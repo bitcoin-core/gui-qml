@@ -1785,6 +1785,7 @@ AM_CONDITIONAL([USE_ASM], [test "$use_asm" = "yes"])
 AM_CONDITIONAL([WORDS_BIGENDIAN], [test "$ac_cv_c_bigendian" = "yes"])
 AM_CONDITIONAL([USE_NATPMP], [test "$use_natpmp" = "yes"])
 AM_CONDITIONAL([USE_UPNP], [test "$use_upnp" = "yes"])
+AM_CONDITIONAL([BUILD_WITH_QML], [test "$use_qml" = "yes"])
 
 dnl for minisketch
 AM_CONDITIONAL([ENABLE_CLMUL], [test "$enable_clmul" = "yes"])
@@ -1926,6 +1927,7 @@ if test "$enable_wallet" != "no"; then
 fi
 echo "  with gui / qt   = $bitcoin_enable_qt"
 if test $bitcoin_enable_qt != "no"; then
+    echo "    with qml      = $use_qml"
     echo "    with qr       = $use_qr"
 fi
 echo "  with zmq        = $use_zmq"
