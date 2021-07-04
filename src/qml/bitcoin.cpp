@@ -18,6 +18,8 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QStringLiteral>
+#include <QUrl>
 
 namespace {
 void SetupUIArgs(ArgsManager& argsman)
@@ -40,9 +42,15 @@ int QmlGuiMain(int argc, char* argv[])
     boost::signals2::scoped_connection handler_question = ::uiInterface.ThreadSafeQuestion_connect(noui_ThreadSafeQuestion);
     boost::signals2::scoped_connection handler_init_message = ::uiInterface.InitMessage_connect(noui_InitMessage);
 
+    Q_INIT_RESOURCE(bitcoin_qml);
+
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
     QQmlApplicationEngine engine;
+    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
+    }
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
