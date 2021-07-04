@@ -105,6 +105,7 @@ QT_QRC_LOCALE_CPP = qt/qrc_bitcoin_locale.cpp
 QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
+  qml/bitcoin.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
   qt/askpassphrasedialog.h \
@@ -276,6 +277,9 @@ BITCOIN_QT_WALLET_CPP = \
   qt/walletmodeltransaction.cpp \
   qt/walletview.cpp
 
+BITCOIN_QML_BASE_CPP = \
+  qml/bitcoin.cpp
+
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
 BITCOIN_QT_CPP += $(BITCOIN_QT_WINDOWS_CPP)
@@ -302,6 +306,10 @@ if TARGET_DARWIN
 endif
 
 nodist_qt_libbitcoinqt_a_SOURCES = $(QT_MOC_CPP) $(QT_MOC) $(QT_QRC_CPP) $(QT_QRC_LOCALE_CPP)
+
+if BUILD_WITH_QML
+  qt_libbitcoinqt_a_SOURCES += $(BITCOIN_QML_BASE_CPP)
+endif # BUILD_WITH_QML
 
 # forms/foo.h -> forms/ui_foo.h
 QT_FORMS_H=$(join $(dir $(QT_FORMS_UI)),$(addprefix ui_, $(notdir $(QT_FORMS_UI:.ui=.h))))

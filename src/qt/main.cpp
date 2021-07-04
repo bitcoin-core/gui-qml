@@ -2,7 +2,15 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#ifdef HAVE_CONFIG_H
+#include <config/bitcoin-config.h>
+#endif
+
+#if USE_QML
+#include <qml/bitcoin.h>
+#else
 #include <qt/bitcoin.h>
+#endif // USE_QML
 
 #include <util/system.h>
 #include <util/threadnames.h>
@@ -31,5 +39,9 @@ int main(int argc, char* argv[])
     SetupEnvironment();
     util::ThreadSetInternalName("main");
 
+#if USE_QML
+    return QmlGuiMain(argc, argv);
+#else
     return GuiMain(argc, argv);
+#endif // USE_QML
 }
