@@ -268,9 +268,9 @@ if(WITH_QML)
   file(GLOB QML_SOURCES "../qml/*.cpp")
   list(APPEND SOURCES ${QML_SOURCES})
 
-#  set(QML_QRC "../qml/bitcoin_qml.qrc")
-#  qt6_add_resources(QML_QRC_CPP ${QML_QRC})
-#  list(APPEND SOURCES ${QML_QRC_CPP})
+  set(QML_QRC "../qml/bitcoin_qml.qrc")
+  qt6_add_resources(QML_QRC_CPP ${QML_QRC})
+  list(APPEND SOURCES ${QML_QRC_CPP})
 endif()
 
 add_executable(bitcoin-qt ${SOURCES})
