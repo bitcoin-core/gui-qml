@@ -22,6 +22,7 @@
              (gnu packages linux)
              (gnu packages llvm)
              (gnu packages mingw)
+             (gnu packages moreutils)
              (gnu packages perl)
              (gnu packages pkg-config)
              (gnu packages python)
@@ -205,7 +206,7 @@ chain for " target " development."))
 (define-public lief
   (package
    (name "python-lief")
-   (version "0.11.4")
+   (version "0.11.5")
    (source
     (origin
      (method git-fetch)
@@ -215,7 +216,7 @@ chain for " target " development."))
      (file-name (git-file-name name version))
      (sha256
       (base32
-       "0h4kcwr9z478almjqhmils8imfpflzk0r7d05g4xbkdyknn162qf"))))
+       "0qahjfg1n0x76ps2mbyljvws1l3qhkqvmxqbahps4qgywl2hbdkj"))))
    (build-system python-build-system)
    (native-inputs
     `(("cmake" ,cmake)))
@@ -524,7 +525,7 @@ and endian independent.")
     (license license:expat)))
 
 (define-public python-signapple
-  (let ((commit "4ff1c1754e37042c002a3f6375c47fd931f2030b"))
+  (let ((commit "b084cbbf44d5330448ffce0c7d118f75781b64bd"))
     (package
       (name "python-signapple")
       (version (git-version "0.1" "1" commit))
@@ -532,12 +533,12 @@ and endian independent.")
        (origin
          (method git-fetch)
          (uri (git-reference
-               (url "https://github.com/dongcarl/signapple")
+               (url "https://github.com/achow101/signapple")
                (commit commit)))
          (file-name (git-file-name name commit))
          (sha256
           (base32
-           "043czyzfm04rcx5xsp59vsppla3vm5g45dbp1npy2hww4066rlnh"))))
+           "0k7inccl2mzac3wq4asbr0kl8s4cghm8982z54kfascqg45shv01"))))
       (build-system python-build-system)
       (propagated-inputs
        `(("python-asn1crypto" ,python-asn1crypto)
@@ -572,6 +573,7 @@ inspecting signatures in Mach-O binaries.")
         patch
         gawk
         sed
+        moreutils
         ;; Compression and archiving
         tar
         bzip2

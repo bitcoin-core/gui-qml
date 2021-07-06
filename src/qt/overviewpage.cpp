@@ -166,19 +166,14 @@ OverviewPage::OverviewPage(const PlatformStyle *platformStyle, QWidget *parent) 
 
     // start with displaying the "out of sync" warnings
     showOutOfSyncWarning(true);
-    connect(ui->labelWalletStatus, &QPushButton::clicked, this, &OverviewPage::handleOutOfSyncWarningClicks);
-    connect(ui->labelTransactionsStatus, &QPushButton::clicked, this, &OverviewPage::handleOutOfSyncWarningClicks);
+    connect(ui->labelWalletStatus, &QPushButton::clicked, this, &OverviewPage::outOfSyncWarningClicked);
+    connect(ui->labelTransactionsStatus, &QPushButton::clicked, this, &OverviewPage::outOfSyncWarningClicked);
 }
 
 void OverviewPage::handleTransactionClicked(const QModelIndex &index)
 {
     if(filter)
         Q_EMIT transactionClicked(filter->mapToSource(index));
-}
-
-void OverviewPage::handleOutOfSyncWarningClicks()
-{
-    Q_EMIT outOfSyncWarningClicked();
 }
 
 void OverviewPage::setPrivacy(bool privacy)
@@ -302,13 +297,13 @@ void OverviewPage::setWalletModel(WalletModel *model)
 
 void OverviewPage::changeEvent(QEvent* e)
 {
-#ifdef Q_OS_MACOS
     if (e->type() == QEvent::PaletteChange) {
         QIcon icon = m_platform_style->SingleColorIcon(QStringLiteral(":/icons/warning"));
         ui->labelTransactionsStatus->setIcon(icon);
         ui->labelWalletStatus->setIcon(icon);
     }
-#endif
+
+    QWidget::changeEvent(e);
 }
 
 void OverviewPage::updateDisplayUnit()
