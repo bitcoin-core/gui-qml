@@ -71,6 +71,12 @@ AC_DEFUN([BITCOIN_QT_INIT],[
                  [qt_lib_suffix= ]); bitcoin_qt_want_version=qt5],
         [qt_lib_suffix= ])
 
+  AC_ARG_WITH([qml],
+    [AS_HELP_STRING([--with-qml],
+    [build QML-based GUI (default=yes)])],
+    [use_qml=$withval],
+    [use_qml=yes])
+
   AC_ARG_WITH([qt-incdir],[AS_HELP_STRING([--with-qt-incdir=INC_DIR],[specify qt include path (overridden by pkgconfig)])], [qt_include_path=$withval], [])
   AC_ARG_WITH([qt-libdir],[AS_HELP_STRING([--with-qt-libdir=LIB_DIR],[specify qt lib path (overridden by pkgconfig)])], [qt_lib_path=$withval], [])
   AC_ARG_WITH([qt-plugindir],[AS_HELP_STRING([--with-qt-plugindir=PLUGIN_DIR],[specify qt plugin path (overridden by pkgconfig)])], [qt_plugin_path=$withval], [])
@@ -395,4 +401,20 @@ AC_DEFUN([_BITCOIN_QT_FIND_LIBS],[
       PKG_CHECK_MODULES([QT_DBUS], [${qt_lib_prefix}DBus $qt_version], [QT_DBUS_INCLUDES="$QT_DBUS_CFLAGS"; have_qt_dbus=yes], [have_qt_dbus=no])
     fi
   ])
+
+  if test "x$use_qml" != xno; then
+    BITCOIN_QT_CHECK([
+      PKG_CHECK_MODULES([QT_QML], [${qt_lib_prefix}Qml${qt_lib_suffix} $qt_version], [QT_INCLUDES="$QT_QML_CFLAGS $QT_INCLUDES" QT_LIBS="$QT_QML_LIBS $QT_LIBS"],
+                        [BITCOIN_QT_FAIL([${qt_lib_prefix}Qml${qt_lib_suffix} $qt_version not found])])
+    ])
+    BITCOIN_QT_CHECK([
+      PKG_CHECK_MODULES([QT_QUICK], [${qt_lib_prefix}Quick${qt_lib_suffix} $qt_version], [QT_INCLUDES="$QT_QUICK_CFLAGS $QT_INCLUDES" QT_LIBS="$QT_QUICK_LIBS $QT_LIBS"],
+                        [BITCOIN_QT_FAIL([${qt_lib_prefix}Quick${qt_lib_suffix} $qt_version not found])])
+    ])
+    BITCOIN_QT_CHECK([
+      PKG_CHECK_MODULES([QT_QUICKCONTROLS], [${qt_lib_prefix}QuickControls2${qt_lib_suffix} $qt_version], [QT_INCLUDES="$QT_QUICKCONTROLS_CFLAGS $QT_INCLUDES" QT_LIBS="$QT_QUICKCONTROLS_LIBS $QT_LIBS"],
+                        [BITCOIN_QT_FAIL([${qt_lib_prefix}QuickControls2${qt_lib_suffix} $qt_version not found])])
+    ])
+    AC_DEFINE([USE_QML], [1], [Define to 1 to use QML-based GUI])
+  fi
 ])

@@ -1801,6 +1801,7 @@ AM_CONDITIONAL([USE_ASM],[test x$use_asm = xyes])
 AM_CONDITIONAL([WORDS_BIGENDIAN],[test x$ac_cv_c_bigendian = xyes])
 AM_CONDITIONAL([USE_NATPMP],[test x$use_natpmp = xyes])
 AM_CONDITIONAL([USE_UPNP],[test x$use_upnp = xyes])
+AM_CONDITIONAL([BUILD_WITH_QML], [test x$use_qml = xyes])
 
 AC_DEFINE(CLIENT_VERSION_MAJOR, _CLIENT_VERSION_MAJOR, [Major version])
 AC_DEFINE(CLIENT_VERSION_MINOR, _CLIENT_VERSION_MINOR, [Minor version])
@@ -1940,6 +1941,7 @@ if test "x$enable_wallet" != "xno"; then
 fi
 echo "  with gui / qt   = $bitcoin_enable_qt"
 if test x$bitcoin_enable_qt != xno; then
+    echo "    with qml      = $use_qml"
     echo "    with qr       = $use_qr"
 fi
 echo "  with zmq        = $use_zmq"
