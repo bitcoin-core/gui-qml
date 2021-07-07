@@ -454,13 +454,6 @@ static void SetupUIArgs(ArgsManager& argsman)
 
 int GuiMain(int argc, char* argv[])
 {
-#ifdef WIN32
-    util::WinCmdLineArgs winArgs;
-    std::tie(argc, argv) = winArgs.get();
-#endif
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
-
     NodeContext node_context;
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
 
