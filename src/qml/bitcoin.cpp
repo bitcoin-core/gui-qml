@@ -14,6 +14,7 @@
 #include <noui.h>
 #include <qml/nodemodel.h>
 #include <qt/guiconstants.h>
+#include <qt/initexecutor.h>
 #include <util/translation.h>
 
 #include <boost/signals2/connection.hpp>
@@ -43,18 +44,63 @@ int QmlGuiMain(int argc, char* argv[])
     std::tie(argc, argv) = win_args.get();
 #endif
 
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
-
-    // Subscribe to global signals from core
-    boost::signals2::scoped_connection handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(noui_ThreadSafeMessageBox);
-    boost::signals2::scoped_connection handler_question = ::uiInterface.ThreadSafeQuestion_connect(noui_ThreadSafeQuestion);
-    boost::signals2::scoped_connection handler_init_message = ::uiInterface.InitMessage_connect(noui_InitMessage);
-
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication app(argc, argv);
 
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+
+    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    SetupServerArgs(gArgs, init->canListenIpc());
+    SetupUIArgs(gArgs);
+    std::string error;
+    if (!gArgs.ParseParameters(argc, argv, error)) {
+        InitError(Untranslated(strprintf("Error parsing command line arguments: %s\n", error)));
+        return EXIT_FAILURE;
+    }
+
+    // legacy GUI:
+    // common:InitConfig()
+    // TODO: requires a <SettingsAbortFn>
+    if (!CheckDataDirOption(gArgs)) {
+        tfm::format(std::cerr, "Error: Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", ""));
+        return EXIT_FAILURE;
+    }
+    if (!gArgs.ReadConfigFiles(error, true)) {
+        tfm::format(std::cerr, "Error reading configuration file: %s\n", error);
+        return EXIT_FAILURE;
+    }
+
+    // legacy GUI:
+    // QScopedPointer<const NetworkStyle> networkStyle(NetworkStyle::instantiate(Params().GetChainType()));
+    SelectParams(gArgs.GetChainType());
+
+    // legacy GUI: parameterSetup()
+    // Default printtoconsole to false for the GUI. GUI programs should not
+    // print to the console unnecessarily.
+    gArgs.SoftSetBoolArg("-printtoconsole", false);
+    InitLogging(gArgs);
+    InitParameterInteraction(gArgs);
+
+    // legacy GUI: createNode()
+    std::unique_ptr<interfaces::Node> node = init->makeNode();
+
+    // legacy GUI: baseInitialize()
+    node->baseInitialize();
+
     NodeModel node_model;
+    InitExecutor init_executor{*node};
+    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
+    // QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
+    QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
+    // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
+
+    qGuiApp->setQuitOnLastWindowClosed(false);
+    QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
+        node->startShutdown();
+        node_model.startNodeShutdown();
+    });
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
@@ -64,14 +110,5 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-    SetupServerArgs(gArgs);
-    SetupUIArgs(gArgs);
-    std::string error;
-    if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(Untranslated(strprintf("Error parsing command line arguments: %s\n", error)));
-        return EXIT_FAILURE;
-    }
-
-    return app.exec();
+    return qGuiApp->exec();
 }
