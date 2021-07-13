@@ -12,6 +12,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
+#include <qml/nodemodel.h>
 #include <qt/guiconstants.h>
 #include <util/translation.h>
 
@@ -20,6 +21,7 @@
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QStringLiteral>
 #include <QUrl>
 
@@ -51,7 +53,12 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication app(argc, argv);
+
+    NodeModel node_model;
+
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("nodeModel", &node_model);
+
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
     if (engine.rootObjects().isEmpty()) {
         return EXIT_FAILURE;
