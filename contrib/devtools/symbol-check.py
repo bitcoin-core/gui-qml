@@ -3,20 +3,21 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 '''
-A script to check that the executables produced by gitian only contain
-certain symbols and are only linked against allowed libraries.
+A script to check that release executables only contain certain symbols
+and are only linked against allowed libraries.
 
 Example usage:
 
-    find ../gitian-builder/build -type f -executable | xargs python3 contrib/devtools/symbol-check.py
+    find ../path/to/binaries -type f -executable | xargs python3 contrib/devtools/symbol-check.py
 '''
 import subprocess
 import sys
-import os
 from typing import List, Optional
 
 import lief
 import pixie
+
+from utils import determine_wellknown_cmd
 
 # Debian 8 (Jessie) EOL: 2020. https://wiki.debian.org/DebianReleases#Production_Releases
 #
@@ -60,7 +61,6 @@ IGNORE_EXPORTS = {
 '_edata', '_end', '__end__', '_init', '__bss_start', '__bss_start__', '_bss_end__', '__bss_end__', '_fini', '_IO_stdin_used', 'stdin', 'stdout', 'stderr',
 'environ', '_environ', '__environ',
 }
-CPPFILT_CMD = os.getenv('CPPFILT', '/usr/bin/c++filt')
 
 # Allowed NEEDED libraries
 ELF_ALLOWED_LIBRARIES = {
@@ -140,7 +140,7 @@ class CPPFilt(object):
     Use a pipe to the 'c++filt' command.
     '''
     def __init__(self):
-        self.proc = subprocess.Popen(CPPFILT_CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
+        self.proc = subprocess.Popen(determine_wellknown_cmd('CPPFILT', 'c++filt'), stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True)
 
     def __call__(self, mangled):
         self.proc.stdin.write(mangled + '\n')

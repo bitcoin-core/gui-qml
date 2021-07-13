@@ -13,21 +13,23 @@ from test_framework.messages import (
     BIP125_SEQUENCE_NUMBER,
     COIN,
     COutPoint,
+    CTxIn,
     CTxOut,
     MAX_BLOCK_BASE_SIZE,
     MAX_MONEY,
     tx_from_hex,
 )
 from test_framework.script import (
-    hash160,
     CScript,
     OP_0,
     OP_2,
     OP_3,
     OP_CHECKMULTISIG,
-    OP_EQUAL,
     OP_HASH160,
     OP_RETURN,
+)
+from test_framework.script_util import (
+    script_to_p2sh_script,
 )
 from test_framework.util import (
     assert_equal,
@@ -247,6 +249,14 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             rawtxs=[tx.serialize().hex()],
         )
 
+        self.log.info('A non-coinbase transaction with coinbase-like outpoint')
+        tx = tx_from_hex(raw_tx_reference)
+        tx.vin.append(CTxIn(COutPoint(hash=0, n=0xffffffff)))
+        self.check_mempool_result(
+            result_expected=[{'txid': tx.rehash(), 'allowed': False, 'reject-reason': 'bad-txns-prevout-null'}],
+            rawtxs=[tx.serialize().hex()],
+        )
+
         self.log.info('A coinbase transaction')
         # Pick the input of the first tx we signed, so it has to be a coinbase tx
         raw_tx_coinbase_spent = node.getrawtransaction(txid=node.decoderawtransaction(hexstring=raw_tx_in_block)['vin'][0]['txid'])
@@ -291,7 +301,7 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             rawtxs=[tx.serialize().hex()],
         )
         tx = tx_from_hex(raw_tx_reference)
-        output_p2sh_burn = CTxOut(nValue=540, scriptPubKey=CScript([OP_HASH160, hash160(b'burn'), OP_EQUAL]))
+        output_p2sh_burn = CTxOut(nValue=540, scriptPubKey=script_to_p2sh_script(b'burn'))
         num_scripts = 100000 // len(output_p2sh_burn.serialize())  # Use enough outputs to make the tx too large for our policy
         tx.vout = [output_p2sh_burn] * num_scripts
         self.check_mempool_result(
