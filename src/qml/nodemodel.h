@@ -12,6 +12,13 @@ class NodeModel : public QObject
 {
     Q_OBJECT
 
+public:
+    Q_INVOKABLE void startNodeInitializionThread();
+    void startNodeShutdown();
+
+Q_SIGNALS:
+    void requestedInitialize();
+    void requestedShutdown();
 };
 
 #endif // BITCOIN_QML_NODEMODEL_H
