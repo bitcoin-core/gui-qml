@@ -10,12 +10,12 @@
 #endif
 
 #include <interfaces/node.h>
+#include <qt/bitcoincore.h>
 
 #include <assert.h>
 #include <memory>
 
 #include <QApplication>
-#include <QThread>
 
 class BitcoinGUI;
 class ClientModel;
@@ -27,33 +27,6 @@ class SplashScreen;
 class WalletController;
 class WalletModel;
 
-
-/** Class encapsulating Bitcoin Core startup and shutdown.
- * Allows running startup and shutdown in a different thread from the UI thread.
- */
-class BitcoinCore: public QObject
-{
-    Q_OBJECT
-public:
-    explicit BitcoinCore(interfaces::Node& node);
-    ~BitcoinCore();
-
-public Q_SLOTS:
-    void initialize();
-    void shutdown();
-
-Q_SIGNALS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
-    void shutdownResult();
-    void runawayException(const QString &message);
-
-private:
-    /// Pass fatal exception message to UI thread
-    void handleRunawayException(const std::exception *e);
-
-    interfaces::Node& m_node;
-    QThread m_thread;
-};
 
 /** Main Bitcoin application object */
 class BitcoinApplication: public QApplication
