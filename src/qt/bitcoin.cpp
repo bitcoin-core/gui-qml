@@ -212,7 +212,6 @@ static const char* qt_argv = "bitcoin-qt";
 
 BitcoinApplication::BitcoinApplication():
     QApplication(qt_argc, const_cast<char **>(&qt_argv)),
-    coreThread(nullptr),
     optionsModel(nullptr),
     clientModel(nullptr),
     window(nullptr),
@@ -240,14 +239,6 @@ void BitcoinApplication::setupPlatformStyle()
 
 BitcoinApplication::~BitcoinApplication()
 {
-    if(coreThread)
-    {
-        qDebug() << __func__ << ": Stopping thread";
-        coreThread->quit();
-        coreThread->wait();
-        qDebug() << __func__ << ": Stopped thread";
-    }
-
     delete window;
     window = nullptr;
     delete platformStyle;

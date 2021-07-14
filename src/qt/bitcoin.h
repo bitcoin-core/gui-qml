@@ -117,7 +117,6 @@ Q_SIGNALS:
 
 private:
     std::unique_ptr<BitcoinCore> m_core;
-    QThread *coreThread;
     OptionsModel *optionsModel;
     ClientModel *clientModel;
     BitcoinGUI *window;
