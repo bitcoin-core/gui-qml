@@ -9,11 +9,13 @@
 #include <config/bitcoin-config.h>
 #endif
 
-#include <QApplication>
+#include <interfaces/node.h>
+
 #include <assert.h>
 #include <memory>
 
-#include <interfaces/node.h>
+#include <QApplication>
+#include <QThread>
 
 class BitcoinGUI;
 class ClientModel;
@@ -34,6 +36,7 @@ class BitcoinCore: public QObject
     Q_OBJECT
 public:
     explicit BitcoinCore(interfaces::Node& node);
+    ~BitcoinCore();
 
 public Q_SLOTS:
     void initialize();
@@ -49,6 +52,7 @@ private:
     void handleRunawayException(const std::exception *e);
 
     interfaces::Node& m_node;
+    QThread m_thread;
 };
 
 /** Main Bitcoin application object */
@@ -112,6 +116,7 @@ Q_SIGNALS:
     void windowShown(BitcoinGUI* window);
 
 private:
+    std::unique_ptr<BitcoinCore> m_core;
     QThread *coreThread;
     OptionsModel *optionsModel;
     ClientModel *clientModel;
