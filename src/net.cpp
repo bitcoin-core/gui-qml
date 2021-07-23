@@ -402,7 +402,8 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
         pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime)/3600.0);
 
     // Resolve
-    const uint16_t default_port{Params().GetDefaultPort()};
+    const uint16_t default_port{pszDest != nullptr ? Params().GetDefaultPort(pszDest) :
+                                                     Params().GetDefaultPort()};
     if (pszDest) {
         std::vector<CService> resolved;
         if (Lookup(pszDest, resolved,  default_port, fNameLookup && !HaveNameProxy(), 256) && !resolved.empty()) {
@@ -936,14 +937,17 @@ void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& evicti
     size_t num_protected{0};
 
     while (num_protected < max_protect_by_network) {
+        // Count the number of disadvantaged networks from which we have peers to protect.
+        auto num_networks = std::count_if(networks.begin(), networks.end(), [](const Net& n) { return n.count; });
+        if (num_networks == 0) {
+            break;
+        }
         const size_t disadvantaged_to_protect{max_protect_by_network - num_protected};
-        const size_t protect_per_network{
-            std::max(disadvantaged_to_protect / networks.size(), static_cast<size_t>(1))};
-
+        const size_t protect_per_network{std::max(disadvantaged_to_protect / num_networks, static_cast<size_t>(1))};
         // Early exit flag if there are no remaining candidates by disadvantaged network.
         bool protected_at_least_one{false};
 
-        for (const Net& n : networks) {
+        for (Net& n : networks) {
             if (n.count == 0) continue;
             const size_t before = eviction_candidates.size();
             EraseLastKElements(eviction_candidates, CompareNodeNetworkTime(n.is_local, n.id),
@@ -953,10 +957,12 @@ void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& evicti
             const size_t after = eviction_candidates.size();
             if (before > after) {
                 protected_at_least_one = true;
-                num_protected += before - after;
+                const size_t delta{before - after};
+                num_protected += delta;
                 if (num_protected >= max_protect_by_network) {
                     break;
                 }
+                n.count -= delta;
             }
         }
         if (!protected_at_least_one) {
@@ -1206,16 +1212,29 @@ void CConnman::CreateNodeFromAcceptedSocket(SOCKET hSocket,
 
 bool CConnman::AddConnection(const std::string& address, ConnectionType conn_type)
 {
-    if (conn_type != ConnectionType::OUTBOUND_FULL_RELAY && conn_type != ConnectionType::BLOCK_RELAY) return false;
-
-    const int max_connections = conn_type == ConnectionType::OUTBOUND_FULL_RELAY ? m_max_outbound_full_relay : m_max_outbound_block_relay;
+    std::optional<int> max_connections;
+    switch (conn_type) {
+    case ConnectionType::INBOUND:
+    case ConnectionType::MANUAL:
+    case ConnectionType::FEELER:
+        return false;
+    case ConnectionType::OUTBOUND_FULL_RELAY:
+        max_connections = m_max_outbound_full_relay;
+        break;
+    case ConnectionType::BLOCK_RELAY:
+        max_connections = m_max_outbound_block_relay;
+        break;
+    // no limit for ADDR_FETCH because -seednode has no limit either
+    case ConnectionType::ADDR_FETCH:
+        break;
+    } // no default case, so the compiler can warn about missing cases
 
     // Count existing connections
     int existing_connections = WITH_LOCK(cs_vNodes,
                                          return std::count_if(vNodes.begin(), vNodes.end(), [conn_type](CNode* node) { return node->m_conn_type == conn_type; }););
 
     // Max connections of specified type already exist
-    if (existing_connections >= max_connections) return false;
+    if (max_connections != std::nullopt && existing_connections >= max_connections) return false;
 
     // Max total outbound connections already exist
     CSemaphoreGrant grant(*semOutbound, true);
@@ -2059,8 +2078,9 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect)
             // from advertising themselves as a service on another host and
             // port, causing a DoS attack as nodes around the network attempt
             // to connect to it fruitlessly.
-            if (addr.GetPort() != Params().GetDefaultPort() && nTries < 50)
+            if (addr.GetPort() != Params().GetDefaultPort(addr.GetNetwork()) && nTries < 50) {
                 continue;
+            }
 
             addrConnect = addr;
             break;
@@ -2123,7 +2143,7 @@ std::vector<AddedNodeInfo> CConnman::GetAddedNodeInfo() const
     }
 
     for (const std::string& strAddNode : lAddresses) {
-        CService service(LookupNumeric(strAddNode, Params().GetDefaultPort()));
+        CService service(LookupNumeric(strAddNode, Params().GetDefaultPort(strAddNode)));
         AddedNodeInfo addedNode{strAddNode, CService(), false, false};
         if (service.IsValid()) {
             // strAddNode is an IP:port
@@ -2465,30 +2485,25 @@ bool CConnman::Bind(const CService &addr, unsigned int flags, NetPermissionFlags
     return true;
 }
 
-bool CConnman::InitBinds(
-    const std::vector<CService>& binds,
-    const std::vector<NetWhitebindPermissions>& whiteBinds,
-    const std::vector<CService>& onion_binds)
+bool CConnman::InitBinds(const Options& options)
 {
     bool fBound = false;
-    for (const auto& addrBind : binds) {
+    for (const auto& addrBind : options.vBinds) {
         fBound |= Bind(addrBind, (BF_EXPLICIT | BF_REPORT_ERROR), NetPermissionFlags::None);
     }
-    for (const auto& addrBind : whiteBinds) {
+    for (const auto& addrBind : options.vWhiteBinds) {
         fBound |= Bind(addrBind.m_service, (BF_EXPLICIT | BF_REPORT_ERROR), addrBind.m_flags);
     }
-    if (binds.empty() && whiteBinds.empty()) {
+    for (const auto& addr_bind : options.onion_binds) {
+        fBound |= Bind(addr_bind, BF_EXPLICIT | BF_DONT_ADVERTISE, NetPermissionFlags::None);
+    }
+    if (options.bind_on_any) {
         struct in_addr inaddr_any;
         inaddr_any.s_addr = htonl(INADDR_ANY);
         struct in6_addr inaddr6_any = IN6ADDR_ANY_INIT;
         fBound |= Bind(CService(inaddr6_any, GetListenPort()), BF_NONE, NetPermissionFlags::None);
         fBound |= Bind(CService(inaddr_any, GetListenPort()), !fBound ? BF_REPORT_ERROR : BF_NONE, NetPermissionFlags::None);
     }
-
-    for (const auto& addr_bind : onion_binds) {
-        fBound |= Bind(addr_bind, BF_EXPLICIT | BF_DONT_ADVERTISE, NetPermissionFlags::None);
-    }
-
     return fBound;
 }
 
@@ -2496,7 +2511,7 @@ bool CConnman::Start(CScheduler& scheduler, const Options& connOptions)
 {
     Init(connOptions);
 
-    if (fListen && !InitBinds(connOptions.vBinds, connOptions.vWhiteBinds, connOptions.onion_binds)) {
+    if (fListen && !InitBinds(connOptions)) {
         if (clientInterface) {
             clientInterface->ThreadSafeMessageBox(
                 _("Failed to listen on any port. Use -listen=0 if you want this."),
