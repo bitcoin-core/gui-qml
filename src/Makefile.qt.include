@@ -35,6 +35,7 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
+  qml/moc_nodemodel.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
@@ -107,6 +108,7 @@ QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
   qml/bitcoin.h \
+  qml/nodemodel.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
   qt/askpassphrasedialog.h \
@@ -281,7 +283,8 @@ BITCOIN_QT_WALLET_CPP = \
   qt/walletview.cpp
 
 BITCOIN_QML_BASE_CPP = \
-  qml/bitcoin.cpp
+  qml/bitcoin.cpp \
+  qml/nodemodel.cpp
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
