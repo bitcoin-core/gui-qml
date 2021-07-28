@@ -29,6 +29,12 @@ This repo is synced with the [Bitcoin Core repo](https://github.com/bitcoin/bitc
 
 Contributions are welcome from all, developers and designers. If you are a new contributor, please read [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
+## Minimum Required Qt Version
+
+All development must adhere to the current upstream Qt Version to minimize our divergence from upstream and avoid costly changes. Review of open PR's must ensure that changes are compatible with this Qt version. Currently, the required version is [Qt 5.12.11](https://github.com/bitcoin-core/gui-qml/blob/a79a2249d027047f08dffe3f04951d52eac198f1/depends/packages/qt.mk#L2).
+
+As the Qt Version changes upstream, refactoring is allowed to use the now available features.
+
 # Compile and Run
 
 The master branch is only guaranteed to work and build on Debian-based systems and macOS.
