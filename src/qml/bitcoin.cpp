@@ -32,6 +32,18 @@ void SetupUIArgs(ArgsManager& argsman)
     argsman.AddArg("-resetguisettings", "Reset all settings changed in the GUI", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     argsman.AddArg("-splash", strprintf("Show splash screen on startup (default: %u)", DEFAULT_SPLASHSCREEN), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 }
+
+bool InitErrorMessageBox(
+    const bilingual_str& message,
+    [[maybe_unused]] const std::string& caption,
+    [[maybe_unused]] unsigned int style)
+{
+    QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
+    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
+    qGuiApp->exec();
+    return false;
+}
 } // namespace
 
 
@@ -41,6 +53,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
+
+    auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
@@ -67,6 +81,8 @@ int QmlGuiMain(int argc, char* argv[])
     node_context.args = &gArgs;
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
     node->baseInitialize();
+
+    handler_message_box.disconnect();
 
     NodeModel node_model;
     InitExecutor init_executor{*node};
