@@ -452,11 +452,6 @@ int GuiMain(int argc, char* argv[])
     NodeContext node_context;
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
 
-    // Subscribe to global signals from core
-    boost::signals2::scoped_connection handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(noui_ThreadSafeMessageBox);
-    boost::signals2::scoped_connection handler_question = ::uiInterface.ThreadSafeQuestion_connect(noui_ThreadSafeQuestion);
-    boost::signals2::scoped_connection handler_init_message = ::uiInterface.InitMessage_connect(noui_InitMessage);
-
     // Do not refer to data directory yet, this can be overridden by Intro::pickDataDirectory
 
     /// 1. Basic Qt initialization (not dependent on parameters or configuration)
