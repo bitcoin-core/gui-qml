@@ -56,20 +56,43 @@ int QmlGuiMain(int argc, char* argv[])
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
-    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    NodeContext node_context;
+
+    /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    node_context.args = &gArgs;
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(strprintf(Untranslated("Error parsing command line arguments: %s\n"), error));
+        InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
         return EXIT_FAILURE;
     }
 
-    CheckDataDirOption();
+    /// Determine availability of data directory.
+    if (!CheckDataDirOption()) {
+        InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));
+        return EXIT_FAILURE;
+    }
 
-    gArgs.ReadConfigFiles(error, true);
+    /// Read and parse bitcoin.conf file.
+    if (!gArgs.ReadConfigFiles(error, true)) {
+        InitError(strprintf(Untranslated("Cannot parse configuration file: %s\n"), error));
+        return EXIT_FAILURE;
+    }
 
-    SelectParams(gArgs.GetChainName());
+    /// Check for chain settings (Params() calls are only valid after this clause).
+    try {
+        SelectParams(gArgs.GetChainName());
+    } catch(std::exception &e) {
+        InitError(Untranslated(strprintf("%s\n", e.what())));
+        return EXIT_FAILURE;
+    }
+
+    /// Read and parse settings.json file.
+    if (!gArgs.InitSettings(error)) {
+        InitError(Untranslated(error));
+        return EXIT_FAILURE;
+    }
 
     // Default printtoconsole to false for the GUI. GUI programs should not
     // print to the console unnecessarily.
@@ -77,10 +100,11 @@ int QmlGuiMain(int argc, char* argv[])
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
 
-    NodeContext node_context;
-    node_context.args = &gArgs;
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
-    node->baseInitialize();
+    if (!node->baseInitialize()) {
+        // A dialog with detailed error will have been shown by InitError().
+        return EXIT_FAILURE;
+    }
 
     handler_message_box.disconnect();
 
