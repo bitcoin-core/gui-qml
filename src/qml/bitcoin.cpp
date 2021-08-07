@@ -5,6 +5,7 @@
 #include <qml/bitcoin.h>
 
 #include <common/args.h>
+#include <common/init.h>
 #include <common/system.h>
 #include <init.h>
 #include <interfaces/init.h>
@@ -72,21 +73,13 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    // legacy GUI:
-    // common:InitConfig()
-    // TODO: requires a <SettingsAbortFn>
-    if (!CheckDataDirOption(gArgs)) {
-        tfm::format(std::cerr, "Error: Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", ""));
+    if (auto error = common::InitConfig(
+            gArgs,
+            [](const bilingual_str& msg, const std::vector<std::string>& details) {
+                return InitError(msg, details);
+            })) {
         return EXIT_FAILURE;
     }
-    if (!gArgs.ReadConfigFiles(error, true)) {
-        tfm::format(std::cerr, "Error reading configuration file: %s\n", error);
-        return EXIT_FAILURE;
-    }
-
-    // legacy GUI:
-    // QScopedPointer<const NetworkStyle> networkStyle(NetworkStyle::instantiate(Params().GetChainType()));
-    SelectParams(gArgs.GetChainType());
 
     // legacy GUI: parameterSetup()
     // Default printtoconsole to false for the GUI. GUI programs should not
@@ -99,7 +92,10 @@ int QmlGuiMain(int argc, char* argv[])
     std::unique_ptr<interfaces::Node> node = init->makeNode();
 
     // legacy GUI: baseInitialize()
-    node->baseInitialize();
+    if (!node->baseInitialize()) {
+        // A dialog with detailed error will have been shown by InitError().
+        return EXIT_FAILURE;
+    }
 
     handler_message_box.disconnect();
 
