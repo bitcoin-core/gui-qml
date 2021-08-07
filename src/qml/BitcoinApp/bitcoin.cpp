@@ -61,7 +61,9 @@ int QmlGuiMain(int argc, char* argv[])
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
-    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+
+    /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
     std::string error;
@@ -70,14 +72,25 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    CheckDataDirOption(gArgs);
-
-    if (!gArgs.ReadConfigFiles(error, true)) {
-        tfm::format(std::cerr, "Error reading configuration file: %s\n", error);
+    /// Determine availability of data directory.
+    if (!CheckDataDirOption(gArgs)) {
+        InitError(Untranslated(strprintf("Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", ""))));
         return EXIT_FAILURE;
     }
 
-    SelectParams(gArgs.GetChainType());
+    /// Read and parse bitcoin.conf file.
+    if (!gArgs.ReadConfigFiles(error, true)) {
+        InitError(Untranslated(strprintf("Cannot parse configuration file: %s\n", error)));
+        return EXIT_FAILURE;
+    }
+
+    /// Check for chain settings (Params() calls are only valid after this clause).
+    try {
+        SelectParams(gArgs.GetChainType());
+    } catch(std::exception &e) {
+        InitError(Untranslated(strprintf("%s\n", e.what())));
+        return EXIT_FAILURE;
+    }
 
     // Default printtoconsole to false for the GUI. GUI programs should not
     // print to the console unnecessarily.
@@ -85,9 +98,11 @@ int QmlGuiMain(int argc, char* argv[])
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
 
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
     std::unique_ptr<interfaces::Node> node = init->makeNode();
-    node->baseInitialize();
+    if (!node->baseInitialize()) {
+        // A dialog with detailed error will have been shown by InitError().
+        return EXIT_FAILURE;
+    }
 
     handler_message_box.disconnect();
 
