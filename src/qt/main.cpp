@@ -11,6 +11,7 @@
 #endif // USE_QML
 
 #include <compat/compat.h>
+#include <noui.h>
 #include <util/translation.h>
 
 #include <QCoreApplication>
@@ -27,6 +28,9 @@ const std::function<std::string()> G_TEST_GET_FULL_NAME{};
 
 MAIN_FUNCTION
 {
+    // Subscribe to global signals from core.
+    noui_connect();
+
 #if USE_QML
     return QmlGuiMain(argc, argv);
 #else
