@@ -29,7 +29,8 @@ public:
     FuzzedDataProvider& m_fuzzed_data_provider;
 
     explicit CAddrManDeterministic(FuzzedDataProvider& fuzzed_data_provider)
-        : m_fuzzed_data_provider(fuzzed_data_provider)
+        : CAddrMan(/* deterministic */ true, /* consistency_check_ratio */ 0)
+        , m_fuzzed_data_provider(fuzzed_data_provider)
     {
         WITH_LOCK(cs, insecure_rand = FastRandomContext{ConsumeUInt256(fuzzed_data_provider)});
         if (fuzzed_data_provider.ConsumeBool()) {
@@ -227,36 +228,27 @@ FUZZ_TARGET_INIT(addrman, initialize_addrman)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     SetMockTime(ConsumeTime(fuzzed_data_provider));
-    CAddrManDeterministic addr_man{fuzzed_data_provider};
+    auto addr_man_ptr = std::make_unique<CAddrManDeterministic>(fuzzed_data_provider);
     if (fuzzed_data_provider.ConsumeBool()) {
         const std::vector<uint8_t> serialized_data{ConsumeRandomLengthByteVector(fuzzed_data_provider)};
         CDataStream ds(serialized_data, SER_DISK, INIT_PROTO_VERSION);
         const auto ser_version{fuzzed_data_provider.ConsumeIntegral<int32_t>()};
         ds.SetVersion(ser_version);
         try {
-            ds >> addr_man;
+            ds >> *addr_man_ptr;
         } catch (const std::ios_base::failure&) {
-            addr_man.Clear();
+            addr_man_ptr = std::make_unique<CAddrManDeterministic>(fuzzed_data_provider);
         }
     }
+    CAddrManDeterministic& addr_man = *addr_man_ptr;
     while (fuzzed_data_provider.ConsumeBool()) {
         CallOneOf(
             fuzzed_data_provider,
-            [&] {
-                addr_man.Clear();
-            },
             [&] {
                 addr_man.ResolveCollisions();
             },
             [&] {
                 (void)addr_man.SelectTriedCollision();
-            },
-            [&] {
-                const std::optional<CAddress> opt_address = ConsumeDeserializable<CAddress>(fuzzed_data_provider);
-                const std::optional<CNetAddr> opt_net_addr = ConsumeDeserializable<CNetAddr>(fuzzed_data_provider);
-                if (opt_address && opt_net_addr) {
-                    addr_man.Add(*opt_address, *opt_net_addr, fuzzed_data_provider.ConsumeIntegralInRange<int64_t>(0, 100000000));
-                }
             },
             [&] {
                 std::vector<CAddress> addresses;

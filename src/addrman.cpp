@@ -77,6 +77,23 @@ double CAddrInfo::GetChance(int64_t nNow) const
     return fChance;
 }
 
+CAddrMan::CAddrMan(bool deterministic, int32_t consistency_check_ratio)
+    : insecure_rand{deterministic}
+    , nKey{deterministic ? uint256{1} : insecure_rand.rand256()}
+    , m_consistency_check_ratio{consistency_check_ratio}
+{
+    for (auto& bucket : vvNew) {
+        for (auto& entry : bucket) {
+            entry = -1;
+        }
+    }
+    for (auto& bucket : vvTried) {
+        for (auto& entry : bucket) {
+            entry = -1;
+        }
+    }
+}
+
 CAddrInfo* CAddrMan::Find(const CNetAddr& addr, int* pnId)
 {
     AssertLockHeld(cs);
@@ -431,10 +448,15 @@ CAddrInfo CAddrMan::Select_(bool newOnly) const
     }
 }
 
-#ifdef DEBUG_ADDRMAN
-int CAddrMan::Check_()
+int CAddrMan::Check_() const
 {
     AssertLockHeld(cs);
+
+    // Run consistency checks 1 in m_consistency_check_ratio times if enabled
+    if (m_consistency_check_ratio == 0) return 0;
+    if (insecure_rand.randrange(m_consistency_check_ratio) >= 1) return 0;
+
+    LogPrint(BCLog::ADDRMAN, "Addrman checks started: new %i, tried %i, total %u\n", nNew, nTried, vRandom.size());
 
     std::unordered_set<int> setTried;
     std::unordered_map<int, int> mapNew;
@@ -458,8 +480,10 @@ int CAddrMan::Check_()
                 return -4;
             mapNew[n] = info.nRefCount;
         }
-        if (mapAddr[info] != n)
+        const auto it{mapAddr.find(info)};
+        if (it == mapAddr.end() || it->second != n) {
             return -5;
+        }
         if (info.nRandomPos < 0 || (size_t)info.nRandomPos >= vRandom.size() || vRandom[info.nRandomPos] != n)
             return -14;
         if (info.nLastTry < 0)
@@ -478,10 +502,13 @@ int CAddrMan::Check_()
             if (vvTried[n][i] != -1) {
                 if (!setTried.count(vvTried[n][i]))
                     return -11;
-                if (mapInfo[vvTried[n][i]].GetTriedBucket(nKey, m_asmap) != n)
+                const auto it{mapInfo.find(vvTried[n][i])};
+                if (it == mapInfo.end() || it->second.GetTriedBucket(nKey, m_asmap) != n) {
                     return -17;
-                if (mapInfo[vvTried[n][i]].GetBucketPosition(nKey, false, n) != i)
+                }
+                if (it->second.GetBucketPosition(nKey, false, n) != i) {
                     return -18;
+                }
                 setTried.erase(vvTried[n][i]);
             }
         }
@@ -492,8 +519,10 @@ int CAddrMan::Check_()
             if (vvNew[n][i] != -1) {
                 if (!mapNew.count(vvNew[n][i]))
                     return -12;
-                if (mapInfo[vvNew[n][i]].GetBucketPosition(nKey, true, n) != i)
+                const auto it{mapInfo.find(vvNew[n][i])};
+                if (it == mapInfo.end() || it->second.GetBucketPosition(nKey, true, n) != i) {
                     return -19;
+                }
                 if (--mapNew[vvNew[n][i]] == 0)
                     mapNew.erase(vvNew[n][i]);
             }
@@ -507,9 +536,9 @@ int CAddrMan::Check_()
     if (nKey.IsNull())
         return -16;
 
+    LogPrint(BCLog::ADDRMAN, "Addrman checks completed successfully\n");
     return 0;
 }
-#endif
 
 void CAddrMan::GetAddr_(std::vector<CAddress>& vAddr, size_t max_addresses, size_t max_pct, std::optional<Network> network) const
 {
