@@ -12,6 +12,7 @@
 #include <qt/bitcoin.h>
 #endif // USE_QML
 
+#include <noui.h>
 #include <util/system.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
@@ -38,6 +39,9 @@ int main(int argc, char* argv[])
 
     SetupEnvironment();
     util::ThreadSetInternalName("main");
+
+    // Subscribe to global signals from core.
+    noui_connect();
 
 #if USE_QML
     return QmlGuiMain(argc, argv);
