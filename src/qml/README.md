@@ -35,10 +35,17 @@ The master branch is only guaranteed to work and build on Debian-based systems a
 Support for more systems will be confirmed and documented as the project matures.
 
 ### Dependencies
-Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), Debian based systems require the following additional dependencies:
+Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), Debian based systems require the following additional dependencies to compile:
 
 ```
 sudo apt install qt6-declarative-dev
+```
+
+The following runtime dependencies are also required for dynamic builds;
+they are not needed for static builds:
+
+```
+sudo apt install qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window
 ```
 
 No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
