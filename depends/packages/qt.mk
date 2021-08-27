@@ -18,6 +18,12 @@ $(package)_patches += fix_android_plugin_names.patch
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = c600d09716940f75d684f61c5bdaced797f623a86db1627da599027f6c635651
 
+$(package)_qtgraphicaleffects_file_name = qtgraphicaleffects-$($(package)_suffix)
+$(package)_qtgraphicaleffects_sha256_hash = ec8d67f64967d5046410490b549c576f9b9e8b47ec68594ae84aa8870173dfe4
+
+$(package)_qtquickcontrols2_file_name = qtquickcontrols2-$($(package)_suffix)
+$(package)_qtquickcontrols2_sha256_hash = 671b6ce5f4b8ecc94db622d5d5fb29ef4ff92819be08e5ea55bfcab579de8919
+
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
 $(package)_qttranslations_sha256_hash=d5788e86257b21d5323f1efd94376a213e091d1e5e03b45a95dd052b5f570db8
 
@@ -25,6 +31,8 @@ $(package)_qttools_file_name=qttools-$($(package)_suffix)
 $(package)_qttools_sha256_hash=c189d0ce1ff7c739db9a3ace52ac3e24cb8fd6dbf234e49f075249b38f43c1cc
 
 $(package)_extra_sources += $($(package)_qtdeclarative_file_name)
+$(package)_extra_sources += $($(package)_qtgraphicaleffects_file_name)
+$(package)_extra_sources += $($(package)_qtquickcontrols2_file_name)
 $(package)_extra_sources += $($(package)_qttranslations_file_name)
 $(package)_extra_sources += $($(package)_qttools_file_name)
 
@@ -207,6 +215,8 @@ endef
 define $(package)_fetch_cmds
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_download_file),$($(package)_file_name),$($(package)_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_sha256_hash)) && \
+$(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtgraphicaleffects_file_name),$($(package)_qtgraphicaleffects_file_name),$($(package)_qtgraphicaleffects_sha256_hash)) && \
+$(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtquickcontrols2_file_name),$($(package)_qtquickcontrols2_file_name),$($(package)_qtquickcontrols2_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttranslations_file_name),$($(package)_qttranslations_file_name),$($(package)_qttranslations_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttools_file_name),$($(package)_qttools_file_name),$($(package)_qttools_sha256_hash))
 endef
@@ -215,6 +225,8 @@ define $(package)_extract_cmds
   mkdir -p $($(package)_extract_dir) && \
   echo "$($(package)_sha256_hash)  $($(package)_source)" > $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qtdeclarative_sha256_hash)  $($(package)_source_dir)/$($(package)_qtdeclarative_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
+  echo "$($(package)_qtgraphicaleffects_sha256_hash)  $($(package)_source_dir)/$($(package)_qtgraphicaleffects_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
+  echo "$($(package)_qtquickcontrols2_sha256_hash)  $($(package)_source_dir)/$($(package)_qtquickcontrols2_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttranslations_sha256_hash)  $($(package)_source_dir)/$($(package)_qttranslations_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttools_sha256_hash)  $($(package)_source_dir)/$($(package)_qttools_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   $(build_SHA256SUM) -c $($(package)_extract_dir)/.$($(package)_file_name).hash && \
@@ -222,6 +234,10 @@ define $(package)_extract_cmds
   tar --no-same-owner --strip-components=1 -xf $($(package)_source) -C qtbase && \
   mkdir qtdeclarative && \
   tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtdeclarative_file_name) -C qtdeclarative && \
+  mkdir qtgraphicaleffects && \
+  tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtgraphicaleffects_file_name) -C qtgraphicaleffects && \
+  mkdir qtquickcontrols2 && \
+  tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtquickcontrols2_file_name) -C qtquickcontrols2 && \
   mkdir qttranslations && \
   tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qttranslations_file_name) -C qttranslations && \
   mkdir qttools && \
@@ -292,6 +308,7 @@ define $(package)_stage_cmds
   export PATH && \
   $(MAKE) -C qtbase/src INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_qt_libs))) && \
   $(MAKE) -C qtdeclarative INSTALL_ROOT=$($(package)_staging_dir) sub-src-install_subtargets && \
+  $(MAKE) -C qtquickcontrols2 INSTALL_ROOT=$($(package)_staging_dir) sub-src-install_subtargets && \
   $(MAKE) -C qttools/src/linguist INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_linguist_tools))) && \
   $(MAKE) -C qttranslations INSTALL_ROOT=$($(package)_staging_dir) install_subtargets
 endef
