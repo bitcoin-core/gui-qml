@@ -8,9 +8,10 @@ CONFIG += $$prl
 cache(CONFIG, add stash, prl)
 
 TEMPLATE = subdirs
-SUBDIRS = qtbase qtdeclarative qttools qttranslations
+SUBDIRS = qtbase qtdeclarative qtquickcontrols qttools qttranslations
 
 qtdeclarative.depends = qtbase
+qtquickcontrols.depends = qtdeclarative
 qttools.depends = qtbase
 qttranslations.depends = qttools
 

@@ -18,6 +18,9 @@ $(package)_patches += fix_qml_python.patch
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = 1267e029abc8424424c419bc1681db069ec76e51270cc220994e0f442c9f78d3
 
+$(package)_qtquickcontrols_file_name = qtquickcontrols-$($(package)_suffix)
+$(package)_qtquickcontrols_sha256_hash = cd6b81fda691ab15d25ac60b6a3437667a892e401438e07a64c88cadd3481389
+
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
 $(package)_qttranslations_sha256_hash=577b0668a777eb2b451c61e8d026d79285371597ce9df06b6dee6c814164b7c3
 
@@ -25,6 +28,7 @@ $(package)_qttools_file_name=qttools-$($(package)_suffix)
 $(package)_qttools_sha256_hash=98b2aaca230458f65996f3534fd471d2ffd038dd58ac997c0589c06dc2385b4f
 
 $(package)_extra_sources += $($(package)_qtdeclarative_file_name)
+$(package)_extra_sources += $($(package)_qtquickcontrols_file_name)
 $(package)_extra_sources += $($(package)_qttranslations_file_name)
 $(package)_extra_sources += $($(package)_qttools_file_name)
 
@@ -187,6 +191,7 @@ endef
 define $(package)_fetch_cmds
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_download_file),$($(package)_file_name),$($(package)_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_sha256_hash)) && \
+$(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtquickcontrols_file_name),$($(package)_qtquickcontrols_file_name),$($(package)_qtquickcontrols_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttranslations_file_name),$($(package)_qttranslations_file_name),$($(package)_qttranslations_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttools_file_name),$($(package)_qttools_file_name),$($(package)_qttools_sha256_hash))
 endef
@@ -195,6 +200,7 @@ define $(package)_extract_cmds
   mkdir -p $($(package)_extract_dir) && \
   echo "$($(package)_sha256_hash)  $($(package)_source)" > $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qtdeclarative_sha256_hash)  $($(package)_source_dir)/$($(package)_qtdeclarative_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
+  echo "$($(package)_qtquickcontrols_sha256_hash)  $($(package)_source_dir)/$($(package)_qtquickcontrols_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttranslations_sha256_hash)  $($(package)_source_dir)/$($(package)_qttranslations_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttools_sha256_hash)  $($(package)_source_dir)/$($(package)_qttools_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   $(build_SHA256SUM) -c $($(package)_extract_dir)/.$($(package)_file_name).hash && \
@@ -202,6 +208,8 @@ define $(package)_extract_cmds
   tar --no-same-owner --strip-components=1 -xf $($(package)_source) -C qtbase && \
   mkdir qtdeclarative && \
   tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtdeclarative_file_name) -C qtdeclarative && \
+  mkdir qtquickcontrols && \
+  tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtquickcontrols_file_name) -C qtquickcontrols && \
   mkdir qttranslations && \
   tar --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qttranslations_file_name) -C qttranslations && \
   mkdir qttools && \
@@ -271,6 +279,7 @@ define $(package)_stage_cmds
   export PATH && \
   $(MAKE) -C qtbase/src INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_qt_libs))) && \
   $(MAKE) -C qtdeclarative INSTALL_ROOT=$($(package)_staging_dir) sub-src-install_subtargets && \
+  $(MAKE) -C qtquickcontrols INSTALL_ROOT=$($(package)_staging_dir) install && \
   $(MAKE) -C qttools/src/linguist INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_linguist_tools))) && \
   $(MAKE) -C qttranslations INSTALL_ROOT=$($(package)_staging_dir) install_subtargets
 endef
