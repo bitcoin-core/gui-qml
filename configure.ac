@@ -1692,6 +1692,9 @@ fi
 
 dnl these are only used when qt is enabled
 BUILD_TEST_QT=""
+if test "$use_qml" != "no"; then
+  use_gui_tests=no
+fi
 if test "$bitcoin_enable_qt" != "no"; then
   dnl enable dbus support
   AC_MSG_CHECKING([whether to build GUI with support for D-Bus])
