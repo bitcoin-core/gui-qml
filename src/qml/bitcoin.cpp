@@ -11,6 +11,7 @@
 #include <noui.h>
 #include <qml/nodemodel.h>
 #include <qt/guiconstants.h>
+#include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -23,6 +24,16 @@
 #include <QQmlContext>
 #include <QStringLiteral>
 #include <QUrl>
+
+#if defined(QT_STATICPLUGIN)
+#include <QtPlugin>
+Q_IMPORT_PLUGIN(QtQuick2DialogsPlugin);
+Q_IMPORT_PLUGIN(QtQuick2Plugin);
+Q_IMPORT_PLUGIN(QtQuick2WindowPlugin);
+Q_IMPORT_PLUGIN(QtQuickControls1Plugin);
+Q_IMPORT_PLUGIN(QtQuickControls2Plugin);
+Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin);
+#endif
 
 namespace {
 void SetupUIArgs(ArgsManager& argsman)
@@ -41,6 +52,9 @@ bool InitErrorMessageBox(
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
+    }
     qGuiApp->exec();
     return false;
 }
@@ -99,6 +113,8 @@ int QmlGuiMain(int argc, char* argv[])
     gArgs.SoftSetBoolArg("-printtoconsole", false);
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
+
+    GUIUtil::LogQtInfo();
 
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
     if (!node->baseInitialize()) {
