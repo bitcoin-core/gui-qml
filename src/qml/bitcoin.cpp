@@ -41,6 +41,9 @@ bool InitErrorMessageBox(
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
+    }
     qGuiApp->exec();
     return false;
 }
