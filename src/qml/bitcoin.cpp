@@ -11,6 +11,7 @@
 #include <noui.h>
 #include <qml/nodemodel.h>
 #include <qt/guiconstants.h>
+#include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -112,6 +113,8 @@ int QmlGuiMain(int argc, char* argv[])
     gArgs.SoftSetBoolArg("-printtoconsole", false);
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
+
+    GUIUtil::LogQtInfo();
 
     std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
     if (!node->baseInitialize()) {

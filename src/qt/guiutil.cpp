@@ -2,6 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#ifdef HAVE_CONFIG_H
+#include <config/bitcoin-config.h>
+#endif
+
 #include <qt/guiutil.h>
 
 #include <qt/bitcoinaddressvalidator.h>
@@ -61,6 +65,9 @@
 #include <QThread>
 #include <QUrlQuery>
 #include <QtGlobal>
+#if USE_QML
+#include <QQuickStyle>
+#endif // USE_QML
 
 #include <cassert>
 #include <chrono>
@@ -881,7 +888,7 @@ void LogQtInfo()
 #else
     const std::string plugin_link{"dynamic"};
 #endif
-    LogPrintf("Qt %s (%s), plugin=%s (%s)\n", qVersion(), qt_link, QGuiApplication::platformName().toStdString(), plugin_link);
+    LogPrintf("Qt %s (%s), plugin=%s (%s)\n", qVersion(), qt_link, qGuiApp->platformName().toStdString(), plugin_link);
     const auto static_plugins = QPluginLoader::staticPlugins();
     if (static_plugins.empty()) {
         LogPrintf("No static plugins.\n");
@@ -895,7 +902,12 @@ void LogQtInfo()
         }
     }
 
+#if USE_QML
+    LogPrintf("QQuickStyle: %s\n", QQuickStyle::name().toStdString());
+#else
     LogPrintf("Style: %s / %s\n", QApplication::style()->objectName().toStdString(), QApplication::style()->metaObject()->className());
+#endif // USE_QML
+
     LogPrintf("System: %s, %s\n", QSysInfo::prettyProductName().toStdString(), QSysInfo::buildAbi().toStdString());
     for (const QScreen* s : QGuiApplication::screens()) {
         LogPrintf("Screen: %s %dx%d, pixel ratio=%.1f\n", s->name().toStdString(), s->size().width(), s->size().height(), s->devicePixelRatio());
