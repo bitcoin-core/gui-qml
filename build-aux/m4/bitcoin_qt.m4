@@ -140,6 +140,12 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       if test -d "$qt_plugin_path/platforms/android"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/platforms/android -lqtfreetype -lEGL"
       fi
+      if test -d "$qt_plugin_path/../qml/QtQuick/Controls.2"; then
+        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Controls.2"
+      fi
+      if test -d "$qt_plugin_path/../qml/QtQuick/Templates.2"; then
+        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Templates.2"
+      fi
       if test -d "$qt_plugin_path/../qml/QtQuick/Window.2"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Window.2"
       fi
@@ -180,6 +186,8 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
     if test "x$use_qml" != xno; then
       _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2Plugin], [-lqtquick2plugin])
       _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2WindowPlugin], [-lwindowplugin])
+      _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqtquickcontrols2plugin])
+      _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqtquicktemplates2plugin])
     fi
   fi
   CPPFLAGS=$TEMP_CPPFLAGS
