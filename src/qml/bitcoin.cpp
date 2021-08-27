@@ -15,6 +15,7 @@
 #include <noui.h>
 #include <qml/nodemodel.h>
 #include <qt/guiconstants.h>
+#include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <util/translation.h>
 
@@ -99,6 +100,8 @@ int QmlGuiMain(int argc, char* argv[])
         // A dialog with detailed error will have been shown by InitError().
         return EXIT_FAILURE;
     }
+
+    GUIUtil::LogQtInfo();
 
     handler_message_box.disconnect();
 
