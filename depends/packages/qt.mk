@@ -13,7 +13,7 @@ $(package)_patches += support_new_android_ndks.patch fix_android_jni_static.patc
 $(package)_patches+= no_sdk_version_check.patch
 $(package)_patches+= fix_lib_paths.patch fix_android_pch.patch
 $(package)_patches+= qtbase-moc-ignore-gcc-macro.patch fix_limits_header.patch
-$(package)_patches += fix_qml_python.patch
+$(package)_patches += fix_qml_python.patch riscv_detection.patch
 
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = 1267e029abc8424424c419bc1681db069ec76e51270cc220994e0f442c9f78d3
@@ -267,6 +267,7 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/qtbase-moc-ignore-gcc-macro.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_limits_header.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_qml_python.patch && \
+  patch -p1 -i $($(package)_patch_dir)/riscv_detection.patch && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
