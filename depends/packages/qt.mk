@@ -150,6 +150,14 @@ endif
 $(package)_config_opts_mingw32 := -no-dbus
 $(package)_config_opts_mingw32 += -no-freetype
 $(package)_config_opts_mingw32 += -no-pkg-config
+$(package)_config_opts_mingw32 += -no-opengl
+$(package)_config_opts_mingw32 += -no-d3d12
+$(package)_config_opts_mingw32 += -xplatform win32-g++
+$(package)_config_opts_mingw32 += "QMAKE_CFLAGS = '$($(package)_cflags) $($(package)_cppflags)'"
+$(package)_config_opts_mingw32 += "QMAKE_CXXFLAGS = '$($(package)_cflags) $($(package)_cppflags)'"
+$(package)_config_opts_mingw32 += "QMAKE_LFLAGS = '$($(package)_ldflags)'"
+$(package)_config_opts_mingw32 += -device-option CROSS_COMPILE="$(host)-"
+$(package)_config_opts_mingw32 += -pch
 ifneq ($(LTO),)
 $(package)_config_opts_mingw32 += -ltcg
 endif
