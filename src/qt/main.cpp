@@ -12,6 +12,7 @@
 #include <qt/bitcoin.h>
 #endif // USE_QML
 
+#include <interfaces/node.h>
 #include <logging.h>
 #include <noui.h>
 #include <util/system.h>
@@ -62,6 +63,8 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 
 int main(int argc, char* argv[])
 {
+    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
+
 #ifdef WIN32
     util::WinCmdLineArgs win_args;
     std::tie(argc, argv) = win_args.get();
