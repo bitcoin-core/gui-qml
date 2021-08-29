@@ -112,7 +112,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     handler_message_box.disconnect();
 
-    NodeModel node_model;
+    NodeModel node_model{*node};
     InitExecutor init_executor{*node};
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
     QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
