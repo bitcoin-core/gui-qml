@@ -11,14 +11,23 @@
 class NodeModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
 
 public:
+    int blockTipHeight() const { return m_block_tip_height; }
+    void setBlockTipHeight(int new_height);
+
     Q_INVOKABLE void startNodeInitializionThread();
     void startNodeShutdown();
 
 Q_SIGNALS:
+    void blockTipHeightChanged();
     void requestedInitialize();
     void requestedShutdown();
+
+private:
+    // Properties that are exposed to QML.
+    int m_block_tip_height{0};
 };
 
 #endif // BITCOIN_QML_NODEMODEL_H

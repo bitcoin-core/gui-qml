@@ -4,7 +4,13 @@
 
 #include <qml/BitcoinApp/nodemodel.h>
 
-#include <QDebug>
+void NodeModel::setBlockTipHeight(int new_height)
+{
+    if (new_height != m_block_tip_height) {
+        m_block_tip_height = new_height;
+        Q_EMIT blockTipHeightChanged();
+    }
+}
 
 void NodeModel::startNodeInitializionThread()
 {
