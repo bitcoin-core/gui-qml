@@ -4,6 +4,13 @@
 
 #include <qml/nodemodel.h>
 
+#include <interfaces/node.h>
+
+NodeModel::NodeModel(interfaces::Node& node)
+    : m_node{node}
+{
+}
+
 void NodeModel::setBlockTipHeight(int new_height)
 {
     if (new_height != m_block_tip_height) {

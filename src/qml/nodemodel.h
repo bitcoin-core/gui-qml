@@ -7,6 +7,10 @@
 
 #include <QObject>
 
+namespace interfaces {
+class Node;
+}
+
 /** Model for Bitcoin network client. */
 class NodeModel : public QObject
 {
@@ -14,6 +18,8 @@ class NodeModel : public QObject
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
 
 public:
+    explicit NodeModel(interfaces::Node& node);
+
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
 
@@ -28,6 +34,8 @@ Q_SIGNALS:
 private:
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+
+    interfaces::Node& m_node;
 };
 
 #endif // BITCOIN_QML_NODEMODEL_H
