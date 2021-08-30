@@ -14,6 +14,7 @@
 #include <node/context.h>
 #include <noui.h>
 #include <qml/BitcoinApp/nodemodel.h>
+#include <qml/BitcoinApp/util.h>
 #include <qt/guiconstants.h>
 #include <qt/initexecutor.h>
 #include <util/translation.h>
@@ -21,9 +22,11 @@
 
 #include <memory>
 
+#include <QDebug>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickWindow>
 #include <QString>
 #include <QUrl>
 
@@ -125,6 +128,13 @@ int QmlGuiMain(int argc, char* argv[])
     if (engine.rootObjects().isEmpty()) {
         return EXIT_FAILURE;
     }
+
+    auto window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
+    if (!window) {
+        return EXIT_FAILURE;
+    }
+
+    qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
 
     return qGuiApp->exec();
 }
