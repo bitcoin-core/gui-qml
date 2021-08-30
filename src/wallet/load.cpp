@@ -8,6 +8,7 @@
 #include <fs.h>
 #include <interfaces/chain.h>
 #include <scheduler.h>
+#include <util/check.h>
 #include <util/string.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -20,8 +21,10 @@
 bool VerifyWallets(WalletContext& context)
 {
     interfaces::Chain& chain = *context.chain;
-    if (gArgs.IsArgSet("-walletdir")) {
-        fs::path wallet_dir = gArgs.GetArg("-walletdir", "");
+    ArgsManager& args = *Assert(context.args);
+
+    if (args.IsArgSet("-walletdir")) {
+        fs::path wallet_dir = args.GetArg("-walletdir", "");
         boost::system::error_code error;
         // The canonical path cleans the path, preventing >1 Berkeley environment instances for the same directory
         fs::path canonical_wallet_dir = fs::canonical(wallet_dir, error);
@@ -36,7 +39,7 @@ bool VerifyWallets(WalletContext& context)
             chain.initError(strprintf(_("Specified -walletdir \"%s\" is a relative path"), wallet_dir.string()));
             return false;
         }
-        gArgs.ForceSetArg("-walletdir", canonical_wallet_dir.string());
+        args.ForceSetArg("-walletdir", canonical_wallet_dir.string());
     }
 
     LogPrintf("Using wallet directory %s\n", GetWalletDir().string());
@@ -45,25 +48,27 @@ bool VerifyWallets(WalletContext& context)
 
     // For backwards compatibility if an unnamed top level wallet exists in the
     // wallets directory, include it in the default list of wallets to load.
-    if (!gArgs.IsArgSet("wallet")) {
+    if (!args.IsArgSet("wallet")) {
         DatabaseOptions options;
         DatabaseStatus status;
         bilingual_str error_string;
         options.require_existing = true;
         options.verify = false;
         if (MakeWalletDatabase("", options, status, error_string)) {
-            gArgs.LockSettings([&](util::Settings& settings) {
-                util::SettingsValue wallets(util::SettingsValue::VARR);
-                wallets.push_back(""); // Default wallet name is ""
-                settings.rw_settings["wallet"] = wallets;
-            });
+            util::SettingsValue wallets(util::SettingsValue::VARR);
+            wallets.push_back(""); // Default wallet name is ""
+            // Pass write=false because no need to write file and probably
+            // better not to. If unnamed wallet needs to be added next startup
+            // and the setting is empty, this code will just run again.
+            chain.updateRwSetting("wallet", wallets, /* write= */ false);
         }
     }
 
     // Keep track of each wallet absolute path to detect duplicates.
     std::set<fs::path> wallet_paths;
 
-    for (const auto& wallet_file : gArgs.GetArgs("-wallet")) {
+    for (const auto& wallet : chain.getSettingsList("wallet")) {
+        const auto& wallet_file = wallet.get_str();
         const fs::path path = fsbridge::AbsPathJoin(GetWalletDir(), wallet_file);
 
         if (!wallet_paths.insert(path).second) {
@@ -94,7 +99,8 @@ bool LoadWallets(WalletContext& context)
     interfaces::Chain& chain = *context.chain;
     try {
         std::set<fs::path> wallet_paths;
-        for (const std::string& name : gArgs.GetArgs("-wallet")) {
+        for (const auto& wallet : chain.getSettingsList("wallet")) {
+            const auto& name = wallet.get_str();
             if (!wallet_paths.insert(name).second) {
                 continue;
             }
