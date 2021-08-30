@@ -949,7 +949,8 @@ void LogQtInfo()
     }
 
 #if USE_QML
-    LogInfo("QQuickStyle: %s\n", QQuickStyle::name().toStdString());
+    const auto style = QQuickStyle::name().toStdString();
+    LogInfo("QQuickStyle: %s\n", style.empty() ? "Default" : style);
 #else
     LogInfo("Style: %s / %s\n", QApplication::style()->objectName().toStdString(), QApplication::style()->metaObject()->className());
 #endif // USE_QML

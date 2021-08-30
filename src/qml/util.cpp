@@ -17,15 +17,16 @@ QString GraphicsApi(QQuickWindow* window)
     switch (window->rendererInterface()->graphicsApi()) {
     case QSGRendererInterface::Unknown: return "Unknown";
     case QSGRendererInterface::Software: return "The Qt Quick 2D Renderer";
-    case QSGRendererInterface::OpenGL: return "OpenGL ES 2.0 or higher";
-    case QSGRendererInterface::Direct3D12: return "Direct3D 12";
     case QSGRendererInterface::OpenVG: return "OpenVG via EGL";
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
-    case QSGRendererInterface::OpenGLRhi: return "OpenGL ES 2.0 or higher via a graphics abstraction layer";
-    case QSGRendererInterface::Direct3D11Rhi: return "Direct3D 11 via a graphics abstraction layer";
-    case QSGRendererInterface::VulkanRhi: return "Vulkan 1.0 via a graphics abstraction layer";
-    case QSGRendererInterface::MetalRhi: return "Metal via a graphics abstraction layer";
-    case QSGRendererInterface::NullRhi: return "Null (no output) via a graphics abstraction layer";
+    case QSGRendererInterface::OpenGL: return "OpenGL ES 2.0 or higher via a graphics abstraction layer";
+    case QSGRendererInterface::Direct3D11: return "Direct3D 11 via a graphics abstraction layer";
+    case QSGRendererInterface::Vulkan: return "Vulkan 1.0 via a graphics abstraction layer";
+    case QSGRendererInterface::Metal: return "Metal via a graphics abstraction layer";
+    case QSGRendererInterface::Null: return "Null (no output) via a graphics abstraction layer";
+#endif
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 6, 0))
+    case QSGRendererInterface::Direct3D12: return "Direct3D 12 via a graphics abstraction layer";
 #endif
     } // no default case, so the compiler can warn about missing cases
     assert(false);
