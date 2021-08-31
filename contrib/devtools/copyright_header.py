@@ -38,7 +38,7 @@ EXCLUDE_DIRS = [
     "src/crc32c/",
 ]
 
-INCLUDE = ['*.h', '*.cpp', '*.cc', '*.c', '*.mm', '*.py', '*.sh', '*.bash-completion']
+INCLUDE = ['*.h', '*.cpp', '*.cc', '*.c', '*.mm', '*.qml', '*.py', '*.sh', '*.bash-completion']
 INCLUDE_COMPILED = re.compile('|'.join([fnmatch.translate(m) for m in INCLUDE]))
 
 def applies_to_file(filename):
@@ -560,7 +560,7 @@ def insert_cmd(argv):
     if not os.path.isfile(filename):
         sys.exit("*** bad filename: %s" % filename)
     _, extension = os.path.splitext(filename)
-    if extension not in ['.h', '.cpp', '.cc', '.c', '.py', '.sh']:
+    if extension not in ['.h', '.cpp', '.cc', '.c', '.qml', '.py', '.sh']:
         sys.exit("*** cannot insert for file extension %s" % extension)
 
     if extension == '.py':
