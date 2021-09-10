@@ -13,6 +13,7 @@
 #include <util/system.h>
 #include <util/translation.h>
 #include <wallet/context.h>
+#include <wallet/spend.h>
 #include <wallet/wallet.h>
 #include <wallet/walletdb.h>
 
@@ -164,7 +165,7 @@ void UnloadWallets(WalletContext& context)
         auto wallet = wallets.back();
         wallets.pop_back();
         std::vector<bilingual_str> warnings;
-        RemoveWallet(context, wallet, /* load_on_startup= */ std::nullopt, warnings);
+        RemoveWallet(context, wallet, /* load_on_start= */ std::nullopt, warnings);
         UnloadWallet(std::move(wallet));
     }
 }
