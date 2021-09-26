@@ -18,7 +18,13 @@ ApplicationWindow {
     }
     visible: true
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    Component.onCompleted: initExecutor.initialize()
+
+    Connections {
+        target: initExecutor
+        onInitializeResult: nodeModel.initializeResult(success, tip_info)
+    }
+
 
     Image {
         id: appLogo
