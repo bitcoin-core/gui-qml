@@ -28,16 +28,11 @@ public:
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
 
-    Q_INVOKABLE void startNodeInitializionThread();
-    void startNodeShutdown();
-
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
 
 Q_SIGNALS:
     void blockTipHeightChanged();
-    void requestedInitialize();
-    void requestedShutdown();
 
 private:
     // Properties that are exposed to QML.
