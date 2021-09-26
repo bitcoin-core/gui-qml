@@ -23,16 +23,6 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
-void NodeModel::startNodeInitializionThread()
-{
-    Q_EMIT requestedInitialize();
-}
-
-void NodeModel::startNodeShutdown()
-{
-    Q_EMIT requestedShutdown();
-}
-
 void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::BlockAndHeaderTipInfo tip_info)
 {
     // TODO: Handle the `success` parameter,

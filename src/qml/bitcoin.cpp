@@ -159,16 +159,11 @@ int QmlGuiMain(int argc, char* argv[])
 
     NodeModel node_model{*node};
     InitExecutor init_executor{*node};
-    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
-    QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
-    QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
-    // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
         node->startShutdown();
-        node_model.startNodeShutdown();
+        init_executor.shutdown();
     });
 
     GUIUtil::LoadFont(":/fonts/inter/regular");
@@ -180,6 +175,7 @@ int QmlGuiMain(int argc, char* argv[])
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
+    engine.rootContext()->setContextProperty("initExecutor", &init_executor);
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
