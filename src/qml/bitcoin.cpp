@@ -12,6 +12,7 @@
 #include <node/context.h>
 #include <node/ui_interface.h>
 #include <noui.h>
+#include <qml/engine.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/util.h>
@@ -30,7 +31,6 @@
 
 #include <QDebug>
 #include <QGuiApplication>
-#include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
@@ -176,7 +176,7 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
-    QQmlApplicationEngine engine;
+    Engine engine(*node);
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
     assert(!network_style.isNull());

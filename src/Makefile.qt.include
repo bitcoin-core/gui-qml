@@ -35,6 +35,7 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
+  qml/moc_engine.cpp \
   qml/moc_nodemodel.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
@@ -108,6 +109,7 @@ QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
   qml/bitcoin.h \
+  qml/engine.h \
   qml/imageprovider.h \
   qml/nodemodel.h \
   qml/util.h \
@@ -286,6 +288,7 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
+  qml/engine.cpp \
   qml/imageprovider.cpp \
   qml/nodemodel.cpp \
   qml/util.cpp
@@ -443,7 +446,7 @@ ui_%.h: %.ui
 	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(MOC) $(DEFAULT_INCLUDES) $(QT_INCLUDES_UNSUPPRESSED) $(MOC_DEFS) $< > $@
 
 moc_%.cpp: %.h
-	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(MOC) $(DEFAULT_INCLUDES) $(QT_INCLUDES_UNSUPPRESSED) $(MOC_DEFS) $< > $@
+	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(MOC) $(DEFAULT_INCLUDES) $(QT_INCLUDES_UNSUPPRESSED) $(QT_QUICK_CFLAGS) $(MOC_DEFS) $< > $@
 
 %.qm: %.ts
 	@test -f $(LRELEASE)
