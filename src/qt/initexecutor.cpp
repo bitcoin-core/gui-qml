@@ -21,6 +21,11 @@ InitExecutor::InitExecutor(interfaces::Node& node)
 {
     m_context.moveToThread(&m_thread);
     m_thread.start();
+
+    connect(this, &InitExecutor::initializeResult, this, [=](bool success, interfaces::BlockAndHeaderTipInfo tip_info) {
+        m_ready = success;
+        Q_EMIT readyChanged();
+    });
 }
 
 InitExecutor::~InitExecutor()
