@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+import BitcoinCore 1.0
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.11
@@ -17,27 +18,28 @@ ApplicationWindow {
 
     Component.onCompleted: initExecutor.initialize()
 
-    Connections {
-        target: initExecutor
-        onInitializeResult: nodeModel.initializeResult(success, tip_info)
-    }
-
-
-    ColumnLayout {
+    Loader {
+        id: loader
+        active: initExecutor.ready
         anchors.centerIn: parent
-        spacing: 15
-        width: 400
-        Image {
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            sourceSize.width: 64
-            sourceSize.height: 64
-        }
-        BlockCounter {
-            Layout.alignment: Qt.AlignCenter
-            blockHeight: nodeModel.blockTipHeight
-        }
-        ConnectionOptions {
+        sourceComponent: ColumnLayout {
+            spacing: 15
+            width: 400
+            NodeModel {
+                id: node_model
+            }
+            Image {
+                Layout.alignment: Qt.AlignCenter
+                source: "image://images/app"
+                sourceSize.width: 64
+                sourceSize.height: 64
+            }
+            BlockCounter {
+                Layout.alignment: Qt.AlignCenter
+                blockHeight: nodeModel.blockTipHeight
+            }
+            ConnectionOptions {
+            }
         }
     }
 }

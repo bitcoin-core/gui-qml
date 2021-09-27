@@ -5,14 +5,14 @@
 #include <qml/nodemodel.h>
 
 #include <interfaces/node.h>
+#include <qml/engine.h>
 #include <validation.h>
 
 #include <cassert>
 
-NodeModel::NodeModel(interfaces::Node& node)
-    : m_node{node}
+NodeModel::NodeModel(QObject* parent)
+    : QObject(parent)
 {
-    ConnectToBlockTipSignal();
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
@@ -23,16 +23,16 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
-void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::BlockAndHeaderTipInfo tip_info)
+void NodeModel::classBegin()
 {
-    // TODO: Handle the `success` parameter,
-    setBlockTipHeight(tip_info.block_height);
 }
 
-void NodeModel::ConnectToBlockTipSignal()
+void NodeModel::componentComplete()
 {
+    auto& node = Engine::node(this);
+    setBlockTipHeight(node.getNumBlocks());
     assert(!m_handler_notify_block_tip);
-    m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
+    m_handler_notify_block_tip = node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             setBlockTipHeight(tip.block_height);
         });

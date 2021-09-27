@@ -164,7 +164,6 @@ int QmlGuiMain(int argc, char* argv[])
 
     handler_message_box.disconnect();
 
-    NodeModel node_model{*node};
     InitExecutor init_executor{*node};
 
     qGuiApp->setQuitOnLastWindowClosed(false);
@@ -176,6 +175,8 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
+    qmlRegisterType<NodeModel>("BitcoinCore", 1, 0, "NodeModel");
+
     Engine engine(*node);
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
@@ -183,7 +184,6 @@ int QmlGuiMain(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
     engine.rootContext()->setContextProperty("initExecutor", &init_executor);
-    engine.rootContext()->setContextProperty("nodeModel", &node_model);
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
     if (engine.rootObjects().isEmpty()) {
