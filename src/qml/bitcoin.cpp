@@ -12,6 +12,7 @@
 #include <node/context.h>
 #include <node/ui_interface.h>
 #include <noui.h>
+#include <qml/chainmodel.h>
 #include <qml/engine.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
@@ -175,6 +176,7 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
+    qmlRegisterType<ChainModel>("BitcoinCore", 1, 0, "ChainModel");
     qmlRegisterType<NodeModel>("BitcoinCore", 1, 0, "NodeModel");
 
     Engine engine(*node);
