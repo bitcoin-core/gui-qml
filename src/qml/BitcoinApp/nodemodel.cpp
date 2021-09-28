@@ -10,6 +10,7 @@
 #include <cassert>
 #include <chrono>
 
+#include <QMetaObject>
 #include <QTimerEvent>
 
 NodeModel::NodeModel(interfaces::Node& node)
@@ -71,7 +72,9 @@ void NodeModel::ConnectToBlockTipSignal()
 
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            setBlockTipHeight(tip.block_height);
-            setVerificationProgress(verification_progress);
+            QMetaObject::invokeMethod(this, [this, tip, verification_progress] {
+                setBlockTipHeight(tip.block_height);
+                setVerificationProgress(verification_progress);
+            });
         });
 }
