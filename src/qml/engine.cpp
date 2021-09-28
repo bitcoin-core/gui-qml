@@ -18,9 +18,19 @@ Engine::~Engine()
 {
 }
 
+interfaces::Chain& Engine::chain(QObject* object)
+{
+    return *Assert(Engine::nodeContext(object).chain);
+}
+
 interfaces::Node& Engine::node(QObject* object)
 {
     auto context = Assert(QQmlEngine::contextForObject(object));
     auto engine = Assert(context->engine());
     return Assert(qobject_cast<Engine*>(engine))->node();
+}
+
+NodeContext& Engine::nodeContext(QObject* object)
+{
+    return *Assert(Engine::node(object).context());
 }

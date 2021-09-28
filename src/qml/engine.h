@@ -8,8 +8,11 @@
 #include <QQmlApplicationEngine>
 
 namespace interfaces {
+class Chain;
 class Node;
 }
+
+class NodeContext;
 
 class Engine : public QQmlApplicationEngine
 {
@@ -21,7 +24,9 @@ public:
 
     interfaces::Node& node() const { return m_node; }
 
+    static interfaces::Chain& chain(QObject* object);
     static interfaces::Node& node(QObject* object);
+    static NodeContext& nodeContext(QObject* object);
 
 private:
     interfaces::Node& m_node;
