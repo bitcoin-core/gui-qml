@@ -22,23 +22,31 @@ ApplicationWindow {
         id: loader
         active: initExecutor.ready
         anchors.centerIn: parent
-        sourceComponent: ColumnLayout {
+        sourceComponent: RowLayout {
             spacing: 15
-            width: 400
-            NodeModel {
-                id: node_model
+            ColumnLayout {
+                spacing: 15
+                Layout.preferredWidth: 400
+                NodeModel {
+                    id: nodeModel
+                }
+                Image {
+                    Layout.alignment: Qt.AlignCenter
+                    source: "image://images/app"
+                    sourceSize.width: 64
+                    sourceSize.height: 64
+                }
+                BlockCounter {
+                    Layout.alignment: Qt.AlignCenter
+                    blockHeight: nodeModel.blockTipHeight
+                }
+                ConnectionOptions {
+                }
             }
-            Image {
-                Layout.alignment: Qt.AlignCenter
-                source: "image://images/app"
-                sourceSize.width: 64
-                sourceSize.height: 64
-            }
-            BlockCounter {
-                Layout.alignment: Qt.AlignCenter
-                blockHeight: nodeModel.blockTipHeight
-            }
-            ConnectionOptions {
+            BlocksListView {
+                Layout.fillHeight: true
+                Layout.preferredHeight: 0
+                Layout.preferredWidth: 300
             }
         }
     }
