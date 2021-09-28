@@ -6,6 +6,7 @@
 
 #include <interfaces/node.h>
 #include <qml/engine.h>
+#include <qt/guiutil.h>
 #include <validation.h>
 
 #include <cassert>
@@ -34,6 +35,8 @@ void NodeModel::componentComplete()
     assert(!m_handler_notify_block_tip);
     m_handler_notify_block_tip = node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            setBlockTipHeight(tip.block_height);
+            GUIUtil::ObjectInvoke(this, [=] {
+                setBlockTipHeight(tip.block_height);
+            });
         });
 }
