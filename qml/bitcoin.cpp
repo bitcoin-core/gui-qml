@@ -15,10 +15,12 @@
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <util/system.h>
+#include <util/threadnames.h>
 #include <util/translation.h>
 
 #include <boost/signals2/connection.hpp>
 #include <memory>
+#include <tuple>
 
 #include <QDebug>
 #include <QGuiApplication>
@@ -66,6 +68,14 @@ bool InitErrorMessageBox(
 
 int QmlGuiMain(int argc, char* argv[])
 {
+#ifdef WIN32
+    util::WinCmdLineArgs winArgs;
+    std::tie(argc, argv) = winArgs.get();
+#endif // WIN32
+
+    SetupEnvironment();
+    util::ThreadSetInternalName("main");
+
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
