@@ -15,14 +15,11 @@
 #include <interfaces/node.h>
 #include <logging.h>
 #include <noui.h>
-#include <util/system.h>
-#include <util/threadnames.h>
 #include <util/translation.h>
 #include <util/url.h>
 
 #include <functional>
 #include <string>
-#include <tuple>
 
 #include <QCoreApplication>
 #include <QString>
@@ -64,14 +61,6 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 int main(int argc, char* argv[])
 {
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-
-#ifdef WIN32
-    util::WinCmdLineArgs win_args;
-    std::tie(argc, argv) = win_args.get();
-#endif // WIN32
-
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
 
     // Subscribe to global signals from core.
     noui_connect();
