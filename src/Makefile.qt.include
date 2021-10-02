@@ -108,6 +108,7 @@ QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
   qml/bitcoin.h \
+  qml/imageprovider.h \
   qml/nodemodel.h \
   qml/util.h \
   qt/addressbookpage.h \
@@ -285,6 +286,7 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
+  qml/imageprovider.cpp \
   qml/nodemodel.cpp \
   qml/util.cpp
 
