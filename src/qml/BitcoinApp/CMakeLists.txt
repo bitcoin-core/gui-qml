@@ -8,6 +8,7 @@ qt6_add_qml_module(bitcoin_qml
   STATIC
   SOURCES
     bitcoin.cpp
+    imageprovider.cpp
     nodemodel.cpp
     util.cpp
   RESOURCE_PREFIX /qt/qml/
