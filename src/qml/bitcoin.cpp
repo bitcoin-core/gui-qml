@@ -9,6 +9,7 @@
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
+#include <node/context.h>
 #include <node/ui_interface.h>
 #include <noui.h>
 #include <qml/imageprovider.h>
@@ -33,7 +34,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
-#include <QStyleHints>
+#include <QStringLiteral>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -42,10 +43,11 @@ QT_END_NAMESPACE
 
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
-Q_IMPORT_PLUGIN(QtQuick2Plugin);
-Q_IMPORT_PLUGIN(QtQuick2WindowPlugin);
+Q_IMPORT_PLUGIN(QtQmlPlugin)
+Q_IMPORT_PLUGIN(QtQmlModelsPlugin)
+Q_IMPORT_PLUGIN(QtQuick2Plugin)
+Q_IMPORT_PLUGIN(QtQuick2WindowPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2Plugin);
-Q_IMPORT_PLUGIN(QtQuickLayoutsPlugin);
 Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin);
 #endif
 
@@ -96,17 +98,19 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+    NodeContext node_context;
+    int unused_exit_status;
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeNodeInit(node_context, argc, argv, unused_exit_status);
 
     SetupEnvironment();
     util::ThreadSetInternalName("main");
 
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    node_context.args = &gArgs;
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
     std::string error;
