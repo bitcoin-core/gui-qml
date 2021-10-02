@@ -13,9 +13,20 @@ ApplicationWindow {
     title: "Bitcoin Core TnG"
     minimumWidth: 750
     minimumHeight: 450
+    background: Rectangle {
+        color: "black"
+    }
     visible: true
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
+
+    Image {
+        id: appLogo
+        anchors.horizontalCenter: parent.horizontalCenter
+        source: "image://images/app"
+        sourceSize.width: 128
+        sourceSize.height: 128
+    }
 
     BitcoinCoreComponents.BlockCounter {
         id: blockCounter
