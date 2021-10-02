@@ -3,6 +3,7 @@
         <file>components/BlockCounter.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
+        <file>pages/onboarding/Onboarding00Welcome.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
