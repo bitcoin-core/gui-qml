@@ -11,6 +11,7 @@
 #include <init.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
+#include <logging.h>
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
@@ -33,8 +34,12 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
-#include <QStringLiteral>
+#include <QString>
 #include <QUrl>
+
+QT_BEGIN_NAMESPACE
+class QMessageLogContext;
+QT_END_NAMESPACE
 
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
@@ -69,6 +74,17 @@ bool InitErrorMessageBox(
     }
     qGuiApp->exec();
     return false;
+}
+
+/* qDebug() message handler --> debug.log */
+void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
+{
+    Q_UNUSED(context);
+    if (type == QtDebugMsg) {
+        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
+    } else {
+        LogPrintf("GUI: %s\n", msg.toStdString());
+    }
 }
 } // namespace
 
@@ -157,6 +173,9 @@ int QmlGuiMain(int argc, char* argv[])
     if (!window) {
         return EXIT_FAILURE;
     }
+
+    // Install qDebug() message handler to route to debug.log
+    qInstallMessageHandler(DebugMessageHandler);
 
     qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
 
