@@ -7,17 +7,21 @@
 #include <common/args.h>
 #include <common/init.h>
 #include <common/system.h>
+#include <chainparams.h>
 #include <init.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
+#include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/util.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
+#include <qt/networkstyle.h>
+#include <util/threadnames.h>
 #include <util/translation.h>
 
 #include <boost/signals2/connection.hpp>
@@ -123,6 +127,11 @@ int QmlGuiMain(int argc, char* argv[])
     });
 
     QQmlApplicationEngine engine;
+
+    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
+    assert(!network_style.isNull());
+    engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
+
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));

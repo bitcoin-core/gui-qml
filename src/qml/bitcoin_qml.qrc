@@ -4,4 +4,7 @@
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
+    <qresource prefix="/icons">
+        <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
+    </qresource>
 </RCC>
