@@ -14,8 +14,6 @@
 
 #include <interfaces/node.h>
 #include <noui.h>
-#include <util/system.h>
-#include <util/threadnames.h>
 #include <util/translation.h>
 #include <util/url.h>
 
@@ -23,7 +21,6 @@
 
 #include <functional>
 #include <string>
-#include <tuple>
 
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
@@ -45,14 +42,6 @@ UrlDecodeFn* const URL_DECODE = urlDecode;
 int main(int argc, char* argv[])
 {
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-
-#ifdef WIN32
-    util::WinCmdLineArgs win_args;
-    std::tie(argc, argv) = win_args.get();
-#endif // WIN32
-
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
 
     // Subscribe to global signals from core.
     noui_connect();
