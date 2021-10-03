@@ -13,23 +13,17 @@
 #endif // USE_QML
 
 #include <interfaces/node.h>
-#include <logging.h>
 #include <noui.h>
 #include <util/system.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 #include <util/url.h>
 
+#include <QCoreApplication>
+
 #include <functional>
 #include <string>
 #include <tuple>
-
-#include <QCoreApplication>
-#include <QString>
-
-QT_BEGIN_NAMESPACE
-class QMessageLogContext;
-QT_END_NAMESPACE
 
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
@@ -48,19 +42,6 @@ extern const std::function<std::string(const char*)> G_TRANSLATION_FUN = [](cons
 };
 UrlDecodeFn* const URL_DECODE = urlDecode;
 
-namespace {
-/* qDebug() message handler --> debug.log */
-void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString& msg)
-{
-    Q_UNUSED(context);
-    if (type == QtDebugMsg) {
-        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
-    } else {
-        LogPrintf("GUI: %s\n", msg.toStdString());
-    }
-}
-} // namespace
-
 int main(int argc, char* argv[])
 {
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
@@ -75,9 +56,6 @@ int main(int argc, char* argv[])
 
     // Subscribe to global signals from core.
     noui_connect();
-
-    // Install qDebug() message handler to route to debug.log
-    qInstallMessageHandler(DebugMessageHandler);
 
 #if USE_QML
     return QmlGuiMain(argc, argv);
