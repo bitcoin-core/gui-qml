@@ -55,7 +55,7 @@ The following runtime dependencies are also required for dynamic builds;
 they are not needed for static builds:
 
 ```
-sudo apt install qml-module-qtquick2 qml-module-qtquick-controls qml-module-qtquick-controls2 qml-module-qtquick-dialogs qml-module-qtquick-window2
+sudo apt install qml-module-qtquick2 qml-module-qtquick-controls qml-module-qtquick-controls2 qml-module-qtquick-dialogs qml-module-qtquick-layouts qml-module-qtquick-window2
 ```
 
 No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
