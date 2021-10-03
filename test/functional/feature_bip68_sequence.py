@@ -42,10 +42,13 @@ class BIP68Test(BitcoinTestFramework):
         self.num_nodes = 2
         self.extra_args = [
             [
+                '-testactivationheight=csv@432',
                 "-acceptnonstdtxn=1",
-                "-peertimeout=9999",  # bump because mocktime might cause a disconnect otherwise
             ],
-            ["-acceptnonstdtxn=0"],
+            [
+                '-testactivationheight=csv@432',
+                "-acceptnonstdtxn=0",
+            ],
         ]
 
     def skip_test_if_missing_module(self):
