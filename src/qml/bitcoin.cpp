@@ -5,6 +5,7 @@
 #include <qml/bitcoin.h>
 
 #include <init.h>
+#include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
 #include <node/context.h>
@@ -91,9 +92,6 @@ int QmlGuiMain(int argc, char* argv[])
     std::tie(argc, argv) = winArgs.get();
 #endif // WIN32
 
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
-
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
@@ -102,6 +100,11 @@ int QmlGuiMain(int argc, char* argv[])
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
     NodeContext node_context;
+    int unused_exit_status;
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeNodeInit(node_context, argc, argv, unused_exit_status);
+
+    SetupEnvironment();
+    util::ThreadSetInternalName("main");
 
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     node_context.args = &gArgs;
@@ -147,7 +150,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     GUIUtil::LogQtInfo();
 
-    std::unique_ptr<interfaces::Node> node = interfaces::MakeNode(&node_context);
+    std::unique_ptr<interfaces::Node> node = init->makeNode();
     if (!node->baseInitialize()) {
         // A dialog with detailed error will have been shown by InitError().
         return EXIT_FAILURE;
