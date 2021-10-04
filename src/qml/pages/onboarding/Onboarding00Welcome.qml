@@ -6,13 +6,13 @@
 
 import QtQuick 2.12
 import QtQuick.Controls 2.12
+import QtQuick.Layouts 1.12
 
-Column {
-    width: appTitle.width
+ColumnLayout {
     spacing: 16
 
     Image {
-        anchors.horizontalCenter: parent.horizontalCenter
+        Layout.alignment: Qt.AlignCenter
         source: "image://images/app"
         sourceSize.width: 128
         sourceSize.height: 128
@@ -20,14 +20,14 @@ Column {
 
     Label {
         id: appTitle
-        anchors.horizontalCenter: parent.horizontalCenter
+        Layout.alignment: Qt.AlignCenter
         text: "Bitcoin Core TnG"
         font.pointSize: 36
         color: "white"
     }
 
     Label {
-        width: parent.width
+        Layout.maximumWidth: appTitle.width
         text: "Be part of the Bitcoin network."
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
@@ -37,8 +37,7 @@ Column {
 
     Button {
         id: startButton
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width
+        Layout.fillWidth: true
         text: "Start"
         font.pointSize: 20
 
@@ -51,8 +50,6 @@ Column {
         }
 
         background: Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width
             implicitHeight: 60
             color: "orange"
             radius: 4
@@ -60,7 +57,7 @@ Column {
     }
 
     Label {
-        anchors.horizontalCenter: parent.horizontalCenter
+        Layout.alignment: Qt.AlignCenter
         text: "100% open-source & open-design"
         font.pointSize: 15
         color: "white"
