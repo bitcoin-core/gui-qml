@@ -25,6 +25,6 @@ ApplicationWindow {
 
     BitcoinCoreOnboarding.Onboarding00Welcome {
         id: welcomePage
-        anchors.centerIn: parent
+        anchors.fill: parent
     }
 }
