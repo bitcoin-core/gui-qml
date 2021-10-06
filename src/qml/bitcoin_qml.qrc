@@ -7,4 +7,8 @@
     <qresource prefix="/icons">
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
     </qresource>
+    <qresource prefix="/fonts">
+        <file alias="inter/regular">res/fonts/Inter-Regular.otf</file>
+        <file alias="inter/semibold">res/fonts/Inter-SemiBold.otf</file>
+    </qresource>
 </RCC>

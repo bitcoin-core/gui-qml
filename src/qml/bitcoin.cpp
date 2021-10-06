@@ -175,6 +175,9 @@ int QmlGuiMain(int argc, char* argv[])
         node_model.startNodeShutdown();
     });
 
+    GUIUtil::LoadFont(":/fonts/inter/regular");
+    GUIUtil::LoadFont(":/fonts/inter/semibold");
+
     QQmlApplicationEngine engine;
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
