@@ -18,6 +18,7 @@
 #include <qml/BitcoinApp/nodemodel.h>
 #include <qml/BitcoinApp/util.h>
 #include <qt/guiconstants.h>
+#include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
 #include <util/translation.h>
@@ -145,6 +146,9 @@ int QmlGuiMain(int argc, char* argv[])
         node->startShutdown();
         node_model.startNodeShutdown();
     });
+
+    GUIUtil::LoadFont(":/qt/qml/BitcoinApp/res/fonts/Inter-Regular.otf");
+    GUIUtil::LoadFont(":/qt/qml/BitcoinApp/res/fonts/Inter-SemiBold.otf");
 
     QQmlApplicationEngine engine;
     engine.addImportPath(QStringLiteral(":/qt/qml"));
