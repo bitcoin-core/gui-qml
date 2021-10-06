@@ -15,6 +15,9 @@ qt6_add_qml_module(bitcoin_qml
   QML_FILES
     initerrormessage.qml
     stub.qml
+  RESOURCES
+    res/fonts/Inter-Regular.otf
+    res/fonts/Inter-SemiBold.otf
 )
 
 add_subdirectory(Components)
