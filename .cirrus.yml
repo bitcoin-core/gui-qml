@@ -31,6 +31,8 @@ base_template: &BASE_TEMPLATE
     - if [ "$CIRRUS_PR" = "" ]; then exit 0; fi
     - git fetch $CIRRUS_REPO_CLONE_URL $CIRRUS_BASE_BRANCH
     - git merge FETCH_HEAD  # Merge base to detect silent merge conflicts
+  set_gui_tests_script:
+    - if [ "$CIRRUS_REPO_FULL_NAME" != "bitcoin/bitcoin" ] && [ "$CIRRUS_REPO_FULL_NAME" != "bitcoin-core/gui" ]; then echo "BITCOIN_CONFIG=${BITCOIN_CONFIG} --disable-gui-tests" >> $CIRRUS_ENV; fi
 
 main_template: &MAIN_TEMPLATE
   timeout_in: 120m  # https://cirrus-ci.org/faq/#instance-timed-out
