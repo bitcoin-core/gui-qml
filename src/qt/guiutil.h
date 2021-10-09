@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QT_GUIUTIL_H
 #define BITCOIN_QT_GUIUTIL_H
 
-#include <amount.h>
+#include <consensus/amount.h>
 #include <fs.h>
 #include <net.h>
 #include <netaddress.h>
@@ -112,6 +112,11 @@ namespace GUIUtil
     bool hasEntryData(const QAbstractItemView *view, int column, int role);
 
     void setClipboard(const QString& str);
+
+    /**
+     * Loads the font from the file specified by file_name, aborts if it fails.
+     */
+    void LoadFont(const QString& file_name);
 
     /**
      * Determine default data directory for operating system.
