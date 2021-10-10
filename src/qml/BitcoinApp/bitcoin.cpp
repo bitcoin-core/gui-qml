@@ -24,6 +24,7 @@
 #include <util/translation.h>
 #include <util/threadnames.h>
 
+#include <cassert>
 #include <memory>
 
 #include <QDebug>
