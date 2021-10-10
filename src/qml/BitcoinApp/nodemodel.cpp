@@ -7,6 +7,8 @@
 #include <interfaces/node.h>
 #include <validation.h>
 
+#include <cassert>
+
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {

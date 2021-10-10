@@ -24,6 +24,7 @@
 #include <util/threadnames.h>
 
 #include <boost/signals2/connection.hpp>
+#include <cassert>
 #include <memory>
 
 #include <QDebug>
