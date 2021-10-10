@@ -25,6 +25,7 @@
 #include <util/translation.h>
 
 #include <boost/signals2/connection.hpp>
+#include <cassert>
 #include <memory>
 
 #include <QDebug>
