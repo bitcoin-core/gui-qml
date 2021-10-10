@@ -292,7 +292,10 @@ BITCOIN_QML_BASE_CPP = \
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
-RES_QML = $(wildcard $(srcdir)/qml/pages/*.qml)
+QML_RES_QML = \
+  qml/components/BlockCounter.qml \
+  qml/pages/initerrormessage.qml \
+  qml/pages/stub.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
@@ -322,7 +325,7 @@ endif
 nodist_qt_libbitcoinqt_a_SOURCES = $(QT_MOC_CPP) $(QT_MOC) $(QT_QRC_CPP) $(QT_QRC_LOCALE_CPP)
 
 if BUILD_WITH_QML
-  qt_libbitcoinqt_a_SOURCES += $(BITCOIN_QML_BASE_CPP) $(QML_QRC) $(RES_QML)
+  qt_libbitcoinqt_a_SOURCES += $(BITCOIN_QML_BASE_CPP) $(QML_QRC) $(QML_RES_QML)
   nodist_qt_libbitcoinqt_a_SOURCES += $(QML_QRC_CPP)
 endif # BUILD_WITH_QML
 
@@ -396,7 +399,7 @@ $(QT_QRC_CPP): $(QT_QRC) $(QT_FORMS_H) $(RES_FONTS) $(RES_ICONS) $(RES_ANIMATION
 	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) -name bitcoin --format-version 1 $< > $@
 
 if BUILD_WITH_QML
-$(QML_QRC_CPP): $(QML_QRC) $(RES_QML)
+$(QML_QRC_CPP): $(QML_QRC) $(QML_RES_QML)
 	@test -f $(RCC)
 	$(AM_V_GEN) QT_SELECT=$(QT_SELECT) $(RCC) --name bitcoin_qml --format-version 1 $< > $@
 endif # BUILD_WITH_QML
