@@ -34,7 +34,6 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
-#include <QStringLiteral>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
