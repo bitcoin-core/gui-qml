@@ -4,6 +4,7 @@
 
 #include <qml/util.h>
 
+#include <cassert>
 #include <string>
 
 #include <QQuickWindow>
