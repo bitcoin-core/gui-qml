@@ -55,7 +55,7 @@ in Qt 5.14.
  
 
 --- old/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
-+++ old/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
++++ new/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
 @@ -48,6 +48,7 @@
  #include <QtCore/qmetatype.h>
  
@@ -67,12 +67,11 @@ in Qt 5.14.
 
 --- old/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
 +++ new/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
-@@ -52,6 +52,8 @@
+@@ -51,6 +51,7 @@
+ //
  
  #include <private/qv4global_p.h>
- 
 +#include <limits>
-+
+ 
  QT_BEGIN_NAMESPACE
  
- class QString
