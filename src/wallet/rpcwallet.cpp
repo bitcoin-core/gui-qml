@@ -1854,7 +1854,7 @@ static RPCHelpMan keypoolrefill()
                 "\nFills the keypool."+
         HELP_REQUIRING_PASSPHRASE,
                 {
-                    {"newsize", RPCArg::Type::NUM, RPCArg::Default{100}, "The new keypool size"},
+                    {"newsize", RPCArg::Type::NUM, RPCArg::DefaultHint{strprintf("%u, or as set by -keypool", DEFAULT_KEYPOOL_SIZE)}, "The new keypool size"},
                 },
                 RPCResult{RPCResult::Type::NONE, "", ""},
                 RPCExamples{
@@ -1886,6 +1886,33 @@ static RPCHelpMan keypoolrefill()
     if (pwallet->GetKeyPoolSize() < kpSize) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Error refreshing keypool.");
     }
+
+    return NullUniValue;
+},
+    };
+}
+
+
+static RPCHelpMan newkeypool()
+{
+    return RPCHelpMan{"newkeypool",
+                "\nEntirely clears and refills the keypool."+
+            HELP_REQUIRING_PASSPHRASE,
+                {},
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+            HelpExampleCli("newkeypool", "")
+            + HelpExampleRpc("newkeypool", "")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    LOCK(pwallet->cs_wallet);
+
+    LegacyScriptPubKeyMan& spk_man = EnsureLegacyScriptPubKeyMan(*pwallet, true);
+    spk_man.NewKeyPool();
 
     return NullUniValue;
 },
@@ -2555,7 +2582,7 @@ static RPCHelpMan listwalletdir()
     UniValue wallets(UniValue::VARR);
     for (const auto& path : ListDatabases(GetWalletDir())) {
         UniValue wallet(UniValue::VOBJ);
-        wallet.pushKV("name", path.string());
+        wallet.pushKV("name", path.u8string());
         wallets.push_back(wallet);
     }
 
@@ -2856,7 +2883,7 @@ static RPCHelpMan restorewallet()
 
     WalletContext& context = EnsureWalletContext(request.context);
 
-    std::string backup_file = request.params[1].get_str();
+    auto backup_file = fs::u8path(request.params[1].get_str());
 
     if (!fs::exists(backup_file)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Backup file does not exist");
@@ -2864,14 +2891,14 @@ static RPCHelpMan restorewallet()
 
     std::string wallet_name = request.params[0].get_str();
 
-    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), wallet_name);
+    const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::u8path(wallet_name));
 
     if (fs::exists(wallet_path)) {
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Wallet name already exists.");
     }
 
     if (!TryCreateDirectories(wallet_path)) {
-        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Failed to create database path '%s'. Database already exists.", wallet_path.string()));
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Failed to create database path '%s'. Database already exists.", wallet_path.u8string()));
     }
 
     auto wallet_file = wallet_path / "wallet.dat";
@@ -4875,6 +4902,7 @@ static const CRPCCommand commands[] =
     { "wallet",             &listwallets,                    },
     { "wallet",             &loadwallet,                     },
     { "wallet",             &lockunspent,                    },
+    { "wallet",             &newkeypool,                     },
     { "wallet",             &removeprunedfunds,              },
     { "wallet",             &rescanblockchain,               },
     { "wallet",             &send,                           },
