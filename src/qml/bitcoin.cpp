@@ -34,6 +34,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -99,6 +100,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
+
+    app.styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
