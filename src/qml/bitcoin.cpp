@@ -33,6 +33,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -95,6 +96,7 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
