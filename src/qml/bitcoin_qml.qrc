@@ -1,4 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/">
+        <file>qtquickcontrols2.conf</file>
+    </qresource>
     <qresource prefix="/qml">
         <file>components/BlockCounter.qml</file>
         <file>pages/initerrormessage.qml</file>

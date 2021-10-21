@@ -161,6 +161,9 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       if test -d "$qt_plugin_path/../qml/QtQuick.2"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick.2"
       fi
+      if test -d "$qt_plugin_path/../qml/QtQuick/Controls.2/Material"; then
+        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Controls.2/Material"
+      fi
     fi
 
     AC_DEFINE(QT_STATICPLUGIN, 1, [Define this symbol if qt plugins are static])
@@ -200,6 +203,7 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqtquickcontrols2plugin])
       _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickLayoutsPlugin], [-lqquicklayoutsplugin])
       _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqtquicktemplates2plugin])
+      _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2MaterialStylePlugin], [-lqtquickcontrols2materialstyleplugin])
     fi
   fi
   CPPFLAGS=$TEMP_CPPFLAGS

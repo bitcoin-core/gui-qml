@@ -299,7 +299,8 @@ QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/BlockCounter.qml \
   qml/pages/initerrormessage.qml \
-  qml/pages/stub.qml
+  qml/pages/stub.qml \
+  qml/qtquickcontrols2.conf
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
