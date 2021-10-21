@@ -35,6 +35,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -81,7 +82,7 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 {
     Q_UNUSED(context);
     if (type == QtDebugMsg) {
-        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
+        LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
@@ -98,6 +99,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     Q_INIT_RESOURCE(bitcoin_qml);
 
+
+    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
