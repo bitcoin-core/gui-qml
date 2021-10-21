@@ -295,6 +295,7 @@ QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/BlockCounter.qml \
   qml/controls/ApplicationWindow.qml \
+  qml/controls/Button.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/stub.qml
 

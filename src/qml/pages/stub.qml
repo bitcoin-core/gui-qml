@@ -32,4 +32,8 @@ ApplicationWindow {
         height: parent.height / 3
         blockHeight: nodeModel.blockTipHeight
     }
+
+    Button {
+        text: "₿itcoin"
+    }
 }
