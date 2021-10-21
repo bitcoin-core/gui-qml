@@ -3,9 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.12
-import QtQuick.Controls 2.12
-import QtQuick.Layouts 1.11
 import "../components"
+import "../controls"
 
 ApplicationWindow {
     id: appWindow
