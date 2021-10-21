@@ -34,6 +34,7 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -78,6 +79,7 @@ void BitcoinQmlDebugMessageHandler(QtMsgType type, const QMessageLogContext& con
 
 int QmlGuiMain(int argc, char* argv[])
 {
+    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
