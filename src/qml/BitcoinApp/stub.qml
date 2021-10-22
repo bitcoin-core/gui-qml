@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import BitcoinApp.Components
+import BitcoinApp.Controls
 
 ApplicationWindow {
     id: appWindow
@@ -30,6 +31,14 @@ ApplicationWindow {
         BlockCounter {
             Layout.alignment: Qt.AlignCenter
             blockHeight: nodeModel.blockTipHeight
+        }
+        ProgressIndicator {
+            id: indicator
+            Layout.fillWidth: true
+            progress: 0.666
+            background: MouseArea {
+                onClicked: indicator.progress = mouseX / width
+            }
         }
         ConnectionOptions {
             Layout.preferredWidth: 400
