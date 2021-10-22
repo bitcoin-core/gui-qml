@@ -17,17 +17,19 @@ ApplicationWindow {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
-    Image {
-        id: appLogo
-        anchors.horizontalCenter: parent.horizontalCenter
-        source: "image://images/app"
-        sourceSize.width: 128
-        sourceSize.height: 128
-    }
-
-    BlockCounter {
-        id: blockCounter
+    ColumnLayout {
         anchors.centerIn: parent
-        blockHeight: nodeModel.blockTipHeight
+        spacing: 15
+        width: 400
+        Image {
+            Layout.alignment: Qt.AlignCenter
+            source: "image://images/app"
+            sourceSize.width: 64
+            sourceSize.height: 64
+        }
+        BlockCounter {
+            Layout.alignment: Qt.AlignCenter
+            blockHeight: nodeModel.blockTipHeight
+        }
     }
 }
