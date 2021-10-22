@@ -9,4 +9,5 @@ qt6_add_qml_module(bitcoin_qml_components
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
     BlockCounter.qml
+    ConnectionOptions.qml
 )
