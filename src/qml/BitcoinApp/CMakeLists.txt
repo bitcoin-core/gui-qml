@@ -21,11 +21,13 @@ qt6_add_qml_module(bitcoin_qml
 )
 
 add_subdirectory(Components)
+add_subdirectory(Controls)
 
 target_link_libraries(bitcoin_qml
   INTERFACE
     bitcoin_qmlplugin
     bitcoin_qml_componentsplugin
+    bitcoin_qml_controlsplugin
   PUBLIC
     Qt6::Widgets
     Qt6::Quick
