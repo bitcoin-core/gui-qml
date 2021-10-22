@@ -31,5 +31,7 @@ ApplicationWindow {
             Layout.alignment: Qt.AlignCenter
             blockHeight: nodeModel.blockTipHeight
         }
+        ConnectionOptions {
+        }
     }
 }
