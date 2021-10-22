@@ -3,6 +3,7 @@
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>controls/OptionButton.qml</file>
+        <file>controls/ProgressIndicator.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
