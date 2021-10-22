@@ -28,7 +28,6 @@ ApplicationWindow {
     BlockCounter {
         id: blockCounter
         anchors.centerIn: parent
-        height: parent.height / 3
         blockHeight: nodeModel.blockTipHeight
     }
 }
