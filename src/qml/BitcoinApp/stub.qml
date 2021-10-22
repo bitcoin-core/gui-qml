@@ -31,5 +31,9 @@ ApplicationWindow {
             Layout.alignment: Qt.AlignCenter
             blockHeight: nodeModel.blockTipHeight
         }
+        ConnectionOptions {
+            Layout.preferredWidth: 400
+            focus: true
+        }
     }
 }
