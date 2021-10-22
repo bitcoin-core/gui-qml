@@ -2,6 +2,10 @@
 
 **WARNING: THIS IS EXPERIMENTAL, DO NOT USE BUILDS FROM THIS REPO FOR REAL TRANSACTIONS!**
 
+To test the recent GUI from the main branch, insecure CI artifacts can be used:
+- for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/Win64%20\[unit%20tests,%20no%20gui%20tests,%20no%20boost::process,%20no%20functional%20tests\]%20\[focal\]/insecure_win_gui.zip)
+- for macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macOS%2010.15%20\[gui,%20no%20tests\]%20\[focal\]/insecure_mac_gui.zip)
+
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
 # Goals and Limitations

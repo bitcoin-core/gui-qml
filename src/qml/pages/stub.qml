@@ -13,9 +13,7 @@ ApplicationWindow {
     title: "Bitcoin Core TnG"
     minimumWidth: 750
     minimumHeight: 450
-    background: Rectangle {
-        color: "black"
-    }
+    color: "black"
     visible: true
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
