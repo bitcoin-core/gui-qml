@@ -423,12 +423,12 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
 
     def import_deterministic_coinbase_privkeys(self):
         for i in range(self.num_nodes):
-            self.init_wallet(i)
+            self.init_wallet(node=i)
 
-    def init_wallet(self, i):
-        wallet_name = self.default_wallet_name if self.wallet_names is None else self.wallet_names[i] if i < len(self.wallet_names) else False
+    def init_wallet(self, *, node):
+        wallet_name = self.default_wallet_name if self.wallet_names is None else self.wallet_names[node] if node < len(self.wallet_names) else False
         if wallet_name is not False:
-            n = self.nodes[i]
+            n = self.nodes[node]
             if wallet_name is not None:
                 n.createwallet(wallet_name=wallet_name, descriptors=self.options.descriptors, load_on_startup=True)
             n.importprivkey(privkey=n.get_deterministic_priv_key().key, label='coinbase')
@@ -628,19 +628,19 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.sync_all()
 
     def generate(self, generator, *args, **kwargs):
-        blocks = generator.generate(*args, **kwargs)
+        blocks = generator.generate(*args, invalid_call=False, **kwargs)
         return blocks
 
     def generateblock(self, generator, *args, **kwargs):
-        blocks = generator.generateblock(*args, **kwargs)
+        blocks = generator.generateblock(*args, invalid_call=False, **kwargs)
         return blocks
 
     def generatetoaddress(self, generator, *args, **kwargs):
-        blocks = generator.generatetoaddress(*args, **kwargs)
+        blocks = generator.generatetoaddress(*args, invalid_call=False, **kwargs)
         return blocks
 
     def generatetodescriptor(self, generator, *args, **kwargs):
-        blocks = generator.generatetodescriptor(*args, **kwargs)
+        blocks = generator.generatetodescriptor(*args, invalid_call=False, **kwargs)
         return blocks
 
     def sync_blocks(self, nodes=None, wait=1, timeout=60):

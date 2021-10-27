@@ -1212,7 +1212,7 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, CWalletTx::Confirmatio
 
 void CWallet::transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {
     LOCK(cs_wallet);
-    SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+    SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
 
     auto it = mapWallet.find(tx->GetHash());
     if (it != mapWallet.end()) {
@@ -1253,7 +1253,7 @@ void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRe
         // distinguishing between conflicted and unconfirmed transactions are
         // imperfect, and could be improved in general, see
         // https://github.com/bitcoin-core/bitcoin-devwiki/wiki/Wallet-Transaction-Conflict-Tracking
-        SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+        SyncTransaction(tx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
     }
 }
 
@@ -1281,7 +1281,7 @@ void CWallet::blockDisconnected(const CBlock& block, int height)
     m_last_block_processed_height = height - 1;
     m_last_block_processed = block.hashPrevBlock;
     for (const CTransactionRef& ptx : block.vtx) {
-        SyncTransaction(ptx, {CWalletTx::Status::UNCONFIRMED, /* block height */ 0, /* block hash */ {}, /* index */ 0});
+        SyncTransaction(ptx, {CWalletTx::Status::UNCONFIRMED, /*block_height=*/0, /*block_hash=*/{}, /*block_index=*/0});
     }
 }
 
@@ -1294,7 +1294,7 @@ void CWallet::updatedBlockTip()
 void CWallet::BlockUntilSyncedToCurrentChain() const {
     AssertLockNotHeld(cs_wallet);
     // Skip the queue-draining stuff if we know we're caught up with
-    // ::ChainActive().Tip(), otherwise put a callback in the validation interface queue and wait
+    // chain().Tip(), otherwise put a callback in the validation interface queue and wait
     // for the queue to drain enough to execute it (indicating we are caught up
     // at least with the time we entered this function).
     uint256 last_block_hash = WITH_LOCK(cs_wallet, return m_last_block_processed);
@@ -3235,7 +3235,8 @@ void CWallet::LoadActiveScriptPubKeyMan(uint256 id, OutputType type, bool intern
     auto spk_man = m_spk_managers.at(id).get();
     spk_mans[type] = spk_man;
 
-    if (spk_mans_other[type] == spk_man) {
+    const auto it = spk_mans_other.find(type);
+    if (it != spk_mans_other.end() && it->second == spk_man) {
         spk_mans_other.erase(type);
     }
 
