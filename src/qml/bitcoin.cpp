@@ -108,6 +108,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs, init->canListenIpc());
+
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
