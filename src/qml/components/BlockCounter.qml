@@ -18,6 +18,6 @@ Label {
     verticalAlignment: Text.AlignVCenter
     font.family: "Inter"
     font.styleName: "Semi Bold"
-    font.pixelSize: height / 3
+    font.pixelSize: 20
     text: blockHeight
 }

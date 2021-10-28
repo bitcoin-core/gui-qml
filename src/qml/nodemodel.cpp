@@ -5,14 +5,15 @@
 #include <qml/nodemodel.h>
 
 #include <interfaces/node.h>
+#include <qml/engine.h>
+#include <qt/guiutil.h>
 #include <validation.h>
 
 #include <cassert>
 
-NodeModel::NodeModel(interfaces::Node& node)
-    : m_node{node}
+NodeModel::NodeModel(QObject* parent)
+    : QObject(parent)
 {
-    ConnectToBlockTipSignal();
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
@@ -23,27 +24,19 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
-void NodeModel::startNodeInitializionThread()
+void NodeModel::classBegin()
 {
-    Q_EMIT requestedInitialize();
 }
 
-void NodeModel::startNodeShutdown()
+void NodeModel::componentComplete()
 {
-    Q_EMIT requestedShutdown();
-}
-
-void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::BlockAndHeaderTipInfo tip_info)
-{
-    // TODO: Handle the `success` parameter,
-    setBlockTipHeight(tip_info.block_height);
-}
-
-void NodeModel::ConnectToBlockTipSignal()
-{
+    auto& node = Engine::node(this);
+    setBlockTipHeight(node.getNumBlocks());
     assert(!m_handler_notify_block_tip);
-    m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
+    m_handler_notify_block_tip = node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            setBlockTipHeight(tip.block_height);
+            GUIUtil::ObjectInvoke(this, [=] {
+                setBlockTipHeight(tip.block_height);
+            });
         });
 }

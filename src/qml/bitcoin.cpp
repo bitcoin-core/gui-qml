@@ -11,6 +11,8 @@
 #include <logging.h>
 #include <node/ui_interface.h>
 #include <noui.h>
+#include <qml/chainmodel.h>
+#include <qml/engine.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/util.h>
@@ -29,10 +31,10 @@
 
 #include <QDebug>
 #include <QGuiApplication>
-#include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
+#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -99,6 +101,8 @@ int QmlGuiMain(int argc, char* argv[])
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
 
+    app.styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
+
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
@@ -157,30 +161,27 @@ int QmlGuiMain(int argc, char* argv[])
 
     handler_message_box.disconnect();
 
-    NodeModel node_model{*node};
     InitExecutor init_executor{*node};
-    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
-    QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
-    QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
-    // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
         node->startShutdown();
-        node_model.startNodeShutdown();
+        init_executor.shutdown();
     });
 
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
-    QQmlApplicationEngine engine;
+    qmlRegisterType<ChainModel>("BitcoinCore", 1, 0, "ChainModel");
+    qmlRegisterType<NodeModel>("BitcoinCore", 1, 0, "NodeModel");
+
+    Engine engine(*node);
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
-    engine.rootContext()->setContextProperty("nodeModel", &node_model);
+    engine.rootContext()->setContextProperty("initExecutor", &init_executor);
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
     if (engine.rootObjects().isEmpty()) {
