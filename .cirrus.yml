@@ -186,6 +186,8 @@ task:
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_win64.sh"
+  bitcoin_qt_artifacts:
+    path: "ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe"
 
 #task:
 #  name: '32-bit + dash [gui] [CentOS 8]'
