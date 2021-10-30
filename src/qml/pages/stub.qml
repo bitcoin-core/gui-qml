@@ -5,31 +5,33 @@
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.11
-import "../components"
+import "../components" as BitcoinCoreComponents
+
 
 ApplicationWindow {
     id: appWindow
     title: "Bitcoin Core TnG"
     minimumWidth: 750
     minimumHeight: 450
-    color: "black"
+    background: Rectangle {
+        color: "black"
+    }
     visible: true
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
-    ColumnLayout {
+    Image {
+        id: appLogo
+        anchors.horizontalCenter: parent.horizontalCenter
+        source: "image://images/app"
+        sourceSize.width: 128
+        sourceSize.height: 128
+    }
+
+    BitcoinCoreComponents.BlockCounter {
+        id: blockCounter
         anchors.centerIn: parent
-        spacing: 15
-        width: 400
-        Image {
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            sourceSize.width: 64
-            sourceSize.height: 64
-        }
-        BlockCounter {
-            Layout.alignment: Qt.AlignCenter
-            blockHeight: nodeModel.blockTipHeight
-        }
+        height: parent.height / 3
+        blockHeight: nodeModel.blockTipHeight
     }
 }
