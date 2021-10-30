@@ -9,7 +9,6 @@
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
-#include <node/context.h>
 #include <node/ui_interface.h>
 #include <noui.h>
 #include <qml/imageprovider.h>
@@ -104,15 +103,12 @@ int QmlGuiMain(int argc, char* argv[])
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
-    NodeContext node_context;
-    int unused_exit_status;
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeNodeInit(node_context, argc, argv, unused_exit_status);
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
 
     SetupEnvironment();
     util::ThreadSetInternalName("main");
 
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-    node_context.args = &gArgs;
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
     std::string error;
