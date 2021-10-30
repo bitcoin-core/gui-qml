@@ -3,12 +3,23 @@
 // file COPYING or https://opensource.org/license/mit/.
 
 import QtQuick
-import QtQuick.Dialogs
+import QtQuick.Controls
 
-MessageDialog {
-    id: messageDialog
+ApplicationWindow {
     title: "Bitcoin Core TnG"
-    text: message
-    onAccepted: Qt.quit()
-    Component.onCompleted: visible = true
+    visible: true
+    minimumWidth: 500
+    minimumHeight: 200
+
+    Dialog {
+        anchors.centerIn: parent
+        title: qsTr("Error")
+        contentItem:
+            Label {
+                text: message
+            }
+        visible: true
+        standardButtons: Dialog.Ok
+        onAccepted: Qt.quit()
+    }
 }
