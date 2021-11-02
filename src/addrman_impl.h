@@ -157,6 +157,7 @@ private:
         V1_DETERMINISTIC = 1, //!< for pre-asmap files
         V2_ASMAP = 2,         //!< for files including asmap version
         V3_BIP155 = 3,        //!< same as V2_ASMAP plus addresses are in BIP155 format
+        V4_MULTIPORT = 4,     //!< adds support for multiple ports per IP
     };
 
     //! The maximum format this software knows it can unserialize. Also, we always serialize
@@ -164,7 +165,7 @@ private:
     //! The format (first byte in the serialized stream) can be higher than this and
     //! still this software may be able to unserialize the file - if the second byte
     //! (see `lowest_compatible` in `Unserialize()`) is less or equal to this.
-    static constexpr Format FILE_FORMAT = Format::V3_BIP155;
+    static constexpr Format FILE_FORMAT = Format::V4_MULTIPORT;
 
     //! The initial value of a field that is incremented every time an incompatible format
     //! change is made (such that old software versions would not be able to parse and
@@ -242,9 +243,13 @@ private:
     //! Move an entry from the "new" table(s) to the "tried" table
     void MakeTried(AddrInfo& info, int nId) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
+    /** Attempt to add a single address to addrman's new table.
+     *  @see AddrMan::Add() for parameters. */
+    bool AddSingle(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty) EXCLUSIVE_LOCKS_REQUIRED(cs);
+
     void Good_(const CService& addr, bool test_before_evict, int64_t time) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
-    bool Add_(const CAddress& addr, const CNetAddr& source, int64_t nTimePenalty) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    bool Add_(const std::vector<CAddress> &vAddr, const CNetAddr& source, int64_t nTimePenalty) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     void Attempt_(const CService& addr, bool fCountFailure, int64_t nTime) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
