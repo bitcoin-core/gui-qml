@@ -202,6 +202,7 @@ task:
 
 task:
   name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [jammy]'
+  alias: win64
   << : *GLOBAL_TASK_TEMPLATE
   container:
     image: ubuntu:jammy
@@ -308,6 +309,7 @@ task:
 
 task:
   name: 'macOS 10.15 [gui, no tests] [focal]'
+  alias: macos
   << : *CONTAINER_DEPENDS_TEMPLATE
   container:
     image: ubuntu:focal
