@@ -296,13 +296,7 @@ QML_RES_FONTS = \
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
-QML_RES_QML = \
-  qml/components/BlockCounter.qml \
-  qml/components/ConnectionOptions.qml \
-  qml/controls/OptionButton.qml \
-  qml/controls/ProgressIndicator.qml \
-  qml/pages/initerrormessage.qml \
-  qml/pages/stub.qml
+QML_RES_QML := $(shell $(RCC) --list $(QML_QRC))
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
