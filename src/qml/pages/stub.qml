@@ -4,8 +4,9 @@
 
 import QtQuick 2.12
 import QtQuick.Controls 2.12
-import "../components" as BitcoinCoreComponents
-
+import QtQuick.Layouts 1.11
+import "../components"
+import "../controls"
 
 ApplicationWindow {
     id: appWindow
@@ -17,17 +18,31 @@ ApplicationWindow {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
-    Image {
-        id: appLogo
-        anchors.horizontalCenter: parent.horizontalCenter
-        source: "image://images/app"
-        sourceSize.width: 128
-        sourceSize.height: 128
-    }
-
-    BitcoinCoreComponents.BlockCounter {
-        id: blockCounter
+    ColumnLayout {
         anchors.centerIn: parent
-        blockHeight: nodeModel.blockTipHeight
+        spacing: 15
+        width: 400
+        Image {
+            Layout.alignment: Qt.AlignCenter
+            source: "image://images/app"
+            sourceSize.width: 64
+            sourceSize.height: 64
+        }
+        BlockCounter {
+            Layout.alignment: Qt.AlignCenter
+            blockHeight: nodeModel.blockTipHeight
+        }
+        ProgressIndicator {
+            id: indicator
+            Layout.fillWidth: true
+            progress: 0.666
+            background: MouseArea {
+                onClicked: indicator.progress = mouseX / width
+            }
+        }
+        ConnectionOptions {
+            Layout.preferredWidth: 400
+            focus: true
+        }
     }
 }

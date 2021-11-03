@@ -3,8 +3,8 @@
 **WARNING: THIS IS EXPERIMENTAL, DO NOT USE BUILDS FROM THIS REPO FOR REAL TRANSACTIONS!**
 
 To test the recent GUI from the main branch, insecure CI artifacts can be used:
-- for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/Win64%20\[unit%20tests,%20no%20gui%20tests,%20no%20boost::process,%20no%20functional%20tests\]%20\[focal\]/insecure_win_gui.zip)
-- for macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macOS%2010.15%20\[gui,%20no%20tests\]%20\[focal\]/insecure_mac_gui.zip)
+- for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip)
+- for macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip)
 
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
@@ -55,7 +55,7 @@ The following runtime dependencies are also required for dynamic builds;
 they are not needed for static builds:
 
 ```
-sudo apt install qml-module-qtquick2 qml-module-qtquick-controls qml-module-qtquick-controls2 qml-module-qtquick-dialogs qml-module-qtquick-window2
+sudo apt install qml-module-qtquick2 qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qtquick-window2
 ```
 
 No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
