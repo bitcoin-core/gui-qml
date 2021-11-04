@@ -300,6 +300,7 @@ QML_RES_QML = \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
   qml/controls/OptionButton.qml \
+  qml/controls/ProgressIndicator.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/stub.qml
 
