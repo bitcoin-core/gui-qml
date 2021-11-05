@@ -181,6 +181,7 @@ task:
 task:
   name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [focal]'
   << : *GLOBAL_TASK_TEMPLATE
+  alias: win64
   container:
     image: ubuntu:focal
   env:
@@ -279,6 +280,7 @@ task:
   name: 'macOS 10.15 [gui, no tests] [focal]'
   << : *DEPENDS_SDK_CACHE_TEMPLATE
   << : *GLOBAL_TASK_TEMPLATE
+  alias: macos
   container:
     image: ubuntu:focal
   env:

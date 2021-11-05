@@ -45,6 +45,6 @@ patches often sit for a long time.
 <!--
 Links for Windows and macOS build artifacts. Replace <PR> with the assigned pull request number.
 
-[![Windows](https://svgshare.com/i/ZhY.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/Win64%20\[unit%20tests,%20no%20gui%20tests,%20no%20boost::process,%20no%20functional%20tests\]%20\[focal\]/insecure_win_gui.zip?branch=pull/<PR>)
-[![macOS](https://svgshare.com/i/ZjP.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macOS%2010.15%20\[gui,%20no%20tests\]%20\[focal\]/insecure_mac_gui.zip?branch=pull/<PR>)
+[![Windows](https://svgshare.com/i/ZhY.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip?branch=pull/<PR>)
+[![macOS](https://svgshare.com/i/ZjP.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip?branch=pull/<PR>)
 -->
