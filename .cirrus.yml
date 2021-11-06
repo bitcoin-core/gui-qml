@@ -311,6 +311,7 @@ task:
   name: 'ARM64 Android APK [focal]'
   << : *DEPENDS_SDK_CACHE_TEMPLATE
   << : *BASE_TEMPLATE
+  alias: android
   depends_sources_cache:
     folder: "depends/sources"
     fingerprint_script: git rev-list -1 HEAD ./depends
@@ -320,3 +321,7 @@ task:
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_android.sh"
+  copy_artifacts_script:
+    - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/insecure_android.apk
+  insecure_android_apk_artifacts:
+    path: "insecure_android.apk"
