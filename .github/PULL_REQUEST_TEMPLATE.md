@@ -45,6 +45,7 @@ patches often sit for a long time.
 <!--
 Links for Windows and macOS build artifacts. Replace <PR> with the assigned pull request number.
 
-[![Windows](https://svgshare.com/i/ZhY.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip?branch=pull/<PR>)
-[![macOS](https://svgshare.com/i/ZjP.svg)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip?branch=pull/<PR>)
+[![Windows](https://img.shields.io/badge/OS-Windows-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip?branch=pull/<PR>)
+[![macOS](https://img.shields.io/badge/OS-macOS-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip?branch=pull/<PR>)
+[![Android](https://img.shields.io/badge/OS-Android-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip?branch=pull/<PR>)
 -->
