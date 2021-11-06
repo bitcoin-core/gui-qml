@@ -6,6 +6,7 @@ import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.11
 import "../components"
+import "../controls"
 
 ApplicationWindow {
     id: appWindow
@@ -30,6 +31,14 @@ ApplicationWindow {
         BlockCounter {
             Layout.alignment: Qt.AlignCenter
             blockHeight: nodeModel.blockTipHeight
+        }
+        ProgressIndicator {
+            id: indicator
+            Layout.fillWidth: true
+            progress: 0.666
+            background: MouseArea {
+                onClicked: indicator.progress = mouseX / width
+            }
         }
         ConnectionOptions {
             Layout.preferredWidth: 400
