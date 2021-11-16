@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2020 The Bitcoin Core developers
+# Copyright (c) 2017-2021 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test RPC calls related to net.
@@ -81,7 +81,6 @@ class NetTest(BitcoinTestFramework):
         # Create a few getpeerinfo last_block/last_transaction values.
         self.wallet.send_self_transfer(from_node=self.nodes[0]) # Make a transaction so we can see it in the getpeerinfo results
         self.generate(self.nodes[1], 1)
-        self.sync_all()
         time_now = int(time.time())
         peer_info = [x.getpeerinfo() for x in self.nodes]
         # Verify last_block and last_transaction keys/values.
@@ -260,7 +259,7 @@ class NetTest(BitcoinTestFramework):
 
         self.log.debug("Test that adding a valid address to the tried table succeeds")
         assert_equal(node.addpeeraddress(address="1.2.3.4", tried=True, port=8333), {"success": True})
-        with node.assert_debug_log(expected_msgs=["Addrman checks started: new 0, tried 1, total 1"]):
+        with node.assert_debug_log(expected_msgs=["CheckAddrman: new 0, tried 1, total 1 started"]):
             addrs = node.getnodeaddresses(count=0)  # getnodeaddresses re-runs the addrman checks
             assert_equal(len(addrs), 1)
             assert_equal(addrs[0]["address"], "1.2.3.4")
@@ -273,7 +272,7 @@ class NetTest(BitcoinTestFramework):
 
         self.log.debug("Test that adding a second address, this time to the new table, succeeds")
         assert_equal(node.addpeeraddress(address="2.0.0.0", port=8333), {"success": True})
-        with node.assert_debug_log(expected_msgs=["Addrman checks started: new 1, tried 1, total 2"]):
+        with node.assert_debug_log(expected_msgs=["CheckAddrman: new 1, tried 1, total 2 started"]):
             addrs = node.getnodeaddresses(count=0)  # getnodeaddresses re-runs the addrman checks
             assert_equal(len(addrs), 2)
 

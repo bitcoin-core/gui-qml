@@ -42,12 +42,12 @@ Optional dependencies:
  ------------|------------------|----------------------
  miniupnpc   | UPnP Support     | Firewall-jumping support
  libnatpmp   | NAT-PMP Support  | Firewall-jumping support
- libdb4.8    | Berkeley DB      | Optional, wallet storage (only needed when legacy wallet enabled)
+ libdb4.8    | Berkeley DB      | Wallet storage (only needed when legacy wallet enabled)
  qt          | GUI              | GUI toolkit (only needed when GUI enabled)
- libqrencode | QR codes in GUI  | Optional for generating QR codes (only needed when GUI enabled)
- libzmq3     | ZMQ notification | Optional, allows generating ZMQ notifications (requires ZMQ version >= 4.0.0)
- sqlite3     | SQLite DB        | Optional, wallet storage (only needed when descriptor wallet enabled)
- systemtap   | Tracing (USDT)   | Optional, statically defined tracepoints
+ libqrencode | QR codes in GUI  | QR code generation (only needed when GUI enabled)
+ libzmq3     | ZMQ notification | ZMQ notifications (requires ZMQ version >= 4.0.0)
+ sqlite3     | SQLite DB        | Wallet storage (only needed when descriptor wallet enabled)
+ systemtap   | Tracing (USDT)   | Statically defined tracepoints
 
 For the versions used, see [dependencies.md](dependencies.md)
 
@@ -234,15 +234,6 @@ Otherwise, you can build Bitcoin Core from self-compiled [depends](/depends/READ
 
 **Note**: You only need Berkeley DB if the wallet is enabled (see [*Disable-wallet mode*](#disable-wallet-mode)).
 
-Boost
------
-If you need to build Boost yourself:
-
-    sudo su
-    ./bootstrap.sh
-    ./bjam install
-
-
 Security
 --------
 To help make your Bitcoin Core installation more secure by making certain attacks impossible to
@@ -321,7 +312,7 @@ This example lists the steps necessary to setup and build a command line only, n
 Note:
 Enabling wallet support requires either compiling against a Berkeley DB newer than 4.8 (package `db`) using `--with-incompatible-bdb`,
 or building and depending on a local version of Berkeley DB 4.8. The readily available Arch Linux packages are currently built using
-`--with-incompatible-bdb` according to the [PKGBUILD](https://projects.archlinux.org/svntogit/community.git/tree/bitcoin/trunk/PKGBUILD).
+`--with-incompatible-bdb` according to the [PKGBUILD](https://github.com/archlinux/svntogit-community/blob/packages/bitcoin/trunk/PKGBUILD).
 As mentioned above, when maintaining portability of the wallet between the standard Bitcoin Core distributions and independently built
 node software is desired, Berkeley DB 4.8 must be used.
 
