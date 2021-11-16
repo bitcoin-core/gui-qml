@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2020 The Bitcoin Core developers
+# Copyright (c) 2016-2021 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test NULLDUMMY softfork.
@@ -130,7 +130,6 @@ class NULLDUMMYTest(BitcoinTestFramework):
         block.hashMerkleRoot = block.calc_merkle_root()
         if with_witness:
             add_witness_commitment(block)
-        block.rehash()
         block.solve()
         assert_equal(None if accept else NULLDUMMY_ERROR, node.submitblock(block.serialize().hex()))
         if accept:
