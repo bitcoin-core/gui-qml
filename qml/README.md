@@ -5,7 +5,6 @@
 To test the recent GUI from the main branch, insecure CI artifacts can be used:
 - for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip)
 - for macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip)
-- for Android: [`insecure_android_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip)
 
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
