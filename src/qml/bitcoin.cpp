@@ -33,7 +33,6 @@
 #include <QQmlContext>
 #include <QQuickWindow>
 #include <QString>
-#include <QStyleHints>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -42,8 +41,10 @@ QT_END_NAMESPACE
 
 #if defined(QT_STATICPLUGIN)
 #include <QtPlugin>
+Q_IMPORT_PLUGIN(QtQuick2DialogsPlugin);
 Q_IMPORT_PLUGIN(QtQuick2Plugin);
 Q_IMPORT_PLUGIN(QtQuick2WindowPlugin);
+Q_IMPORT_PLUGIN(QtQuickControls1Plugin);
 Q_IMPORT_PLUGIN(QtQuickControls2Plugin);
 Q_IMPORT_PLUGIN(QtQuickLayoutsPlugin);
 Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin);
@@ -96,7 +97,6 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
 
     QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
