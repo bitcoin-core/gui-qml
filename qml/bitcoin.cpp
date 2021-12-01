@@ -41,8 +41,6 @@ Q_IMPORT_PLUGIN(QtQuick2DialogsPlugin);
 Q_IMPORT_PLUGIN(QtQuick2Plugin);
 Q_IMPORT_PLUGIN(QtQuick2WindowPlugin);
 Q_IMPORT_PLUGIN(QtQuickControls1Plugin);
-Q_IMPORT_PLUGIN(QtQuickControls2Plugin);
-Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin);
 #endif
 
 namespace {
