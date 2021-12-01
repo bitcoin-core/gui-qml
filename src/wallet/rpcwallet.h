@@ -21,6 +21,8 @@ class CTransaction;
 struct PartiallySignedTransaction;
 struct WalletContext;
 
+extern const std::string HELP_REQUIRING_PASSPHRASE;
+
 Span<const CRPCCommand> GetWalletRPCCommands();
 
 /**
@@ -38,4 +40,4 @@ const LegacyScriptPubKeyMan& EnsureConstLegacyScriptPubKeyMan(const CWallet& wal
 
 RPCHelpMan getaddressinfo();
 RPCHelpMan signrawtransactionwithwallet();
-#endif //BITCOIN_WALLET_RPCWALLET_H
+#endif // BITCOIN_WALLET_RPCWALLET_H

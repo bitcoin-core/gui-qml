@@ -10,7 +10,12 @@ from decimal import Decimal
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 from test_framework.descriptors import descsum_create
-from test_framework.script import (CScript, OP_CHECKSIG, taproot_construct)
+from test_framework.script import (
+    CScript,
+    OP_1,
+    OP_CHECKSIG,
+    taproot_construct,
+)
 from test_framework.segwit_addr import encode_segwit_address
 
 # xprvs/xpubs, and m/* derived x-only pubkeys (created using independent implementation)
@@ -165,7 +170,7 @@ def pk(hex_key):
 def compute_taproot_address(pubkey, scripts):
     """Compute the address for a taproot output with given inner key and scripts."""
     tap = taproot_construct(pubkey, scripts)
-    assert tap.scriptPubKey[0] == 0x51
+    assert tap.scriptPubKey[0] == OP_1
     assert tap.scriptPubKey[1] == 0x20
     return encode_segwit_address("bcrt", 1, tap.scriptPubKey[2:])
 
@@ -237,20 +242,15 @@ class WalletTaprootTest(BitcoinTestFramework):
             assert_equal(len(rederive), 1)
             assert_equal(rederive[0], addr_g)
 
-        # tr descriptors cannot be imported when Taproot is not active
+        # tr descriptors can be imported regardless of Taproot status
         result = self.privs_tr_enabled.importdescriptors([{"desc": desc, "timestamp": "now"}])
         assert(result[0]["success"])
         result = self.pubs_tr_enabled.importdescriptors([{"desc": desc_pub, "timestamp": "now"}])
         assert(result[0]["success"])
-        if desc.startswith("tr"):
-            result = self.privs_tr_disabled.importdescriptors([{"desc": desc, "timestamp": "now"}])
-            assert(not result[0]["success"])
-            assert_equal(result[0]["error"]["code"], -4)
-            assert_equal(result[0]["error"]["message"], "Cannot import tr() descriptor when Taproot is not active")
-            result = self.pubs_tr_disabled.importdescriptors([{"desc": desc_pub, "timestamp": "now"}])
-            assert(not result[0]["success"])
-            assert_equal(result[0]["error"]["code"], -4)
-            assert_equal(result[0]["error"]["message"], "Cannot import tr() descriptor when Taproot is not active")
+        result = self.privs_tr_disabled.importdescriptors([{"desc": desc, "timestamp": "now"}])
+        assert result[0]["success"]
+        result = self.pubs_tr_disabled.importdescriptors([{"desc": desc_pub, "timestamp": "now"}])
+        assert result[0]["success"]
 
     def do_test_sendtoaddress(self, comment, pattern, privmap, treefn, keys_pay, keys_change):
         self.log.info("Testing %s through sendtoaddress" % comment)
