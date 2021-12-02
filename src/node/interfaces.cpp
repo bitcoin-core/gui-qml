@@ -540,8 +540,11 @@ public:
         const CBlockIndex* block2 = m_node.chainman->m_blockman.LookupBlockIndex(block_hash2);
         const CBlockIndex* ancestor = block1 && block2 ? LastCommonAncestor(block1, block2) : nullptr;
         // Using & instead of && below to avoid short circuiting and leaving
-        // output uninitialized.
-        return FillBlock(ancestor, ancestor_out, lock, active) & FillBlock(block1, block1_out, lock, active) & FillBlock(block2, block2_out, lock, active);
+        // output uninitialized. Cast bool to int to avoid -Wbitwise-instead-of-logical
+        // compiler warnings.
+        return int{FillBlock(ancestor, ancestor_out, lock, active)} &
+               int{FillBlock(block1, block1_out, lock, active)} &
+               int{FillBlock(block2, block2_out, lock, active)};
     }
     void findCoins(std::map<COutPoint, Coin>& coins) override { return FindCoins(m_node, coins); }
     double guessVerificationProgress(const uint256& block_hash) override
@@ -720,12 +723,6 @@ public:
         for (const CTxMemPoolEntry& entry : m_node.mempool->mapTx) {
             notifications.transactionAddedToMempool(entry.GetSharedTx(), 0 /* mempool_sequence */);
         }
-    }
-    bool isTaprootActive() override
-    {
-        LOCK(::cs_main);
-        const CBlockIndex* tip = Assert(m_node.chainman)->ActiveChain().Tip();
-        return DeploymentActiveAfter(tip, Params().GetConsensus(), Consensus::DEPLOYMENT_TAPROOT);
     }
     NodeContext& m_node;
 };

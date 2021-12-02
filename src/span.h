@@ -30,7 +30,11 @@
 
 /** A Span is an object that can refer to a contiguous sequence of objects.
  *
- * It implements a subset of C++20's std::span.
+ * This file implements a subset of C++20's std::span.  It can be considered
+ * temporary compatibility code until C++20 and is designed to be a
+ * self-contained abstraction without depending on other project files. For this
+ * reason, Clang lifetimebound is defined here instead of including
+ * <attributes.h>, which also defines it.
  *
  * Things to be aware of when writing code that deals with Spans:
  *
@@ -60,7 +64,7 @@
  *   types that expose a data() and size() member function), functions that
  *   accept a Span as input parameter can be called with any compatible
  *   range-like object. For example, this works:
-*
+ *
  *       void Foo(Span<const int> arg);
  *
  *       Foo(std::vector<int>{1, 2, 3}); // Works
@@ -180,6 +184,7 @@ public:
         return m_data[m_size - 1];
     }
     constexpr std::size_t size() const noexcept { return m_size; }
+    constexpr std::size_t size_bytes() const noexcept { return sizeof(C) * m_size; }
     constexpr bool empty() const noexcept { return size() == 0; }
     CONSTEXPR_IF_NOT_DEBUG C& operator[](std::size_t pos) const noexcept
     {
@@ -236,11 +241,35 @@ T& SpanPopBack(Span<T>& span)
     return back;
 }
 
+// From C++20 as_bytes and as_writeable_bytes
+template <typename T>
+Span<const std::byte> AsBytes(Span<T> s) noexcept
+{
+    return {reinterpret_cast<const std::byte*>(s.data()), s.size_bytes()};
+}
+template <typename T>
+Span<std::byte> AsWritableBytes(Span<T> s) noexcept
+{
+    return {reinterpret_cast<std::byte*>(s.data()), s.size_bytes()};
+}
+
+template <typename V>
+Span<const std::byte> MakeByteSpan(V&& v) noexcept
+{
+    return AsBytes(MakeSpan(std::forward<V>(v)));
+}
+template <typename V>
+Span<std::byte> MakeWritableByteSpan(V&& v) noexcept
+{
+    return AsWritableBytes(MakeSpan(std::forward<V>(v)));
+}
+
 // Helper functions to safely cast to unsigned char pointers.
 inline unsigned char* UCharCast(char* c) { return (unsigned char*)c; }
 inline unsigned char* UCharCast(unsigned char* c) { return c; }
 inline const unsigned char* UCharCast(const char* c) { return (unsigned char*)c; }
 inline const unsigned char* UCharCast(const unsigned char* c) { return c; }
+inline const unsigned char* UCharCast(const std::byte* c) { return reinterpret_cast<const unsigned char*>(c); }
 
 // Helper function to safely convert a Span to a Span<[const] unsigned char>.
 template <typename T> constexpr auto UCharSpanCast(Span<T> s) -> Span<typename std::remove_pointer<decltype(UCharCast(s.data()))>::type> { return {UCharCast(s.data()), s.size()}; }
@@ -248,4 +277,4 @@ template <typename T> constexpr auto UCharSpanCast(Span<T> s) -> Span<typename s
 /** Like MakeSpan, but for (const) unsigned char member types only. Only works for (un)signed char containers. */
 template <typename V> constexpr auto MakeUCharSpan(V&& v) -> decltype(UCharSpanCast(MakeSpan(std::forward<V>(v)))) { return UCharSpanCast(MakeSpan(std::forward<V>(v))); }
 
-#endif
+#endif // BITCOIN_SPAN_H
