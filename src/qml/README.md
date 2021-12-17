@@ -55,3 +55,10 @@ No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.
 For instructions on how to build and compile Bitcoin Core, refer to your respective systems build docs.
 
 The QML GUI is provided by the `bitcoin-qml` build target.
+
+### Run
+
+To run the QML GUI:
+```
+./build/bin/bitcoin-qml
+```
