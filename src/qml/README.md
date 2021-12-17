@@ -71,3 +71,9 @@ you must configure with the following option:
 ```
 ./configure --with-qml
 ```
+### Run
+
+To run the qml GUI:
+```
+./src/qt/bitcoin-qt
+```
