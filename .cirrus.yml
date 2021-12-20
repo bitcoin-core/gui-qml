@@ -183,10 +183,8 @@ task:
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_win64.sh"
-  copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe insecure_win_gui.exe
-  insecure_win_gui_artifacts:
-    path: "insecure_win_gui.exe"
+  bitcoin_qt_artifacts:
+    path: "ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe"
 
 #task:
 #  name: '32-bit + dash [gui] [CentOS 8]'
@@ -286,12 +284,8 @@ task:
     MACOS_SDK: "Xcode-12.1-12A7403-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_mac.sh"
-  copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-apple-darwin19/src/qt/bitcoin-qt insecure_mac_gui
-    - tar -czf insecure_mac_gui.tar.gz insecure_mac_gui
-  insecure_mac_gui_artifacts:
-    path: "insecure_mac_gui.tar.gz"
-    type: "application/gzip"
+  macos_bitcoin_qt_artifacts:
+    path: "ci/scratch/build/bitcoin-x86_64-apple-darwin19/src/qt/bitcoin-qt"
 
 task:
   name: 'macOS 11 native [gui] [no depends]'
