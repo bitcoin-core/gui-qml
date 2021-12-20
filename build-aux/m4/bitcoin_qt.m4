@@ -140,12 +140,6 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       if test -d "$qt_plugin_path/platforms/android"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/platforms/android -lqtfreetype -lEGL"
       fi
-      if test -d "$qt_plugin_path/../qml/QtQuick/Window.2"; then
-        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Window.2"
-      fi
-      if test -d "$qt_plugin_path/../qml/QtQuick.2"; then
-        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick.2"
-      fi
     fi
 
     AC_DEFINE([QT_STATICPLUGIN], [1], [Define this symbol if qt plugins are static])
@@ -176,10 +170,6 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
     elif test "x$TARGET_OS" = xandroid; then
       QT_LIBS="-Wl,--export-dynamic,--undefined=JNI_OnLoad -lqtforandroid -ljnigraphics -landroid -lqtfreetype $QT_LIBS"
       AC_DEFINE([QT_QPA_PLATFORM_ANDROID], [1], [Define this symbol if the qt platform is android])
-    fi
-    if test "x$use_qml" != xno; then
-      _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2Plugin], [-lqtquick2plugin])
-      _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2WindowPlugin], [-lwindowplugin])
     fi
   fi
   CPPFLAGS=$TEMP_CPPFLAGS
