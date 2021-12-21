@@ -37,11 +37,15 @@ This project has custom policies for development, see:
 
 ## Compile and Run
 
-The master branch is only guaranteed to work and build on Debian-based systems and macOS.
+The master branch is only guaranteed to work and build on Debian-based systems, Fedora, and macOS.
 Support for more systems will be confirmed and documented as the project matures.
 
 ### Dependencies
-Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), Debian based systems require the following additional dependencies to compile:
+No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
+
+Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), the following additional dependencies are required to compile:
+
+#### Debian-based systems:
 
 ```
 sudo apt install qt6-declarative-dev
@@ -54,7 +58,11 @@ they are not needed for static builds:
 sudo apt install qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-dialogs qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window
 ```
 
-No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
+#### Fedora:
+
+```
+sudo dnf install qt6-qtdeclarative-devel
+```
 
 ### Build
 
