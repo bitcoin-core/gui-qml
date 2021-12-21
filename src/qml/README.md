@@ -46,10 +46,18 @@ The master branch is only guaranteed to work and build on Debian-based systems a
 Support for more systems will be confirmed and documented as the project matures.
 
 ### Dependencies
-Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), Debian based systems require the following additional dependencies to compile:
+Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), the following additional dependencies are required to compile:
+
+- on Debian-based systems:
 
 ```
 sudo apt install qtdeclarative5-dev qtquickcontrols2-5-dev
+```
+
+- on Fedora:
+
+```
+sudo dnf install qt5-qtdeclarative-devel qt5-qtquickcontrols2-devel
 ```
 
 The following runtime dependencies are also required for dynamic builds;
