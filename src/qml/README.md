@@ -48,11 +48,15 @@ This project has custom policies for development, see:
 
 ## Compile and Run
 
-The master branch is only guaranteed to work and build on Debian-based systems and macOS.
+The master branch is only guaranteed to work and build on Debian-based systems, Fedora, and macOS.
 Support for more systems will be confirmed and documented as the project matures.
 
 ### Dependencies
-Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), Debian based systems require the following additional dependencies to compile:
+No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
+
+Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), the following additional dependencies are required to compile:
+
+#### Debian-based systems:
 
 ```
 sudo apt install qtdeclarative5-dev qtquickcontrols2-5-dev
@@ -65,7 +69,11 @@ they are not needed for static builds:
 sudo apt install qml-module-qtquick2 qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qtquick-window2
 ```
 
-No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.md), are needed for macOS.
+#### Fedora:
+
+```
+sudo dnf install qt5-qtdeclarative-devel qt5-qtquickcontrols2-devel
+```
 
 ### Build
 
