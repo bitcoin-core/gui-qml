@@ -33,6 +33,7 @@ public:
 
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void detectShutdown();
 
 Q_SIGNALS:
     void blockTipHeightChanged();
