@@ -39,6 +39,13 @@ void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::Bloc
     setBlockTipHeight(tip_info.block_height);
 }
 
+void NodeModel::detectShutdown()
+{
+    if (m_node.shutdownRequested()) {
+        startNodeShutdown();
+    }
+}
+
 void NodeModel::ConnectToBlockTipSignal()
 {
     assert(!m_handler_notify_block_tip);
