@@ -9,9 +9,14 @@
 
 #include <cassert>
 
+#include <QTimer>
+
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_poll_shutdown_timer = new QTimer(this);
+    connect(m_poll_shutdown_timer, &QTimer::timeout, this, &NodeModel::detectShutdown);
+    m_poll_shutdown_timer->start(200);
     ConnectToBlockTipSignal();
 }
 

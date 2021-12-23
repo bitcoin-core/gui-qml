@@ -11,6 +11,7 @@
 #include <memory>
 
 #include <QObject>
+#include <QTimer>
 
 namespace interfaces {
 class Node;
@@ -46,6 +47,7 @@ private:
 
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
+    QTimer* m_poll_shutdown_timer{nullptr};
 
     void ConnectToBlockTipSignal();
 };
