@@ -34,6 +34,7 @@
 #include <QQuickWindow>
 #include <QString>
 #include <QStyleHints>
+#include <QTimer>
 #include <QUrl>
 
 QT_BEGIN_NAMESPACE
@@ -159,11 +160,16 @@ int QmlGuiMain(int argc, char* argv[])
 
     NodeModel node_model{*node};
     InitExecutor init_executor{*node};
+    QTimer* pollShutdownTimer = new QTimer(&node_model);
+    QObject::connect(pollShutdownTimer, &QTimer::timeout, &node_model, &NodeModel::detectShutdown);
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, pollShutdownTimer, &QTimer::stop);
     QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
     QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
+
+    pollShutdownTimer->start(200);
 
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
