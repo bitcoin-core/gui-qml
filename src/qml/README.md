@@ -40,6 +40,12 @@ All development must adhere to the current upstream Qt Version to minimize our d
 
 As the Qt Version changes upstream, refactoring is allowed to use the now available features.
 
+### Policies
+
+This project has custom policies for development, see:
+- [Icon Policy](./doc/icon-policy.md)
+- [Translator Comments Policy](./doc/translator-comments.md)
+
 ## Compile and Run
 
 The master branch is only guaranteed to work and build on Debian-based systems and macOS.
