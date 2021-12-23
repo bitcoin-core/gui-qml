@@ -16,12 +16,12 @@ The primary goals of the project can be summed up as follows:
 - Work alongside the Bitcoin Design community to develop an aesthetic GUI
 - Develop a mobile-optimized GUI
 
-It is important that we stay as conflict-free as possible with the Bitcoin Core repo.
+We must avoid conflicts with the Bitcoin Core repo.
 As such, this project will aim to make very few changes outside of the qml directory.
 Pull requests must be focused on developing the GUI itself, adding build support,
 or improving relevant documentation.
 
-Note that this project will **not** accept pull requests making any significant changes unrelated to the GUI.
+This project will **not** accept pull requests making any significant changes unrelated to the GUI.
 
 ## Development Process
 
@@ -52,9 +52,15 @@ No additional dependencies, besides those in [build-osx.md](../../doc/build-osx.
 
 ### Build
 
-For instructions on how to build and compile Bitcoin Core, refer to your respective systems build docs.
+For instructions on how to build and compile Bitcoin Core, refer to your respective system's build doc.
 
-The QML GUI is provided by the `bitcoin-qml` build target.
+As long as the required dependencies are installed, the QML GUI will be built.
+To ensure that you are in fact building the QML GUI, you can configure with the following option:
+
+```
+cmake -B build -DBUILD_GUI=ON
+cmake --build build -t bitcoin-qml
+```
 
 ### Run
 
