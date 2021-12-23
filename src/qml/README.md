@@ -29,6 +29,12 @@ This repo is synced with the [Bitcoin Core repo](https://github.com/bitcoin/bitc
 
 Contributions are welcome from all, developers and designers. If you are a new contributor, please read [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
+### Policies
+
+This project has custom policies for development, see:
+- [Icon Policy](./doc/icon-policy.md)
+- [Translator Comments Policy](./doc/translator-comments.md)
+
 ## Compile and Run
 
 The master branch is only guaranteed to work and build on Debian-based systems and macOS.
