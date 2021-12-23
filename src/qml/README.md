@@ -9,7 +9,7 @@ To test the recent GUI from the main branch, insecure CI artifacts can be used:
 
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
-# Goals and Limitations
+## Goals and Limitations
 
 The current Bitcoin Core GUI has gathered enough technical debt and hacked on features; it is time to begin anew.
 This project will start from a clean slate to produce a feature-rich GUI with intuitive user flows and first-class design.
@@ -28,19 +28,19 @@ or improving relevant documentation.
 
 Note that this project will **not** accept pull requests making any significant changes unrelated to the GUI.
 
-# Development Process
+## Development Process
 
 This repo is synced with the [Bitcoin Core repo](https://github.com/bitcoin/bitcoin) on a weekly basis, or as needed to resolve conflicts.
 
 Contributions are welcome from all, developers and designers. If you are a new contributor, please read [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
-## Minimum Required Qt Version
+### Minimum Required Qt Version
 
 All development must adhere to the current upstream Qt Version to minimize our divergence from upstream and avoid costly changes. Review of open PR's must ensure that changes are compatible with this Qt version. Currently, the required version is [Qt 5.12.11](https://github.com/bitcoin-core/gui-qml/blob/a79a2249d027047f08dffe3f04951d52eac198f1/depends/packages/qt.mk#L2).
 
 As the Qt Version changes upstream, refactoring is allowed to use the now available features.
 
-# Compile and Run
+## Compile and Run
 
 The master branch is only guaranteed to work and build on Debian-based systems and macOS.
 Support for more systems will be confirmed and documented as the project matures.
