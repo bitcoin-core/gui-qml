@@ -173,6 +173,8 @@ PE_ALLOWED_LIBRARIES = {
 'VERSION.dll', # version checking
 'WINMM.dll', # WinMM audio API
 'WTSAPI32.dll', # Remote Desktop
+'d3d11.dll',
+'dxgi.dll',
 }
 
 def check_version(max_versions, version, arch) -> bool:
