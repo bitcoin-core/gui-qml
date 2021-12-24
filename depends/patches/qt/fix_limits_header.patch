@@ -7,17 +7,6 @@ Upstream commits:
  - Qt 6.0: b2af6332ea37e45ab230a7a5d2d278f86d961b83
  - Qt 6.1: 9c56d4da2ff631a8c1c30475bd792f6c86bda53c
 
-Details of a patch for qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h:
- - upstream bug: not submitted
- - upstream commits:
-   - Qt 5.15 -- unavailable as open source
-   - Qt 6.1: 150bd8e33bc6f79906f711a74cf3fe6831bf05ac
-   - Qt 6.2: 367293b18ab0d0a0432c1c8ce445fee052e5eee5
-
-A patch for qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h can be
-dropped after the commit 68b7a66a6e4d673d11aab44cb87b3f005cdff8ea
-in Qt 5.14.
-
 --- old/qtbase/src/corelib/global/qendian.h
 +++ new/qtbase/src/corelib/global/qendian.h
 @@ -44,6 +44,8 @@
@@ -53,26 +42,3 @@ in Qt 5.14.
  #include <math.h>
  #include <stdio.h>
  
-
---- old/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
-+++ old/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
-@@ -48,6 +48,7 @@
- #include <QtCore/qmetatype.h>
- 
- #include <initializer_list>
-+#include <limits>
- #include <type_traits>
- 
- //
-
---- old/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
-+++ new/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
-@@ -52,6 +52,8 @@
- 
- #include <private/qv4global_p.h>
- 
-+#include <limits>
-+
- QT_BEGIN_NAMESPACE
- 
- class QString
