@@ -682,7 +682,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_descriptor_test, BasicTestingSetup)
     vw << (int32_t)0;
     vw << (int32_t)1;
 
-    VectorReader vr(0, 0, malformed_record, 0);
+    SpanReader vr{0, 0, malformed_record};
     WalletDescriptor w_desc;
     BOOST_CHECK_EXCEPTION(vr >> w_desc, std::ios_base::failure, malformed_descriptor);
 }
@@ -816,30 +816,35 @@ BOOST_FIXTURE_TEST_CASE(ZapSelectTx, TestChain100Setup)
     context.args = &gArgs;
     context.chain = m_node.chain.get();
     auto wallet = TestLoadWallet(context);
-    CKey key;
-    key.MakeNewKey(true);
-    AddKey(*wallet, key);
+    AddKey(*wallet, coinbaseKey);
 
-    std::string error;
+    // rescan to ensure coinbase transactions from test fixture are picked up by the wallet
+    {
+        WalletRescanReserver reserver(*wallet);
+        reserver.reserve();
+        wallet->ScanForWalletTransactions(m_node.chain->getBlockHash(0), 0, /* max height= */ {}, reserver, /* update= */ true);
+    }
+    // create one more block to get the first block coinbase to maturity
     m_coinbase_txns.push_back(CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey())).vtx[0]);
-    auto block_tx = TestSimpleSpend(*m_coinbase_txns[0], 0, coinbaseKey, GetScriptForRawPubKey(key.GetPubKey()));
-    CreateAndProcessBlock({block_tx}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    // spend first coinbase tx
+    auto spend_tx = TestSimpleSpend(*m_coinbase_txns[0], 0, coinbaseKey, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
+    CreateAndProcessBlock({spend_tx}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
 
     SyncWithValidationInterfaceQueue();
 
     {
-        auto block_hash = block_tx.GetHash();
+        auto spend_tx_hash = spend_tx.GetHash();
         auto prev_hash = m_coinbase_txns[0]->GetHash();
 
         LOCK(wallet->cs_wallet);
         BOOST_CHECK(wallet->HasWalletSpend(prev_hash));
-        BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_hash), 1u);
+        BOOST_CHECK_EQUAL(wallet->mapWallet.count(spend_tx_hash), 1u);
 
-        std::vector<uint256> vHashIn{ block_hash }, vHashOut;
+        std::vector<uint256> vHashIn{spend_tx_hash}, vHashOut;
         BOOST_CHECK_EQUAL(wallet->ZapSelectTx(vHashIn, vHashOut), DBErrors::LOAD_OK);
 
         BOOST_CHECK(!wallet->HasWalletSpend(prev_hash));
-        BOOST_CHECK_EQUAL(wallet->mapWallet.count(block_hash), 0u);
+        BOOST_CHECK_EQUAL(wallet->mapWallet.count(spend_tx_hash), 0u);
     }
 
     TestUnloadWallet(std::move(wallet));

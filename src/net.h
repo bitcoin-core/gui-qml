@@ -6,7 +6,6 @@
 #ifndef BITCOIN_NET_H
 #define BITCOIN_NET_H
 
-#include <addrman.h>
 #include <chainparams.h>
 #include <common/bloom.h>
 #include <compat.h>
@@ -37,9 +36,10 @@
 #include <thread>
 #include <vector>
 
-class CScheduler;
-class CNode;
+class AddrMan;
 class BanMan;
+class CNode;
+class CScheduler;
 struct bilingual_str;
 
 /** Default for -whitelistrelay. */
@@ -48,7 +48,7 @@ static const bool DEFAULT_WHITELISTRELAY = true;
 static const bool DEFAULT_WHITELISTFORCERELAY = false;
 
 /** Time after which to disconnect, after waiting for a ping response (or inactivity). */
-static const int TIMEOUT_INTERVAL = 20 * 60;
+static constexpr std::chrono::minutes TIMEOUT_INTERVAL{20};
 /** Run the feeler connection loop once every 2 minutes. **/
 static constexpr auto FEELER_INTERVAL = 2min;
 /** Run the extra block-relay-only connection loop once every 5 minutes. **/
@@ -241,11 +241,11 @@ public:
     NodeId nodeid;
     ServiceFlags nServices;
     bool fRelayTxes;
-    int64_t nLastSend;
-    int64_t nLastRecv;
-    int64_t nLastTXTime;
-    int64_t nLastBlockTime;
-    int64_t nTimeConnected;
+    std::chrono::seconds m_last_send;
+    std::chrono::seconds m_last_recv;
+    std::chrono::seconds m_last_tx_time;
+    std::chrono::seconds m_last_block_time;
+    std::chrono::seconds m_connected;
     int64_t nTimeOffset;
     std::string m_addr_name;
     int nVersion;
@@ -420,10 +420,10 @@ public:
 
     uint64_t nRecvBytes GUARDED_BY(cs_vRecv){0};
 
-    std::atomic<int64_t> nLastSend{0};
-    std::atomic<int64_t> nLastRecv{0};
-    //! Unix epoch time at peer connection, in seconds.
-    const int64_t nTimeConnected;
+    std::atomic<std::chrono::seconds> m_last_send{0s};
+    std::atomic<std::chrono::seconds> m_last_recv{0s};
+    //! Unix epoch time at peer connection
+    const std::chrono::seconds m_connected;
     std::atomic<int64_t> nTimeOffset{0};
     // Address of this peer
     const CAddress addr;
@@ -562,13 +562,13 @@ public:
      * preliminary validity checks and was saved to disk, even if we don't
      * connect the block or it eventually fails connection. Used as an inbound
      * peer eviction criterium in CConnman::AttemptToEvictConnection. */
-    std::atomic<int64_t> nLastBlockTime{0};
+    std::atomic<std::chrono::seconds> m_last_block_time{0s};
 
     /** UNIX epoch time of the last transaction received from this peer that we
      * had not yet seen (e.g. not already received from another peer) and that
      * was accepted into our mempool. Used as an inbound peer eviction criterium
      * in CConnman::AttemptToEvictConnection. */
-    std::atomic<int64_t> nLastTXTime{0};
+    std::atomic<std::chrono::seconds> m_last_tx_time{0s};
 
     /** Last measured round-trip time. Used only for RPC/GUI stats/debugging.*/
     std::atomic<std::chrono::microseconds> m_last_ping_time{0us};
@@ -784,7 +784,7 @@ public:
         m_msgproc = connOptions.m_msgproc;
         nSendBufferMaxSize = connOptions.nSendBufferMaxSize;
         nReceiveFloodSize = connOptions.nReceiveFloodSize;
-        m_peer_connect_timeout = connOptions.m_peer_connect_timeout;
+        m_peer_connect_timeout = std::chrono::seconds{connOptions.m_peer_connect_timeout};
         {
             LOCK(cs_totalBytesSent);
             nMaxOutboundLimit = connOptions.nMaxOutboundLimit;
@@ -884,8 +884,8 @@ public:
      * Attempts to open a connection. Currently only used from tests.
      *
      * @param[in]   address     Address of node to try connecting to
-     * @param[in]   conn_type   ConnectionType::OUTBOUND or ConnectionType::BLOCK_RELAY
-     *                          or ConnectionType::ADDR_FETCH
+     * @param[in]   conn_type   ConnectionType::OUTBOUND, ConnectionType::BLOCK_RELAY,
+     *                          ConnectionType::ADDR_FETCH or ConnectionType::FEELER
      * @return      bool        Returns false if there are no available
      *                          slots for this connection:
      *                          - conn_type not a supported ConnectionType
@@ -942,7 +942,7 @@ public:
     std::chrono::microseconds PoissonNextSendInbound(std::chrono::microseconds now, std::chrono::seconds average_interval);
 
     /** Return true if we should disconnect the peer for failing an inactivity check. */
-    bool ShouldRunInactivityChecks(const CNode& node, int64_t secs_now) const;
+    bool ShouldRunInactivityChecks(const CNode& node, std::chrono::seconds now) const;
 
 private:
     struct ListenSocket {
@@ -1084,7 +1084,7 @@ private:
     uint64_t nMaxOutboundLimit GUARDED_BY(cs_totalBytesSent);
 
     // P2P timeout in seconds
-    int64_t m_peer_connect_timeout;
+    std::chrono::seconds m_peer_connect_timeout;
 
     // Whitelisted ranges. Any node connecting from these is automatically
     // whitelisted (as well as those connecting to whitelisted binds).
@@ -1274,10 +1274,10 @@ void CaptureMessage(const CAddress& addr, const std::string& msg_type, const Spa
 struct NodeEvictionCandidate
 {
     NodeId id;
-    int64_t nTimeConnected;
+    std::chrono::seconds m_connected;
     std::chrono::microseconds m_min_ping_time;
-    int64_t nLastBlockTime;
-    int64_t nLastTXTime;
+    std::chrono::seconds m_last_block_time;
+    std::chrono::seconds m_last_tx_time;
     bool fRelevantServices;
     bool fRelayTxes;
     bool fBloomFilter;

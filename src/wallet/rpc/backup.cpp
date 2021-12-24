@@ -17,7 +17,7 @@
 #include <util/system.h>
 #include <util/time.h>
 #include <util/translation.h>
-#include <wallet/rpcwallet.h>
+#include <wallet/rpc/util.h>
 #include <wallet/wallet.h>
 
 #include <stdint.h>
@@ -35,7 +35,7 @@ std::string static EncodeDumpString(const std::string &str) {
     std::stringstream ret;
     for (const unsigned char c : str) {
         if (c <= 32 || c >= 128 || c == '%') {
-            ret << '%' << HexStr(Span<const unsigned char>(&c, 1));
+            ret << '%' << HexStr({&c, 1});
         } else {
             ret << c;
         }
@@ -189,33 +189,6 @@ RPCHelpMan importprivkey()
     }
 
     return NullUniValue;
-},
-    };
-}
-
-RPCHelpMan abortrescan()
-{
-    return RPCHelpMan{"abortrescan",
-                "\nStops current wallet rescan triggered by an RPC call, e.g. by an importprivkey call.\n"
-                "Note: Use \"getwalletinfo\" to query the scanning progress.\n",
-                {},
-                RPCResult{RPCResult::Type::BOOL, "", "Whether the abort was successful"},
-                RPCExamples{
-            "\nImport a private key\n"
-            + HelpExampleCli("importprivkey", "\"mykey\"") +
-            "\nAbort the running wallet rescan\n"
-            + HelpExampleCli("abortrescan", "") +
-            "\nAs a JSON-RPC call\n"
-            + HelpExampleRpc("abortrescan", "")
-                },
-        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
-{
-    std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
-    if (!pwallet) return NullUniValue;
-
-    if (!pwallet->IsScanning() || pwallet->IsAbortingRescan()) return false;
-    pwallet->AbortRescan();
-    return true;
 },
     };
 }
@@ -1326,11 +1299,11 @@ RPCHelpMan importmulti()
                         {RPCResult::Type::OBJ, "", "",
                         {
                             {RPCResult::Type::BOOL, "success", ""},
-                            {RPCResult::Type::ARR, "warnings", /* optional */ true, "",
+                            {RPCResult::Type::ARR, "warnings", /*optional=*/true, "",
                             {
                                 {RPCResult::Type::STR, "", ""},
                             }},
-                            {RPCResult::Type::OBJ, "error", /* optional */ true, "",
+                            {RPCResult::Type::OBJ, "error", /*optional=*/true, "",
                             {
                                 {RPCResult::Type::ELISION, "", "JSONRPC error"},
                             }},
@@ -1346,6 +1319,11 @@ RPCHelpMan importmulti()
 {
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(mainRequest);
     if (!pwallet) return NullUniValue;
+    CWallet& wallet{*pwallet};
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    wallet.BlockUntilSyncedToCurrentChain();
 
     RPCTypeCheck(mainRequest.params, {UniValue::VARR, UniValue::VOBJ});
 
@@ -1617,7 +1595,7 @@ RPCHelpMan importdescriptors()
                                         /* oneline_description */ "", {"timestamp | \"now\"", "integer / string"}
                                     },
                                     {"internal", RPCArg::Type::BOOL, RPCArg::Default{false}, "Whether matching outputs should be treated as not incoming payments (e.g. change)"},
-                                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Label to assign to the address, only allowed with internal=false"},
+                                    {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Label to assign to the address, only allowed with internal=false. Disabled for ranged descriptors"},
                                 },
                             },
                         },
@@ -1629,11 +1607,11 @@ RPCHelpMan importdescriptors()
                         {RPCResult::Type::OBJ, "", "",
                         {
                             {RPCResult::Type::BOOL, "success", ""},
-                            {RPCResult::Type::ARR, "warnings", /* optional */ true, "",
+                            {RPCResult::Type::ARR, "warnings", /*optional=*/true, "",
                             {
                                 {RPCResult::Type::STR, "", ""},
                             }},
-                            {RPCResult::Type::OBJ, "error", /* optional */ true, "",
+                            {RPCResult::Type::OBJ, "error", /*optional=*/true, "",
                             {
                                 {RPCResult::Type::ELISION, "", "JSONRPC error"},
                             }},
@@ -1649,6 +1627,11 @@ RPCHelpMan importdescriptors()
 {
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(main_request);
     if (!pwallet) return NullUniValue;
+    CWallet& wallet{*pwallet};
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    wallet.BlockUntilSyncedToCurrentChain();
 
     //  Make sure wallet is a descriptor wallet
     if (!pwallet->IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS)) {
@@ -1808,11 +1791,10 @@ RPCHelpMan listdescriptors()
         }
         spk.pushKV("desc", descriptor);
         spk.pushKV("timestamp", wallet_descriptor.creation_time);
-        const bool active = active_spk_mans.count(desc_spk_man) != 0;
-        spk.pushKV("active", active);
-        const auto& type = wallet_descriptor.descriptor->GetOutputType();
-        if (active && type) {
-            spk.pushKV("internal", wallet->GetScriptPubKeyMan(*type, true) == desc_spk_man);
+        spk.pushKV("active", active_spk_mans.count(desc_spk_man) != 0);
+        const auto internal = wallet->IsInternalScriptPubKeyMan(desc_spk_man);
+        if (internal.has_value()) {
+            spk.pushKV("internal", *internal);
         }
         if (wallet_descriptor.descriptor->IsRange()) {
             UniValue range(UniValue::VARR);
@@ -1829,6 +1811,92 @@ RPCHelpMan listdescriptors()
     response.pushKV("descriptors", descriptors);
 
     return response;
+},
+    };
+}
+
+RPCHelpMan backupwallet()
+{
+    return RPCHelpMan{"backupwallet",
+                "\nSafely copies current wallet file to destination, which can be a directory or a path with filename.\n",
+                {
+                    {"destination", RPCArg::Type::STR, RPCArg::Optional::NO, "The destination directory or file"},
+                },
+                RPCResult{RPCResult::Type::NONE, "", ""},
+                RPCExamples{
+                    HelpExampleCli("backupwallet", "\"backup.dat\"")
+            + HelpExampleRpc("backupwallet", "\"backup.dat\"")
+                },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+    const std::shared_ptr<const CWallet> pwallet = GetWalletForJSONRPCRequest(request);
+    if (!pwallet) return NullUniValue;
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    pwallet->BlockUntilSyncedToCurrentChain();
+
+    LOCK(pwallet->cs_wallet);
+
+    std::string strDest = request.params[0].get_str();
+    if (!pwallet->BackupWallet(strDest)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Error: Wallet backup failed!");
+    }
+
+    return NullUniValue;
+},
+    };
+}
+
+
+RPCHelpMan restorewallet()
+{
+    return RPCHelpMan{
+        "restorewallet",
+        "\nRestore and loads a wallet from backup.\n",
+        {
+            {"wallet_name", RPCArg::Type::STR, RPCArg::Optional::NO, "The name that will be applied to the restored wallet"},
+            {"backup_file", RPCArg::Type::STR, RPCArg::Optional::NO, "The backup file that will be used to restore the wallet."},
+            {"load_on_startup", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED_NAMED_ARG, "Save wallet name to persistent settings and load on startup. True to add wallet to startup list, false to remove, null to leave unchanged."},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::STR, "name", "The wallet name if restored successfully."},
+                {RPCResult::Type::STR, "warning", "Warning message if wallet was not loaded cleanly."},
+            }
+        },
+        RPCExamples{
+            HelpExampleCli("restorewallet", "\"testwallet\" \"home\\backups\\backup-file.bak\"")
+            + HelpExampleRpc("restorewallet", "\"testwallet\" \"home\\backups\\backup-file.bak\"")
+            + HelpExampleCliNamed("restorewallet", {{"wallet_name", "testwallet"}, {"backup_file", "home\\backups\\backup-file.bak\""}, {"load_on_startup", true}})
+            + HelpExampleRpcNamed("restorewallet", {{"wallet_name", "testwallet"}, {"backup_file", "home\\backups\\backup-file.bak\""}, {"load_on_startup", true}})
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+{
+
+    WalletContext& context = EnsureWalletContext(request.context);
+
+    auto backup_file = fs::u8path(request.params[1].get_str());
+
+    std::string wallet_name = request.params[0].get_str();
+
+    std::optional<bool> load_on_start = request.params[2].isNull() ? std::nullopt : std::optional<bool>(request.params[2].get_bool());
+
+    DatabaseStatus status;
+    bilingual_str error;
+    std::vector<bilingual_str> warnings;
+
+    const std::shared_ptr<CWallet> wallet = RestoreWallet(context, fs::PathToString(backup_file), wallet_name, load_on_start, status, error, warnings);
+
+    HandleWalletError(wallet, status, error);
+
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("name", wallet->GetName());
+    obj.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+
+    return obj;
+
 },
     };
 }
