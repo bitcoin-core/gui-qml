@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+import BitcoinCore 1.0
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.11
@@ -16,33 +17,51 @@ ApplicationWindow {
     color: "black"
     visible: true
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    Component.onCompleted: initExecutor.initialize()
 
-    ColumnLayout {
+    Connections {
+        target: initExecutor
+        onInitializeResult: nodeModel.initializeResult(success, tip_info)
+    }
+
+    BusyIndicator {
+        running: !initExecutor.ready
+        visible: running
         anchors.centerIn: parent
-        spacing: 15
-        width: 400
-        Image {
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            sourceSize.width: 64
-            sourceSize.height: 64
-        }
-        BlockCounter {
-            Layout.alignment: Qt.AlignCenter
-            blockHeight: nodeModel.blockTipHeight
-        }
-        ProgressIndicator {
-            id: indicator
-            Layout.fillWidth: true
-            progress: 0.666
-            background: MouseArea {
-                onClicked: indicator.progress = mouseX / width
+    }
+
+    Loader {
+        id: loader
+        active: initExecutor.ready
+        anchors.centerIn: parent
+        sourceComponent: ColumnLayout {
+            spacing: 15
+            width: 400
+            NodeModel {
+                id: nodeModel
             }
-        }
-        ConnectionOptions {
-            Layout.preferredWidth: 400
-            focus: true
+            Image {
+                Layout.alignment: Qt.AlignCenter
+                source: "image://images/app"
+                sourceSize.width: 64
+                sourceSize.height: 64
+            }
+            BlockCounter {
+                Layout.alignment: Qt.AlignCenter
+                blockHeight: nodeModel.blockTipHeight
+            }
+            ProgressIndicator {
+                id: indicator
+                Layout.fillWidth: true
+                progress: 0.666
+                background: MouseArea {
+                    onClicked: indicator.progress = mouseX / width
+                }
+            }
+            ConnectionOptions {
+                Layout.preferredWidth: 400
+                focus: true
+            }
         }
     }
 }

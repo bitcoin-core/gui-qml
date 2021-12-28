@@ -22,15 +22,19 @@ QT_END_NAMESPACE
 class InitExecutor : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool ready READ ready NOTIFY readyChanged)
 public:
     explicit InitExecutor(interfaces::Node& node);
     ~InitExecutor();
+
+    bool ready() const { return m_ready; }
 
 public Q_SLOTS:
     void initialize();
     void shutdown();
 
 Q_SIGNALS:
+    void readyChanged();
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
     void shutdownResult();
     void runawayException(const QString& message);
@@ -42,6 +46,7 @@ private:
     interfaces::Node& m_node;
     QObject m_context;
     QThread m_thread;
+    bool m_ready{false};
 };
 
 #endif // BITCOIN_QT_INITEXECUTOR_H
