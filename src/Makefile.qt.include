@@ -299,6 +299,7 @@ QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
+  qml/components/ConnectionSettings.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
   qml/controls/OptionButton.qml \
