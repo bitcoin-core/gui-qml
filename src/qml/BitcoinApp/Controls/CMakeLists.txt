@@ -8,6 +8,7 @@ qt6_add_qml_module(bitcoin_qml_controls
   STATIC
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
+    ContinueButton.qml
     Header.qml
     OptionButton.qml
     ProgressIndicator.qml
