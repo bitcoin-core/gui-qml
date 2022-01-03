@@ -302,6 +302,7 @@ QML_RES_QML = \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
   qml/controls/OptionButton.qml \
+  qml/controls/OptionSwitch.qml \
   qml/controls/ProgressIndicator.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/stub.qml
