@@ -5,6 +5,7 @@
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/OptionButton.qml</file>
+        <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
