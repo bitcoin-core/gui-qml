@@ -310,6 +310,12 @@ QML_RES_QML = \
   qml/controls/Setting.qml \
   qml/controls/TextButton.qml \
   qml/controls/Wizard.qml \
+  qml/pages/onboarding/onboarding01.qml \
+  qml/pages/onboarding/onboarding02.qml \
+  qml/pages/onboarding/onboarding03.qml \
+  qml/pages/onboarding/onboarding03a.qml \
+  qml/pages/onboarding/onboarding03b.qml \
+  qml/pages/onboarding/onboarding04.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/stub.qml
 

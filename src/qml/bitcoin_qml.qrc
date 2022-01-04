@@ -13,6 +13,12 @@
         <file>controls/Setting.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/Wizard.qml</file>
+        <file>pages/onboarding/onboarding01.qml</file>
+        <file>pages/onboarding/onboarding02.qml</file>
+        <file>pages/onboarding/onboarding03.qml</file>
+        <file>pages/onboarding/onboarding03a.qml</file>
+        <file>pages/onboarding/onboarding03b.qml</file>
+        <file>pages/onboarding/onboarding04.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
