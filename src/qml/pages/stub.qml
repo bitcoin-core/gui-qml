@@ -18,6 +18,18 @@ ApplicationWindow {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
+    menuBar: RowLayout {
+        height: 50
+        Layout.leftMargin: 10
+        Loader {
+            active: stack.currentIndex > 0 ? true : false
+            visible: active
+            sourceComponent: TextButton {
+                text: "‹ Back"
+                onClicked: stack.currentIndex -= 1
+            }
+        }
+    }
     ColumnLayout {
         anchors.centerIn: parent
         spacing: 15
@@ -54,11 +66,12 @@ ApplicationWindow {
             Layout.fillWidth: true
             ConnectionOptions {}
             ConnectionSettings {}
+            StorageOptions {}
         }
         ContinueButton {
             Layout.alignment: Qt.AlignCenter
-            text: stack.currentIndex < 1 ? qsTr("Continue") : qsTr("Back")
-            onClicked: stack.currentIndex < 1 ? stack.currentIndex = 1 : stack.currentIndex = 0
+            text: stack.currentIndex > 0 ? qsTr("Next") : qsTr("Start")
+            onClicked: stack.currentIndex < 2 ? stack.currentIndex += 1 : null
         }
         PageIndicator {
             Layout.alignment: Qt.AlignCenter
