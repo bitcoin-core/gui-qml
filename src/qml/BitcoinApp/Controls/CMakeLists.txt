@@ -12,6 +12,7 @@ qt6_add_qml_module(bitcoin_qml_controls
     Header.qml
     OptionButton.qml
     OptionSwitch.qml
+    PageIndicator.qml
     ProgressIndicator.qml
     Setting.qml
     TextButton.qml
