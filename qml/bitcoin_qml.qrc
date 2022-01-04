@@ -3,6 +3,7 @@
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
+        <file>components/StorageOptions.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/OptionButton.qml</file>
