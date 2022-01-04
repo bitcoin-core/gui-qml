@@ -11,4 +11,5 @@ qt6_add_qml_module(bitcoin_qml_components
     BlockCounter.qml
     ConnectionOptions.qml
     ConnectionSettings.qml
+    StorageOptions.qml
 )
