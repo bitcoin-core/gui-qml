@@ -10,6 +10,7 @@
         <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/Setting.qml</file>
+        <file>controls/TextButton.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
