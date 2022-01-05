@@ -14,10 +14,6 @@ Details of a patch for qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h:
    - Qt 6.1: 150bd8e33bc6f79906f711a74cf3fe6831bf05ac
    - Qt 6.2: 367293b18ab0d0a0432c1c8ce445fee052e5eee5
 
-A patch for qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h can be
-dropped after the commit 68b7a66a6e4d673d11aab44cb87b3f005cdff8ea
-in Qt 5.14.
-
 --- old/qtbase/src/corelib/global/qendian.h
 +++ new/qtbase/src/corelib/global/qendian.h
 @@ -44,6 +44,8 @@
@@ -30,17 +26,16 @@ in Qt 5.14.
  #include <stdlib.h>
  #include <string.h>
 
---- old/qtbase/src/corelib/tools/qbytearraymatcher.h
-+++ new/qtbase/src/corelib/tools/qbytearraymatcher.h
-@@ -42,6 +42,8 @@
+--- old/qtbase/src/corelib/global/qfloat16.h
++++ new/qtbase/src/corelib/global/qfloat16.h
+@@ -43,6 +43,7 @@
  
- #include <QtCore/qbytearray.h>
- 
+ #include <QtCore/qglobal.h>
+ #include <QtCore/qmetatype.h>
 +#include <limits>
-+
- QT_BEGIN_NAMESPACE
+ #include <string.h>
  
- 
+ #if defined(QT_COMPILER_SUPPORTS_F16C) && defined(__AVX2__) && !defined(__F16C__)
 
 --- old/qtbase/src/tools/moc/generator.cpp
 +++ new/qtbase/src/tools/moc/generator.cpp
@@ -53,6 +48,27 @@ in Qt 5.14.
  #include <math.h>
  #include <stdio.h>
  
+--- old/qtbase/src/corelib/text/qbytearraymatcher.h
++++ new/qtbase/src/corelib/text/qbytearraymatcher.h
+@@ -42,6 +42,8 @@
+ 
+ #include <QtCore/qbytearray.h>
+ 
++#include <limits>
++
+ QT_BEGIN_NAMESPACE
+ 
+ 
+--- old/qtbase/src/corelib/tools/qoffsetstringarray_p.h
++++ new/qtbase/src/corelib/tools/qoffsetstringarray_p.h
+@@ -55,6 +55,7 @@
+ 
+ #include <tuple>
+ #include <array>
++#include <limits>
+ 
+ QT_BEGIN_NAMESPACE
+ 
 
 --- old/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
 +++ new/qtdeclarative/src/qmldebug/qqmlprofilerevent_p.h
@@ -64,14 +80,3 @@ in Qt 5.14.
  #include <type_traits>
  
  //
-
---- old/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
-+++ new/qtdeclarative/src/qml/jsruntime/qv4propertykey_p.h
-@@ -51,6 +51,7 @@
- //
- 
- #include <private/qv4global_p.h>
-+#include <limits>
- 
- QT_BEGIN_NAMESPACE
- 

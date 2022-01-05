@@ -105,7 +105,19 @@ ELF_ALLOWED_LIBRARIES = {
 'libxkbcommon-x11.so.0', # keyboard keymapping
 'libfontconfig.so.1', # font support
 'libfreetype.so.6', # font parsing
-'libdl.so.2' # programming interface to dynamic linker
+'libdl.so.2', # programming interface to dynamic linker
+'libxcb-icccm.so.4',
+'libxcb-image.so.0',
+'libxcb-shm.so.0',
+'libxcb-keysyms.so.1',
+'libxcb-randr.so.0',
+'libxcb-render-util.so.0',
+'libxcb-render.so.0',
+'libxcb-shape.so.0',
+'libxcb-sync.so.1',
+'libxcb-xfixes.so.0',
+'libxcb-xinerama.so.0',
+'libxcb-xkb.so.1',
 }
 
 MACHO_ALLOWED_LIBRARIES = {
@@ -116,6 +128,7 @@ MACHO_ALLOWED_LIBRARIES = {
 'AppKit', # user interface
 'ApplicationServices', # common application tasks.
 'Carbon', # deprecated c back-compat API
+'ColorSync',
 'CoreFoundation', # low level func, data types
 'CoreGraphics', # 2D rendering
 'CoreServices', # operating system services
@@ -152,6 +165,8 @@ PE_ALLOWED_LIBRARIES = {
 'VERSION.dll', # version checking
 'WINMM.dll', # WinMM audio API
 'WTSAPI32.dll',
+'d3d11.dll',
+'dxgi.dll',
 }
 
 def check_version(max_versions, version, arch) -> bool:
@@ -241,18 +256,18 @@ def check_ELF_interpreter(binary) -> bool:
     return binary.concrete.interpreter == expected_interpreter
 
 CHECKS = {
-'ELF': [
+lief.EXE_FORMATS.ELF: [
     ('IMPORTED_SYMBOLS', check_imported_symbols),
     ('EXPORTED_SYMBOLS', check_exported_symbols),
     ('LIBRARY_DEPENDENCIES', check_ELF_libraries),
     ('INTERPRETER_NAME', check_ELF_interpreter),
 ],
-'MACHO': [
+lief.EXE_FORMATS.MACHO: [
     ('DYNAMIC_LIBRARIES', check_MACHO_libraries),
     ('MIN_OS', check_MACHO_min_os),
     ('SDK', check_MACHO_sdk),
 ],
-'PE' : [
+lief.EXE_FORMATS.PE: [
     ('DYNAMIC_LIBRARIES', check_PE_libraries),
     ('SUBSYSTEM_VERSION', check_PE_subsystem_version),
 ]
@@ -263,7 +278,7 @@ if __name__ == '__main__':
     for filename in sys.argv[1:]:
         try:
             binary = lief.parse(filename)
-            etype = binary.format.name
+            etype = binary.format
             if etype == lief.EXE_FORMATS.UNKNOWN:
                 print(f'{filename}: unknown executable format')
                 retval = 1

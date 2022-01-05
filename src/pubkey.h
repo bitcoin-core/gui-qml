@@ -17,6 +17,7 @@
 #include <vector>
 
 const unsigned int BIP32_EXTKEY_SIZE = 74;
+const unsigned int BIP32_EXTKEY_WITH_VERSION_SIZE = 78;
 
 /** A reference to a CKey: the Hash160 of its serialized public key */
 class CKeyID : public uint160
@@ -129,6 +130,11 @@ public:
         return a.vch[0] < b.vch[0] ||
                (a.vch[0] == b.vch[0] && memcmp(a.vch, b.vch, a.size()) < 0);
     }
+    friend bool operator>(const CPubKey& a, const CPubKey& b)
+    {
+        return a.vch[0] > b.vch[0] ||
+               (a.vch[0] == b.vch[0] && memcmp(a.vch, b.vch, a.size()) > 0);
+    }
 
     //! Implement serialization, as if this was a byte vector.
     template <typename Stream>
@@ -157,13 +163,13 @@ public:
     //! Get the KeyID of this public key (hash of its serialization)
     CKeyID GetID() const
     {
-        return CKeyID(Hash160(MakeSpan(vch).first(size())));
+        return CKeyID(Hash160(Span{vch}.first(size())));
     }
 
     //! Get the 256-bit hash of this public key.
     uint256 GetHash() const
     {
-        return Hash(MakeSpan(vch).first(size()));
+        return Hash(Span{vch}.first(size()));
     }
 
     /*
@@ -240,7 +246,7 @@ public:
     explicit XOnlyPubKey(Span<const unsigned char> bytes);
 
     /** Construct an x-only pubkey from a normal pubkey. */
-    explicit XOnlyPubKey(const CPubKey& pubkey) : XOnlyPubKey(Span<const unsigned char>(pubkey.begin() + 1, pubkey.begin() + 33)) {}
+    explicit XOnlyPubKey(const CPubKey& pubkey) : XOnlyPubKey(Span{pubkey}.subspan(1, 32)) {}
 
     /** Verify a Schnorr signature against this public key.
      *
@@ -283,6 +289,7 @@ public:
 };
 
 struct CExtPubKey {
+    unsigned char version[4];
     unsigned char nDepth;
     unsigned char vchFingerprint[4];
     unsigned int nChild;
@@ -303,8 +310,20 @@ struct CExtPubKey {
         return !(a == b);
     }
 
+    friend bool operator<(const CExtPubKey &a, const CExtPubKey &b)
+    {
+        if (a.pubkey < b.pubkey) {
+            return true;
+        } else if (a.pubkey > b.pubkey) {
+            return false;
+        }
+        return a.chaincode < b.chaincode;
+    }
+
     void Encode(unsigned char code[BIP32_EXTKEY_SIZE]) const;
     void Decode(const unsigned char code[BIP32_EXTKEY_SIZE]);
+    void EncodeWithVersion(unsigned char code[BIP32_EXTKEY_WITH_VERSION_SIZE]) const;
+    void DecodeWithVersion(const unsigned char code[BIP32_EXTKEY_WITH_VERSION_SIZE]);
     bool Derive(CExtPubKey& out, unsigned int nChild) const;
 };
 
