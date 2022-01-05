@@ -2,9 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-import QtQuick 2.12
-import QtQuick.Controls 2.12
-import QtQuick.Layouts 1.11
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 Button {
     property string description
@@ -33,25 +33,16 @@ Button {
         spacing: 3
         ColumnLayout {
             spacing: 3
-            Label {
+            Header {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
-                font.family: "Inter"
-                font.styleName: "Regular"
-                font.pointSize: 18
-                color: "white"
-                text: button.text
-                wrapMode: Text.WordWrap
-            }
-            Label {
-                Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                font.family: "Inter"
-                font.styleName: "Regular"
-                font.pixelSize: 15
-                color: "#DEDEDE"
-                text: button.description
-                wrapMode: Text.WordWrap
+                center: false
+                header: button.text
+                headerSize: 18
+                headerMargin: 0
+                description: button.description
+                descriptionSize: 15
+                descriptionMargin: 0
             }
             Loader {
                 Layout.topMargin: 2

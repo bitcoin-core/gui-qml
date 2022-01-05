@@ -2,9 +2,13 @@
     <qresource prefix="/qml">
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
+        <file>components/ConnectionSettings.qml</file>
+        <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/OptionButton.qml</file>
+        <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>
+        <file>controls/Setting.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
