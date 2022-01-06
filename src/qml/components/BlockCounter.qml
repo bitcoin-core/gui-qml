@@ -6,13 +6,14 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import "../controls"
 
 Label {
     property int blockHeight: 0
     background: Rectangle {
-        color: "black"
+        color: Theme.color.background
     }
-    color: "orange"
+    color: Theme.color.orange
     padding: 16
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
