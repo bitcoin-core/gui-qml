@@ -36,7 +36,6 @@ public:
     void setVerificationProgress(double new_progress);
 
     Q_INVOKABLE void startNodeInitializionThread();
-    void startNodeShutdown();
 
     void startShutdownPolling();
     void stopShutdownPolling();
