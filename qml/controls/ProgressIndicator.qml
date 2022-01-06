@@ -17,7 +17,7 @@ Control {
     contentItem: Rectangle {
         implicitHeight: 6
         radius: Math.floor(height / 2)
-        color: "#404040"
+        color: Theme.color.neutral3
         Item {
             width: Math.round(progress * contentItem.width)
             height: parent.height
@@ -26,7 +26,7 @@ Control {
                 width: contentItem.width
                 height: contentItem.height
                 radius: contentItem.radius
-                color: "orange"
+                color: Theme.color.orange
             }
         }
     }
