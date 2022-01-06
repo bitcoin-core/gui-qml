@@ -2,9 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import QtQuick 2.12
+import QtQuick.Controls 2.12
+import QtQuick.Layouts 1.11
 import "../controls"
 
 ColumnLayout {
@@ -31,13 +31,5 @@ ColumnLayout {
         Layout.fillWidth: true
         text: qsTr("Only when on Wi-Fi")
         description: qsTr("Loads quickly when on wi-fi and pauses when on cellular data.")
-        detail: ProgressIndicator {
-            implicitWidth: 50
-            SequentialAnimation on progress {
-                loops: Animation.Infinite
-                SmoothedAnimation { to: 1; velocity: 1; }
-                SmoothedAnimation { to: 0; velocity: 1; }
-            }
-        }
     }
 }
