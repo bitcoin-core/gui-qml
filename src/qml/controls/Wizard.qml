@@ -14,6 +14,7 @@ Page {
     header: RowLayout {
         height: 50
         Layout.leftMargin: 10
+        Layout.rightMargin: 10
         Loader {
             active: wizard.currentIndex > 0 ? true : false
             visible: active
@@ -21,6 +22,11 @@ Page {
                 text: "‹ Back"
                 onClicked: wizard.currentIndex -= 1
             }
+        }
+        ThemeToggleButton {
+            width: 50
+            height: 50
+            Layout.alignment: Qt.AlignRight
         }
     }
     SwipeView {

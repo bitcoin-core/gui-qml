@@ -36,6 +36,16 @@ ApplicationWindow {
         Page {
             anchors.fill: parent
             background: null
+            header: RowLayout {
+                height: 50
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                ThemeToggleButton {
+                    width: 50
+                    height: 50
+                    Layout.alignment: Qt.AlignRight
+                }
+            }
             ColumnLayout {
                 width: 600
                 spacing: 0

@@ -315,6 +315,7 @@ QML_RES_QML = \
   qml/controls/Setting.qml \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
+  qml/controls/ThemeToggleButton.qml \
   qml/controls/Wizard.qml \
   qml/pages/onboarding/onboarding01.qml \
   qml/pages/onboarding/onboarding02.qml \
