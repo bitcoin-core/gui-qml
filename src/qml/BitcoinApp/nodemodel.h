@@ -12,6 +12,10 @@
 
 #include <QObject>
 
+QT_BEGIN_NAMESPACE
+class QTimerEvent;
+QT_END_NAMESPACE
+
 namespace interfaces {
 class Node;
 }
@@ -34,6 +38,9 @@ public:
     Q_INVOKABLE void startNodeInitializionThread();
     void startNodeShutdown();
 
+    void startShutdownPolling();
+    void stopShutdownPolling();
+
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
 
@@ -43,10 +50,15 @@ Q_SIGNALS:
     void requestedShutdown();
     void verificationProgressChanged();
 
+protected:
+    void timerEvent(QTimerEvent* event) override;
+
 private:
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
     double m_verification_progress{0.0};
+
+    int m_shutdown_polling_timer_id{0};
 
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
