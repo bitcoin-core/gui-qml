@@ -11,7 +11,7 @@ PageIndicator {
         implicitWidth: 10
         implicitHeight: 10
         radius: Math.round(width / 2)
-        color: "white"
+        color: Theme.color.neutral9
         opacity: index === root.currentIndex ? 0.95 : pressed ? 0.7 : 0.45
         Behavior on opacity {
             OpacityAnimator {

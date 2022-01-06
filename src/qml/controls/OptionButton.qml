@@ -15,7 +15,7 @@ Button {
     property alias detail: detail_loader.sourceComponent
     background: Rectangle {
         border.width: 1
-        border.color: button.checked ? "#F7931A" : button.hovered ? "white" : "#999999"
+        border.color: button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
         radius: 10
         color: "transparent"
         Rectangle {
@@ -23,7 +23,7 @@ Button {
             anchors.fill: parent
             anchors.margins: -4
             border.width: 2
-            border.color: "#F7931A"
+            border.color: Theme.color.orange
             radius: 14
             color: "transparent"
             opacity: 0.4
@@ -50,7 +50,7 @@ Button {
                 visible: active
                 sourceComponent: Label {
                     background: Rectangle {
-                        color: "white"
+                        color: Theme.color.neutral9
                         radius: 3
                     }
                     font.styleName: "Regular"
@@ -59,7 +59,7 @@ Button {
                     rightPadding: 7
                     bottomPadding: 4
                     leftPadding: 7
-                    color: "black"
+                    color: Theme.color.neutral0
                     text: qsTr("Recommended")
                 }
             }
