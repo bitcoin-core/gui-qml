@@ -2,6 +2,11 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit/.
 
+set_source_files_properties(
+  Theme.qml
+  PROPERTIES QT_QML_SINGLETON_TYPE TRUE
+)
+
 qt6_add_qml_module(bitcoin_qml_controls
   URI BitcoinApp.Controls
   VERSION 1.0
@@ -16,4 +21,5 @@ qt6_add_qml_module(bitcoin_qml_controls
     ProgressIndicator.qml
     Setting.qml
     TextButton.qml
+    Theme.qml
 )
