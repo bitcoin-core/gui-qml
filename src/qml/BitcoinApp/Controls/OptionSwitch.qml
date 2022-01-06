@@ -13,7 +13,7 @@ Switch {
         x: root.leftPadding
         y: Math.round((parent.height - height) / 2)
         radius: 18
-        color: root.checked ? "#F7931A" : "#DDDDDD"
+        color: root.checked ? Theme.color.orange : Theme.color.neutral4
         Rectangle {
             id: indicatorButton
             y: parent.height / 2 - height / 2
@@ -21,7 +21,7 @@ Switch {
             width: 20
             height: 20
             radius: 18
-            color: "#ffffff"
+            color: Theme.color.white
         }
     }
 }

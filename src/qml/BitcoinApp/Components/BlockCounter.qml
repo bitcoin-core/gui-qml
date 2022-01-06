@@ -6,13 +6,14 @@
 
 import QtQuick
 import QtQuick.Controls
+import BitcoinApp.Controls
 
 Label {
     property int blockHeight: 0
     background: Rectangle {
-        color: "black"
+        color: Theme.color.background
     }
-    color: "orange"
+    color: Theme.color.orange
     padding: 16
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
