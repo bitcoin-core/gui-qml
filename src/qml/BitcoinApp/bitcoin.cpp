@@ -146,7 +146,6 @@ int QmlGuiMain(int argc, char* argv[])
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
         node->startShutdown();
-        node_model.startNodeShutdown();
     });
 
     GUIUtil::LoadFont(":/qt/qml/BitcoinApp/res/fonts/Inter-Regular.otf");
@@ -176,5 +175,6 @@ int QmlGuiMain(int argc, char* argv[])
 
     qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
 
+    node_model.startShutdownPolling();
     return qGuiApp->exec();
 }
