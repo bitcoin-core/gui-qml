@@ -28,7 +28,7 @@ Control {
             font.family: "Inter"
             font.styleName: root.bold ? "Semi Bold" : "Regular"
             font.pointSize: root.headerSize
-            color: "#FFFFFF"
+            color: Theme.color.neutral9
             text: root.header
             horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: Text.WordWrap
@@ -43,7 +43,7 @@ Control {
                 font.family: "Inter"
                 font.styleName: "Regular"
                 font.pointSize: root.descriptionSize
-                color: "#DEDEDE"
+                color: Theme.color.neutral8
                 text: root.description
                 horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
                 wrapMode: Text.WordWrap
@@ -59,7 +59,7 @@ Control {
                 font.family: "Inter"
                 font.styleName: "Regular"
                 font.pixelSize: root.subtextSize
-                color: "#FFFFFF"
+                color: Theme.color.neutral9
                 text: root.subtext
                 horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
                 wrapMode: Text.WordWrap

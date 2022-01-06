@@ -8,7 +8,7 @@ import QtQuick.Controls
 Button {
     id: root
     property int textSize: 18
-    property string textColor: "white"
+    property string textColor: Theme.color.neutral9
     font.family: "Inter"
     font.styleName: "Semi Bold"
     font.pointSize: root.textSize
