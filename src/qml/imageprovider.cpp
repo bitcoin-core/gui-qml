@@ -7,6 +7,7 @@
 #include <qt/networkstyle.h>
 
 #include <QIcon>
+#include <QImage>
 #include <QPixmap>
 #include <QQuickImageProvider>
 #include <QSize>
@@ -27,5 +28,14 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return m_network_style->getAppIcon().pixmap(requested_size);
     }
 
+    if (id == "moon") {
+        *size = requested_size;
+        return QIcon(":/icons/moon").pixmap(requested_size);
+    }
+
+    if (id == "sun") {
+        *size = requested_size;
+        return QIcon(":/icons/sun").pixmap(requested_size);
+    }
     return {};
 }
