@@ -28,7 +28,6 @@ Page {
             Layout.topMargin: 30
             text: "Done"
             textSize: 18
-            textColor: "white"
             onClicked: {
                 connections.decrementCurrentIndex()
                 wizard.inSubPage = false

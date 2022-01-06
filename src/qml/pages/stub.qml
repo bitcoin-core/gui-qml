@@ -13,7 +13,7 @@ ApplicationWindow {
     title: "Bitcoin Core TnG"
     minimumWidth: 800
     minimumHeight: 700
-    color: "black"
+    color: Theme.color.background
     visible: true
     StackView {
         id: main

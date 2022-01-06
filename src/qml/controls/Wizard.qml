@@ -39,7 +39,7 @@ Page {
     footer: Rectangle {
         Layout.fillWidth: true
         height: 50
-        color: "black"
+        color: Theme.color.background
         Indicator {
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter

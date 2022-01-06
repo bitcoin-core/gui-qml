@@ -19,7 +19,7 @@ Button {
     background: Rectangle {
         implicitHeight: 46
         implicitWidth: 300
-        color: "#F7931A"
+        color: Theme.color.orange
         radius: 5
     }
 }
