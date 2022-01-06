@@ -33,7 +33,6 @@ public:
     void setBlockTipHeight(int new_height);
 
     Q_INVOKABLE void startNodeInitializionThread();
-    void startNodeShutdown();
 
     void startShutdownPolling();
     void stopShutdownPolling();
