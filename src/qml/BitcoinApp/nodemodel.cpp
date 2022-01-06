@@ -23,6 +23,14 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
+void NodeModel::setVerificationProgress(double new_progress)
+{
+    if (new_progress != m_verification_progress) {
+        m_verification_progress = new_progress;
+        Q_EMIT verificationProgressChanged();
+    }
+}
+
 void NodeModel::startNodeInitializionThread()
 {
     Q_EMIT requestedInitialize();
@@ -37,13 +45,16 @@ void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::Bloc
 {
     // TODO: Handle the `success` parameter,
     setBlockTipHeight(tip_info.block_height);
+    setVerificationProgress(tip_info.verification_progress);
 }
 
 void NodeModel::ConnectToBlockTipSignal()
 {
     assert(!m_handler_notify_block_tip);
+
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             setBlockTipHeight(tip.block_height);
+            setVerificationProgress(verification_progress);
         });
 }
