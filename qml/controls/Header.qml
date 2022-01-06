@@ -10,7 +10,7 @@ Control {
     id: root
     property bool bold: false
     property bool center: true
-    property string header
+    required property string header
     property int headerMargin
     property int headerSize: 28
     property string description
