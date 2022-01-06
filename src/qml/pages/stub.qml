@@ -11,72 +11,52 @@ import "../controls"
 ApplicationWindow {
     id: appWindow
     title: "Bitcoin Core TnG"
-    minimumWidth: 750
-    minimumHeight: 450
+    minimumWidth: 800
+    minimumHeight: 700
     color: "black"
     visible: true
-
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
-
-    menuBar: RowLayout {
-        height: 50
-        Layout.leftMargin: 10
-        Loader {
-            active: stack.currentIndex > 0 ? true : false
-            visible: active
-            sourceComponent: TextButton {
-                text: "‹ Back"
-                onClicked: stack.currentIndex -= 1
-            }
-        }
+    StackView {
+        id: main
+        initialItem: onboardingWizard
+        anchors.fill: parent
     }
-    ColumnLayout {
-        anchors.centerIn: parent
-        spacing: 15
-        width: 400
-        Image {
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            sourceSize.width: 64
-            sourceSize.height: 64
-        }
-        Header {
-            Layout.fillWidth: true
-            bold: true
-            header: qsTr("Bitcoin Core App")
-            headerSize: 36
-            headerMargin: 30
-            description: qsTr("Be part of the Bitcoin network.")
-            descriptionSize: 24
-            descriptionMargin: 0
-            subtext: qsTr("100% open-source & open-design")
-            subtextMargin: 25
-        }
-        BlockCounter {
-            Layout.alignment: Qt.AlignCenter
-            blockHeight: nodeModel.blockTipHeight
-        }
-        ProgressIndicator {
-            id: indicator
-            Layout.fillWidth: true
-            progress: nodeModel.verificationProgress
-        }
-        StackLayout {
-            id: stack
-            Layout.fillWidth: true
-            ConnectionOptions {}
-            ConnectionSettings {}
-            StorageOptions {}
-        }
-        ContinueButton {
-            Layout.alignment: Qt.AlignCenter
-            text: stack.currentIndex > 0 ? qsTr("Next") : qsTr("Start")
-            onClicked: stack.currentIndex < 2 ? stack.currentIndex += 1 : null
-        }
-        PageIndicator {
-            Layout.alignment: Qt.AlignCenter
-            count: stack.count
-            currentIndex: stack.currentIndex
+    Wizard {
+        id: onboardingWizard
+        anchors.fill: parent
+        views: [
+            "onboarding/onboarding01.qml",
+            "onboarding/onboarding02.qml",
+            "onboarding/onboarding03.qml",
+            "onboarding/onboarding04.qml"
+        ]
+        onFinishedChanged: main.push(node)
+    }
+    Component {
+        id: node
+        Page {
+            anchors.fill: parent
+            background: null
+            ColumnLayout {
+                width: 600
+                spacing: 0
+                anchors.centerIn: parent
+                Component.onCompleted: nodeModel.startNodeInitializionThread();
+                Image {
+                    Layout.alignment: Qt.AlignCenter
+                    source: "image://images/app"
+                    sourceSize.width: 64
+                    sourceSize.height: 64
+                }
+                BlockCounter {
+                    Layout.alignment: Qt.AlignCenter
+                    blockHeight: nodeModel.blockTipHeight
+                }
+                ProgressIndicator {
+                    width: 200
+                    Layout.alignment: Qt.AlignCenter
+                    progress: nodeModel.verificationProgress
+                }
+            }
         }
     }
 }
