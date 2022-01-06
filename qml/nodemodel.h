@@ -21,12 +21,15 @@ class NodeModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
+    Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
 
 public:
     explicit NodeModel(interfaces::Node& node);
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
+    double verificationProgress() const { return m_verification_progress; }
+    void setVerificationProgress(double new_progress);
 
     Q_INVOKABLE void startNodeInitializionThread();
     void startNodeShutdown();
@@ -38,10 +41,12 @@ Q_SIGNALS:
     void blockTipHeightChanged();
     void requestedInitialize();
     void requestedShutdown();
+    void verificationProgressChanged();
 
 private:
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+    double m_verification_progress{0.0};
 
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
