@@ -300,12 +300,14 @@ QML_RES_QML = \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
+  qml/components/StorageOptions.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/ProgressIndicator.qml \
   qml/controls/Setting.qml \
+  qml/controls/TextButton.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/stub.qml
 
