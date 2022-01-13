@@ -11,21 +11,22 @@ Control {
     property bool last: false
     property string header
     property string description
-    contentItem: GridLayout {
-        columns: 2
-        rowSpacing: 20
+    contentItem: ColumnLayout {
+        spacing: 20
         width: parent.width
-        Header {
-            Layout.fillWidth: true
-            center: false
-            header: root.header
-            headerSize: 18
-            description: root.description
-            descriptionSize: 15
-            descriptionMargin: 0
-        }
-        OptionSwitch {
-            Layout.alignment: Qt.AlignRight
+        RowLayout {
+            Header {
+                Layout.fillWidth: true
+                center: false
+                header: root.header
+                headerSize: 18
+                description: root.description
+                descriptionSize: 15
+                descriptionMargin: 0
+            }
+            OptionSwitch {
+                Layout.alignment: Qt.AlignRight
+            }
         }
         Loader {
             Layout.fillWidth:true
