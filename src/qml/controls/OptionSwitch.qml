@@ -11,7 +11,7 @@ Switch {
         implicitWidth: 45
         implicitHeight: 28
         x: root.leftPadding
-        y: parent.height / 2 - height / 2
+        y: Math.round((parent.height - height) / 2)
         radius: 18
         color: root.checked ? "#F7931A" : "#DDDDDD"
         Rectangle {
