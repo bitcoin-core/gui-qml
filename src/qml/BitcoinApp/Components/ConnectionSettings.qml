@@ -11,25 +11,25 @@ ColumnLayout {
     spacing: 20
     Setting {
         Layout.fillWidth: true
-        header: "Use cellular data"
+        header: qsTr("Use cellular data")
     }
     Setting {
         Layout.fillWidth: true
-        header: "Daily upload limit"
+        header: qsTr("Daily upload limit")
     }
     Setting {
         Layout.fillWidth: true
-        header: "Connection limit"
+        header: qsTr("Connection limit")
     }
     Setting {
         Layout.fillWidth: true
-        header: "Listening enabled"
-        description: "Reduces data usage."
+        header: qsTr("Listening enabled")
+        description: qsTr("Reduces data usage.")
     }
     Setting {
         last: true
         Layout.fillWidth: true
-        header: "Blocks Only"
-        description: "Do not transfer unconfirmed transactions. Also disabled listening."
+        header: qsTr("Blocks Only")
+        description: qsTr("Do not transfer unconfirmed transactions. Also disabled listening.")
     }
 }
