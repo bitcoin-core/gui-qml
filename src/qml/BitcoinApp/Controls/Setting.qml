@@ -8,8 +8,8 @@ import QtQuick.Layouts
 
 Control {
     id: root
-    property bool last: false
-    property string header
+    property bool last: parent && root === parent.children[parent.children.length - 1]
+    required property string header
     property string description
     contentItem: ColumnLayout {
         spacing: 20
