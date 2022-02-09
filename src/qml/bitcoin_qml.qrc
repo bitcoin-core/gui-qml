@@ -6,6 +6,7 @@
         <file>components/StorageOptions.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
+        <file>controls/PageIndicator.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>

@@ -303,6 +303,7 @@ QML_RES_QML = \
   qml/components/StorageOptions.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
+  qml/controls/PageIndicator.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/ProgressIndicator.qml \
