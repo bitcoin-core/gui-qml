@@ -295,6 +295,7 @@ QML_RES_FONTS = \
   qml/res/fonts/Inter-SemiBold.otf
 
 QML_RES_ICONS = \
+  qml/res/icons/caret-left.png \
   qml/res/icons/info.png
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
