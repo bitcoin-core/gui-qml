@@ -19,6 +19,7 @@ qt6_add_qml_module(bitcoin_qml
     res/fonts/Inter-Regular.otf
     res/fonts/Inter-SemiBold.otf
     res/icons/caret-left.png
+    res/icons/caret-right.png
     res/icons/info.png
 )
 
