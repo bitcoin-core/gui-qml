@@ -18,6 +18,7 @@ qt6_add_qml_module(bitcoin_qml
   RESOURCES
     res/fonts/Inter-Regular.otf
     res/fonts/Inter-SemiBold.otf
+    res/icons/info.png
 )
 
 add_subdirectory(Components)
