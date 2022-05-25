@@ -27,6 +27,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return m_network_style->getAppIcon().pixmap(requested_size);
     }
 
+    if (id == "caret-left") {
+        *size = requested_size;
+        return QIcon(":/icons/caret-left").pixmap(requested_size);
+    }
+
     if (id == "info") {
         *size = requested_size;
         return QIcon(":/icons/info").pixmap(requested_size);
