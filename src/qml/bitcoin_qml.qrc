@@ -10,15 +10,14 @@
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>
-        <file>controls/qmldir</file>
         <file>controls/Setting.qml</file>
         <file>controls/TextButton.qml</file>
-        <file>controls/Theme.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
+        <file alias="info">res/icons/info.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="inter/regular">res/fonts/Inter-Regular.otf</file>

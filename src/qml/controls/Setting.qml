@@ -35,7 +35,7 @@ Control {
             visible: active
             sourceComponent: Rectangle {
                 height: 1
-                color: Theme.color.neutral5
+                color: "#777777"
             }
         }
     }
