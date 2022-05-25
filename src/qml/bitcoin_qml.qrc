@@ -20,6 +20,7 @@
     <qresource prefix="/icons">
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
         <file alias="caret-left">res/icons/caret-left.png</file>
+        <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="info">res/icons/info.png</file>
     </qresource>
     <qresource prefix="/fonts">
