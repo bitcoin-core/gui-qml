@@ -32,6 +32,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/caret-left").pixmap(requested_size);
     }
 
+    if (id == "caret-right") {
+        *size = requested_size;
+        return QIcon(":/icons/caret-right").pixmap(requested_size);
+    }
+
     if (id == "info") {
         *size = requested_size;
         return QIcon(":/icons/info").pixmap(requested_size);
