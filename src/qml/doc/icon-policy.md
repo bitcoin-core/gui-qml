@@ -17,7 +17,7 @@ PNGs are used in production due to wide application support, transparency suppor
 and better image quality compared to competing file types such as JPEG.
 
 #### Optimizing Production Files (PNG)
-Production (PNG) files must be processed by the [optimize-png.py](https://github.com/bitcoin-core/bitcoin-maintainer-tools/blob/master/optimise-pngs.py) script before their inclusion in Bitcoin Core.
+Production (PNG) files must be processed by the [optimize-pngs.py](https://github.com/bitcoin-core/bitcoin-maintainer-tools/blob/master/optimize-pngs.py) script before their inclusion in Bitcoin Core.
 PNG optimization removes various unnecessary color profiles, ancillary data,
 and text chunks, resulting in a lossless file size reduction.
 
