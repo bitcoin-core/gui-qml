@@ -27,6 +27,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return m_network_style->getAppIcon().pixmap(requested_size);
     }
 
+    if (id == "caret-left") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/caret-left.png").pixmap(requested_size);
+    }
+
     if (id == "info") {
         *size = requested_size;
         return QIcon(":/qt/qml/BitcoinApp/res/icons/info.png").pixmap(requested_size);
