@@ -15,7 +15,6 @@ $(package)_patches += qtbase-moc-ignore-gcc-macro.patch fix_limits_header.patch
 $(package)_patches += fix_bigsur_style.patch use_android_ndk23.patch
 $(package)_patches += rcc_hardcode_timestamp.patch
 $(package)_patches += fix_android_plugin_names.patch
-$(package)_patches += fix_riscv_atomic.patch
 
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = c600d09716940f75d684f61c5bdaced797f623a86db1627da599027f6c635651
@@ -285,7 +284,6 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/use_android_ndk23.patch && \
   patch -p1 -i $($(package)_patch_dir)/rcc_hardcode_timestamp.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_android_plugin_names.patch && \
-  patch -p1 -i $($(package)_patch_dir)/fix_riscv_atomic.patch && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
