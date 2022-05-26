@@ -47,7 +47,10 @@ ApplicationWindow {
         ProgressIndicator {
             id: indicator
             Layout.fillWidth: true
-            progress: nodeModel.verificationProgress
+            progress: 0.666
+            background: MouseArea {
+                onClicked: indicator.progress = mouseX / width
+            }
         }
         ConnectionOptions {
             Layout.preferredWidth: 400
