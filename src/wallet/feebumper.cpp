@@ -16,6 +16,7 @@
 #include <wallet/spend.h>
 #include <wallet/wallet.h>
 
+namespace wallet {
 //! Check whether transaction has descendant in wallet or mempool, or has been
 //! mined, or conflicts with a mined transaction. Return a feebumper::Result.
 static feebumper::Result PreconditionChecks(const CWallet& wallet, const CWalletTx& wtx, std::vector<bilingual_str>& errors) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
@@ -134,7 +135,7 @@ static CFeeRate EstimateFeeRate(const CWallet& wallet, const CWalletTx& wtx, con
     feerate += std::max(node_incremental_relay_fee, wallet_incremental_relay_fee);
 
     // Fee rate must also be at least the wallet's GetMinimumFeeRate
-    CFeeRate min_feerate(GetMinimumFeeRate(wallet, coin_control, /* feeCalc */ nullptr));
+    CFeeRate min_feerate(GetMinimumFeeRate(wallet, coin_control, /*feeCalc=*/nullptr));
 
     // Set the required fee rate for the replacement transaction in coin control.
     return std::max(feerate, min_feerate);
@@ -232,12 +233,6 @@ Result CreateRateBumpTransaction(CWallet& wallet, const uint256& txid, const CCo
 
     // Write back transaction
     mtx = CMutableTransaction(*tx_new);
-    // Mark new tx not replaceable, if requested.
-    if (!coin_control.m_signal_bip125_rbf.value_or(wallet.m_signal_rbf)) {
-        for (auto& input : mtx.vin) {
-            if (input.nSequence < 0xfffffffe) input.nSequence = 0xfffffffe;
-        }
-    }
 
     return Result::OK;
 }
@@ -282,3 +277,4 @@ Result CommitTransaction(CWallet& wallet, const uint256& txid, CMutableTransacti
 }
 
 } // namespace feebumper
+} // namespace wallet

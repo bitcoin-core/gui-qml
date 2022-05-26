@@ -14,6 +14,8 @@
 #include <validation.h> // For g_chainman
 #include <warnings.h>
 
+using node::ReadBlockFromDisk;
+
 constexpr uint8_t DB_BEST_BLOCK{'B'};
 
 constexpr int64_t SYNC_LOG_INTERVAL = 30; // seconds
@@ -209,6 +211,11 @@ bool BaseIndex::Commit()
 bool BaseIndex::CommitInternal(CDBBatch& batch)
 {
     LOCK(cs_main);
+    // Don't commit anything if we haven't indexed any block yet
+    // (this could happen if init is interrupted).
+    if (m_best_block_index == nullptr) {
+        return false;
+    }
     GetDB().WriteBestBlock(batch, m_chainstate->m_chain.GetLocator(m_best_block_index));
     return true;
 }

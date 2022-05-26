@@ -39,6 +39,8 @@ private:
 protected:
     bool Init() override;
 
+    bool CommitInternal(CDBBatch& batch) override;
+
     bool WriteBlock(const CBlock& block, const CBlockIndex* pindex) override;
 
     bool Rewind(const CBlockIndex* current_tip, const CBlockIndex* new_tip) override;
@@ -52,7 +54,7 @@ public:
     explicit CoinStatsIndex(size_t n_cache_size, bool f_memory = false, bool f_wipe = false);
 
     // Look up stats for a specific block using CBlockIndex
-    bool LookUpStats(const CBlockIndex* block_index, CCoinsStats& coins_stats) const;
+    bool LookUpStats(const CBlockIndex* block_index, node::CCoinsStats& coins_stats) const;
 };
 
 /// The global UTXO set hash object.

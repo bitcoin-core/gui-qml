@@ -29,6 +29,7 @@ Common `host-platform-triplet`s for cross compilation are:
 - `x86_64-pc-linux-gnu` for x86 Linux
 - `x86_64-w64-mingw32` for Win64
 - `x86_64-apple-darwin` for macOS
+- `arm64-apple-darwin` for ARM macOS
 - `arm-linux-gnueabihf` for Linux ARM 32 bit
 - `aarch64-linux-gnu` for Linux ARM 64 bit
 - `powerpc64-linux-gnu` for Linux POWER 64-bit (big endian)
@@ -83,6 +84,10 @@ For linux S390X cross compilation:
 
     sudo apt-get install g++-s390x-linux-gnu binutils-s390x-linux-gnu
 
+### Install the required dependencies: OpenBSD
+
+    pkg_add bash gtar
+
 ### Dependency Options
 
 The following can be set when running make: `make FOO=bar`
@@ -108,7 +113,10 @@ The following can be set when running make: `make FOO=bar`
 - `BUILD_ID_SALT`: Optional salt to use when generating build package ids
 - `FORCE_USE_SYSTEM_CLANG`: (EXPERTS ONLY) When cross-compiling for macOS, use Clang found in the
   system's `$PATH` rather than the default prebuilt release of Clang
-  from llvm.org. Clang 8 or later is required.
+  from llvm.org. Clang 8 or later is required
+- `LOG`: Use file-based logging for individual packages. During a package build its log file
+  resides in the `depends` directory, and the log file is printed out automatically in case
+  of build error. After successful build log files are moved along with package archives
 
 If some packages are not built, for example `make NO_WALLET=1`, the appropriate
 options will be passed to bitcoin's configure. In this case, `--disable-wallet`.

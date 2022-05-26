@@ -2,6 +2,7 @@ env:  # Global defaults
   PACKAGE_MANAGER_INSTALL: "apt-get update && apt-get install -y"
   MAKEJOBS: "-j10"
   TEST_RUNNER_PORT_MIN: "14000"  # Must be larger than 12321, which is used for the http cache. See https://cirrus-ci.org/guide/writing-tasks/#http-cache
+  CI_FAILFAST_TEST_LEAVE_DANGLING: "1"  # Cirrus CI does not care about dangling process and setting this variable avoids killing the CI script itself on error
   CCACHE_SIZE: "200M"
   CCACHE_DIR: "/tmp/ccache_dir"
   CCACHE_NOHASHDIR: "1"  # Debug info might contain a stale path if the build dir changes, but this is fine
@@ -72,6 +73,19 @@ task:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
 
 task:
+  name: 'tidy [jammy]'
+  << : *GLOBAL_TASK_TEMPLATE
+  container:
+    image: ubuntu:jammy
+    cpu: 2
+    memory: 5G
+  # For faster CI feedback, immediately schedule the linters
+  << : *CREDITS_TEMPLATE
+  env:
+    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
+    FILE_ENV: "./ci/test/00_setup_env_native_tidy.sh"
+
+task:
   name: "Win64 native [msvc]"
   << : *FILTER_TEMPLATE
   windows_container:
@@ -82,14 +96,17 @@ task:
   env:
     PATH: 'C:\jom;C:\Python39;C:\Python39\Scripts;C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin;%PATH%'
     PYTHONUTF8: 1
-    CI_VCPKG_TAG: '2021.05.12'
+    CI_VCPKG_TAG: '2022.04.12'
     VCPKG_DOWNLOADS: 'C:\Users\ContainerAdministrator\AppData\Local\vcpkg\downloads'
     VCPKG_DEFAULT_BINARY_CACHE: 'C:\Users\ContainerAdministrator\AppData\Local\vcpkg\archives'
-    QT_DOWNLOAD_URL: 'https://download.qt.io/official_releases/qt/5.15/5.15.2/single/qt-everywhere-src-5.15.2.zip'
-    QT_LOCAL_PATH: 'C:\qt-everywhere-src-5.15.2.zip'
-    QT_SOURCE_DIR: 'C:\qt-everywhere-src-5.15.2'
+    CCACHE_DIR: 'C:\Users\ContainerAdministrator\AppData\Local\ccache'
+    WRAPPED_CL: 'C:\Users\ContainerAdministrator\AppData\Local\Temp\cirrus-ci-build\ci\test\wrapped-cl.bat'
+    QT_DOWNLOAD_URL: 'https://download.qt.io/official_releases/qt/5.15/5.15.3/single/qt-everywhere-opensource-src-5.15.3.zip'
+    QT_LOCAL_PATH: 'C:\qt-everywhere-opensource-src-5.15.3.zip'
+    QT_SOURCE_DIR: 'C:\qt-everywhere-src-5.15.3'
     QTBASEDIR: 'C:\Qt_static'
     x64_NATIVE_TOOLS: '"C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat"'
+    QT_CONFIGURE_COMMAND: '..\configure -release -silent -opensource -confirm-license -opengl desktop -static -static-runtime -mp -qt-zlib -qt-pcre -qt-libpng -nomake examples -nomake tests -nomake tools -no-angle -no-dbus -no-gif -no-gtk -no-ico -no-icu -no-libjpeg -no-libudev -no-sql-sqlite -no-sql-odbc -no-sqlite -no-vulkan -skip qt3d -skip qtactiveqt -skip qtandroidextras -skip qtcharts -skip qtconnectivity -skip qtdatavis3d -skip qtdeclarative -skip doc -skip qtdoc -skip qtgamepad -skip qtgraphicaleffects -skip qtimageformats -skip qtlocation -skip qtlottie -skip qtmacextras -skip qtmultimedia -skip qtnetworkauth -skip qtpurchasing -skip qtquick3d -skip qtquickcontrols -skip qtquickcontrols2 -skip qtquicktimeline -skip qtremoteobjects -skip qtscript -skip qtscxml -skip qtsensors -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel -skip qtwebengine -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtx11extras -skip qtxmlpatterns -no-openssl -no-feature-bearermanagement -no-feature-printdialog -no-feature-printer -no-feature-printpreviewdialog -no-feature-printpreviewwidget -no-feature-sql -no-feature-sqlmodel -no-feature-textbrowser -no-feature-textmarkdownwriter -no-feature-textodfwriter -no-feature-xml'
     IgnoreWarnIntDirInTempDetected: 'true'
   merge_script:
     - git config --global user.email "ci@ci.ci"
@@ -104,7 +121,7 @@ task:
     folder: "%QTBASEDIR%"
     reupload_on_changes: false
     fingerprint_script:
-      - echo %QT_DOWNLOAD_URL%
+      - echo %QT_DOWNLOAD_URL% %QT_CONFIGURE_COMMAND%
       - msbuild -version
     populate_script:
       - curl -L -o C:\jom.zip http://download.qt.io/official_releases/jom/jom.zip
@@ -116,7 +133,7 @@ task:
       - cd %QT_SOURCE_DIR%
       - mkdir build
       - cd build
-      - ..\configure -release -silent -opensource -confirm-license -opengl desktop -static -static-runtime -mp -qt-zlib -qt-pcre -qt-libpng -nomake examples -nomake tests -nomake tools -no-angle -no-dbus -no-gif -no-gtk -no-ico -no-icu -no-libjpeg -no-libudev -no-sql-sqlite -no-sql-odbc -no-sqlite -no-vulkan -skip qt3d -skip qtactiveqt -skip qtandroidextras -skip qtcharts -skip qtconnectivity -skip qtdatavis3d -skip qtdeclarative -skip doc -skip qtdoc -skip qtgamepad -skip qtgraphicaleffects -skip qtimageformats -skip qtlocation -skip qtlottie -skip qtmacextras -skip qtmultimedia -skip qtnetworkauth -skip qtpurchasing -skip qtquick3d -skip qtquickcontrols -skip qtquickcontrols2 -skip qtquicktimeline -skip qtremoteobjects -skip qtscript -skip qtscxml -skip qtsensors -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel -skip qtwebengine -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtx11extras -skip qtxmlpatterns -no-openssl -no-feature-bearermanagement -no-feature-printdialog -no-feature-printer -no-feature-printpreviewdialog -no-feature-printpreviewwidget -no-feature-sql -no-feature-sqlmodel -no-feature-textbrowser -no-feature-textmarkdownwriter -no-feature-textodfwriter -no-feature-xml -prefix %QTBASEDIR%
+      - '%QT_CONFIGURE_COMMAND% -prefix %QTBASEDIR%'
       - jom
       - jom install
   vcpkg_tools_cache:
@@ -130,12 +147,17 @@ task:
     reupload_on_changes: true
     fingerprint_script:
       - echo %CI_VCPKG_TAG%
+      - type build_msvc\vcpkg.json
       - msbuild -version
     populate_script:
       - mkdir %VCPKG_DEFAULT_BINARY_CACHE%
-  install_python_script:
+  ccache_cache:
+    folder: '%CCACHE_DIR%'
+  install_tools_script:
+    - choco install --yes --no-progress ccache
     - choco install --yes --no-progress python3 --version=3.9.6
     - pip install zmq
+    - ccache --version
     - python -VV
   install_vcpkg_script:
     - cd ..
@@ -147,9 +169,12 @@ task:
     - .\vcpkg integrate install
     - .\vcpkg version
   build_script:
+    - '%x64_NATIVE_TOOLS%'
     - cd %CIRRUS_WORKING_DIR%
+    - ccache --zero-stats
     - python build_msvc\msvc-autogen.py
-    - msbuild build_msvc\bitcoin.sln -property:Configuration=Release -maxCpuCount -verbosity:minimal -noLogo
+    - msbuild build_msvc\bitcoin.sln -property:CLToolExe=%WRAPPED_CL% -property:Configuration=Release -maxCpuCount -verbosity:minimal -noLogo
+    - ccache --show-stats
   unit_tests_script:
     - src\test_bitcoin.exe -l test_suite
     - src\bench_bitcoin.exe > NUL
@@ -176,11 +201,11 @@ task:
     QEMU_USER_CMD: ""  # Disable qemu and run the test natively
 
 task:
-  name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [focal]'
+  name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [jammy]'
   << : *GLOBAL_TASK_TEMPLATE
   alias: win64
   container:
-    image: ubuntu:focal
+    image: ubuntu:jammy
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_win64.sh"
@@ -193,14 +218,14 @@ task:
   name: '32-bit + dash [gui] [CentOS 8]'
   << : *GLOBAL_TASK_TEMPLATE
   container:
-    image: centos:8
+    image: quay.io/centos/centos:stream8
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     PACKAGE_MANAGER_INSTALL: "yum install -y"
     FILE_ENV: "./ci/test/00_setup_env_i686_centos.sh"
 
 task:
-  name: '[previous releases, uses qt5 dev package and some depends packages, DEBUG] [unsigned char] [bionic]'
+  name: '[previous releases, uses qt5 dev package and some depends packages, DEBUG] [unsigned char] [buster]'
   previous_releases_cache:
     folder: "releases"
   << : *GLOBAL_TASK_TEMPLATE
@@ -242,11 +267,10 @@ task:
     MAKEJOBS: "-j4"  # Avoid excessive memory use
 
 task:
-  name: '[fuzzer,address,undefined,integer, no depends] [focal]'
-  only_if: $CIRRUS_BRANCH == $CIRRUS_DEFAULT_BRANCH || $CIRRUS_BASE_BRANCH == $CIRRUS_DEFAULT_BRANCH
+  name: '[fuzzer,address,undefined,integer, no depends] [jammy]'
   << : *GLOBAL_TASK_TEMPLATE
   container:
-    image: ubuntu:focal
+    image: ubuntu:jammy
     cpu: 4  # Increase CPU and memory to avoid timeout
     memory: 16G
   env:
@@ -265,13 +289,13 @@ task:
     FILE_ENV: "./ci/test/00_setup_env_i686_multiprocess.sh"
 
 task:
-  name: '[no wallet] [bionic]'
+  name: '[no wallet, libbitcoinkernel] [bionic]'
   << : *GLOBAL_TASK_TEMPLATE
   container:
     image: ubuntu:bionic
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-    FILE_ENV: "./ci/test/00_setup_env_native_nowallet.sh"
+    FILE_ENV: "./ci/test/00_setup_env_native_nowallet_libbitcoinkernel.sh"
 
 task:
   name: 'macOS 10.15 [gui, no tests] [focal]'
@@ -284,7 +308,7 @@ task:
   container:
     image: ubuntu:focal
   env:
-    MACOS_SDK: "Xcode-12.1-12A7403-extracted-SDK-with-libcxx-headers"
+    MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_mac.sh"
   copy_artifacts_script:
@@ -299,9 +323,9 @@ task:
   brew_install_script:
     - brew install boost libevent qt@5 miniupnpc libnatpmp ccache zeromq qrencode libtool automake gnu-getopt
   << : *GLOBAL_TASK_TEMPLATE
-  osx_instance:
+  macos_instance:
     # Use latest image, but hardcode version to avoid silent upgrades (and breaks)
-    image: monterey-xcode-13.2  # https://cirrus-ci.org/guide/macOS
+    image: monterey-xcode-13.3  # https://cirrus-ci.org/guide/macOS
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     CI_USE_APT_INSTALL: "no"

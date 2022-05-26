@@ -209,10 +209,10 @@ namespace GUIUtil
     bool SetStartOnSystemStartup(bool fAutoStart);
 
     /** Convert QString to OS specific boost path through UTF-8 */
-    fs::path qstringToBoostPath(const QString &path);
+    fs::path QStringToPath(const QString &path);
 
     /** Convert OS specific boost path to QString through UTF-8 */
-    QString boostPathToQString(const fs::path &path);
+    QString PathToQString(const fs::path &path);
 
     /** Convert enum Network to QString */
     QString NetworkToQString(Network net);
@@ -222,6 +222,9 @@ namespace GUIUtil
 
     /** Convert seconds into a QString with days, hours, mins, secs */
     QString formatDurationStr(std::chrono::seconds dur);
+
+    /** Convert peer connection time to a QString denominated in the most relevant unit. */
+    QString FormatPeerAge(std::chrono::seconds time_connected);
 
     /** Format CNodeStats.nServices bitmask into a user-readable string */
     QString formatServicesStr(quint64 mask);
@@ -426,7 +429,7 @@ namespace GUIUtil
     /**
      * Shows a QDialog instance asynchronously, and deletes it on close.
      */
-    void ShowModalDialogAndDeleteOnClose(QDialog* dialog);
+    void ShowModalDialogAsynchronously(QDialog* dialog);
 
     inline bool IsEscapeOrBack(int key)
     {

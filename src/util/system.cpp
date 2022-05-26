@@ -6,15 +6,20 @@
 #include <util/system.h>
 
 #ifdef ENABLE_EXTERNAL_SIGNER
-#if defined(WIN32) && !defined(__kernel_entry)
-// A workaround for boost 1.71 incompatibility with mingw-w64 compiler.
-// For details see https://github.com/bitcoin/bitcoin/pull/22348.
-#define __kernel_entry
+#if defined(__GNUC__)
+// Boost 1.78 requires the following workaround.
+// See: https://github.com/boostorg/process/issues/235
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnarrowing"
 #endif
 #include <boost/process.hpp>
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 #endif // ENABLE_EXTERNAL_SIGNER
 
 #include <chainparamsbase.h>
+#include <fs.h>
 #include <sync.h>
 #include <util/check.h>
 #include <util/getuniquepath.h>
@@ -71,10 +76,16 @@
 #endif
 
 #include <boost/algorithm/string/replace.hpp>
+#include <univalue.h>
+
+#include <fstream>
+#include <map>
+#include <memory>
 #include <optional>
+#include <string>
+#include <system_error>
 #include <thread>
 #include <typeinfo>
-#include <univalue.h>
 
 // Application startup time (used for uptime calculation)
 const int64_t nStartupTime = GetTime();
@@ -151,7 +162,7 @@ bool CheckDiskSpace(const fs::path& dir, uint64_t additional_bytes)
 }
 
 std::streampos GetFileSize(const char* path, std::streamsize max) {
-    std::ifstream file(path, std::ios::binary);
+    std::ifstream file{path, std::ios::binary};
     file.ignore(max);
     return file.gcount();
 }
@@ -243,19 +254,6 @@ static std::optional<util::SettingsValue> InterpretValue(const KeyInfo& key, con
     }
     return value;
 }
-
-namespace {
-fs::path StripRedundantLastElementsOfPath(const fs::path& path)
-{
-    auto result = path;
-    while (fs::PathToString(result.filename()) == ".") {
-        result = result.parent_path();
-    }
-
-    assert(fs::equivalent(result, path));
-    return result;
-}
-} // namespace
 
 // Define default constructor and destructor that are not inline, so code instantiating this class doesn't need to
 // #include class definitions for all members.
@@ -398,6 +396,16 @@ std::optional<unsigned int> ArgsManager::GetArgFlags(const std::string& name) co
     return std::nullopt;
 }
 
+fs::path ArgsManager::GetPathArg(std::string arg, const fs::path& default_value) const
+{
+    if (IsArgNegated(arg)) return fs::path{};
+    std::string path_str = GetArg(arg, "");
+    if (path_str.empty()) return default_value;
+    fs::path result = fs::PathFromString(path_str).lexically_normal();
+    // Remove trailing slash, if present.
+    return result.has_filename() ? result : result.parent_path();
+}
+
 const fs::path& ArgsManager::GetBlocksDirPath() const
 {
     LOCK(cs_args);
@@ -408,7 +416,7 @@ const fs::path& ArgsManager::GetBlocksDirPath() const
     if (!path.empty()) return path;
 
     if (IsArgSet("-blocksdir")) {
-        path = fs::system_complete(fs::PathFromString(GetArg("-blocksdir", "")));
+        path = fs::absolute(GetPathArg("-blocksdir"));
         if (!fs::is_directory(path)) {
             path = "";
             return path;
@@ -420,7 +428,6 @@ const fs::path& ArgsManager::GetBlocksDirPath() const
     path /= fs::PathFromString(BaseParams().DataDir());
     path /= "blocks";
     fs::create_directories(path);
-    path = StripRedundantLastElementsOfPath(path);
     return path;
 }
 
@@ -433,9 +440,9 @@ const fs::path& ArgsManager::GetDataDir(bool net_specific) const
     // this function
     if (!path.empty()) return path;
 
-    std::string datadir = GetArg("-datadir", "");
+    const fs::path datadir{GetPathArg("-datadir")};
     if (!datadir.empty()) {
-        path = fs::system_complete(fs::PathFromString(datadir));
+        path = fs::absolute(datadir);
         if (!fs::is_directory(path)) {
             path = "";
             return path;
@@ -443,15 +450,18 @@ const fs::path& ArgsManager::GetDataDir(bool net_specific) const
     } else {
         path = GetDefaultDataDir();
     }
-    if (net_specific)
-        path /= fs::PathFromString(BaseParams().DataDir());
 
-    if (fs::create_directories(path)) {
-        // This is the first run, create wallets subdirectory too
+    if (!fs::exists(path)) {
         fs::create_directories(path / "wallets");
     }
 
-    path = StripRedundantLastElementsOfPath(path);
+    if (net_specific && !BaseParams().DataDir().empty()) {
+        path /= fs::PathFromString(BaseParams().DataDir());
+        if (!fs::exists(path)) {
+            fs::create_directories(path / "wallets");
+        }
+    }
+
     return path;
 }
 
@@ -518,12 +528,12 @@ bool ArgsManager::InitSettings(std::string& error)
 
 bool ArgsManager::GetSettingsPath(fs::path* filepath, bool temp) const
 {
-    if (IsArgNegated("-settings")) {
+    fs::path settings = GetPathArg("-settings", fs::path{BITCOIN_SETTINGS_FILENAME});
+    if (settings.empty()) {
         return false;
     }
     if (filepath) {
-        std::string settings = GetArg("-settings", BITCOIN_SETTINGS_FILENAME);
-        *filepath = fsbridge::AbsPathJoin(GetDataDirNet(), fs::PathFromString(temp ? settings + ".tmp" : settings));
+        *filepath = fsbridge::AbsPathJoin(GetDataDirNet(), temp ? settings + ".tmp" : settings);
     }
     return true;
 }
@@ -590,7 +600,7 @@ bool ArgsManager::IsArgNegated(const std::string& strArg) const
 std::string ArgsManager::GetArg(const std::string& strArg, const std::string& strDefault) const
 {
     const util::SettingsValue value = GetSetting(strArg);
-    return value.isNull() ? strDefault : value.isFalse() ? "0" : value.isTrue() ? "1" : value.get_str();
+    return value.isNull() ? strDefault : value.isFalse() ? "0" : value.isTrue() ? "1" : value.isNum() ? value.getValStr() : value.get_str();
 }
 
 int64_t ArgsManager::GetIntArg(const std::string& strArg, int64_t nDefault) const
@@ -812,8 +822,8 @@ fs::path GetDefaultDataDir()
 
 bool CheckDataDirOption()
 {
-    std::string datadir = gArgs.GetArg("-datadir", "");
-    return datadir.empty() || fs::is_directory(fs::system_complete(fs::PathFromString(datadir)));
+    const fs::path datadir{gArgs.GetPathArg("-datadir")};
+    return datadir.empty() || fs::is_directory(fs::absolute(datadir));
 }
 
 fs::path GetConfigFile(const std::string& confPath)
@@ -903,7 +913,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
     }
 
     const std::string confPath = GetArg("-conf", BITCOIN_CONF_FILENAME);
-    fsbridge::ifstream stream(GetConfigFile(confPath));
+    std::ifstream stream{GetConfigFile(confPath)};
 
     // not ok to have a config file specified that cannot be opened
     if (IsArgSet("-conf") && !stream.good()) {
@@ -950,7 +960,7 @@ bool ArgsManager::ReadConfigFiles(std::string& error, bool ignore_invalid_keys)
             const size_t default_includes = add_includes({});
 
             for (const std::string& conf_file_name : conf_file_names) {
-                fsbridge::ifstream conf_file_stream(GetConfigFile(conf_file_name));
+                std::ifstream conf_file_stream{GetConfigFile(conf_file_name)};
                 if (conf_file_stream.good()) {
                     if (!ReadConfigStream(conf_file_stream, conf_file_name, error, ignore_invalid_keys)) {
                         return false;
@@ -1064,17 +1074,24 @@ void ArgsManager::LogArgs() const
 
 bool RenameOver(fs::path src, fs::path dest)
 {
-#ifdef WIN32
+#ifdef __MINGW64__
+    // This is a workaround for a bug in libstdc++ which
+    // implements std::filesystem::rename with _wrename function.
+    // This bug has been fixed in upstream:
+    //  - GCC 10.3: 8dd1c1085587c9f8a21bb5e588dfe1e8cdbba79e
+    //  - GCC 11.1: 1dfd95f0a0ca1d9e6cbc00e6cbfd1fa20a98f312
+    // For more details see the commits mentioned above.
     return MoveFileExW(src.wstring().c_str(), dest.wstring().c_str(),
                        MOVEFILE_REPLACE_EXISTING) != 0;
 #else
-    int rc = std::rename(src.c_str(), dest.c_str());
-    return (rc == 0);
-#endif /* WIN32 */
+    std::error_code error;
+    fs::rename(src, dest, error);
+    return !error;
+#endif
 }
 
 /**
- * Ignores exceptions thrown by Boost's create_directories if the requested directory exists.
+ * Ignores exceptions thrown by create_directories if the requested directory exists.
  * Specifically handles case where path p exists, but it wasn't possible for the user to
  * write to the parent directory.
  */
@@ -1318,16 +1335,6 @@ void SetupEnvironment()
     SetConsoleCP(CP_UTF8);
     SetConsoleOutputCP(CP_UTF8);
 #endif
-    // The path locale is lazy initialized and to avoid deinitialization errors
-    // in multithreading environments, it is set explicitly by the main thread.
-    // A dummy locale is used to extract the internal default locale, used by
-    // fs::path, which is then used to explicitly imbue the path.
-    std::locale loc = fs::path::imbue(std::locale::classic());
-#ifndef WIN32
-    fs::path::imbue(loc);
-#else
-    fs::path::imbue(std::locale(loc, new std::codecvt_utf8_utf16<wchar_t>()));
-#endif
 }
 
 bool SetupNetworking()
@@ -1345,18 +1352,6 @@ bool SetupNetworking()
 int GetNumCores()
 {
     return std::thread::hardware_concurrency();
-}
-
-std::string CopyrightHolders(const std::string& strPrefix)
-{
-    const auto copyright_devs = strprintf(_(COPYRIGHT_HOLDERS).translated, COPYRIGHT_HOLDERS_SUBSTITUTION);
-    std::string strCopyrightHolders = strPrefix + copyright_devs;
-
-    // Make sure Bitcoin Core copyright is not removed by accident
-    if (copyright_devs.find("Bitcoin Core") == std::string::npos) {
-        strCopyrightHolders += "\n" + strPrefix + "The Bitcoin Core developers";
-    }
-    return strCopyrightHolders;
 }
 
 // Obtain the application startup time (used for uptime calculation)

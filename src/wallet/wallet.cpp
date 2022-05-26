@@ -48,6 +48,7 @@
 
 using interfaces::FoundBlock;
 
+namespace wallet {
 const std::map<uint64_t,std::string> WALLET_FLAG_CAVEATS{
     {WALLET_FLAG_AVOID_REUSE,
         "You need to rescan the blockchain in order to correctly mark used "
@@ -166,6 +167,14 @@ std::unique_ptr<interfaces::Handler> HandleLoadWallet(WalletContext& context, Lo
     return interfaces::MakeHandler([&context, it] { LOCK(context.wallets_mutex); context.wallet_load_fns.erase(it); });
 }
 
+void NotifyWalletLoaded(WalletContext& context, const std::shared_ptr<CWallet>& wallet)
+{
+    LOCK(context.wallets_mutex);
+    for (auto& load_wallet : context.wallet_load_fns) {
+        load_wallet(interfaces::MakeWallet(context, wallet));
+    }
+}
+
 static Mutex g_loading_wallet_mutex;
 static Mutex g_wallet_release_mutex;
 static std::condition_variable g_wallet_release_cv;
@@ -231,6 +240,8 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
             status = DatabaseStatus::FAILED_LOAD;
             return nullptr;
         }
+
+        NotifyWalletLoaded(context, wallet);
         AddWallet(context, wallet);
         wallet->postInitProcess();
 
@@ -347,22 +358,30 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
             wallet->Lock();
         }
     }
+
+    NotifyWalletLoaded(context, wallet);
     AddWallet(context, wallet);
     wallet->postInitProcess();
 
     // Write the wallet settings
     UpdateWalletSetting(*context.chain, name, load_on_start, warnings);
 
+    // Legacy wallets are being deprecated, warn if a newly created wallet is legacy
+    if (!(wallet_creation_flags & WALLET_FLAG_DESCRIPTORS)) {
+        warnings.push_back(_("Wallet created successfully. The legacy wallet type is being deprecated and support for creating and opening legacy wallets will be removed in the future."));
+    }
+
     status = DatabaseStatus::SUCCESS;
     return wallet;
 }
 
-std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const std::string& backup_file, const std::string& wallet_name, std::optional<bool> load_on_start, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
+std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& backup_file, const std::string& wallet_name, std::optional<bool> load_on_start, DatabaseStatus& status, bilingual_str& error, std::vector<bilingual_str>& warnings)
 {
     DatabaseOptions options;
+    ReadDatabaseArgs(*context.args, options);
     options.require_existing = true;
 
-    if (!fs::exists(fs::u8path(backup_file))) {
+    if (!fs::exists(backup_file)) {
         error = Untranslated("Backup file does not exist");
         status = DatabaseStatus::FAILED_INVALID_BACKUP_FILE;
         return nullptr;
@@ -377,7 +396,7 @@ std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const std::string
     }
 
     auto wallet_file = wallet_path / "wallet.dat";
-    fs::copy_file(backup_file, wallet_file, fs::copy_option::fail_if_exists);
+    fs::copy_file(backup_file, wallet_file, fs::copy_options::none);
 
     auto wallet = LoadWallet(context, wallet_name, load_on_start, options, status, error, warnings);
 
@@ -951,9 +970,7 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
         wtx.nOrderPos = IncOrderPosNext(&batch);
         wtx.m_it_wtxOrdered = wtxOrdered.insert(std::make_pair(wtx.nOrderPos, &wtx));
         wtx.nTimeSmart = ComputeTimeSmart(wtx, rescanning_old_block);
-        if (IsFromMe(*tx.get())) {
-            AddToSpends(hash);
-        }
+        AddToSpends(hash, &batch);
     }
 
     if (!fInsertedNew)
@@ -1028,7 +1045,8 @@ bool CWallet::LoadToWallet(const uint256& hash, const UpdateWalletTxFn& fill_wtx
     if (!fill_wtx(wtx, ins.second)) {
         return false;
     }
-    // If wallet doesn't have a chain (e.g wallet-tool), don't bother to update txn.
+    // If wallet doesn't have a chain (e.g when using bitcoin-wallet tool),
+    // don't bother to update txn.
     if (HaveChain()) {
         bool active;
         auto lookup_block = [&](const uint256& hash, int& height, TxState& state) {
@@ -1506,6 +1524,49 @@ bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut 
     return true;
 }
 
+bool FillInputToWeight(CTxIn& txin, int64_t target_weight)
+{
+    assert(txin.scriptSig.empty());
+    assert(txin.scriptWitness.IsNull());
+
+    int64_t txin_weight = GetTransactionInputWeight(txin);
+
+    // Do nothing if the weight that should be added is less than the weight that already exists
+    if (target_weight < txin_weight) {
+        return false;
+    }
+    if (target_weight == txin_weight) {
+        return true;
+    }
+
+    // Subtract current txin weight, which should include empty witness stack
+    int64_t add_weight = target_weight - txin_weight;
+    assert(add_weight > 0);
+
+    // We will want to subtract the size of the Compact Size UInt that will also be serialized.
+    // However doing so when the size is near a boundary can result in a problem where it is not
+    // possible to have a stack element size and combination to exactly equal a target.
+    // To avoid this possibility, if the weight to add is less than 10 bytes greater than
+    // a boundary, the size will be split so that 2/3rds will be in one stack element, and
+    // the remaining 1/3rd in another. Using 3rds allows us to avoid additional boundaries.
+    // 10 bytes is used because that accounts for the maximum size. This does not need to be super precise.
+    if ((add_weight >= 253 && add_weight < 263)
+        || (add_weight > std::numeric_limits<uint16_t>::max() && add_weight <= std::numeric_limits<uint16_t>::max() + 10)
+        || (add_weight > std::numeric_limits<uint32_t>::max() && add_weight <= std::numeric_limits<uint32_t>::max() + 10)) {
+        int64_t first_weight = add_weight / 3;
+        add_weight -= first_weight;
+
+        first_weight -= GetSizeOfCompactSize(first_weight);
+        txin.scriptWitness.stack.emplace(txin.scriptWitness.stack.end(), first_weight, 0);
+    }
+
+    add_weight -= GetSizeOfCompactSize(add_weight);
+    txin.scriptWitness.stack.emplace(txin.scriptWitness.stack.end(), add_weight, 0);
+    assert(GetTransactionInputWeight(txin) == target_weight);
+
+    return true;
+}
+
 // Helper for producing a bunch of max-sized low-S low-R signatures (eg 71 bytes)
 bool CWallet::DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> &txouts, const CCoinControl* coin_control) const
 {
@@ -1514,6 +1575,14 @@ bool CWallet::DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> 
     for (const auto& txout : txouts)
     {
         CTxIn& txin = txNew.vin[nIn];
+        // If weight was provided, fill the input to that weight
+        if (coin_control && coin_control->HasInputWeight(txin.prevout)) {
+            if (!FillInputToWeight(txin, coin_control->GetInputWeight(txin.prevout))) {
+                return false;
+            }
+            nIn++;
+            continue;
+        }
         // Use max sig if watch only inputs were used or if this particular input is an external input
         // to ensure a sufficient fee is attained for the requested feerate.
         const bool use_max_sig = coin_control && (coin_control->fAllowWatchOnly || coin_control->IsExternalSelected(txin.prevout));
@@ -2601,9 +2670,9 @@ std::unique_ptr<WalletDatabase> MakeWalletDatabase(const std::string& name, cons
     // 4. For backwards compatibility, the name of a data file in -walletdir.
     const fs::path wallet_path = fsbridge::AbsPathJoin(GetWalletDir(), fs::PathFromString(name));
     fs::file_type path_type = fs::symlink_status(wallet_path).type();
-    if (!(path_type == fs::file_not_found || path_type == fs::directory_file ||
-          (path_type == fs::symlink_file && fs::is_directory(wallet_path)) ||
-          (path_type == fs::regular_file && fs::PathFromString(name).filename() == fs::PathFromString(name)))) {
+    if (!(path_type == fs::file_type::not_found || path_type == fs::file_type::directory ||
+          (path_type == fs::file_type::symlink && fs::is_directory(wallet_path)) ||
+          (path_type == fs::file_type::regular && fs::PathFromString(name).filename() == fs::PathFromString(name)))) {
         error_string = Untranslated(strprintf(
               "Invalid -wallet path '%s'. -wallet path should point to a directory where wallet.dat and "
               "database/log.?????????? files can be stored, a location where such a directory could be created, "
@@ -2640,6 +2709,10 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
         }
         else if (nLoadWalletRet == DBErrors::TOO_NEW) {
             error = strprintf(_("Error loading %s: Wallet requires newer version of %s"), walletFile, PACKAGE_NAME);
+            return nullptr;
+        }
+        else if (nLoadWalletRet == DBErrors::EXTERNAL_SIGNER_SUPPORT_REQUIRED) {
+            error = strprintf(_("Error loading %s: External signer wallet being loaded without external signer support compiled"), walletFile);
             return nullptr;
         }
         else if (nLoadWalletRet == DBErrors::NEED_REWRITE)
@@ -2841,13 +2914,6 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
 
     if (chain && !AttachChain(walletInstance, *chain, rescan_required, error, warnings)) {
         return nullptr;
-    }
-
-    {
-        LOCK(context.wallets_mutex);
-        for (auto& load_wallet : context.wallet_load_fns) {
-            load_wallet(interfaces::MakeWallet(context, walletInstance));
-        }
     }
 
     {
@@ -3433,3 +3499,4 @@ ScriptPubKeyMan* CWallet::AddWalletDescriptor(WalletDescriptor& desc, const Flat
 
     return spk_man;
 }
+} // namespace wallet

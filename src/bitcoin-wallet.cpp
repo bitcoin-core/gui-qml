@@ -59,11 +59,14 @@ static bool WalletAppInit(ArgsManager& args, int argc, char* argv[])
     }
     if (argc < 2 || HelpRequested(args) || args.IsArgSet("-version")) {
         std::string strUsage = strprintf("%s bitcoin-wallet version", PACKAGE_NAME) + " " + FormatFullVersion() + "\n";
-        if (!args.IsArgSet("-version")) {
+
+        if (args.IsArgSet("-version")) {
+            strUsage += FormatParagraph(LicenseInfo());
+        } else {
             strUsage += "\n"
                         "bitcoin-wallet is an offline tool for creating and interacting with " PACKAGE_NAME " wallet files.\n"
                         "By default bitcoin-wallet will act on wallets in the default mainnet wallet directory in the datadir.\n"
-                        "To change the target wallet, use the -datadir, -wallet and -testnet/-regtest arguments.\n\n"
+                        "To change the target wallet, use the -datadir, -wallet and -regtest/-signet/-testnet arguments.\n\n"
                         "Usage:\n"
                         "  bitcoin-wallet [options] <command>\n";
             strUsage += "\n" + args.GetHelpMessage();
@@ -123,7 +126,7 @@ int main(int argc, char* argv[])
 
     ECCVerifyHandle globalVerifyHandle;
     ECC_Start();
-    if (!WalletTool::ExecuteWalletToolFunc(args, command->command)) {
+    if (!wallet::WalletTool::ExecuteWalletToolFunc(args, command->command)) {
         return EXIT_FAILURE;
     }
     ECC_Stop();

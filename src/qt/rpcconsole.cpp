@@ -40,6 +40,7 @@
 #include <QDateTime>
 #include <QFont>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QLatin1String>
 #include <QLocale>
 #include <QMenu>
@@ -53,6 +54,8 @@
 #include <QTime>
 #include <QTimer>
 #include <QVariant>
+
+#include <chrono>
 
 const int CONSOLE_HISTORY = 50;
 const int INITIAL_TRAFFIC_GRAPH_MINS = 30;
@@ -691,6 +694,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->peerWidget->setColumnWidth(PeerTableModel::Subversion, SUBVERSION_COLUMN_WIDTH);
             ui->peerWidget->setColumnWidth(PeerTableModel::Ping, PING_COLUMN_WIDTH);
         }
+        ui->peerWidget->horizontalHeader()->setSectionResizeMode(PeerTableModel::Age, QHeaderView::ResizeToContents);
         ui->peerWidget->horizontalHeader()->setStretchLastSection(true);
         ui->peerWidget->setItemDelegateForColumn(PeerTableModel::NetNodeId, new PeerIdViewDelegate(this));
 
@@ -723,6 +727,7 @@ void RPCConsole::setClientModel(ClientModel *model, int bestblock_height, int64_
             ui->banlistWidget->setColumnWidth(BanTableModel::Address, BANSUBNET_COLUMN_WIDTH);
             ui->banlistWidget->setColumnWidth(BanTableModel::Bantime, BANTIME_COLUMN_WIDTH);
         }
+        ui->banlistWidget->horizontalHeader()->setSectionResizeMode(BanTableModel::Address, QHeaderView::ResizeToContents);
         ui->banlistWidget->horizontalHeader()->setStretchLastSection(true);
 
         // create ban table context menu
@@ -845,7 +850,7 @@ void RPCConsole::setFontSize(int newSize)
 
     // clear console (reset icon sizes, default stylesheet) and re-add the content
     float oldPosFactor = 1.0 / ui->messagesWidget->verticalScrollBar()->maximum() * ui->messagesWidget->verticalScrollBar()->value();
-    clear(/* keep_prompt */ true);
+    clear(/*keep_prompt=*/true);
     ui->messagesWidget->setHtml(str);
     ui->messagesWidget->verticalScrollBar()->setValue(oldPosFactor * ui->messagesWidget->verticalScrollBar()->maximum());
 }
@@ -1140,7 +1145,7 @@ void RPCConsole::on_sldGraphRange_valueChanged(int value)
 
 void RPCConsole::setTrafficGraphRange(int mins)
 {
-    ui->trafficGraph->setGraphRangeMins(mins);
+    ui->trafficGraph->setGraphRange(std::chrono::minutes{mins});
     ui->lblGraphRange->setText(GUIUtil::formatDurationStr(std::chrono::minutes{mins}));
 }
 
@@ -1166,7 +1171,6 @@ void RPCConsole::updateDetailWidget()
         peerAddrDetails += "<br />" + tr("via %1").arg(QString::fromStdString(stats->nodeStats.addrLocal));
     ui->peerHeading->setText(peerAddrDetails);
     ui->peerServices->setText(GUIUtil::formatServicesStr(stats->nodeStats.nServices));
-    ui->peerRelayTxes->setText(stats->nodeStats.fRelayTxes ? ts.yes : ts.no);
     QString bip152_hb_settings;
     if (stats->nodeStats.m_bip152_highbandwidth_to) bip152_hb_settings = ts.to;
     if (stats->nodeStats.m_bip152_highbandwidth_from) bip152_hb_settings += (bip152_hb_settings.isEmpty() ? ts.from : QLatin1Char('/') + ts.from);
@@ -1185,7 +1189,7 @@ void RPCConsole::updateDetailWidget()
     ui->timeoffset->setText(GUIUtil::formatTimeOffset(stats->nodeStats.nTimeOffset));
     ui->peerVersion->setText(QString::number(stats->nodeStats.nVersion));
     ui->peerSubversion->setText(QString::fromStdString(stats->nodeStats.cleanSubVer));
-    ui->peerConnectionType->setText(GUIUtil::ConnectionTypeToQString(stats->nodeStats.m_conn_type, /* prepend_direction */ true));
+    ui->peerConnectionType->setText(GUIUtil::ConnectionTypeToQString(stats->nodeStats.m_conn_type, /*prepend_direction=*/true));
     ui->peerNetwork->setText(GUIUtil::NetworkToQString(stats->nodeStats.m_network));
     if (stats->nodeStats.m_permissionFlags == NetPermissionFlags::None) {
         ui->peerPermissions->setText(ts.na);
@@ -1215,6 +1219,10 @@ void RPCConsole::updateDetailWidget()
         }
         ui->peerHeight->setText(QString::number(stats->nodeStateStats.m_starting_height));
         ui->peerPingWait->setText(GUIUtil::formatPingTime(stats->nodeStateStats.m_ping_wait));
+        ui->peerAddrRelayEnabled->setText(stats->nodeStateStats.m_addr_relay_enabled ? ts.yes : ts.no);
+        ui->peerAddrProcessed->setText(QString::number(stats->nodeStateStats.m_addr_processed));
+        ui->peerAddrRateLimited->setText(QString::number(stats->nodeStateStats.m_addr_rate_limited));
+        ui->peerRelayTxes->setText(stats->nodeStateStats.m_relay_txs ? ts.yes : ts.no);
     }
 
     ui->peersTabRightPanel->show();
@@ -1348,10 +1356,10 @@ QString RPCConsole::tabTitle(TabTypes tab_type) const
 QKeySequence RPCConsole::tabShortcut(TabTypes tab_type) const
 {
     switch (tab_type) {
-    case TabTypes::INFO: return QKeySequence(Qt::CTRL + Qt::Key_I);
-    case TabTypes::CONSOLE: return QKeySequence(Qt::CTRL + Qt::Key_T);
-    case TabTypes::GRAPH: return QKeySequence(Qt::CTRL + Qt::Key_N);
-    case TabTypes::PEERS: return QKeySequence(Qt::CTRL + Qt::Key_P);
+    case TabTypes::INFO: return QKeySequence(tr("Ctrl+I"));
+    case TabTypes::CONSOLE: return QKeySequence(tr("Ctrl+T"));
+    case TabTypes::GRAPH: return QKeySequence(tr("Ctrl+N"));
+    case TabTypes::PEERS: return QKeySequence(tr("Ctrl+P"));
     } // no default case, so the compiler can warn about missing cases
 
     assert(false);

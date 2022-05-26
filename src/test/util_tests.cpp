@@ -5,6 +5,7 @@
 #include <util/system.h>
 
 #include <clientversion.h>
+#include <fs.h>
 #include <hash.h> // For Hash()
 #include <key.h>  // For CKey
 #include <sync.h>
@@ -16,6 +17,7 @@
 #include <util/message.h> // For MessageSign(), MessageVerify(), MESSAGE_MAGIC
 #include <util/moneystr.h>
 #include <util/overflow.h>
+#include <util/readwritefile.h>
 #include <util/spanparsing.h>
 #include <util/strencodings.h>
 #include <util/string.h>
@@ -23,6 +25,9 @@
 #include <util/vector.h>
 
 #include <array>
+#include <fstream>
+#include <limits>
+#include <map>
 #include <optional>
 #include <stdint.h>
 #include <string.h>
@@ -73,6 +78,31 @@ BOOST_AUTO_TEST_CASE(util_datadir)
     BOOST_CHECK_EQUAL(dd_norm, args.GetDataDirBase());
 }
 
+namespace {
+class NoCopyOrMove
+{
+public:
+    int i;
+    explicit NoCopyOrMove(int i) : i{i} { }
+
+    NoCopyOrMove() = delete;
+    NoCopyOrMove(const NoCopyOrMove&) = delete;
+    NoCopyOrMove(NoCopyOrMove&&) = delete;
+    NoCopyOrMove& operator=(const NoCopyOrMove&) = delete;
+    NoCopyOrMove& operator=(NoCopyOrMove&&) = delete;
+
+    operator bool() const { return i != 0; }
+
+    int get_ip1() { return i + 1; }
+    bool test()
+    {
+        // Check that Assume can be used within a lambda and still call methods
+        [&]() { Assume(get_ip1()); }();
+        return Assume(get_ip1() != 5);
+    }
+};
+} // namespace
+
 BOOST_AUTO_TEST_CASE(util_check)
 {
     // Check that Assert can forward
@@ -84,6 +114,14 @@ BOOST_AUTO_TEST_CASE(util_check)
     // Check that Assume can be used as unary expression
     const bool result{Assume(two == 2)};
     Assert(result);
+
+    // Check that Assert doesn't require copy/move
+    NoCopyOrMove x{9};
+    Assert(x).i += 3;
+    Assert(x).test();
+
+    // Check nested Asserts
+    BOOST_CHECK_EQUAL(Assert((Assert(x).test() ? 3 : 0)), 3);
 }
 
 BOOST_AUTO_TEST_CASE(util_criticalsection)
@@ -1283,7 +1321,7 @@ BOOST_AUTO_TEST_CASE(util_ParseMoney)
     BOOST_CHECK_EQUAL(ParseMoney("0.00000001 ").value(), COIN/100000000);
     BOOST_CHECK_EQUAL(ParseMoney(" 0.00000001").value(), COIN/100000000);
 
-    // Parsing amount that can not be represented should fail
+    // Parsing amount that cannot be represented should fail
     BOOST_CHECK(!ParseMoney("100000000.00"));
     BOOST_CHECK(!ParseMoney("0.000000001"));
 
@@ -1471,9 +1509,17 @@ static void TestAddMatrixOverflow()
     constexpr T MAXI{std::numeric_limits<T>::max()};
     BOOST_CHECK(!CheckedAdd(T{1}, MAXI));
     BOOST_CHECK(!CheckedAdd(MAXI, MAXI));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(MAXI, MAXI));
+
     BOOST_CHECK_EQUAL(0, CheckedAdd(T{0}, T{0}).value());
     BOOST_CHECK_EQUAL(MAXI, CheckedAdd(T{0}, MAXI).value());
     BOOST_CHECK_EQUAL(MAXI, CheckedAdd(T{1}, MAXI - 1).value());
+    BOOST_CHECK_EQUAL(MAXI - 1, CheckedAdd(T{1}, MAXI - 2).value());
+    BOOST_CHECK_EQUAL(0, SaturatingAdd(T{0}, T{0}));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{0}, MAXI));
+    BOOST_CHECK_EQUAL(MAXI, SaturatingAdd(T{1}, MAXI - 1));
+    BOOST_CHECK_EQUAL(MAXI - 1, SaturatingAdd(T{1}, MAXI - 2));
 }
 
 /* Check for overflow or underflow */
@@ -1485,9 +1531,17 @@ static void TestAddMatrix()
     constexpr T MAXI{std::numeric_limits<T>::max()};
     BOOST_CHECK(!CheckedAdd(T{-1}, MINI));
     BOOST_CHECK(!CheckedAdd(MINI, MINI));
+    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI));
+    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(MINI, MINI));
+
     BOOST_CHECK_EQUAL(MINI, CheckedAdd(T{0}, MINI).value());
     BOOST_CHECK_EQUAL(MINI, CheckedAdd(T{-1}, MINI + 1).value());
     BOOST_CHECK_EQUAL(-1, CheckedAdd(MINI, MAXI).value());
+    BOOST_CHECK_EQUAL(MINI + 1, CheckedAdd(T{-1}, MINI + 2).value());
+    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{0}, MINI));
+    BOOST_CHECK_EQUAL(MINI, SaturatingAdd(T{-1}, MINI + 1));
+    BOOST_CHECK_EQUAL(MINI + 1, SaturatingAdd(T{-1}, MINI + 2));
+    BOOST_CHECK_EQUAL(-1, SaturatingAdd(MINI, MAXI));
 }
 
 BOOST_AUTO_TEST_CASE(util_overflow)
@@ -1621,6 +1675,11 @@ BOOST_AUTO_TEST_CASE(test_ToIntegral)
     BOOST_CHECK(!ToIntegral<uint8_t>("256"));
 }
 
+int64_t atoi64_legacy(const std::string& str)
+{
+    return strtoll(str.c_str(), nullptr, 10);
+}
+
 BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
 {
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("1234"), 1'234);
@@ -1648,48 +1707,68 @@ BOOST_AUTO_TEST_CASE(test_LocaleIndependentAtoi)
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>(""), 0);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("aap"), 0);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("0x1"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-32482348723847471234"), 0);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("32482348723847471234"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-32482348723847471234"), -2'147'483'647 - 1);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("32482348723847471234"), 2'147'483'647);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775809"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775809"), -9'223'372'036'854'775'807LL - 1LL);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("-9223372036854775808"), -9'223'372'036'854'775'807LL - 1LL);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775807"), 9'223'372'036'854'775'807);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775808"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>("9223372036854775808"), 9'223'372'036'854'775'807);
+
+    std::map<std::string, int64_t> atoi64_test_pairs = {
+        {"-9223372036854775809", std::numeric_limits<int64_t>::min()},
+        {"-9223372036854775808", -9'223'372'036'854'775'807LL - 1LL},
+        {"9223372036854775807", 9'223'372'036'854'775'807},
+        {"9223372036854775808", std::numeric_limits<int64_t>::max()},
+        {"+-", 0},
+        {"0x1", 0},
+        {"ox1", 0},
+        {"", 0},
+    };
+
+    for (const auto& pair : atoi64_test_pairs) {
+        BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), pair.second);
+    }
+
+    // Ensure legacy compatibility with previous versions of Bitcoin Core's atoi64
+    for (const auto& pair : atoi64_test_pairs) {
+        BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int64_t>(pair.first), atoi64_legacy(pair.first));
+    }
 
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("-1"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("0"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551615"), 18'446'744'073'709'551'615ULL);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551616"), 0U);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint64_t>("18446744073709551616"), 18'446'744'073'709'551'615ULL);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483649"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483649"), -2'147'483'648LL);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("-2147483648"), -2'147'483'648LL);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483647"), 2'147'483'647);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483648"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int32_t>("2147483648"), 2'147'483'647);
 
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("-1"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("0"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967295"), 4'294'967'295U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967296"), 0U);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint32_t>("4294967296"), 4'294'967'295U);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32769"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32769"), -32'768);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("-32768"), -32'768);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32767"), 32'767);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32768"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int16_t>("32768"), 32'767);
 
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("-1"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("0"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65535"), 65'535U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65536"), 0U);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint16_t>("65536"), 65'535U);
 
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-129"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-129"), -128);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("-128"), -128);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("127"), 127);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("128"), 0);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<int8_t>("128"), 127);
 
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("-1"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("0"), 0U);
     BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("255"), 255U);
-    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("256"), 0U);
+    BOOST_CHECK_EQUAL(LocaleIndependentAtoi<uint8_t>("256"), 255U);
 }
 
 BOOST_AUTO_TEST_CASE(test_ParseInt64)
@@ -2548,4 +2627,49 @@ BOOST_AUTO_TEST_CASE(util_ParseByteUnits)
     BOOST_CHECK(!ParseByteUnits("1x", noop));
 }
 
+BOOST_AUTO_TEST_CASE(util_ReadBinaryFile)
+{
+    fs::path tmpfolder = m_args.GetDataDirBase();
+    fs::path tmpfile = tmpfolder / "read_binary.dat";
+    std::string expected_text;
+    for (int i = 0; i < 30; i++) {
+        expected_text += "0123456789";
+    }
+    {
+        std::ofstream file{tmpfile};
+        file << expected_text;
+    }
+    {
+        // read all contents in file
+        auto [valid, text] = ReadBinaryFile(tmpfile);
+        BOOST_CHECK(valid);
+        BOOST_CHECK_EQUAL(text, expected_text);
+    }
+    {
+        // read half contents in file
+        auto [valid, text] = ReadBinaryFile(tmpfile, expected_text.size() / 2);
+        BOOST_CHECK(valid);
+        BOOST_CHECK_EQUAL(text, expected_text.substr(0, expected_text.size() / 2));
+    }
+    {
+        // read from non-existent file
+        fs::path invalid_file = tmpfolder / "invalid_binary.dat";
+        auto [valid, text] = ReadBinaryFile(invalid_file);
+        BOOST_CHECK(!valid);
+        BOOST_CHECK(text.empty());
+    }
+}
+
+BOOST_AUTO_TEST_CASE(util_WriteBinaryFile)
+{
+    fs::path tmpfolder = m_args.GetDataDirBase();
+    fs::path tmpfile = tmpfolder / "write_binary.dat";
+    std::string expected_text = "bitcoin";
+    auto valid = WriteBinaryFile(tmpfile, expected_text);
+    std::string actual_text;
+    std::ifstream file{tmpfile};
+    file >> actual_text;
+    BOOST_CHECK(valid);
+    BOOST_CHECK_EQUAL(actual_text, expected_text);
+}
 BOOST_AUTO_TEST_SUITE_END()
