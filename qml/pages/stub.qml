@@ -5,7 +5,8 @@
 import QtQuick 2.12
 import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.11
-import "../components"
+import "../components" as BitcoinCoreComponents
+
 
 ApplicationWindow {
     id: appWindow
@@ -25,7 +26,7 @@ ApplicationWindow {
         sourceSize.height: 128
     }
 
-    BlockCounter {
+    BitcoinCoreComponents.BlockCounter {
         id: blockCounter
         anchors.centerIn: parent
         blockHeight: nodeModel.blockTipHeight
