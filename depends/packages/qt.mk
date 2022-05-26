@@ -23,9 +23,16 @@ $(package)_patches += rcc_hardcode_timestamp.patch
 $(package)_patches += duplicate_lcqpafonts.patch
 $(package)_patches += fix_android_plugin_names.patch
 $(package)_patches += fix_riscv_atomic.patch
+$(package)_patches += fix_static_build.patch
 
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = 33f15a5caa451bddf8298466442ccf7ca65e4cf90453928ddbb95216c4374062
+
+$(package)_qtgraphicaleffects_file_name = qtgraphicaleffects-$($(package)_suffix)
+$(package)_qtgraphicaleffects_sha256_hash = e24e855f202bb24b4f8ea9df504e24f451a5af49875a18cf324faf5f1e628f6b
+
+$(package)_qtquickcontrols2_file_name = qtquickcontrols2-$($(package)_suffix)
+$(package)_qtquickcontrols2_sha256_hash = 3b95e9be58c3d918f4c4a805116459a403ae6c61e33edf71b319672c46af562f
 
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
 $(package)_qttranslations_sha256_hash=5d7869f670a135ad0986e266813b9dd5bbae2b09577338f9cdf8904d4af52db0
@@ -34,6 +41,8 @@ $(package)_qttools_file_name=qttools-$($(package)_suffix)
 $(package)_qttools_sha256_hash=463b2fe71a085e7ab4e39333ae360ab0ec857b966d7a08f752c427e5df55f90d
 
 $(package)_extra_sources += $($(package)_qtdeclarative_file_name)
+$(package)_extra_sources += $($(package)_qtgraphicaleffects_file_name)
+$(package)_extra_sources += $($(package)_qtquickcontrols2_file_name)
 $(package)_extra_sources += $($(package)_qttranslations_file_name)
 $(package)_extra_sources += $($(package)_qttools_file_name)
 
@@ -220,6 +229,8 @@ endef
 define $(package)_fetch_cmds
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_download_file),$($(package)_file_name),$($(package)_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_file_name),$($(package)_qtdeclarative_sha256_hash)) && \
+$(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtgraphicaleffects_file_name),$($(package)_qtgraphicaleffects_file_name),$($(package)_qtgraphicaleffects_sha256_hash)) && \
+$(call fetch_file,$(package),$($(package)_download_path),$($(package)_qtquickcontrols2_file_name),$($(package)_qtquickcontrols2_file_name),$($(package)_qtquickcontrols2_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttranslations_file_name),$($(package)_qttranslations_file_name),$($(package)_qttranslations_sha256_hash)) && \
 $(call fetch_file,$(package),$($(package)_download_path),$($(package)_qttools_file_name),$($(package)_qttools_file_name),$($(package)_qttools_sha256_hash))
 endef
@@ -228,6 +239,8 @@ define $(package)_extract_cmds
   mkdir -p $($(package)_extract_dir) && \
   echo "$($(package)_sha256_hash)  $($(package)_source)" > $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qtdeclarative_sha256_hash)  $($(package)_source_dir)/$($(package)_qtdeclarative_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
+  echo "$($(package)_qtgraphicaleffects_sha256_hash)  $($(package)_source_dir)/$($(package)_qtgraphicaleffects_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
+  echo "$($(package)_qtquickcontrols2_sha256_hash)  $($(package)_source_dir)/$($(package)_qtquickcontrols2_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttranslations_sha256_hash)  $($(package)_source_dir)/$($(package)_qttranslations_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   echo "$($(package)_qttools_sha256_hash)  $($(package)_source_dir)/$($(package)_qttools_file_name)" >> $($(package)_extract_dir)/.$($(package)_file_name).hash && \
   $(build_SHA256SUM) -c $($(package)_extract_dir)/.$($(package)_file_name).hash && \
@@ -235,6 +248,10 @@ define $(package)_extract_cmds
   $(build_TAR) --no-same-owner --strip-components=1 -xf $($(package)_source) -C qtbase && \
   mkdir qtdeclarative && \
   $(build_TAR) --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtdeclarative_file_name) -C qtdeclarative && \
+  mkdir qtgraphicaleffects && \
+  $(build_TAR) --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtgraphicaleffects_file_name) -C qtgraphicaleffects && \
+  mkdir qtquickcontrols2 && \
+  $(build_TAR) --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qtquickcontrols2_file_name) -C qtquickcontrols2 && \
   mkdir qttranslations && \
   $(build_TAR) --no-same-owner --strip-components=1 -xf $($(package)_source_dir)/$($(package)_qttranslations_file_name) -C qttranslations && \
   mkdir qttools && \
@@ -276,6 +293,7 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/duplicate_lcqpafonts.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_android_plugin_names.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_riscv_atomic.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_static_build.patch && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
@@ -305,6 +323,7 @@ define $(package)_stage_cmds
   export PATH && \
   $(MAKE) -C qtbase/src INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_qt_libs))) && \
   $(MAKE) -C qtdeclarative INSTALL_ROOT=$($(package)_staging_dir) sub-src-install_subtargets && \
+  $(MAKE) -C qtquickcontrols2 INSTALL_ROOT=$($(package)_staging_dir) sub-src-install_subtargets && \
   $(MAKE) -C qttools/src/linguist INSTALL_ROOT=$($(package)_staging_dir) $(addsuffix -install_subtargets,$(addprefix sub-,$($(package)_linguist_tools))) && \
   $(MAKE) -C qttranslations INSTALL_ROOT=$($(package)_staging_dir) install_subtargets
 endef
