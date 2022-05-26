@@ -1,0 +1,17 @@
+Android: Replace '.' with '_' in plugin name prefix
+
+Since Qt 5.14, commit fcb78b500076bf3917e5d8bf8507395bbc33a1a5,
+Android plugin names are prefixed with their relative paths to qt folder.
+Although '/' is replaced '_' in prefixes, '.' must be replaced as well.
+
+
+--- old/qtbase/mkspecs/features/qt_functions.prf
++++ new/qtbase/mkspecs/features/qt_functions.prf
+@@ -36,6 +36,7 @@ defineReplace(qt5LibraryTarget) {
+         LIBRARY_NAME_PREFIX = $$2
+         LIBRARY_NAME_PREFIX = $$replace(LIBRARY_NAME_PREFIX, "//", "/")
+         LIBRARY_NAME_PREFIX = $$replace(LIBRARY_NAME_PREFIX, "/", "_")
++        LIBRARY_NAME_PREFIX = $$replace(LIBRARY_NAME_PREFIX, "\.", "_")
+         LIBRARY_NAME = $$LIBRARY_NAME_PREFIX$$qtLibraryTarget($$1)
+         unset(LIBRARY_NAME_PREFIX)
+    } else: LIBRARY_NAME = $$qtLibraryTarget($$1)
