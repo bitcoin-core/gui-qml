@@ -43,8 +43,6 @@ UrlDecodeFn* const URL_DECODE = urlDecode;
 
 int main(int argc, char* argv[])
 {
-    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-
     // Subscribe to global signals from core.
     noui_connect();
 
