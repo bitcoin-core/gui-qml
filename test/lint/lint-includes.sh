@@ -54,8 +54,6 @@ EXPECTED_BOOST_INCLUDES=(
     boost/algorithm/string/replace.hpp
     boost/algorithm/string/split.hpp
     boost/date_time/posix_time/posix_time.hpp
-    boost/filesystem.hpp
-    boost/filesystem/fstream.hpp
     boost/multi_index/hashed_index.hpp
     boost/multi_index/ordered_index.hpp
     boost/multi_index/sequenced_index.hpp
@@ -64,6 +62,7 @@ EXPECTED_BOOST_INCLUDES=(
     boost/signals2/connection.hpp
     boost/signals2/optional_last_value.hpp
     boost/signals2/signal.hpp
+    boost/test/included/unit_test.hpp
     boost/test/unit_test.hpp
 )
 

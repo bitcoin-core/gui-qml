@@ -90,7 +90,7 @@ public:
     uint32_t getLogCategories() override { return LogInstance().GetCategoryMask(); }
     bool baseInitialize() override
     {
-        return AppInitBasicSetup(gArgs) && AppInitParameterInteraction(gArgs) && AppInitSanityChecks() &&
+        return AppInitBasicSetup(gArgs) && AppInitParameterInteraction(gArgs, /*use_syscall_sandbox=*/false) && AppInitSanityChecks() &&
                AppInitLockDataDirectory() && AppInitInterfaces(*m_context);
     }
     bool appInitMain(interfaces::BlockAndHeaderTipInfo* tip_info) override
@@ -113,7 +113,7 @@ public:
     }
     bool shutdownRequested() override { return ShutdownRequested(); }
     void mapPort(bool use_upnp, bool use_natpmp) override { StartMapPort(use_upnp, use_natpmp); }
-    bool getProxy(Network net, proxyType& proxy_info) override { return GetProxy(net, proxy_info); }
+    bool getProxy(Network net, Proxy& proxy_info) override { return GetProxy(net, proxy_info); }
     size_t getNodeCount(ConnectionDirection flags) override
     {
         return m_context->connman ? m_context->connman->GetNodeCount(flags) : 0;
@@ -249,8 +249,8 @@ public:
     bool isInitialBlockDownload() override {
         return chainman().ActiveChainstate().IsInitialBlockDownload();
     }
-    bool getReindex() override { return ::fReindex; }
-    bool getImporting() override { return ::fImporting; }
+    bool getReindex() override { return node::fReindex; }
+    bool getImporting() override { return node::fImporting; }
     void setNetworkActive(bool active) override
     {
         if (m_context->connman) {
@@ -486,16 +486,11 @@ public:
         const CChain& active = Assert(m_node.chainman)->ActiveChain();
         return active.GetLocator();
     }
-    bool checkFinalTx(const CTransaction& tx) override
-    {
-        LOCK(cs_main);
-        return CheckFinalTx(chainman().ActiveChain().Tip(), tx);
-    }
     std::optional<int> findLocatorFork(const CBlockLocator& locator) override
     {
         LOCK(cs_main);
         const CChainState& active = Assert(m_node.chainman)->ActiveChainstate();
-        if (CBlockIndex* fork = active.FindForkInGlobalIndex(locator)) {
+        if (const CBlockIndex* fork = active.FindForkInGlobalIndex(locator)) {
             return fork->nHeight;
         }
         return std::nullopt;
@@ -562,7 +557,7 @@ public:
         // used to limit the range, and passing min_height that's too low or
         // max_height that's too high will not crash or change the result.
         LOCK(::cs_main);
-        if (CBlockIndex* block = chainman().m_blockman.LookupBlockIndex(block_hash)) {
+        if (const CBlockIndex* block = chainman().m_blockman.LookupBlockIndex(block_hash)) {
             if (max_height && block->nHeight >= *max_height) block = block->GetAncestor(*max_height);
             for (; block->nStatus & BLOCK_HAVE_DATA; block = block->pprev) {
                 // Check pprev to not segfault if min_height is too low
@@ -595,7 +590,7 @@ public:
         bool relay,
         std::string& err_string) override
     {
-        const TransactionError err = BroadcastTransaction(m_node, tx, err_string, max_tx_fee, relay, /*wait_callback*/ false);
+        const TransactionError err = BroadcastTransaction(m_node, tx, err_string, max_tx_fee, relay, /*wait_callback=*/false);
         // Chain clients only care about failures to accept the tx to the mempool. Disregard non-mempool related failures.
         // Note: this will need to be updated if BroadcastTransactions() is updated to return other non-mempool failures
         // that Chain clients do not need to know about.
@@ -649,9 +644,9 @@ public:
     bool havePruned() override
     {
         LOCK(cs_main);
-        return ::fHavePruned;
+        return node::fHavePruned;
     }
-    bool isReadyToBroadcast() override { return !::fImporting && !::fReindex && !isInitialBlockDownload(); }
+    bool isReadyToBroadcast() override { return !node::fImporting && !node::fReindex && !isInitialBlockDownload(); }
     bool isInitialBlockDownload() override {
         return chainman().ActiveChainstate().IsInitialBlockDownload();
     }
@@ -729,6 +724,6 @@ public:
 } // namespace node
 
 namespace interfaces {
-std::unique_ptr<Node> MakeNode(NodeContext& context) { return std::make_unique<node::NodeImpl>(context); }
-std::unique_ptr<Chain> MakeChain(NodeContext& context) { return std::make_unique<node::ChainImpl>(context); }
+std::unique_ptr<Node> MakeNode(node::NodeContext& context) { return std::make_unique<node::NodeImpl>(context); }
+std::unique_ptr<Chain> MakeChain(node::NodeContext& context) { return std::make_unique<node::ChainImpl>(context); }
 } // namespace interfaces

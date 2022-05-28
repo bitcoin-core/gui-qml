@@ -36,6 +36,7 @@ def assert_approx(v, vexp, vspan=0.00001):
 
 def assert_fee_amount(fee, tx_size, feerate_BTC_kvB):
     """Assert the fee is in range."""
+    assert isinstance(tx_size, int)
     target_fee = get_fee(tx_size, feerate_BTC_kvB)
     if fee < target_fee:
         raise AssertionError("Fee of %s BTC too low! (Should be %s BTC)" % (str(fee), str(target_fee)))
@@ -219,7 +220,13 @@ def str_to_b64str(string):
 
 
 def ceildiv(a, b):
-    """Divide 2 ints and round up to next int rather than round down"""
+    """
+    Divide 2 ints and round up to next int rather than round down
+    Implementation requires python integers, which have a // operator that does floor division.
+    Other types like decimal.Decimal whose // operator truncates towards 0 will not work.
+    """
+    assert isinstance(a, int)
+    assert isinstance(b, int)
     return -(-a // b)
 
 
@@ -227,7 +234,7 @@ def get_fee(tx_size, feerate_btc_kvb):
     """Calculate the fee in BTC given a feerate is BTC/kvB. Reflects CFeeRate::GetFee"""
     feerate_sat_kvb = int(feerate_btc_kvb * Decimal(1e8)) # Fee in sat/kvb as an int to avoid float precision errors
     target_fee_sat = ceildiv(feerate_sat_kvb * tx_size, 1000) # Round calculated fee up to nearest sat
-    return satoshi_round(target_fee_sat / Decimal(1e8)) # Truncate BTC result to nearest sat
+    return target_fee_sat / Decimal(1e8) # Return result in  BTC
 
 
 def satoshi_round(amount):
@@ -438,7 +445,7 @@ def delete_cookie_file(datadir, chain):
 
 def softfork_active(node, key):
     """Return whether a softfork is active."""
-    return node.getblockchaininfo()['softforks'][key]['active']
+    return node.getdeploymentinfo()['deployments'][key]['active']
 
 
 def set_node_times(nodes, t):
@@ -566,17 +573,17 @@ def create_lots_of_big_transactions(node, txouts, utxos, num, fee):
     return txids
 
 
-def mine_large_block(test_framework, node, utxos=None):
+def mine_large_block(test_framework, mini_wallet, node):
     # generate a 66k transaction,
     # and 14 of them is close to the 1MB block limit
-    num = 14
     txouts = gen_return_txouts()
-    utxos = utxos if utxos is not None else []
-    if len(utxos) < num:
-        utxos.clear()
-        utxos.extend(node.listunspent())
-    fee = 100 * node.getnetworkinfo()["relayfee"]
-    create_lots_of_big_transactions(node, txouts, utxos, num, fee=fee)
+    from .messages import COIN
+    fee = 100 * int(node.getnetworkinfo()["relayfee"] * COIN)
+    for _ in range(14):
+        tx = mini_wallet.create_self_transfer(from_node=node, fee_rate=0, mempool_valid=False)['tx']
+        tx.vout[0].nValue -= fee
+        tx.vout.extend(txouts)
+        mini_wallet.sendrawtransaction(from_node=node, tx_hex=tx.serialize().hex())
     test_framework.generate(node, 1)
 
 

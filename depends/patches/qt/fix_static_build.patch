@@ -1,0 +1,23 @@
+Fix static build
+
+Function with the same name is exported from QtQuick which leads
+to multiple definition linker error. Marking this function as static
+avoids the issue.
+
+Upstream commits:
+ - Qt 5.15.4: 9b62b6b44338dbaa3de1fe888d2b9d4b36eca947
+ - Qt 6.0: e9c4baa1f4200c4f65e84aeed46ee6eed71bef01
+ - Qt 6.1: 140095b310a144740774b0a5c01af30e624eb8c7
+ - Qt 6.2: 02b18562fe1d6dec50e361a2ac568cb11087b743
+
+--- a/qtquickcontrols2/src/quicktemplates2/qtquicktemplates2global.cpp
++++ b/qtquickcontrols2/src/quicktemplates2/qtquicktemplates2global.cpp
+@@ -42,7 +42,7 @@
+ QT_BEGIN_NAMESPACE
+
+ #if QT_CONFIG(accessibility)
+-QAccessibleInterface *qQuickAccessibleFactory(const QString &classname, QObject *object)
++static QAccessibleInterface *qQuickAccessibleFactory(const QString &classname, QObject *object)
+ {
+     if (classname == u"QQuickPage") {
+         return new QAccessibleQuickPage(qobject_cast<QQuickPage *>(object));

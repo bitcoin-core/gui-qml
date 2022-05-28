@@ -22,18 +22,22 @@
 #include <vector>
 
 class BanMan;
-class CCoinControl;
 class CFeeRate;
 class CNodeStats;
 class Coin;
 class RPCTimerInterface;
 class UniValue;
-class proxyType;
+class Proxy;
 enum class SynchronizationState;
 enum class TransactionError;
 struct CNodeStateStats;
-struct NodeContext;
 struct bilingual_str;
+namespace node {
+struct NodeContext;
+} // namespace node
+namespace wallet {
+class CCoinControl;
+} // namespace wallet
 
 namespace interfaces {
 class Handler;
@@ -97,7 +101,7 @@ public:
     virtual void mapPort(bool use_upnp, bool use_natpmp) = 0;
 
     //! Get proxy.
-    virtual bool getProxy(Network net, proxyType& proxy_info) = 0;
+    virtual bool getProxy(Network net, Proxy& proxy_info) = 0;
 
     //! Get number of connections.
     virtual size_t getNodeCount(ConnectionDirection flags) = 0;
@@ -242,12 +246,12 @@ public:
 
     //! Get and set internal node context. Useful for testing, but not
     //! accessible across processes.
-    virtual NodeContext* context() { return nullptr; }
-    virtual void setContext(NodeContext* context) { }
+    virtual node::NodeContext* context() { return nullptr; }
+    virtual void setContext(node::NodeContext* context) { }
 };
 
 //! Return implementation of Node interface.
-std::unique_ptr<Node> MakeNode(NodeContext& context);
+std::unique_ptr<Node> MakeNode(node::NodeContext& context);
 
 //! Block tip (could be a header or not, depends on the subscribed signal).
 struct BlockTip {

@@ -20,6 +20,8 @@
 
 #include <boost/test/unit_test.hpp>
 
+using node::SnapshotMetadata;
+
 BOOST_FIXTURE_TEST_SUITE(validation_chainstatemanager_tests, ChainTestingSetup)
 
 //! Basic tests for ChainstateManager.
@@ -97,8 +99,6 @@ BOOST_AUTO_TEST_CASE(chainstatemanager)
 
     // Let scheduler events finish running to avoid accessing memory that is going to be unloaded
     SyncWithValidationInterfaceQueue();
-
-    WITH_LOCK(::cs_main, manager.Unload());
 }
 
 //! Test rebalancing the caches associated with each chainstate.
@@ -233,7 +233,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_activate_snapshot, TestChain100Setup)
         *chainman.SnapshotBlockhash());
 
     // Ensure that the genesis block was not marked assumed-valid.
-    BOOST_CHECK(!chainman.ActiveChain().Genesis()->IsAssumedValid());
+    BOOST_CHECK(WITH_LOCK(::cs_main, return !chainman.ActiveChain().Genesis()->IsAssumedValid()));
 
     const AssumeutxoData& au_data = *ExpectedAssumeutxo(snapshot_height, ::Params());
     const CBlockIndex* tip = chainman.ActiveTip();
@@ -354,6 +354,7 @@ BOOST_FIXTURE_TEST_CASE(chainstatemanager_loadblockindex, TestChain100Setup)
 
     // Mark some region of the chain assumed-valid.
     for (int i = 0; i <= cs1.m_chain.Height(); ++i) {
+        LOCK(::cs_main);
         auto index = cs1.m_chain[i];
 
         if (i < last_assumed_valid_idx && i >= assumed_valid_start_idx) {

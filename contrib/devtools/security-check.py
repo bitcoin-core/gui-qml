@@ -12,10 +12,6 @@ from typing import List
 
 import lief #type:ignore
 
-# temporary constant, to be replaced with lief.ELF.ARCH.RISCV
-# https://github.com/lief-project/LIEF/pull/562
-LIEF_ELF_ARCH_RISCV = lief.ELF.ARCH(243)
-
 def check_ELF_RELRO(binary) -> bool:
     '''
     Check for read-only relocations.
@@ -101,7 +97,6 @@ def check_ELF_separate_code(binary):
     for segment in binary.segments:
         if segment.type ==  lief.ELF.SEGMENT_TYPES.LOAD:
             for section in segment.sections:
-                assert(section.name not in flags_per_section)
                 flags_per_section[section.name] = segment.flags
     # Spot-check ELF LOAD program header flags per section
     # If these sections exist, check them against the expected R/W/E flags
@@ -110,6 +105,17 @@ def check_ELF_separate_code(binary):
             if int(EXPECTED_FLAGS[section]) != int(flags):
                 return False
     return True
+
+def check_ELF_control_flow(binary) -> bool:
+    '''
+    Check for control flow instrumentation
+    '''
+    main = binary.get_function_address('main')
+    content = binary.get_content_from_virtual_address(main, 4, lief.Binary.VA_TYPES.AUTO)
+
+    if content == [243, 15, 30, 250]: # endbr64
+        return True
+    return False
 
 def check_PE_DYNAMIC_BASE(binary) -> bool:
     '''PIE: DllCharacteristics bit 0x40 signifies dynamicbase (ASLR)'''
@@ -172,7 +178,7 @@ def check_NX(binary) -> bool:
     '''
     return binary.has_nx
 
-def check_control_flow(binary) -> bool:
+def check_MACHO_control_flow(binary) -> bool:
     '''
     Check for control flow instrumentation
     '''
@@ -200,27 +206,27 @@ BASE_PE = [
 ]
 
 BASE_MACHO = [
-    ('PIE', check_PIE),
     ('NOUNDEFS', check_MACHO_NOUNDEFS),
-    ('NX', check_NX),
     ('LAZY_BINDINGS', check_MACHO_LAZY_BINDINGS),
     ('Canary', check_MACHO_Canary),
-    ('CONTROL_FLOW', check_control_flow),
 ]
 
 CHECKS = {
     lief.EXE_FORMATS.ELF: {
-        lief.ARCHITECTURES.X86: BASE_ELF,
+        lief.ARCHITECTURES.X86: BASE_ELF + [('CONTROL_FLOW', check_ELF_control_flow)],
         lief.ARCHITECTURES.ARM: BASE_ELF,
         lief.ARCHITECTURES.ARM64: BASE_ELF,
         lief.ARCHITECTURES.PPC: BASE_ELF,
-        LIEF_ELF_ARCH_RISCV: BASE_ELF,
+        lief.ARCHITECTURES.RISCV: BASE_ELF,
     },
     lief.EXE_FORMATS.PE: {
         lief.ARCHITECTURES.X86: BASE_PE,
     },
     lief.EXE_FORMATS.MACHO: {
-        lief.ARCHITECTURES.X86: BASE_MACHO,
+        lief.ARCHITECTURES.X86: BASE_MACHO + [('PIE', check_PIE),
+                                              ('NX', check_NX),
+                                              ('CONTROL_FLOW', check_MACHO_control_flow)],
+        lief.ARCHITECTURES.ARM64: BASE_MACHO,
     }
 }
 
@@ -239,12 +245,9 @@ if __name__ == '__main__':
                 continue
 
             if arch == lief.ARCHITECTURES.NONE:
-                if binary.header.machine_type == LIEF_ELF_ARCH_RISCV:
-                    arch = LIEF_ELF_ARCH_RISCV
-                else:
-                    print(f'{filename}: unknown architecture')
-                    retval = 1
-                    continue
+                print(f'{filename}: unknown architecture')
+                retval = 1
+                continue
 
             failed: List[str] = []
             for (name, func) in CHECKS[etype][arch]:

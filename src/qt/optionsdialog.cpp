@@ -19,6 +19,8 @@
 #include <netbase.h>
 #include <txdb.h> // for -dbcache defaults
 
+#include <chrono>
+
 #include <QDataWidgetMapper>
 #include <QDir>
 #include <QIntValidator>
@@ -362,7 +364,7 @@ void OptionsDialog::showRestartWarning(bool fPersistent)
         ui->statusLabel->setText(tr("This change would require a client restart."));
         // clear non-persistent status label after 10 seconds
         // Todo: should perhaps be a class attribute, if we extend the use of statusLabel
-        QTimer::singleShot(10000, this, &OptionsDialog::clearStatusLabel);
+        QTimer::singleShot(10s, this, &OptionsDialog::clearStatusLabel);
     }
 }
 
@@ -393,7 +395,7 @@ void OptionsDialog::updateProxyValidationState()
 
 void OptionsDialog::updateDefaultProxyNets()
 {
-    proxyType proxy;
+    Proxy proxy;
     std::string strProxy;
     QString strDefaultProxyGUI;
 
@@ -423,7 +425,7 @@ QValidator::State ProxyAddressValidator::validate(QString &input, int &pos) cons
     Q_UNUSED(pos);
     // Validate the proxy
     CService serv(LookupNumeric(input.toStdString(), DEFAULT_GUI_PROXY_PORT));
-    proxyType addrProxy = proxyType(serv, true);
+    Proxy addrProxy = Proxy(serv, true);
     if (addrProxy.IsValid())
         return QValidator::Acceptable;
 

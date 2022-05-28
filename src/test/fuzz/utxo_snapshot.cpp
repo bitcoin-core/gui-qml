@@ -4,6 +4,7 @@
 
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <fs.h>
 #include <node/utxo_snapshot.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
@@ -12,6 +13,8 @@
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <validationinterface.h>
+
+using node::SnapshotMetadata;
 
 namespace {
 

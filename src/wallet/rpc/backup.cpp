@@ -5,6 +5,7 @@
 #include <chain.h>
 #include <clientversion.h>
 #include <core_io.h>
+#include <fs.h>
 #include <interfaces/chain.h>
 #include <key_io.h>
 #include <merkleblock.h>
@@ -20,8 +21,10 @@
 #include <wallet/rpc/util.h>
 #include <wallet/wallet.h>
 
-#include <stdint.h>
+#include <cstdint>
+#include <fstream>
 #include <tuple>
+#include <string>
 
 #include <boost/algorithm/string.hpp>
 
@@ -31,6 +34,7 @@
 
 using interfaces::FoundBlock;
 
+namespace wallet {
 std::string static EncodeDumpString(const std::string &str) {
     std::stringstream ret;
     for (const unsigned char c : str) {
@@ -520,7 +524,7 @@ RPCHelpMan importwallet()
 
         EnsureWalletIsUnlocked(*pwallet);
 
-        fsbridge::ifstream file;
+        std::ifstream file;
         file.open(fs::u8path(request.params[0].get_str()), std::ios::in | std::ios::ate);
         if (!file.is_open()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Cannot open wallet dump file");
@@ -728,7 +732,7 @@ RPCHelpMan dumpwallet()
         throw JSONRPCError(RPC_INVALID_PARAMETER, filepath.u8string() + " already exists. If you are sure this is what you want, move it out of the way first");
     }
 
-    fsbridge::ofstream file;
+    std::ofstream file;
     file.open(filepath);
     if (!file.is_open())
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Cannot open wallet dump file");
@@ -1256,7 +1260,7 @@ RPCHelpMan importmulti()
                                 {
                                     {"desc", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Descriptor to import. If using descriptor, do not also provide address/scriptPubKey, scripts, or pubkeys"},
                                     {"scriptPubKey", RPCArg::Type::STR, RPCArg::Optional::NO, "Type of scriptPubKey (string for script, json for address). Should not be provided if using a descriptor",
-                                        /* oneline_description */ "", {"\"<script>\" | { \"address\":\"<address>\" }", "string / json"}
+                                        /*oneline_description=*/"", {"\"<script>\" | { \"address\":\"<address>\" }", "string / json"}
                                     },
                                     {"timestamp", RPCArg::Type::NUM, RPCArg::Optional::NO, "Creation time of the key expressed in " + UNIX_EPOCH_TIME + ",\n"
         "                                                              or the string \"now\" to substitute the current synced blockchain time. The timestamp of the oldest\n"
@@ -1264,7 +1268,7 @@ RPCHelpMan importmulti()
         "                                                              \"now\" can be specified to bypass scanning, for keys which are known to never have been used, and\n"
         "                                                              0 can be specified to scan the entire blockchain. Blocks up to 2 hours before the earliest key\n"
         "                                                              creation time of all keys being imported by the importmulti call will be scanned.",
-                                        /* oneline_description */ "", {"timestamp | \"now\"", "integer / string"}
+                                        /*oneline_description=*/"", {"timestamp | \"now\"", "integer / string"}
                                     },
                                     {"redeemscript", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Allowed only if the scriptPubKey is a P2SH or P2SH-P2WSH address/scriptPubKey"},
                                     {"witnessscript", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "Allowed only if the scriptPubKey is a P2SH-P2WSH or P2WSH address/scriptPubKey"},
@@ -1592,7 +1596,7 @@ RPCHelpMan importdescriptors()
         "                                                              \"now\" can be specified to bypass scanning, for outputs which are known to never have been used, and\n"
         "                                                              0 can be specified to scan the entire blockchain. Blocks up to 2 hours before the earliest timestamp\n"
         "                                                              of all descriptors being imported will be scanned.",
-                                        /* oneline_description */ "", {"timestamp | \"now\"", "integer / string"}
+                                        /*oneline_description=*/"", {"timestamp | \"now\"", "integer / string"}
                                     },
                                     {"internal", RPCArg::Type::BOOL, RPCArg::Default{false}, "Whether matching outputs should be treated as not incoming payments (e.g. change)"},
                                     {"label", RPCArg::Type::STR, RPCArg::Default{""}, "Label to assign to the address, only allowed with internal=false. Disabled for ranged descriptors"},
@@ -1887,7 +1891,7 @@ RPCHelpMan restorewallet()
     bilingual_str error;
     std::vector<bilingual_str> warnings;
 
-    const std::shared_ptr<CWallet> wallet = RestoreWallet(context, fs::PathToString(backup_file), wallet_name, load_on_start, status, error, warnings);
+    const std::shared_ptr<CWallet> wallet = RestoreWallet(context, backup_file, wallet_name, load_on_start, status, error, warnings);
 
     HandleWalletError(wallet, status, error);
 
@@ -1900,3 +1904,4 @@ RPCHelpMan restorewallet()
 },
     };
 }
+} // namespace wallet

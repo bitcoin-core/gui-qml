@@ -2,30 +2,32 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <memory>
-
 #include <boost/test/unit_test.hpp>
 
 #include <fs.h>
 #include <test/util/setup_common.h>
 #include <wallet/bdb.h>
 
+#include <fstream>
+#include <memory>
+#include <string>
 
+namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(db_tests, BasicTestingSetup)
 
 static std::shared_ptr<BerkeleyEnvironment> GetWalletEnv(const fs::path& path, std::string& database_filename)
 {
     fs::path data_file = BDBDataFile(path);
     database_filename = fs::PathToString(data_file.filename());
-    return GetBerkeleyEnv(data_file.parent_path());
+    return GetBerkeleyEnv(data_file.parent_path(), false);
 }
 
 BOOST_AUTO_TEST_CASE(getwalletenv_file)
 {
     std::string test_name = "test_name.dat";
-    const fs::path datadir = gArgs.GetDataDirNet();
+    const fs::path datadir = m_args.GetDataDirNet();
     fs::path file_path = datadir / test_name;
-    fs::ofstream f(file_path);
+    std::ofstream f{file_path};
     f.close();
 
     std::string filename;
@@ -37,7 +39,7 @@ BOOST_AUTO_TEST_CASE(getwalletenv_file)
 BOOST_AUTO_TEST_CASE(getwalletenv_directory)
 {
     std::string expected_name = "wallet.dat";
-    const fs::path datadir = gArgs.GetDataDirNet();
+    const fs::path datadir = m_args.GetDataDirNet();
 
     std::string filename;
     std::shared_ptr<BerkeleyEnvironment> env = GetWalletEnv(datadir, filename);
@@ -47,8 +49,8 @@ BOOST_AUTO_TEST_CASE(getwalletenv_directory)
 
 BOOST_AUTO_TEST_CASE(getwalletenv_g_dbenvs_multiple)
 {
-    fs::path datadir = gArgs.GetDataDirNet() / "1";
-    fs::path datadir_2 = gArgs.GetDataDirNet() / "2";
+    fs::path datadir = m_args.GetDataDirNet() / "1";
+    fs::path datadir_2 = m_args.GetDataDirNet() / "2";
     std::string filename;
 
     std::shared_ptr<BerkeleyEnvironment> env_1 = GetWalletEnv(datadir, filename);
@@ -77,3 +79,4 @@ BOOST_AUTO_TEST_CASE(getwalletenv_g_dbenvs_free_instance)
 }
 
 BOOST_AUTO_TEST_SUITE_END()
+} // namespace wallet
