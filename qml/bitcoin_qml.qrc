@@ -19,6 +19,7 @@
     </qresource>
     <qresource prefix="/icons">
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
+        <file alias="info">res/icons/info.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="inter/regular">res/fonts/Inter-Regular.otf</file>
