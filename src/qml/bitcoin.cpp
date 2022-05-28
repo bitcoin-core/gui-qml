@@ -98,6 +98,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     Q_INIT_RESOURCE(bitcoin_qml);
+    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);

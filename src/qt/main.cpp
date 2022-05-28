@@ -43,8 +43,6 @@ const std::function<std::string()> G_TEST_GET_FULL_NAME{};
 
 MAIN_FUNCTION
 {
-    qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-
     // Subscribe to global signals from core.
     noui_connect();
 
