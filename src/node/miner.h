@@ -116,7 +116,7 @@ struct update_for_parent_inclusion
 
     void operator() (CTxMemPoolModifiedEntry &e)
     {
-        e.nModFeesWithAncestors -= iter->GetFee();
+        e.nModFeesWithAncestors -= iter->GetModifiedFee();
         e.nSizeWithAncestors -= iter->GetTxSize();
         e.nSigOpCostWithAncestors -= iter->GetSigOpCost();
     }
@@ -157,8 +157,8 @@ public:
         CFeeRate blockMinFeeRate;
     };
 
-    explicit BlockAssembler(CChainState& chainstate, const CTxMemPool& mempool, const CChainParams& params);
-    explicit BlockAssembler(CChainState& chainstate, const CTxMemPool& mempool, const CChainParams& params, const Options& options);
+    explicit BlockAssembler(CChainState& chainstate, const CTxMemPool& mempool);
+    explicit BlockAssembler(CChainState& chainstate, const CTxMemPool& mempool, const Options& options);
 
     /** Construct a new block template with coinbase to scriptPubKeyIn */
     std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn);

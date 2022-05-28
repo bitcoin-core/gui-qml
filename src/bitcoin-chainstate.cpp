@@ -28,8 +28,6 @@
 #include <functional>
 #include <iosfwd>
 
-const std::function<std::string(const char*)> G_TRANSLATION_FUN = nullptr;
-
 int main(int argc, char* argv[])
 {
     // SETUP: Argument parsing and handling
@@ -72,13 +70,16 @@ int main(int argc, char* argv[])
 
 
     // SETUP: Chainstate
-    ChainstateManager chainman;
+    const ChainstateManager::Options chainman_opts{
+        chainparams,
+        static_cast<int64_t(*)()>(GetTime),
+    };
+    ChainstateManager chainman{chainman_opts};
 
     auto rv = node::LoadChainstate(false,
                                    std::ref(chainman),
                                    nullptr,
                                    false,
-                                   chainparams.GetConsensus(),
                                    false,
                                    2 << 20,
                                    2 << 22,
@@ -93,10 +94,8 @@ int main(int argc, char* argv[])
         auto maybe_verify_error = node::VerifyLoadedChainstate(std::ref(chainman),
                                                                false,
                                                                false,
-                                                               chainparams.GetConsensus(),
                                                                DEFAULT_CHECKBLOCKS,
-                                                               DEFAULT_CHECKLEVEL,
-                                                               /*get_unix_time_seconds=*/static_cast<int64_t (*)()>(GetTime));
+                                                               DEFAULT_CHECKLEVEL);
         if (maybe_verify_error.has_value()) {
             std::cerr << "Failed to verify loaded Chain state from your datadir." << std::endl;
             goto epilogue;
@@ -165,7 +164,7 @@ int main(int argc, char* argv[])
             LOCK(cs_main);
             const CBlockIndex* pindex = chainman.m_blockman.LookupBlockIndex(block.hashPrevBlock);
             if (pindex) {
-                UpdateUncommittedBlockStructures(block, pindex, chainparams.GetConsensus());
+                chainman.UpdateUncommittedBlockStructures(block, pindex);
             }
         }
 
@@ -192,7 +191,7 @@ int main(int argc, char* argv[])
         bool new_block;
         auto sc = std::make_shared<submitblock_StateCatcher>(block.GetHash());
         RegisterSharedValidationInterface(sc);
-        bool accepted = chainman.ProcessNewBlock(chainparams, blockptr, /*force_processing=*/true, /*new_block=*/&new_block);
+        bool accepted = chainman.ProcessNewBlock(blockptr, /*force_processing=*/true, /*new_block=*/&new_block);
         UnregisterSharedValidationInterface(sc);
         if (!new_block && accepted) {
             std::cerr << "duplicate" << std::endl;
@@ -255,8 +254,6 @@ epilogue:
         }
     }
     GetMainSignals().UnregisterBackgroundSignalScheduler();
-
-    WITH_LOCK(::cs_main, UnloadBlockIndex(nullptr, chainman));
 
     init::UnsetGlobals();
 }

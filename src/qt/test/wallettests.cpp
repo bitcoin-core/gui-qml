@@ -7,24 +7,25 @@
 
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
+#include <key_io.h>
 #include <qt/bitcoinamountfield.h>
+#include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
 #include <qt/optionsmodel.h>
+#include <qt/overviewpage.h>
 #include <qt/platformstyle.h>
 #include <qt/qvalidatedlineedit.h>
+#include <qt/receivecoinsdialog.h>
+#include <qt/receiverequestdialog.h>
+#include <qt/recentrequeststablemodel.h>
 #include <qt/sendcoinsdialog.h>
 #include <qt/sendcoinsentry.h>
 #include <qt/transactiontablemodel.h>
 #include <qt/transactionview.h>
 #include <qt/walletmodel.h>
-#include <key_io.h>
 #include <test/util/setup_common.h>
 #include <validation.h>
 #include <wallet/wallet.h>
-#include <qt/overviewpage.h>
-#include <qt/receivecoinsdialog.h>
-#include <qt/recentrequeststablemodel.h>
-#include <qt/receiverequestdialog.h>
 
 #include <chrono>
 #include <memory>
@@ -183,7 +184,7 @@ void TestGUI(interfaces::Node& node)
     std::unique_ptr<const PlatformStyle> platformStyle(PlatformStyle::instantiate("other"));
     SendCoinsDialog sendCoinsDialog(platformStyle.get());
     TransactionView transactionView(platformStyle.get());
-    OptionsModel optionsModel;
+    OptionsModel optionsModel(node);
     ClientModel clientModel(node, &optionsModel);
     WalletContext& context = *node.walletLoader().context();
     AddWallet(context, wallet);
@@ -196,7 +197,7 @@ void TestGUI(interfaces::Node& node)
         // Check balance in send dialog
         QLabel* balanceLabel = sendCoinsDialog.findChild<QLabel*>("labelBalance");
         QString balanceText = balanceLabel->text();
-        int unit = walletModel.getOptionsModel()->getDisplayUnit();
+        BitcoinUnit unit = walletModel.getOptionsModel()->getDisplayUnit();
         CAmount balance = walletModel.wallet().getBalance();
         QString balanceComparison = BitcoinUnits::formatWithUnit(unit, balance, false, BitcoinUnits::SeparatorStyle::ALWAYS);
         QCOMPARE(balanceText, balanceComparison);
@@ -222,7 +223,7 @@ void TestGUI(interfaces::Node& node)
     overviewPage.setWalletModel(&walletModel);
     QLabel* balanceLabel = overviewPage.findChild<QLabel*>("labelBalance");
     QString balanceText = balanceLabel->text().trimmed();
-    int unit = walletModel.getOptionsModel()->getDisplayUnit();
+    BitcoinUnit unit = walletModel.getOptionsModel()->getDisplayUnit();
     CAmount balance = walletModel.wallet().getBalance();
     QString balanceComparison = BitcoinUnits::formatWithUnit(unit, balance, false, BitcoinUnits::SeparatorStyle::ALWAYS);
     QCOMPARE(balanceText, balanceComparison);
@@ -314,7 +315,7 @@ void TestGUI(interfaces::Node& node)
 
 void WalletTests::walletTests()
 {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     if (QApplication::platformName() == "minimal") {
         // Disable for mac on "minimal" platform to avoid crashes inside the Qt
         // framework when it tries to look up unimplemented cocoa functions,
