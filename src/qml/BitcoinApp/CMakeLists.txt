@@ -14,6 +14,10 @@ qt6_add_qml_module(bitcoin_qml
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
     initerrormessage.qml
+    onboarding01.qml
+    onboarding01a.qml
+    onboarding01b.qml
+    onboarding01c.qml
     stub.qml
   RESOURCES
     res/fonts/Inter-Regular.otf
