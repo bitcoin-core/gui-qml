@@ -13,5 +13,6 @@ qt6_add_qml_module(bitcoin_qml_components
     ConnectionOptions.qml
     ConnectionSettings.qml
     DeveloperOptions.qml
+    StorageLocations.qml
     StorageOptions.qml
 )

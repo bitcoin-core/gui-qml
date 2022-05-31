@@ -20,6 +20,7 @@ qt6_add_qml_module(bitcoin_qml
     onboarding01c.qml
     onboarding02.qml
     onboarding03.qml
+    onboarding04.qml
     stub.qml
   RESOURCES
     res/fonts/Inter-Regular.otf
