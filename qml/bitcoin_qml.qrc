@@ -7,6 +7,7 @@
         <file>components/DeveloperOptions.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>components/StorageOptions.qml</file>
+        <file>components/StorageSettings.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Information.qml</file>
@@ -27,6 +28,9 @@
         <file>pages/onboarding/onboarding02.qml</file>
         <file>pages/onboarding/onboarding03.qml</file>
         <file>pages/onboarding/onboarding04.qml</file>
+        <file>pages/onboarding/onboarding05.qml</file>
+        <file>pages/onboarding/onboarding05a.qml</file>
+        <file>pages/onboarding/onboarding05b.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
