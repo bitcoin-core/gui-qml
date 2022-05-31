@@ -19,6 +19,7 @@ Control {
     property string subtext
     property int subtextMargin
     property int subtextSize: 15
+    property bool wrap: true
     contentItem: ColumnLayout {
         spacing: 0
         Label {
@@ -27,11 +28,11 @@ Control {
             topPadding: root.headerMargin
             font.family: "Inter"
             font.styleName: root.bold ? "Semi Bold" : "Regular"
-            font.pointSize: root.headerSize
+            font.pixelSize: root.headerSize
             color: Theme.color.neutral9
             text: root.header
             horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: Text.WordWrap
+            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
         }
         Loader {
             Layout.fillWidth: true
@@ -42,11 +43,11 @@ Control {
                 topPadding: root.descriptionMargin
                 font.family: "Inter"
                 font.styleName: "Regular"
-                font.pointSize: root.descriptionSize
+                font.pixelSize: root.descriptionSize
                 color: Theme.color.neutral8
                 text: root.description
                 horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
-                wrapMode: Text.WordWrap
+                wrapMode: wrap ? Text.WordWrap : Text.NoWrap
             }
         }
         Loader {
@@ -62,7 +63,7 @@ Control {
                 color: Theme.color.neutral9
                 text: root.subtext
                 horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
-                wrapMode: Text.WordWrap
+                wrapMode: wrap ? Text.WordWrap : Text.NoWrap
             }
         }
     }
