@@ -10,48 +10,57 @@ import BitcoinApp.Controls
 
 ApplicationWindow {
     id: appWindow
-    title: "Bitcoin Core TnG"
-    minimumWidth: 750
-    minimumHeight: 450
+    title: "Bitcoin Core App"
+    minimumWidth: 640
+    minimumHeight: 665
     color: Theme.color.background
     visible: true
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    StackView {
+        id: main
+        initialItem: onboardingWizard
+        anchors.fill: parent
+    }
 
-    ColumnLayout {
-        anchors.centerIn: parent
-        spacing: 15
-        width: 400
-        Image {
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            sourceSize.width: 64
-            sourceSize.height: 64
-        }
-        Header {
-            Layout.fillWidth: true
-            bold: true
-            header: qsTr("Bitcoin Core App")
-            headerSize: 36
-            headerMargin: 30
-            description: qsTr("Be part of the Bitcoin network.")
-            descriptionSize: 24
-            descriptionMargin: 0
-            subtext: qsTr("100% open-source & open-design")
-            subtextMargin: 25
-        }
-        BlockCounter {
-            Layout.alignment: Qt.AlignCenter
-            blockHeight: nodeModel.blockTipHeight
-        }
-        ProgressIndicator {
-            id: indicator
-            Layout.fillWidth: true
-            progress: nodeModel.verificationProgress
-        }
-        ConnectionOptions {
-            Layout.preferredWidth: 400
-            focus: true
-        }
+    Wizard {
+        id: onboardingWizard
+        anchors.fill: parent
+        views: [
+            "onboarding01.qml",
+            "onboarding02.qml",
+            "onboarding03.qml",
+            "onboarding04.qml",
+            "onboarding05.qml",
+            "onboarding06.qml",
+        ]
+        onFinishedChanged: main.push(node)
+    }
+    Component {
+        id: node
+        Page {
+            anchors.fill: parent
+            background: null
+            ColumnLayout {
+                width: 600
+                spacing: 0
+                anchors.centerIn: parent
+                Component.onCompleted: nodeModel.startNodeInitializionThread();
+                Image {
+                    Layout.alignment: Qt.AlignCenter
+                    source: "image://images/app"
+                    sourceSize.width: 64
+                    sourceSize.height: 64
+                }
+                BlockCounter {
+                    Layout.alignment: Qt.AlignCenter
+                    blockHeight: nodeModel.blockTipHeight
+                }
+                ProgressIndicator {
+                    width: 200
+                    Layout.alignment: Qt.AlignCenter
+                    progress: nodeModel.verificationProgress
+                }
+            }
+         }
     }
 }
