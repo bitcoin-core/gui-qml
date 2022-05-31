@@ -31,6 +31,9 @@
         <file>pages/onboarding/onboarding05.qml</file>
         <file>pages/onboarding/onboarding05a.qml</file>
         <file>pages/onboarding/onboarding05b.qml</file>
+        <file>pages/onboarding/onboarding06.qml</file>
+        <file>pages/onboarding/onboarding06a.qml</file>
+        <file>pages/onboarding/onboarding06b.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
