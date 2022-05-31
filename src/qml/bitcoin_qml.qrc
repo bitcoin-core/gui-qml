@@ -5,6 +5,7 @@
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/StorageLocations.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
@@ -25,6 +26,7 @@
         <file>pages/onboarding/onboarding01c.qml</file>
         <file>pages/onboarding/onboarding02.qml</file>
         <file>pages/onboarding/onboarding03.qml</file>
+        <file>pages/onboarding/onboarding04.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
