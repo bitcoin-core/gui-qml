@@ -9,14 +9,16 @@ Button {
     id: root
     property int textSize: 18
     property string textColor: Theme.color.neutral9
+    property bool bold: true
+    property bool rightalign: false
     font.family: "Inter"
-    font.styleName: "Semi Bold"
-    font.pointSize: root.textSize
+    font.styleName: bold ? "Semi Bold" : "Regular"
+    font.pixelSize: root.textSize
     contentItem: Text {
         text: root.text
         font: root.font
         color: root.textColor
-        horizontalAlignment: Text.AlignHCenter
+        horizontalAlignment: rightalign ? Text.AlignRight : Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
     background: null
