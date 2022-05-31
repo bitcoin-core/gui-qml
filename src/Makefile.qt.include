@@ -304,9 +304,11 @@ QML_RES_ICONS = \
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
+  qml/components/AboutOptions.qml \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
+  qml/components/DeveloperOptions.qml \
   qml/components/StorageOptions.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
@@ -321,6 +323,10 @@ QML_RES_QML = \
   qml/controls/Theme.qml \
   qml/controls/Wizard.qml \
   qml/pages/initerrormessage.qml \
+  qml/pages/onboarding/onboarding01.qml \
+  qml/pages/onboarding/onboarding01a.qml \
+  qml/pages/onboarding/onboarding01b.qml \
+  qml/pages/onboarding/onboarding01c.qml \
   qml/pages/stub.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
