@@ -311,6 +311,7 @@ QML_RES_QML = \
   qml/components/DeveloperOptions.qml \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
+  qml/components/StorageSettings.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/Header.qml \
   qml/controls/Information.qml \
@@ -331,6 +332,9 @@ QML_RES_QML = \
   qml/pages/onboarding/onboarding02.qml \
   qml/pages/onboarding/onboarding03.qml \
   qml/pages/onboarding/onboarding04.qml \
+  qml/pages/onboarding/onboarding05.qml \
+  qml/pages/onboarding/onboarding05a.qml \
+  qml/pages/onboarding/onboarding05b.qml \
   qml/pages/stub.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
