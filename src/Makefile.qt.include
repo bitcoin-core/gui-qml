@@ -326,6 +326,7 @@ QML_RES_QML = \
   qml/pages/onboarding/onboarding01a.qml \
   qml/pages/onboarding/onboarding01b.qml \
   qml/pages/onboarding/onboarding01c.qml \
+  qml/pages/onboarding/onboarding02.qml \
   qml/pages/stub.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
