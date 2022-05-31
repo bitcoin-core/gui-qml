@@ -26,6 +26,7 @@ Control {
             }
             OptionSwitch {
                 Layout.alignment: Qt.AlignRight
+                Layout.rightMargin: -12
             }
         }
         Loader {
