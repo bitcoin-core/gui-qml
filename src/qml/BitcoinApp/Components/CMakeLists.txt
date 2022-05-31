@@ -8,8 +8,10 @@ qt6_add_qml_module(bitcoin_qml_components
   STATIC
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
+    AboutOptions.qml
     BlockCounter.qml
     ConnectionOptions.qml
     ConnectionSettings.qml
+    DeveloperOptions.qml
     StorageOptions.qml
 )
