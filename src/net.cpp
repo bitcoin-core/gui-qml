@@ -1344,15 +1344,47 @@ void CConnman::DisconnectNodes()
 
 void CConnman::NotifyNumConnectionsChanged()
 {
-    size_t nodes_size;
+    decltype(m_nodes) nodes_copy;
     {
         LOCK(m_nodes_mutex);
-        nodes_size = m_nodes.size();
+        nodes_copy = m_nodes;
     }
-    if(nodes_size != nPrevNodeCount) {
-        nPrevNodeCount = nodes_size;
+
+    int num_outbound_full_relay{0};
+    int num_block_relay{0};
+    int num_manual{0};
+    int num_inbound{0};
+    for (const auto* node : nodes_copy) {
+        switch (node->m_conn_type) {
+        case ConnectionType::OUTBOUND_FULL_RELAY:
+            ++num_outbound_full_relay;
+            break;
+        case ConnectionType::BLOCK_RELAY:
+            ++num_block_relay;
+            break;
+        case ConnectionType::MANUAL:
+            ++num_manual;
+            break;
+        case ConnectionType::INBOUND:
+            ++num_inbound;
+            break;
+        case ConnectionType::FEELER:
+        case ConnectionType::ADDR_FETCH:
+            break;
+        }
+    }
+
+    if (num_outbound_full_relay != m_num_outbound_full_relay ||
+        num_block_relay != m_num_block_relay ||
+        num_manual != m_num_manual ||
+        num_inbound != m_num_inbound) {
+        m_num_outbound_full_relay = num_outbound_full_relay;
+        m_num_block_relay = num_block_relay;
+        m_num_manual = num_manual;
+        m_num_inbound = num_inbound;
         if (m_client_interface) {
-            m_client_interface->NotifyNumConnectionsChanged(nodes_size);
+            m_client_interface->NotifyNumConnectionsChanged(
+                {num_outbound_full_relay, num_block_relay, num_manual, num_inbound, static_cast<int>(nodes_copy.size())});
         }
     }
 }
