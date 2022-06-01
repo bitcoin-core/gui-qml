@@ -33,6 +33,7 @@ class Proxy;
 enum class SynchronizationState;
 struct CNodeStateStats;
 struct bilingual_str;
+struct PeersNumByType;
 namespace node {
 enum class TransactionError;
 struct NodeContext;
@@ -245,7 +246,7 @@ public:
     virtual std::unique_ptr<Handler> handleInitWallet(InitWalletFn fn) = 0;
 
     //! Register handler for number of connections changed messages.
-    using NotifyNumConnectionsChangedFn = std::function<void(int new_num_connections)>;
+    using NotifyNumConnectionsChangedFn = std::function<void(PeersNumByType new_num_connections)>;
     virtual std::unique_ptr<Handler> handleNotifyNumConnectionsChanged(NotifyNumConnectionsChangedFn fn) = 0;
 
     //! Register handler for network active messages.

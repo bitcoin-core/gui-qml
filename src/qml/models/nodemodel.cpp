@@ -151,7 +151,7 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
     assert(!m_handler_notify_num_peers_changed);
 
     m_handler_notify_num_peers_changed = m_node.handleNotifyNumConnectionsChanged(
-        [this](int new_num_peers) {
-            setNumOutboundPeers(new_num_peers);
+        [this](PeersNumByType new_num_peers) {
+            setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
         });
 }

@@ -52,6 +52,7 @@ class CChainParams;
 class CNode;
 class CScheduler;
 struct bilingual_str;
+struct PeersNumByType;
 
 /** Time after which to disconnect, after waiting for a ping response (or inactivity). */
 static constexpr std::chrono::minutes TIMEOUT_INTERVAL{20};
@@ -1446,7 +1447,11 @@ private:
     std::list<CNode*> m_nodes_disconnected;
     mutable RecursiveMutex m_nodes_mutex;
     std::atomic<NodeId> nLastNodeId{0};
-    unsigned int nPrevNodeCount{0};
+    int m_num_outbound_full_relay{0};
+    int m_num_block_relay{0};
+    int m_num_manual{0};
+    int m_num_inbound{0};
+
 
     // Stores number of full-tx connections (outbound and manual) per network
     std::array<unsigned int, Network::NET_MAX> m_network_conn_counts GUARDED_BY(m_nodes_mutex) = {};
