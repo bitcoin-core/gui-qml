@@ -17,6 +17,7 @@
 #include <interfaces/node.h>
 #include <net.h>
 #include <netbase.h>
+#include <node/interface_ui.h>
 #include <util/threadnames.h>
 #include <util/time.h>
 #include <validation.h>
@@ -239,8 +240,8 @@ void ClientModel::subscribeToCoreSignals()
             Q_EMIT showProgress(QString::fromStdString(title), progress);
         });
     m_handler_notify_num_connections_changed = m_node.handleNotifyNumConnectionsChanged(
-        [this](int new_num_connections) {
-            Q_EMIT numConnectionsChanged(new_num_connections);
+        [this](PeersNumByType new_num_connections) {
+            Q_EMIT numConnectionsChanged(new_num_connections.total);
         });
     m_handler_notify_network_active_changed = m_node.handleNotifyNetworkActiveChanged(
         [this](bool network_active) {
