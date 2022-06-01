@@ -13,10 +13,10 @@ Control {
     required property string header
     property int headerMargin
     property int headerSize: 28
-    property string description
+    property string description: ""
     property int descriptionMargin: 10
     property int descriptionSize: 18
-    property string subtext
+    property string subtext: ""
     property int subtextMargin
     property int subtextSize: 15
     property bool wrap: true
