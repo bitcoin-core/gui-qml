@@ -16,14 +16,12 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <cuckoocache.h>
-#include <deploymentstatus.h>
 #include <flatfile.h>
 #include <hash.h>
-#include <index/blockfilterindex.h>
+#include <kernel/coinstats.h>
 #include <logging.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
-#include <node/coinstats.h>
 #include <node/ui_interface.h>
 #include <node/utxo_snapshot.h>
 #include <policy/policy.h>
@@ -38,7 +36,6 @@
 #include <script/sigcache.h>
 #include <shutdown.h>
 #include <signet.h>
-#include <timedata.h>
 #include <tinyformat.h>
 #include <txdb.h>
 #include <txmempool.h>
@@ -56,24 +53,23 @@
 #include <warnings.h>
 
 #include <algorithm>
+#include <deque>
 #include <numeric>
 #include <optional>
 #include <string>
 
-#include <boost/algorithm/string/replace.hpp>
+using kernel::CCoinsStats;
+using kernel::CoinStatsHashType;
+using kernel::ComputeUTXOStats;
 
 using node::BLOCKFILE_CHUNK_SIZE;
 using node::BlockManager;
 using node::BlockMap;
 using node::CBlockIndexHeightOnlyComparator;
 using node::CBlockIndexWorkComparator;
-using node::CCoinsStats;
-using node::CoinStatsHashType;
-using node::fHavePruned;
 using node::fImporting;
 using node::fPruneMode;
 using node::fReindex;
-using node::GetUTXOStats;
 using node::nPruneTarget;
 using node::OpenBlockFile;
 using node::ReadBlockFromDisk;
@@ -107,6 +103,12 @@ const std::vector<std::string> CHECKLEVEL_DOC {
     "level 4 tries to reconnect the blocks",
     "each level includes the checks of the previous levels",
 };
+/** The number of blocks to keep below the deepest prune lock.
+ *  There is nothing special about this number. It is higher than what we
+ *  expect to see in regular mainnet reorgs, but not so high that it would
+ *  noticeably interfere with the pruning mechanism.
+ * */
+static constexpr int PRUNE_LOCK_BUFFER{10};
 
 /**
  * Mutex to guard access to validation specific variables, such as reading
@@ -120,7 +122,6 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  */
 RecursiveMutex cs_main;
 
-CBlockIndex *pindexBestHeader = nullptr;
 Mutex g_best_block_mutex;
 std::condition_variable g_best_block_cv;
 uint256 g_best_block;
@@ -248,14 +249,19 @@ bool CheckSequenceLocksAtTip(CBlockIndex* tip,
                     maxInputHeight = std::max(maxInputHeight, height);
                 }
             }
-            lp->maxInputBlock = tip->GetAncestor(maxInputHeight);
+            // tip->GetAncestor(maxInputHeight) should never return a nullptr
+            // because maxInputHeight is always less than the tip height.
+            // It would, however, be a bad bug to continue execution, since a
+            // LockPoints object with the maxInputBlock member set to nullptr
+            // signifies no relative lock time.
+            lp->maxInputBlock = Assert(tip->GetAncestor(maxInputHeight));
         }
     }
     return EvaluateSequenceLocks(index, lockPair);
 }
 
 // Returns the script flags which should be checked for a given block
-static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Consensus::Params& chainparams);
+static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman);
 
 static void LimitMempoolSize(CTxMemPool& pool, CCoinsViewCache& coins_cache, size_t limit, std::chrono::seconds age)
     EXCLUSIVE_LOCKS_REQUIRED(::cs_main, pool.cs)
@@ -280,8 +286,9 @@ static bool IsCurrentForFeeEstimation(CChainState& active_chainstate) EXCLUSIVE_
         return false;
     if (active_chainstate.m_chain.Tip()->GetBlockTime() < count_seconds(GetTime<std::chrono::seconds>() - MAX_FEE_ESTIMATION_TIP_AGE))
         return false;
-    if (active_chainstate.m_chain.Height() < pindexBestHeader->nHeight - 1)
+    if (active_chainstate.m_chain.Height() < active_chainstate.m_chainman.m_best_header->nHeight - 1) {
         return false;
+    }
     return true;
 }
 
@@ -807,7 +814,6 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTxInputs
     }
 
-    // Check for non-standard pay-to-script-hash in inputs
     if (fRequireStandard && !AreInputsStandard(tx, m_view)) {
         return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
@@ -1019,7 +1025,6 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     const CTransaction& tx = *ws.m_ptx;
     const uint256& hash = ws.m_hash;
     TxValidationState& state = ws.m_state;
-    const CChainParams& chainparams = args.m_chainparams;
 
     // Check again against the current block tip's script verification
     // flags to cache our script execution flags. This is, of course,
@@ -1036,7 +1041,7 @@ bool MemPoolAccept::ConsensusScriptChecks(const ATMPArgs& args, Workspace& ws)
     // There is a similar check in CreateNewBlock() to prevent creating
     // invalid blocks (using TestBlockValidity), however allowing such
     // transactions into the mempool can be exploited as a DoS attack.
-    unsigned int currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), chainparams.GetConsensus())};
+    unsigned int currentBlockScriptVerifyFlags{GetBlockScriptFlags(*m_active_chainstate.m_chain.Tip(), m_active_chainstate.m_chainman)};
     if (!CheckInputsFromMempoolAndCache(tx, state, m_view, m_pool, currentBlockScriptVerifyFlags,
                                         ws.m_precomputed_txdata, m_active_chainstate.CoinsTip())) {
         LogPrintf("BUG! PLEASE REPORT THIS! CheckInputScripts failed against latest-block but not STANDARD flags %s, %s\n", hash.ToString(), state.ToString());
@@ -1112,6 +1117,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         if (!ConsensusScriptChecks(args, ws)) {
             results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
             // Since PolicyScriptChecks() passed, this should never fail.
+            Assume(false);
             all_submitted = false;
             package_state.Invalid(PackageValidationResult::PCKG_MEMPOOL_ERROR,
                                   strprintf("BUG! PolicyScriptChecks succeeded but ConsensusScriptChecks failed: %s",
@@ -1126,6 +1132,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
                                              m_limit_descendant_size, unused_err_string)) {
             results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
             // Since PreChecks() and PackageMempoolChecks() both enforce limits, this should never fail.
+            Assume(false);
             all_submitted = false;
             package_state.Invalid(PackageValidationResult::PCKG_MEMPOOL_ERROR,
                                   strprintf("BUG! Mempool ancestors or descendants were underestimated: %s",
@@ -1139,6 +1146,7 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
         if (!Finalize(args, ws)) {
             results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
             // Since LimitMempoolSize() won't be called, this should never fail.
+            Assume(false);
             all_submitted = false;
             package_state.Invalid(PackageValidationResult::PCKG_MEMPOOL_ERROR,
                                   strprintf("BUG! Adding to mempool failed: %s", ws.m_ptx->GetHash().ToString()));
@@ -1446,7 +1454,7 @@ PackageMempoolAcceptResult ProcessNewPackage(CChainState& active_chainstate, CTx
     assert(std::all_of(package.cbegin(), package.cend(), [](const auto& tx){return tx != nullptr;}));
 
     std::vector<COutPoint> coins_to_uncache;
-    const CChainParams& chainparams = Params();
+    const CChainParams& chainparams = active_chainstate.m_params;
     const auto result = [&]() EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
         AssertLockHeld(cs_main);
         if (test_accept) {
@@ -1484,7 +1492,7 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 }
 
 CoinsViews::CoinsViews(
-    std::string ldb_name,
+    fs::path ldb_name,
     size_t cache_size_bytes,
     bool in_memory,
     bool should_wipe) : m_dbview(
@@ -1504,7 +1512,7 @@ CChainState::CChainState(
     std::optional<uint256> from_snapshot_blockhash)
     : m_mempool(mempool),
       m_blockman(blockman),
-      m_params(::Params()),
+      m_params(chainman.GetParams()),
       m_chainman(chainman),
       m_from_snapshot_blockhash(from_snapshot_blockhash) {}
 
@@ -1512,7 +1520,7 @@ void CChainState::InitCoinsDB(
     size_t cache_size_bytes,
     bool in_memory,
     bool should_wipe,
-    std::string leveldb_name)
+    fs::path leveldb_name)
 {
     if (m_from_snapshot_blockhash) {
         leveldb_name += "_" + m_from_snapshot_blockhash->ToString();
@@ -1570,7 +1578,7 @@ static void AlertNotify(const std::string& strMessage)
     std::string singleQuote("'");
     std::string safeStatus = SanitizeString(strMessage);
     safeStatus = singleQuote+safeStatus+singleQuote;
-    boost::replace_all(strCmd, "%s", safeStatus);
+    ReplaceAll(strCmd, "%s", safeStatus);
 
     std::thread t(runCommand, strCmd);
     t.detach(); // thread runs free
@@ -1602,8 +1610,8 @@ void CChainState::InvalidChainFound(CBlockIndex* pindexNew)
     if (!m_chainman.m_best_invalid || pindexNew->nChainWork > m_chainman.m_best_invalid->nChainWork) {
         m_chainman.m_best_invalid = pindexNew;
     }
-    if (pindexBestHeader != nullptr && pindexBestHeader->GetAncestor(pindexNew->nHeight) == pindexNew) {
-        pindexBestHeader = m_chain.Tip();
+    if (m_chainman.m_best_header != nullptr && m_chainman.m_best_header->GetAncestor(pindexNew->nHeight) == pindexNew) {
+        m_chainman.m_best_header = m_chain.Tip();
     }
 
     LogPrintf("%s: invalid block=%s  height=%d  log2_work=%f  date=%s\n", __func__,
@@ -1898,10 +1906,11 @@ void StopScriptCheckWorkerThreads()
 class WarningBitsConditionChecker : public AbstractThresholdConditionChecker
 {
 private:
-    int bit;
+    const ChainstateManager& m_chainman;
+    int m_bit;
 
 public:
-    explicit WarningBitsConditionChecker(int bitIn) : bit(bitIn) {}
+    explicit WarningBitsConditionChecker(const ChainstateManager& chainman, int bit) : m_chainman{chainman}, m_bit(bit) {}
 
     int64_t BeginTime(const Consensus::Params& params) const override { return 0; }
     int64_t EndTime(const Consensus::Params& params) const override { return std::numeric_limits<int64_t>::max(); }
@@ -1912,15 +1921,17 @@ public:
     {
         return pindex->nHeight >= params.MinBIP9WarningHeight &&
                ((pindex->nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
-               ((pindex->nVersion >> bit) & 1) != 0 &&
-               ((g_versionbitscache.ComputeBlockVersion(pindex->pprev, params) >> bit) & 1) == 0;
+               ((pindex->nVersion >> m_bit) & 1) != 0 &&
+               ((m_chainman.m_versionbitscache.ComputeBlockVersion(pindex->pprev, params) >> m_bit) & 1) == 0;
     }
 };
 
-static ThresholdConditionCache warningcache[VERSIONBITS_NUM_BITS] GUARDED_BY(cs_main);
+static std::array<ThresholdConditionCache, VERSIONBITS_NUM_BITS> warningcache GUARDED_BY(cs_main);
 
-static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Consensus::Params& consensusparams)
+static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const ChainstateManager& chainman)
 {
+    const Consensus::Params& consensusparams = chainman.GetConsensus();
+
     // BIP16 didn't become active until Apr 1 2012 (on mainnet, and
     // retroactively applied to testnet)
     // However, only one historical block violated the P2SH rules (on both
@@ -1936,22 +1947,22 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Co
     }
 
     // Enforce the DERSIG (BIP66) rule
-    if (DeploymentActiveAt(block_index, consensusparams, Consensus::DEPLOYMENT_DERSIG)) {
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_DERSIG)) {
         flags |= SCRIPT_VERIFY_DERSIG;
     }
 
     // Enforce CHECKLOCKTIMEVERIFY (BIP65)
-    if (DeploymentActiveAt(block_index, consensusparams, Consensus::DEPLOYMENT_CLTV)) {
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_CLTV)) {
         flags |= SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY;
     }
 
     // Enforce CHECKSEQUENCEVERIFY (BIP112)
-    if (DeploymentActiveAt(block_index, consensusparams, Consensus::DEPLOYMENT_CSV)) {
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_CSV)) {
         flags |= SCRIPT_VERIFY_CHECKSEQUENCEVERIFY;
     }
 
     // Enforce BIP147 NULLDUMMY (activated simultaneously with segwit)
-    if (DeploymentActiveAt(block_index, consensusparams, Consensus::DEPLOYMENT_SEGWIT)) {
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_SEGWIT)) {
         flags |= SCRIPT_VERIFY_NULLDUMMY;
     }
 
@@ -1994,7 +2005,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
     // Also, currently the rule against blocks more than 2 hours in the future
     // is enforced in ContextualCheckBlockHeader(); we wouldn't want to
     // re-enforce that rule here (at least until we make it impossible for
-    // GetAdjustedTime() to go backward).
+    // m_adjusted_time_callback() to go backward).
     if (!CheckBlock(block, state, m_params.GetConsensus(), !fJustCheck, !fJustCheck)) {
         if (state.GetResult() == BlockValidationResult::BLOCK_MUTATED) {
             // We don't write down blocks to disk if they may have been
@@ -2029,8 +2040,8 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
         BlockMap::const_iterator  it = m_blockman.m_block_index.find(hashAssumeValid);
         if (it != m_blockman.m_block_index.end()) {
             if (it->second.GetAncestor(pindex->nHeight) == pindex &&
-                pindexBestHeader->GetAncestor(pindex->nHeight) == pindex &&
-                pindexBestHeader->nChainWork >= nMinimumChainWork) {
+                m_chainman.m_best_header->GetAncestor(pindex->nHeight) == pindex &&
+                m_chainman.m_best_header->nChainWork >= nMinimumChainWork) {
                 // This block is a member of the assumed verified chain and an ancestor of the best header.
                 // Script verification is skipped when connecting blocks under the
                 // assumevalid block. Assuming the assumevalid block is valid this
@@ -2045,7 +2056,7 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
                 //  artificially set the default assumed verified block further back.
                 // The test against nMinimumChainWork prevents the skipping when denied access to any chain at
                 //  least as good as the expected chain.
-                fScriptChecks = (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, m_params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+                fScriptChecks = (GetBlockProofEquivalentTime(*m_chainman.m_best_header, *pindex, *m_chainman.m_best_header, m_params.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
             }
         }
     }
@@ -2142,12 +2153,12 @@ bool CChainState::ConnectBlock(const CBlock& block, BlockValidationState& state,
 
     // Enforce BIP68 (sequence locks)
     int nLockTimeFlags = 0;
-    if (DeploymentActiveAt(*pindex, m_params.GetConsensus(), Consensus::DEPLOYMENT_CSV)) {
+    if (DeploymentActiveAt(*pindex, m_chainman, Consensus::DEPLOYMENT_CSV)) {
         nLockTimeFlags |= LOCKTIME_VERIFY_SEQUENCE;
     }
 
     // Get the script flags for this block
-    unsigned int flags{GetBlockScriptFlags(*pindex, m_params.GetConsensus())};
+    unsigned int flags{GetBlockScriptFlags(*pindex, m_chainman)};
 
     int64_t nTime2 = GetTimeMicros(); nTimeForks += nTime2 - nTime1;
     LogPrint(BCLog::BENCH, "    - Fork checks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime2 - nTime1), nTimeForks * MICRO, nTimeForks * MILLI / nBlocksTotal);
@@ -2339,12 +2350,24 @@ bool CChainState::FlushStateToDisk(
         CoinsCacheSizeState cache_state = GetCoinsCacheSizeState();
         LOCK(m_blockman.cs_LastBlockFile);
         if (fPruneMode && (m_blockman.m_check_for_pruning || nManualPruneHeight > 0) && !fReindex) {
-            // make sure we don't prune above the blockfilterindexes bestblocks
+            // make sure we don't prune above any of the prune locks bestblocks
             // pruning is height-based
-            int last_prune = m_chain.Height(); // last height we can prune
-            ForEachBlockFilterIndex([&](BlockFilterIndex& index) {
-               last_prune = std::max(1, std::min(last_prune, index.GetSummary().best_block_height));
-            });
+            int last_prune{m_chain.Height()}; // last height we can prune
+            std::optional<std::string> limiting_lock; // prune lock that actually was the limiting factor, only used for logging
+
+            for (const auto& prune_lock : m_blockman.m_prune_locks) {
+                if (prune_lock.second.height_first == std::numeric_limits<int>::max()) continue;
+                // Remove the buffer and one additional block here to get actual height that is outside of the buffer
+                const int lock_height{prune_lock.second.height_first - PRUNE_LOCK_BUFFER - 1};
+                last_prune = std::max(1, std::min(last_prune, lock_height));
+                if (last_prune == lock_height) {
+                    limiting_lock = prune_lock.first;
+                }
+            }
+
+            if (limiting_lock) {
+                LogPrint(BCLog::PRUNE, "%s limited pruning to height %d\n", limiting_lock.value(), last_prune);
+            }
 
             if (nManualPruneHeight > 0) {
                 LOG_TIME_MILLIS_WITH_CATEGORY("find files to prune (manual)", BCLog::BENCH);
@@ -2358,9 +2381,9 @@ bool CChainState::FlushStateToDisk(
             }
             if (!setFilesToPrune.empty()) {
                 fFlushForPrune = true;
-                if (!fHavePruned) {
+                if (!m_blockman.m_have_pruned) {
                     m_blockman.m_block_tree_db->WriteFlag("prunedblockfiles", true);
-                    fHavePruned = true;
+                    m_blockman.m_have_pruned = true;
                 }
             }
         }
@@ -2431,9 +2454,9 @@ bool CChainState::FlushStateToDisk(
             full_flush_completed = true;
             TRACE5(utxocache, flush,
                    (int64_t)(GetTimeMicros() - nNow.count()), // in microseconds (µs)
-                   (u_int32_t)mode,
-                   (u_int64_t)coins_count,
-                   (u_int64_t)coins_mem_usage,
+                   (uint32_t)mode,
+                   (uint64_t)coins_count,
+                   (uint64_t)coins_mem_usage,
                    (bool)fFlushForPrune);
         }
     }
@@ -2533,8 +2556,8 @@ void CChainState::UpdateTip(const CBlockIndex* pindexNew)
     if (!this->IsInitialBlockDownload()) {
         const CBlockIndex* pindex = pindexNew;
         for (int bit = 0; bit < VERSIONBITS_NUM_BITS; bit++) {
-            WarningBitsConditionChecker checker(bit);
-            ThresholdState state = checker.GetStateFor(pindex, m_params.GetConsensus(), warningcache[bit]);
+            WarningBitsConditionChecker checker(m_chainman, bit);
+            ThresholdState state = checker.GetStateFor(pindex, m_params.GetConsensus(), warningcache.at(bit));
             if (state == ThresholdState::ACTIVE || state == ThresholdState::LOCKED_IN) {
                 const bilingual_str warning = strprintf(_("Unknown new rules activated (versionbit %i)"), bit);
                 if (state == ThresholdState::ACTIVE) {
@@ -2582,6 +2605,18 @@ bool CChainState::DisconnectTip(BlockValidationState& state, DisconnectedBlockTr
         assert(flushed);
     }
     LogPrint(BCLog::BENCH, "- Disconnect block: %.2fms\n", (GetTimeMicros() - nStart) * MILLI);
+
+    {
+        // Prune locks that began at or after the tip should be moved backward so they get a chance to reorg
+        const int max_height_first{pindexDelete->nHeight - 1};
+        for (auto& prune_lock : m_blockman.m_prune_locks) {
+            if (prune_lock.second.height_first <= max_height_first) continue;
+
+            prune_lock.second.height_first = max_height_first;
+            LogPrint(BCLog::PRUNE, "%s prune lock moved back to %d\n", prune_lock.first, max_height_first);
+        }
+    }
+
     // Write the chain state to disk, if necessary.
     if (!FlushStateToDisk(state, FlushStateMode::IF_NEEDED)) {
         return false;
@@ -2618,7 +2653,7 @@ static int64_t nTimePostConnect = 0;
 struct PerBlockConnectTrace {
     CBlockIndex* pindex = nullptr;
     std::shared_ptr<const CBlock> pblock;
-    PerBlockConnectTrace() {}
+    PerBlockConnectTrace() = default;
 };
 /**
  * Used to track blocks whose transactions were applied to the UTXO state as a
@@ -2904,7 +2939,7 @@ static bool NotifyHeaderTip(CChainState& chainstate) LOCKS_EXCLUDED(cs_main) {
     CBlockIndex* pindexHeader = nullptr;
     {
         LOCK(cs_main);
-        pindexHeader = pindexBestHeader;
+        pindexHeader = chainstate.m_chainman.m_best_header;
 
         if (pindexHeader != pindexHeaderOld) {
             fNotify = true;
@@ -3245,7 +3280,7 @@ void CChainState::ReceivedBlockTransactions(const CBlock& block, CBlockIndex* pi
     pindexNew->nDataPos = pos.nPos;
     pindexNew->nUndoPos = 0;
     pindexNew->nStatus |= BLOCK_HAVE_DATA;
-    if (DeploymentActiveAt(*pindexNew, m_params.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT)) {
+    if (DeploymentActiveAt(*pindexNew, m_chainman, Consensus::DEPLOYMENT_SEGWIT)) {
         pindexNew->nStatus |= BLOCK_OPT_WITNESS;
     }
     pindexNew->RaiseValidity(BLOCK_VALID_TRANSACTIONS);
@@ -3363,11 +3398,11 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     return true;
 }
 
-void UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams)
+void ChainstateManager::UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     int commitpos = GetWitnessCommitmentIndex(block);
     static const std::vector<unsigned char> nonce(32, 0x00);
-    if (commitpos != NO_WITNESS_COMMITMENT && DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_SEGWIT) && !block.vtx[0]->HasWitness()) {
+    if (commitpos != NO_WITNESS_COMMITMENT && DeploymentActiveAfter(pindexPrev, *this, Consensus::DEPLOYMENT_SEGWIT) && !block.vtx[0]->HasWitness()) {
         CMutableTransaction tx(*block.vtx[0]);
         tx.vin[0].scriptWitness.stack.resize(1);
         tx.vin[0].scriptWitness.stack[0] = nonce;
@@ -3375,7 +3410,7 @@ void UpdateUncommittedBlockStructures(CBlock& block, const CBlockIndex* pindexPr
     }
 }
 
-std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams)
+std::vector<unsigned char> ChainstateManager::GenerateCoinbaseCommitment(CBlock& block, const CBlockIndex* pindexPrev) const
 {
     std::vector<unsigned char> commitment;
     int commitpos = GetWitnessCommitmentIndex(block);
@@ -3398,7 +3433,7 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
         tx.vout.push_back(out);
         block.vtx[0] = MakeTransactionRef(std::move(tx));
     }
-    UpdateUncommittedBlockStructures(block, pindexPrev, consensusParams);
+    UpdateUncommittedBlockStructures(block, pindexPrev);
     return commitment;
 }
 
@@ -3411,14 +3446,14 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
  *  in ConnectBlock().
  *  Note that -reindex-chainstate skips the validation that happens here!
  */
-static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
+static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidationState& state, BlockManager& blockman, const ChainstateManager& chainman, const CBlockIndex* pindexPrev, int64_t nAdjustedTime) EXCLUSIVE_LOCKS_REQUIRED(::cs_main)
 {
     AssertLockHeld(::cs_main);
     assert(pindexPrev != nullptr);
     const int nHeight = pindexPrev->nHeight + 1;
 
     // Check proof of work
-    const Consensus::Params& consensusParams = params.GetConsensus();
+    const Consensus::Params& consensusParams = chainman.GetConsensus();
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
         return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, "bad-diffbits", "incorrect proof of work");
 
@@ -3427,7 +3462,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         // Don't accept any forks from the main chain prior to last checkpoint.
         // GetLastCheckpoint finds the last checkpoint in MapCheckpoints that's in our
         // BlockIndex().
-        const CBlockIndex* pcheckpoint = blockman.GetLastCheckpoint(params.Checkpoints());
+        const CBlockIndex* pcheckpoint = blockman.GetLastCheckpoint(chainman.GetParams().Checkpoints());
         if (pcheckpoint && nHeight < pcheckpoint->nHeight) {
             LogPrintf("ERROR: %s: forked chain older than last checkpoint (height %d)\n", __func__, nHeight);
             return state.Invalid(BlockValidationResult::BLOCK_CHECKPOINT, "bad-fork-prior-to-checkpoint");
@@ -3443,9 +3478,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
         return state.Invalid(BlockValidationResult::BLOCK_TIME_FUTURE, "time-too-new", "block timestamp too far in the future");
 
     // Reject blocks with outdated version
-    if ((block.nVersion < 2 && DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_HEIGHTINCB)) ||
-        (block.nVersion < 3 && DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_DERSIG)) ||
-        (block.nVersion < 4 && DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_CLTV))) {
+    if ((block.nVersion < 2 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_HEIGHTINCB)) ||
+        (block.nVersion < 3 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_DERSIG)) ||
+        (block.nVersion < 4 && DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CLTV))) {
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER, strprintf("bad-version(0x%08x)", block.nVersion),
                                  strprintf("rejected nVersion=0x%08x block", block.nVersion));
     }
@@ -3459,13 +3494,13 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
  *  in ConnectBlock().
  *  Note that -reindex-chainstate skips the validation that happens here!
  */
-static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
+static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& state, const ChainstateManager& chainman, const CBlockIndex* pindexPrev)
 {
     const int nHeight = pindexPrev == nullptr ? 0 : pindexPrev->nHeight + 1;
 
     // Enforce BIP113 (Median Time Past).
     int nLockTimeFlags = 0;
-    if (DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_CSV)) {
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_CSV)) {
         assert(pindexPrev != nullptr);
         nLockTimeFlags |= LOCKTIME_MEDIAN_TIME_PAST;
     }
@@ -3482,7 +3517,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     }
 
     // Enforce rule that the coinbase starts with serialized block height
-    if (DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_HEIGHTINCB))
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_HEIGHTINCB))
     {
         CScript expect = CScript() << nHeight;
         if (block.vtx[0]->vin[0].scriptSig.size() < expect.size() ||
@@ -3500,7 +3535,7 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     //   {0xaa, 0x21, 0xa9, 0xed}, and the following 32 bytes are SHA256^2(witness root, witness reserved value). In case there are
     //   multiple, the last one is used.
     bool fHaveWitness = false;
-    if (DeploymentActiveAfter(pindexPrev, consensusParams, Consensus::DEPLOYMENT_SEGWIT)) {
+    if (DeploymentActiveAfter(pindexPrev, chainman, Consensus::DEPLOYMENT_SEGWIT)) {
         int commitpos = GetWitnessCommitmentIndex(block);
         if (commitpos != NO_WITNESS_COMMITMENT) {
             bool malleated = false;
@@ -3541,13 +3576,13 @@ static bool ContextualCheckBlock(const CBlock& block, BlockValidationState& stat
     return true;
 }
 
-bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
+bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValidationState& state, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
     // Check for duplicate
     uint256 hash = block.GetHash();
     BlockMap::iterator miSelf{m_blockman.m_block_index.find(hash)};
-    if (hash != chainparams.GetConsensus().hashGenesisBlock) {
+    if (hash != GetConsensus().hashGenesisBlock) {
         if (miSelf != m_blockman.m_block_index.end()) {
             // Block header is already known.
             CBlockIndex* pindex = &(miSelf->second);
@@ -3560,7 +3595,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             return true;
         }
 
-        if (!CheckBlockHeader(block, state, chainparams.GetConsensus())) {
+        if (!CheckBlockHeader(block, state, GetConsensus())) {
             LogPrint(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -3577,7 +3612,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             LogPrint(BCLog::VALIDATION, "%s: %s prev block invalid\n", __func__, hash.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
         }
-        if (!ContextualCheckBlockHeader(block, state, m_blockman, chainparams, pindexPrev, GetAdjustedTime())) {
+        if (!ContextualCheckBlockHeader(block, state, m_blockman, *this, pindexPrev, m_adjusted_time_callback())) {
             LogPrint(BCLog::VALIDATION, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -3621,7 +3656,7 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
             }
         }
     }
-    CBlockIndex* pindex{m_blockman.AddToBlockIndex(block)};
+    CBlockIndex* pindex{m_blockman.AddToBlockIndex(block, m_best_header)};
 
     if (ppindex)
         *ppindex = pindex;
@@ -3630,14 +3665,14 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
 }
 
 // Exposed wrapper for AcceptBlockHeader
-bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CChainParams& chainparams, const CBlockIndex** ppindex)
+bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& headers, BlockValidationState& state, const CBlockIndex** ppindex)
 {
     AssertLockNotHeld(cs_main);
     {
         LOCK(cs_main);
         for (const CBlockHeader& header : headers) {
             CBlockIndex *pindex = nullptr; // Use a temp pindex instead of ppindex to avoid a const_cast
-            bool accepted{AcceptBlockHeader(header, state, chainparams, &pindex)};
+            bool accepted{AcceptBlockHeader(header, state, &pindex)};
             ActiveChainstate().CheckBlockIndex();
 
             if (!accepted) {
@@ -3651,7 +3686,7 @@ bool ChainstateManager::ProcessNewBlockHeaders(const std::vector<CBlockHeader>& 
     if (NotifyHeaderTip(ActiveChainstate())) {
         if (ActiveChainstate().IsInitialBlockDownload() && ppindex && *ppindex) {
             const CBlockIndex& last_accepted{**ppindex};
-            const int64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / chainparams.GetConsensus().nPowTargetSpacing};
+            const int64_t blocks_left{(GetTime() - last_accepted.GetBlockTime()) / GetConsensus().nPowTargetSpacing};
             const double progress{100.0 * last_accepted.nHeight / (last_accepted.nHeight + blocks_left)};
             LogPrintf("Synchronizing blockheaders, height: %d (~%.2f%%)\n", last_accepted.nHeight, progress);
         }
@@ -3670,7 +3705,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     CBlockIndex *pindexDummy = nullptr;
     CBlockIndex *&pindex = ppindex ? *ppindex : pindexDummy;
 
-    bool accepted_header{m_chainman.AcceptBlockHeader(block, state, m_params, &pindex)};
+    bool accepted_header{m_chainman.AcceptBlockHeader(block, state, &pindex)};
     CheckBlockIndex();
 
     if (!accepted_header)
@@ -3710,7 +3745,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     }
 
     if (!CheckBlock(block, state, m_params.GetConsensus()) ||
-        !ContextualCheckBlock(block, state, m_params.GetConsensus(), pindex->pprev)) {
+        !ContextualCheckBlock(block, state, m_chainman, pindex->pprev)) {
         if (state.IsInvalid() && state.GetResult() != BlockValidationResult::BLOCK_MUTATED) {
             pindex->nStatus |= BLOCK_FAILED_VALID;
             m_blockman.m_dirty_blockindex.insert(pindex);
@@ -3743,7 +3778,7 @@ bool CChainState::AcceptBlock(const std::shared_ptr<const CBlock>& pblock, Block
     return true;
 }
 
-bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock>& block, bool force_processing, bool* new_block)
+bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& block, bool force_processing, bool* new_block)
 {
     AssertLockNotHeld(cs_main);
 
@@ -3761,7 +3796,7 @@ bool ChainstateManager::ProcessNewBlock(const CChainParams& chainparams, const s
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        bool ret = CheckBlock(*block, state, chainparams.GetConsensus());
+        bool ret = CheckBlock(*block, state, GetConsensus());
         if (ret) {
             // Store to disk
             ret = ActiveChainstate().AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block);
@@ -3801,6 +3836,7 @@ bool TestBlockValidity(BlockValidationState& state,
                        CChainState& chainstate,
                        const CBlock& block,
                        CBlockIndex* pindexPrev,
+                       const std::function<int64_t()>& adjusted_time_callback,
                        bool fCheckPOW,
                        bool fCheckMerkleRoot)
 {
@@ -3814,11 +3850,11 @@ bool TestBlockValidity(BlockValidationState& state,
     indexDummy.phashBlock = &block_hash;
 
     // NOTE: CheckBlockHeader is called by CheckBlock
-    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainparams, pindexPrev, GetAdjustedTime()))
+    if (!ContextualCheckBlockHeader(block, state, chainstate.m_blockman, chainstate.m_chainman, pindexPrev, adjusted_time_callback()))
         return error("%s: Consensus::ContextualCheckBlockHeader: %s", __func__, state.ToString());
     if (!CheckBlock(block, state, chainparams.GetConsensus(), fCheckPOW, fCheckMerkleRoot))
         return error("%s: Consensus::CheckBlock: %s", __func__, state.ToString());
-    if (!ContextualCheckBlock(block, state, chainparams.GetConsensus(), pindexPrev))
+    if (!ContextualCheckBlock(block, state, chainstate.m_chainman, pindexPrev))
         return error("%s: Consensus::ContextualCheckBlock: %s", __func__, state.ToString());
     if (!chainstate.ConnectBlock(block, state, &indexDummy, viewNew, true)) {
         return false;
@@ -4078,10 +4114,11 @@ bool CChainState::ReplayBlocks()
     // Roll forward from the forking point to the new tip.
     int nForkHeight = pindexFork ? pindexFork->nHeight : 0;
     for (int nHeight = nForkHeight + 1; nHeight <= pindexNew->nHeight; ++nHeight) {
-        const CBlockIndex* pindex = pindexNew->GetAncestor(nHeight);
-        LogPrintf("Rolling forward %s (%i)\n", pindex->GetBlockHash().ToString(), nHeight);
+        const CBlockIndex& pindex{*Assert(pindexNew->GetAncestor(nHeight))};
+
+        LogPrintf("Rolling forward %s (%i)\n", pindex.GetBlockHash().ToString(), nHeight);
         uiInterface.ShowProgress(_("Replaying blocks…").translated, (int) ((nHeight - nForkHeight) * 100.0 / (pindexNew->nHeight - nForkHeight)) , false);
-        if (!RollforwardBlock(pindex, cache)) return false;
+        if (!RollforwardBlock(&pindex, cache)) return false;
     }
 
     cache.SetBestBlock(pindexNew->GetBlockHash());
@@ -4097,7 +4134,7 @@ bool CChainState::NeedsRedownload() const
     // At and above m_params.SegwitHeight, segwit consensus rules must be validated
     CBlockIndex* block{m_chain.Tip()};
 
-    while (block != nullptr && DeploymentActiveAt(*block, m_params.GetConsensus(), Consensus::DEPLOYMENT_SEGWIT)) {
+    while (block != nullptr && DeploymentActiveAt(*block, m_chainman, Consensus::DEPLOYMENT_SEGWIT)) {
         if (!(block->nStatus & BLOCK_OPT_WITNESS)) {
             // block is insufficiently validated for a segwit client
             return true;
@@ -4113,22 +4150,6 @@ void CChainState::UnloadBlockIndex()
     AssertLockHeld(::cs_main);
     nBlockSequenceId = 1;
     setBlockIndexCandidates.clear();
-}
-
-// May NOT be used after any connections are up as much
-// of the peer-processing logic assumes a consistent
-// block index state
-void UnloadBlockIndex(CTxMemPool* mempool, ChainstateManager& chainman)
-{
-    AssertLockHeld(::cs_main);
-    chainman.Unload();
-    pindexBestHeader = nullptr;
-    if (mempool) mempool->clear();
-    g_versionbitscache.Clear();
-    for (int b = 0; b < VERSIONBITS_NUM_BITS; b++) {
-        warningcache[b].clear();
-    }
-    fHavePruned = false;
 }
 
 bool ChainstateManager::LoadBlockIndex()
@@ -4203,6 +4224,8 @@ bool ChainstateManager::LoadBlockIndex()
             if (pindex->nStatus & BLOCK_FAILED_MASK && (!m_best_invalid || pindex->nChainWork > m_best_invalid->nChainWork)) {
                 m_best_invalid = pindex;
             }
+            if (pindex->IsValid(BLOCK_VALID_TREE) && (m_best_header == nullptr || CBlockIndexWorkComparator()(m_best_header, pindex)))
+                m_best_header = pindex;
         }
 
         needs_init = m_blockman.m_block_index.empty();
@@ -4237,7 +4260,7 @@ bool CChainState::LoadGenesisBlock()
         if (blockPos.IsNull()) {
             return error("%s: writing genesis block to disk failed", __func__);
         }
-        CBlockIndex *pindex = m_blockman.AddToBlockIndex(block);
+        CBlockIndex* pindex = m_blockman.AddToBlockIndex(block, m_chainman.m_best_header);
         ReceivedBlockTransactions(block, pindex, blockPos);
     } catch (const std::runtime_error& e) {
         return error("%s: failed to write genesis block: %s", __func__, e.what());
@@ -4448,7 +4471,7 @@ void CChainState::CheckBlockIndex()
         // HAVE_DATA is only equivalent to nTx > 0 (or VALID_TRANSACTIONS) if no pruning has occurred.
         // Unless these indexes are assumed valid and pending block download on a
         // background chainstate.
-        if (!fHavePruned && !pindex->IsAssumedValid()) {
+        if (!m_blockman.m_have_pruned && !pindex->IsAssumedValid()) {
             // If we've never pruned, then HAVE_DATA should be equivalent to nTx > 0
             assert(!(pindex->nStatus & BLOCK_HAVE_DATA) == (pindex->nTx == 0));
             assert(pindexFirstMissing == pindexFirstNeverProcessed);
@@ -4522,7 +4545,7 @@ void CChainState::CheckBlockIndex()
         if (pindexFirstMissing == nullptr) assert(!foundInUnlinked); // We aren't missing data for any parent -- cannot be in m_blocks_unlinked.
         if (pindex->pprev && (pindex->nStatus & BLOCK_HAVE_DATA) && pindexFirstNeverProcessed == nullptr && pindexFirstMissing != nullptr) {
             // We HAVE_DATA for this block, have received data for all parents at some point, but we're currently missing data for some parent.
-            assert(fHavePruned); // We must have pruned.
+            assert(m_blockman.m_have_pruned); // We must have pruned.
             // This block may have entered m_blocks_unlinked if:
             //  - it has a descendant that at some point had more work than the
             //    tip, and
@@ -4964,14 +4987,15 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
     CBlockIndex* snapshot_start_block = WITH_LOCK(::cs_main, return m_blockman.LookupBlockIndex(base_blockhash));
 
     if (!snapshot_start_block) {
-        // Needed for GetUTXOStats and ExpectedAssumeutxo to determine the height and to avoid a crash when base_blockhash.IsNull()
+        // Needed for ComputeUTXOStats and ExpectedAssumeutxo to determine the
+        // height and to avoid a crash when base_blockhash.IsNull()
         LogPrintf("[snapshot] Did not find snapshot start blockheader %s\n",
                   base_blockhash.ToString());
         return false;
     }
 
     int base_height = snapshot_start_block->nHeight;
-    auto maybe_au_data = ExpectedAssumeutxo(base_height, ::Params());
+    auto maybe_au_data = ExpectedAssumeutxo(base_height, GetParams());
 
     if (!maybe_au_data) {
         LogPrintf("[snapshot] assumeutxo height in snapshot metadata not recognized " /* Continued */
@@ -5072,22 +5096,22 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
 
     assert(coins_cache.GetBestBlock() == base_blockhash);
 
-    CCoinsStats stats{CoinStatsHashType::HASH_SERIALIZED};
     auto breakpoint_fnc = [] { /* TODO insert breakpoint here? */ };
 
     // As above, okay to immediately release cs_main here since no other context knows
     // about the snapshot_chainstate.
     CCoinsViewDB* snapshot_coinsdb = WITH_LOCK(::cs_main, return &snapshot_chainstate.CoinsDB());
 
-    if (!GetUTXOStats(snapshot_coinsdb, m_blockman, stats, breakpoint_fnc)) {
+    const std::optional<CCoinsStats> maybe_stats = ComputeUTXOStats(CoinStatsHashType::HASH_SERIALIZED, snapshot_coinsdb, m_blockman, breakpoint_fnc);
+    if (!maybe_stats.has_value()) {
         LogPrintf("[snapshot] failed to generate coins stats\n");
         return false;
     }
 
     // Assert that the deserialized chainstate contents match the expected assumeutxo value.
-    if (AssumeutxoHash{stats.hashSerialized} != au_data.hash_serialized) {
+    if (AssumeutxoHash{maybe_stats->hashSerialized} != au_data.hash_serialized) {
         LogPrintf("[snapshot] bad snapshot content hash: expected %s, got %s\n",
-            au_data.hash_serialized.ToString(), stats.hashSerialized.ToString());
+            au_data.hash_serialized.ToString(), maybe_stats->hashSerialized.ToString());
         return false;
     }
 
@@ -5125,7 +5149,7 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
 
         // Fake BLOCK_OPT_WITNESS so that CChainState::NeedsRedownload()
         // won't ask to rewind the entire assumed-valid chain on startup.
-        if (DeploymentActiveAt(*index, ::Params().GetConsensus(), Consensus::DEPLOYMENT_SEGWIT)) {
+        if (DeploymentActiveAt(*index, *this, Consensus::DEPLOYMENT_SEGWIT)) {
             index->nStatus |= BLOCK_OPT_WITNESS;
         }
 
@@ -5159,19 +5183,6 @@ bool ChainstateManager::IsSnapshotActive() const
     return m_snapshot_chainstate && m_active_chainstate == m_snapshot_chainstate.get();
 }
 
-void ChainstateManager::Unload()
-{
-    AssertLockHeld(::cs_main);
-    for (CChainState* chainstate : this->GetAll()) {
-        chainstate->m_chain.SetTip(nullptr);
-        chainstate->UnloadBlockIndex();
-    }
-
-    m_failed_blocks.clear();
-    m_blockman.Unload();
-    m_best_invalid = nullptr;
-}
-
 void ChainstateManager::MaybeRebalanceCaches()
 {
     AssertLockHeld(::cs_main);
@@ -5200,5 +5211,17 @@ void ChainstateManager::MaybeRebalanceCaches()
             m_ibd_chainstate->ResizeCoinsCaches(
                 m_total_coinstip_cache * 0.95, m_total_coinsdb_cache * 0.95);
         }
+    }
+}
+
+ChainstateManager::~ChainstateManager()
+{
+    LOCK(::cs_main);
+
+    m_versionbitscache.Clear();
+
+    // TODO: The warning cache should probably become non-global
+    for (auto& i : warningcache) {
+        i.clear();
     }
 }

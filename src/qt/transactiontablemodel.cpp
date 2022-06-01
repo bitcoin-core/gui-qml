@@ -5,6 +5,7 @@
 #include <qt/transactiontablemodel.h>
 
 #include <qt/addresstablemodel.h>
+#include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -61,7 +62,7 @@ struct TxLessThan
 struct TransactionNotification
 {
 public:
-    TransactionNotification() {}
+    TransactionNotification() = default;
     TransactionNotification(uint256 _hash, ChangeType _status, bool _showTransaction):
         hash(_hash), status(_status), showTransaction(_showTransaction) {}
 
@@ -232,7 +233,7 @@ public:
         return nullptr;
     }
 
-    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord *rec, int unit)
+    QString describe(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, BitcoinUnit unit)
     {
         return TransactionDesc::toHTML(node, wallet, rec, unit);
     }

@@ -81,7 +81,7 @@
 #include <string>
 #include <vector>
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
 
 #include <QProcess>
 
@@ -185,8 +185,7 @@ bool parseBitcoinURI(const QUrl &uri, SendCoinsRecipient *out)
         {
             if(!i->second.isEmpty())
             {
-                if(!BitcoinUnits::parse(BitcoinUnits::BTC, i->second, &rv.amount))
-                {
+                if (!BitcoinUnits::parse(BitcoinUnit::BTC, i->second, &rv.amount)) {
                     return false;
                 }
             }
@@ -218,7 +217,7 @@ QString formatBitcoinURI(const SendCoinsRecipient &info)
 
     if (info.amount)
     {
-        ret += QString("?amount=%1").arg(BitcoinUnits::format(BitcoinUnits::BTC, info.amount, false, BitcoinUnits::SeparatorStyle::NEVER));
+        ret += QString("?amount=%1").arg(BitcoinUnits::format(BitcoinUnit::BTC, info.amount, false, BitcoinUnits::SeparatorStyle::NEVER));
         paramCount++;
     }
 
@@ -407,7 +406,7 @@ bool isObscured(QWidget *w)
 
 void bringToFront(QWidget* w)
 {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     ForceActivation();
 #endif
 
@@ -451,7 +450,7 @@ bool openBitcoinConf()
 
     /* Open bitcoin.conf with the associated application */
     bool res = QDesktopServices::openUrl(QUrl::fromLocalFile(PathToQString(pathConfig)));
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     // Workaround for macOS-specific behavior; see #15409.
     if (!res) {
         res = QProcess::startDetached("/usr/bin/open", QStringList{"-t", PathToQString(pathConfig)});
@@ -516,7 +515,7 @@ fs::path static StartupShortcutPath()
         return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin.lnk";
     if (chain == CBaseChainParams::TESTNET) // Remove this special case when CBaseChainParams::TESTNET = "testnet4"
         return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin (testnet).lnk";
-    return GetSpecialFolderPath(CSIDL_STARTUP) / strprintf("Bitcoin (%s).lnk", chain);
+    return GetSpecialFolderPath(CSIDL_STARTUP) / fs::u8path(strprintf("Bitcoin (%s).lnk", chain));
 }
 
 bool GetStartOnSystemStartup()
@@ -597,7 +596,7 @@ fs::path static GetAutostartFilePath()
     std::string chain = gArgs.GetChainName();
     if (chain == CBaseChainParams::MAIN)
         return GetAutostartDir() / "bitcoin.desktop";
-    return GetAutostartDir() / strprintf("bitcoin-%s.desktop", chain);
+    return GetAutostartDir() / fs::u8path(strprintf("bitcoin-%s.desktop", chain));
 }
 
 bool GetStartOnSystemStartup()
@@ -890,7 +889,7 @@ bool ItemDelegate::eventFilter(QObject *object, QEvent *event)
 
 void PolishProgressDialog(QProgressDialog* dialog)
 {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     // Workaround for macOS-only Qt bug; see: QTBUG-65750, QTBUG-70357.
     const int margin = TextWidth(dialog->fontMetrics(), ("X"));
     dialog->resize(dialog->width() + 2 * margin, dialog->height());

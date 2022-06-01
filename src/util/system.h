@@ -14,7 +14,6 @@
 #include <config/bitcoin-config.h>
 #endif
 
-#include <attributes.h>
 #include <compat.h>
 #include <compat/assumptions.h>
 #include <fs.h>
@@ -76,8 +75,8 @@ void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length);
  */
 [[nodiscard]] bool RenameOver(fs::path src, fs::path dest);
 
-bool LockDirectory(const fs::path& directory, const std::string lockfile_name, bool probe_only=false);
-void UnlockDirectory(const fs::path& directory, const std::string& lockfile_name);
+bool LockDirectory(const fs::path& directory, const fs::path& lockfile_name, bool probe_only=false);
+void UnlockDirectory(const fs::path& directory, const fs::path& lockfile_name);
 bool DirIsWritable(const fs::path& directory);
 bool CheckDiskSpace(const fs::path& dir, uint64_t additional_bytes = 0);
 
@@ -161,6 +160,10 @@ struct SectionInfo
     int m_line;
 };
 
+std::string SettingToString(const util::SettingsValue&, const std::string&);
+int64_t SettingToInt(const util::SettingsValue&, int64_t);
+bool SettingToBool(const util::SettingsValue&, bool);
+
 class ArgsManager
 {
 public:
@@ -175,6 +178,7 @@ public:
         // ALLOW_STRING = 0x08,   //!< unimplemented, draft implementation in #16545
         // ALLOW_LIST = 0x10,     //!< unimplemented, draft implementation in #16545
         DISALLOW_NEGATION = 0x20, //!< disallow -nofoo syntax
+        DISALLOW_ELISION = 0x40,  //!< disallow -foo syntax that doesn't assign any value
 
         DEBUG_ONLY = 0x100,
         /* Some options would cause cross-contamination if values for
@@ -436,7 +440,7 @@ protected:
      * Get settings file path, or return false if read-write settings were
      * disabled with -nosettings.
      */
-    bool GetSettingsPath(fs::path* filepath = nullptr, bool temp = false) const;
+    bool GetSettingsPath(fs::path* filepath = nullptr, bool temp = false, bool backup = false) const;
 
     /**
      * Read settings file. Push errors to vector, or log them if null.
@@ -444,9 +448,16 @@ protected:
     bool ReadSettingsFile(std::vector<std::string>* errors = nullptr);
 
     /**
-     * Write settings file. Push errors to vector, or log them if null.
+     * Write settings file or backup settings file. Push errors to vector, or
+     * log them if null.
      */
-    bool WriteSettingsFile(std::vector<std::string>* errors = nullptr) const;
+    bool WriteSettingsFile(std::vector<std::string>* errors = nullptr, bool backup = false) const;
+
+    /**
+     * Get current setting from config file or read/write settings file,
+     * ignoring nonpersistent command line or forced settings values.
+     */
+    util::SettingsValue GetPersistentSetting(const std::string& name) const;
 
     /**
      * Access settings with lock held.

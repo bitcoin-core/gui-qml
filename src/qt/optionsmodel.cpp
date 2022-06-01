@@ -24,13 +24,14 @@
 #include <QLatin1Char>
 #include <QSettings>
 #include <QStringList>
+#include <QVariant>
 
 const char *DEFAULT_GUI_PROXY_HOST = "127.0.0.1";
 
 static const QString GetDefaultProxyAddress();
 
-OptionsModel::OptionsModel(QObject *parent, bool resetSettings) :
-    QAbstractListModel(parent)
+OptionsModel::OptionsModel(interfaces::Node& node, QObject *parent, bool resetSettings) :
+    QAbstractListModel(parent), m_node{node}
 {
     Init(resetSettings);
 }
@@ -71,9 +72,16 @@ void OptionsModel::Init(bool resetSettings)
     fMinimizeOnClose = settings.value("fMinimizeOnClose").toBool();
 
     // Display
-    if (!settings.contains("nDisplayUnit"))
-        settings.setValue("nDisplayUnit", BitcoinUnits::BTC);
-    nDisplayUnit = settings.value("nDisplayUnit").toInt();
+    if (!settings.contains("DisplayBitcoinUnit")) {
+        settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(BitcoinUnit::BTC));
+    }
+    QVariant unit = settings.value("DisplayBitcoinUnit");
+    if (unit.canConvert<BitcoinUnit>()) {
+        m_display_bitcoin_unit = unit.value<BitcoinUnit>();
+    } else {
+        m_display_bitcoin_unit = BitcoinUnit::BTC;
+        settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_bitcoin_unit));
+    }
 
     if (!settings.contains("strThirdPartyTxUrls"))
         settings.setValue("strThirdPartyTxUrls", "");
@@ -327,81 +335,7 @@ QVariant OptionsModel::data(const QModelIndex & index, int role) const
 {
     if(role == Qt::EditRole)
     {
-        QSettings settings;
-        switch(index.row())
-        {
-        case StartAtStartup:
-            return GUIUtil::GetStartOnSystemStartup();
-        case ShowTrayIcon:
-            return m_show_tray_icon;
-        case MinimizeToTray:
-            return fMinimizeToTray;
-        case MapPortUPnP:
-#ifdef USE_UPNP
-            return settings.value("fUseUPnP");
-#else
-            return false;
-#endif // USE_UPNP
-        case MapPortNatpmp:
-#ifdef USE_NATPMP
-            return settings.value("fUseNatpmp");
-#else
-            return false;
-#endif // USE_NATPMP
-        case MinimizeOnClose:
-            return fMinimizeOnClose;
-
-        // default proxy
-        case ProxyUse:
-            return settings.value("fUseProxy", false);
-        case ProxyIP:
-            return GetProxySetting(settings, "addrProxy").ip;
-        case ProxyPort:
-            return GetProxySetting(settings, "addrProxy").port;
-
-        // separate Tor proxy
-        case ProxyUseTor:
-            return settings.value("fUseSeparateProxyTor", false);
-        case ProxyIPTor:
-            return GetProxySetting(settings, "addrSeparateProxyTor").ip;
-        case ProxyPortTor:
-            return GetProxySetting(settings, "addrSeparateProxyTor").port;
-
-#ifdef ENABLE_WALLET
-        case SpendZeroConfChange:
-            return settings.value("bSpendZeroConfChange");
-        case ExternalSignerPath:
-            return settings.value("external_signer_path");
-        case SubFeeFromAmount:
-            return m_sub_fee_from_amount;
-#endif
-        case DisplayUnit:
-            return nDisplayUnit;
-        case ThirdPartyTxUrls:
-            return strThirdPartyTxUrls;
-        case Language:
-            return settings.value("language");
-        case UseEmbeddedMonospacedFont:
-            return m_use_embedded_monospaced_font;
-        case CoinControlFeatures:
-            return fCoinControlFeatures;
-        case EnablePSBTControls:
-            return settings.value("enable_psbt_controls");
-        case Prune:
-            return settings.value("bPrune");
-        case PruneSize:
-            return settings.value("nPruneSize");
-        case DatabaseCache:
-            return settings.value("nDatabaseCache");
-        case ThreadsScriptVerif:
-            return settings.value("nThreadsScriptVerif");
-        case Listen:
-            return settings.value("fListen");
-        case Server:
-            return settings.value("server");
-        default:
-            return QVariant();
-        }
+        return getOption(OptionID(index.row()));
     }
     return QVariant();
 }
@@ -412,171 +346,7 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
     bool successful = true; /* set to false on parse error */
     if(role == Qt::EditRole)
     {
-        QSettings settings;
-        switch(index.row())
-        {
-        case StartAtStartup:
-            successful = GUIUtil::SetStartOnSystemStartup(value.toBool());
-            break;
-        case ShowTrayIcon:
-            m_show_tray_icon = value.toBool();
-            settings.setValue("fHideTrayIcon", !m_show_tray_icon);
-            Q_EMIT showTrayIconChanged(m_show_tray_icon);
-            break;
-        case MinimizeToTray:
-            fMinimizeToTray = value.toBool();
-            settings.setValue("fMinimizeToTray", fMinimizeToTray);
-            break;
-        case MapPortUPnP: // core option - can be changed on-the-fly
-            settings.setValue("fUseUPnP", value.toBool());
-            break;
-        case MapPortNatpmp: // core option - can be changed on-the-fly
-            settings.setValue("fUseNatpmp", value.toBool());
-            break;
-        case MinimizeOnClose:
-            fMinimizeOnClose = value.toBool();
-            settings.setValue("fMinimizeOnClose", fMinimizeOnClose);
-            break;
-
-        // default proxy
-        case ProxyUse:
-            if (settings.value("fUseProxy") != value) {
-                settings.setValue("fUseProxy", value.toBool());
-                setRestartRequired(true);
-            }
-            break;
-        case ProxyIP: {
-            auto ip_port = GetProxySetting(settings, "addrProxy");
-            if (!ip_port.is_set || ip_port.ip != value.toString()) {
-                ip_port.ip = value.toString();
-                SetProxySetting(settings, "addrProxy", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-        case ProxyPort: {
-            auto ip_port = GetProxySetting(settings, "addrProxy");
-            if (!ip_port.is_set || ip_port.port != value.toString()) {
-                ip_port.port = value.toString();
-                SetProxySetting(settings, "addrProxy", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-
-        // separate Tor proxy
-        case ProxyUseTor:
-            if (settings.value("fUseSeparateProxyTor") != value) {
-                settings.setValue("fUseSeparateProxyTor", value.toBool());
-                setRestartRequired(true);
-            }
-            break;
-        case ProxyIPTor: {
-            auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
-            if (!ip_port.is_set || ip_port.ip != value.toString()) {
-                ip_port.ip = value.toString();
-                SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-        case ProxyPortTor: {
-            auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
-            if (!ip_port.is_set || ip_port.port != value.toString()) {
-                ip_port.port = value.toString();
-                SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
-                setRestartRequired(true);
-            }
-        }
-        break;
-
-#ifdef ENABLE_WALLET
-        case SpendZeroConfChange:
-            if (settings.value("bSpendZeroConfChange") != value) {
-                settings.setValue("bSpendZeroConfChange", value);
-                setRestartRequired(true);
-            }
-            break;
-        case ExternalSignerPath:
-            if (settings.value("external_signer_path") != value.toString()) {
-                settings.setValue("external_signer_path", value.toString());
-                setRestartRequired(true);
-            }
-            break;
-        case SubFeeFromAmount:
-            m_sub_fee_from_amount = value.toBool();
-            settings.setValue("SubFeeFromAmount", m_sub_fee_from_amount);
-            break;
-#endif
-        case DisplayUnit:
-            setDisplayUnit(value);
-            break;
-        case ThirdPartyTxUrls:
-            if (strThirdPartyTxUrls != value.toString()) {
-                strThirdPartyTxUrls = value.toString();
-                settings.setValue("strThirdPartyTxUrls", strThirdPartyTxUrls);
-                setRestartRequired(true);
-            }
-            break;
-        case Language:
-            if (settings.value("language") != value) {
-                settings.setValue("language", value);
-                setRestartRequired(true);
-            }
-            break;
-        case UseEmbeddedMonospacedFont:
-            m_use_embedded_monospaced_font = value.toBool();
-            settings.setValue("UseEmbeddedMonospacedFont", m_use_embedded_monospaced_font);
-            Q_EMIT useEmbeddedMonospacedFontChanged(m_use_embedded_monospaced_font);
-            break;
-        case CoinControlFeatures:
-            fCoinControlFeatures = value.toBool();
-            settings.setValue("fCoinControlFeatures", fCoinControlFeatures);
-            Q_EMIT coinControlFeaturesChanged(fCoinControlFeatures);
-            break;
-        case EnablePSBTControls:
-            m_enable_psbt_controls = value.toBool();
-            settings.setValue("enable_psbt_controls", m_enable_psbt_controls);
-            break;
-        case Prune:
-            if (settings.value("bPrune") != value) {
-                settings.setValue("bPrune", value);
-                setRestartRequired(true);
-            }
-            break;
-        case PruneSize:
-            if (settings.value("nPruneSize") != value) {
-                settings.setValue("nPruneSize", value);
-                setRestartRequired(true);
-            }
-            break;
-        case DatabaseCache:
-            if (settings.value("nDatabaseCache") != value) {
-                settings.setValue("nDatabaseCache", value);
-                setRestartRequired(true);
-            }
-            break;
-        case ThreadsScriptVerif:
-            if (settings.value("nThreadsScriptVerif") != value) {
-                settings.setValue("nThreadsScriptVerif", value);
-                setRestartRequired(true);
-            }
-            break;
-        case Listen:
-            if (settings.value("fListen") != value) {
-                settings.setValue("fListen", value);
-                setRestartRequired(true);
-            }
-            break;
-        case Server:
-            if (settings.value("server") != value) {
-                settings.setValue("server", value);
-                setRestartRequired(true);
-            }
-            break;
-        default:
-            break;
-        }
+        successful = setOption(OptionID(index.row()), value);
     }
 
     Q_EMIT dataChanged(index, index);
@@ -584,16 +354,263 @@ bool OptionsModel::setData(const QModelIndex & index, const QVariant & value, in
     return successful;
 }
 
-/** Updates current unit in memory, settings and emits displayUnitChanged(newUnit) signal */
-void OptionsModel::setDisplayUnit(const QVariant &value)
+QVariant OptionsModel::getOption(OptionID option) const
 {
-    if (!value.isNull())
-    {
-        QSettings settings;
-        nDisplayUnit = value.toInt();
-        settings.setValue("nDisplayUnit", nDisplayUnit);
-        Q_EMIT displayUnitChanged(nDisplayUnit);
+    QSettings settings;
+    switch (option) {
+    case StartAtStartup:
+        return GUIUtil::GetStartOnSystemStartup();
+    case ShowTrayIcon:
+        return m_show_tray_icon;
+    case MinimizeToTray:
+        return fMinimizeToTray;
+    case MapPortUPnP:
+#ifdef USE_UPNP
+        return settings.value("fUseUPnP");
+#else
+        return false;
+#endif // USE_UPNP
+    case MapPortNatpmp:
+#ifdef USE_NATPMP
+        return settings.value("fUseNatpmp");
+#else
+        return false;
+#endif // USE_NATPMP
+    case MinimizeOnClose:
+        return fMinimizeOnClose;
+
+    // default proxy
+    case ProxyUse:
+        return settings.value("fUseProxy", false);
+    case ProxyIP:
+        return GetProxySetting(settings, "addrProxy").ip;
+    case ProxyPort:
+        return GetProxySetting(settings, "addrProxy").port;
+
+    // separate Tor proxy
+    case ProxyUseTor:
+        return settings.value("fUseSeparateProxyTor", false);
+    case ProxyIPTor:
+        return GetProxySetting(settings, "addrSeparateProxyTor").ip;
+    case ProxyPortTor:
+        return GetProxySetting(settings, "addrSeparateProxyTor").port;
+
+#ifdef ENABLE_WALLET
+    case SpendZeroConfChange:
+        return settings.value("bSpendZeroConfChange");
+    case ExternalSignerPath:
+        return settings.value("external_signer_path");
+    case SubFeeFromAmount:
+        return m_sub_fee_from_amount;
+#endif
+    case DisplayUnit:
+        return QVariant::fromValue(m_display_bitcoin_unit);
+    case ThirdPartyTxUrls:
+        return strThirdPartyTxUrls;
+    case Language:
+        return settings.value("language");
+    case UseEmbeddedMonospacedFont:
+        return m_use_embedded_monospaced_font;
+    case CoinControlFeatures:
+        return fCoinControlFeatures;
+    case EnablePSBTControls:
+        return settings.value("enable_psbt_controls");
+    case Prune:
+        return settings.value("bPrune");
+    case PruneSize:
+        return settings.value("nPruneSize");
+    case DatabaseCache:
+        return settings.value("nDatabaseCache");
+    case ThreadsScriptVerif:
+        return settings.value("nThreadsScriptVerif");
+    case Listen:
+        return settings.value("fListen");
+    case Server:
+        return settings.value("server");
+    default:
+        return QVariant();
     }
+}
+
+bool OptionsModel::setOption(OptionID option, const QVariant& value)
+{
+    bool successful = true; /* set to false on parse error */
+    QSettings settings;
+
+    switch (option) {
+    case StartAtStartup:
+        successful = GUIUtil::SetStartOnSystemStartup(value.toBool());
+        break;
+    case ShowTrayIcon:
+        m_show_tray_icon = value.toBool();
+        settings.setValue("fHideTrayIcon", !m_show_tray_icon);
+        Q_EMIT showTrayIconChanged(m_show_tray_icon);
+        break;
+    case MinimizeToTray:
+        fMinimizeToTray = value.toBool();
+        settings.setValue("fMinimizeToTray", fMinimizeToTray);
+        break;
+    case MapPortUPnP: // core option - can be changed on-the-fly
+        settings.setValue("fUseUPnP", value.toBool());
+        break;
+    case MapPortNatpmp: // core option - can be changed on-the-fly
+        settings.setValue("fUseNatpmp", value.toBool());
+        break;
+    case MinimizeOnClose:
+        fMinimizeOnClose = value.toBool();
+        settings.setValue("fMinimizeOnClose", fMinimizeOnClose);
+        break;
+
+    // default proxy
+    case ProxyUse:
+        if (settings.value("fUseProxy") != value) {
+            settings.setValue("fUseProxy", value.toBool());
+            setRestartRequired(true);
+        }
+        break;
+    case ProxyIP: {
+        auto ip_port = GetProxySetting(settings, "addrProxy");
+        if (!ip_port.is_set || ip_port.ip != value.toString()) {
+            ip_port.ip = value.toString();
+            SetProxySetting(settings, "addrProxy", ip_port);
+            setRestartRequired(true);
+        }
+    }
+    break;
+    case ProxyPort: {
+        auto ip_port = GetProxySetting(settings, "addrProxy");
+        if (!ip_port.is_set || ip_port.port != value.toString()) {
+            ip_port.port = value.toString();
+            SetProxySetting(settings, "addrProxy", ip_port);
+            setRestartRequired(true);
+        }
+    }
+    break;
+
+    // separate Tor proxy
+    case ProxyUseTor:
+        if (settings.value("fUseSeparateProxyTor") != value) {
+            settings.setValue("fUseSeparateProxyTor", value.toBool());
+            setRestartRequired(true);
+        }
+        break;
+    case ProxyIPTor: {
+        auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
+        if (!ip_port.is_set || ip_port.ip != value.toString()) {
+            ip_port.ip = value.toString();
+            SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
+            setRestartRequired(true);
+        }
+    }
+    break;
+    case ProxyPortTor: {
+        auto ip_port = GetProxySetting(settings, "addrSeparateProxyTor");
+        if (!ip_port.is_set || ip_port.port != value.toString()) {
+            ip_port.port = value.toString();
+            SetProxySetting(settings, "addrSeparateProxyTor", ip_port);
+            setRestartRequired(true);
+        }
+    }
+    break;
+
+#ifdef ENABLE_WALLET
+    case SpendZeroConfChange:
+        if (settings.value("bSpendZeroConfChange") != value) {
+            settings.setValue("bSpendZeroConfChange", value);
+            setRestartRequired(true);
+        }
+        break;
+    case ExternalSignerPath:
+        if (settings.value("external_signer_path") != value.toString()) {
+            settings.setValue("external_signer_path", value.toString());
+            setRestartRequired(true);
+        }
+        break;
+    case SubFeeFromAmount:
+        m_sub_fee_from_amount = value.toBool();
+        settings.setValue("SubFeeFromAmount", m_sub_fee_from_amount);
+        break;
+#endif
+    case DisplayUnit:
+        setDisplayUnit(value);
+        break;
+    case ThirdPartyTxUrls:
+        if (strThirdPartyTxUrls != value.toString()) {
+            strThirdPartyTxUrls = value.toString();
+            settings.setValue("strThirdPartyTxUrls", strThirdPartyTxUrls);
+            setRestartRequired(true);
+        }
+        break;
+    case Language:
+        if (settings.value("language") != value) {
+            settings.setValue("language", value);
+            setRestartRequired(true);
+        }
+        break;
+    case UseEmbeddedMonospacedFont:
+        m_use_embedded_monospaced_font = value.toBool();
+        settings.setValue("UseEmbeddedMonospacedFont", m_use_embedded_monospaced_font);
+        Q_EMIT useEmbeddedMonospacedFontChanged(m_use_embedded_monospaced_font);
+        break;
+    case CoinControlFeatures:
+        fCoinControlFeatures = value.toBool();
+        settings.setValue("fCoinControlFeatures", fCoinControlFeatures);
+        Q_EMIT coinControlFeaturesChanged(fCoinControlFeatures);
+        break;
+    case EnablePSBTControls:
+        m_enable_psbt_controls = value.toBool();
+        settings.setValue("enable_psbt_controls", m_enable_psbt_controls);
+        break;
+    case Prune:
+        if (settings.value("bPrune") != value) {
+            settings.setValue("bPrune", value);
+            setRestartRequired(true);
+        }
+        break;
+    case PruneSize:
+        if (settings.value("nPruneSize") != value) {
+            settings.setValue("nPruneSize", value);
+            setRestartRequired(true);
+        }
+        break;
+    case DatabaseCache:
+        if (settings.value("nDatabaseCache") != value) {
+            settings.setValue("nDatabaseCache", value);
+            setRestartRequired(true);
+        }
+        break;
+    case ThreadsScriptVerif:
+        if (settings.value("nThreadsScriptVerif") != value) {
+            settings.setValue("nThreadsScriptVerif", value);
+            setRestartRequired(true);
+        }
+        break;
+    case Listen:
+        if (settings.value("fListen") != value) {
+            settings.setValue("fListen", value);
+            setRestartRequired(true);
+        }
+        break;
+    case Server:
+        if (settings.value("server") != value) {
+            settings.setValue("server", value);
+            setRestartRequired(true);
+        }
+        break;
+    default:
+        break;
+    }
+
+    return successful;
+}
+
+void OptionsModel::setDisplayUnit(const QVariant& new_unit)
+{
+    if (new_unit.isNull() || new_unit.value<BitcoinUnit>() == m_display_bitcoin_unit) return;
+    m_display_bitcoin_unit = new_unit.value<BitcoinUnit>();
+    QSettings settings;
+    settings.setValue("DisplayBitcoinUnit", QVariant::fromValue(m_display_bitcoin_unit));
+    Q_EMIT displayUnitChanged(m_display_bitcoin_unit);
 }
 
 void OptionsModel::setRestartRequired(bool fRequired)
