@@ -5,6 +5,8 @@
 #include <qml/nodemodel.h>
 
 #include <interfaces/node.h>
+#include <net.h>
+#include <node/ui_interface.h>
 #include <validation.h>
 
 #include <cassert>
@@ -23,6 +25,14 @@ void NodeModel::setBlockTipHeight(int new_height)
     if (new_height != m_block_tip_height) {
         m_block_tip_height = new_height;
         Q_EMIT blockTipHeightChanged();
+    }
+}
+
+void NodeModel::setNumOutboundPeers(int new_num)
+{
+    if (new_num != m_num_outbound_peers) {
+        m_num_outbound_peers = new_num;
+        Q_EMIT numOutboundPeersChanged();
     }
 }
 
@@ -68,10 +78,16 @@ void NodeModel::timerEvent(QTimerEvent* event)
 void NodeModel::ConnectToBlockTipSignal()
 {
     assert(!m_handler_notify_block_tip);
+    assert(!m_handler_notify_num_peers_changed);
 
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             setBlockTipHeight(tip.block_height);
             setVerificationProgress(verification_progress);
+        });
+
+    m_handler_notify_num_peers_changed = m_node.handleNotifyNumConnectionsChanged(
+        [this](PeersNumByType new_num_peers) {
+            setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
         });
 }
