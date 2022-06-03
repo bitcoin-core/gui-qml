@@ -150,6 +150,7 @@ MACHO_ALLOWED_LIBRARIES = {
 'QuartzCore', # animation
 'Security', # access control and authentication
 'UniformTypeIdentifiers', # collection of types that map to MIME and file types
+'OpenGL',
 }
 
 PE_ALLOWED_LIBRARIES = {

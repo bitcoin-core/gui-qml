@@ -132,6 +132,8 @@ endif
 
 $(package)_config_opts_darwin := -no-dbus
 $(package)_config_opts_darwin += -no-feature-printsupport
+$(package)_config_opts_darwin += -pch
+$(package)_config_opts_darwin += -no-feature-corewlan
 $(package)_config_opts_darwin += -no-freetype
 $(package)_config_opts_darwin += -no-pkg-config
 
