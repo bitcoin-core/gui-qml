@@ -7,9 +7,20 @@ $(package)_sha256_hash=$(qt_details_qtbase_sha256_hash)
 ifneq ($(host),$(build))
 $(package)_dependencies := native_$(package)
 endif
-$(package)_linux_dependencies=freetype fontconfig libxcb libxkbcommon libxcb_util libxcb_util_cursor libxcb_util_render libxcb_util_keysyms libxcb_util_image libxcb_util_wm
+$(package)_linux_dependencies=freetype fontconfig libxcb libxkbcommon libxcb_util libxcb_util_cursor libxcb_util_render libxcb_util_keysyms libxcb_util_image libxcb_util_wm libglvnd
+$(package)_qt_libs=corelib network widgets gui plugins testlib
+$(package)_linguist_tools = lrelease lupdate lconvert
 $(package)_patches_path := $(qt_details_patches_path)
 $(package)_patches := dont_hardcode_pwd.patch
+$(package)_patches += qt.pro
+$(package)_patches += qttools_src.pro
+$(package)_patches += mac-qmake.conf
+$(package)_patches += fix_qt_pkgconfig.patch
+$(package)_patches += no-xlib.patch
+$(package)_patches += dont_hardcode_x86_64.patch
+$(package)_patches += fix_montery_include.patch
+$(package)_patches += fix_android_jni_static.patch
+$(package)_patches += dont_hardcode_pwd.patch
 $(package)_patches += qtbase-moc-ignore-gcc-macro.patch
 $(package)_patches += qtbase_avoid_native_float16.patch
 $(package)_patches += qtbase_avoid_qmain.patch
