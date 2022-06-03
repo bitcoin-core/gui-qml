@@ -154,7 +154,6 @@ $(package)_config_opts += -no-feature-qml-worker-script
 $(package)_config_opts += -no-feature-qml-xml-http-request
 
 $(package)_config_opts_darwin = -no-dbus
-$(package)_config_opts_darwin += -no-opengl
 $(package)_config_opts_darwin += -pch
 $(package)_config_opts_darwin += -no-feature-corewlan
 $(package)_config_opts_darwin += -no-freetype

@@ -138,6 +138,7 @@ MACHO_ALLOWED_LIBRARIES = {
 'Metal', # 3D graphics
 'Security', # access control and authentication
 'QuartzCore', # animation
+'OpenGL',
 }
 
 PE_ALLOWED_LIBRARIES = {
