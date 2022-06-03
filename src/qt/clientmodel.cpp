@@ -15,7 +15,7 @@
 #include <interfaces/node.h>
 #include <net.h>
 #include <netbase.h>
-#include <node/ui_interface.h>
+#include <node/interface_ui.h>
 #include <util/system.h>
 #include <util/threadnames.h>
 #include <util/time.h>
