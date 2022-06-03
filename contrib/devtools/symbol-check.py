@@ -164,6 +164,7 @@ PE_ALLOWED_LIBRARIES = {
 'WTSAPI32.dll',
 'd3d11.dll',
 'dxgi.dll',
+'OPENGL32.dll',
 }
 
 def check_version(max_versions, version, arch) -> bool:
