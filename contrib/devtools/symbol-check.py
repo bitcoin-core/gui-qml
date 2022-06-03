@@ -188,6 +188,7 @@ PE_ALLOWED_LIBRARIES = {
 'SHCORE.dll', # Stream Handler Core
 'd3d11.dll',
 'dxgi.dll',
+'OPENGL32.dll',
 }
 
 def check_version(max_versions, version, arch) -> bool:

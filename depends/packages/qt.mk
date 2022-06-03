@@ -206,6 +206,8 @@ $(package)_config_opts_x86_64_linux = -xplatform linux-g++-64
 endif
 
 $(package)_config_opts_mingw32 := -no-dbus
+$(package)_config_opts_mingw32 += -opengl desktop
+$(package)_config_opts_mingw32 += -no-d3d12
 $(package)_config_opts_mingw32 += -no-freetype
 $(package)_config_opts_mingw32 += -no-pkg-config
 $(package)_config_opts_mingw32 += -no-opengl
