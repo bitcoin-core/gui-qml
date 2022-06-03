@@ -203,7 +203,7 @@ else
   $(package)_config_opts_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
 endif
 
-$(package)_config_opts_mingw32 = -no-opengl
+$(package)_config_opts_mingw32 = -opengl desktop
 $(package)_config_opts_mingw32 += -no-d3d12
 $(package)_config_opts_mingw32 += -no-dbus
 $(package)_config_opts_mingw32 += -no-freetype
