@@ -11,18 +11,6 @@ Page {
     property var views
     property alias finished: swipeView.finished
     background: null
-    header: RowLayout {
-        height: 50
-        Layout.leftMargin: 10
-        Loader {
-            active: swipeView.currentIndex > 0 ? true : false
-            visible: active
-            sourceComponent: TextButton {
-                text: "‹ Back"
-                onClicked: swipeView.currentIndex -= 1
-            }
-        }
-    }
     SwipeView {
         id: swipeView
         property bool inSubPage: false
@@ -33,18 +21,6 @@ Page {
             model: views.length
             Loader {
                 source: "../" + views[index]
-            }
-        }
-    }
-    footer: Page {
-        background: Rectangle {
-            color: "black"
-        }
-        contentItem: RowLayout {
-            PageIndicator {
-                Layout.alignment: Qt.AlignCenter
-                count: swipeView.count
-                currentIndex: swipeView.currentIndex
             }
         }
     }
