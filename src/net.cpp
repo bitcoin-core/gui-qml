@@ -25,6 +25,7 @@
 #include <protocol.h>
 #include <random.h>
 #include <scheduler.h>
+#include <util/designator.h>
 #include <util/sock.h>
 #include <util/strencodings.h>
 #include <util/syscall_sandbox.h>
@@ -113,7 +114,7 @@ static const uint64_t RANDOMIZER_ID_ADDRCACHE = 0x1cf2e4ddd306dda9ULL; // SHA256
 //
 bool fDiscover = true;
 bool fListen = true;
-Mutex g_maplocalhost_mutex;
+GlobalMutex g_maplocalhost_mutex;
 std::map<CNetAddr, LocalServiceInfo> mapLocalHost GUARDED_BY(g_maplocalhost_mutex);
 static bool vfLimited[NET_MAX] GUARDED_BY(g_maplocalhost_mutex) = {};
 std::string strSubVersion;
@@ -1101,12 +1102,20 @@ bool CConnman::AttemptToEvictConnection()
                 continue;
             if (node->fDisconnect)
                 continue;
-            NodeEvictionCandidate candidate = {node->GetId(), node->m_connected, node->m_min_ping_time,
-                                               node->m_last_block_time, node->m_last_tx_time,
-                                               HasAllDesirableServiceFlags(node->nServices),
-                                               node->m_relays_txs.load(), node->m_bloom_filter_loaded.load(),
-                                               node->nKeyedNetGroup, node->m_prefer_evict, node->addr.IsLocal(),
-                                               node->ConnectedThroughNetwork()};
+            NodeEvictionCandidate candidate{
+                Desig(id) node->GetId(),
+                Desig(m_connected) node->m_connected,
+                Desig(m_min_ping_time) node->m_min_ping_time,
+                Desig(m_last_block_time) node->m_last_block_time,
+                Desig(m_last_tx_time) node->m_last_tx_time,
+                Desig(fRelevantServices) HasAllDesirableServiceFlags(node->nServices),
+                Desig(m_relay_txs) node->m_relays_txs.load(),
+                Desig(fBloomFilter) node->m_bloom_filter_loaded.load(),
+                Desig(nKeyedNetGroup) node->nKeyedNetGroup,
+                Desig(prefer_evict) node->m_prefer_evict,
+                Desig(m_is_local) node->addr.IsLocal(),
+                Desig(m_network) node->ConnectedThroughNetwork(),
+            };
             vEvictionCandidates.push_back(candidate);
         }
     }
@@ -1864,12 +1873,12 @@ bool CConnman::GetTryNewOutboundPeer() const
 void CConnman::SetTryNewOutboundPeer(bool flag)
 {
     m_try_another_outbound_peer = flag;
-    LogPrint(BCLog::NET, "net: setting try another outbound peer=%s\n", flag ? "true" : "false");
+    LogPrint(BCLog::NET, "setting try another outbound peer=%s\n", flag ? "true" : "false");
 }
 
 void CConnman::StartExtraBlockRelayPeers()
 {
-    LogPrint(BCLog::NET, "net: enabling extra block-relay-only peers\n");
+    LogPrint(BCLog::NET, "enabling extra block-relay-only peers\n");
     m_start_extra_block_relay_peers = true;
 }
 
@@ -2805,8 +2814,11 @@ std::vector<CAddress> CConnman::GetAddresses(CNode& requestor, size_t max_addres
 {
     auto local_socket_bytes = requestor.addrBind.GetAddrBytes();
     uint64_t cache_id = GetDeterministicRandomizer(RANDOMIZER_ID_ADDRCACHE)
-        .Write(requestor.addr.GetNetwork())
+        .Write(requestor.ConnectedThroughNetwork())
         .Write(local_socket_bytes.data(), local_socket_bytes.size())
+        // For outbound connections, the port of the bound address is randomly
+        // assigned by the OS and would therefore not be useful for seeding.
+        .Write(requestor.IsInboundConn() ? requestor.addrBind.GetPort() : 0)
         .Finalize();
     const auto current_time = GetTime<std::chrono::microseconds>();
     auto r = m_addr_response_caches.emplace(cache_id, CachedAddrResponse{});

@@ -66,7 +66,7 @@ struct CUpdatedBlock
     int height;
 };
 
-static Mutex cs_blockchange;
+static GlobalMutex cs_blockchange;
 static std::condition_variable cond_blockchange;
 static CUpdatedBlock latestblock GUARDED_BY(cs_blockchange);
 
@@ -790,7 +790,7 @@ static RPCHelpMan pruneblockchain()
     const CBlockIndex& block{*CHECK_NONFATAL(active_chain.Tip())};
     const CBlockIndex* last_block{active_chainstate.m_blockman.GetFirstStoredBlock(block)};
 
-    return static_cast<uint64_t>(last_block->nHeight);
+    return static_cast<int64_t>(last_block->nHeight - 1);
 },
     };
 }
@@ -2085,7 +2085,7 @@ static RPCHelpMan scantxoutset()
             // no scan in progress
             return NullUniValue;
         }
-        result.pushKV("progress", g_scan_progress);
+        result.pushKV("progress", g_scan_progress.load());
         return result;
     } else if (request.params[0].get_str() == "abort") {
         CoinsViewScanReserver reserver;

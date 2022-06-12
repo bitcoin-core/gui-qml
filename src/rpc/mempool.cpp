@@ -8,6 +8,7 @@
 #include <core_io.h>
 #include <fs.h>
 #include <policy/rbf.h>
+#include <policy/settings.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
@@ -15,7 +16,6 @@
 #include <txmempool.h>
 #include <univalue.h>
 #include <util/moneystr.h>
-#include <validation.h>
 
 using node::DEFAULT_MAX_RAW_TX_FEE_RATE;
 using node::NodeContext;
@@ -229,23 +229,12 @@ static std::vector<RPCResult> MempoolEntryDescription()
     return {
         RPCResult{RPCResult::Type::NUM, "vsize", "virtual transaction size as defined in BIP 141. This is different from actual serialized size for witness transactions as witness data is discounted."},
         RPCResult{RPCResult::Type::NUM, "weight", "transaction weight as defined in BIP 141."},
-        RPCResult{RPCResult::Type::STR_AMOUNT, "fee", /*optional=*/true,
-                  "transaction fee, denominated in " + CURRENCY_UNIT + " (DEPRECATED, returned only if config option -deprecatedrpc=fees is passed)"},
-        RPCResult{RPCResult::Type::STR_AMOUNT, "modifiedfee", /*optional=*/true,
-                  "transaction fee with fee deltas used for mining priority, denominated in " + CURRENCY_UNIT +
-                      " (DEPRECATED, returned only if config option -deprecatedrpc=fees is passed)"},
         RPCResult{RPCResult::Type::NUM_TIME, "time", "local time transaction entered pool in seconds since 1 Jan 1970 GMT"},
         RPCResult{RPCResult::Type::NUM, "height", "block height when transaction entered pool"},
         RPCResult{RPCResult::Type::NUM, "descendantcount", "number of in-mempool descendant transactions (including this one)"},
         RPCResult{RPCResult::Type::NUM, "descendantsize", "virtual transaction size of in-mempool descendants (including this one)"},
-        RPCResult{RPCResult::Type::STR_AMOUNT, "descendantfees", /*optional=*/true,
-                  "transaction fees of in-mempool descendants (including this one) with fee deltas used for mining priority, denominated in " +
-                      CURRENCY_ATOM + "s (DEPRECATED, returned only if config option -deprecatedrpc=fees is passed)"},
         RPCResult{RPCResult::Type::NUM, "ancestorcount", "number of in-mempool ancestor transactions (including this one)"},
         RPCResult{RPCResult::Type::NUM, "ancestorsize", "virtual transaction size of in-mempool ancestors (including this one)"},
-        RPCResult{RPCResult::Type::STR_AMOUNT, "ancestorfees", /*optional=*/true,
-                  "transaction fees of in-mempool ancestors (including this one) with fee deltas used for mining priority, denominated in " +
-                      CURRENCY_ATOM + "s (DEPRECATED, returned only if config option -deprecatedrpc=fees is passed)"},
         RPCResult{RPCResult::Type::STR_HEX, "wtxid", "hash of serialized transaction, including witness data"},
         RPCResult{RPCResult::Type::OBJ, "fees", "",
             {
@@ -269,24 +258,12 @@ static void entryToJSON(const CTxMemPool& pool, UniValue& info, const CTxMemPool
 
     info.pushKV("vsize", (int)e.GetTxSize());
     info.pushKV("weight", (int)e.GetTxWeight());
-    // TODO: top-level fee fields are deprecated. deprecated_fee_fields_enabled blocks should be removed in v24
-    const bool deprecated_fee_fields_enabled{IsDeprecatedRPCEnabled("fees")};
-    if (deprecated_fee_fields_enabled) {
-        info.pushKV("fee", ValueFromAmount(e.GetFee()));
-        info.pushKV("modifiedfee", ValueFromAmount(e.GetModifiedFee()));
-    }
     info.pushKV("time", count_seconds(e.GetTime()));
     info.pushKV("height", (int)e.GetHeight());
     info.pushKV("descendantcount", e.GetCountWithDescendants());
     info.pushKV("descendantsize", e.GetSizeWithDescendants());
-    if (deprecated_fee_fields_enabled) {
-        info.pushKV("descendantfees", e.GetModFeesWithDescendants());
-    }
     info.pushKV("ancestorcount", e.GetCountWithAncestors());
     info.pushKV("ancestorsize", e.GetSizeWithAncestors());
-    if (deprecated_fee_fields_enabled) {
-        info.pushKV("ancestorfees", e.GetModFeesWithAncestors());
-    }
     info.pushKV("wtxid", pool.vTxHashes[e.vTxHashesIdx].first.ToString());
 
     UniValue fees(UniValue::VOBJ);
@@ -639,7 +616,7 @@ static RPCHelpMan gettxspendingprevout()
                                 }, /*fAllowNull=*/false, /*fStrict=*/true);
 
                 const uint256 txid(ParseHashO(o, "txid"));
-                const int nOutput = find_value(o, "vout").get_int();
+                const int nOutput{find_value(o, "vout").getInt<int>()};
                 if (nOutput < 0) {
                     throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid parameter, vout cannot be negative");
                 }
