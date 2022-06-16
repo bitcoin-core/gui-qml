@@ -10,6 +10,7 @@ from enum import Enum
 from random import choice
 from typing import (
     Any,
+    List,
     Optional,
 )
 from test_framework.address import (
@@ -147,7 +148,7 @@ class MiniWallet:
     def get_address(self):
         return self._address
 
-    def get_utxo(self, *, txid: str = '', vout: Optional[int] = None, mark_as_spent=True):
+    def get_utxo(self, *, txid: str = '', vout: Optional[int] = None, mark_as_spent=True) -> dict:
         """
         Returns a utxo and marks it as spent (pops it from the internal list)
 
@@ -166,6 +167,13 @@ class MiniWallet:
             return self._utxos.pop(index)
         else:
             return self._utxos[index]
+
+    def get_utxos(self, *, mark_as_spent=True):
+        """Returns the list of all utxos and optionally mark them as spent"""
+        utxos = deepcopy(self._utxos)
+        if mark_as_spent:
+            self._utxos = []
+        return utxos
 
     def send_self_transfer(self, **kwargs):
         """Create and send a tx with the specified fee_rate. Fee may be exact or at most one satoshi higher than needed."""
@@ -208,14 +216,21 @@ class MiniWallet:
         return {'new_utxos': [self.get_utxo(txid=txid, vout=vout) for vout in range(len(tx.vout))],
                 'txid': txid, 'hex': tx.serialize().hex(), 'tx': tx}
 
-    def create_self_transfer_multi(self, *, from_node, utxos_to_spend=None, num_outputs=1, fee_per_output=1000):
+    def create_self_transfer_multi(
+            self, *, from_node,
+            utxos_to_spend: Optional[List[dict]] = None,
+            num_outputs=1,
+            sequence=0,
+            fee_per_output=1000):
         """
         Create and return a transaction that spends the given UTXOs and creates a
         certain number of outputs with equal amounts.
         """
         utxos_to_spend = utxos_to_spend or [self.get_utxo()]
         # create simple tx template (1 input, 1 output)
-        tx = self.create_self_transfer(fee_rate=0, from_node=from_node, utxo_to_spend=utxos_to_spend[0], mempool_valid=False)['tx']
+        tx = self.create_self_transfer(
+            fee_rate=0, from_node=from_node,
+            utxo_to_spend=utxos_to_spend[0], sequence=sequence, mempool_valid=False)['tx']
 
         # duplicate inputs, witnesses and outputs
         tx.vin = [deepcopy(tx.vin[0]) for _ in range(len(utxos_to_spend))]
@@ -270,8 +285,8 @@ class MiniWallet:
 
         return {'txid': tx.rehash(), 'wtxid': tx.getwtxid(), 'hex': tx_hex, 'tx': tx}
 
-    def sendrawtransaction(self, *, from_node, tx_hex, **kwargs):
-        txid = from_node.sendrawtransaction(hexstring=tx_hex, **kwargs)
+    def sendrawtransaction(self, *, from_node, tx_hex, maxfeerate=0, **kwargs):
+        txid = from_node.sendrawtransaction(hexstring=tx_hex, maxfeerate=maxfeerate, **kwargs)
         self.scan_tx(from_node.decoderawtransaction(tx_hex))
         return txid
 

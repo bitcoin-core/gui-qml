@@ -23,7 +23,7 @@ noinst_PROGRAMS =
 TESTS =
 BENCHMARKS =
 
-BITCOIN_INCLUDES=-I$(builddir) -I$(srcdir)/$(MINISKETCH_INCLUDE_DIR_INT) -I$(srcdir)/secp256k1/include -I$(srcdir)/$(UNIVALUE_INCLUDE_DIR_INT) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS)
+BITCOIN_INCLUDES=-I$(builddir) -I$(srcdir)/$(MINISKETCH_INCLUDE_DIR_INT) -I$(srcdir)/secp256k1/include -I$(srcdir)/$(UNIVALUE_INCLUDE_DIR_INT) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS)
 
 LIBBITCOIN_NODE=libbitcoin_node.a
 LIBBITCOIN_COMMON=libbitcoin_common.a
@@ -139,7 +139,6 @@ BITCOIN_CORE_H = \
   compat/byteswap.h \
   compat/cpuid.h \
   compat/endian.h \
-  compat/sanity.h \
   compressor.h \
   consensus/consensus.h \
   consensus/tx_check.h \
@@ -172,7 +171,9 @@ BITCOIN_CORE_H = \
   interfaces/node.h \
   interfaces/wallet.h \
   kernel/chainstatemanager_opts.h \
+  kernel/checks.h \
   kernel/coinstats.h \
+  kernel/context.h \
   key.h \
   key_io.h \
   logging.h \
@@ -255,6 +256,7 @@ BITCOIN_CORE_H = \
   util/bip32.h \
   util/bytevectorhash.h \
   util/check.h \
+  util/designator.h \
   util/epochguard.h \
   util/error.h \
   util/fastrange.h \
@@ -356,7 +358,9 @@ libbitcoin_node_a_SOURCES = \
   index/coinstatsindex.cpp \
   index/txindex.cpp \
   init.cpp \
+  kernel/checks.cpp \
   kernel/coinstats.cpp \
+  kernel/context.cpp \
   mapport.cpp \
   net.cpp \
   netgroup.cpp \
@@ -407,6 +411,7 @@ libbitcoin_node_a_SOURCES = \
 
 if ENABLE_WALLET
 libbitcoin_node_a_SOURCES += wallet/init.cpp
+libbitcoin_node_a_CPPFLAGS += $(BDB_CPPFLAGS)
 endif
 if !ENABLE_WALLET
 libbitcoin_node_a_SOURCES += dummywallet.cpp
@@ -426,7 +431,7 @@ endif
 
 # wallet: shared between bitcoind and bitcoin-qt, but only linked
 # when wallet enabled
-libbitcoin_wallet_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(SQLITE_CFLAGS)
+libbitcoin_wallet_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BDB_CPPFLAGS) $(SQLITE_CFLAGS)
 libbitcoin_wallet_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libbitcoin_wallet_a_SOURCES = \
   wallet/coincontrol.cpp \
@@ -629,15 +634,12 @@ libbitcoin_common_a_SOURCES = \
   $(BITCOIN_CORE_H)
 
 # util: shared between all executables.
-# This library *must* be included to make sure that the glibc
-# sanity checks are linked.
 libbitcoin_util_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 libbitcoin_util_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libbitcoin_util_a_SOURCES = \
   support/lockedpool.cpp \
   chainparamsbase.cpp \
   clientversion.cpp \
-  compat/glibcxx_sanity.cpp \
   fs.cpp \
   interfaces/echo.cpp \
   interfaces/handler.cpp \
@@ -857,7 +859,6 @@ libbitcoinkernel_la_SOURCES = \
   chainparams.cpp \
   clientversion.cpp \
   coins.cpp \
-  compat/glibcxx_sanity.cpp \
   compressor.cpp \
   consensus/merkle.cpp \
   consensus/tx_check.cpp \
@@ -869,8 +870,9 @@ libbitcoinkernel_la_SOURCES = \
   flatfile.cpp \
   fs.cpp \
   hash.cpp \
-  init/common.cpp \
+  kernel/checks.cpp \
   kernel/coinstats.cpp \
+  kernel/context.cpp \
   key.cpp \
   logging.cpp \
   node/blockstorage.cpp \
