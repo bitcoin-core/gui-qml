@@ -319,6 +319,27 @@ task:
     type: "application/gzip"
 
 task:
+  name: 'macOS arm64 [gui, no tests] [jammy]'
+  << : *BASE_TEMPLATE
+  macos_sdk_cache:
+    folder: "depends/SDKs/$MACOS_SDK"
+    fingerprint_key: "$MACOS_SDK"
+  << : *MAIN_TEMPLATE
+  alias: macos_arm64
+  container:
+    image: ubuntu:jammy
+  env:
+    MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
+    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
+    FILE_ENV: "./ci/test/00_setup_env_mac_arm64.sh"
+  copy_artifacts_script:
+    - cp ci/scratch/build/bitcoin-arm64-apple-darwin/src/qt/bitcoin-qt insecure_mac_arm64_gui
+    - tar -czf insecure_mac_arm64_gui.tar.gz insecure_mac_arm64_gui
+  insecure_mac_arm64_gui_artifacts:
+    path: "insecure_mac_arm64_gui.tar.gz"
+    type: "application/gzip"
+
+task:
   name: 'macOS 12 native [gui, system sqlite only] [no depends]'
   brew_install_script:
     - brew install boost libevent qt@5 miniupnpc libnatpmp ccache zeromq qrencode libtool automake gnu-getopt
