@@ -58,19 +58,19 @@ compute_credits_template: &CREDITS_TEMPLATE
   # Only use credits for pull requests to the main repo
   use_compute_credits: $CIRRUS_REPO_FULL_NAME == 'bitcoin/bitcoin' && $CIRRUS_PR != ""
 
-task:
-  name: 'lint [bionic]'
-  << : *BASE_TEMPLATE
-  container:
-    image: ubuntu:bionic  # For python 3.6, oldest supported version according to doc/dependencies.md
-    cpu: 1
-    memory: 1G
-  # For faster CI feedback, immediately schedule the linters
-  << : *CREDITS_TEMPLATE
-  lint_script:
-    - ./ci/lint_run_all.sh
-  env:
-    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
+# task:
+#   name: 'lint [bionic]'
+#   << : *BASE_TEMPLATE
+#   container:
+#     image: ubuntu:bionic  # For python 3.6, oldest supported version according to doc/dependencies.md
+#     cpu: 1
+#     memory: 1G
+#   # For faster CI feedback, immediately schedule the linters
+#   << : *CREDITS_TEMPLATE
+#   lint_script:
+#     - ./ci/lint_run_all.sh
+#   env:
+#     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
 
 task:
   name: 'tidy [jammy]'
