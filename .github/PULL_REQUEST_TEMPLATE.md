@@ -48,5 +48,5 @@ Links for Windows and macOS build artifacts. Replace <PR> with the assigned pull
 [![Windows](https://img.shields.io/badge/OS-Windows-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip?branch=pull/<PR>)
 [![Intel macOS](https://img.shields.io/badge/OS-macOS-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip?branch=pull/<PR>)
 [![Apple Silicon macOS](https://img.shields.io/badge/OS-macOS-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos_arm64/insecure_mac_arm64_gui.zip?branch=pull/<PR>)
-[![Android](https://img.shields.io/badge/OS-Android-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip?branch=pull/<PR>)
+[![ARM64 Android](https://img.shields.io/badge/OS-Android-green)](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip?branch=pull/<PR>)
 -->
