@@ -9,7 +9,7 @@
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
-#include <node/ui_interface.h>
+#include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
