@@ -9,6 +9,7 @@
 #include <chainparams.h>
 #include <common/bloom.h>
 #include <compat.h>
+#include <node/connection_types.h>
 #include <consensus/amount.h>
 #include <crypto/siphash.h>
 #include <hash.h>
@@ -120,78 +121,6 @@ struct CSerializedNetMsg {
     std::vector<unsigned char> data;
     std::string m_type;
 };
-
-/** Different types of connections to a peer. This enum encapsulates the
- * information we have available at the time of opening or accepting the
- * connection. Aside from INBOUND, all types are initiated by us.
- *
- * If adding or removing types, please update CONNECTION_TYPE_DOC in
- * src/rpc/net.cpp and src/qt/rpcconsole.cpp, as well as the descriptions in
- * src/qt/guiutil.cpp and src/bitcoin-cli.cpp::NetinfoRequestHandler. */
-enum class ConnectionType {
-    /**
-     * Inbound connections are those initiated by a peer. This is the only
-     * property we know at the time of connection, until P2P messages are
-     * exchanged.
-     */
-    INBOUND,
-
-    /**
-     * These are the default connections that we use to connect with the
-     * network. There is no restriction on what is relayed; by default we relay
-     * blocks, addresses & transactions. We automatically attempt to open
-     * MAX_OUTBOUND_FULL_RELAY_CONNECTIONS using addresses from our AddrMan.
-     */
-    OUTBOUND_FULL_RELAY,
-
-
-    /**
-     * We open manual connections to addresses that users explicitly requested
-     * via the addnode RPC or the -addnode/-connect configuration options. Even if a
-     * manual connection is misbehaving, we do not automatically disconnect or
-     * add it to our discouragement filter.
-     */
-    MANUAL,
-
-    /**
-     * Feeler connections are short-lived connections made to check that a node
-     * is alive. They can be useful for:
-     * - test-before-evict: if one of the peers is considered for eviction from
-     *   our AddrMan because another peer is mapped to the same slot in the tried table,
-     *   evict only if this longer-known peer is offline.
-     * - move node addresses from New to Tried table, so that we have more
-     *   connectable addresses in our AddrMan.
-     * Note that in the literature ("Eclipse Attacks on Bitcoin’s Peer-to-Peer Network")
-     * only the latter feature is referred to as "feeler connections",
-     * although in our codebase feeler connections encompass test-before-evict as well.
-     * We make these connections approximately every FEELER_INTERVAL:
-     * first we resolve previously found collisions if they exist (test-before-evict),
-     * otherwise we connect to a node from the new table.
-     */
-    FEELER,
-
-    /**
-     * We use block-relay-only connections to help prevent against partition
-     * attacks. By not relaying transactions or addresses, these connections
-     * are harder to detect by a third party, thus helping obfuscate the
-     * network topology. We automatically attempt to open
-     * MAX_BLOCK_RELAY_ONLY_ANCHORS using addresses from our anchors.dat. Then
-     * addresses from our AddrMan if MAX_BLOCK_RELAY_ONLY_CONNECTIONS
-     * isn't reached yet.
-     */
-    BLOCK_RELAY,
-
-    /**
-     * AddrFetch connections are short lived connections used to solicit
-     * addresses from peers. These are initiated to addresses submitted via the
-     * -seednode command line argument, or under certain conditions when the
-     * AddrMan is empty.
-     */
-    ADDR_FETCH,
-};
-
-/** Convert ConnectionType enum to a string value */
-std::string ConnectionTypeAsString(ConnectionType conn_type);
 
 /**
  * Look up IP addresses from all interfaces on the machine and add them to the
@@ -980,28 +909,9 @@ private:
     /**
      * Generate a collection of sockets to check for IO readiness.
      * @param[in] nodes Select from these nodes' sockets.
-     * @param[out] recv_set Sockets to check for read readiness.
-     * @param[out] send_set Sockets to check for write readiness.
-     * @param[out] error_set Sockets to check for errors.
-     * @return true if at least one socket is to be checked (the returned set is not empty)
+     * @return sockets to check for readiness
      */
-    bool GenerateSelectSet(const std::vector<CNode*>& nodes,
-                           std::set<SOCKET>& recv_set,
-                           std::set<SOCKET>& send_set,
-                           std::set<SOCKET>& error_set);
-
-    /**
-     * Check which sockets are ready for IO.
-     * @param[in] nodes Select from these nodes' sockets.
-     * @param[out] recv_set Sockets which are ready for read.
-     * @param[out] send_set Sockets which are ready for write.
-     * @param[out] error_set Sockets which have errors.
-     * This calls `GenerateSelectSet()` to gather a list of sockets to check.
-     */
-    void SocketEvents(const std::vector<CNode*>& nodes,
-                      std::set<SOCKET>& recv_set,
-                      std::set<SOCKET>& send_set,
-                      std::set<SOCKET>& error_set);
+    Sock::EventsPerSock GenerateWaitSockets(Span<CNode* const> nodes);
 
     /**
      * Check connected and listening sockets for IO readiness and process them accordingly.
@@ -1010,23 +920,18 @@ private:
 
     /**
      * Do the read/write for connected sockets that are ready for IO.
-     * @param[in] nodes Nodes to process. The socket of each node is checked against
-     * `recv_set`, `send_set` and `error_set`.
-     * @param[in] recv_set Sockets that are ready for read.
-     * @param[in] send_set Sockets that are ready for send.
-     * @param[in] error_set Sockets that have an exceptional condition (error).
+     * @param[in] nodes Nodes to process. The socket of each node is checked against `what`.
+     * @param[in] events_per_sock Sockets that are ready for IO.
      */
     void SocketHandlerConnected(const std::vector<CNode*>& nodes,
-                                const std::set<SOCKET>& recv_set,
-                                const std::set<SOCKET>& send_set,
-                                const std::set<SOCKET>& error_set)
+                                const Sock::EventsPerSock& events_per_sock)
         EXCLUSIVE_LOCKS_REQUIRED(!m_total_bytes_sent_mutex, !mutexMsgProc);
 
     /**
      * Accept incoming connections, one from each read-ready listening socket.
-     * @param[in] recv_set Sockets that are ready for read.
+     * @param[in] events_per_sock Sockets that are ready for IO.
      */
-    void SocketHandlerListening(const std::set<SOCKET>& recv_set);
+    void SocketHandlerListening(const Sock::EventsPerSock& events_per_sock);
 
     void ThreadSocketHandler() EXCLUSIVE_LOCKS_REQUIRED(!m_total_bytes_sent_mutex, !mutexMsgProc);
     void ThreadDNSAddressSeed() EXCLUSIVE_LOCKS_REQUIRED(!m_addr_fetches_mutex, !m_nodes_mutex);
@@ -1270,55 +1175,5 @@ extern std::function<void(const CAddress& addr,
                           Span<const unsigned char> data,
                           bool is_incoming)>
     CaptureMessage;
-
-struct NodeEvictionCandidate
-{
-    NodeId id;
-    std::chrono::seconds m_connected;
-    std::chrono::microseconds m_min_ping_time;
-    std::chrono::seconds m_last_block_time;
-    std::chrono::seconds m_last_tx_time;
-    bool fRelevantServices;
-    bool m_relay_txs;
-    bool fBloomFilter;
-    uint64_t nKeyedNetGroup;
-    bool prefer_evict;
-    bool m_is_local;
-    Network m_network;
-};
-
-/**
- * Select an inbound peer to evict after filtering out (protecting) peers having
- * distinct, difficult-to-forge characteristics. The protection logic picks out
- * fixed numbers of desirable peers per various criteria, followed by (mostly)
- * ratios of desirable or disadvantaged peers. If any eviction candidates
- * remain, the selection logic chooses a peer to evict.
- */
-[[nodiscard]] std::optional<NodeId> SelectNodeToEvict(std::vector<NodeEvictionCandidate>&& vEvictionCandidates);
-
-/** Protect desirable or disadvantaged inbound peers from eviction by ratio.
- *
- * This function protects half of the peers which have been connected the
- * longest, to replicate the non-eviction implicit behavior and preclude attacks
- * that start later.
- *
- * Half of these protected spots (1/4 of the total) are reserved for the
- * following categories of peers, sorted by longest uptime, even if they're not
- * longest uptime overall:
- *
- * - onion peers connected via our tor control service
- *
- * - localhost peers, as manually configured hidden services not using
- *   `-bind=addr[:port]=onion` will not be detected as inbound onion connections
- *
- * - I2P peers
- *
- * - CJDNS peers
- *
- * This helps protect these privacy network peers, which tend to be otherwise
- * disadvantaged under our eviction criteria for their higher min ping times
- * relative to IPv4/IPv6 peers, and favorise the diversity of peer connections.
- */
-void ProtectEvictionCandidatesByRatio(std::vector<NodeEvictionCandidate>& vEvictionCandidates);
 
 #endif // BITCOIN_NET_H

@@ -12,6 +12,7 @@
 #include <qt/bitcoin.h>
 #endif // USE_QML
 
+#include <compat.h>
 #include <util/translation.h>
 #include <util/url.h>
 
@@ -39,4 +40,7 @@ extern const std::function<std::string(const char*)> G_TRANSLATION_FUN = [](cons
 };
 UrlDecodeFn* const URL_DECODE = urlDecode;
 
-int main(int argc, char* argv[]) { return GuiMain(argc, argv); }
+MAIN_FUNCTION
+{
+    return GuiMain(argc, argv);
+}

@@ -150,8 +150,8 @@ bool Session::Accept(Connection& conn)
                 throw std::runtime_error("wait on socket failed");
             }
 
-            if ((occurred & Sock::RECV) == 0) {
-                // Timeout, no incoming connections within MAX_WAIT_FOR_IO.
+            if (occurred == 0) {
+                // Timeout, no incoming connections or errors within MAX_WAIT_FOR_IO.
                 continue;
             }
 
@@ -376,8 +376,8 @@ void Session::CreateIfNotCreatedAlready()
     m_session_id = session_id;
     m_control_sock = std::move(sock);
 
-    LogPrintf("I2P: SAM session created: session id=%s, my address=%s\n", m_session_id,
-              m_my_addr.ToString());
+    LogPrintfCategory(BCLog::I2P, "SAM session created: session id=%s, my address=%s\n",
+                      m_session_id, m_my_addr.ToString());
 }
 
 std::unique_ptr<Sock> Session::StreamAccept()
@@ -410,7 +410,7 @@ void Session::Disconnect()
             Log("Destroying session %s", m_session_id);
         }
     }
-    m_control_sock->Reset();
+    m_control_sock = std::make_unique<Sock>(INVALID_SOCKET);
     m_session_id.clear();
 }
 } // namespace sam
