@@ -36,7 +36,7 @@ Control {
         Loader {
             Layout.fillWidth: true
             Layout.preferredWidth: 0
-            active: root.description.length > 0
+            active: (root.description.length ?? 0) > 0
             visible: active
             sourceComponent: Label {
                 topPadding: root.descriptionMargin
@@ -52,7 +52,7 @@ Control {
         Loader {
             Layout.fillWidth: true
             Layout.preferredWidth: 0
-            active: root.subtext.length > 0
+            active: (root.subtext.length ?? 0) > 0
             visible: active
             sourceComponent: Label {
                 topPadding: root.subtextMargin
