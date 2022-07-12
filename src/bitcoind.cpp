@@ -14,7 +14,7 @@
 #include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <node/context.h>
-#include <node/ui_interface.h>
+#include <node/interface_ui.h>
 #include <noui.h>
 #include <shutdown.h>
 #include <util/check.h>
@@ -256,7 +256,7 @@ static bool AppInit(NodeContext& node, int argc, char* argv[])
     return fRet;
 }
 
-int main(int argc, char* argv[])
+MAIN_FUNCTION
 {
 #ifdef WIN32
     util::WinCmdLineArgs winArgs;

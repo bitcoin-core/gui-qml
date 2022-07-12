@@ -12,7 +12,7 @@
 #include <qt/bitcoin.h>
 #endif // USE_QML
 
-#include <interfaces/node.h>
+#include <compat.h>
 #include <noui.h>
 #include <util/translation.h>
 #include <util/url.h>
@@ -41,7 +41,7 @@ extern const std::function<std::string(const char*)> G_TRANSLATION_FUN = [](cons
 };
 UrlDecodeFn* const URL_DECODE = urlDecode;
 
-int main(int argc, char* argv[])
+MAIN_FUNCTION
 {
     // Subscribe to global signals from core.
     noui_connect();

@@ -262,7 +262,7 @@ private:
     typedef std::multimap<COutPoint, uint256> TxSpends;
     TxSpends mapTxSpends GUARDED_BY(cs_wallet);
     void AddToSpends(const COutPoint& outpoint, const uint256& wtxid, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
-    void AddToSpends(const uint256& wtxid, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    void AddToSpends(const CWalletTx& wtx, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Add a transaction to the wallet, or update it.  confirm.block_* should
@@ -441,16 +441,16 @@ public:
     //! check whether we support the named feature
     bool CanSupportFeature(enum WalletFeature wf) const override EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) { AssertLockHeld(cs_wallet); return IsFeatureSupported(nWalletVersion, wf); }
 
-    bool IsSpent(const uint256& hash, unsigned int n) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool IsSpent(const COutPoint& outpoint) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    // Whether this or any known UTXO with the same single key has been spent.
-    bool IsSpentKey(const uint256& hash, unsigned int n) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    // Whether this or any known scriptPubKey with the same single key has been spent.
+    bool IsSpentKey(const CScript& scriptPubKey) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     void SetSpentKeyState(WalletBatch& batch, const uint256& hash, unsigned int n, bool used, std::set<CTxDestination>& tx_destinations) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /** Display address on an external signer. Returns false if external signer support is not compiled */
     bool DisplayAddress(const CTxDestination& dest) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    bool IsLockedCoin(uint256 hash, unsigned int n) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    bool IsLockedCoin(const COutPoint& output) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool LockCoin(const COutPoint& output, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool UnlockCoin(const COutPoint& output, WalletBatch* batch = nullptr) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool UnlockAllCoins() EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -635,7 +635,30 @@ public:
 
     std::optional<int64_t> GetOldestKeyPoolTime() const;
 
-    std::set<CTxDestination> GetLabelAddresses(const std::string& label) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    // Filter struct for 'ListAddrBookAddresses'
+    struct AddrBookFilter {
+        // Fetch addresses with the provided label
+        std::optional<std::string> m_op_label{std::nullopt};
+        // Don't include change addresses by default
+        bool ignore_change{true};
+    };
+
+    /**
+     * Filter and retrieve destinations stored in the addressbook
+     */
+    std::vector<CTxDestination> ListAddrBookAddresses(const std::optional<AddrBookFilter>& filter) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    /**
+     * Retrieve all the known labels in the address book
+     */
+    std::set<std::string> ListAddrBookLabels(const std::string& purpose) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    /**
+     * Walk-through the address book entries.
+     * Stops when the provided 'ListAddrBookFunc' returns false.
+     */
+    using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, const std::string& purpose, bool is_change)>;
+    void ForEachAddrBookEntry(const ListAddrBookFunc& func) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Marks all outputs in each one of the destinations dirty, so their cache is
@@ -932,7 +955,7 @@ bool AddWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 //! Remove wallet name from persistent configuration so it will not be loaded on startup.
 bool RemoveWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 
-bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut &txout, bool use_max_sig);
+bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut &txout, const CCoinControl* coin_control = nullptr);
 
 bool FillInputToWeight(CTxIn& txin, int64_t target_weight);
 } // namespace wallet

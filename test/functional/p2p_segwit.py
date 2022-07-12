@@ -371,6 +371,10 @@ class SegWitTest(BitcoinTestFramework):
         block1 = self.build_next_block()
         block1.solve()
 
+        # Send an empty headers message, to clear out any prior getheaders
+        # messages that our peer may be waiting for us on.
+        self.test_node.send_message(msg_headers())
+
         self.test_node.announce_block_and_wait_for_getdata(block1, use_header=False)
         assert self.test_node.last_message["getdata"].inv[0].type == blocktype
         test_witness_block(self.nodes[0], self.test_node, block1, True)
@@ -1998,7 +2002,7 @@ class SegWitTest(BitcoinTestFramework):
             def serialize(self):
                 return serialize_with_bogus_witness(self.tx)
 
-        tx = self.wallet.create_self_transfer(from_node=self.nodes[0])['tx']
+        tx = self.wallet.create_self_transfer()['tx']
         assert_raises_rpc_error(-22, "TX decode failed", self.nodes[0].decoderawtransaction, hexstring=serialize_with_bogus_witness(tx).hex(), iswitness=True)
         with self.nodes[0].assert_debug_log(['Unknown transaction optional data']):
             self.test_node.send_and_ping(msg_bogus_tx(tx))
