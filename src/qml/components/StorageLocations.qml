@@ -14,22 +14,14 @@ ColumnLayout {
     spacing: 15
     OptionButton {
         ButtonGroup.group: group
-        text: qsTr("Reduce storage")
-        description: qsTr("Uses about 75GB.")
+        text: qsTr("SD Card")
+        description: qsTr("The available space is large enough for full block storage. ")
         recommended: true
         checked: true
-        detail: ProgressIndicator {
-            implicitWidth: 75
-            progress: 0.25
-        }
     }
     OptionButton {
         ButtonGroup.group: group
-        text: qsTr("Default")
-        description: qsTr("Uses about 423GB.")
-        detail: ProgressIndicator {
-            implicitWidth: 75
-            progress: 0.8
-        }
+        text: qsTr("Hard drive")
+        description: qsTr("Available space only allows for partial block storage.")
     }
 }

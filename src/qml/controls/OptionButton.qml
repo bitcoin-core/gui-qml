@@ -13,6 +13,7 @@ Button {
     padding: 15
     checkable: true
     property alias detail: detail_loader.sourceComponent
+    implicitWidth: 450
     background: Rectangle {
         border.width: 1
         border.color: button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
