@@ -13,7 +13,6 @@
 #endif // USE_QML
 
 #include <compat.h>
-#include <noui.h>
 #include <util/translation.h>
 #include <util/url.h>
 
@@ -43,12 +42,5 @@ UrlDecodeFn* const URL_DECODE = urlDecode;
 
 MAIN_FUNCTION
 {
-    // Subscribe to global signals from core.
-    noui_connect();
-
-#if USE_QML
-    return QmlGuiMain(argc, argv);
-#else
     return GuiMain(argc, argv);
-#endif // USE_QML
 }
