@@ -1,11 +1,16 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
+        <file>components/AboutOptions.qml</file>
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
+        <file>components/DeveloperOptions.qml</file>
+        <file>components/StorageLocations.qml</file>
         <file>components/StorageOptions.qml</file>
+        <file>components/StorageSettings.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/Header.qml</file>
+        <file>controls/Information.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
@@ -16,6 +21,19 @@
         <file>controls/Theme.qml</file>
         <file>controls/Wizard.qml</file>
         <file>pages/initerrormessage.qml</file>
+        <file>pages/onboarding/onboarding01.qml</file>
+        <file>pages/onboarding/onboarding01a.qml</file>
+        <file>pages/onboarding/onboarding01b.qml</file>
+        <file>pages/onboarding/onboarding01c.qml</file>
+        <file>pages/onboarding/onboarding02.qml</file>
+        <file>pages/onboarding/onboarding03.qml</file>
+        <file>pages/onboarding/onboarding04.qml</file>
+        <file>pages/onboarding/onboarding05.qml</file>
+        <file>pages/onboarding/onboarding05a.qml</file>
+        <file>pages/onboarding/onboarding05b.qml</file>
+        <file>pages/onboarding/onboarding06.qml</file>
+        <file>pages/onboarding/onboarding06a.qml</file>
+        <file>pages/onboarding/onboarding06b.qml</file>
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
