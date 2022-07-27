@@ -8,7 +8,7 @@ import QtQuick.Controls 2.15
 Button {
     font.family: "Inter"
     font.styleName: "Semi Bold"
-    font.pointSize: 18
+    font.pixelSize: 18
     contentItem: Text {
         text: parent.text
         font: parent.font

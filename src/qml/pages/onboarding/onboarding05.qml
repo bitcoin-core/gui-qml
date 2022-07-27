@@ -5,23 +5,23 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import "../../controls"
+import "../../components"
 
 Page {
-    id: root
-    property var views
-    property alias finished: swipeView.finished
     background: null
+    Layout.fillWidth: true
+    clip: true
     SwipeView {
-        id: swipeView
-        property bool inSubPage: false
-        property bool finished: false
+        id: storages
         anchors.fill: parent
         interactive: false
-        Repeater {
-            model: views.length
-            Loader {
-                source: "../pages/" + views[index]
-            }
+        orientation: Qt.Vertical
+        Loader {
+            source:"onboarding05a.qml"
+        }
+        Loader {
+            source:"onboarding05b.qml"
         }
     }
 }
