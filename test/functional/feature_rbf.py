@@ -7,7 +7,7 @@
 from decimal import Decimal
 
 from test_framework.messages import (
-    BIP125_SEQUENCE_NUMBER,
+    MAX_BIP125_RBF_SEQUENCE,
     COIN,
     SEQUENCE_FINAL,
 )
@@ -428,7 +428,7 @@ class ReplaceByFeeTest(BitcoinTestFramework):
 
                 optin_parent_tx = wallet.send_self_transfer_multi(
                     from_node=normal_node,
-                    sequence=BIP125_SEQUENCE_NUMBER,
+                    sequence=MAX_BIP125_RBF_SEQUENCE,
                     utxos_to_spend=[root_utxos[graph_num]],
                     num_outputs=txs_per_graph,
                 )
@@ -636,14 +636,14 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         optin_parent_tx = self.wallet.send_self_transfer(
             from_node=self.nodes[0],
             utxo_to_spend=confirmed_utxo,
-            sequence=BIP125_SEQUENCE_NUMBER,
+            sequence=MAX_BIP125_RBF_SEQUENCE,
             fee_rate=Decimal('0.01'),
         )
         assert_equal(True, self.nodes[0].getmempoolentry(optin_parent_tx['txid'])['bip125-replaceable'])
 
         replacement_parent_tx = self.wallet.create_self_transfer(
             utxo_to_spend=confirmed_utxo,
-            sequence=BIP125_SEQUENCE_NUMBER,
+            sequence=MAX_BIP125_RBF_SEQUENCE,
             fee_rate=Decimal('0.02'),
         )
 
@@ -702,17 +702,16 @@ class ReplaceByFeeTest(BitcoinTestFramework):
         assert_raises_rpc_error(-26, "insufficient fee", self.nodes[0].sendrawtransaction, tx.serialize().hex())
 
     def test_fullrbf(self):
-        txid = self.wallet.send_self_transfer(from_node=self.nodes[0])['txid']
-        self.generate(self.nodes[0], 1)
-        confirmed_utxo = self.wallet.get_utxo(txid=txid)
 
+        confirmed_utxo = self.make_utxo(self.nodes[0], int(2 * COIN))
         self.restart_node(0, extra_args=["-mempoolfullrbf=1"])
+        assert self.nodes[0].getmempoolinfo()["fullrbf"]
 
         # Create an explicitly opt-out transaction
         optout_tx = self.wallet.send_self_transfer(
             from_node=self.nodes[0],
             utxo_to_spend=confirmed_utxo,
-            sequence=SEQUENCE_FINAL,
+            sequence=MAX_BIP125_RBF_SEQUENCE + 1,
             fee_rate=Decimal('0.01'),
         )
         assert_equal(False, self.nodes[0].getmempoolentry(optout_tx['txid'])['bip125-replaceable'])
@@ -728,6 +727,7 @@ class ReplaceByFeeTest(BitcoinTestFramework):
 
         # Optout_tx is not anymore in the mempool.
         assert optout_tx['txid'] not in self.nodes[0].getrawmempool()
+        assert conflicting_tx['txid'] in self.nodes[0].getrawmempool()
 
 if __name__ == '__main__':
     ReplaceByFeeTest().main()

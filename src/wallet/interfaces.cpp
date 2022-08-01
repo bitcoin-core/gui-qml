@@ -146,11 +146,10 @@ public:
     void abortRescan() override { m_wallet->AbortRescan(); }
     bool backupWallet(const std::string& filename) override { return m_wallet->BackupWallet(filename); }
     std::string getWalletName() override { return m_wallet->GetName(); }
-    bool getNewDestination(const OutputType type, const std::string label, CTxDestination& dest) override
+    BResult<CTxDestination> getNewDestination(const OutputType type, const std::string label) override
     {
         LOCK(m_wallet->cs_wallet);
-        bilingual_str error;
-        return m_wallet->GetNewDestination(type, label, dest, error);
+        return m_wallet->GetNewDestination(type, label);
     }
     bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key) override
     {
@@ -250,22 +249,21 @@ public:
         LOCK(m_wallet->cs_wallet);
         return m_wallet->ListLockedCoins(outputs);
     }
-    CTransactionRef createTransaction(const std::vector<CRecipient>& recipients,
+    BResult<CTransactionRef> createTransaction(const std::vector<CRecipient>& recipients,
         const CCoinControl& coin_control,
         bool sign,
         int& change_pos,
-        CAmount& fee,
-        bilingual_str& fail_reason) override
+        CAmount& fee) override
     {
         LOCK(m_wallet->cs_wallet);
-        FeeCalculation fee_calc_out;
-        std::optional<CreatedTransactionResult> txr = CreateTransaction(*m_wallet, recipients, change_pos,
-                fail_reason, coin_control, fee_calc_out, sign);
-        if (!txr) return {};
-        fee = txr->fee;
-        change_pos = txr->change_pos;
+        const auto& res = CreateTransaction(*m_wallet, recipients, change_pos,
+                                     coin_control, sign);
+        if (!res) return res.GetError();
+        const auto& txr = res.GetObj();
+        fee = txr.fee;
+        change_pos = txr.change_pos;
 
-        return txr->tx;
+        return txr.tx;
     }
     void commitTransaction(CTransactionRef tx,
         WalletValueMap value_map,
@@ -571,11 +569,13 @@ public:
         options.require_existing = true;
         return MakeWallet(m_context, LoadWallet(m_context, name, true /* load_on_start */, options, status, error, warnings));
     }
-    std::unique_ptr<Wallet> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, bilingual_str& error, std::vector<bilingual_str>& warnings) override
+    BResult<std::unique_ptr<Wallet>> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, std::vector<bilingual_str>& warnings) override
     {
         DatabaseStatus status;
-
-        return MakeWallet(m_context, RestoreWallet(m_context, backup_file, wallet_name, /*load_on_start=*/true, status, error, warnings));
+        bilingual_str error;
+        BResult<std::unique_ptr<Wallet>> wallet{MakeWallet(m_context, RestoreWallet(m_context, backup_file, wallet_name, /*load_on_start=*/true, status, error, warnings))};
+        if (!wallet) return error;
+        return wallet;
     }
     std::string getWalletDir() override
     {

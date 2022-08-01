@@ -21,6 +21,7 @@ $(package)_patches += fix_limits_header.patch
 $(package)_patches += use_android_ndk23.patch
 $(package)_patches += rcc_hardcode_timestamp.patch
 $(package)_patches += duplicate_lcqpafonts.patch
+$(package)_patches += fast_fixed_dtoa_no_optimize.patch
 $(package)_patches += fix_android_plugin_names.patch
 $(package)_patches += fix_riscv_atomic.patch
 $(package)_patches += fix_static_build.patch
@@ -180,6 +181,9 @@ $(package)_config_opts_linux += -system-freetype
 $(package)_config_opts_linux += -fontconfig
 $(package)_config_opts_linux += -no-feature-vulkan
 $(package)_config_opts_linux += -dbus-runtime
+ifneq ($(LTO),)
+$(package)_config_opts_linux += -ltcg
+endif
 $(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
 $(package)_config_opts_i686_linux  = -xplatform linux-g++-32
 ifneq (,$(findstring -stdlib=libc++,$($(1)_cxx)))
@@ -202,6 +206,7 @@ $(package)_config_opts_mingw32 += "QMAKE_CFLAGS = '$($(package)_cflags) $($(pack
 $(package)_config_opts_mingw32 += "QMAKE_CXX = '$($(package)_cxx)'"
 $(package)_config_opts_mingw32 += "QMAKE_CXXFLAGS = '$($(package)_cxxflags) $($(package)_cppflags)'"
 $(package)_config_opts_mingw32 += "QMAKE_LFLAGS = '$($(package)_ldflags)'"
+$(package)_config_opts_mingw32 += "QMAKE_LIB = '$($(package)_ar) rc'"
 $(package)_config_opts_mingw32 += -device-option CROSS_COMPILE="$(host)-"
 $(package)_config_opts_mingw32 += -pch
 
@@ -289,6 +294,7 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/use_android_ndk23.patch && \
   patch -p1 -i $($(package)_patch_dir)/rcc_hardcode_timestamp.patch && \
   patch -p1 -i $($(package)_patch_dir)/duplicate_lcqpafonts.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fast_fixed_dtoa_no_optimize.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_android_plugin_names.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_riscv_atomic.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_static_build.patch && \
