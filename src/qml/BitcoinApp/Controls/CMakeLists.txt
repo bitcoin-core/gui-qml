@@ -14,6 +14,7 @@ qt6_add_qml_module(bitcoin_qml_controls
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
     ContinueButton.qml
+    ExternalLink.qml
     Header.qml
     Information.qml
     OptionButton.qml
