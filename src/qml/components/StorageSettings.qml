@@ -12,23 +12,28 @@ ColumnLayout {
     Setting {
         Layout.fillWidth: true
         header: qsTr("Store Recent blocks only")
+        actionItem: OptionSwitch {}
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Storage limit")
-        description: qsTr("75 GB")
-        isReadonly: false
+        actionItem: ValueInput {
+            description: qsTr("75 GB")
+        }
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Data location")
-        description: qsTr("c://.../data")
-        isReadonly: false
+        actionItem: ValueInput {
+            description: qsTr("c://.../data")
+        }
+
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Block location")
-        description: qsTr("c://.../blocks")
-        isReadonly: false
+        actionItem: ValueInput {
+            description: qsTr("c://.../blocks")
+        }
     }
 }
