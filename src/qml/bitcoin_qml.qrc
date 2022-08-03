@@ -19,6 +19,7 @@
         <file>controls/Setting.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
+        <file>controls/ValueInput.qml</file>
         <file>controls/Wizard.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/onboarding/onboarding01.qml</file>
@@ -37,7 +38,6 @@
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
-        <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
