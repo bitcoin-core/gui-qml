@@ -10,6 +10,7 @@ Control {
     id: root
     property bool last: parent && root === parent.children[parent.children.length - 1]
     required property string header
+    property alias actionItem: action_loader.sourceComponent
     property string description
     contentItem: ColumnLayout {
         spacing: 20
@@ -24,13 +25,15 @@ Control {
                 descriptionSize: 15
                 descriptionMargin: 0
             }
-            OptionSwitch {
-                Layout.alignment: Qt.AlignRight
-                Layout.rightMargin: -12
+            Loader {
+                id: action_loader
+                active: true
+                visible: active
+                sourceComponent: root.actionItem
             }
         }
         Loader {
-            Layout.fillWidth:true
+            Layout.fillWidth: true
             Layout.columnSpan: 2
             active: !last
             visible: active
