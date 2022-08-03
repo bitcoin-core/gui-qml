@@ -31,13 +31,6 @@ ColumnLayout {
     }
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Dark Mode")
-        actionItem: OptionSwitch {
-            onToggled: Theme.toggleDark()
-        }
-    }
-    Setting {
-        Layout.fillWidth: true
         header: qsTr("Other option...")
         actionItem: ValueInput {
             description: qsTr("42")
