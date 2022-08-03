@@ -12,40 +12,48 @@ ColumnLayout {
     Setting {
         Layout.fillWidth: true
         header: qsTr("Use cellular data")
+        actionItem: OptionSwitch{}
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Daily upload limit")
-        description: qsTr("250 MB")
-        isReadonly: false
+        actionItem: ValueInput {
+            description: qsTr("250 MB")
+        }
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Connection limit")
-        description: qsTr("6")
-        isReadonly: false
+        actionItem: ValueInput {
+            description: qsTr("6")
+        }
     }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable listening")
         description: qsTr("Increases data usage")
+        actionItem: OptionSwitch {}
     }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Blocks Only")
         description: qsTr("Reduces data usage.")
+        actionItem: OptionSwitch {}
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
         header: qsTr("Networks")
-        subtext: qsTr("Which networks to use for communication")
-        description: qsTr("6")
-        isReadonly: false
+        description: qsTr("Which networks to use for communication")
+        actionItem: ValueInput {
+            description: qsTr("6")
+        }
     }
-    Information {
+    Setting {
         last: true
         Layout.fillWidth: true
         header: qsTr("Proxy settings")
-        description: qsTr(">")
+        actionItem: ValueInput {
+            description: qsTr(">")
+        }
     }
 }
