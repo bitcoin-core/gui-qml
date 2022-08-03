@@ -9,56 +9,49 @@ import "../controls"
 
 ColumnLayout {
     spacing: 20
-    Information {
+    Setting {
         Layout.fillWidth: true
-        header:  qsTr("Website")
-        description: qsTr("bitcoincore.org >")
-        link: "https://bitcoincore.org"
+        header: qsTr("Website")
+        actionItem: ExternalLink {
+            description: qsTr("bitcoincore.org >")
+            link: "https://bitcoincore.org"
+        }
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
-        header:  qsTr("Source code")
-        description: qsTr("github.com/bitcoin/bitcoin >")
-        link: "https://github.com/bitcoin/bitcoin"
+        header: qsTr("Source code")
+        actionItem: ExternalLink {
+            description: qsTr("github.com/bitcoin/bitcoin >")
+            link: "https://github.com/bitcoin/bitcoin"
+        }
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
-        header:  qsTr("License")
-        description: qsTr("MIT >")
-        link: "https://opensource.org/licenses/MIT"
+        header: qsTr("License")
+        actionItem: ExternalLink {
+            description: qsTr("MIT >")
+            link: "https://opensource.org/licenses/MIT"
+        }
     }
-    Information {
+    Setting {
         Layout.fillWidth: true
-        header:  qsTr("Version")
-        description: qsTr("v22.99.0-1e7564eca8a6 >")
-        link: "https://bitcoin.org/en/download"
+        header: qsTr("Version")
+        actionItem: ExternalLink {
+            description: qsTr("v22.99.0-1e7564eca8a6 >")
+            link: "https://bitcoin.org/en/download"
+        }
     }
-    RowLayout {
-        Header {
-            Layout.fillWidth: true
-            center: false
-            header: qsTr("Developer options")
-            headerSize: 18
-            description: qsTr("Only use these if you have development experience")
-            descriptionSize: 15
-            descriptionMargin: 10
-            wrap: false
-            }
-        Loader {
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: 5
-            active: true
-            visible: active
-            sourceComponent: TextButton {
-                text: ">"
-                bold: false
-                rightalign: true
-                onClicked: {
-                    introductions.incrementCurrentIndex()
-                    swipeView.inSubPage = true
-                }
+    Setting {
+        Layout.fillWidth: true
+        header: qsTr("Developer options")
+        description: qsTr("Only use these if you have development experience")
+        actionItem: TextButton {
+            text: ">"
+            bold: false
+            rightalign: true
+            onClicked: {
+                introductions.incrementCurrentIndex()
+                swipeView.inSubPage = true
             }
         }
     }
