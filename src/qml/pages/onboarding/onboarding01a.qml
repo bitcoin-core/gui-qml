@@ -16,38 +16,35 @@ Page {
     Layout.fillWidth: true
     header: RowLayout {
         height: 50
-        Loader {
-            active: true
-            visible: active
+        Item {
             Layout.alignment: Qt.AlignRight
             Layout.margins: 11
-            sourceComponent: Item {
-                width: 24
-                height: 24
-                Rectangle {
+            width: 24
+            height: 24
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.color.white
+                radius: width*0.5
+            }
+            Image {
+                id: icon
+                source: "qrc:/icons/info"
+                width: parent.width
+                height: parent.height
+                anchors.centerIn: parent
+                fillMode: Image.PreserveAspectFit
+                mipmap: true
+                MouseArea {
                     anchors.fill: parent
-                    color: Theme.color.white
-                    radius: width*0.5
-                }
-                Image {
-                    id: icon
-                    source: "qrc:/icons/info"
-                    width: parent.width
-                    height: parent.height
-                    anchors.centerIn: parent
-                    fillMode: Image.PreserveAspectFit
-                    mipmap: true
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            introductions.incrementCurrentIndex()
-                            swipeView.inSubPage = true
-                        }
+                    onClicked: {
+                        introductions.incrementCurrentIndex()
+                        swipeView.inSubPage = true
                     }
                 }
             }
         }
     }
+    
     ColumnLayout {
         width: 600
         spacing: 0

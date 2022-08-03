@@ -14,34 +14,31 @@ Page {
     clip: true
     header: RowLayout {
         height: 50
-        Loader {
-            active: true
-            visible: active
+        Item {
             Layout.alignment: Qt.AlignRight
             Layout.topMargin: 12
             Layout.rightMargin: -7
-            sourceComponent: Item {
-                Layout.fillWidth: true
-                width: 73
-                height: 46
-                Text {
-                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                    text: "Done"
-                    color: Theme.color.neutral9
-                    font.family: "Inter"
-                    font.styleName: "Semi Bold"
-                    font.pixelSize: 18
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    onClicked: {
-                        connections.decrementCurrentIndex()
-                        swipeView.inSubPage = false
-                    }
+            Layout.fillWidth: true
+            width: 73
+            height: 46
+            Text {
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                text: "Done"
+                color: Theme.color.neutral9
+                font.family: "Inter"
+                font.styleName: "Semi Bold"
+                font.pixelSize: 18
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    connections.decrementCurrentIndex()
+                    swipeView.inSubPage = false
                 }
             }
         }
     }
+    
     ColumnLayout {
         width: 450
         spacing: 0
