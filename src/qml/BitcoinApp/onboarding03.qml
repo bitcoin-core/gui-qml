@@ -47,31 +47,17 @@ Page {
             }
         }
     }
-    ColumnLayout {
-        width: 600
-        spacing: 0
+    OnboardingInfo {
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        Image {
-            Layout.topMargin: 20
-            Layout.alignment: Qt.AlignCenter
+        banner: Image {
             source: "image://images/app"
             sourceSize.width: 200
             sourceSize.height: 200
         }
-        Header {
-            Layout.fillWidth: true
-            bold: true
-            header: qsTr("The block clock")
-            headerMargin: 30
-            description: qsTr("The Bitcoin network targets a new block every\n10 minutes. Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each block on a dial\nthat represents the current day.")
-            descriptionMargin: 20
-        }
-        ContinueButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 40
-            text: "Next"
-            onClicked: swipeView.incrementCurrentIndex()
-        }
+        bold: true
+        header: qsTr("The block clock")
+        description: qsTr("The Bitcoin network targets a new block every\n10 minutes. Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each block on a dial\nthat represents the current day.")
+        buttonText: "Next"
     }
 }

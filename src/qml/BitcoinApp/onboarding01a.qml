@@ -45,35 +45,24 @@ Page {
             }
         }
     }
-    ColumnLayout {
-        width: 600
-        spacing: 0
-        anchors.horizontalCenter: parent.horizontalCenter
+    OnboardingInfo {
         anchors.top: parent.top
-        Image {
+        anchors.horizontalCenter: parent.horizontalCenter
+        banner: Image {
+            Layout.fillWidth: true
             Layout.alignment: Qt.AlignCenter
             source: "image://images/app"
             sourceSize.width: 100
             sourceSize.height: 100
         }
-        Header {
-            Layout.fillWidth: true
-            implicitWidth: childrenRect.width
-            bold: true
-            header: qsTr("Bitcoin Core App")
-            headerSize: 36
-            headerMargin: 30
-            description: qsTr("Be part of the Bitcoin network.")
-            descriptionSize: 24
-            descriptionMargin: 10
-            subtext: qsTr("100% open-source & open-design")
-            subtextMargin: 30
-        }
-        ContinueButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 40
-            text: "Start"
-            onClicked: swipeView.incrementCurrentIndex()
-        }
+        bannerMargin: 0
+        bold: true
+        header: qsTr("Bitcoin Core App")
+        headerSize: 36
+        description: qsTr("Be part of the Bitcoin network.")
+        descriptionMargin: 10
+        descriptionSize: 24
+        subtext: qsTr("100% open-source & open-design")
+        buttonText: "Start"
     }
 }
