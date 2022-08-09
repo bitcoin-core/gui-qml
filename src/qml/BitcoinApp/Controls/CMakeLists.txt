@@ -18,6 +18,7 @@ qt6_add_qml_module(bitcoin_qml_controls
     Header.qml
     NavButton.qml
     OnboardingInfo.qml
+    OnboardingNav.qml
     OptionButton.qml
     OptionSwitch.qml
     PageIndicator.qml
