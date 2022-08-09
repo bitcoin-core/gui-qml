@@ -14,37 +14,14 @@ Page {
     background: null
     clip: true
     Layout.fillWidth: true
-    header: RowLayout {
-        height: 50
-        Loader {
-            active: true
-            visible: active
-            Layout.alignment: Qt.AlignRight
-            Layout.margins: 11
-            sourceComponent: Item {
-                width: 24
-                height: 24
-                Rectangle {
-                    anchors.fill: parent
-                    color: Theme.color.white
-                    radius: width*0.5
-                }
-                Image {
-                    id: icon
-                    source: "qrc:/icons/info"
-                    width: parent.width
-                    height: parent.height
-                    anchors.centerIn: parent
-                    fillMode: Image.PreserveAspectFit
-                    mipmap: true
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            introductions.incrementCurrentIndex()
-                            swipeView.inSubPage = true
-                        }
-                    }
-                }
+    header: OnboardingNav {
+        alignLeft: false
+        navButton: NavButton {
+            iconSource: "image://images/info"
+            iconHeight: 24
+            onClicked: {
+                introductions.incrementCurrentIndex()
+                swipeView.inSubPage = true
             }
         }
     }
