@@ -11,6 +11,7 @@
         <file>controls/ContinueButton.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/Header.qml</file>
+        <file>controls/NavButton.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/OnboardingInfo.qml</file>
         <file>controls/OptionButton.qml</file>
