@@ -17,11 +17,79 @@ Page {
         anchors.fill: parent
         interactive: false
         orientation: Qt.Vertical
-        Loader {
-            source:"onboarding05a.qml"
+        Page {
+            background: null
+            Layout.fillWidth: true
+            clip: true
+            header: OnboardingNav {
+                navButton: NavButton {
+                    iconSource: "image://images/caret-left"
+                    text: "Back"
+                    onClicked: swipeView.currentIndex -= 1
+                }
+            }
+            ColumnLayout {
+                width: 600
+                spacing: 0
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                Header {
+                    Layout.fillWidth: true
+                    bold: true
+                    header: qsTr("Storage")
+                    description: qsTr("Data retrieved from the Bitcoin network is stored\non your device.\n\nYou have 500GB of storage available.")
+                }
+                StorageOptions {
+                    Layout.topMargin: 30
+                    Layout.alignment: Qt.AlignCenter
+                }
+                TextButton {
+                    Layout.alignment: Qt.AlignCenter
+                    Layout.topMargin: 30
+                    text: "Detailed settings"
+                    textSize: 18
+                    textColor: "#F7931A"
+                    onClicked: {
+                      storages.incrementCurrentIndex()
+                      swipeView.inSubPage = true
+                    }
+                }
+                ContinueButton {
+                    Layout.alignment: Qt.AlignCenter
+                    Layout.topMargin: 40
+                    text: "Next"
+                    onClicked: swipeView.incrementCurrentIndex()
+                }
+            }
         }
-        Loader {
-            source:"onboarding05b.qml"
+        Page {
+            background: null
+            Layout.fillWidth: true
+            clip: true
+            header: OnboardingNav {
+                alignLeft: false
+                navButton: NavButton {
+                    text: "Done"
+                    onClicked: {
+                        storages.decrementCurrentIndex()
+                        swipeView.inSubPage = false
+                    }
+                }
+            }
+            ColumnLayout {
+                width: 450
+                spacing: 0
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                Header {
+                    Layout.fillWidth: true
+                    bold: true
+                    header: "Storage settings"
+                }
+                StorageSettings {
+                    Layout.topMargin: 30
+                }
+            }
         }
     }
 }
