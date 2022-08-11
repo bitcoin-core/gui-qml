@@ -22,6 +22,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return {};
     }
 
+    if (id == "arrow-up") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/arrow-up.png").pixmap(requested_size);
+    }
+
     if (id == "app") {
         *size = requested_size;
         return m_network_style->getAppIcon().pixmap(requested_size);
