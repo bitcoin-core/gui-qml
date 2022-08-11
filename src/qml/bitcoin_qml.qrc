@@ -9,7 +9,6 @@
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>controls/ContinueButton.qml</file>
-        <file>controls/ExternalLink.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Information.qml</file>
         <file>controls/PageIndicator.qml</file>
@@ -38,6 +37,7 @@
         <file>pages/stub.qml</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
