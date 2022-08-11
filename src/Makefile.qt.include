@@ -296,6 +296,7 @@ QML_RES_FONTS = \
   qml/res/fonts/Inter-SemiBold.otf
 
 QML_RES_ICONS = \
+  qml/res/icons/arrow-up.png \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
   qml/res/icons/export.png \
