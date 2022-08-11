@@ -325,6 +325,7 @@ QML_RES_QML = \
   qml/controls/Setting.qml \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
+  qml/controls/ValueInput.qml \
   qml/controls/Wizard.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/onboarding/onboarding01.qml \
