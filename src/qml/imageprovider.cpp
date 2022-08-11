@@ -22,6 +22,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return {};
     }
 
+    if (id == "arrow-down") {
+        *size = requested_size;
+        return QIcon(":/icons/arrow-down").pixmap(requested_size);
+    }
+
     if (id == "arrow-up") {
         *size = requested_size;
         return QIcon(":/icons/arrow-up").pixmap(requested_size);
