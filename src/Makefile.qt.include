@@ -317,7 +317,6 @@ QML_RES_QML = \
   qml/controls/ContinueButton.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/Header.qml \
-  qml/controls/Information.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
