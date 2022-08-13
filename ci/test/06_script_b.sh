@@ -35,8 +35,9 @@ if [ "$RUN_FUNCTIONAL_TESTS" = "true" ]; then
 fi
 
 if [ "${RUN_TIDY}" = "true" ]; then
+  set -eo pipefail
   export P_CI_DIR="${BASE_BUILD_DIR}/bitcoin-$HOST/src/"
-  CI_EXEC run-clang-tidy "${MAKEJOBS}"
+  ( CI_EXEC run-clang-tidy -quiet "${MAKEJOBS}" ) | grep -C5 "error"
   export P_CI_DIR="${BASE_BUILD_DIR}/bitcoin-$HOST/"
   CI_EXEC "python3 ${DIR_IWYU}/include-what-you-use/iwyu_tool.py"\
           " src/compat"\
@@ -44,6 +45,8 @@ if [ "${RUN_TIDY}" = "true" ]; then
           " src/init"\
           " src/kernel"\
           " src/node/chainstate.cpp"\
+          " src/node/mempool_args.cpp"\
+          " src/node/validation_cache_args.cpp"\
           " src/policy/feerate.cpp"\
           " src/policy/packages.cpp"\
           " src/policy/settings.cpp"\

@@ -1,9 +1,9 @@
 package=qt
-$(package)_version=5.15.3
+$(package)_version=5.15.5
 $(package)_download_path=https://download.qt.io/official_releases/qt/5.15/$($(package)_version)/submodules
 $(package)_suffix=everywhere-opensource-src-$($(package)_version).tar.xz
 $(package)_file_name=qtbase-$($(package)_suffix)
-$(package)_sha256_hash=26394ec9375d52c1592bd7b689b1619c6b8dbe9b6f91fdd5c355589787f3a0b6
+$(package)_sha256_hash=0c42c799aa7c89e479a07c451bf5a301e291266ba789e81afc18f95049524edc
 $(package)_linux_dependencies=freetype fontconfig libxcb libxkbcommon libxcb_util libxcb_util_render libxcb_util_keysyms libxcb_util_image libxcb_util_wm libglvnd
 $(package)_qt_libs=corelib network widgets gui plugins testlib
 $(package)_linguist_tools = lrelease lupdate lconvert
@@ -17,29 +17,28 @@ $(package)_patches += fix_montery_include.patch
 $(package)_patches += fix_android_jni_static.patch
 $(package)_patches += dont_hardcode_pwd.patch
 $(package)_patches += qtbase-moc-ignore-gcc-macro.patch
-$(package)_patches += fix_limits_header.patch
 $(package)_patches += use_android_ndk23.patch
 $(package)_patches += rcc_hardcode_timestamp.patch
 $(package)_patches += duplicate_lcqpafonts.patch
 $(package)_patches += fast_fixed_dtoa_no_optimize.patch
+$(package)_patches += guix_cross_lib_path.patch
 $(package)_patches += fix_android_plugin_names.patch
 $(package)_patches += fix_riscv_atomic.patch
-$(package)_patches += fix_static_build.patch
 
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
-$(package)_qtdeclarative_sha256_hash = 33f15a5caa451bddf8298466442ccf7ca65e4cf90453928ddbb95216c4374062
+$(package)_qtdeclarative_sha256_hash = 5cc169d91efb15a1ee7f484862f872c3eaba592dacf3c0fbcb55c0f3c208254a
 
 $(package)_qtgraphicaleffects_file_name = qtgraphicaleffects-$($(package)_suffix)
-$(package)_qtgraphicaleffects_sha256_hash = e24e855f202bb24b4f8ea9df504e24f451a5af49875a18cf324faf5f1e628f6b
+$(package)_qtgraphicaleffects_sha256_hash = 237fd5ead50866128a7ae3820f454d0e6b955e648892429fc3b99b8b7fb1f677
 
 $(package)_qtquickcontrols2_file_name = qtquickcontrols2-$($(package)_suffix)
-$(package)_qtquickcontrols2_sha256_hash = 3b95e9be58c3d918f4c4a805116459a403ae6c61e33edf71b319672c46af562f
+$(package)_qtquickcontrols2_sha256_hash = c4a37bace5a0f6a9ec997097a5e331b438f4b5019d925aa2673fcc036825afb3
 
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
-$(package)_qttranslations_sha256_hash=5d7869f670a135ad0986e266813b9dd5bbae2b09577338f9cdf8904d4af52db0
+$(package)_qttranslations_sha256_hash=c92af4171397a0ed272330b4fa0669790fcac8d050b07c8b8cc565ebeba6735e
 
 $(package)_qttools_file_name=qttools-$($(package)_suffix)
-$(package)_qttools_sha256_hash=463b2fe71a085e7ab4e39333ae360ab0ec857b966d7a08f752c427e5df55f90d
+$(package)_qttools_sha256_hash=6d0778b71b2742cb527561791d1d3d255366163d54a10f78c683a398f09ffc6c
 
 $(package)_extra_sources += $($(package)_qtdeclarative_file_name)
 $(package)_extra_sources += $($(package)_qtgraphicaleffects_file_name)
@@ -289,15 +288,14 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/no-xlib.patch && \
   patch -p1 -i $($(package)_patch_dir)/dont_hardcode_x86_64.patch && \
   patch -p1 -i $($(package)_patch_dir)/qtbase-moc-ignore-gcc-macro.patch && \
-  patch -p1 -i $($(package)_patch_dir)/fix_limits_header.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_montery_include.patch && \
   patch -p1 -i $($(package)_patch_dir)/use_android_ndk23.patch && \
   patch -p1 -i $($(package)_patch_dir)/rcc_hardcode_timestamp.patch && \
   patch -p1 -i $($(package)_patch_dir)/duplicate_lcqpafonts.patch && \
   patch -p1 -i $($(package)_patch_dir)/fast_fixed_dtoa_no_optimize.patch && \
+  patch -p1 -i $($(package)_patch_dir)/guix_cross_lib_path.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_android_plugin_names.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_riscv_atomic.patch && \
-  patch -p1 -i $($(package)_patch_dir)/fix_static_build.patch && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
@@ -307,8 +305,7 @@ define $(package)_preprocess_cmds
   echo "!host_build: QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
   echo "!host_build: QMAKE_LFLAGS     += $($(package)_ldflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
   sed -i.old "s|QMAKE_CC                = \$$$$\$$$${CROSS_COMPILE}clang|QMAKE_CC                = $($(package)_cc)|" qtbase/mkspecs/common/clang.conf && \
-  sed -i.old "s|QMAKE_CXX               = \$$$$\$$$${CROSS_COMPILE}clang++|QMAKE_CXX               = $($(package)_cxx)|" qtbase/mkspecs/common/clang.conf && \
-  sed -i.old "s/LIBRARY_PATH/(CROSS_)?\0/g" qtbase/mkspecs/features/toolchain.prf
+  sed -i.old "s|QMAKE_CXX               = \$$$$\$$$${CROSS_COMPILE}clang++|QMAKE_CXX               = $($(package)_cxx)|" qtbase/mkspecs/common/clang.conf
 endef
 
 define $(package)_config_cmds
