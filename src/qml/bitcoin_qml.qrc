@@ -12,7 +12,6 @@
         <file>controls/ExternalLink.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/PageIndicator.qml</file>
-        <file>controls/OnboardingInfo.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/ProgressIndicator.qml</file>
@@ -45,6 +44,7 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="export">res/icons/export.png</file>
+        <file alias="gear">res/icons/gear.png</file>
         <file alias="info">res/icons/info.png</file>
     </qresource>
     <qresource prefix="/fonts">
