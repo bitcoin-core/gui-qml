@@ -36,6 +36,7 @@ qt6_add_qml_module(bitcoin_qml
     res/icons/caret-left.png
     res/icons/caret-right.png
     res/icons/export.png
+    res/icons/gear.png
     res/icons/info.png
 )
 
