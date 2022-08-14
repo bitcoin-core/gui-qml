@@ -22,7 +22,7 @@ Page {
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         banner: Image {
-            source: "image://images/app"
+            source: Theme.image.blocktime
             sourceSize.width: 200
             sourceSize.height: 200
         }
