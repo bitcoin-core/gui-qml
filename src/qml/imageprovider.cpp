@@ -32,6 +32,16 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/arrow-up").pixmap(requested_size);
     }
 
+    if (id == "blocktime-dark") {
+        *size = requested_size;
+        return QIcon(":/icons/blocktime-dark").pixmap(requested_size);
+    }
+
+    if (id == "blocktime-light") {
+        *size = requested_size;
+        return QIcon(":/icons/blocktime-light").pixmap(requested_size);
+    }
+
     if (id == "app") {
         *size = requested_size;
         return m_network_style->getAppIcon().pixmap(requested_size);
@@ -50,6 +60,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "export") {
         *size = requested_size;
         return QIcon(":/icons/export").pixmap(requested_size);
+    }
+
+    if (id == "gear") {
+        *size = requested_size;
+        return QIcon(":/icons/gear").pixmap(requested_size);
     }
 
     if (id == "info") {
