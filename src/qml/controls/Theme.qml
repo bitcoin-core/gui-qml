@@ -22,6 +22,9 @@ QtObject {
         property color neutral8: dark ? "#CCCCCC" : "#404040"
         property color neutral9: dark ? "#FFFFFF" : "#000000"
     }
+    property QtObject image: QtObject {
+        property url blocktime: dark ? "image://images/blocktime-dark" : "image://images/blocktime-light"
+    }
     function toggleDark() {
         dark = !dark
     }
