@@ -77,5 +77,15 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/qt/qml/BitcoinApp/res/icons/info.png").pixmap(requested_size);
     }
 
+    if (id == "network-dark") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/network-dark.png").pixmap(requested_size);
+    }
+
+    if (id == "network-light") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/network-light.png").pixmap(requested_size);
+    }
+
     return {};
 }
