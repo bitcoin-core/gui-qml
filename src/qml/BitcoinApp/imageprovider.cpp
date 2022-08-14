@@ -32,6 +32,16 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/qt/qml/BitcoinApp/res/icons/arrow-up.png").pixmap(requested_size);
     }
 
+    if (id == "blocktime-dark") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/blocktime-dark.png").pixmap(requested_size);
+    }
+
+    if (id == "blocktime-light") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/blocktime-light.png").pixmap(requested_size);
+    }
+
     if (id == "app") {
         *size = requested_size;
         return m_network_style->getAppIcon().pixmap(requested_size);
