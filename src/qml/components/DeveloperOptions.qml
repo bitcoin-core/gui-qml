@@ -33,6 +33,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Dark Mode")
         actionItem: OptionSwitch {
+            checked: Theme.dark
             onToggled: Theme.toggleDark()
         }
     }

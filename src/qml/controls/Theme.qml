@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick 2.15
 
 QtObject {
-    property bool dark: false
+    property bool dark: true
     property QtObject color: QtObject {
         property color white: "#FFFFFF"
         property color background: dark ? "black" : "white"
