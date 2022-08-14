@@ -28,7 +28,7 @@ Page {
             Layout.fillWidth: true
             bold: true
             header: qsTr("Storage location")
-            description: qsTr("On which drive do you want to store the downloaded block data?")
+            description: qsTr("Where do you want to store the downloaded block data?")
             descriptionMargin: 20
         }
         StorageLocations {
