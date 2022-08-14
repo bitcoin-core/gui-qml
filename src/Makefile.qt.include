@@ -318,8 +318,10 @@ QML_RES_QML = \
   qml/controls/ContinueButton.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/Header.qml \
+  qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/OnboardingInfo.qml \
+  qml/controls/OnboardingNav.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/ProgressIndicator.qml \
