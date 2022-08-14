@@ -15,7 +15,7 @@ ColumnLayout {
     OptionButton {
         ButtonGroup.group: group
         text: qsTr("Reduce storage")
-        description: qsTr("Uses about 75GB.")
+        description: qsTr("Uses about 2GB.")
         recommended: true
         checked: true
         detail: ProgressIndicator {

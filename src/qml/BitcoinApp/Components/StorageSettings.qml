@@ -18,7 +18,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Storage limit")
         actionItem: ValueInput {
-            description: qsTr("75 GB")
+            description: qsTr("2 GB")
         }
     }
     Setting {
@@ -26,14 +26,6 @@ ColumnLayout {
         header: qsTr("Data location")
         actionItem: ValueInput {
             description: qsTr("c://.../data")
-        }
-
-    }
-    Setting {
-        Layout.fillWidth: true
-        header: qsTr("Block location")
-        actionItem: ValueInput {
-            description: qsTr("c://.../blocks")
         }
     }
 }
