@@ -52,6 +52,8 @@
         <file alias="export">res/icons/export.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="info">res/icons/info.png</file>
+        <file alias="network-dark">res/icons/network-dark.png</file>
+        <file alias="network-light">res/icons/network-light.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="inter/regular">res/fonts/Inter-Regular.otf</file>
