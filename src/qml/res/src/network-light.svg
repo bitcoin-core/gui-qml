@@ -1,0 +1,48 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 99.9999C50.5 99.9999 98.5 50.4998 98.5 9.99976" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M10 100C50.5 100 64.5 65 36.5 37" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M31 157.5C59.5 129 134.5 135 163.5 164" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M31 157.5C59.5 129 68.4998 69 36 36.5" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M99 10.4998C99 50.4998 134.5 135 163.5 164" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M189.5 100.5C149.5 100.5 65 64.9998 36.5 36.4998" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M164 36.5C135.5 65 99 51.0002 99 10.0002" stroke="#BBBBBB" stroke-width="1.5"/>
+<path d="M10 100C50.5 100 100 149.5 100 190.5" stroke="#F1D54A" stroke-width="1.5"/>
+<path d="M10 100C50.5 100 100 149.5 100 190.5" stroke="url(#paint0_linear_4644_117776)" stroke-width="1.5"/>
+<path d="M36 36C73 73 100 149.5 100 190.5" stroke="#F1D54A" stroke-width="1.5"/>
+<path d="M36 36C73 73 100 149.5 100 190.5" stroke="url(#paint1_linear_4644_117776)" stroke-width="1.5"/>
+<path d="M164 36.5C135.5 65 100 149.5 100 190.5" stroke="#F1D54A" stroke-width="1.5"/>
+<path d="M164 36.5C135.5 65 100 149.5 100 190.5" stroke="url(#paint2_linear_4644_117776)" stroke-width="1.5"/>
+<path d="M189 100.5C149.5 100.5 100 149.5 100 190.5" stroke="#F1D54A" stroke-width="1.5"/>
+<path d="M189 100.5C149.5 100.5 100 149.5 100 190.5" stroke="url(#paint3_linear_4644_117776)" stroke-width="1.5"/>
+<circle cx="100" cy="10" r="10" fill="#BBBBBB"/>
+<circle cx="36.6773" cy="36.4644" r="10" transform="rotate(-45 36.6773 36.4644)" fill="#BBBBBB"/>
+<circle cx="10" cy="100" r="10" transform="rotate(-90 10 100)" fill="#BBBBBB"/>
+<circle cx="31.1271" cy="157.332" r="10" transform="rotate(-130 31.1271 157.332)" fill="#BBBBBB"/>
+<circle cx="100" cy="190" r="10" transform="rotate(-180 100 190)" fill="#F1D54A"/>
+<circle cx="100" cy="190" r="10" transform="rotate(-180 100 190)" fill="url(#paint4_linear_4644_117776)" fill-opacity="0.5"/>
+<circle cx="163.858" cy="163" r="10" transform="rotate(135 163.858 163)" fill="#BBBBBB"/>
+<circle cx="190" cy="100" r="10" transform="rotate(90 190 100)" fill="#BBBBBB"/>
+<circle cx="163" cy="36.1421" r="10" transform="rotate(45 163 36.1421)" fill="#BBBBBB"/>
+<defs>
+<linearGradient id="paint0_linear_4644_117776" x1="55.225" y1="190.5" x2="54.77" y2="100" gradientUnits="userSpaceOnUse">
+<stop offset="0.489583" stop-color="#F1D54A"/>
+<stop offset="1" stop-color="#BBBBBB"/>
+</linearGradient>
+<linearGradient id="paint1_linear_4644_117776" x1="68.16" y1="190.5" x2="66.2954" y2="36.0186" gradientUnits="userSpaceOnUse">
+<stop offset="0.489583" stop-color="#F1D54A"/>
+<stop offset="1" stop-color="#BBBBBB"/>
+</linearGradient>
+<linearGradient id="paint2_linear_4644_117776" x1="132.16" y1="190.5" x2="130.307" y2="36.5184" gradientUnits="userSpaceOnUse">
+<stop offset="0.489583" stop-color="#F1D54A"/>
+<stop offset="1" stop-color="#BBBBBB"/>
+</linearGradient>
+<linearGradient id="paint3_linear_4644_117776" x1="144.722" y1="190.5" x2="144.267" y2="100.5" gradientUnits="userSpaceOnUse">
+<stop offset="0.489583" stop-color="#F1D54A"/>
+<stop offset="1" stop-color="#BBBBBB"/>
+</linearGradient>
+<linearGradient id="paint4_linear_4644_117776" x1="97.5" y1="180" x2="103" y2="196.5" gradientUnits="userSpaceOnUse">
+<stop stop-color="#EC5445"/>
+<stop offset="1" stop-color="#F1D54A"/>
+</linearGradient>
+</defs>
+</svg>
