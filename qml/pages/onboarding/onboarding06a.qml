@@ -42,7 +42,7 @@ Page {
         TextButton {
             Layout.alignment: Qt.AlignCenter
             Layout.topMargin: 30
-            text: "Connection Settings"
+            text: "Connection settings"
             textSize: 18
             textColor: Theme.color.orange
             onClicked: {
