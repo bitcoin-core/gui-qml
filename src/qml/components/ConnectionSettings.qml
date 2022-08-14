@@ -11,42 +11,24 @@ ColumnLayout {
     spacing: 20
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Use cellular data")
-        actionItem: OptionSwitch{}
-    }
-    Setting {
-        Layout.fillWidth: true
-        header: qsTr("Daily upload limit")
-        actionItem: ValueInput {
-            description: qsTr("250 MB")
-        }
-    }
-    Setting {
-        Layout.fillWidth: true
-        header: qsTr("Connection limit")
-        actionItem: ValueInput {
-            description: qsTr("6")
-        }
-    }
-    Setting {
-        Layout.fillWidth: true
         header: qsTr("Enable listening")
-        description: qsTr("Increases data usage")
+        description: qsTr("Allows incoming connections")
         actionItem: OptionSwitch {}
     }
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Blocks Only")
-        description: qsTr("Reduces data usage.")
+        header: qsTr("Map port using UPnP")
         actionItem: OptionSwitch {}
     }
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Networks")
-        description: qsTr("Which networks to use for communication")
-        actionItem: ValueInput {
-            description: qsTr("6")
-        }
+        header: qsTr("Map port using NAT-PMP")
+        actionItem: OptionSwitch {}
+    }
+    Setting {
+        Layout.fillWidth: true
+        header: qsTr("Enable RPC server")
+        actionItem: OptionSwitch {}
     }
     Setting {
         last: true
