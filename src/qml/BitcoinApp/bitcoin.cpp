@@ -160,7 +160,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
 
-    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/stub.qml")));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/main.qml")));
     if (engine.rootObjects().isEmpty()) {
         return EXIT_FAILURE;
     }
