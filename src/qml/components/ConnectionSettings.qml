@@ -25,7 +25,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Connection limit")
         actionItem: ValueInput {
-            description: qsTr("6")
+            description: "6"
         }
     }
     Setting {
@@ -45,7 +45,7 @@ ColumnLayout {
         header: qsTr("Networks")
         description: qsTr("Which networks to use for communication")
         actionItem: ValueInput {
-            description: qsTr("6")
+            description: "6"
         }
     }
     Setting {

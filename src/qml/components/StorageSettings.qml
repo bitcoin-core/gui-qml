@@ -25,7 +25,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Data location")
         actionItem: ValueInput {
-            description: qsTr("c://.../data")
+            description: "c://.../data"
         }
 
     }
@@ -33,7 +33,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Block location")
         actionItem: ValueInput {
-            description: qsTr("c://.../blocks")
+            description: "c://.../blocks"
         }
     }
 }

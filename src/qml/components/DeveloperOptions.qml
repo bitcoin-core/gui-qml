@@ -40,7 +40,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Other option...")
         actionItem: ValueInput {
-            description: qsTr("42")
+            description: "42"
         }
     }
     Setting {
