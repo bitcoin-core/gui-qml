@@ -7,9 +7,12 @@ import QtQuick.Controls 2.15
 
 Switch {
     id: root
+    padding: 0
+    width: 45
+    height: 28
     indicator: Rectangle {
-        implicitWidth: 45
-        implicitHeight: 28
+        implicitWidth: root.width
+        implicitHeight: root.height
         x: root.leftPadding
         y: Math.round((parent.height - height) / 2)
         radius: 18
