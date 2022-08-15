@@ -169,7 +169,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
 
-    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/stub.qml")));
+    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
     if (engine.rootObjects().isEmpty()) {
         return EXIT_FAILURE;
     }
