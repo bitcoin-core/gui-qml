@@ -58,6 +58,7 @@ bool InitErrorMessageBox(
     [[maybe_unused]] unsigned int style)
 {
     QQmlApplicationEngine engine;
+    engine.addImportPath(QStringLiteral(":/qt/qml"));
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/initerrormessage.qml")));
     if (engine.rootObjects().isEmpty()) {
