@@ -4,22 +4,31 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import "../controls"
 
 ApplicationWindow {
-    title: "Bitcoin Core TnG"
+    id: root
     visible: true
+    title: "Bitcoin Core App"
     minimumWidth: 500
-    minimumHeight: 200
+    minimumHeight: 220
+    color: Theme.color.background
+    ColumnLayout {
+        spacing: 30
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
 
-    Dialog {
-        anchors.centerIn: parent
-        title: qsTr("Error")
-        contentItem:
-            Label {
-                text: message
-            }
-        visible: true
-        standardButtons: Dialog.Ok
-        onAccepted: Qt.quit()
+        Header {
+            Layout.topMargin: 30
+            Layout.fillWidth: true
+            header: message
+            headerSize: 18
+        }
+        OutlineButton {
+            Layout.alignment: Qt.AlignCenter
+            text: "OK"
+            onClicked: Qt.quit()
+        }
     }
 }
