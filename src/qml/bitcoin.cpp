@@ -67,6 +67,7 @@ bool InitErrorMessageBox(
 {
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
+    engine.addImageProvider(QStringLiteral("images"), new ImageProvider{NULL});
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
     if (engine.rootObjects().isEmpty()) {
         return EXIT_FAILURE;

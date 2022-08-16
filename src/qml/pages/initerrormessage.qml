@@ -4,22 +4,73 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import "../controls"
 
 ApplicationWindow {
-    title: "Bitcoin Core TnG"
+    id: root
+    title: "Bitcoin Core App"
+    minimumWidth: 640
+    minimumHeight: 665
+    color: Theme.color.background
     visible: true
-    minimumWidth: 500
-    minimumHeight: 200
 
-    Dialog {
+    Page {
+        id: errorWindow
+        width: 400
+        height: 240
         anchors.centerIn: parent
-        title: qsTr("Error")
-        contentItem:
-            Label {
-                text: message
+        background: Rectangle {
+            color: Theme.color.background
+            radius: 10
+            border {
+                width: 1
+                color: Theme.color.neutral4
             }
-        visible: true
-        standardButtons: Dialog.Ok
-        onAccepted: Qt.quit()
+        }
+        header: RowLayout {
+            width: errorWindow.width
+            height: 55
+            Rectangle {
+                width: 55
+            }
+            Header {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignCenter
+                bold: true
+                header: "Error"
+                headerSize: 24
+            }
+            Button {
+                id: icon_button
+                implicitWidth: 55
+                icon.source: "image://images/cross"
+                icon.color: Theme.color.neutral9
+                icon.width: 20
+                background: null
+                onClicked: Qt.quit()
+            }
+        }
+        Rectangle {
+            anchors.bottom: errorWindow.header.bottom
+            width: errorWindow.width
+            height: 1
+            color: Theme.color.neutral5
+        }
+        ColumnLayout {
+            anchors.fill: parent
+            Header {
+                Layout.fillWidth: true
+                Layout.topMargin: 20
+                header: message
+                headerSize: 18
+            }
+            OutlineButton {
+                Layout.alignment: Qt.AlignCenter
+                Layout.bottomMargin: 20
+                text: "Quit"
+                onClicked: Qt.quit()
+            }
+        }
     }
 }
