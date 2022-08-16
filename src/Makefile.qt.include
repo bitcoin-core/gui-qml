@@ -324,6 +324,7 @@ QML_RES_QML = \
   qml/controls/OnboardingNav.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
+  qml/controls/OutlineButton.qml \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
   qml/controls/Setting.qml \
