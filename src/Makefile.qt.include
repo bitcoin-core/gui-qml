@@ -302,6 +302,7 @@ QML_RES_ICONS = \
   qml/res/icons/blocktime-light.png \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
+  qml/res/icons/cross.png \
   qml/res/icons/export.png \
   qml/res/icons/gear.png \
   qml/res/icons/info.png
