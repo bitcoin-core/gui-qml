@@ -24,6 +24,7 @@ QtObject {
     }
     property QtObject image: QtObject {
         property url blocktime: dark ? "image://images/blocktime-dark" : "image://images/blocktime-light"
+        property url network: dark ? "image://images/network-dark" : "image://images/network-light"
     }
     function toggleDark() {
         dark = !dark
