@@ -307,7 +307,9 @@ QML_RES_ICONS = \
   qml/res/icons/gear.png \
   qml/res/icons/info.png \
   qml/res/icons/network-dark.png \
-  qml/res/icons/network-light.png 
+  qml/res/icons/network-light.png \
+  qml/res/icons/storage-dark.png \
+  qml/res/icons/storage-light.png
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc

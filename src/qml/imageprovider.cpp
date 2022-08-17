@@ -87,5 +87,15 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/network-light").pixmap(requested_size);
     }
 
+    if (id == "storage-dark") {
+        *size = requested_size;
+        return QIcon(":/icons/storage-dark").pixmap(requested_size);
+    }
+
+    if (id == "storage-light") {
+        *size = requested_size;
+        return QIcon(":/icons/storage-light").pixmap(requested_size);
+    }
+
     return {};
 }
