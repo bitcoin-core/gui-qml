@@ -43,6 +43,8 @@ qt6_add_qml_module(bitcoin_qml
     res/icons/info.png
     res/icons/network-dark.png
     res/icons/network-light.png
+    res/icons/storage-dark.png
+    res/icons/storage-light.png
 )
 
 add_subdirectory(Components)

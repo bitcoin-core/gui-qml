@@ -30,6 +30,7 @@ Control {
     component ImageSet: QtObject {
         required property url blocktime
         required property url network
+        required property url storage
     }
 
     ColorSet {
@@ -78,12 +79,14 @@ Control {
         id: darkImageSet
         blocktime: "image://images/blocktime-dark"
         network: "image://images/network-dark"
+        storage: "image://images/storage-dark"
     }
 
     ImageSet {
         id: lightImageSet
         blocktime: "image://images/blocktime-light"
         network: "image://images/network-light"
+        storage: "image://images/storage-light"
     }
 
     function toggleDark() {

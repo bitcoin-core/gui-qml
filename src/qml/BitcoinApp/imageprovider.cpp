@@ -87,5 +87,15 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/qt/qml/BitcoinApp/res/icons/network-light.png").pixmap(requested_size);
     }
 
+    if (id == "storage-dark") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/storage-dark.png").pixmap(requested_size);
+    }
+
+    if (id == "storage-light") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/storage-light.png").pixmap(requested_size);
+    }
+
     return {};
 }
