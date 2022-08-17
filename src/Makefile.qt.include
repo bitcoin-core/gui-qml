@@ -337,6 +337,7 @@ QML_RES_QML = \
   qml/controls/ValueInput.qml \
   qml/controls/Wizard.qml \
   qml/pages/initerrormessage.qml \
+  qml/pages/main.qml \
   qml/pages/onboarding/onboarding01.qml \
   qml/pages/onboarding/onboarding01a.qml \
   qml/pages/onboarding/onboarding01b.qml \
@@ -349,8 +350,7 @@ QML_RES_QML = \
   qml/pages/onboarding/onboarding05b.qml \
   qml/pages/onboarding/onboarding06.qml \
   qml/pages/onboarding/onboarding06a.qml \
-  qml/pages/onboarding/onboarding06b.qml \
-  qml/pages/stub.qml
+  qml/pages/onboarding/onboarding06b.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
