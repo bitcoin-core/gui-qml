@@ -1,31 +1,91 @@
 pragma Singleton
 import QtQuick
+import QtQuick.Controls
 
-QtObject {
+Control {
     property bool dark: true
-    property QtObject color: QtObject {
-        property color white: "#FFFFFF"
-        property color background: dark ? "black" : "white"
-        property color orange: dark ? "#F89B2A" : "#F7931A"
-        property color red: dark ? "#EC6363" : "#EB5757"
-        property color green: dark ? "#36B46B" : "#27AE60"
-        property color blue: dark ? "#3CA3DE" : "#2D9CDB"
-        property color purple: dark ? "#C075DC" : "#BB6BD9"
-        property color neutral0: dark ? "#000000" : "#FFFFFF"
-        property color neutral1: dark ? "#1A1A1A" : "#F8F8F8"
-        property color neutral2: dark ? "#2D2D2D" : "#F4F4F4"
-        property color neutral3: dark ? "#444444" : "#EDEDED"
-        property color neutral4: dark ? "#5C5C5C" : "#DEDEDE"
-        property color neutral5: dark ? "#787878" : "#BBBBBB"
-        property color neutral6: dark ? "#949494" : "#999999"
-        property color neutral7: dark ? "#B0B0B0" : "#777777"
-        property color neutral8: dark ? "#CCCCCC" : "#404040"
-        property color neutral9: dark ? "#FFFFFF" : "#000000"
+    readonly property ColorSet color: dark ? darkColorSet : lightColorSet
+    readonly property ImageSet image: dark ? darkImageSet : lightImageSet
+
+    component ColorSet: QtObject {
+        required property color white
+        required property color background
+        required property color orange
+        required property color red
+        required property color green
+        required property color blue
+        required property color purple
+        required property color neutral0
+        required property color neutral1
+        required property color neutral2
+        required property color neutral3
+        required property color neutral4
+        required property color neutral5
+        required property color neutral6
+        required property color neutral7
+        required property color neutral8
+        required property color neutral9
     }
-    property QtObject image: QtObject {
-        property url blocktime: dark ? "image://images/blocktime-dark" : "image://images/blocktime-light"
-        property url network: dark ? "image://images/network-dark" : "image://images/network-light"
+
+    component ImageSet: QtObject {
+        required property url blocktime
+        required property url network
     }
+
+    ColorSet {
+        id: darkColorSet
+        white: "#FFFFFF"
+        background: "black"
+        orange: "#F89B2A"
+        red: "#EC6363"
+        green: "#36B46B"
+        blue: "#3CA3DE"
+        purple: "#C075DC"
+        neutral0: "#000000"
+        neutral1: "#1A1A1A"
+        neutral2: "#2D2D2D"
+        neutral3: "#444444"
+        neutral4: "#5C5C5C"
+        neutral5: "#787878"
+        neutral6: "#949494"
+        neutral7: "#B0B0B0"
+        neutral8: "#CCCCCC"
+        neutral9: "#FFFFFF"
+    }
+
+    ColorSet {
+        id: lightColorSet
+        white: "#FFFFFF"
+        background: "white"
+        orange: "#F7931A"
+        red: "#EB5757"
+        green: "#27AE60"
+        blue: "#2D9CDB"
+        purple: "#BB6BD9"
+        neutral0: "#FFFFFF"
+        neutral1: "#F8F8F8"
+        neutral2: "#F4F4F4"
+        neutral3: "#EDEDED"
+        neutral4: "#DEDEDE"
+        neutral5: "#BBBBBB"
+        neutral6: "#999999"
+        neutral7: "#777777"
+        neutral8: "#404040"
+        neutral9: "#000000"
+    }
+
+    ImageSet {
+        id: darkImageSet
+        blocktime: "image://images/blocktime-dark"
+        network: "image://images/network-dark"
+    }
+
+    ImageSet {
+        id: lightImageSet
+        blocktime: "image://images/blocktime-light"
+        network: "image://images/network-light"
+    }
+
     function toggleDark() {
         dark = !dark
     }
