@@ -14,6 +14,7 @@
 #include <node/interface_ui.h>
 #include <node/context.h>
 #include <noui.h>
+#include <qml/BitcoinApp/appmode.h>
 #include <qml/BitcoinApp/imageprovider.h>
 #include <qml/BitcoinApp/nodemodel.h>
 #include <qml/BitcoinApp/util.h>
@@ -159,6 +160,14 @@ int QmlGuiMain(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
+
+#ifdef __ANDROID__
+    AppMode app_mode(AppMode::MOBILE);
+#else
+    AppMode app_mode(AppMode::DESKTOP);
+#endif // __ANDROID__
+
+    qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
 
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/main.qml")));
     if (engine.rootObjects().isEmpty()) {
