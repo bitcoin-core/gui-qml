@@ -7,6 +7,7 @@ qt6_add_qml_module(bitcoin_qml
   VERSION 1.0
   STATIC
   SOURCES
+    appmode.h
     bitcoin.cpp
     imageprovider.cpp
     nodemodel.cpp
