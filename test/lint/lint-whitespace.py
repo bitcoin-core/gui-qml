@@ -92,8 +92,8 @@ def main():
         if args.prev_commits:
             commit_range = "HEAD~" + args.prev_commits + "...HEAD"
         else:
-            # This assumes that the target branch of the pull request will be master.
-            merge_base = check_output(["git", "merge-base", "HEAD", "master"], text=True, encoding="utf8").rstrip("\n")
+            # This assumes that the target branch of the pull request will be main.
+            merge_base = check_output(["git", "merge-base", "HEAD", "main"], text=True, encoding="utf8").rstrip("\n")
             commit_range = merge_base + "..HEAD"
     else:
         commit_range = os.getenv("COMMIT_RANGE")
