@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -20,6 +21,7 @@ Page {
         }
     }
     ColumnLayout {
+        id: selections
         width: 600
         spacing: 0
         anchors.top: parent.top
@@ -50,11 +52,40 @@ Page {
               swipeView.inSubPage = true
             }
         }
-        ContinueButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 40
-            text: "Next"
-            onClicked: swipeView.finished = true
-        }
     }
+    ContinueButton {
+        id: continueButton
+        anchors.topMargin: 40
+        anchors.leftMargin: 20
+        anchors.rightMargin: 20
+        anchors.bottomMargin: 60
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Next"
+        onClicked: swipeView.finished = true
+    }
+
+    state: AppMode.state
+
+    states: [
+        State {
+            name: "MOBILE"
+            AnchorChanges {
+                target: continueButton
+                anchors.top: undefined
+                anchors.bottom: continueButton.parent.bottom
+                anchors.right: continueButton.parent.right
+                anchors.left: continueButton.parent.left
+            }
+        },
+        State {
+            name: "DESKTOP"
+            AnchorChanges {
+                target: continueButton
+                anchors.top: selections.bottom
+                anchors.bottom: undefined
+                anchors.right: undefined
+                anchors.left: undefined
+            }
+        }
+    ]
 }
