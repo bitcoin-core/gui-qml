@@ -24,7 +24,6 @@ Control {
         spacing: 0
         Label {
             Layout.fillWidth: true
-            Layout.preferredWidth: 0
             topPadding: root.headerMargin
             font.family: "Inter"
             font.styleName: root.bold ? "Semi Bold" : "Regular"
@@ -36,7 +35,6 @@ Control {
         }
         Loader {
             Layout.fillWidth: true
-            Layout.preferredWidth: 0
             active: root.description.length > 0
             visible: active
             sourceComponent: Label {
@@ -52,7 +50,6 @@ Control {
         }
         Loader {
             Layout.fillWidth: true
-            Layout.preferredWidth: 0
             active: root.subtext.length > 0
             visible: active
             sourceComponent: Label {

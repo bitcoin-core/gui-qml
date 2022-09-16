@@ -19,16 +19,16 @@ Page {
         }
     }
     OnboardingInfo {
-      anchors.top: parent.top
-      anchors.horizontalCenter: parent.horizontalCenter
-      banner: Image {
-          source: Theme.image.network
-          sourceSize.width: 200
-          sourceSize.height: 200
-      }
-      bold: true
-      header: qsTr("Strengthen bitcoin")
-      description: qsTr("Bitcoin Core runs a full Bitcoin node which verifies the rules of the network are being followed.\n\nUsers running nodes is what makes bitcoin\nso resilient and trustworthy.")
-      buttonText: "Next"
+        height: parent.height
+        anchors.horizontalCenter: parent.horizontalCenter
+        banner: Image {
+            source: Theme.image.network
+            sourceSize.width: 200
+            sourceSize.height: 200
+        }
+        bold: true
+        header: qsTr("Strengthen bitcoin")
+        description: qsTr("Bitcoin Core runs a full Bitcoin node which verifies the rules of the network are being followed.\n\nUsers running nodes is what makes bitcoin\nso resilient and trustworthy.")
+        buttonText: "Next"
     }
 }
