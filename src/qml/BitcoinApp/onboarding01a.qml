@@ -23,7 +23,7 @@ Page {
         }
     }
     OnboardingInfo {
-        anchors.top: parent.top
+        height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         banner: Image {
             Layout.fillWidth: true

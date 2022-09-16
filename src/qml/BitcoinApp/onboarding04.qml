@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import BitcoinApp.Controls
 import BitcoinApp.Components
+import org.bitcoincore.qt
 
 Page {
     background: null
@@ -20,6 +21,7 @@ Page {
         }
     }
     ColumnLayout {
+        id: selections
         width: 600
         spacing: 0
         anchors.top: parent.top
@@ -35,11 +37,40 @@ Page {
             Layout.topMargin: 30
             Layout.alignment: Qt.AlignCenter
         }
-        ContinueButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 40
-            text: "Next"
-            onClicked: swipeView.incrementCurrentIndex()
-        }
     }
+    ContinueButton {
+        id: continueButton
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 40
+        anchors.bottomMargin: 60
+        anchors.rightMargin: 20
+        anchors.leftMargin: 20
+        text: "Next"
+        onClicked: swipeView.incrementCurrentIndex()
+    }
+
+    state: AppMode.state
+
+    states: [
+        State {
+            name: "MOBILE"
+            AnchorChanges {
+                target: continueButton
+                anchors.top: undefined
+                anchors.bottom: continueButton.parent.bottom
+                anchors.left: continueButton.parent.left
+                anchors.right: continueButton.parent.right
+            }
+        },
+        State {
+            name: "DESKTOP"
+            AnchorChanges {
+                target: continueButton
+                anchors.top: selections.bottom
+                anchors.bottom: undefined
+                anchors.left: undefined
+                anchors.right: undefined
+            }
+        }
+    ]
 }
