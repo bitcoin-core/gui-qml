@@ -29,8 +29,9 @@ Page {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignCenter
             source: "image://images/app"
-            sourceSize.width: 100
-            sourceSize.height: 100
+            // Bitcoin icon has ~11% padding
+            sourceSize.width: 112
+            sourceSize.height: 112
         }
         bannerMargin: 0
         bold: true
