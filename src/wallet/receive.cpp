@@ -193,7 +193,8 @@ CAmount CachedTxGetAvailableCredit(const CWallet& wallet, const CWalletTx& wtx, 
 
 void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
                   std::list<COutputEntry>& listReceived,
-                  std::list<COutputEntry>& listSent, CAmount& nFee, const isminefilter& filter)
+                  std::list<COutputEntry>& listSent, CAmount& nFee, const isminefilter& filter,
+                  bool include_change)
 {
     nFee = 0;
     listReceived.clear();
@@ -218,8 +219,7 @@ void CachedTxGetAmounts(const CWallet& wallet, const CWalletTx& wtx,
         //   2) the output is to us (received)
         if (nDebit > 0)
         {
-            // Don't report 'change' txouts
-            if (OutputIsChange(wallet, txout))
+            if (!include_change && OutputIsChange(wallet, txout))
                 continue;
         }
         else if (!(fIsMine & filter))
@@ -416,7 +416,7 @@ std::set< std::set<CTxDestination> > GetAddressGroupings(const CWallet& wallet)
 
     std::set< std::set<CTxDestination>* > uniqueGroupings; // a set of pointers to groups of addresses
     std::map< CTxDestination, std::set<CTxDestination>* > setmap;  // map addresses to the unique group containing it
-    for (std::set<CTxDestination> _grouping : groupings)
+    for (const std::set<CTxDestination>& _grouping : groupings)
     {
         // make a set of all the groups hit by this new group
         std::set< std::set<CTxDestination>* > hits;
