@@ -2,16 +2,38 @@ A workaround for error when building for riscv64.
 
 Upstream report: https://bugreports.qt.io/browse/QTBUG-84580
 
-Patch concept: https://bugs.gentoo.org/790689
+Patch: https://bugs.gentoo.org/803470
 
 
---- old/qtdeclarative/src/qml/qml.pro
-+++ new/qtdeclarative/src/qml/qml.pro
-@@ -19,6 +19,7 @@ solaris-cc*:QMAKE_CXXFLAGS_RELEASE -= -O2
+--- a/qtbase/mkspecs/common/linux.conf
++++ b/qtbase/mkspecs/common/linux.conf
+@@ -33,7 +33,7 @@ QMAKE_LIBS_EGL          = -lEGL
+ QMAKE_LIBS_OPENGL       = -lGL
+ QMAKE_LIBS_OPENGL_ES2   = -lGLESv2
+ QMAKE_LIBS_OPENVG       = -lOpenVG
+-QMAKE_LIBS_THREAD       = -lpthread
++QMAKE_LIBS_THREAD       = -pthread
+ QMAKE_LIBS_VULKAN       =
  
- # Ensure this gcc optimization is switched off for mips platforms to avoid trouble with JIT.
- gcc:isEqual(QT_ARCH, "mips"): QMAKE_CXXFLAGS += -fno-reorder-blocks
-+gcc:isEqual(QT_ARCH, "riscv64"): LIBS += -latomic
- 
- DEFINES += QT_NO_FOREACH
- 
+ QMAKE_INCDIR_WAYLAND    =
+
+--- a/qtbase/src/corelib/configure.json
++++ b/qtbase/src/corelib/configure.json
+@@ -355,7 +355,7 @@
+                     "std::future<int> f = std::async([]() { return 42; });",
+                     "(void)f.get();"
+                 ],
+-                "qmake": "unix:LIBS += -lpthread"
++                "qmake": "unix:LIBS += -pthread"
+             }
+         },
+         "cxx11_random": {
+@@ -466,7 +466,7 @@
+                     "shm_open(\"test\", O_RDWR | O_CREAT | O_EXCL, 0666);",
+                     "shm_unlink(\"test\");"
+                 ],
+-                "qmake": "linux: LIBS += -lpthread -lrt"
++                "qmake": "linux: LIBS += -pthread -lrt"
+             }
+         },
+         "linkat": {
