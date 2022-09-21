@@ -415,7 +415,7 @@ void CleanupBlockRevFiles()
     // Remove the rev files immediately and insert the blk file paths into an
     // ordered map keyed by block file index.
     LogPrintf("Removing unusable blk?????.dat and rev?????.dat files for -reindex with -prune\n");
-    fs::path blocksdir = gArgs.GetBlocksDirPath();
+    const fs::path& blocksdir = gArgs.GetBlocksDirPath();
     for (fs::directory_iterator it(blocksdir); it != fs::directory_iterator(); it++) {
         const std::string path = fs::PathToString(it->path().filename());
         if (fs::is_regular_file(*it) &&
@@ -882,7 +882,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
         // We can't hold cs_main during ActivateBestChain even though we're accessing
         // the chainman unique_ptrs since ABC requires us not to be holding cs_main, so retrieve
         // the relevant pointers before the ABC call.
-        for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+        for (Chainstate* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
             BlockValidationState state;
             if (!chainstate->ActivateBestChain(state, nullptr)) {
                 LogPrintf("Failed to connect best block (%s)\n", state.ToString());

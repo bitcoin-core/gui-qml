@@ -82,7 +82,7 @@ int main(int argc, char* argv[])
     // SETUP: Chainstate
     const ChainstateManager::Options chainman_opts{
         .chainparams = chainparams,
-        .adjusted_time_callback = static_cast<int64_t (*)()>(GetTime),
+        .adjusted_time_callback = NodeClock::now,
     };
     ChainstateManager chainman{chainman_opts};
 
@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
         }
     }
 
-    for (CChainState* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
+    for (Chainstate* chainstate : WITH_LOCK(::cs_main, return chainman.GetAll())) {
         BlockValidationState state;
         if (!chainstate->ActivateBestChain(state, nullptr)) {
             std::cerr << "Failed to connect best block (" << state.ToString() << ")" << std::endl;
@@ -115,12 +115,14 @@ int main(int argc, char* argv[])
     // Main program logic starts here
     std::cout
         << "Hello! I'm going to print out some information about your datadir." << std::endl
-        << "\t" << "Path: " << gArgs.GetDataDirNet() << std::endl
+        << "\t" << "Path: " << gArgs.GetDataDirNet() << std::endl;
+    {
+        LOCK(chainman.GetMutex());
+        std::cout
         << "\t" << "Reindexing: " << std::boolalpha << node::fReindex.load() << std::noboolalpha << std::endl
         << "\t" << "Snapshot Active: " << std::boolalpha << chainman.IsSnapshotActive() << std::noboolalpha << std::endl
         << "\t" << "Active Height: " << chainman.ActiveHeight() << std::endl
         << "\t" << "Active IBD: " << std::boolalpha << chainman.ActiveChainstate().IsInitialBlockDownload() << std::noboolalpha << std::endl;
-    {
         CBlockIndex* tip = chainman.ActiveTip();
         if (tip) {
             std::cout << "\t" << tip->ToString() << std::endl;
@@ -193,7 +195,7 @@ int main(int argc, char* argv[])
         bool new_block;
         auto sc = std::make_shared<submitblock_StateCatcher>(block.GetHash());
         RegisterSharedValidationInterface(sc);
-        bool accepted = chainman.ProcessNewBlock(blockptr, /*force_processing=*/true, /*new_block=*/&new_block);
+        bool accepted = chainman.ProcessNewBlock(blockptr, /*force_processing=*/true, /*min_pow_checked=*/true, /*new_block=*/&new_block);
         UnregisterSharedValidationInterface(sc);
         if (!new_block && accepted) {
             std::cerr << "duplicate" << std::endl;
@@ -207,6 +209,9 @@ int main(int argc, char* argv[])
         switch (sc->state.GetResult()) {
         case BlockValidationResult::BLOCK_RESULT_UNSET:
             std::cerr << "initial value. Block has not yet been rejected" << std::endl;
+            break;
+        case BlockValidationResult::BLOCK_HEADER_LOW_WORK:
+            std::cerr << "the block header may be on a too-little-work chain" << std::endl;
             break;
         case BlockValidationResult::BLOCK_CONSENSUS:
             std::cerr << "invalid by consensus rules (excluding any below reasons)" << std::endl;
@@ -248,7 +253,7 @@ epilogue:
     GetMainSignals().FlushBackgroundCallbacks();
     {
         LOCK(cs_main);
-        for (CChainState* chainstate : chainman.GetAll()) {
+        for (Chainstate* chainstate : chainman.GetAll()) {
             if (chainstate->CanFlushToDisk()) {
                 chainstate->ForceFlushStateToDisk();
                 chainstate->ResetCoinsViews();

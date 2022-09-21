@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-define(_CLIENT_VERSION_MAJOR, 23)
+define(_CLIENT_VERSION_MAJOR, 24)
 define(_CLIENT_VERSION_MINOR, 99)
 define(_CLIENT_VERSION_BUILD, 0)
 define(_CLIENT_VERSION_RC, 0)
@@ -31,6 +31,7 @@ fi
 
 BITCOIN_DAEMON_NAME=bitcoind
 BITCOIN_GUI_NAME=bitcoin-qt
+BITCOIN_TEST_NAME=test_bitcoin
 BITCOIN_CLI_NAME=bitcoin-cli
 BITCOIN_TX_NAME=bitcoin-tx
 BITCOIN_UTIL_NAME=bitcoin-util
@@ -518,7 +519,7 @@ if test "$enable_clmul" = "yes"; then
 fi
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $SSE42_CXXFLAGS"
+CXXFLAGS="$SSE42_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for SSE4.2 intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <stdint.h>
@@ -540,7 +541,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $SSE41_CXXFLAGS"
+CXXFLAGS="$SSE41_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for SSE4.1 intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <stdint.h>
@@ -555,7 +556,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $AVX2_CXXFLAGS"
+CXXFLAGS="$AVX2_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for AVX2 intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <stdint.h>
@@ -570,7 +571,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $X86_SHANI_CXXFLAGS"
+CXXFLAGS="$X86_SHANI_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for x86 SHA-NI intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <stdint.h>
@@ -591,7 +592,7 @@ AX_CHECK_COMPILE_FLAG([-march=armv8-a+crc+crypto], [ARM_CRC_CXXFLAGS="-march=arm
 AX_CHECK_COMPILE_FLAG([-march=armv8-a+crc+crypto], [ARM_SHANI_CXXFLAGS="-march=armv8-a+crc+crypto"], [], [$CXXFLAG_WERROR])
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $ARM_CRC_CXXFLAGS"
+CXXFLAGS="$ARM_CRC_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for ARMv8 CRC32 intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <arm_acle.h>
@@ -610,7 +611,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 CXXFLAGS="$TEMP_CXXFLAGS"
 
 TEMP_CXXFLAGS="$CXXFLAGS"
-CXXFLAGS="$CXXFLAGS $ARM_SHANI_CXXFLAGS"
+CXXFLAGS="$ARM_SHANI_CXXFLAGS $CXXFLAGS"
 AC_MSG_CHECKING([for ARMv8 SHA-NI intrinsics])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
     #include <arm_acle.h>
@@ -744,6 +745,16 @@ case $host in
          dnl Homebrew where each one is located, then adjust paths accordingly.
          dnl It's safe to add these paths even if the functionality is disabled by
          dnl the user (--without-wallet or --without-gui for example).
+
+         dnl Homebrew may create symlinks in /usr/local/include for some packages.
+         dnl Because MacOS's clang internally adds "-I /usr/local/include" to its search
+         dnl paths, this will negate efforts to use -isystem for those packages, as they
+         dnl will be found first in /usr/local. Use the internal "-internal-isystem"
+         dnl option to system-ify all /usr/local/include paths without adding it to the list
+         dnl of search paths in case it's not already there.
+         if test "$suppress_external_warnings" != "no"; then
+           AX_CHECK_PREPROC_FLAG([-Xclang -internal-isystem/usr/local/include], [CORE_CPPFLAGS="$CORE_CPPFLAGS -Xclang -internal-isystem/usr/local/include"], [], [$CXXFLAG_WERROR])
+         fi
 
          if test "$use_bdb" != "no" && $BREW list --versions berkeley-db@4 >/dev/null && test "$BDB_CFLAGS" = "" && test "$BDB_LIBS" = ""; then
            bdb_prefix=$($BREW --prefix berkeley-db@4 2>/dev/null)
@@ -1694,11 +1705,12 @@ AM_CONDITIONAL([BUILD_BITCOIN_UTIL], [test $build_bitcoin_util = "yes"])
 AC_MSG_RESULT($build_bitcoin_util)
 
 AC_MSG_CHECKING([whether to build experimental bitcoin-chainstate])
-if test "$build_experimental_kernel_lib" = "no"; then
-AC_MSG_ERROR([experimental bitcoin-chainstate cannot be built without the experimental bitcoinkernel library. Use --with-experimental-kernel-lib]);
-else
-  AM_CONDITIONAL([BUILD_BITCOIN_CHAINSTATE], [test $build_bitcoin_chainstate = "yes"])
+if test "$build_bitcoin_chainstate" = "yes"; then
+  if test "$build_experimental_kernel_lib" = "no"; then
+    AC_MSG_ERROR([experimental bitcoin-chainstate cannot be built without the experimental bitcoinkernel library. Use --with-experimental-kernel-lib]);
+  fi
 fi
+AM_CONDITIONAL([BUILD_BITCOIN_CHAINSTATE], [test $build_bitcoin_chainstate = "yes"])
 AC_MSG_RESULT($build_bitcoin_chainstate)
 
 AC_MSG_CHECKING([whether to build libraries])
@@ -1921,6 +1933,7 @@ AC_SUBST(COPYRIGHT_HOLDERS_SUBSTITUTION, "_COPYRIGHT_HOLDERS_SUBSTITUTION")
 AC_SUBST(COPYRIGHT_HOLDERS_FINAL, "_COPYRIGHT_HOLDERS_FINAL")
 AC_SUBST(BITCOIN_DAEMON_NAME)
 AC_SUBST(BITCOIN_GUI_NAME)
+AC_SUBST(BITCOIN_TEST_NAME)
 AC_SUBST(BITCOIN_CLI_NAME)
 AC_SUBST(BITCOIN_TX_NAME)
 AC_SUBST(BITCOIN_UTIL_NAME)

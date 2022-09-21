@@ -69,6 +69,7 @@ Q_IMPORT_PLUGIN(QMacStylePlugin);
 Q_DECLARE_METATYPE(bool*)
 Q_DECLARE_METATYPE(CAmount)
 Q_DECLARE_METATYPE(SynchronizationState)
+Q_DECLARE_METATYPE(SyncType)
 Q_DECLARE_METATYPE(uint256)
 
 static void RegisterMetaTypes()
@@ -76,6 +77,7 @@ static void RegisterMetaTypes()
     // Register meta types used for QMetaObject::invokeMethod and Qt::QueuedConnection
     qRegisterMetaType<bool*>();
     qRegisterMetaType<SynchronizationState>();
+    qRegisterMetaType<SyncType>();
   #ifdef ENABLE_WALLET
     qRegisterMetaType<WalletModel*>();
   #endif

@@ -70,6 +70,7 @@ $(package)_config_opts += -no-linuxfb
 $(package)_config_opts += -no-libjpeg
 $(package)_config_opts += -no-libproxy
 $(package)_config_opts += -no-libudev
+$(package)_config_opts += -no-mimetype-database
 $(package)_config_opts += -no-mtdev
 $(package)_config_opts += -no-openssl
 $(package)_config_opts += -no-openvg
@@ -159,6 +160,9 @@ $(package)_config_opts_darwin += -no-feature-corewlan
 $(package)_config_opts_darwin += -no-freetype
 $(package)_config_opts_darwin += QMAKE_MACOSX_DEPLOYMENT_TARGET=$(OSX_MIN_VERSION)
 
+# Optimizing using > -O1 causes non-determinism when building across arches.
+$(package)_config_opts_aarch64_darwin += "QMAKE_CFLAGS_OPTIMIZE_FULL = -O1"
+
 ifneq ($(build_os),darwin)
 $(package)_config_opts_darwin += -xplatform macx-clang-linux
 $(package)_config_opts_darwin += -device-option MAC_SDK_PATH=$(OSX_SDK)
@@ -183,18 +187,10 @@ $(package)_config_opts_linux += -dbus-runtime
 ifneq ($(LTO),)
 $(package)_config_opts_linux += -ltcg
 endif
-$(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_i686_linux  = -xplatform linux-g++-32
+$(package)_config_opts_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
 ifneq (,$(findstring -stdlib=libc++,$($(1)_cxx)))
 $(package)_config_opts_x86_64_linux = -xplatform linux-clang-libc++
-else
-$(package)_config_opts_x86_64_linux = -xplatform linux-g++-64
 endif
-$(package)_config_opts_aarch64_linux = -xplatform linux-aarch64-gnu-g++
-$(package)_config_opts_powerpc64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_powerpc64le_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_riscv64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_s390x_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
 
 $(package)_config_opts_mingw32 = -opengl desktop
 $(package)_config_opts_mingw32 += -no-d3d12
@@ -267,18 +263,11 @@ endef
 # 2. Create a macOS-Clang-Linux mkspec using our mac-qmake.conf.
 #
 # 3. After making a copy of the mkspec for the linux-arm-gnueabi host, named
-# bitcoin-linux-g++, replace instances of linux-arm-gnueabi with $(host). This
-# way we can generically support hosts like riscv64-linux-gnu, which Qt doesn't
-# ship a mkspec for. See it's usage in config_opts_* above.
+#    bitcoin-linux-g++, replace tool names with $($($(package)_type)_TOOL).
 #
 # 4. Put our C, CXX and LD FLAGS into gcc-base.conf. Only used for non-host builds.
 #
-# 5. Do similar for the win32-g++ mkspec.
-#
-# 6. In clang.conf, swap out clang & clang++, for our compiler + flags. See #17466.
-#
-# 7. Adjust a regex in toolchain.prf, to accommodate Guix's usage of
-# CROSS_LIBRARY_PATH. See #15277.
+# 5. In clang.conf, swap out clang & clang++, for our compiler + flags. See #17466.
 define $(package)_preprocess_cmds
   cp $($(package)_patch_dir)/qt.pro qt.pro && \
   cp $($(package)_patch_dir)/qttools_src.pro qttools/src/src.pro && \
@@ -300,7 +289,12 @@ define $(package)_preprocess_cmds
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
   cp -r qtbase/mkspecs/linux-arm-gnueabi-g++ qtbase/mkspecs/bitcoin-linux-g++ && \
-  sed -i.old "s/arm-linux-gnueabi-/$(host)-/g" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-gcc|$($($(package)_type)_CC)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-g++|$($($(package)_type)_CXX)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-ar|$($($(package)_type)_AR)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-objcopy|$($($(package)_type)_OBJCOPY)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-nm|$($($(package)_type)_NM)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
+  sed -i.old "s|arm-linux-gnueabi-strip|$($($(package)_type)_STRIP)|" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
   echo "!host_build: QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
   echo "!host_build: QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
   echo "!host_build: QMAKE_LFLAGS     += $($(package)_ldflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
