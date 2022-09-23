@@ -13,6 +13,7 @@ ColumnLayout {
     }
     spacing: 15
     OptionButton {
+        Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Default directory")
         description: qsTr("The downloaded block data will be saved to the default data directory for your OS.")
@@ -20,6 +21,7 @@ ColumnLayout {
         checked: true
     }
     OptionButton {
+        Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Custom directory")
         description: qsTr("The downloaded block data will be saved to the chosen directory.")

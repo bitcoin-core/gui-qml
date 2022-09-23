@@ -20,6 +20,7 @@ Page {
     }
     OnboardingInfo {
         height: parent.height
+        width: Math.min(parent.width, 600)
         anchors.horizontalCenter: parent.horizontalCenter
         banner: Image {
             source: Theme.image.network

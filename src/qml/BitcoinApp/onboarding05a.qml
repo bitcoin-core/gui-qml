@@ -22,18 +22,23 @@ Page {
     }
     ColumnLayout {
         id: selections
-        width: 600
+        width: Math.min(parent.width, 600)
         spacing: 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         Header {
             Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
             bold: true
             header: qsTr("Storage")
             description: qsTr("Data retrieved from the Bitcoin network is stored\non your device.\n\nYou have 500GB of storage available.")
         }
         StorageOptions {
+            Layout.maximumWidth: 450
             Layout.topMargin: 30
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
             Layout.alignment: Qt.AlignCenter
         }
         TextButton {
