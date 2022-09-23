@@ -22,7 +22,7 @@ Page {
     }
     ColumnLayout {
         id: selections
-        width: 600
+        width: Math.min(parent.width, 600)
         spacing: 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
@@ -35,6 +35,9 @@ Page {
         }
         Header {
             Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+
             bold: true
             header: qsTr("Starting initial download")
             headerMargin: 30
@@ -44,6 +47,9 @@ Page {
         TextButton {
             Layout.alignment: Qt.AlignCenter
             Layout.topMargin: 30
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+
             text: "Connection settings"
             textSize: 18
             textColor: Theme.color.orange
