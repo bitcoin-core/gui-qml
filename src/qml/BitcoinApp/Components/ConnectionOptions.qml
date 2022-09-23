@@ -13,18 +13,21 @@ ColumnLayout {
     }
     spacing: 15
     OptionButton {
+        Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Fast always on")
         description: qsTr("Loads quickly at all times and uses as much cellular data as needed.")
         recommended: true
     }
     OptionButton {
+        Layout.fillWidth: true
         ButtonGroup.group: group
         checked: true
         text: qsTr("Slow always on")
         description: qsTr("Loads at all times with reduced cellular data usage.")
     }
     OptionButton {
+        Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Only when on Wi-Fi")
         description: qsTr("Loads quickly when on wi-fi and pauses when on cellular data.")
