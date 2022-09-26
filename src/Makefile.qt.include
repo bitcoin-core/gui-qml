@@ -298,6 +298,7 @@ QML_RES_FONTS = \
 QML_RES_ICONS = \
   qml/res/icons/arrow-down.png \
   qml/res/icons/arrow-up.png \
+  qml/res/icons/bitcoin-circle.png \
   qml/res/icons/blocktime-dark.png \
   qml/res/icons/blocktime-light.png \
   qml/res/icons/caret-left.png \
