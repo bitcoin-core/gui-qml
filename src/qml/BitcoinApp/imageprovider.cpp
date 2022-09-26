@@ -32,6 +32,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/qt/qml/BitcoinApp/res/icons/arrow-up.png").pixmap(requested_size);
     }
 
+    if (id == "bitcoin-circle") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/bitcoin-circle.png").pixmap(requested_size);
+    }
+
     if (id == "blocktime-dark") {
         *size = requested_size;
         return QIcon(":/qt/qml/BitcoinApp/res/icons/blocktime-dark.png").pixmap(requested_size);

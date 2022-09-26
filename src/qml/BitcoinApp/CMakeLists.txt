@@ -34,6 +34,7 @@ qt6_add_qml_module(bitcoin_qml
     res/fonts/Inter-SemiBold.otf
     res/icons/arrow-down.png
     res/icons/arrow-up.png
+    res/icons/bitcoin-circle.png
     res/icons/blocktime-dark.png
     res/icons/blocktime-light.png
     res/icons/caret-left.png
