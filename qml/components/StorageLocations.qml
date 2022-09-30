@@ -14,14 +14,14 @@ ColumnLayout {
     spacing: 15
     OptionButton {
         ButtonGroup.group: group
-        text: qsTr("SD Card")
-        description: qsTr("The available space is large enough for full block storage. ")
+        text: qsTr("Default directory")
+        description: qsTr("The downloaded block data will be saved to the default data directory for your OS.")
         recommended: true
         checked: true
     }
     OptionButton {
         ButtonGroup.group: group
-        text: qsTr("Hard drive")
-        description: qsTr("Available space only allows for partial block storage.")
+        text: qsTr("Custom directory")
+        description: qsTr("The downloaded block data will be saved to the chosen directory.")
     }
 }
