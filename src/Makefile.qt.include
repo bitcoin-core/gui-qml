@@ -35,6 +35,7 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
+  qml/moc_appmode.cpp \
   qml/moc_nodemodel.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
@@ -107,6 +108,7 @@ QT_QRC_LOCALE_CPP = qt/qrc_bitcoin_locale.cpp
 QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
+  qml/appmode.h \
   qml/bitcoin.h \
   qml/imageprovider.h \
   qml/nodemodel.h \
