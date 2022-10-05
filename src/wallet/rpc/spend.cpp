@@ -317,7 +317,7 @@ RPCHelpMan sendmany()
                 "\nSend multiple times. Amounts are double-precision floating point numbers." +
         HELP_REQUIRING_PASSPHRASE,
                 {
-                    {"dummy", RPCArg::Type::STR, RPCArg::Optional::NO, "Must be set to \"\" for backwards compatibility.", "\"\""},
+                    {"dummy", RPCArg::Type::STR, RPCArg::Optional::NO, "Must be set to \"\" for backwards compatibility.", RPCArgOptions{.oneline_description="\"\""}},
                     {"amounts", RPCArg::Type::OBJ_USER_KEYS, RPCArg::Optional::NO, "The addresses and amounts",
                         {
                             {"address", RPCArg::Type::AMOUNT, RPCArg::Optional::NO, "The bitcoin address is the key, the numeric amount (can be string) in " + CURRENCY_UNIT + " is the value"},
@@ -338,7 +338,7 @@ RPCHelpMan sendmany()
                     {"estimate_mode", RPCArg::Type::STR, RPCArg::Default{"unset"}, "The fee estimate mode, must be one of (case insensitive):\n"
                      "\"" + FeeModes("\"\n\"") + "\""},
                     {"fee_rate", RPCArg::Type::AMOUNT, RPCArg::DefaultHint{"not set, fall back to wallet fee estimation"}, "Specify a fee rate in " + CURRENCY_ATOM + "/vB."},
-                    {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, return extra infomration about the transaction."},
+                    {"verbose", RPCArg::Type::BOOL, RPCArg::Default{false}, "If true, return extra information about the transaction."},
                 },
                 {
                     RPCResult{"if verbose is not set or set to false",
@@ -503,7 +503,6 @@ void FundTransaction(CWallet& wallet, CMutableTransaction& tx, CAmount& fee_out,
         coinControl.fAllowWatchOnly = options.get_bool();
       }
       else {
-        RPCTypeCheckArgument(options, UniValue::VOBJ);
         RPCTypeCheckObj(options,
             {
                 {"add_inputs", UniValueType(UniValue::VBOOL)},
@@ -775,7 +774,7 @@ RPCHelpMan fundrawtransaction()
                              },
                         },
                         FundTxDoc()),
-                        "options"},
+                        RPCArgOptions{.oneline_description="options"}},
                     {"iswitness", RPCArg::Type::BOOL, RPCArg::DefaultHint{"depends on heuristic tests"}, "Whether the transaction hex is a serialized witness transaction.\n"
                         "If iswitness is not present, heuristic tests will be used in decoding.\n"
                         "If true, only witness deserialization will be tried.\n"
@@ -969,7 +968,7 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
                     {"estimate_mode", RPCArg::Type::STR, RPCArg::Default{"unset"}, "The fee estimate mode, must be one of (case insensitive):\n"
                      "\"" + FeeModes("\"\n\"") + "\""},
                 },
-                "options"},
+                RPCArgOptions{.oneline_description="options"}},
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "", Cat(
@@ -1174,7 +1173,7 @@ RPCHelpMan send()
                     },
                 },
                 FundTxDoc()),
-                "options"},
+                RPCArgOptions{.oneline_description="options"}},
         },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
@@ -1282,7 +1281,7 @@ RPCHelpMan sendall()
                     },
                     FundTxDoc()
                 ),
-                "options"
+                RPCArgOptions{.oneline_description="options"}
             },
         },
         RPCResult{
@@ -1612,7 +1611,7 @@ RPCHelpMan walletcreatefundedpsbt()
                             },
                         },
                         FundTxDoc()),
-                        "options"},
+                        RPCArgOptions{.oneline_description="options"}},
                     {"bip32derivs", RPCArg::Type::BOOL, RPCArg::Default{true}, "Include BIP 32 derivation paths for public keys if we know them"},
                 },
                 RPCResult{
@@ -1653,7 +1652,6 @@ RPCHelpMan walletcreatefundedpsbt()
     bool rbf{wallet.m_signal_rbf};
     const UniValue &replaceable_arg = options["replaceable"];
     if (!replaceable_arg.isNull()) {
-        RPCTypeCheckArgument(replaceable_arg, UniValue::VBOOL);
         rbf = replaceable_arg.isTrue();
     }
     CMutableTransaction rawTx = ConstructTransaction(request.params[0], request.params[1], request.params[2], rbf);
