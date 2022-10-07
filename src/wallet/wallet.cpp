@@ -1907,7 +1907,7 @@ std::set<uint256> CWallet::GetTxConflicts(const CWalletTx& wtx) const
 // mempool to relay them. On startup, we will do this for all unconfirmed
 // transactions but will not ask the mempool to relay them. We do this on startup
 // to ensure that our own mempool is aware of our transactions, and to also
-// initialize nNextResend so that the actual rebroadcast is scheduled. There
+// initialize m_next_resend so that the actual rebroadcast is scheduled. There
 // is a privacy side effect here as not broadcasting on startup also means that we won't
 // inform the world of our wallet's state, particularly if the wallet (or node) is not
 // yet synced.
@@ -1941,9 +1941,9 @@ void CWallet::ResubmitWalletTransactions(bool relay, bool force)
 
     // Do this infrequently and randomly to avoid giving away
     // that these are our transactions.
-    if (!force && GetTime() < nNextResend) return;
+    if (!force && GetTime() < m_next_resend) return;
     // resend 12-36 hours from now, ~1 day on average.
-    nNextResend = GetTime() + (12 * 60 * 60) + GetRand(24 * 60 * 60);
+    m_next_resend = GetTime() + (12 * 60 * 60) + GetRand(24 * 60 * 60);
 
     int submitted_tx_count = 0;
 
@@ -2110,6 +2110,7 @@ SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkh
     CScript script_pub_key = GetScriptForDestination(pkhash);
     for (const auto& spk_man_pair : m_spk_managers) {
         if (spk_man_pair.second->CanProvide(script_pub_key, sigdata)) {
+            LOCK(cs_wallet);  // DescriptorScriptPubKeyMan calls IsLocked which can lock cs_wallet in a deadlocking order
             return spk_man_pair.second->SignMessage(message, pkhash, str_sig);
         }
     }
