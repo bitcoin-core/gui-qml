@@ -41,6 +41,8 @@ Item {
         }
         Header {
             Layout.fillWidth: true
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
             bold: root.bold
             center: root.center
             header: root.header
