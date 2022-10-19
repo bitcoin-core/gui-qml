@@ -14,7 +14,7 @@ Page {
     Layout.fillWidth: true
     clip: true
     header: OnboardingNav {
-        navButton: NavButton {
+        leftDetail: NavButton {
             iconSource: "image://images/caret-left"
             text: "Back"
             onClicked: swipeView.currentIndex -= 1
