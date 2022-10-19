@@ -12,7 +12,7 @@ Page {
     background: null
     Layout.fillWidth: true
     clip: true
-    header: OnboardingNav {
+    header: NavigationBar {
         rightDetail: NavButton {
             text: "Done"
             onClicked: {

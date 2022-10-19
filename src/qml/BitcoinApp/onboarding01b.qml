@@ -12,7 +12,7 @@ Page {
     background: null
     clip: true
     Layout.fillWidth: true
-    header: OnboardingNav {
+    header: NavigationBar {
         leftDetail: NavButton {
             iconSource: "image://images/caret-left"
             text: "Back"

@@ -11,7 +11,7 @@ Page {
     background: null
     clip: true
     Layout.fillWidth: true
-    header: OnboardingNav {
+    header: NavigationBar {
         rightDetail: NavButton {
             iconSource: "image://images/info"
             iconHeight: 24
