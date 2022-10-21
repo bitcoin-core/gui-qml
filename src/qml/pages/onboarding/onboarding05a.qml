@@ -59,7 +59,6 @@ Page {
         anchors.leftMargin: 20
         anchors.rightMargin: 20
         anchors.bottomMargin: 60
-        anchors.horizontalCenter: parent.horizontalCenter
         text: "Next"
         onClicked: swipeView.incrementCurrentIndex()
     }
@@ -75,6 +74,7 @@ Page {
                 anchors.bottom: continueButton.parent.bottom
                 anchors.left: continueButton.parent.left
                 anchors.right: continueButton.parent.right
+                anchors.horizontalCenter: undefined
             }
         },
         State {
@@ -85,6 +85,7 @@ Page {
                 anchors.bottom: undefined
                 anchors.left: undefined
                 anchors.right: undefined
+                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
     ]
