@@ -65,7 +65,6 @@ Page {
         anchors.leftMargin: 20
         anchors.rightMargin: 20
         anchors.bottomMargin: 60
-        anchors.horizontalCenter: parent.horizontalCenter
         text: "Next"
         onClicked: swipeView.finished = true
     }
@@ -81,6 +80,7 @@ Page {
                 anchors.bottom: continueButton.parent.bottom
                 anchors.right: continueButton.parent.right
                 anchors.left: continueButton.parent.left
+                anchors.horizontalCenter: undefined
             }
         },
         State {
@@ -91,6 +91,7 @@ Page {
                 anchors.bottom: undefined
                 anchors.right: undefined
                 anchors.left: undefined
+                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
     ]

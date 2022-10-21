@@ -45,7 +45,6 @@ Page {
     }
     ContinueButton {
         id: continueButton
-        anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: 40
         anchors.bottomMargin: 60
         anchors.rightMargin: 20
@@ -65,6 +64,7 @@ Page {
                 anchors.bottom: continueButton.parent.bottom
                 anchors.left: continueButton.parent.left
                 anchors.right: continueButton.parent.right
+                anchors.horizontalCenter: undefined
             }
         },
         State {
@@ -75,6 +75,7 @@ Page {
                 anchors.bottom: undefined
                 anchors.left: undefined
                 anchors.right: undefined
+                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
     ]
