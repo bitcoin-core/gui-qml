@@ -12,9 +12,8 @@ Page {
     background: null
     Layout.fillWidth: true
     clip: true
-    header: OnboardingNav {
-        alignLeft: false
-        navButton: NavButton {
+    header: NavigationBar {
+        rightDetail: NavButton {
             text: "Done"
             onClicked: {
                 storages.decrementCurrentIndex()
