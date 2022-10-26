@@ -11,6 +11,7 @@ qt6_add_qml_module(bitcoin_qml
     bitcoin.cpp
     imageprovider.cpp
     nodemodel.cpp
+    options_model.cpp
     util.cpp
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
