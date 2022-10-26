@@ -20,74 +20,40 @@ Page {
             onClicked: swipeView.currentIndex -= 1
         }
     }
-    ColumnLayout {
-        id: selections
+    OnboardingInfo {
+        height: parent.height
         width: Math.min(parent.width, 600)
-        spacing: 0
-        anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        Header {
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            bold: true
-            header: qsTr("Storage")
-            description: qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have 500GB of storage available.")
-        }
-        StorageOptions {
-            Layout.maximumWidth: 450
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.alignment: Qt.AlignCenter
-        }
-        TextButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 30
-            text: "Detailed settings"
-            textSize: 18
-            textColor: "#F7931A"
-            onClicked: {
-              storages.incrementCurrentIndex()
-              swipeView.inSubPage = true
         bannerActive: false
+        bold: true
+        header: qsTr("Storage")
+        headerMargin: 0
+        description: qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have 500GB of storage available.")
+        descriptionMargin: 10
+        detailActive: true
+        detailItem: ColumnLayout {
+            spacing: 0
+            StorageOptions {
+                Layout.maximumWidth: 450
+                Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+            }
+            TextButton {
+                Layout.alignment: Qt.AlignCenter
+                Layout.topMargin: 30
+                Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                text: "Detailed settings"
+                textSize: 18
+                textColor: "#F7931A"
+                onClicked: {
+                  storages.incrementCurrentIndex()
+                  swipeView.inSubPage = true
+                }
             }
         }
+        buttonText: qsTr("Next")
     }
-    ContinueButton {
-        id: continueButton
-        anchors.topMargin: 40
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        anchors.bottomMargin: 60
-        text: "Next"
-        onClicked: swipeView.incrementCurrentIndex()
-    }
-
-    state: AppMode.state
-
-    states: [
-        State {
-            name: "MOBILE"
-            AnchorChanges {
-                target: continueButton
-                anchors.top: undefined
-                anchors.bottom: continueButton.parent.bottom
-                anchors.left: continueButton.parent.left
-                anchors.right: continueButton.parent.right
-                anchors.horizontalCenter: undefined
-            }
-        },
-        State {
-            name: "DESKTOP"
-            AnchorChanges {
-                target: continueButton
-                anchors.top: selections.bottom
-                anchors.bottom: undefined
-                anchors.left: undefined
-                anchors.right: undefined
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
-    ]
 }
