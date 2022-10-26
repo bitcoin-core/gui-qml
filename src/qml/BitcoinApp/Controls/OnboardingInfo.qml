@@ -9,8 +9,9 @@ import org.bitcoincore.qt
 
 Item {
     id: root
-    property alias banner: banner_loader.sourceComponent
+    property alias bannerItem: banner_loader.sourceComponent
     required property string buttonText
+    property bool bannerActive: true
     property bool bold: false
     property bool center: true
     property int bannerMargin: 20
@@ -33,11 +34,11 @@ Item {
         spacing: 0
         Loader {
             id: banner_loader
-            active: true
+            active: root.bannerActive
             visible: active
             Layout.alignment: Qt.AlignCenter
             Layout.topMargin: root.bannerMargin
-            sourceComponent: root.actionItem
+            sourceComponent: root.bannerItem
         }
         Header {
             Layout.fillWidth: true

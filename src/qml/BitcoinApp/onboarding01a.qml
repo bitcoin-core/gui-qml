@@ -25,7 +25,7 @@ Page {
         height: parent.height
         width: Math.min(parent.width, 600)
         anchors.horizontalCenter: parent.horizontalCenter
-        banner: Image {
+        bannerItem: Image {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignCenter
             source: "image://images/app"
