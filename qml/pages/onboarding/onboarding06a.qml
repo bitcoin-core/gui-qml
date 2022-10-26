@@ -20,11 +20,9 @@ Page {
             onClicked: swipeView.currentIndex -= 1
         }
     }
-    ColumnLayout {
-        id: selections
+    OnboardingInfo {
+        height: parent.height
         width: Math.min(parent.width, 600)
-        spacing: 0
-        anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
         bannerItem: Image {
             Layout.topMargin: 20
@@ -33,23 +31,13 @@ Page {
             sourceSize.width: 200
             sourceSize.height: 200
         }
-        Header {
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-
-            bold: true
-            header: qsTr("Starting initial download")
-            headerMargin: 30
-            description: qsTr("The application will connect to the Bitcoin network and start downloading and verifying transactions.\n\nThis may take several hours, or even days, based on your connection.")
-            descriptionMargin: 20
-        }
-        TextButton {
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-
+        bold: true
+        header: qsTr("Starting initial download")
+        headerMargin: 30
+        description: qsTr("The application will connect to the Bitcoin network and start downloading and verifying transactions.\n\nThis may take several hours, or even days, based on your connection.")
+        descriptionMargin: 20
+        detailActive: true
+        detailItem: TextButton {
             text: "Connection settings"
             textSize: 18
             textColor: Theme.color.orange
@@ -58,41 +46,7 @@ Page {
               swipeView.inSubPage = true
             }
         }
+        lastPage: true
+        buttonText: "Next"
     }
-    ContinueButton {
-        id: continueButton
-        anchors.topMargin: 40
-        anchors.leftMargin: 20
-        anchors.rightMargin: 20
-        anchors.bottomMargin: 60
-        text: "Next"
-        onClicked: swipeView.finished = true
-    }
-
-    state: AppMode.state
-
-    states: [
-        State {
-            name: "MOBILE"
-            AnchorChanges {
-                target: continueButton
-                anchors.top: undefined
-                anchors.bottom: continueButton.parent.bottom
-                anchors.right: continueButton.parent.right
-                anchors.left: continueButton.parent.left
-                anchors.horizontalCenter: undefined
-            }
-        },
-        State {
-            name: "DESKTOP"
-            AnchorChanges {
-                target: continueButton
-                anchors.top: selections.bottom
-                anchors.bottom: undefined
-                anchors.right: undefined
-                anchors.left: undefined
-                anchors.horizontalCenter: parent.horizontalCenter
-            }
-        }
-    ]
 }
