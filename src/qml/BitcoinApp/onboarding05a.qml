@@ -50,6 +50,7 @@ Page {
             onClicked: {
               storages.incrementCurrentIndex()
               swipeView.inSubPage = true
+        bannerActive: false
             }
         }
     }

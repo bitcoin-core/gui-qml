@@ -26,7 +26,7 @@ Page {
         spacing: 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        Image {
+        bannerItem: Image {
             Layout.topMargin: 20
             Layout.alignment: Qt.AlignCenter
             source: Theme.image.storage
