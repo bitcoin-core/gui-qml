@@ -10,8 +10,11 @@ import org.bitcoincore.qt
 Item {
     id: root
     property alias bannerItem: banner_loader.sourceComponent
+    property alias detailItem: detail_loader.sourceComponent
     required property string buttonText
     property bool bannerActive: true
+    property bool detailActive: false
+    property bool lastPage: false
     property bool bold: false
     property bool center: true
     property int bannerMargin: 20
@@ -56,6 +59,16 @@ Item {
             subtextMargin: root.subtextMargin
             subtextSize: root.subtextSize
         }
+        Loader {
+            id: detail_loader
+            active: root.detailActive
+            visible: active
+            Layout.alignment: Qt.AlignCenter
+            Layout.topMargin: 30
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+            sourceComponent: root.detailItem
+        }
     }
     ContinueButton {
         id: continueButton
@@ -64,7 +77,7 @@ Item {
         anchors.leftMargin: 20
         anchors.rightMargin: 20
         text: root.buttonText
-        onClicked: swipeView.incrementCurrentIndex()
+        onClicked: root.lastPage ? swipeView.finished = true : swipeView.incrementCurrentIndex()
     }
 
     state: AppMode.state
