@@ -11,14 +11,18 @@ ColumnLayout {
     spacing: 20
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Store Recent blocks only")
-        actionItem: OptionSwitch {}
+        header: qsTr("Store recent blocks only")
+        actionItem: OptionSwitch {
+            checked: options.prune
+            onToggled: options.prune = checked
+        }
     }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Storage limit")
         actionItem: ValueInput {
-            description: qsTr("2 GB")
+            description: options.pruneSizeGB
+            onEditingFinished: options.pruneSizeGB = parseInt(text)
         }
     }
     Setting {
