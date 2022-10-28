@@ -22,7 +22,7 @@ Page {
         }
     }
     ColumnLayout {
-        width: Math.min(parent.width, 450)
+        width: Math.min(parent.width, 490)
         spacing: 0
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
