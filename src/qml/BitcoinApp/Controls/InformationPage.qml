@@ -82,10 +82,12 @@ Page {
         id: continueButton
         visible: root.buttonText.length > 0
         enabled: visible
+        width: Math.min(300, parent.width - 2 * anchors.leftMargin)
         anchors.topMargin: 40
         anchors.bottomMargin: 60
         anchors.leftMargin: 20
         anchors.rightMargin: 20
+        anchors.horizontalCenter: parent.horizontalCenter
         text: root.buttonText
         onClicked: root.lastPage ? swipeView.finished = true : swipeView.incrementCurrentIndex()
     }
@@ -99,9 +101,6 @@ Page {
                 target: continueButton
                 anchors.top: undefined
                 anchors.bottom: continueButton.parent.bottom
-                anchors.right: continueButton.parent.right
-                anchors.left: continueButton.parent.left
-                anchors.horizontalCenter: undefined
             }
         },
         State {
@@ -110,9 +109,6 @@ Page {
                 target: continueButton
                 anchors.top: information.bottom
                 anchors.bottom: undefined
-                anchors.left: undefined
-                anchors.right: undefined
-                anchors.horizontalCenter: parent.horizontalCenter
             }
         }
     ]
