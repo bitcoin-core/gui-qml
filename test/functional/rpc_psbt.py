@@ -27,7 +27,10 @@ from test_framework.psbt import (
     PSBT_IN_SHA256,
     PSBT_IN_HASH160,
     PSBT_IN_HASH256,
+    PSBT_IN_WITNESS_UTXO,
+    PSBT_OUT_TAP_TREE,
 )
+from test_framework.script import CScript, OP_TRUE
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_approx,
@@ -272,7 +275,7 @@ class PSBTTest(BitcoinTestFramework):
 
         self.log.info("- raises RPC error with invalid estimate_mode settings")
         for k, v in {"number": 42, "object": {"foo": "bar"}}.items():
-            assert_raises_rpc_error(-3, "Expected type string for estimate_mode, got {}".format(k),
+            assert_raises_rpc_error(-3, f"JSON value of type {k} for field estimate_mode is not of expected type string",
                 self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": v, "conf_target": 0.1, "add_inputs": True})
         for mode in ["", "foo", Decimal("3.141592")]:
             assert_raises_rpc_error(-8, 'Invalid estimate_mode parameter, must be one of: "unset", "economical", "conservative"',
@@ -282,7 +285,7 @@ class PSBTTest(BitcoinTestFramework):
         for mode in ["unset", "economical", "conservative"]:
             self.log.debug("{}".format(mode))
             for k, v in {"string": "", "object": {"foo": "bar"}}.items():
-                assert_raises_rpc_error(-3, "Expected type number for conf_target, got {}".format(k),
+                assert_raises_rpc_error(-3, f"JSON value of type {k} for field conf_target is not of expected type number",
                     self.nodes[1].walletcreatefundedpsbt, inputs, outputs, 0, {"estimate_mode": mode, "conf_target": v, "add_inputs": True})
             for n in [-1, 0, 1009]:
                 assert_raises_rpc_error(-8, "Invalid conf_target, must be between 1 and 1008",  # max value of 1008 per src/policy/fees.h
@@ -654,7 +657,7 @@ class PSBTTest(BitcoinTestFramework):
         ext_utxo = self.nodes[0].listunspent(addresses=[addr])[0]
 
         # An external input without solving data should result in an error
-        assert_raises_rpc_error(-4, "Insufficient funds", wallet.walletcreatefundedpsbt, [ext_utxo], {self.nodes[0].getnewaddress(): 15})
+        assert_raises_rpc_error(-4, "Not solvable pre-selected input COutPoint(%s, %s)" % (ext_utxo["txid"][0:10], ext_utxo["vout"]), wallet.walletcreatefundedpsbt, [ext_utxo], {self.nodes[0].getnewaddress(): 15})
 
         # But funding should work when the solving data is provided
         psbt = wallet.walletcreatefundedpsbt([ext_utxo], {self.nodes[0].getnewaddress(): 15}, 0, {"add_inputs": True, "solving_data": {"pubkeys": [addr_info['pubkey']], "scripts": [addr_info["embedded"]["scriptPubKey"], addr_info["embedded"]["embedded"]["scriptPubKey"]]}})
@@ -779,9 +782,18 @@ class PSBTTest(BitcoinTestFramework):
             self.generate(self.nodes[0], 1)
             self.nodes[0].importdescriptors([{"desc": descsum_create("tr({})".format(privkey)), "timestamp":"now"}])
 
-            psbt = watchonly.sendall([wallet.getnewaddress()])["psbt"]
+            psbt = watchonly.sendall([wallet.getnewaddress(), addr])["psbt"]
             psbt = self.nodes[0].walletprocesspsbt(psbt)["psbt"]
-            self.nodes[0].sendrawtransaction(self.nodes[0].finalizepsbt(psbt)["hex"])
+            txid = self.nodes[0].sendrawtransaction(self.nodes[0].finalizepsbt(psbt)["hex"])
+            vout = find_vout_for_address(self.nodes[0], txid, addr)
+
+            # Make sure tap tree is in psbt
+            parsed_psbt = PSBT.from_base64(psbt)
+            assert_greater_than(len(parsed_psbt.o[vout].map[PSBT_OUT_TAP_TREE]), 0)
+            assert "taproot_tree" in self.nodes[0].decodepsbt(psbt)["outputs"][vout]
+            parsed_psbt.make_blank()
+            comb_psbt = self.nodes[0].combinepsbt([psbt, parsed_psbt.to_base64()])
+            assert_equal(comb_psbt, psbt)
 
             self.log.info("Test that walletprocesspsbt both updates and signs a non-updated psbt containing Taproot inputs")
             addr = self.nodes[0].getnewaddress("", "bech32m")
@@ -792,6 +804,14 @@ class PSBTTest(BitcoinTestFramework):
             rawtx = self.nodes[0].finalizepsbt(signed["psbt"])["hex"]
             self.nodes[0].sendrawtransaction(rawtx)
             self.generate(self.nodes[0], 1)
+
+            # Make sure tap tree is not in psbt
+            parsed_psbt = PSBT.from_base64(psbt)
+            assert PSBT_OUT_TAP_TREE not in parsed_psbt.o[0].map
+            assert "taproot_tree" not in self.nodes[0].decodepsbt(psbt)["outputs"][0]
+            parsed_psbt.make_blank()
+            comb_psbt = self.nodes[0].combinepsbt([psbt, parsed_psbt.to_base64()])
+            assert_equal(comb_psbt, psbt)
 
         self.log.info("Test decoding PSBT with per-input preimage types")
         # note that the decodepsbt RPC doesn't check whether preimages and hashes match
@@ -833,6 +853,18 @@ class PSBTTest(BitcoinTestFramework):
         psbt2 = PSBT(g=PSBTMap({PSBT_GLOBAL_UNSIGNED_TX: tx.serialize()}), i=[PSBTMap()], o=[PSBTMap()]).to_base64()
         assert_raises_rpc_error(-8, "PSBTs not compatible (different transactions)", self.nodes[0].combinepsbt, [psbt1, psbt2])
         assert_equal(self.nodes[0].combinepsbt([psbt1, psbt1]), psbt1)
+
+        self.log.info("Test that PSBT inputs are being checked via script execution")
+        acs_prevout = CTxOut(nValue=0, scriptPubKey=CScript([OP_TRUE]))
+        tx = CTransaction()
+        tx.vin = [CTxIn(outpoint=COutPoint(hash=int('dd' * 32, 16), n=0), scriptSig=b"")]
+        tx.vout = [CTxOut(nValue=0, scriptPubKey=b"")]
+        psbt = PSBT()
+        psbt.g = PSBTMap({PSBT_GLOBAL_UNSIGNED_TX: tx.serialize()})
+        psbt.i = [PSBTMap({bytes([PSBT_IN_WITNESS_UTXO]) : acs_prevout.serialize()})]
+        psbt.o = [PSBTMap()]
+        assert_equal(self.nodes[0].finalizepsbt(psbt.to_base64()),
+            {'hex': '0200000001dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd0000000000000000000100000000000000000000000000', 'complete': True})
 
 
 if __name__ == '__main__':

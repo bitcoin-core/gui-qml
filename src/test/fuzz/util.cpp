@@ -4,6 +4,7 @@
 
 #include <consensus/amount.h>
 #include <net_processing.h>
+#include <netaddress.h>
 #include <netmessagemaker.h>
 #include <pubkey.h>
 #include <test/fuzz/util.h>
@@ -16,7 +17,7 @@
 #include <memory>
 
 FuzzedSock::FuzzedSock(FuzzedDataProvider& fuzzed_data_provider)
-    : m_fuzzed_data_provider{fuzzed_data_provider}
+    : m_fuzzed_data_provider{fuzzed_data_provider}, m_selectable{fuzzed_data_provider.ConsumeBool()}
 {
     m_socket = fuzzed_data_provider.ConsumeIntegralInRange<SOCKET>(INVALID_SOCKET - 1, INVALID_SOCKET);
 }
@@ -254,6 +255,24 @@ int FuzzedSock::GetSockName(sockaddr* name, socklen_t* name_len) const
     return 0;
 }
 
+bool FuzzedSock::SetNonBlocking() const
+{
+    constexpr std::array setnonblocking_errnos{
+        EBADF,
+        EPERM,
+    };
+    if (m_fuzzed_data_provider.ConsumeBool()) {
+        SetFuzzedErrNo(m_fuzzed_data_provider, setnonblocking_errnos);
+        return false;
+    }
+    return true;
+}
+
+bool FuzzedSock::IsSelectable() const
+{
+    return m_selectable;
+}
+
 bool FuzzedSock::Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred) const
 {
     constexpr std::array wait_errnos{
@@ -478,21 +497,6 @@ CTxDestination ConsumeTxDestination(FuzzedDataProvider& fuzzed_data_provider) no
     return tx_destination;
 }
 
-CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, const CTransaction& tx) noexcept
-{
-    // Avoid:
-    // policy/feerate.cpp:28:34: runtime error: signed integer overflow: 34873208148477500 * 1000 cannot be represented in type 'long'
-    //
-    // Reproduce using CFeeRate(348732081484775, 10).GetFeePerK()
-    const CAmount fee = std::min<CAmount>(ConsumeMoney(fuzzed_data_provider), std::numeric_limits<CAmount>::max() / static_cast<CAmount>(100000));
-    assert(MoneyRange(fee));
-    const int64_t time = fuzzed_data_provider.ConsumeIntegral<int64_t>();
-    const unsigned int entry_height = fuzzed_data_provider.ConsumeIntegral<unsigned int>();
-    const bool spends_coinbase = fuzzed_data_provider.ConsumeBool();
-    const unsigned int sig_op_cost = fuzzed_data_provider.ConsumeIntegralInRange<unsigned int>(0, MAX_BLOCK_SIGOPS_COST);
-    return CTxMemPoolEntry{MakeTransactionRef(tx), fee, time, entry_height, spends_coinbase, sig_op_cost, {}};
-}
-
 bool ContainsSpentInput(const CTransaction& tx, const CCoinsViewCache& inputs) noexcept
 {
     for (const CTxIn& tx_in : tx.vin) {
@@ -502,28 +506,6 @@ bool ContainsSpentInput(const CTransaction& tx, const CCoinsViewCache& inputs) n
         }
     }
     return false;
-}
-
-CNetAddr ConsumeNetAddr(FuzzedDataProvider& fuzzed_data_provider) noexcept
-{
-    const Network network = fuzzed_data_provider.PickValueInArray({Network::NET_IPV4, Network::NET_IPV6, Network::NET_INTERNAL, Network::NET_ONION});
-    CNetAddr net_addr;
-    if (network == Network::NET_IPV4) {
-        in_addr v4_addr = {};
-        v4_addr.s_addr = fuzzed_data_provider.ConsumeIntegral<uint32_t>();
-        net_addr = CNetAddr{v4_addr};
-    } else if (network == Network::NET_IPV6) {
-        if (fuzzed_data_provider.remaining_bytes() >= 16) {
-            in6_addr v6_addr = {};
-            memcpy(v6_addr.s6_addr, fuzzed_data_provider.ConsumeBytes<uint8_t>(16).data(), 16);
-            net_addr = CNetAddr{v6_addr, fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
-        }
-    } else if (network == Network::NET_INTERNAL) {
-        net_addr.SetInternal(fuzzed_data_provider.ConsumeBytesAsString(32));
-    } else if (network == Network::NET_ONION) {
-        net_addr.SetSpecial(fuzzed_data_provider.ConsumeBytesAsString(32));
-    }
-    return net_addr;
 }
 
 CAddress ConsumeAddress(FuzzedDataProvider& fuzzed_data_provider) noexcept

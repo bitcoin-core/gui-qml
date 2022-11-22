@@ -40,11 +40,13 @@ if [ "${RUN_TIDY}" = "true" ]; then
   ( CI_EXEC run-clang-tidy -quiet "${MAKEJOBS}" ) | grep -C5 "error"
   export P_CI_DIR="${BASE_BUILD_DIR}/bitcoin-$HOST/"
   CI_EXEC "python3 ${DIR_IWYU}/include-what-you-use/iwyu_tool.py"\
+          " src/common/url.cpp"\
           " src/compat"\
           " src/dbwrapper.cpp"\
           " src/init"\
           " src/kernel"\
           " src/node/chainstate.cpp"\
+          " src/node/chainstatemanager_args.cpp"\
           " src/node/mempool_args.cpp"\
           " src/node/validation_cache_args.cpp"\
           " src/policy/feerate.cpp"\
@@ -54,9 +56,9 @@ if [ "${RUN_TIDY}" = "true" ]; then
           " src/rpc/fees.cpp"\
           " src/rpc/signmessage.cpp"\
           " src/test/fuzz/txorphan.cpp"\
-          " src/threadinterrupt.cpp"\
           " src/util/bip32.cpp"\
           " src/util/bytevectorhash.cpp"\
+          " src/util/check.cpp"\
           " src/util/error.cpp"\
           " src/util/getuniquepath.cpp"\
           " src/util/hasher.cpp"\
@@ -67,7 +69,8 @@ if [ "${RUN_TIDY}" = "true" ]; then
           " src/util/strencodings.cpp"\
           " src/util/string.cpp"\
           " src/util/syserror.cpp"\
-          " src/util/url.cpp"\
+          " src/util/threadinterrupt.cpp"\
+          " src/zmq"\
           " -p . ${MAKEJOBS} -- -Xiwyu --cxx17ns -Xiwyu --mapping_file=${BASE_BUILD_DIR}/bitcoin-$HOST/contrib/devtools/iwyu/bitcoin.core.imp"
 fi
 

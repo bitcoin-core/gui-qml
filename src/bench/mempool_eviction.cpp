@@ -6,6 +6,7 @@
 #include <policy/policy.h>
 #include <test/util/setup_common.h>
 #include <txmempool.h>
+#include <txmempool_entry.h>
 
 
 static void AddTx(const CTransactionRef& tx, const CAmount& nFee, CTxMemPool& pool) EXCLUSIVE_LOCKS_REQUIRED(cs_main, pool.cs)
@@ -132,4 +133,4 @@ static void MempoolEviction(benchmark::Bench& bench)
     });
 }
 
-BENCHMARK(MempoolEviction);
+BENCHMARK(MempoolEviction, benchmark::PriorityLevel::HIGH);

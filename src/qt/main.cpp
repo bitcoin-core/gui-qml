@@ -12,10 +12,10 @@
 #include <qt/bitcoin.h>
 #endif // USE_QML
 
+#include <common/url.h>
 #include <compat/compat.h>
 #include <noui.h>
 #include <util/translation.h>
-#include <util/url.h>
 
 #include <QCoreApplication>
 
