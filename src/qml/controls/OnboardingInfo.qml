@@ -11,7 +11,7 @@ Item {
     id: root
     property alias bannerItem: banner_loader.sourceComponent
     property alias detailItem: detail_loader.sourceComponent
-    required property string buttonText
+    property string buttonText: ""
     property bool bannerActive: true
     property bool detailActive: false
     property bool lastPage: false
@@ -72,6 +72,8 @@ Item {
     }
     ContinueButton {
         id: continueButton
+        visible: root.buttonText.length > 0
+        enabled: visible
         anchors.topMargin: 40
         anchors.bottomMargin: 60
         anchors.leftMargin: 20
