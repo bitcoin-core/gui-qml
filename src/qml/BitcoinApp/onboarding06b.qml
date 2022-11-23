@@ -8,34 +8,27 @@ import QtQuick.Layouts
 import BitcoinApp.Controls
 import BitcoinApp.Components
 
-Page {
+InformationPage {
     background: null
     Layout.fillWidth: true
     clip: true
-    header: NavigationBar {
-        rightDetail: NavButton {
-            text: "Done"
-            onClicked: {
-                connections.decrementCurrentIndex()
-                swipeView.inSubPage = false
-            }
+    navRightDetail: NavButton {
+        text: "Done"
+        onClicked: {
+            connections.decrementCurrentIndex()
+            swipeView.inSubPage = false
         }
     }
-    OnboardingInfo {
-        height: parent.height
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        bannerActive: false
-        bold: true
-        header: "Connection settings"
-        headerMargin: 0
-        detailActive: true
-        detailItem: ColumnLayout {
-            spacing: 0
-            ConnectionSettings {
-                Layout.maximumWidth: 450
-                Layout.alignment: Qt.AlignCenter
-            }
+    bannerActive: false
+    bold: true
+    headerText: "Connection settings"
+    headerMargin: 0
+    detailActive: true
+    detailItem: ColumnLayout {
+        spacing: 0
+        ConnectionSettings {
+            Layout.maximumWidth: 450
+            Layout.alignment: Qt.AlignCenter
         }
     }
 }

@@ -9,46 +9,37 @@ import BitcoinApp.Controls
 import BitcoinApp.Components
 import org.bitcoincore.qt
 
-Page {
-    background: null
+InformationPage {
     Layout.fillWidth: true
-    clip: true
-    header: NavigationBar {
-        leftDetail: NavButton {
-            iconSource: "image://images/caret-left"
-            text: "Back"
-            onClicked: swipeView.currentIndex -= 1
-        }
+    navLeftDetail: NavButton {
+        iconSource: "image://images/caret-left"
+        text: "Back"
+        onClicked: swipeView.currentIndex -= 1
     }
-    OnboardingInfo {
-        height: parent.height
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        bannerActive: false
-        bold: true
-        header: qsTr("Storage")
-        headerMargin: 0
-        description: qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have 500GB of storage available.")
-        descriptionMargin: 10
-        detailActive: true
-        detailItem: ColumnLayout {
-            spacing: 0
-            StorageOptions {
-                Layout.maximumWidth: 450
-                Layout.alignment: Qt.AlignCenter
-            }
-            TextButton {
-                Layout.topMargin: 30
-                Layout.fillWidth: true
-                text: "Detailed settings"
-                textSize: 18
-                textColor: "#F7931A"
-                onClicked: {
-                  storages.incrementCurrentIndex()
-                  swipeView.inSubPage = true
-                }
+    bannerActive: false
+    bold: true
+    headerText: qsTr("Storage")
+    headerMargin: 0
+    description: qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have 500GB of storage available.")
+    descriptionMargin: 10
+    detailActive: true
+    detailItem: ColumnLayout {
+        spacing: 0
+        StorageOptions {
+            Layout.maximumWidth: 450
+            Layout.alignment: Qt.AlignCenter
+        }
+        TextButton {
+            Layout.topMargin: 30
+            Layout.fillWidth: true
+            text: "Detailed settings"
+            textSize: 18
+            textColor: "#F7931A"
+            onClicked: {
+              storages.incrementCurrentIndex()
+              swipeView.inSubPage = true
             }
         }
-        buttonText: qsTr("Next")
     }
+    buttonText: qsTr("Next")
 }

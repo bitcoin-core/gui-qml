@@ -8,35 +8,26 @@ import QtQuick.Layouts
 import BitcoinApp.Controls
 import BitcoinApp.Components
 
-Page {
-    background: null
-    clip: true
+InformationPage {
     Layout.fillWidth: true
-    header: NavigationBar {
-        leftDetail: NavButton {
-            iconSource: "image://images/caret-left"
-            text: "Back"
-            onClicked: {
-                introductions.decrementCurrentIndex()
-                swipeView.inSubPage = true
-            }
+    navLeftDetail: NavButton {
+        iconSource: "image://images/caret-left"
+        text: "Back"
+        onClicked: {
+            introductions.decrementCurrentIndex()
+            swipeView.inSubPage = true
         }
     }
-    OnboardingInfo {
-        height: parent.height
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        bannerActive: false
-        bold: true
-        header: "Developer options"
-        headerMargin: 0
-        detailActive: true
-        detailItem: ColumnLayout {
-            spacing: 0
-            DeveloperOptions {
-                Layout.maximumWidth: 450
-                Layout.alignment: Qt.AlignCenter
-            }
+    bannerActive: false
+    bold: true
+    headerText: "Developer options"
+    headerMargin: 0
+    detailActive: true
+    detailItem: ColumnLayout {
+        spacing: 0
+        DeveloperOptions {
+            Layout.maximumWidth: 450
+            Layout.alignment: Qt.AlignCenter
         }
     }
 }
