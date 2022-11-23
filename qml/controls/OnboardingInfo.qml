@@ -28,8 +28,6 @@ Item {
     property int subtextMargin: 30
     property int subtextSize: 15
 
-    implicitWidth: 600
-
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width
@@ -63,7 +61,7 @@ Item {
             id: detail_loader
             active: root.detailActive
             visible: active
-            Layout.alignment: Qt.AlignCenter
+            Layout.fillWidth: true
             Layout.topMargin: 30
             Layout.leftMargin: 20
             Layout.rightMargin: 20
