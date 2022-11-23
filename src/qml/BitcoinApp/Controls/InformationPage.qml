@@ -7,10 +7,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import org.bitcoincore.qt
 
-Item {
+Page {
     id: root
     property alias bannerItem: banner_loader.sourceComponent
     property alias detailItem: detail_loader.sourceComponent
+    property alias navLeftDetail: navbar.leftDetail
+    property alias navMiddleDetail: navbar.middleDetail
+    property alias navRightDetail: navbar.rightDetail
     property string buttonText: ""
     property bool bannerActive: true
     property bool detailActive: false
@@ -18,7 +21,7 @@ Item {
     property bool bold: false
     property bool center: true
     property int bannerMargin: 20
-    required property string header
+    required property string headerText
     property int headerMargin: 30
     property int headerSize: 28
     property string description: ""
@@ -28,10 +31,17 @@ Item {
     property int subtextMargin: 30
     property int subtextSize: 15
 
+    background: null
+    clip: true
+
+    header: NavigationBar {
+      id: navbar
+    }
+
     ColumnLayout {
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width
         id: information
+        width: Math.min(parent.width, 600)
+        anchors.horizontalCenter: parent.horizontalCenter
         spacing: 0
         Loader {
             id: banner_loader
@@ -47,7 +57,7 @@ Item {
             Layout.rightMargin: 20
             bold: root.bold
             center: root.center
-            header: root.header
+            header: root.headerText
             headerMargin: root.headerMargin
             headerSize: root.headerSize
             description: root.description

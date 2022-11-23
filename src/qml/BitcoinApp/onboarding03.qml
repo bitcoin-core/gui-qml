@@ -7,29 +7,20 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import BitcoinApp.Controls
 
-Page {
-    background: null
-    clip: true
+InformationPage {
     Layout.fillWidth: true
-    header: NavigationBar {
-        leftDetail: NavButton {
-            iconSource: "image://images/caret-left"
-            text: "Back"
-            onClicked: swipeView.currentIndex -= 1
-        }
+    navLeftDetail: NavButton {
+        iconSource: "image://images/caret-left"
+        text: "Back"
+        onClicked: swipeView.currentIndex -= 1
     }
-    OnboardingInfo {
-        height: parent.height
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        bannerItem: Image {
-            source: Theme.image.blocktime
-            sourceSize.width: 200
-            sourceSize.height: 200
-        }
-        bold: true
-        header: qsTr("The block clock")
-        description: qsTr("The Bitcoin network targets a new block every\n10 minutes. Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each block on a dial\nthat represents the current day.")
-        buttonText: "Next"
+    bannerItem: Image {
+        source: Theme.image.blocktime
+        sourceSize.width: 200
+        sourceSize.height: 200
     }
+    bold: true
+    headerText: qsTr("The block clock")
+    description: qsTr("The Bitcoin network targets a new block every\n10 minutes. Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each block on a dial\nthat represents the current day.")
+    buttonText: "Next"
 }
