@@ -35,16 +35,11 @@ Page {
             spacing: 0
             StorageOptions {
                 Layout.maximumWidth: 450
-                Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
+                Layout.alignment: Qt.AlignCenter
             }
             TextButton {
-                Layout.alignment: Qt.AlignCenter
                 Layout.topMargin: 30
                 Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
                 text: "Detailed settings"
                 textSize: 18
                 textColor: "#F7931A"
