@@ -12,7 +12,7 @@ ApplicationWindow {
     id: appWindow
     title: "Bitcoin Core App"
     minimumWidth: 640
-    minimumHeight: 665
+    minimumHeight: 200
     color: Theme.color.background
     visible: true
 

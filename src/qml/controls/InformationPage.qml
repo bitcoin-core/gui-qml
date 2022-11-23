@@ -30,6 +30,7 @@ Page {
     property string subtext: ""
     property int subtextMargin: 30
     property int subtextSize: 15
+    property bool showButtonOutsideScrollView: root.height > 300
 
     background: null
     clip: true
@@ -38,53 +39,76 @@ Page {
       id: navbar
     }
 
-    ColumnLayout {
+    ScrollView {
         id: information
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        spacing: 0
-        Loader {
-            id: banner_loader
-            active: root.bannerActive
-            visible: active
-            Layout.alignment: Qt.AlignCenter
-            Layout.topMargin: root.bannerMargin
-            sourceComponent: root.bannerItem
+        clip: true
+        width: parent.width
+        contentWidth: width
+        height: {
+            if (showButtonOutsideScrollView) {
+                return Math.min(parent.height - continueButton.height - 40,
+                               contentHeight);
+            } else {
+                return parent.height;
+            }
         }
-        Header {
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            bold: root.bold
-            center: root.center
-            header: root.headerText
-            headerMargin: root.headerMargin
-            headerSize: root.headerSize
-            description: root.description
-            descriptionMargin: root.descriptionMargin
-            descriptionSize: root.descriptionSize
-            subtext: root.subtext
-            subtextMargin: root.subtextMargin
-            subtextSize: root.subtextSize
-        }
-        Loader {
-            id: detail_loader
-            active: root.detailActive
-            visible: active
-            Layout.fillWidth: true
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            sourceComponent: root.detailItem
+
+        ColumnLayout {
+            width: Math.min(parent.width, 600)
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 0
+            Loader {
+                id: banner_loader
+                active: root.bannerActive
+                visible: active
+                Layout.alignment: Qt.AlignCenter
+                Layout.topMargin: root.bannerMargin
+                sourceComponent: root.bannerItem
+            }
+            Header {
+                Layout.fillWidth: true
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                bold: root.bold
+                center: root.center
+                header: root.headerText
+                headerMargin: root.headerMargin
+                headerSize: root.headerSize
+                description: root.description
+                descriptionMargin: root.descriptionMargin
+                descriptionSize: root.descriptionSize
+                subtext: root.subtext
+                subtextMargin: root.subtextMargin
+                subtextSize: root.subtextSize
+            }
+            Loader {
+                id: detail_loader
+                active: root.detailActive
+                visible: active
+                Layout.fillWidth: true
+                Layout.topMargin: 30
+                Layout.leftMargin: 20
+                Layout.rightMargin: 20
+                sourceComponent: root.detailItem
+            }
+			ContinueButton {
+				id: continueButtonInside
+				visible: root.buttonText.length > 1 && !showButtonOutsideScrollView
+				enabled: visible
+				width: Math.min(301, parent.width - 2 * anchors.leftMargin)
+                Layout.alignment: Qt.AlignCenter
+                Layout.topMargin: 40
+				text: root.buttonText
+				onClicked: root.lastPage ? swipeView.finished = true : swipeView.incrementCurrentIndex()
+			}
         }
     }
+
     ContinueButton {
         id: continueButton
-        visible: root.buttonText.length > 0
+        visible: root.buttonText.length > 1 && showButtonOutsideScrollView
         enabled: visible
-        width: Math.min(300, parent.width - 2 * anchors.leftMargin)
-        anchors.topMargin: 40
-        anchors.bottomMargin: 60
+        width: Math.min(301, parent.width - 2 * anchors.leftMargin)
         anchors.leftMargin: 20
         anchors.rightMargin: 20
         anchors.horizontalCenter: parent.horizontalCenter
@@ -102,6 +126,11 @@ Page {
                 anchors.top: undefined
                 anchors.bottom: continueButton.parent.bottom
             }
+            PropertyChanges {
+                target: continueButton
+                anchors.topMargin: 5
+                anchors.bottomMargin: 5
+            }
         },
         State {
             name: "DESKTOP"
@@ -109,6 +138,11 @@ Page {
                 target: continueButton
                 anchors.top: information.bottom
                 anchors.bottom: undefined
+            }
+            PropertyChanges {
+                target: continueButton
+                anchors.topMargin: 40
+                anchors.bottomMargin: 60
             }
         }
     ]
