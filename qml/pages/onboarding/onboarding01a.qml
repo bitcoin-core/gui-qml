@@ -10,40 +10,31 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 
-Page {
-    background: null
-    clip: true
+InformationPage {
     Layout.fillWidth: true
-    header: NavigationBar {
-        rightDetail: NavButton {
-            iconSource: "image://images/info"
-            iconHeight: 24
-            onClicked: {
-                introductions.incrementCurrentIndex()
-                swipeView.inSubPage = true
-            }
+    navRightDetail: NavButton {
+        iconSource: "image://images/info"
+        iconHeight: 24
+        onClicked: {
+            introductions.incrementCurrentIndex()
+            swipeView.inSubPage = true
         }
     }
-    OnboardingInfo {
-        height: parent.height
-        width: Math.min(parent.width, 600)
-        anchors.horizontalCenter: parent.horizontalCenter
-        bannerItem: Image {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignCenter
-            source: "image://images/app"
-            // Bitcoin icon has ~11% padding
-            sourceSize.width: 112
-            sourceSize.height: 112
-        }
-        bannerMargin: 0
-        bold: true
-        header: qsTr("Bitcoin Core App")
-        headerSize: 36
-        description: qsTr("Be part of the Bitcoin network.")
-        descriptionMargin: 10
-        descriptionSize: 24
-        subtext: qsTr("100% open-source & open-design")
-        buttonText: "Start"
+    bannerItem: Image {
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignCenter
+        source: "image://images/app"
+        // Bitcoin icon has ~11% padding
+        sourceSize.width: 112
+        sourceSize.height: 112
     }
+    bannerMargin: 0
+    bold: true
+    headerText: qsTr("Bitcoin Core App")
+    headerSize: 36
+    description: qsTr("Be part of the Bitcoin network.")
+    descriptionMargin: 10
+    descriptionSize: 24
+    subtext: qsTr("100% open-source & open-design")
+    buttonText: "Start"
 }
