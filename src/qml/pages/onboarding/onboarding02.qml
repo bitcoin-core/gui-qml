@@ -11,7 +11,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: swipeView.currentIndex -= 1
     }
     bannerItem: Image {
@@ -22,5 +22,5 @@ InformationPage {
     bold: true
     headerText: qsTr("Strengthen bitcoin")
     description: qsTr("Bitcoin Core runs a full Bitcoin node which verifies the rules of the network are being followed.\n\nUsers running nodes is what makes bitcoin\nso resilient and trustworthy.")
-    buttonText: "Next"
+    buttonText: qsTr("Next")
 }
