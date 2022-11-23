@@ -13,7 +13,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: swipeView.currentIndex -= 1
     }
     bannerActive: false
@@ -32,7 +32,7 @@ InformationPage {
         TextButton {
             Layout.topMargin: 30
             Layout.fillWidth: true
-            text: "Detailed settings"
+            text: qsTr("Detailed settings")
             textSize: 18
             textColor: "#F7931A"
             onClicked: {

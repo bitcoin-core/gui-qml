@@ -12,7 +12,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: {
             introductions.decrementCurrentIndex()
             swipeView.inSubPage = false
@@ -20,7 +20,7 @@ InformationPage {
     }
     bannerActive: false
     bold: true
-    headerText: "About"
+    headerText: qsTr("About")
     headerMargin: 0
     description: qsTr("Bitcoin Core is an open source project.\nIf you find it useful, please contribute.\n\n This is experimental software.")
     descriptionMargin: 20

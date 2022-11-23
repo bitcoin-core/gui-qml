@@ -13,7 +13,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: swipeView.currentIndex -= 1
     }
     bannerItem: Image {
@@ -39,5 +39,5 @@ InformationPage {
         }
     }
     lastPage: true
-    buttonText: "Next"
+    buttonText: qsTr("Next")
 }

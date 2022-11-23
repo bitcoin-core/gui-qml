@@ -12,7 +12,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: {
             introductions.decrementCurrentIndex()
             swipeView.inSubPage = true
@@ -20,7 +20,7 @@ InformationPage {
     }
     bannerActive: false
     bold: true
-    headerText: "Developer options"
+    headerText: qsTr("Developer options")
     headerMargin: 0
     detailActive: true
     detailItem: ColumnLayout {
