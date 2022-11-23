@@ -11,7 +11,7 @@ InformationPage {
     Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
-        text: "Back"
+        text: qsTr("Back")
         onClicked: swipeView.currentIndex -= 1
     }
     bannerItem: Image {
@@ -22,5 +22,5 @@ InformationPage {
     bold: true
     headerText: qsTr("The block clock")
     description: qsTr("The Bitcoin network targets a new block every\n10 minutes. Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each block on a dial\nthat represents the current day.")
-    buttonText: "Next"
+    buttonText: qsTr("Next")
 }
