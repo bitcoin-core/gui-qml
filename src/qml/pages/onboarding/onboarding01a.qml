@@ -36,5 +36,5 @@ InformationPage {
     descriptionMargin: 10
     descriptionSize: 24
     subtext: qsTr("100% open-source & open-design")
-    buttonText: "Start"
+    buttonText: qsTr("Start")
 }
