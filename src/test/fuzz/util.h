@@ -22,8 +22,8 @@
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
+#include <test/fuzz/util/net.h>
 #include <test/util/net.h>
-#include <txmempool.h>
 #include <uint256.h>
 #include <version.h>
 
@@ -47,6 +47,13 @@ class FuzzedSock : public Sock
      * `Recv()` call we must return the same data, thus we remember it here.
      */
     mutable std::optional<uint8_t> m_peek_data;
+
+    /**
+     * Whether to pretend that the socket is select(2)-able. This is randomly set in the
+     * constructor. It should remain constant so that repeated calls to `IsSelectable()`
+     * return the same value.
+     */
+    const bool m_selectable;
 
 public:
     explicit FuzzedSock(FuzzedDataProvider& fuzzed_data_provider);
@@ -72,6 +79,10 @@ public:
     int SetSockOpt(int level, int opt_name, const void* opt_val, socklen_t opt_len) const override;
 
     int GetSockName(sockaddr* name, socklen_t* name_len) const override;
+
+    bool SetNonBlocking() const override;
+
+    bool IsSelectable() const override;
 
     bool Wait(std::chrono::milliseconds timeout, Event requested, Event* occurred = nullptr) const override;
 
@@ -213,8 +224,6 @@ template <typename WeakEnumType, size_t size>
     return UintToArith256(ConsumeUInt256(fuzzed_data_provider));
 }
 
-[[nodiscard]] CTxMemPoolEntry ConsumeTxMemPoolEntry(FuzzedDataProvider& fuzzed_data_provider, const CTransaction& tx) noexcept;
-
 [[nodiscard]] CTxDestination ConsumeTxDestination(FuzzedDataProvider& fuzzed_data_provider) noexcept;
 
 template <typename T>
@@ -274,8 +283,6 @@ inline void SetFuzzedErrNo(FuzzedDataProvider& fuzzed_data_provider) noexcept
     }
     return result;
 }
-
-CNetAddr ConsumeNetAddr(FuzzedDataProvider& fuzzed_data_provider) noexcept;
 
 inline CSubNet ConsumeSubNet(FuzzedDataProvider& fuzzed_data_provider) noexcept
 {

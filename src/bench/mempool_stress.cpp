@@ -6,6 +6,7 @@
 #include <policy/policy.h>
 #include <test/util/setup_common.h>
 #include <txmempool.h>
+#include <txmempool_entry.h>
 #include <validation.h>
 
 #include <vector>
@@ -114,5 +115,5 @@ static void MempoolCheck(benchmark::Bench& bench)
     });
 }
 
-BENCHMARK(ComplexMemPool);
-BENCHMARK(MempoolCheck);
+BENCHMARK(ComplexMemPool, benchmark::PriorityLevel::HIGH);
+BENCHMARK(MempoolCheck, benchmark::PriorityLevel::HIGH);
