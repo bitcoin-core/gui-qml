@@ -36,6 +36,7 @@ QT_FORMS_UI = \
 
 QT_MOC_CPP = \
   qml/moc_appmode.cpp \
+  qml/moc_chainmodel.cpp \
   qml/moc_nodemodel.cpp \
   qml/moc_options_model.cpp \
   qt/moc_addressbookpage.cpp \
@@ -111,6 +112,7 @@ QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 BITCOIN_QT_H = \
   qml/appmode.h \
   qml/bitcoin.h \
+  qml/chainmodel.h \
   qml/imageprovider.h \
   qml/nodemodel.h \
   qml/options_model.h \
@@ -291,6 +293,7 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
+  qml/chainmodel.cpp \
   qml/imageprovider.cpp \
   qml/nodemodel.cpp \
   qml/options_model.cpp \
