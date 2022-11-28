@@ -6,12 +6,14 @@
 
 #include <chainparams.h>
 #include <init.h>
+#include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#include <qml/chainmodel.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/util.h>
@@ -154,6 +156,7 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LogQtInfo();
 
     std::unique_ptr<interfaces::Node> node = init->makeNode();
+    std::unique_ptr<interfaces::Chain> chain = init->makeChain();
     if (!node->baseInitialize()) {
         // A dialog with detailed error will have been shown by InitError().
         return EXIT_FAILURE;
@@ -184,6 +187,12 @@ int QmlGuiMain(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
+
+    ChainModel chain_model{*chain};
+    engine.rootContext()->setContextProperty("chainModel", &chain_model);
+
+    QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
+    QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
 
 #ifdef __ANDROID__
     AppMode app_mode(AppMode::MOBILE);
