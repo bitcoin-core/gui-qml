@@ -16,6 +16,7 @@ ColumnLayout {
     property string description: ""
     property int descriptionMargin: 10
     property int descriptionSize: 18
+    property string descriptionColor: Theme.color.neutral8
     property string subtext: ""
     property int subtextMargin
     property int subtextSize: 15
@@ -42,7 +43,7 @@ ColumnLayout {
             font.family: "Inter"
             font.styleName: "Regular"
             font.pixelSize: root.descriptionSize
-            color: Theme.color.neutral8
+            color: root.descriptionColor
             text: root.description
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
