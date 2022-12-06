@@ -20,7 +20,6 @@ Page {
             iconHeight: 24
             onClicked: {
                 introductions.incrementCurrentIndex()
-                swipeView.inSubPage = true
             }
         }
     }

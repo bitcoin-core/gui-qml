@@ -43,7 +43,6 @@ Page {
             textColor: Theme.color.orange
             onClicked: {
               connections.incrementCurrentIndex()
-              swipeView.inSubPage = true
             }
         }
         lastPage: true

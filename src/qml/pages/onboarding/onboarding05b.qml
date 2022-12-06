@@ -17,7 +17,6 @@ Page {
             text: "Done"
             onClicked: {
                 storages.decrementCurrentIndex()
-                swipeView.inSubPage = false
             }
         }
     }

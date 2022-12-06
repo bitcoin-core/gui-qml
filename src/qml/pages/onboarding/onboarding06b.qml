@@ -17,7 +17,6 @@ Page {
             text: "Done"
             onClicked: {
                 connections.decrementCurrentIndex()
-                swipeView.inSubPage = false
             }
         }
     }

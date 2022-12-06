@@ -50,7 +50,6 @@ Page {
                 textColor: "#F7931A"
                 onClicked: {
                   storages.incrementCurrentIndex()
-                  swipeView.inSubPage = true
                 }
             }
         }

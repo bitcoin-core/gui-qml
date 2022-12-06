@@ -65,7 +65,6 @@ ColumnLayout {
             background: null
             onClicked: {
                 introductions.incrementCurrentIndex()
-                swipeView.inSubPage = true
             }
         }
     }

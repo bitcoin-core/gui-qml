@@ -18,7 +18,6 @@ Page {
             text: "Back"
             onClicked: {
                 introductions.decrementCurrentIndex()
-                swipeView.inSubPage = true
             }
         }
     }
