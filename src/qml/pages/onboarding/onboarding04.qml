@@ -14,7 +14,7 @@ InformationPage {
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
-        onClicked: swipeView.currentIndex -= 1
+        onClicked: swipeView.decrementCurrentIndex()
     }
     bannerActive: false
     bold: true
