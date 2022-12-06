@@ -14,7 +14,7 @@ InformationPage {
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
-        onClicked: swipeView.currentIndex -= 1
+        onClicked: swipeView.decrementCurrentIndex()
     }
     bannerActive: false
     bold: true
@@ -36,8 +36,8 @@ InformationPage {
             textSize: 18
             textColor: "#F7931A"
             onClicked: {
-              storages.incrementCurrentIndex()
-              swipeView.inSubPage = true
+                storages.incrementCurrentIndex()
+                swipeView.inSubPage = true
             }
         }
     }
