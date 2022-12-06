@@ -14,7 +14,7 @@ InformationPage {
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
-        onClicked: swipeView.currentIndex -= 1
+        onClicked: swipeView.decrementCurrentIndex()
     }
     bannerItem: Image {
         Layout.topMargin: 20
@@ -30,12 +30,12 @@ InformationPage {
     descriptionMargin: 20
     detailActive: true
     detailItem: TextButton {
-        text: "Connection settings"
+        text: qsTr("Connection settings")
         textSize: 18
         textColor: Theme.color.orange
         onClicked: {
-          connections.incrementCurrentIndex()
-          swipeView.inSubPage = true
+            connections.incrementCurrentIndex()
+            swipeView.inSubPage = true
         }
     }
     lastPage: true
