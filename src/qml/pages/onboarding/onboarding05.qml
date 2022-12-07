@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
+import "../settings"
 
 Page {
     background: null
@@ -17,11 +18,40 @@ Page {
         anchors.fill: parent
         interactive: false
         orientation: Qt.Vertical
-        Loader {
-            source:"onboarding05a.qml"
+        InformationPage {
+            Layout.fillWidth: true
+            navLeftDetail: NavButton {
+                iconSource: "image://images/caret-left"
+                text: qsTr("Back")
+                onClicked: swipeView.decrementCurrentIndex()
+            }
+            bannerActive: false
+            bold: true
+            headerText: qsTr("Storage")
+            headerMargin: 0
+            description: qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have 500GB of storage available.")
+            descriptionMargin: 10
+            detailActive: true
+            detailItem: ColumnLayout {
+                spacing: 0
+                StorageOptions {
+                    Layout.maximumWidth: 450
+                    Layout.alignment: Qt.AlignCenter
+                }
+                TextButton {
+                    Layout.topMargin: 30
+                    Layout.fillWidth: true
+                    text: qsTr("Detailed settings")
+                    textSize: 18
+                    textColor: "#F7931A"
+                    onClicked: {
+                        storages.incrementCurrentIndex()
+                        swipeView.inSubPage = true
+                    }
+                }
+            }
+            buttonText: qsTr("Next")
         }
-        Loader {
-            source:"../settings/SettingsStorage.qml"
-        }
+        SettingsStorage {}
     }
 }

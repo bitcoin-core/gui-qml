@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
+import "../settings"
 
 Page {
     background: null
@@ -17,14 +18,35 @@ Page {
         anchors.fill: parent
         interactive: false
         orientation: Qt.Horizontal
-        Loader {
-            source:"onboarding01a.qml"
+        InformationPage {
+            Layout.fillWidth: true
+            navRightDetail: NavButton {
+                iconSource: "image://images/info"
+                iconHeight: 24
+                onClicked: {
+                    introductions.incrementCurrentIndex()
+                    swipeView.inSubPage = true
+                }
+            }
+            bannerItem: Image {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignCenter
+                source: "image://images/app"
+                // Bitcoin icon has ~11% padding
+                sourceSize.width: 112
+                sourceSize.height: 112
+            }
+            bannerMargin: 0
+            bold: true
+            headerText: qsTr("Bitcoin Core App")
+            headerSize: 36
+            description: qsTr("Be part of the Bitcoin network.")
+            descriptionMargin: 10
+            descriptionSize: 24
+            subtext: qsTr("100% open-source & open-design")
+            buttonText: qsTr("Start")
         }
-        Loader {
-            source:"../settings/SettingsAbout.qml"
-        }
-        Loader {
-            source:"../settings/SettingsDeveloper.qml"
-        }
+        SettingsAbout {}
+        SettingsDeveloper {}
     }
 }
