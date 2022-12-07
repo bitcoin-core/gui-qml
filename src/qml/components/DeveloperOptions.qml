@@ -14,6 +14,8 @@ ColumnLayout {
         header: qsTr("Developer documentation")
         actionItem: ExternalLink {
             iconSource: "qrc:/icons/export"
+            iconWidth: 30
+            iconHeight: 30
             link: "https://bitcoin.org/en/bitcoin-core/contribute/documentation"
         }
     }

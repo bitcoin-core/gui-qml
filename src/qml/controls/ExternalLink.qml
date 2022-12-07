@@ -12,8 +12,8 @@ Control {
     property string description: ""
     property int descriptionSize: 18
     property url iconSource: ""
-    property int iconWidth: 30
-    property int iconHeight: 30
+    property int iconWidth: 18
+    property int iconHeight: 18
 
     contentItem: RowLayout {
         spacing: 0
