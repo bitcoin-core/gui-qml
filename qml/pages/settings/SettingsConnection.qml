@@ -12,13 +12,6 @@ InformationPage {
     background: null
     Layout.fillWidth: true
     clip: true
-    navRightDetail: NavButton {
-        text: qsTr("Done")
-        onClicked: {
-            connections.decrementCurrentIndex()
-            swipeView.inSubPage = false
-        }
-    }
     bannerActive: false
     bold: true
     headerText: qsTr("Connection settings")
