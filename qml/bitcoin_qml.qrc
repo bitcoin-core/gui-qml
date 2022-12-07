@@ -27,12 +27,12 @@
         <file>controls/Wizard.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/main.qml</file>
-        <file>pages/onboarding/onboarding01.qml</file>
-        <file>pages/onboarding/onboarding02.qml</file>
-        <file>pages/onboarding/onboarding03.qml</file>
-        <file>pages/onboarding/onboarding04.qml</file>
-        <file>pages/onboarding/onboarding05.qml</file>
-        <file>pages/onboarding/onboarding06.qml</file>
+        <file>pages/onboarding/OnboardingBlockclock.qml</file>
+        <file>pages/onboarding/OnboardingConnection.qml</file>
+        <file>pages/onboarding/OnboardingCover.qml</file>
+        <file>pages/onboarding/OnboardingStorageAmount.qml</file>
+        <file>pages/onboarding/OnboardingStorageLocation.qml</file>
+        <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
