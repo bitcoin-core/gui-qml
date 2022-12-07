@@ -41,7 +41,6 @@ Page {
                 textColor: Theme.color.orange
                 onClicked: {
                     connections.incrementCurrentIndex()
-                    swipeView.inSubPage = true
                 }
             }
             lastPage: true
@@ -52,7 +51,6 @@ Page {
                 text: qsTr("Done")
                 onClicked: {
                     connections.decrementCurrentIndex()
-                    swipeView.inSubPage = false
                 }
             }
         }

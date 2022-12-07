@@ -43,7 +43,6 @@ Page {
                     textColor: "#F7931A"
                     onClicked: {
                         storages.incrementCurrentIndex()
-                        swipeView.inSubPage = true
                     }
                 }
             }
@@ -54,7 +53,6 @@ Page {
                 text: qsTr("Done")
                 onClicked: {
                     storages.decrementCurrentIndex()
-                    swipeView.inSubPage = false
                 }
             }
         }
