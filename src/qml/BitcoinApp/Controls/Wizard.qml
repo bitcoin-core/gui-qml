@@ -13,7 +13,6 @@ Page {
     background: null
     SwipeView {
         id: swipeView
-        property bool inSubPage: false
         property bool finished: false
         anchors.fill: parent
         interactive: false
