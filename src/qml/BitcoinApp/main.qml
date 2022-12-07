@@ -22,19 +22,25 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
-    Wizard {
+    Component {
         id: onboardingWizard
-        anchors.fill: parent
-        views: [
-            "OnboardingCover.qml",
-            "OnboardingStrengthen.qml",
-            "OnboardingBlockclock.qml",
-            "OnboardingStorageLocation.qml",
-            "OnboardingStorageAmount.qml",
-            "OnboardingConnection.qml"
-        ]
-        onFinishedChanged: main.push(node)
+        SwipeView {
+            id: swipeView
+            property bool finished: false
+            anchors.fill: parent
+            interactive: false
+
+            OnboardingCover {}
+            OnboardingStrengthen {}
+            OnboardingBlockclock {}
+            OnboardingStorageLocation {}
+            OnboardingStorageAmount {}
+            OnboardingConnection {}
+
+            onFinishedChanged: main.push(node)
+        }
     }
+
     Component {
         id: node
         Page {
