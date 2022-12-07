@@ -28,14 +28,11 @@
         <file>pages/initerrormessage.qml</file>
         <file>pages/main.qml</file>
         <file>pages/onboarding/onboarding01.qml</file>
-        <file>pages/onboarding/onboarding01a.qml</file>
         <file>pages/onboarding/onboarding02.qml</file>
         <file>pages/onboarding/onboarding03.qml</file>
         <file>pages/onboarding/onboarding04.qml</file>
         <file>pages/onboarding/onboarding05.qml</file>
-        <file>pages/onboarding/onboarding05a.qml</file>
         <file>pages/onboarding/onboarding06.qml</file>
-        <file>pages/onboarding/onboarding06a.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
