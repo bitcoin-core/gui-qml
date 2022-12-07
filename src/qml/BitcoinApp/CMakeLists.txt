@@ -16,12 +16,12 @@ qt6_add_qml_module(bitcoin_qml
   QML_FILES
     initerrormessage.qml
     main.qml
-    onboarding01.qml
-    onboarding02.qml
-    onboarding03.qml
-    onboarding04.qml
-    onboarding05.qml
-    onboarding06.qml
+    OnboardingBlockclock.qml
+    OnboardingConnection.qml
+    OnboardingCover.qml
+    OnboardingStorageAmount.qml
+    OnboardingStorageLocation.qml
+    OnboardingStrengthen.qml
     SettingsAbout.qml
     SettingsConnection.qml
     SettingsDeveloper.qml
