@@ -37,11 +37,7 @@ Page {
             detailActive: true
             detailItem: TextButton {
                 text: qsTr("Connection settings")
-                textSize: 18
-                textColor: Theme.color.orange
-                onClicked: {
-                    connections.incrementCurrentIndex()
-                }
+                onClicked: connections.incrementCurrentIndex()
             }
             lastPage: true
             buttonText: qsTr("Next")

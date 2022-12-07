@@ -39,11 +39,7 @@ Page {
                     Layout.topMargin: 30
                     Layout.fillWidth: true
                     text: qsTr("Detailed settings")
-                    textSize: 18
-                    textColor: "#F7931A"
-                    onClicked: {
-                        storages.incrementCurrentIndex()
-                    }
+                    onClicked: storages.incrementCurrentIndex()
                 }
             }
             buttonText: qsTr("Next")
