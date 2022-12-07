@@ -29,17 +29,17 @@
         <file>pages/main.qml</file>
         <file>pages/onboarding/onboarding01.qml</file>
         <file>pages/onboarding/onboarding01a.qml</file>
-        <file>pages/onboarding/onboarding01b.qml</file>
-        <file>pages/onboarding/onboarding01c.qml</file>
         <file>pages/onboarding/onboarding02.qml</file>
         <file>pages/onboarding/onboarding03.qml</file>
         <file>pages/onboarding/onboarding04.qml</file>
         <file>pages/onboarding/onboarding05.qml</file>
         <file>pages/onboarding/onboarding05a.qml</file>
-        <file>pages/onboarding/onboarding05b.qml</file>
         <file>pages/onboarding/onboarding06.qml</file>
         <file>pages/onboarding/onboarding06a.qml</file>
-        <file>pages/onboarding/onboarding06b.qml</file>
+        <file>pages/settings/SettingsAbout.qml</file>
+        <file>pages/settings/SettingsConnection.qml</file>
+        <file>pages/settings/SettingsDeveloper.qml</file>
+        <file>pages/settings/SettingsStorage.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="arrow-down">res/icons/arrow-down.png</file>
