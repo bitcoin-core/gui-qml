@@ -51,6 +51,14 @@ Page {
             }
             buttonText: qsTr("Next")
         }
-        SettingsStorage {}
+        SettingsStorage {
+            navRightDetail: NavButton {
+                text: qsTr("Done")
+                onClicked: {
+                    storages.decrementCurrentIndex()
+                    swipeView.inSubPage = false
+                }
+            }
+        }
     }
 }

@@ -10,14 +10,6 @@ import BitcoinApp.Components
 
 InformationPage {
     Layout.fillWidth: true
-    navLeftDetail: NavButton {
-        iconSource: "image://images/caret-left"
-        text: qsTr("Back")
-        onClicked: {
-            introductions.decrementCurrentIndex()
-            swipeView.inSubPage = true
-        }
-    }
     bannerActive: false
     bold: true
     headerText: qsTr("Developer options")

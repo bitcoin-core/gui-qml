@@ -49,6 +49,14 @@ Page {
             lastPage: true
             buttonText: qsTr("Next")
         }
-        SettingsConnection {}
+        SettingsConnection {
+            navRightDetail: NavButton {
+                text: qsTr("Done")
+                onClicked: {
+                    connections.decrementCurrentIndex()
+                    swipeView.inSubPage = false
+                }
+            }
+        }
     }
 }

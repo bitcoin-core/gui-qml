@@ -10,13 +10,6 @@ import BitcoinApp.Components
 
 InformationPage {
     Layout.fillWidth: true
-    navRightDetail: NavButton {
-        text: qsTr("Done")
-        onClicked: {
-            storages.decrementCurrentIndex()
-            swipeView.inSubPage = false
-        }
-    }
     bannerActive: false
     bold: true
     headerText: qsTr("Storage settings")
