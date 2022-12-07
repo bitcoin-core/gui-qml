@@ -45,7 +45,25 @@ Page {
             subtext: qsTr("100% open-source & open-design")
             buttonText: qsTr("Start")
         }
-        SettingsAbout {}
-        SettingsDeveloper {}
+        SettingsAbout {
+            navLeftDetail: NavButton {
+                iconSource: "image://images/caret-left"
+                text: qsTr("Back")
+                onClicked: {
+                    introductions.decrementCurrentIndex()
+                    swipeView.inSubPage = false
+                }
+            }
+        }
+        SettingsDeveloper {
+            navLeftDetail: NavButton {
+                iconSource: "image://images/caret-left"
+                text: qsTr("Back")
+                onClicked: {
+                    introductions.decrementCurrentIndex()
+                    swipeView.inSubPage = true
+                }
+            }
+        }
     }
 }
