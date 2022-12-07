@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../components"
 import "../controls"
+import "./onboarding"
 
 ApplicationWindow {
     id: appWindow
@@ -22,19 +23,25 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
-    Wizard {
+    Component {
         id: onboardingWizard
-        anchors.fill: parent
-        views: [
-            "onboarding/OnboardingCover.qml",
-            "onboarding/OnboardingStrengthen.qml",
-            "onboarding/OnboardingBlockclock.qml",
-            "onboarding/OnboardingStorageLocation.qml",
-            "onboarding/OnboardingStorageAmount.qml",
-            "onboarding/OnboardingConnection.qml"
-        ]
-        onFinishedChanged: main.push(node)
+        SwipeView {
+            id: swipeView
+            property bool finished: false
+            anchors.fill: parent
+            interactive: false
+
+            OnboardingCover {}
+            OnboardingStrengthen {}
+            OnboardingBlockclock {}
+            OnboardingStorageLocation {}
+            OnboardingStorageAmount {}
+            OnboardingConnection {}
+
+            onFinishedChanged: main.push(node)
+        }
     }
+
     Component {
         id: node
         Page {
