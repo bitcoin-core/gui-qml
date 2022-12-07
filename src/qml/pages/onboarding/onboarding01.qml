@@ -21,10 +21,10 @@ Page {
             source:"onboarding01a.qml"
         }
         Loader {
-            source:"onboarding01b.qml"
+            source:"../settings/SettingsAbout.qml"
         }
         Loader {
-            source:"onboarding01c.qml"
+            source:"../settings/SettingsDeveloper.qml"
         }
     }
 }
