@@ -18,17 +18,17 @@ qt6_add_qml_module(bitcoin_qml
     main.qml
     onboarding01.qml
     onboarding01a.qml
-    onboarding01b.qml
-    onboarding01c.qml
     onboarding02.qml
     onboarding03.qml
     onboarding04.qml
     onboarding05.qml
     onboarding05a.qml
-    onboarding05b.qml
     onboarding06.qml
     onboarding06a.qml
-    onboarding06b.qml
+    SettingsAbout.qml
+    SettingsConnection.qml
+    SettingsDeveloper.qml
+    SettingsStorage.qml
   RESOURCES
     res/fonts/Inter-Regular.otf
     res/fonts/Inter-SemiBold.otf

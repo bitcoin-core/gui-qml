@@ -21,7 +21,7 @@ Page {
             source:"onboarding06a.qml"
         }
         Loader {
-            source:"onboarding06b.qml"
+            source:"SettingsConnection.qml"
         }
     }
 }

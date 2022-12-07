@@ -21,7 +21,7 @@ Page {
             source:"onboarding05a.qml"
         }
         Loader {
-            source:"onboarding05b.qml"
+            source:"SettingsStorage.qml"
         }
     }
 }
