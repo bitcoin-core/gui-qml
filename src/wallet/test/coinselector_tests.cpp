@@ -4,6 +4,7 @@
 
 #include <consensus/amount.h>
 #include <node/context.h>
+#include <policy/policy.h>
 #include <primitives/transaction.h>
 #include <random.h>
 #include <test/util/setup_common.h>
@@ -83,7 +84,7 @@ static void add_coin(CoinsResult& available_coins, CWallet& wallet, const CAmoun
     assert(ret.second);
     CWalletTx& wtx = (*ret.first).second;
     const auto& txout = wtx.tx->vout.at(nInput);
-    available_coins.coins[OutputType::BECH32].emplace_back(COutPoint(wtx.GetHash(), nInput), txout, nAge, CalculateMaximumSignedInputSize(txout, &wallet, /*coin_control=*/nullptr), /*spendable=*/ true, /*solvable=*/ true, /*safe=*/ true, wtx.GetTxTime(), fIsFromMe, feerate);
+    available_coins.Add(OutputType::BECH32, {COutPoint(wtx.GetHash(), nInput), txout, nAge, CalculateMaximumSignedInputSize(txout, &wallet, /*coin_control=*/nullptr), /*spendable=*/ true, /*solvable=*/ true, /*safe=*/ true, wtx.GetTxTime(), fIsFromMe, feerate});
 }
 
 /** Check if SelectionResult a is equivalent to SelectionResult b.
@@ -342,7 +343,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         coin_control.Select(select_coin.outpoint);
         PreSelectedInputs selected_input;
         selected_input.Insert(select_coin, coin_selection_params_bnb.m_subtract_fee_outputs);
-        available_coins.coins[OutputType::BECH32].erase(available_coins.coins[OutputType::BECH32].begin());
+        available_coins.Erase({available_coins.coins[OutputType::BECH32].begin()->outpoint});
         coin_selection_params_bnb.m_effective_feerate = CFeeRate(0);
         const auto result10 = SelectCoins(*wallet, available_coins, selected_input, 10 * CENT, coin_control, coin_selection_params_bnb);
         BOOST_CHECK(result10);
@@ -402,7 +403,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test)
         coin_control.Select(select_coin.outpoint);
         PreSelectedInputs selected_input;
         selected_input.Insert(select_coin, coin_selection_params_bnb.m_subtract_fee_outputs);
-        available_coins.coins[OutputType::BECH32].erase(++available_coins.coins[OutputType::BECH32].begin());
+        available_coins.Erase({(++available_coins.coins[OutputType::BECH32].begin())->outpoint});
         const auto result13 = SelectCoins(*wallet, available_coins, selected_input, 10 * CENT, coin_control, coin_selection_params_bnb);
         BOOST_CHECK(EquivalentResult(expected_result, *result13));
     }
@@ -930,6 +931,124 @@ BOOST_AUTO_TEST_CASE(effective_value_test)
     BOOST_CHECK_EQUAL(output5.GetEffectiveValue(), nValue); // The effective value should be equal to the absolute value if input_bytes is -1
 }
 
+static std::optional<SelectionResult> select_coins(const CAmount& target, const CoinSelectionParams& cs_params, const CCoinControl& cc, std::function<CoinsResult(CWallet&)> coin_setup, interfaces::Chain* chain, const ArgsManager& args)
+{
+    std::unique_ptr<CWallet> wallet = std::make_unique<CWallet>(chain, "", args, CreateMockWalletDatabase());
+    wallet->LoadWallet();
+    LOCK(wallet->cs_wallet);
+    wallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+    wallet->SetupDescriptorScriptPubKeyMans();
+
+    auto available_coins = coin_setup(*wallet);
+
+    const auto result = SelectCoins(*wallet, available_coins, /*pre_set_inputs=*/ {}, target, cc, cs_params);
+    if (result) {
+        const auto signedTxSize = 10 + 34 + 68 * result->GetInputSet().size(); // static header size + output size + inputs size (P2WPKH)
+        BOOST_CHECK_LE(signedTxSize * WITNESS_SCALE_FACTOR, MAX_STANDARD_TX_WEIGHT);
+
+        BOOST_CHECK_GE(result->GetSelectedValue(), target);
+    }
+    return result;
+}
+
+static bool has_coin(const CoinSet& set, CAmount amount)
+{
+    return std::any_of(set.begin(), set.end(), [&](const auto& coin) { return coin.GetEffectiveValue() == amount; });
+}
+
+BOOST_AUTO_TEST_CASE(check_max_weight)
+{
+    const CAmount target = 49.5L * COIN;
+    CCoinControl cc;
+
+    FastRandomContext rand;
+    CoinSelectionParams cs_params{
+        rand,
+        /*change_output_size=*/34,
+        /*change_spend_size=*/68,
+        /*min_change_target=*/CENT,
+        /*effective_feerate=*/CFeeRate(0),
+        /*long_term_feerate=*/CFeeRate(0),
+        /*discard_feerate=*/CFeeRate(0),
+        /*tx_noinputs_size=*/10 + 34, // static header size + output size
+        /*avoid_partial=*/false,
+    };
+
+    auto chain{m_node.chain.get()};
+
+    {
+        // Scenario 1:
+        // The actor starts with 1x 50.0 BTC and 1515x 0.033 BTC (~100.0 BTC total) unspent outputs
+        // Then tries to spend 49.5 BTC
+        // The 50.0 BTC output should be selected, because the transaction would otherwise be too large
+
+        // Perform selection
+
+        const auto result = select_coins(
+            target, cs_params, cc, [&](CWallet& wallet) {
+                CoinsResult available_coins;
+                for (int j = 0; j < 1515; ++j) {
+                    add_coin(available_coins, wallet, CAmount(0.033 * COIN), CFeeRate(0), 144, false, 0, true);
+                }
+
+                add_coin(available_coins, wallet, CAmount(50 * COIN), CFeeRate(0), 144, false, 0, true);
+                return available_coins;
+            },
+            chain, m_args);
+
+        BOOST_CHECK(result);
+        BOOST_CHECK(has_coin(result->GetInputSet(), CAmount(50 * COIN)));
+    }
+
+    {
+        // Scenario 2:
+
+        // The actor starts with 400x 0.0625 BTC and 2000x 0.025 BTC (75.0 BTC total) unspent outputs
+        // Then tries to spend 49.5 BTC
+        // A combination of coins should be selected, such that the created transaction is not too large
+
+        // Perform selection
+        const auto result = select_coins(
+            target, cs_params, cc, [&](CWallet& wallet) {
+                CoinsResult available_coins;
+                for (int j = 0; j < 400; ++j) {
+                    add_coin(available_coins, wallet, CAmount(0.0625 * COIN), CFeeRate(0), 144, false, 0, true);
+                }
+                for (int j = 0; j < 2000; ++j) {
+                    add_coin(available_coins, wallet, CAmount(0.025 * COIN), CFeeRate(0), 144, false, 0, true);
+                }
+                return available_coins;
+            },
+            chain, m_args);
+
+        BOOST_CHECK(has_coin(result->GetInputSet(), CAmount(0.0625 * COIN)));
+        BOOST_CHECK(has_coin(result->GetInputSet(), CAmount(0.025 * COIN)));
+    }
+
+    {
+        // Scenario 3:
+
+        // The actor starts with 1515x 0.033 BTC (49.995 BTC total) unspent outputs
+        // No results should be returned, because the transaction would be too large
+
+        // Perform selection
+        const auto result = select_coins(
+            target, cs_params, cc, [&](CWallet& wallet) {
+                CoinsResult available_coins;
+                for (int j = 0; j < 1515; ++j) {
+                    add_coin(available_coins, wallet, CAmount(0.033 * COIN), CFeeRate(0), 144, false, 0, true);
+                }
+                return available_coins;
+            },
+            chain, m_args);
+
+        // No results
+        // 1515 inputs * 68 bytes = 103,020 bytes
+        // 103,020 bytes * 4 = 412,080 weight, which is above the MAX_STANDARD_TX_WEIGHT of 400,000
+        BOOST_CHECK(!result);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(SelectCoins_effective_value_test)
 {
     // Test that the effective value is used to check whether preset inputs provide sufficient funds when subtract_fee_outputs is not used.
@@ -974,10 +1093,50 @@ BOOST_AUTO_TEST_CASE(SelectCoins_effective_value_test)
     cc.SelectExternal(output.outpoint, output.txout);
 
     const auto preset_inputs = *Assert(FetchSelectedInputs(*wallet, cc, cs_params));
-    available_coins.coins[OutputType::BECH32].erase(available_coins.coins[OutputType::BECH32].begin());
+    available_coins.Erase({available_coins.coins[OutputType::BECH32].begin()->outpoint});
 
     const auto result = SelectCoins(*wallet, available_coins, preset_inputs, target, cc, cs_params);
     BOOST_CHECK(!result);
+}
+
+BOOST_FIXTURE_TEST_CASE(wallet_coinsresult_test, BasicTestingSetup)
+{
+    // Test case to verify CoinsResult object sanity.
+    CoinsResult available_coins;
+    {
+        std::unique_ptr<CWallet> dummyWallet = std::make_unique<CWallet>(m_node.chain.get(), "dummy", m_args, CreateMockWalletDatabase());
+        BOOST_CHECK_EQUAL(dummyWallet->LoadWallet(), DBErrors::LOAD_OK);
+        LOCK(dummyWallet->cs_wallet);
+        dummyWallet->SetWalletFlag(WALLET_FLAG_DESCRIPTORS);
+        dummyWallet->SetupDescriptorScriptPubKeyMans();
+
+        // Add some coins to 'available_coins'
+        for (int i=0; i<10; i++) {
+            add_coin(available_coins, *dummyWallet, 1 * COIN);
+        }
+    }
+
+    {
+        // First test case, check that 'CoinsResult::Erase' function works as expected.
+        // By trying to erase two elements from the 'available_coins' object.
+        std::unordered_set<COutPoint, SaltedOutpointHasher> outs_to_remove;
+        const auto& coins = available_coins.All();
+        for (int i = 0; i < 2; i++) {
+            outs_to_remove.emplace(coins[i].outpoint);
+        }
+        available_coins.Erase(outs_to_remove);
+
+        // Check that the elements were actually removed.
+        const auto& updated_coins = available_coins.All();
+        for (const auto& out: outs_to_remove) {
+            auto it = std::find_if(updated_coins.begin(), updated_coins.end(), [&out](const COutput &coin) {
+                return coin.outpoint == out;
+            });
+            BOOST_CHECK(it == updated_coins.end());
+        }
+        // And verify that no extra element were removed
+        BOOST_CHECK_EQUAL(available_coins.Size(), 8);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

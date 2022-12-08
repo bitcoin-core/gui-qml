@@ -8,16 +8,23 @@
 #include <config/bitcoin-config.h>
 #endif
 
+#include <clientversion.h>
 #include <tinyformat.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 
+std::string StrFormatInternalBug(const char* msg, const char* file, int line, const char* func)
+{
+    return strprintf("Internal bug detected: \"%s\"\n%s:%d (%s)\n"
+                     "%s %s\n"
+                     "Please report this issue here: %s\n",
+                     msg, file, line, func, PACKAGE_NAME, FormatFullVersion(), PACKAGE_BUGREPORT);
+}
 
 NonFatalCheckError::NonFatalCheckError(const char* msg, const char* file, int line, const char* func)
-    : std::runtime_error{
-          strprintf("Internal bug detected: \"%s\"\n%s:%d (%s)\nPlease report this issue here: %s\n", msg, file, line, func, PACKAGE_BUGREPORT)}
+    : std::runtime_error{StrFormatInternalBug(msg, file, line, func)}
 {
 }
 
