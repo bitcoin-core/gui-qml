@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 import "../../controls"
 
 InformationPage {
-    Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")

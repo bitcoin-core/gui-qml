@@ -9,7 +9,6 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
-    Layout.fillWidth: true
     bannerActive: false
     bold: true
     headerText: qsTr("Storage settings")
