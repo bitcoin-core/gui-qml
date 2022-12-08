@@ -10,7 +10,6 @@ import BitcoinApp.Components
 
 Page {
     background: null
-    Layout.fillWidth: true
     clip: true
     SwipeView {
         id: introductions
@@ -18,7 +17,6 @@ Page {
         interactive: false
         orientation: Qt.Horizontal
         InformationPage {
-            Layout.fillWidth: true
             navRightDetail: NavButton {
                 iconSource: "image://images/info"
                 iconHeight: 24

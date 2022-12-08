@@ -10,7 +10,6 @@ import BitcoinApp.Components
 
 Page {
     background: null
-    Layout.fillWidth: true
     clip: true
     SwipeView {
         id: connections
@@ -18,7 +17,6 @@ Page {
         interactive: false
         orientation: Qt.Vertical
         InformationPage {
-            Layout.fillWidth: true
             navLeftDetail: NavButton {
                 iconSource: "image://images/caret-left"
                 text: qsTr("Back")

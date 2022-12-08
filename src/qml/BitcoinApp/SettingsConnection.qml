@@ -10,7 +10,6 @@ import BitcoinApp.Components
 
 InformationPage {
     background: null
-    Layout.fillWidth: true
     clip: true
     bannerActive: false
     bold: true
