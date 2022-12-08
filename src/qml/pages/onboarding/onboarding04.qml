@@ -10,7 +10,6 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
-    Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
