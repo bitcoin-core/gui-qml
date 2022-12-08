@@ -8,7 +8,6 @@ import QtQuick.Layouts
 import BitcoinApp.Controls
 
 InformationPage {
-    Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")

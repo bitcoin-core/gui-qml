@@ -10,7 +10,6 @@ import BitcoinApp.Components
 import org.bitcoincore.qt
 
 InformationPage {
-    Layout.fillWidth: true
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")

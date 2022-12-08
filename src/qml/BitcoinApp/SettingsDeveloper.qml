@@ -9,7 +9,6 @@ import BitcoinApp.Controls
 import BitcoinApp.Components
 
 InformationPage {
-    Layout.fillWidth: true
     bannerActive: false
     bold: true
     headerText: qsTr("Developer options")
