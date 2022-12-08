@@ -22,24 +22,23 @@ Page {
             }
         }
     }
-    ColumnLayout {
-        width: Math.min(parent.width, 490)
-        spacing: 0
-        anchors.top: parent.top
+    OnboardingInfo {
+        height: parent.height
+        width: Math.min(parent.width, 600)
         anchors.horizontalCenter: parent.horizontalCenter
-        Header {
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            bold: true
-            header: "About"
-            description: qsTr("Bitcoin Core is an open source project.\nIf you find it useful, please contribute.\n\n This is experimental software.")
-            descriptionMargin: 20
-        }
-        AboutOptions {
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
+        bannerActive: false
+        bold: true
+        header: "About"
+        headerMargin: 0
+        description: qsTr("Bitcoin Core is an open source project.\nIf you find it useful, please contribute.\n\n This is experimental software.")
+        descriptionMargin: 20
+        detailActive: true
+        detailItem: ColumnLayout {
+            spacing: 0
+            AboutOptions {
+                Layout.maximumWidth: 450
+                Layout.alignment: Qt.AlignCenter
+            }
         }
     }
 }
