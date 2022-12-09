@@ -56,7 +56,7 @@ ColumnLayout {
             icon.width: 18
             background: null
             onClicked: {
-                introductions.incrementCurrentIndex()
+                aboutSwipe.incrementCurrentIndex()
             }
         }
     }
