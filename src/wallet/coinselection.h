@@ -6,6 +6,7 @@
 #define BITCOIN_WALLET_COINSELECTION_H
 
 #include <consensus/amount.h>
+#include <consensus/consensus.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -110,6 +111,8 @@ public:
         assert(effective_value.has_value());
         return effective_value.value();
     }
+
+    bool HasEffectiveValue() const { return effective_value.has_value(); }
 };
 
 /** Parameters for one iteration of Coin Selection. */
@@ -221,6 +224,8 @@ struct OutputGroup
     /** Indicate that we are subtracting the fee from outputs.
      * When true, the value that is used for coin selection is the UTXO's real value rather than effective value */
     bool m_subtract_fee_outputs{false};
+    /** Total weight of the UTXOs in this group. */
+    int m_weight{0};
 
     OutputGroup() {}
     OutputGroup(const CoinSelectionParams& params) :
@@ -293,6 +298,8 @@ private:
     bool m_use_effective{false};
     /** The computed waste */
     std::optional<CAmount> m_waste;
+    /** Total weight of the selected inputs */
+    int m_weight{0};
 
 public:
     explicit SelectionResult(const CAmount target, SelectionAlgorithm algo)
@@ -314,6 +321,12 @@ public:
     void ComputeAndSetWaste(const CAmount min_viable_change, const CAmount change_cost, const CAmount change_fee);
     [[nodiscard]] CAmount GetWaste() const;
 
+    /**
+     * Combines the @param[in] other selection result into 'this' selection result.
+     *
+     * Important note:
+     * There must be no shared 'COutput' among the two selection results being combined.
+     */
     void Merge(const SelectionResult& other);
 
     /** Get m_selected_inputs */
@@ -345,6 +358,8 @@ public:
     CAmount GetTarget() const { return m_target; }
 
     SelectionAlgorithm GetAlgo() const { return m_algo; }
+
+    int GetWeight() const { return m_weight; }
 };
 
 std::optional<SelectionResult> SelectCoinsBnB(std::vector<OutputGroup>& utxo_pool, const CAmount& selection_target, const CAmount& cost_of_change);
