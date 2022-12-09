@@ -52,14 +52,5 @@ Page {
                 }
             }
         }
-        SettingsDeveloper {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    introductions.decrementCurrentIndex()
-                }
-            }
-        }
     }
 }
