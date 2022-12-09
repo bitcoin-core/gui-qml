@@ -16,6 +16,8 @@ qt6_add_qml_module(bitcoin_qml
   QML_FILES
     initerrormessage.qml
     main.qml
+    NodeRunner.qml
+    NodeSettings.qml
     OnboardingBlockclock.qml
     OnboardingConnection.qml
     OnboardingCover.qml
