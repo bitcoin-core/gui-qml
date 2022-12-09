@@ -9,24 +9,15 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
-    background: null
     Layout.fillWidth: true
-    clip: true
-    navRightDetail: NavButton {
-        text: qsTr("Done")
-        onClicked: {
-            connections.decrementCurrentIndex()
-            swipeView.inSubPage = false
-        }
-    }
     bannerActive: false
     bold: true
-    headerText: qsTr("Connection settings")
+    headerText: qsTr("Developer options")
     headerMargin: 0
     detailActive: true
     detailItem: ColumnLayout {
         spacing: 0
-        ConnectionSettings {
+        DeveloperOptions {
             Layout.maximumWidth: 450
             Layout.alignment: Qt.AlignCenter
         }

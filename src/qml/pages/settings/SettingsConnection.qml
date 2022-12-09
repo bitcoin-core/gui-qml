@@ -9,22 +9,17 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
+    background: null
     Layout.fillWidth: true
-    navRightDetail: NavButton {
-        text: qsTr("Done")
-        onClicked: {
-            storages.decrementCurrentIndex()
-            swipeView.inSubPage = false
-        }
-    }
+    clip: true
     bannerActive: false
     bold: true
-    headerText: qsTr("Storage settings")
+    headerText: qsTr("Connection settings")
     headerMargin: 0
     detailActive: true
     detailItem: ColumnLayout {
         spacing: 0
-        StorageSettings {
+        ConnectionSettings {
             Layout.maximumWidth: 450
             Layout.alignment: Qt.AlignCenter
         }
