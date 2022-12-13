@@ -341,7 +341,6 @@ QML_RES_QML = \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ValueInput.qml \
-  qml/controls/Wizard.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
   qml/pages/onboarding/OnboardingBlockclock.qml \
