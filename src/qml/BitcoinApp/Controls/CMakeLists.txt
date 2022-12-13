@@ -28,5 +28,4 @@ qt6_add_qml_module(bitcoin_qml_controls
     TextButton.qml
     Theme.qml
     ValueInput.qml
-    Wizard.qml
 )
