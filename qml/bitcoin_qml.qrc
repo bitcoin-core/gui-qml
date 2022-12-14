@@ -26,6 +26,8 @@
         <file>controls/ValueInput.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/main.qml</file>
+        <file>pages/node/NodeRunner.qml</file>
+        <file>pages/node/NodeSettings.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
         <file>pages/onboarding/OnboardingCover.qml</file>
