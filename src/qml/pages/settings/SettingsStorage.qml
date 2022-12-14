@@ -14,5 +14,11 @@ InformationPage {
     headerText: qsTr("Storage settings")
     headerMargin: 0
     detailActive: true
-    detailItem: StorageSettings {}
+    detailItem: StorageSettings {
+        // Set default prune values
+        Component.onCompleted: {
+            optionsModel.prune = true
+            optionsModel.pruneSizeGB = 2
+        }
+    }
 }
