@@ -26,13 +26,7 @@ Item {
             description: qsTr("Bitcoin Core is an open source project.\nIf you find it useful, please contribute.\n\n This is experimental software.")
             descriptionMargin: 20
             detailActive: true
-            detailItem: ColumnLayout {
-                spacing: 0
-                AboutOptions {
-                    Layout.maximumWidth: 450
-                    Layout.alignment: Qt.AlignCenter
-                }
-            }
+            detailItem: AboutOptions {}
         }
         SettingsDeveloper {
             navLeftDetail: NavButton {
