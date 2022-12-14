@@ -29,7 +29,6 @@ ApplicationWindow {
         SwipeView {
             id: swipeView
             property bool finished: false
-            anchors.fill: parent
             interactive: false
 
             OnboardingCover {}
@@ -47,7 +46,6 @@ ApplicationWindow {
         id: node
         SwipeView {
             id: node_swipe
-            anchors.fill: parent
             interactive: false
             orientation: Qt.Vertical
             NodeRunner {
