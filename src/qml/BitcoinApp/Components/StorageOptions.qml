@@ -19,11 +19,18 @@ ColumnLayout {
         description: qsTr("Uses about 2GB. For simple wallet use.")
         recommended: true
         checked: true
+        onClicked: {
+            optionsModel.prune = true
+            optionsModel.pruneSizeGB = 2
+        }
     }
     OptionButton {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Store all data")
         description: qsTr("Uses about 550GB. Support the network.")
+        onClicked: {
+            optionsModel.prune = false
+        }
     }
 }
