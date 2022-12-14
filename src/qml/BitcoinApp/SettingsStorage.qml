@@ -14,11 +14,5 @@ InformationPage {
     headerText: qsTr("Storage settings")
     headerMargin: 0
     detailActive: true
-    detailItem: ColumnLayout {
-        spacing: 0
-        StorageSettings {
-            Layout.maximumWidth: 450
-            Layout.alignment: Qt.AlignCenter
-        }
-    }
+    detailItem: StorageSettings {}
 }

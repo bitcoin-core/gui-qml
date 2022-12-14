@@ -12,73 +12,73 @@ Item {
     id: nodeSettings
     property alias navMiddleDetail: nodeSettingsView.navMiddleDetail
     property alias navRightDetail: nodeSettingsView.navRightDetail
+
     StackView {
         id: nodeSettingsView
         property alias navMiddleDetail: node_settings.navMiddleDetail
         property alias navRightDetail: node_settings.navRightDetail
+        anchors.fill: parent
+
         initialItem: Page {
             id: node_settings
             property alias navMiddleDetail: navbar.middleDetail
             property alias navRightDetail: navbar.rightDetail
             background: null
+            implicitWidth: 450
+            leftPadding: 20
+            rightPadding: 20
+            topPadding: 30
+
             header: NavigationBar {
                 id: navbar
             }
             ColumnLayout {
-                spacing: 0
-                width: parent.width
-                ColumnLayout {
-                    spacing: 20
-                    Layout.maximumWidth: 450
-                    Layout.topMargin: 30
-                    Layout.leftMargin: 20
-                    Layout.rightMargin: 20
-                    Layout.alignment: Qt.AlignCenter
-                    Setting {
-                        Layout.fillWidth: true
-                        header: qsTr("Dark Mode")
-                        actionItem: OptionSwitch {
-                            checked: Theme.dark
-                            onToggled: Theme.toggleDark()
+                spacing: 20
+                width: Math.min(parent.width, 450)
+                anchors.horizontalCenter: parent.horizontalCenter
+                Setting {
+                    Layout.fillWidth: true
+                    header: qsTr("Dark Mode")
+                    actionItem: OptionSwitch {
+                        checked: Theme.dark
+                        onToggled: Theme.toggleDark()
+                    }
+                }
+                Setting {
+                    Layout.fillWidth: true
+                    header: qsTr("About")
+                    actionItem: NavButton {
+                        iconSource: "image://images/caret-right"
+                        background: null
+                        onClicked: {
+                            nodeSettingsView.push(about_page)
                         }
                     }
-                    Setting {
-                        Layout.fillWidth: true
-                        header: qsTr("About")
-                        actionItem: NavButton {
-                            iconSource: "image://images/caret-right"
-                            background: null
-                            onClicked: {
-                                nodeSettingsView.push(about_page)
-                            }
+                }
+                Setting {
+                    Layout.fillWidth: true
+                    header: qsTr("Storage")
+                    actionItem: NavButton {
+                        iconSource: "image://images/caret-right"
+                        background: null
+                        onClicked: {
+                            nodeSettingsView.push(storage_page)
                         }
                     }
-                    Setting {
-                        Layout.fillWidth: true
-                        header: qsTr("Storage")
-                        actionItem: NavButton {
-                            iconSource: "image://images/caret-right"
-                            background: null
-                            onClicked: {
-                                nodeSettingsView.push(storage_page)
-                            }
-                        }
-                    }
-                    Setting {
-                        Layout.fillWidth: true
-                        header: qsTr("Connection")
-                        actionItem: NavButton {
-                            iconSource: "image://images/caret-right"
-                            background: null
-                            onClicked: {
-                                nodeSettingsView.push(connection_page)
-                            }
+                }
+                Setting {
+                    Layout.fillWidth: true
+                    header: qsTr("Connection")
+                    actionItem: NavButton {
+                        iconSource: "image://images/caret-right"
+                        background: null
+                        onClicked: {
+                            nodeSettingsView.push(connection_page)
                         }
                     }
                 }
             }
         }
-        anchors.fill: parent
     }
     Component {
         id: about_page

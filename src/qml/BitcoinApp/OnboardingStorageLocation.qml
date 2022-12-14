@@ -22,12 +22,6 @@ InformationPage {
     description: qsTr("Where do you want to store the downloaded block data?")
     descriptionMargin: 20
     detailActive: true
-    detailItem: ColumnLayout {
-        spacing: 0
-        StorageLocations {
-            Layout.maximumWidth: 450
-            Layout.alignment: Qt.AlignCenter
-        }
-    }
+    detailItem: StorageLocations {}
     buttonText: qsTr("Next")
 }
