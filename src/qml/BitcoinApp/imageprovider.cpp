@@ -62,6 +62,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/qt/qml/BitcoinApp/res/icons/caret-right.png").pixmap(requested_size);
     }
 
+    if (id == "check") {
+        *size = requested_size;
+        return QIcon(":/qt/qml/BitcoinApp/res/icons/check.png").pixmap(requested_size);
+    }
+
     if (id == "cross") {
         *size = requested_size;
         return QIcon(":/qt/qml/BitcoinApp/res/icons/cross.png").pixmap(requested_size);
