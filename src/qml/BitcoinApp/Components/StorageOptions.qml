@@ -19,19 +19,11 @@ ColumnLayout {
         description: qsTr("Uses about 2GB.")
         recommended: true
         checked: true
-        detail: ProgressIndicator {
-            implicitWidth: 75
-            progress: 0.25
-        }
     }
     OptionButton {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Default")
         description: qsTr("Uses about 423GB.")
-        detail: ProgressIndicator {
-            implicitWidth: 75
-            progress: 0.8
-        }
     }
 }

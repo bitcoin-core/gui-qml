@@ -31,13 +31,5 @@ ColumnLayout {
         ButtonGroup.group: group
         text: qsTr("Only when on Wi-Fi")
         description: qsTr("Loads quickly when on wi-fi and pauses when on cellular data.")
-        detail: ProgressIndicator {
-            implicitWidth: 50
-            SequentialAnimation on progress {
-                loops: Animation.Infinite
-                SmoothedAnimation { to: 1; velocity: 1; }
-                SmoothedAnimation { to: 0; velocity: 1; }
-            }
-        }
     }
 }
