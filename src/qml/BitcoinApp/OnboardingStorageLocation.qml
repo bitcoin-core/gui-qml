@@ -19,7 +19,7 @@ InformationPage {
     bold: true
     headerText: qsTr("Storage location")
     headerMargin: 0
-    description: qsTr("Where do you want to store the downloaded block data?")
+    description: qsTr("Where do you want to store the downloaded block data?\nYou need a minimum of 1GB of storage.")
     descriptionMargin: 20
     detailActive: true
     detailItem: StorageLocations {}
