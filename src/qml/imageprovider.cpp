@@ -62,6 +62,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/caret-right").pixmap(requested_size);
     }
 
+    if (id == "check") {
+        *size = requested_size;
+        return QIcon(":/icons/check").pixmap(requested_size);
+    }
+
     if (id == "cross") {
         *size = requested_size;
         return QIcon(":/icons/cross").pixmap(requested_size);
