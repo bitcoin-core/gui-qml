@@ -341,15 +341,14 @@ QML_RES_QML = \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ValueInput.qml \
-  qml/controls/Wizard.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
-  qml/pages/onboarding/onboarding01.qml \
-  qml/pages/onboarding/onboarding02.qml \
-  qml/pages/onboarding/onboarding03.qml \
-  qml/pages/onboarding/onboarding04.qml \
-  qml/pages/onboarding/onboarding05.qml \
-  qml/pages/onboarding/onboarding06.qml \
+  qml/pages/onboarding/OnboardingBlockclock.qml \
+  qml/pages/onboarding/OnboardingConnection.qml \
+  qml/pages/onboarding/OnboardingCover.qml \
+  qml/pages/onboarding/OnboardingStorageAmount.qml \
+  qml/pages/onboarding/OnboardingStorageLocation.qml \
+  qml/pages/onboarding/OnboardingStrengthen.qml \
   qml/pages/settings/SettingsAbout.qml \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
