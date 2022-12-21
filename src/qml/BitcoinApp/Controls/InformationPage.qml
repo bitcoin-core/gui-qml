@@ -9,6 +9,7 @@ import org.bitcoincore.qt
 
 Page {
     id: root
+    implicitHeight: parent.height
     property alias bannerItem: banner_loader.sourceComponent
     property alias detailItem: detail_loader.sourceComponent
     property alias navLeftDetail: navbar.leftDetail
@@ -41,12 +42,11 @@ Page {
     }
 
     ScrollView {
+        id: scrollView
         width: parent.width
         height: parent.height
         clip: true
         contentWidth: width
-        contentHeight: information.height + continueButton.height
-            + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
 
         ColumnLayout {
             id: information
@@ -115,6 +115,18 @@ Page {
                 anchors.top: undefined
                 anchors.bottom: continueButton.parent.bottom
             }
+            PropertyChanges {
+                target: scrollView
+                contentHeight: {
+                    var combinedHeight = information.height + continueButton.height
+                        + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
+                    if (scrollView.height < combinedHeight) {
+                        return combinedHeight
+                    } else {
+                        return scrollView.height
+                    }
+                }
+            }
         },
         State {
             name: "DESKTOP"
@@ -122,6 +134,11 @@ Page {
                 target: continueButton
                 anchors.top: information.bottom
                 anchors.bottom: undefined
+            }
+            PropertyChanges {
+                target: scrollView
+                contentHeight: information.height + continueButton.height
+                    + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
             }
         }
     ]
