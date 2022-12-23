@@ -12,6 +12,16 @@ Switch {
     background: Rectangle {
         radius: Math.floor(height / 2)
         color: root.checked ? Theme.color.orange : Theme.color.neutral4
+
+        Rectangle {
+            visible: root.visualFocus
+            anchors.fill: parent
+            anchors.margins: -4
+            border.width: 2
+            border.color: Theme.color.purple
+            radius: 9
+            color: "transparent"
+        }
     }
     indicator: Rectangle {
         property real _margin: Math.round((parent.height - height) / 2)
