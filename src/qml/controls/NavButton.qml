@@ -39,7 +39,18 @@ AbstractButton {
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+
+        Rectangle {
+            visible: root.visualFocus
+            anchors.fill: parent
+            anchors.margins: -4
+            border.width: 2
+            border.color: Theme.color.purple
+            radius: 9
+            color: "transparent"
+        }
     }
+
     contentItem: RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -77,7 +88,7 @@ AbstractButton {
                    text: root.text
               }
           }
-        }
+       }
     }
     MouseArea {
         anchors.fill: parent
