@@ -23,10 +23,9 @@ Button {
             anchors.fill: parent
             anchors.margins: -4
             border.width: 2
-            border.color: Theme.color.orange
+            border.color: Theme.color.purple
             radius: 14
             color: "transparent"
-            opacity: 0.4
         }
     }
     contentItem: RowLayout {
