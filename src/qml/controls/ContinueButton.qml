@@ -43,6 +43,10 @@ Button {
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+
+        FocusBorder {
+            visible: root.visualFocus
+        }
     }
     MouseArea {
         anchors.fill: parent
@@ -59,6 +63,13 @@ Button {
         onReleased: {
             root.background.state = "DEFAULT"
             root.clicked()
+        }
+    }
+    onVisualFocusChanged: {
+        if (visualFocus && (focusReason == Qt.TabFocusReason || focusReason == Qt.BacktabFocusReason)) {
+            root.background.state = "HOVER"
+        } else {
+            root.background.state = "DEFAULT"
         }
     }
 }
