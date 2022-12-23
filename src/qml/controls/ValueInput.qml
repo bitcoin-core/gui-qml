@@ -5,13 +5,26 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-TextEdit {
+Control {
     id: root
     required property string parentState
     property string description: ""
     property int descriptionSize: 18
     property color textColor
     state: root.parentState
+    signal editingFinished()
+    focusPolicy: Qt.StrongFocus
+
+    contentItem: TextEdit {
+        font.family: "Inter"
+        font.styleName: "Regular"
+        font.pixelSize: root.descriptionSize
+        color: root.textColor
+        text: root.description
+        horizontalAlignment: Text.AlignRight
+        wrapMode: Text.WordWrap
+        onEditingFinished: editingFinished()
+    }
 
     states: [
         State {
@@ -28,15 +41,17 @@ TextEdit {
         }
     ]
 
-    font.family: "Inter"
-    font.styleName: "Regular"
-    font.pixelSize: root.descriptionSize
-    color: root.textColor
-    text: description
-    horizontalAlignment: Text.AlignRight
-    wrapMode: Text.WordWrap
-
-    Behavior on color {
+    Behavior on textColor {
         ColorAnimation { duration: 150 }
+    }
+
+    background: Rectangle {
+        visible: root.visualFocus
+        anchors.fill: parent
+        anchors.margins: -4
+        border.width: 2
+        border.color: Theme.color.purple
+        radius: 9
+        color: "transparent"
     }
 }
