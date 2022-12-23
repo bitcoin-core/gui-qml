@@ -85,4 +85,14 @@ AbstractButton {
         }
     }
     onClicked: Qt.openUrlExternally(link)
+
+    background: Rectangle {
+        visible: root.visualFocus
+        anchors.fill: parent
+        anchors.margins: -4
+        border.width: 2
+        border.color: Theme.color.purple
+        radius: 9
+        color: "transparent"
+    }
 }
