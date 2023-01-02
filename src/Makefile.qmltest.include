@@ -1,0 +1,47 @@
+# Copyright (c) 2013-2023 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+bin_PROGRAMS += qml/test/test_bitcoin-qt
+TESTS += qml/test/test_bitcoin-qt
+
+TEST_QML_MOC_CPP = \
+  qml/test/moc_onboardingtests.cpp
+
+TEST_QML_H = 
+
+qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
+  $(QT_INCLUDES) $(QT_TEST_INCLUDES) $(BOOST_CPPFLAGS)
+
+qml_test_test_bitcoin_qt_SOURCES = \
+  init/bitcoin-qt.cpp \
+  qml/test/onboardingtests.cpp \
+  $(TEST_QML_H)
+
+nodist_qml_test_test_bitcoin_qt_SOURCES = $(TEST_QML_MOC_CPP)
+
+qml_test_test_bitcoin_qt_LDADD = $(LIBBITCOINQT) $(LIBBITCOIN_NODE) $(LIBTEST_UTIL)
+if ENABLE_WALLET
+qml_test_test_bitcoin_qt_LDADD += $(LIBBITCOIN_UTIL) $(LIBBITCOIN_WALLET)
+endif
+if ENABLE_ZMQ
+qml_test_test_bitcoin_qt_LDADD += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
+endif
+qml_test_test_bitcoin_qt_LDADD += $(LIBBITCOIN_CLI) $(LIBBITCOIN_COMMON) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_CRYPTO) $(LIBUNIVALUE) $(LIBLEVELDB) \
+  $(LIBMEMENV) $(QT_LIBS) $(QT_DBUS_LIBS) $(QT_TEST_LIBS) \
+  $(QR_LIBS) $(BDB_LIBS) $(MINIUPNPC_LIBS) $(NATPMP_LIBS) $(LIBSECP256K1) \
+  $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(SQLITE_LIBS)
+qml_test_test_bitcoin_qt_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
+qml_test_test_bitcoin_qt_CXXFLAGS = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
+
+CLEAN_BITCOIN_QML_TEST = $(TEST_QML_MOC_CPP) qml/test/*.gcda qml/test/*.gcno
+
+CLEANFILES += $(CLEAN_BITCOIN_QML_TEST)
+
+test_bitcoin_qt_qml : qml/test/test_bitcoin-qt-qml$(EXEEXT)
+
+test_bitcoin_qt_qml_check : qt/test/test_bitcoin-qt-qml$(EXEEXT) FORCE
+	$(MAKE) check-TESTS TESTS=$^
+
+test_bitcoin_qt_qml_clean: FORCE
+	rm -f $(CLEAN_BITCOIN_QML_TEST) $(qml_test_test_bitcoin_qt_OBJECTS)
