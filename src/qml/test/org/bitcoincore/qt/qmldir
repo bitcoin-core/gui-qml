@@ -1,0 +1,2 @@
+module org.bitcoincore.qt
+singleton AppMode 1.0 AppMode.qml
