@@ -10,7 +10,9 @@ Rectangle {
     height: 665
     color: Theme.color.background
 
-    OnboardingCover {}
+    OnboardingCover {
+        anchors.fill: parent
+    }
 
     TestCase {
         id: onboardingFlow
