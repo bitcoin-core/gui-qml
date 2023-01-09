@@ -13,9 +13,7 @@ qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN
   $(QT_INCLUDES) $(QT_TEST_INCLUDES) $(QT_QUICKTEST_INCLUDES) $(BOOST_CPPFLAGS)
 
 qml_test_test_bitcoin_qt_SOURCES = \
-  $(TEST_QML_MOC_CPP) \
   qml/test/onboardingtests.cpp \
-  qml/qrc_bitcoin.cpp \
   qml/bitcoin_qml.qrc \
   qml/test/imageprovider.cpp \
   $(TEST_QML_H)
