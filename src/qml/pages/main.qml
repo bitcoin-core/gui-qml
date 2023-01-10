@@ -54,18 +54,7 @@ ApplicationWindow {
 
     Component {
         id: onboardingWizard
-        SwipeView {
-            id: swipeView
-            property bool finished: false
-            interactive: false
-
-            OnboardingCover {}
-            OnboardingStrengthen {}
-            OnboardingBlockclock {}
-            OnboardingStorageLocation {}
-            OnboardingStorageAmount {}
-            OnboardingConnection {}
-
+        OnboardingWizard {
             onFinishedChanged: main.push(node)
         }
     }

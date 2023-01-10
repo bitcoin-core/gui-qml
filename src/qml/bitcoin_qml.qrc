@@ -51,6 +51,7 @@
         <file>pages/onboarding/OnboardingStorageAmount.qml</file>
         <file>pages/onboarding/OnboardingStorageLocation.qml</file>
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
+        <file>pages/onboarding/OnboardingWizard.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
