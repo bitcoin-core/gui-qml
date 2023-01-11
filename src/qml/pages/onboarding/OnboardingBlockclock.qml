@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import "../../controls"
 
 InformationPage {
+    objectName: "onboardingBlockClock"
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")

@@ -11,6 +11,7 @@ import "../settings"
 
 Page {
     background: null
+    objectName: "onboardingConnection"
     clip: true
     SwipeView {
         id: connections

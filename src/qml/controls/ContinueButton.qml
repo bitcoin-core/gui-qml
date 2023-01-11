@@ -9,6 +9,7 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     hoverEnabled: AppMode.isDesktop
+    objectName: "continueButton"
     contentItem: CoreText {
         text: parent.text
         bold: true
