@@ -14,6 +14,7 @@ src/bitcoin-wallet
 src/test/fuzz/fuzz
 src/test/test_bitcoin
 src/qt/test/test_bitcoin-qt
+src/qml/test/test_bitcoin-qt
 
 # autoreconf
 Makefile.in
@@ -52,6 +53,7 @@ src/qml/models/moc_*.cpp
 src/qt/forms/ui_*.h
 
 src/qt/test/moc*.cpp
+src/qml/test/moc*.cpp
 
 src/qt/bitcoin-qt.config
 src/qt/bitcoin-qt.creator
