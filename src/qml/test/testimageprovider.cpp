@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/test/imageprovider.h>
+#include <qml/test/testimageprovider.h>
 
 #include <QIcon>
 #include <QPixmap>

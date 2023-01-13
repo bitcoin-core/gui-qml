@@ -1,9 +1,8 @@
 #include <QtQuickTest>
 #include <QQmlEngine>
 #include <QQmlContext>
-#include <qml/test/imageprovider.h>
+#include <qml/test/testimageprovider.h>
 #include <qml/test/onboardingtests.h>
-#include <qt/networkstyle.h>
 
 Setup::Setup()
 {

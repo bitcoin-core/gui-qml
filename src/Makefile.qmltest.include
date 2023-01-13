@@ -7,7 +7,7 @@ TESTS += qml/test/test_bitcoin-qt
 
 TEST_QML_MOC_CPP = qml/test/moc_onboardingtests.cpp
 
-TEST_QML_H = qml/test/onboardingtests.h qml/test/imageprovider.h
+TEST_QML_H = qml/test/onboardingtests.h qml/test/testimageprovider.h
 
 qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
   $(QT_INCLUDES) $(QT_TEST_INCLUDES) $(QT_QUICKTEST_INCLUDES) $(BOOST_CPPFLAGS) $(QT_QUICKTEST_CFLAGS)
@@ -15,7 +15,7 @@ qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN
 qml_test_test_bitcoin_qt_SOURCES = \
   qml/test/onboardingtests.cpp \
   qml/bitcoin_qml.qrc \
-  qml/test/imageprovider.cpp \
+  qml/test/testimageprovider.cpp \
   $(TEST_QML_H)
 
 nodist_qml_test_test_bitcoin_qt_SOURCES = $(TEST_QML_MOC_CPP) $(QML_QRC_CPP)
