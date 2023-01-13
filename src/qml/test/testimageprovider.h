@@ -1,9 +1,9 @@
-// Copyright (c) 2021 The Bitcoin Core developers
+// Copyright (c) 2023 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_TEST_IMAGEPROVIDER_H
-#define BITCOIN_QML_TEST_IMAGEPROVIDER_H
+#ifndef BITCOIN_QML_TEST_TESTIMAGEPROVIDER_H
+#define BITCOIN_QML_TEST_TESTIMAGEPROVIDER_H
 
 #include <QPixmap>
 #include <QQuickImageProvider>
@@ -22,4 +22,4 @@ public:
 
 };
 
-#endif // BITCOIN_QML_IMAGEPROVIDER_H
+#endif // BITCOIN_QML_TEST_TESTIMAGEPROVIDER_H
