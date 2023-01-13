@@ -320,6 +320,10 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
     if test "$have_qt_test" = "no"; then
       bitcoin_enable_qt_test=no
     fi
+    bitcoin_enable_qml_test=yes
+    if test "$have_qml_test" = "no"; then
+      bitcoin_enable_qml_test=no
+    fi
     bitcoin_enable_qt_dbus=no
     if test "$use_dbus" != "no" && test "$have_qt_dbus" = "yes"; then
       bitcoin_enable_qt_dbus=yes
@@ -482,8 +486,7 @@ AC_DEFUN([_BITCOIN_QT_FIND_LIBS],[
                         [BITCOIN_QT_FAIL([${qt_lib_prefix}QuickControls2${qt_lib_suffix} $qt_version not found])])
     ])
     BITCOIN_QT_CHECK([
-      PKG_CHECK_MODULES([QT_QUICKTEST], [${qt_lib_prefix}QuickTest${qt_lib_suffix} $qt_version], [QT_INCLUDES="$QT_QUICKTEST_CFLAGS $QT_INCLUDES" QT_LIBS="$QT_QUICKTEST_LIBS $QT_LIBS"],
-                        [BITCOIN_QT_FAIL([${qt_lib_prefix}QuickTest${qt_lib_suffix} $qt_version not found])])
+      PKG_CHECK_MODULES([QT_QUICKTEST], [${qt_lib_prefix}QuickTest${qt_lib_suffix} $qt_version], [QT_QMLTEST_INCLUDES="$QT_QUICKTEST_CFLAGS"; have_quick_test=yes],[have_quick_test=no])
     ])
 
     AC_DEFINE([USE_QML], [1], [Define to 1 to use QML-based GUI])

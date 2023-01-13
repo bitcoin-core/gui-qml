@@ -1764,8 +1764,9 @@ fi
 
 dnl these are only used when qt is enabled
 BUILD_TEST_QT=""
+BUILD_TEST_QML=""
 if test "$use_qml" != "no"; then
-  use_gui_tests=no
+  bitcoin_enable_qt_test=no
 fi
 if test "$bitcoin_enable_qt" != "no"; then
   dnl enable dbus support
@@ -1798,6 +1799,14 @@ if test "$bitcoin_enable_qt" != "no"; then
   if test "$use_gui_tests$bitcoin_enable_qt_test" = "yesyes"; then
     AC_MSG_RESULT([yes])
     BUILD_TEST_QT="yes"
+  else
+    AC_MSG_RESULT([no])
+  fi
+
+  AC_MSG_CHECKING([whether to build qml/test_bitcoin-qt])
+  if test "$use_gui_tests$bitcoin_enable_qml_test" = "yesyes"; then
+    AC_MSG_RESULT([yes])
+    BUILD_TEST_QML="yes"
   else
     AC_MSG_RESULT([no])
   fi
@@ -1840,6 +1849,7 @@ AM_CONDITIONAL([ENABLE_FUZZ], [test "$enable_fuzz" = "yes"])
 AM_CONDITIONAL([ENABLE_FUZZ_BINARY], [test "$enable_fuzz_binary" = "yes"])
 AM_CONDITIONAL([ENABLE_QT], [test "$bitcoin_enable_qt" = "yes"])
 AM_CONDITIONAL([ENABLE_QT_TESTS], [test "$BUILD_TEST_QT" = "yes"])
+AM_CONDITIONAL([ENABLE_QML_TESTS], [test "$BUILD_TEST_QML" = "yes"])
 AM_CONDITIONAL([ENABLE_BENCH], [test "$use_bench" = "yes"])
 AM_CONDITIONAL([USE_QRCODE], [test "$use_qr" = "yes"])
 AM_CONDITIONAL([USE_LCOV], [test "$use_lcov" = "yes"])
