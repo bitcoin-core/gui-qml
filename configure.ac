@@ -1804,7 +1804,7 @@ if test "$bitcoin_enable_qt" != "no"; then
   fi
 
   AC_MSG_CHECKING([whether to build qml/test_bitcoin-qt])
-  if test "$use_gui_tests$bitcoin_enable_qml_test" = "yesyes"; then
+  if test "$use_qml$use_gui_tests$bitcoin_enable_qml_test" = "yesyesyes"; then
     AC_MSG_RESULT([yes])
     BUILD_TEST_QML="yes"
   else
