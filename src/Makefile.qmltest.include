@@ -5,15 +5,15 @@
 bin_PROGRAMS += qml/test/test_bitcoin-qt
 TESTS += qml/test/test_bitcoin-qt
 
-TEST_QML_MOC_CPP = qml/test/moc_onboardingtests.cpp
+TEST_QML_MOC_CPP = qml/test/moc_setup.cpp
 
-TEST_QML_H = qml/test/onboardingtests.h qml/test/testimageprovider.h
+TEST_QML_H = qml/test/setup.h qml/test/testimageprovider.h
 
 qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
   $(QT_INCLUDES) $(QT_TEST_INCLUDES) $(QT_QUICKTEST_INCLUDES) $(BOOST_CPPFLAGS) $(QT_QUICKTEST_CFLAGS)
 
 qml_test_test_bitcoin_qt_SOURCES = \
-  qml/test/onboardingtests.cpp \
+  qml/test/setup.cpp \
   qml/bitcoin_qml.qrc \
   qml/test/testimageprovider.cpp \
   $(TEST_QML_H)
