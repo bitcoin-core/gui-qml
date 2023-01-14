@@ -9,8 +9,8 @@ TEST_QML_MOC_CPP = qml/test/moc_setup.cpp
 
 TEST_QML_H = qml/test/setup.h qml/test/testimageprovider.h
 
-qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(BITCOIN_QT_INCLUDES) \
-  $(QT_INCLUDES) $(QT_TEST_INCLUDES) $(QT_QUICKTEST_INCLUDES) $(BOOST_CPPFLAGS) $(QT_QUICKTEST_CFLAGS)
+qml_test_test_bitcoin_qt_CPPFLAGS = $(AM_CPPFLAGS) \
+  $(QT_INCLUDES) $(QT_QUICKTEST_INCLUDES) $(BOOST_CPPFLAGS) $(QT_QUICKTEST_CFLAGS)
 
 qml_test_test_bitcoin_qt_SOURCES = \
   qml/test/setup.cpp \
@@ -20,7 +20,7 @@ qml_test_test_bitcoin_qt_SOURCES = \
 
 nodist_qml_test_test_bitcoin_qt_SOURCES = $(TEST_QML_MOC_CPP) $(QML_QRC_CPP)
 
-qml_test_test_bitcoin_qt_LDADD = $(QT_QUICKTEST_LIBS) $(QT_TEST_LIBS) $(QT_LIBS)
+qml_test_test_bitcoin_qt_LDADD = $(QT_QUICKTEST_LIBS) $(QT_LIBS)
 qml_test_test_bitcoin_qt_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(QT_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) $(PTHREAD_FLAGS)
 qml_test_test_bitcoin_qt_CXXFLAGS = $(AM_CXXFLAGS) $(QT_PIE_FLAGS)
 
