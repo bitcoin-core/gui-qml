@@ -1,5 +1,5 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -226,6 +226,14 @@ static RPCHelpMan loadwallet()
     bilingual_str error;
     std::vector<bilingual_str> warnings;
     std::optional<bool> load_on_start = request.params[1].isNull() ? std::nullopt : std::optional<bool>(request.params[1].get_bool());
+
+    {
+        LOCK(context.wallets_mutex);
+        if (std::any_of(context.wallets.begin(), context.wallets.end(), [&name](const auto& wallet) { return wallet->GetName() == name; })) {
+            throw JSONRPCError(RPC_WALLET_ALREADY_LOADED, "Wallet \"" + name + "\" is already loaded.");
+        }
+    }
+
     std::shared_ptr<CWallet> const wallet = LoadWallet(context, name, load_on_start, options, status, error, warnings);
 
     HandleWalletError(wallet, status, error);
@@ -437,13 +445,20 @@ static RPCHelpMan unloadwallet()
         throw JSONRPCError(RPC_WALLET_NOT_FOUND, "Requested wallet does not exist or is not loaded");
     }
 
-    // Release the "main" shared pointer and prevent further notifications.
-    // Note that any attempt to load the same wallet would fail until the wallet
-    // is destroyed (see CheckUniqueFileid).
     std::vector<bilingual_str> warnings;
-    std::optional<bool> load_on_start = request.params[1].isNull() ? std::nullopt : std::optional<bool>(request.params[1].get_bool());
-    if (!RemoveWallet(context, wallet, load_on_start, warnings)) {
-        throw JSONRPCError(RPC_MISC_ERROR, "Requested wallet already unloaded");
+    {
+        WalletRescanReserver reserver(*wallet);
+        if (!reserver.reserve()) {
+            throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
+        }
+
+        // Release the "main" shared pointer and prevent further notifications.
+        // Note that any attempt to load the same wallet would fail until the wallet
+        // is destroyed (see CheckUniqueFileid).
+        std::optional<bool> load_on_start = request.params[1].isNull() ? std::nullopt : std::optional<bool>(request.params[1].get_bool());
+        if (!RemoveWallet(context, wallet, load_on_start, warnings)) {
+            throw JSONRPCError(RPC_MISC_ERROR, "Requested wallet already unloaded");
+        }
     }
 
     UnloadWallet(std::move(wallet));

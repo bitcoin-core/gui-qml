@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -241,7 +241,7 @@ std::shared_ptr<CWallet> LoadWalletInternal(WalletContext& context, const std::s
         }
 
         context.chain->initMessage(_("Loading wallet…").translated);
-        const std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), options.create_flags, error, warnings);
+        std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), options.create_flags, error, warnings);
         if (!wallet) {
             error = Untranslated("Wallet loading failed.") + Untranslated(" ") + error;
             status = DatabaseStatus::FAILED_LOAD;
@@ -381,7 +381,7 @@ std::shared_ptr<CWallet> CreateWallet(WalletContext& context, const std::string&
 
     // Make the wallet
     context.chain->initMessage(_("Loading wallet…").translated);
-    const std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), wallet_creation_flags, error, warnings);
+    std::shared_ptr<CWallet> wallet = CWallet::Create(context, name, std::move(database), wallet_creation_flags, error, warnings);
     if (!wallet) {
         error = Untranslated("Wallet creation failed.") + Untranslated(" ") + error;
         status = DatabaseStatus::FAILED_CREATE;
@@ -472,8 +472,7 @@ std::shared_ptr<CWallet> RestoreWallet(WalletContext& context, const fs::path& b
         error += strprintf(Untranslated("Unexpected exception: %s"), e.what());
     }
     if (!wallet) {
-        fs::remove(wallet_file);
-        fs::remove(wallet_path);
+        fs::remove_all(wallet_path);
     }
 
     return wallet;
@@ -648,8 +647,7 @@ bool CWallet::HasWalletSpend(const CTransactionRef& tx) const
     AssertLockHeld(cs_wallet);
     const uint256& txid = tx->GetHash();
     for (unsigned int i = 0; i < tx->vout.size(); ++i) {
-        auto iter = mapTxSpends.find(COutPoint(txid, i));
-        if (iter != mapTxSpends.end()) {
+        if (IsSpent(COutPoint(txid, i))) {
             return true;
         }
     }
@@ -1355,7 +1353,7 @@ void CWallet::SyncTransaction(const CTransactionRef& ptx, const SyncTxState& sta
     MarkInputsDirty(ptx);
 }
 
-void CWallet::transactionAddedToMempool(const CTransactionRef& tx, uint64_t mempool_sequence) {
+void CWallet::transactionAddedToMempool(const CTransactionRef& tx) {
     LOCK(cs_wallet);
     SyncTransaction(tx, TxStateInMempool{});
 
@@ -1365,7 +1363,7 @@ void CWallet::transactionAddedToMempool(const CTransactionRef& tx, uint64_t memp
     }
 }
 
-void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason, uint64_t mempool_sequence) {
+void CWallet::transactionRemovedFromMempool(const CTransactionRef& tx, MemPoolRemovalReason reason) {
     LOCK(cs_wallet);
     auto it = mapWallet.find(tx->GetHash());
     if (it != mapWallet.end()) {
@@ -1411,7 +1409,7 @@ void CWallet::blockConnected(const interfaces::BlockInfo& block)
     m_last_block_processed = block.hash;
     for (size_t index = 0; index < block.data->vtx.size(); index++) {
         SyncTransaction(block.data->vtx[index], TxStateConfirmed{block.hash, block.height, static_cast<int>(index)});
-        transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK, /*mempool_sequence=*/0);
+        transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
     }
 }
 
@@ -2884,7 +2882,7 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
     const auto start{SteadyClock::now()};
     // TODO: Can't use std::make_shared because we need a custom deleter but
     // should be possible to use std::allocate_shared.
-    const std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, args, std::move(database)), ReleaseWallet);
+    std::shared_ptr<CWallet> walletInstance(new CWallet(chain, name, args, std::move(database)), ReleaseWallet);
     bool rescan_required = false;
     DBErrors nLoadWalletRet = walletInstance->LoadWallet();
     if (nLoadWalletRet != DBErrors::LOAD_OK) {
@@ -3184,6 +3182,24 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
 
     if (tip_height && *tip_height != rescan_height)
     {
+        // No need to read and scan block if block was created before
+        // our wallet birthday (as adjusted for block time variability)
+        std::optional<int64_t> time_first_key;
+        for (auto spk_man : walletInstance->GetAllScriptPubKeyMans()) {
+            int64_t time = spk_man->GetTimeFirstKey();
+            if (!time_first_key || time < *time_first_key) time_first_key = time;
+        }
+        if (time_first_key) {
+            FoundBlock found = FoundBlock().height(rescan_height);
+            chain.findFirstBlockWithTimeAndHeight(*time_first_key - TIMESTAMP_WINDOW, rescan_height, found);
+            if (!found.found) {
+                // We were unable to find a block that had a time more recent than our earliest timestamp
+                // or a height higher than the wallet was synced to, indicating that the wallet is newer than the
+                // current chain tip. Skip rescanning in this case.
+                rescan_height = *tip_height;
+            }
+        }
+
         // Technically we could execute the code below in any case, but performing the
         // `while` loop below can make startup very slow, so only check blocks on disk
         // if necessary.
@@ -3217,17 +3233,6 @@ bool CWallet::AttachChain(const std::shared_ptr<CWallet>& walletInstance, interf
 
         chain.initMessage(_("Rescanning…").translated);
         walletInstance->WalletLogPrintf("Rescanning last %i blocks (from block %i)...\n", *tip_height - rescan_height, rescan_height);
-
-        // No need to read and scan block if block was created before
-        // our wallet birthday (as adjusted for block time variability)
-        std::optional<int64_t> time_first_key;
-        for (auto spk_man : walletInstance->GetAllScriptPubKeyMans()) {
-            int64_t time = spk_man->GetTimeFirstKey();
-            if (!time_first_key || time < *time_first_key) time_first_key = time;
-        }
-        if (time_first_key) {
-            chain.findFirstBlockWithTimeAndHeight(*time_first_key - TIMESTAMP_WINDOW, rescan_height, FoundBlock().height(rescan_height));
-        }
 
         {
             WalletRescanReserver reserver(*walletInstance);
@@ -4002,6 +4007,23 @@ bool CWallet::ApplyMigrationData(MigrationData& data, bilingual_str& error)
             }
         }
     }
+
+    // Persist added address book entries (labels, purpose) for watchonly and solvable wallets
+    auto persist_address_book = [](const CWallet& wallet) {
+        LOCK(wallet.cs_wallet);
+        WalletBatch batch{wallet.GetDatabase()};
+        for (const auto& [destination, addr_book_data] : wallet.m_address_book) {
+            auto address{EncodeDestination(destination)};
+            auto purpose{addr_book_data.purpose};
+            auto label{addr_book_data.GetLabel()};
+            // don't bother writing default values (unknown purpose, empty label)
+            if (purpose != "unknown") batch.WritePurpose(address, purpose);
+            if (!label.empty()) batch.WriteName(address, label);
+        }
+    };
+    if (data.watchonly_wallet) persist_address_book(*data.watchonly_wallet);
+    if (data.solvable_wallet) persist_address_book(*data.solvable_wallet);
+
     // Remove the things to delete
     if (dests_to_delete.size() > 0) {
         for (const auto& dest : dests_to_delete) {

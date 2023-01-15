@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Copyright (c) 2018-2021 The Bitcoin Core developers
+# Copyright (c) 2018-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -81,4 +81,9 @@ fi
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then
   CI_EXEC LD_LIBRARY_PATH="${DEPENDS_DIR}/${HOST}/lib" test/fuzz/test_runner.py "${FUZZ_TESTS_CONFIG}" "$MAKEJOBS" -l DEBUG "${DIR_FUZZ_IN}"
+fi
+
+if [ -z "$DANGER_RUN_CI_ON_HOST" ]; then
+  echo "Stop and remove CI container by ID"
+  docker container kill "${CI_CONTAINER_ID}"
 fi

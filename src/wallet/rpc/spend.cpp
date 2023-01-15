@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2011-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -82,10 +82,10 @@ static UniValue FinishTransaction(const std::shared_ptr<CWallet> pwallet, const 
     PartiallySignedTransaction psbtx(rawTx);
 
     // First fill transaction with our data without signing,
-    // so external signers are not asked sign more than once.
+    // so external signers are not asked to sign more than once.
     bool complete;
-    pwallet->FillPSBT(psbtx, complete, SIGHASH_DEFAULT, false, true);
-    const TransactionError err{pwallet->FillPSBT(psbtx, complete, SIGHASH_DEFAULT, true, false)};
+    pwallet->FillPSBT(psbtx, complete, SIGHASH_DEFAULT, /*sign=*/false, /*bip32derivs=*/true);
+    const TransactionError err{pwallet->FillPSBT(psbtx, complete, SIGHASH_DEFAULT, /*sign=*/true, /*bip32derivs=*/false)};
     if (err != TransactionError::OK) {
         throw JSONRPCTransactionError(err);
     }
@@ -763,13 +763,17 @@ RPCHelpMan fundrawtransaction()
                             },
                             {"input_weights", RPCArg::Type::ARR, RPCArg::Optional::OMITTED_NAMED_ARG, "Inputs and their corresponding weights",
                                 {
-                                    {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
-                                    {"vout", RPCArg::Type::NUM, RPCArg::Optional::NO, "The output index"},
-                                    {"weight", RPCArg::Type::NUM, RPCArg::Optional::NO, "The maximum weight for this input, "
-                                        "including the weight of the outpoint and sequence number. "
-                                        "Note that serialized signature sizes are not guaranteed to be consistent, "
-                                        "so the maximum DER signatures size of 73 bytes should be used when considering ECDSA signatures."
-                                        "Remember to convert serialized sizes to weight units when necessary."},
+                                    {"", RPCArg::Type::OBJ, RPCArg::Optional::OMITTED, "",
+                                        {
+                                            {"txid", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The transaction id"},
+                                            {"vout", RPCArg::Type::NUM, RPCArg::Optional::NO, "The output index"},
+                                            {"weight", RPCArg::Type::NUM, RPCArg::Optional::NO, "The maximum weight for this input, "
+                                                "including the weight of the outpoint and sequence number. "
+                                                "Note that serialized signature sizes are not guaranteed to be consistent, "
+                                                "so the maximum DER signatures size of 73 bytes should be used when considering ECDSA signatures."
+                                                "Remember to convert serialized sizes to weight units when necessary."},
+                                        },
+                                    },
                                 },
                              },
                         },
@@ -993,7 +997,7 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
     std::shared_ptr<CWallet> const pwallet = GetWalletForJSONRPCRequest(request);
     if (!pwallet) return UniValue::VNULL;
 
-    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && !want_psbt) {
+    if (pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) && !pwallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER) && !want_psbt) {
         throw JSONRPCError(RPC_WALLET_ERROR, "bumpfee is not available with wallets that have private keys disabled. Use psbtbumpfee instead.");
     }
 
@@ -1071,6 +1075,9 @@ static RPCHelpMan bumpfee_helper(std::string method_name)
     // For psbtbumpfee, return the base64-encoded unsigned PSBT of the new transaction.
     if (!want_psbt) {
         if (!feebumper::SignTransaction(*pwallet, mtx)) {
+            if (pwallet->IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
+                throw JSONRPCError(RPC_WALLET_ERROR, "Transaction incomplete. Try psbtbumpfee instead.");
+            }
             throw JSONRPCError(RPC_WALLET_ERROR, "Can't sign transaction.");
         }
 
@@ -1651,11 +1658,8 @@ RPCHelpMan walletcreatefundedpsbt()
 
     CAmount fee;
     int change_position;
-    bool rbf{wallet.m_signal_rbf};
     const UniValue &replaceable_arg = options["replaceable"];
-    if (!replaceable_arg.isNull()) {
-        rbf = replaceable_arg.isTrue();
-    }
+    const bool rbf{replaceable_arg.isNull() ? wallet.m_signal_rbf : replaceable_arg.get_bool()};
     CMutableTransaction rawTx = ConstructTransaction(request.params[0], request.params[1], request.params[2], rbf);
     CCoinControl coin_control;
     // Automatically select coins, unless at least one is manually selected. Can
@@ -1670,7 +1674,7 @@ RPCHelpMan walletcreatefundedpsbt()
     // Fill transaction with out data but don't sign
     bool bip32derivs = request.params[4].isNull() ? true : request.params[4].get_bool();
     bool complete = true;
-    const TransactionError err{wallet.FillPSBT(psbtx, complete, 1, false, bip32derivs)};
+    const TransactionError err{wallet.FillPSBT(psbtx, complete, 1, /*sign=*/false, /*bip32derivs=*/bip32derivs)};
     if (err != TransactionError::OK) {
         throw JSONRPCTransactionError(err);
     }

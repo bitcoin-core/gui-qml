@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018-2021 The Bitcoin Core developers
+# Copyright (c) 2018-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Backwards compatibility functional test
 
 Test various backwards compatibility scenarios. Requires previous releases binaries,
 see test/README.md.
-
-v0.15.2 is not required by this test, but it is used in wallet_upgradewallet.py.
-Due to a hardfork in regtest, it can't be used to sync nodes.
-
 
 Due to RPC changes introduced in various versions the below tests
 won't work for older versions without some patches or workarounds.
@@ -197,18 +193,18 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
                         assert_equal(txs[1]["txid"], tx1_id)
                         assert_equal(txs[2]["walletconflicts"], [tx1_id])
                         assert_equal(txs[1]["replaced_by_txid"], tx2_id)
-                        assert not(txs[1]["abandoned"])
+                        assert not txs[1]["abandoned"]
                         assert_equal(txs[1]["confirmations"], -1)
                         assert_equal(txs[2]["blockindex"], 1)
                         assert txs[3]["abandoned"]
                         assert_equal(txs[4]["walletconflicts"], [tx3_id])
                         assert_equal(txs[3]["replaced_by_txid"], tx4_id)
-                        assert not(hasattr(txs[3], "blockindex"))
+                        assert not hasattr(txs[3], "blockindex")
                     elif wallet_name == "w2":
-                        assert(info['private_keys_enabled'] == False)
+                        assert info['private_keys_enabled'] == False
                         assert info['keypoolsize'] == 0
                     else:
-                        assert(info['private_keys_enabled'] == True)
+                        assert info['private_keys_enabled'] == True
                         assert info['keypoolsize'] == 0
         else:
             for node in legacy_nodes:
@@ -274,6 +270,7 @@ class BackwardsCompatibilityTest(BitcoinTestFramework):
             assert_equal(info["desc"], descsum_create(descriptor))
 
             # Now copy that same wallet back to 0.16 to make sure no automatic upgrade breaks it
+            node_master.unloadwallet("u1_v16")
             os.remove(os.path.join(node_v16_wallets_dir, "wallets/u1_v16"))
             shutil.copyfile(
                 os.path.join(node_master_wallets_dir, "u1_v16"),

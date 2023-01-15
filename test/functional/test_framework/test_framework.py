@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2021 The Bitcoin Core developers
+# Copyright (c) 2014-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Base class for RPC testing."""
@@ -214,11 +214,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
             self.options.descriptors = None
         elif self.options.descriptors is None:
             # Some wallet is either required or optionally used by the test.
-            # Prefer BDB unless it isn't available
-            if self.is_bdb_compiled():
-                self.options.descriptors = False
-            elif self.is_sqlite_compiled():
+            # Prefer SQLite unless it isn't available
+            if self.is_sqlite_compiled():
                 self.options.descriptors = True
+            elif self.is_bdb_compiled():
+                self.options.descriptors = False
             else:
                 # If neither are compiled, tests requiring a wallet will be skipped and the value of self.options.descriptors won't matter
                 # It still needs to exist and be None in order for tests to work however.
@@ -608,6 +608,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.wait_until(lambda: sum(peer['version'] != 0 for peer in to_connection.getpeerinfo()) == to_num_peers)
         self.wait_until(lambda: sum(peer['bytesrecv_per_msg'].pop('verack', 0) == 24 for peer in from_connection.getpeerinfo()) == from_num_peers)
         self.wait_until(lambda: sum(peer['bytesrecv_per_msg'].pop('verack', 0) == 24 for peer in to_connection.getpeerinfo()) == to_num_peers)
+        # The message bytes are counted before processing the message, so make
+        # sure it was fully processed by waiting for a ping.
+        self.wait_until(lambda: sum(peer["bytesrecv_per_msg"].pop("pong", 0) >= 32 for peer in from_connection.getpeerinfo()) == from_num_peers)
+        self.wait_until(lambda: sum(peer["bytesrecv_per_msg"].pop("pong", 0) >= 32 for peer in to_connection.getpeerinfo()) == to_num_peers)
 
     def disconnect_nodes(self, a, b):
         def disconnect_nodes_helper(node_a, node_b):
@@ -849,6 +853,13 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
             import zmq  # noqa
         except ImportError:
             raise SkipTest("python3-zmq module not available.")
+
+    def skip_if_no_py_sqlite3(self):
+        """Attempt to import the sqlite3 package and skip the test if the import fails."""
+        try:
+            import sqlite3  # noqa
+        except ImportError:
+            raise SkipTest("sqlite3 module not available.")
 
     def skip_if_no_python_bcc(self):
         """Attempt to import the bcc package and skip the tests if the import fails."""

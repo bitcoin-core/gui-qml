@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 #
-# Copyright (c) 2018-2021 The Bitcoin Core developers
+# Copyright (c) 2018-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 export LC_ALL=C
 
-GIT_HEAD=$(git rev-parse HEAD)
 if [ -n "$CIRRUS_PR" ]; then
-  COMMIT_RANGE="${CIRRUS_BASE_SHA}..$GIT_HEAD"
+  COMMIT_RANGE="HEAD~..HEAD"
   echo
   git log --no-merges --oneline "$COMMIT_RANGE"
   echo

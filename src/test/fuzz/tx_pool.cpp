@@ -1,4 +1,4 @@
-// Copyright (c) 2021 The Bitcoin Core developers
+// Copyright (c) 2021-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -211,7 +211,7 @@ FUZZ_TARGET_INIT(tx_pool_standard, initialize_tx_pool)
             for (int i = 0; i < num_out; ++i) {
                 tx_mut.vout.emplace_back(amount_out, P2WSH_OP_TRUE);
             }
-            const auto tx = MakeTransactionRef(tx_mut);
+            auto tx = MakeTransactionRef(tx_mut);
             // Restore previously removed outpoints
             for (const auto& in : tx->vin) {
                 Assert(outpoints_rbf.insert(in.prevout).second);
