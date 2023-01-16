@@ -108,7 +108,7 @@ dnl   BITCOIN_QT_CONFIGURE([MINIMUM-VERSION])
 dnl
 dnl Outputs: See _BITCOIN_QT_FIND_LIBS
 dnl Outputs: Sets variables for all qt-related tools.
-dnl Outputs: bitcoin_enable_qt, bitcoin_enable_qt_dbus, bitcoin_enable_qt_test
+dnl Outputs: bitcoin_enable_qt, bitcoin_enable_qt_dbus, bitcoin_enable_qt_test, bitcoin_enable_qml_test
 AC_DEFUN([BITCOIN_QT_CONFIGURE],[
   qt_version=">= $1"
   qt_lib_prefix="Qt5"
@@ -321,7 +321,7 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       bitcoin_enable_qt_test=no
     fi
     bitcoin_enable_qml_test=yes
-    if test "$have_qml_test" = "no"; then
+    if test "$have_quick_test" = "no" || test "$bitcoin_cv_static_qt" = "yes"; then
       bitcoin_enable_qml_test=no
     fi
     bitcoin_enable_qt_dbus=no
@@ -352,6 +352,7 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
   AC_SUBST(QT_LDFLAGS)
   AC_SUBST(QT_DBUS_INCLUDES)
   AC_SUBST(QT_TEST_INCLUDES)
+  AC_SUBST(QT_QMLTEST_INCLUDES)
   AC_SUBST(QT_SELECT, qt5)
   AC_SUBST(MOC_DEFS)
 ])
@@ -442,7 +443,7 @@ dnl _BITCOIN_QT_FIND_LIBS
 dnl ---------------------
 dnl
 dnl Outputs: All necessary QT_* variables are set.
-dnl Outputs: have_qt_test and have_qt_dbus are set (if applicable) to yes|no.
+dnl Outputs: have_qt_test, have_quick_test, and have_qt_dbus are set (if applicable) to yes|no.
 AC_DEFUN([_BITCOIN_QT_FIND_LIBS],[
   BITCOIN_QT_CHECK([
     PKG_CHECK_MODULES([QT_CORE], [${qt_lib_prefix}Core${qt_lib_suffix} $qt_version], [QT_INCLUDES="$QT_CORE_CFLAGS $QT_INCLUDES" QT_LIBS="$QT_CORE_LIBS $QT_LIBS"],
@@ -486,7 +487,7 @@ AC_DEFUN([_BITCOIN_QT_FIND_LIBS],[
                         [BITCOIN_QT_FAIL([${qt_lib_prefix}QuickControls2${qt_lib_suffix} $qt_version not found])])
     ])
     BITCOIN_QT_CHECK([
-      PKG_CHECK_MODULES([QT_QUICKTEST], [${qt_lib_prefix}QuickTest${qt_lib_suffix} $qt_version], [QT_QMLTEST_INCLUDES="$QT_QUICKTEST_CFLAGS"; have_quick_test=yes],[have_quick_test=no])
+      PKG_CHECK_MODULES([QT_QUICKTEST], [${qt_lib_prefix}QuickTest${qt_lib_suffix} $qt_version], [QT_QMLTEST_INCLUDES="$QT_QUICKTEST_CFLAGS"; have_quick_test=yes], [have_quick_test=no])
     ])
 
     AC_DEFINE([USE_QML], [1], [Define to 1 to use QML-based GUI])
