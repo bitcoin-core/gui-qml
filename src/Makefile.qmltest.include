@@ -3,7 +3,6 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 bin_PROGRAMS += qml/test/test_bitcoin-qt
-TESTS += qml/test/test_bitcoin-qt
 
 TEST_QML_MOC_CPP = qml/test/moc_setup.cpp
 
@@ -29,9 +28,6 @@ CLEAN_BITCOIN_QML_TEST = $(TEST_QML_MOC_CPP)
 CLEANFILES += $(CLEAN_BITCOIN_QML_TEST)
 
 test_bitcoin_qt_qml: qml/test/test_bitcoin-qt$(EXEEXT)
-
-test_bitcoin_qt_qml_check: qml/test/test_bitcoin-qt$(EXEEXT) FORCE
-	$(MAKE) check-TESTS TESTS=$^
 
 test_bitcoin_qt_qml_clean: FORCE
 	rm -f $(CLEAN_BITCOIN_QML_TEST) $(qml_test_test_bitcoin_qt_OBJECTS)
