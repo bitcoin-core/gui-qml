@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2021 The Bitcoin Core developers
+# Copyright (c) 2017-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Class for bitcoind node under test"""
@@ -337,7 +337,7 @@ class TestNode():
             return
         self.log.debug("Stopping node")
         try:
-            # Do not use wait argument when testing older nodes, e.g. in feature_backwards_compatibility.py
+            # Do not use wait argument when testing older nodes, e.g. in wallet_backwards_compatibility.py
             if self.version_is_at_least(180000):
                 self.stop(wait=wait)
             else:

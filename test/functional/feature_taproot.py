@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2019-2021 The Bitcoin Core developers
+# Copyright (c) 2019-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 # Test Taproot softfork (BIPs 340-342)
@@ -1292,7 +1292,7 @@ class TaprootTest(BitcoinTestFramework):
         # It is not impossible to fit enough tapscript sigops to hit the old 80k limit without
         # busting txin-level limits. We simply have to account for the p2pk outputs in all
         # transactions.
-        extra_output_script = CScript([OP_CHECKSIG]*((MAX_BLOCK_SIGOPS_WEIGHT - sigops_weight) // WITNESS_SCALE_FACTOR))
+        extra_output_script = CScript(bytes([OP_CHECKSIG]*((MAX_BLOCK_SIGOPS_WEIGHT - sigops_weight) // WITNESS_SCALE_FACTOR)))
 
         coinbase_tx = create_coinbase(self.lastblockheight + 1, pubkey=cb_pubkey, extra_output_script=extra_output_script, fees=fees)
         block = create_block(self.tip, coinbase_tx, self.lastblocktime + 1, txlist=txs)

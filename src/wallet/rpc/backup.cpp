@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -93,6 +93,22 @@ static void RescanWallet(CWallet& wallet, const WalletRescanReserver& reserver, 
     }
 }
 
+static void EnsureBlockDataFromTime(const CWallet& wallet, int64_t timestamp)
+{
+    auto& chain{wallet.chain()};
+    if (!chain.havePruned()) {
+        return;
+    }
+
+    int height{0};
+    const bool found{chain.findFirstBlockWithTimeAndHeight(timestamp - TIMESTAMP_WINDOW, 0, FoundBlock().height(height))};
+
+    uint256 tip_hash{WITH_LOCK(wallet.cs_wallet, return wallet.GetLastBlockHash())};
+    if (found && !chain.hasBlocks(tip_hash, height)) {
+        throw JSONRPCError(RPC_WALLET_ERROR, strprintf("Pruned blocks from height %d required to import keys. Use RPC call getblockchaininfo to determine your pruned height.", height));
+    }
+}
+
 RPCHelpMan importprivkey()
 {
     return RPCHelpMan{"importprivkey",
@@ -140,9 +156,7 @@ RPCHelpMan importprivkey()
         EnsureWalletIsUnlocked(*pwallet);
 
         std::string strSecret = request.params[0].get_str();
-        std::string strLabel;
-        if (!request.params[1].isNull())
-            strLabel = request.params[1].get_str();
+        const std::string strLabel{LabelFromValue(request.params[1])};
 
         // Whether to perform rescan after import
         if (!request.params[2].isNull())
@@ -233,9 +247,7 @@ RPCHelpMan importaddress()
 
     EnsureLegacyScriptPubKeyMan(*pwallet, true);
 
-    std::string strLabel;
-    if (!request.params[1].isNull())
-        strLabel = request.params[1].get_str();
+    const std::string strLabel{LabelFromValue(request.params[1])};
 
     // Whether to perform rescan after import
     bool fRescan = true;
@@ -426,9 +438,7 @@ RPCHelpMan importpubkey()
 
     EnsureLegacyScriptPubKeyMan(*pwallet, true);
 
-    std::string strLabel;
-    if (!request.params[1].isNull())
-        strLabel = request.params[1].get_str();
+    const std::string strLabel{LabelFromValue(request.params[1])};
 
     // Whether to perform rescan after import
     bool fRescan = true;
@@ -504,13 +514,6 @@ RPCHelpMan importwallet()
 
     EnsureLegacyScriptPubKeyMan(*pwallet, true);
 
-    if (pwallet->chain().havePruned()) {
-        // Exit early and print an error.
-        // If a block is pruned after this check, we will import the key(s),
-        // but fail the rescan with a generic error.
-        throw JSONRPCError(RPC_WALLET_ERROR, "Importing wallets is disabled when blocks are pruned");
-    }
-
     WalletRescanReserver reserver(*pwallet);
     if (!reserver.reserve()) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet is currently rescanning. Abort existing rescan or wait.");
@@ -565,15 +568,18 @@ RPCHelpMan importwallet()
                         fLabel = true;
                     }
                 }
+                nTimeBegin = std::min(nTimeBegin, nTime);
                 keys.push_back(std::make_tuple(key, nTime, fLabel, strLabel));
             } else if(IsHex(vstr[0])) {
                 std::vector<unsigned char> vData(ParseHex(vstr[0]));
                 CScript script = CScript(vData.begin(), vData.end());
                 int64_t birth_time = ParseISO8601DateTime(vstr[1]);
+                if (birth_time > 0) nTimeBegin = std::min(nTimeBegin, birth_time);
                 scripts.push_back(std::pair<CScript, int64_t>(script, birth_time));
             }
         }
         file.close();
+        EnsureBlockDataFromTime(*pwallet, nTimeBegin);
         // We now know whether we are importing private keys, so we can error if private keys are disabled
         if (keys.size() > 0 && pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS)) {
             pwallet->chain().showProgress("", 100, false); // hide progress dialog in GUI
@@ -602,8 +608,6 @@ RPCHelpMan importwallet()
 
             if (has_label)
                 pwallet->SetAddressBook(PKHash(keyid), label, "receive");
-
-            nTimeBegin = std::min(nTimeBegin, time);
             progress++;
         }
         for (const auto& script_pair : scripts) {
@@ -615,9 +619,6 @@ RPCHelpMan importwallet()
                 pwallet->WalletLogPrintf("Error importing script %s\n", HexStr(script));
                 fGood = false;
                 continue;
-            }
-            if (time > 0) {
-                nTimeBegin = std::min(nTimeBegin, time);
             }
 
             progress++;
@@ -1163,7 +1164,7 @@ static UniValue ProcessImport(CWallet& wallet, const UniValue& data, const int64
         if (internal && data.exists("label")) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Internal addresses should not have a label");
         }
-        const std::string& label = data.exists("label") ? data["label"].get_str() : "";
+        const std::string label{LabelFromValue(data["label"])};
         const bool add_keypool = data.exists("keypool") ? data["keypool"].get_bool() : false;
 
         // Add to keypool only works with privkeys disabled
@@ -1457,7 +1458,7 @@ static UniValue ProcessDescriptorImport(CWallet& wallet, const UniValue& data, c
         const std::string& descriptor = data["desc"].get_str();
         const bool active = data.exists("active") ? data["active"].get_bool() : false;
         const bool internal = data.exists("internal") ? data["internal"].get_bool() : false;
-        const std::string& label = data.exists("label") ? data["label"].get_str() : "";
+        const std::string label{LabelFromValue(data["label"])};
 
         // Parse descriptor string
         FlatSigningProvider keys;

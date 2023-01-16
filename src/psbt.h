@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -178,7 +178,7 @@ void SerializeHDKeypath(Stream& s, KeyOriginInfo hd_keypath)
 template<typename Stream>
 void SerializeHDKeypaths(Stream& s, const std::map<CPubKey, KeyOriginInfo>& hd_keypaths, CompactSizeWriter type)
 {
-    for (auto keypath_pair : hd_keypaths) {
+    for (const auto& keypath_pair : hd_keypaths) {
         if (!keypath_pair.first.IsValid()) {
             throw std::ios_base::failure("Invalid CPubKey being serialized");
         }

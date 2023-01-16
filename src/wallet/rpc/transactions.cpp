@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2011-2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -416,7 +416,6 @@ static const std::vector<RPCResult> TransactionDescriptionString()
            }},
            {RPCResult::Type::STR_HEX, "replaced_by_txid", /*optional=*/true, "The txid if this tx was replaced."},
            {RPCResult::Type::STR_HEX, "replaces_txid", /*optional=*/true, "The txid if the tx replaces one."},
-           {RPCResult::Type::STR, "comment", /*optional=*/true, ""},
            {RPCResult::Type::STR, "to", /*optional=*/true, "If a comment to is associated with the transaction."},
            {RPCResult::Type::NUM_TIME, "time", "The transaction time expressed in " + UNIX_EPOCH_TIME + "."},
            {RPCResult::Type::NUM_TIME, "timereceived", "The time received expressed in " + UNIX_EPOCH_TIME + "."},
@@ -487,7 +486,7 @@ RPCHelpMan listtransactions()
 
     std::optional<std::string> filter_label;
     if (!request.params[0].isNull() && request.params[0].get_str() != "*") {
-        filter_label = request.params[0].get_str();
+        filter_label.emplace(LabelFromValue(request.params[0]));
         if (filter_label.value().empty()) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Label argument must be a valid label name or \"*\".");
         }
@@ -635,10 +634,9 @@ RPCHelpMan listsinceblock()
     bool include_removed = (request.params[3].isNull() || request.params[3].get_bool());
     bool include_change = (!request.params[4].isNull() && request.params[4].get_bool());
 
+    // Only set it if 'label' was provided.
     std::optional<std::string> filter_label;
-    if (!request.params[5].isNull()) {
-        filter_label = request.params[5].get_str();
-    }
+    if (!request.params[5].isNull()) filter_label.emplace(LabelFromValue(request.params[5]));
 
     int depth = height ? wallet.GetLastBlockHeight() + 1 - *height : -1;
 

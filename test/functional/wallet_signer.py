@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2021 The Bitcoin Core developers
+# Copyright (c) 2017-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test external signer.
@@ -13,6 +13,7 @@ import platform
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_greater_than,
     assert_raises_rpc_error,
 )
 
@@ -169,11 +170,11 @@ class WalletSignerTest(BitcoinTestFramework):
         assert_equal(result[1], {'success': True})
         assert_equal(mock_wallet.getwalletinfo()["txcount"], 1)
         dest = self.nodes[0].getnewaddress(address_type='bech32')
-        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {}, True)['psbt']
+        mock_psbt = mock_wallet.walletcreatefundedpsbt([], {dest:0.5}, 0, {'replaceable': True}, True)['psbt']
         mock_psbt_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt, sign=True, sighashtype="ALL", bip32derivs=True)
         mock_psbt_final = mock_wallet.finalizepsbt(mock_psbt_signed["psbt"])
         mock_tx = mock_psbt_final["hex"]
-        assert(mock_wallet.testmempoolaccept([mock_tx])[0]["allowed"])
+        assert mock_wallet.testmempoolaccept([mock_tx])[0]["allowed"]
 
         # # Create a new wallet and populate with specific public keys, in order
         # # to work with the mock signed PSBT.
@@ -202,22 +203,42 @@ class WalletSignerTest(BitcoinTestFramework):
         # assert_equal(result[1], {'success': True})
         assert_equal(hww.getwalletinfo()["txcount"], 1)
 
-        assert(hww.testmempoolaccept([mock_tx])[0]["allowed"])
+        assert hww.testmempoolaccept([mock_tx])[0]["allowed"]
 
         with open(os.path.join(self.nodes[1].cwd, "mock_psbt"), "w", encoding="utf8") as f:
             f.write(mock_psbt_signed["psbt"])
 
         self.log.info('Test send using hww1')
 
+        # Don't broadcast transaction yet so the RPC returns the raw hex
         res = hww.send(outputs={dest:0.5},options={"add_to_wallet": False})
-        assert(res["complete"])
+        assert res["complete"]
         assert_equal(res["hex"], mock_tx)
 
         self.log.info('Test sendall using hww1')
 
         res = hww.sendall(recipients=[{dest:0.5}, hww.getrawchangeaddress()],options={"add_to_wallet": False})
-        assert(res["complete"])
+        assert res["complete"]
         assert_equal(res["hex"], mock_tx)
+        # Broadcast transaction so we can bump the fee
+        hww.sendrawtransaction(res["hex"])
+
+        self.log.info('Prepare fee bumped mock PSBT')
+
+        # Now that the transaction is broadcast, bump fee in mock wallet:
+        orig_tx_id = res["txid"]
+        mock_psbt_bumped = mock_wallet.psbtbumpfee(orig_tx_id)["psbt"]
+        mock_psbt_bumped_signed = mock_wallet.walletprocesspsbt(psbt=mock_psbt_bumped, sign=True, sighashtype="ALL", bip32derivs=True)
+
+        with open(os.path.join(self.nodes[1].cwd, "mock_psbt"), "w", encoding="utf8") as f:
+            f.write(mock_psbt_bumped_signed["psbt"])
+
+        self.log.info('Test bumpfee using hww1')
+
+        # Bump fee
+        res = hww.bumpfee(orig_tx_id)
+        assert_greater_than(res["fee"], res["origfee"])
+        assert_equal(res["errors"], [])
 
         # # Handle error thrown by script
         # self.set_mock_result(self.nodes[4], "2")

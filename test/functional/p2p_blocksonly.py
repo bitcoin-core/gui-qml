@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2019-2021 The Bitcoin Core developers
+# Copyright (c) 2019-2022 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test p2p blocksonly mode & block-relay-only connections."""
@@ -104,7 +104,7 @@ class P2PBlocksOnly(BitcoinTestFramework):
         self.nodes[0].setmocktime(int(time.time()) + 60)
 
         conn.sync_send_with_ping()
-        assert(int(txid, 16) not in conn.get_invs())
+        assert int(txid, 16) not in conn.get_invs()
 
     def check_p2p_inv_violation(self, peer):
         self.log.info("Check that tx-invs from P2P are rejected and result in disconnect")
