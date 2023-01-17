@@ -37,6 +37,7 @@ QT_FORMS_UI = \
 QT_MOC_CPP = \
   qml/moc_appmode.cpp \
   qml/moc_nodemodel.cpp \
+  qml/moc_options_model.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
@@ -112,6 +113,7 @@ BITCOIN_QT_H = \
   qml/bitcoin.h \
   qml/imageprovider.h \
   qml/nodemodel.h \
+  qml/options_model.h \
   qml/util.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
@@ -291,6 +293,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
   qml/imageprovider.cpp \
   qml/nodemodel.cpp \
+  qml/options_model.cpp \
   qml/util.cpp
 
 QML_RES_FONTS = \
