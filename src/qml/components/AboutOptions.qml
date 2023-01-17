@@ -13,7 +13,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Website")
         actionItem: ExternalLink {
-            description: qsTr("bitcoincore.org")
+            description: "bitcoincore.org"
             link: "https://bitcoincore.org"
             iconSource: "image://images/caret-right"
         }
@@ -22,7 +22,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Source code")
         actionItem: ExternalLink {
-            description: qsTr("github.com/bitcoin/bitcoin")
+            description: "github.com/bitcoin/bitcoin"
             link: "https://github.com/bitcoin/bitcoin"
             iconSource: "image://images/caret-right"
         }
@@ -31,7 +31,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("License")
         actionItem: ExternalLink {
-            description: qsTr("MIT")
+            description: "MIT"
             link: "https://opensource.org/licenses/MIT"
             iconSource: "image://images/caret-right"
         }
@@ -40,7 +40,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Version")
         actionItem: ExternalLink {
-            description: qsTr("v22.99.0-1e7564eca8a6")
+            description: "v22.99.0-1e7564eca8a6"
             link: "https://bitcoin.org/en/download"
             iconSource: "image://images/caret-right"
         }
