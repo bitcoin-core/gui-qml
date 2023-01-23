@@ -318,6 +318,7 @@ BASE_SCRIPTS = [
     'mempool_unbroadcast.py',
     'mempool_compatibility.py',
     'mempool_accept_wtxid.py',
+    'mempool_dust.py',
     'rpc_deriveaddresses.py',
     'rpc_deriveaddresses.py --usecli',
     'p2p_ping.py',
@@ -584,7 +585,7 @@ def run_tests(*, test_list, src_dir, build_dir, tmpdir, jobs=1, enable_coverage=
                     combined_logs_args = [sys.executable, os.path.join(tests_dir, 'combine_logs.py'), testdir]
                     if BOLD[0]:
                         combined_logs_args += ['--color']
-                    combined_logs, _ = subprocess.Popen(combined_logs_args, universal_newlines=True, stdout=subprocess.PIPE).communicate()
+                    combined_logs, _ = subprocess.Popen(combined_logs_args, text=True, stdout=subprocess.PIPE).communicate()
                     print("\n".join(deque(combined_logs.splitlines(), combined_logs_len)))
 
                 if failfast:
@@ -669,7 +670,7 @@ class TestHandler:
             self.jobs.append((test,
                               time.time(),
                               subprocess.Popen([sys.executable, self.tests_dir + test_argv[0]] + test_argv[1:] + self.flags + portseed_arg + tmpdir_arg,
-                                               universal_newlines=True,
+                                               text=True,
                                                stdout=log_stdout,
                                                stderr=log_stderr),
                               testdir,
