@@ -21,6 +21,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
+    Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
 
 public:
@@ -34,6 +35,8 @@ public:
     void setPrune(bool new_prune);
     int pruneSizeGB() const { return m_prune_size_gb; }
     void setPruneSizeGB(int new_prune_size);
+    bool server() const { return m_server; }
+    void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
 
@@ -42,6 +45,7 @@ Q_SIGNALS:
     void natpmpChanged(bool new_natpmp);
     void pruneChanged(bool new_prune);
     void pruneSizeGBChanged(int new_prune_size_gb);
+    void serverChanged(bool new_server);
     void upnpChanged(bool new_upnp);
 
 private:
@@ -52,6 +56,7 @@ private:
     bool m_natpmp;
     bool m_prune;
     int m_prune_size_gb;
+    bool m_server;
     bool m_upnp;
 
     common::SettingsValue pruneSetting() const;
