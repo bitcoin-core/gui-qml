@@ -13,7 +13,10 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Enable listening")
         description: qsTr("Allows incoming connections")
-        actionItem: OptionSwitch {}
+        actionItem: OptionSwitch {
+            checked: optionsModel.listen
+            onToggled: optionsModel.listen = checked
+        }
     }
     Setting {
         Layout.fillWidth: true
