@@ -21,7 +21,10 @@ ColumnLayout {
     Setting {
         Layout.fillWidth: true
         header: qsTr("Map port using UPnP")
-        actionItem: OptionSwitch {}
+        actionItem: OptionSwitch {
+            checked: optionsModel.upnp
+            onToggled: optionsModel.upnp = checked
+        }
     }
     Setting {
         Layout.fillWidth: true
