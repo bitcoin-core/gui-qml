@@ -18,6 +18,7 @@ class OptionsQmlModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
+    Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
@@ -27,6 +28,8 @@ public:
 
     bool listen() const { return m_listen; }
     void setListen(bool new_listen);
+    bool natpmp() const { return m_natpmp; }
+    void setNatpmp(bool new_natpmp);
     bool prune() const { return m_prune; }
     void setPrune(bool new_prune);
     int pruneSizeGB() const { return m_prune_size_gb; }
@@ -36,6 +39,7 @@ public:
 
 Q_SIGNALS:
     void listenChanged(bool new_listen);
+    void natpmpChanged(bool new_natpmp);
     void pruneChanged(bool new_prune);
     void pruneSizeGBChanged(int new_prune_size_gb);
     void upnpChanged(bool new_upnp);
@@ -45,6 +49,7 @@ private:
 
     // Properties that are exposed to QML.
     bool m_listen;
+    bool m_natpmp;
     bool m_prune;
     int m_prune_size_gb;
     bool m_upnp;
