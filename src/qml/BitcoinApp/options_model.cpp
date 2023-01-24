@@ -21,6 +21,15 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
 }
 
+void OptionsQmlModel::setListen(bool new_listen)
+{
+    if (new_listen != m_listen) {
+        m_listen = new_listen;
+        m_node.updateRwSetting("listen", new_listen);
+        Q_EMIT listenChanged(new_listen);
+    }
+}
+
 void OptionsQmlModel::setPrune(bool new_prune)
 {
     if (new_prune != m_prune) {
