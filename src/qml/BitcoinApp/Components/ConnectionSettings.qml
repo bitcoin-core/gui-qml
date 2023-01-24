@@ -21,7 +21,10 @@ ColumnLayout {
     Setting {
         Layout.fillWidth: true
         header: qsTr("Map port using PCP or NAT-PMP")
-        actionItem: OptionSwitch {}
+        actionItem: OptionSwitch {
+            checked: optionsModel.natpmp
+            onToggled: optionsModel.natpmp = checked
+        }
     }
     Setting {
         Layout.fillWidth: true

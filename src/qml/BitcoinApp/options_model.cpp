@@ -30,6 +30,15 @@ void OptionsQmlModel::setListen(bool new_listen)
     }
 }
 
+void OptionsQmlModel::setNatpmp(bool new_natpmp)
+{
+    if (new_natpmp != m_natpmp) {
+        m_natpmp = new_natpmp;
+        m_node.updateRwSetting("natpmp", new_natpmp);
+        Q_EMIT natpmpChanged(new_natpmp);
+    }
+}
+
 void OptionsQmlModel::setPrune(bool new_prune)
 {
     if (new_prune != m_prune) {
