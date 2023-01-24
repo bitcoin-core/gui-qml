@@ -48,6 +48,15 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
     }
 }
 
+void OptionsQmlModel::setUpnp(bool new_upnp)
+{
+    if (new_upnp != m_upnp) {
+        m_upnp = new_upnp;
+        m_node.updateRwSetting("upnp", new_upnp);
+        Q_EMIT upnpChanged(new_upnp);
+    }
+}
+
 common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
