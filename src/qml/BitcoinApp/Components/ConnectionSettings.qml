@@ -29,7 +29,10 @@ ColumnLayout {
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable RPC server")
-        actionItem: OptionSwitch {}
+        actionItem: OptionSwitch {
+            checked: optionsModel.server
+            onToggled: optionsModel.server = checked
+        }
     }
     Setting {
         last: true

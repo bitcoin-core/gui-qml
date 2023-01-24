@@ -57,6 +57,15 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
     }
 }
 
+void OptionsQmlModel::setServer(bool new_server)
+{
+    if (new_server != m_server) {
+        m_server = new_server;
+        m_node.updateRwSetting("server", new_server);
+        Q_EMIT serverChanged(new_server);
+    }
+}
+
 common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
