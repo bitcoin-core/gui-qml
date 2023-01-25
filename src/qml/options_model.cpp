@@ -21,6 +21,24 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
 }
 
+void OptionsQmlModel::setListen(bool new_listen)
+{
+    if (new_listen != m_listen) {
+        m_listen = new_listen;
+        m_node.updateRwSetting("listen", new_listen);
+        Q_EMIT listenChanged(new_listen);
+    }
+}
+
+void OptionsQmlModel::setNatpmp(bool new_natpmp)
+{
+    if (new_natpmp != m_natpmp) {
+        m_natpmp = new_natpmp;
+        m_node.updateRwSetting("natpmp", new_natpmp);
+        Q_EMIT natpmpChanged(new_natpmp);
+    }
+}
+
 void OptionsQmlModel::setPrune(bool new_prune)
 {
     if (new_prune != m_prune) {
@@ -36,6 +54,24 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
         m_prune_size_gb = new_prune_size_gb;
         m_node.updateRwSetting("prune", pruneSetting());
         Q_EMIT pruneSizeGBChanged(new_prune_size_gb);
+    }
+}
+
+void OptionsQmlModel::setServer(bool new_server)
+{
+    if (new_server != m_server) {
+        m_server = new_server;
+        m_node.updateRwSetting("server", new_server);
+        Q_EMIT serverChanged(new_server);
+    }
+}
+
+void OptionsQmlModel::setUpnp(bool new_upnp)
+{
+    if (new_upnp != m_upnp) {
+        m_upnp = new_upnp;
+        m_node.updateRwSetting("upnp", new_upnp);
+        Q_EMIT upnpChanged(new_upnp);
     }
 }
 
