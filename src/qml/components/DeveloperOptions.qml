@@ -25,10 +25,11 @@ ColumnLayout {
     Setting {
         id: dbcacheSetting
         Layout.fillWidth: true
-        header: qsTr("Database cache size")
+        header: qsTr("Database cache size (MiB)")
         actionItem: ValueInput {
             parentState: dbcacheSetting.state
-            description: ("450 MiB")
+            description: optionsModel.dbcacheSizeMiB
+            onEditingFinished: optionsModel.dbcacheSizeMiB = parseInt(text)
         }
         onClicked: loadedItem.forceActiveFocus()
     }

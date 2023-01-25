@@ -10,6 +10,7 @@
 #include <interfaces/node.h>
 #include <qt/guiconstants.h>
 #include <qt/optionsmodel.h>
+#include <txdb.h>
 #include <univalue.h>
 
 #include <cassert>
@@ -17,9 +18,20 @@
 OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
+
     int64_t prune_value{SettingToInt(m_node.getPersistentSetting("prune"), 0)};
     m_prune = (prune_value > 1);
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
+}
+
+void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
+{
+    if (new_dbcache_size_mib != m_dbcache_size_mib) {
+        m_dbcache_size_mib = new_dbcache_size_mib;
+        m_node.updateRwSetting("dbcache", new_dbcache_size_mib);
+        Q_EMIT dbcacheSizeMiBChanged(new_dbcache_size_mib);
+    }
 }
 
 void OptionsQmlModel::setListen(bool new_listen)
