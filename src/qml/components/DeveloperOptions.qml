@@ -39,7 +39,8 @@ ColumnLayout {
         header: qsTr("Script verification threads")
         actionItem: ValueInput {
             parentState: parSetting.state
-            description: ("0")
+            description: optionsModel.scriptThreads
+            onEditingFinished: optionsModel.scriptThreads = parseInt(text)
         }
         onClicked: loadedItem.forceActiveFocus()
     }
