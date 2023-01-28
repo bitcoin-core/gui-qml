@@ -11,6 +11,8 @@ Control {
         required property color white
         required property color background
         required property color orange
+        required property color orangeLight1
+        required property color orangeLight2
         required property color red
         required property color green
         required property color blue
@@ -38,6 +40,8 @@ Control {
         white: "#FFFFFF"
         background: "black"
         orange: "#F89B2A"
+        orangeLight1: "#FFAD4A"
+        orangeLight2: "#FFBF72"
         red: "#EC6363"
         green: "#36B46B"
         blue: "#3CA3DE"
@@ -59,6 +63,8 @@ Control {
         white: "#FFFFFF"
         background: "white"
         orange: "#F7931A"
+        orangeLight1: "#FFAD4A"
+        orangeLight2: "#FFBF72"
         red: "#EB5757"
         green: "#27AE60"
         blue: "#2D9CDB"
