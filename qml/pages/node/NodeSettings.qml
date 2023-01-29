@@ -48,8 +48,11 @@ Item {
                 Setting {
                     Layout.fillWidth: true
                     header: qsTr("About")
-                    actionItem: NavButton {
-                        iconSource: "image://images/caret-right"
+                    actionItem: Button {
+                        icon.source: "image://images/caret-right"
+                        icon.color: Theme.color.neutral9
+                        icon.height: 18
+                        icon.width: 18
                         background: null
                         onClicked: {
                             nodeSettingsView.push(about_page)
@@ -59,8 +62,11 @@ Item {
                 Setting {
                     Layout.fillWidth: true
                     header: qsTr("Storage")
-                    actionItem: NavButton {
-                        iconSource: "image://images/caret-right"
+                    actionItem: Button {
+                        icon.source: "image://images/caret-right"
+                        icon.color: Theme.color.neutral9
+                        icon.height: 18
+                        icon.width: 18
                         background: null
                         onClicked: {
                             nodeSettingsView.push(storage_page)
@@ -70,8 +76,11 @@ Item {
                 Setting {
                     Layout.fillWidth: true
                     header: qsTr("Connection")
-                    actionItem: NavButton {
-                        iconSource: "image://images/caret-right"
+                    actionItem: Button {
+                        icon.source: "image://images/caret-right"
+                        icon.color: Theme.color.neutral9
+                        icon.height: 18
+                        icon.width: 18
                         background: null
                         onClicked: {
                             nodeSettingsView.push(connection_page)
