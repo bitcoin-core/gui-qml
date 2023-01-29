@@ -25,6 +25,7 @@ class NodeModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
+    Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
 
@@ -33,6 +34,8 @@ public:
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
+    int remainingSyncTime() const { return m_remaining_sync_time; }
+    void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
     bool pause() const { return m_pause; }
@@ -48,10 +51,14 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void blockTipHeightChanged();
+    void remainingSyncTimeChanged();
     void requestedInitialize();
     void requestedShutdown();
     void verificationProgressChanged();
     void pauseChanged(bool new_pause);
+
+    void setTimeRatioList(int new_time);
+    void setTimeRatioListInitial();
 
 protected:
     void timerEvent(QTimerEvent* event) override;
@@ -59,10 +66,13 @@ protected:
 private:
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+    int m_remaining_sync_time{0};
     double m_verification_progress{0.0};
     bool m_pause{false};
 
     int m_shutdown_polling_timer_id{0};
+
+    QVector<QPair<int, double>> m_block_process_time;
 
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
