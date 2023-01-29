@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import BitcoinApp.Components
 import BitcoinApp.Controls
+import org.bitcoincore.qt
 
 ApplicationWindow {
     id: appWindow

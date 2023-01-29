@@ -18,6 +18,7 @@
 #include <noui.h>
 #include <qml/BitcoinApp/appmode.h>
 #include <qml/BitcoinApp/chainmodel.h>
+#include <qml/BitcoinApp/Components/blockclockdial.h>
 #include <qml/BitcoinApp/imageprovider.h>
 #include <qml/BitcoinApp/nodemodel.h>
 #include <qml/BitcoinApp/options_model.h>
@@ -176,6 +177,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif // __ANDROID__
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
+    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
 
     engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/main.qml")));
     if (engine.rootObjects().isEmpty()) {
