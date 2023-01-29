@@ -9,6 +9,7 @@ qt6_add_qml_module(bitcoin_qml
   SOURCES
     appmode.h
     bitcoin.cpp
+    chainmodel.cpp
     imageprovider.cpp
     nodemodel.cpp
     options_model.cpp
