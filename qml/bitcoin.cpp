@@ -6,12 +6,15 @@
 
 #include <chainparams.h>
 #include <init.h>
+#include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#include <qml/chainmodel.h>
+#include <qml/components/blockclockdial.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/options_model.h>
@@ -155,6 +158,7 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LogQtInfo();
 
     std::unique_ptr<interfaces::Node> node = init->makeNode();
+    std::unique_ptr<interfaces::Chain> chain = init->makeChain();
     if (!node->baseInitialize()) {
         // A dialog with detailed error will have been shown by InitError().
         return EXIT_FAILURE;
@@ -169,6 +173,11 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
+
+    ChainModel chain_model{*chain};
+
+    QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
+    QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
 
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
@@ -185,6 +194,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
+    engine.rootContext()->setContextProperty("chainModel", &chain_model);
 
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
@@ -196,6 +206,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif // __ANDROID__
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
+    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
     if (engine.rootObjects().isEmpty()) {
