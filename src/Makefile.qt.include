@@ -35,6 +35,7 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
+  qml/components/moc_blockclockdial.cpp \
   qml/moc_appmode.cpp \
   qml/moc_chainmodel.cpp \
   qml/moc_nodemodel.cpp \
@@ -113,6 +114,7 @@ BITCOIN_QT_H = \
   qml/appmode.h \
   qml/bitcoin.h \
   qml/chainmodel.h \
+  qml/components/blockclockdial.h \
   qml/imageprovider.h \
   qml/nodemodel.h \
   qml/options_model.h \
@@ -294,6 +296,7 @@ BITCOIN_QT_WALLET_CPP = \
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
   qml/chainmodel.cpp \
+  qml/components/blockclockdial.cpp \
   qml/imageprovider.cpp \
   qml/nodemodel.cpp \
   qml/options_model.cpp \
@@ -325,6 +328,7 @@ QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/AboutOptions.qml \
+  qml/components/BlockClock.qml \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
