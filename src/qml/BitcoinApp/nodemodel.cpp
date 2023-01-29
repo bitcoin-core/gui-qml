@@ -10,6 +10,7 @@
 #include <cassert>
 #include <chrono>
 
+#include <QDateTime>
 #include <QMetaObject>
 #include <QTimerEvent>
 
@@ -27,9 +28,46 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
+void NodeModel::setRemainingSyncTime(double new_progress)
+{
+    int currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
+
+    // keep a vector of samples of verification progress at height
+    m_block_process_time.push_front(qMakePair(currentTime, new_progress));
+
+    // show progress speed if we have more than one sample
+    if (m_block_process_time.size() >= 2) {
+        double progressDelta = 0;
+        int timeDelta = 0;
+        int remainingMSecs = 0;
+        double remainingProgress = 1.0 - new_progress;
+        for (int i = 1; i < m_block_process_time.size(); i++) {
+            QPair<int, double> sample = m_block_process_time[i];
+
+            // take first sample after 500 seconds or last available one
+            if (sample.first < (currentTime - 500 * 1000) || i == m_block_process_time.size() - 1) {
+                progressDelta = m_block_process_time[0].second - sample.second;
+                timeDelta = m_block_process_time[0].first - sample.first;
+                remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
+                break;
+            }
+        }
+        if (remainingMSecs > 0 && m_block_process_time.count() % 1000 == 0) {
+            m_remaining_sync_time = remainingMSecs;
+
+            Q_EMIT remainingSyncTimeChanged();
+        }
+        static const int MAX_SAMPLES = 5000;
+        if (m_block_process_time.count() > MAX_SAMPLES) {
+            m_block_process_time.remove(1, m_block_process_time.count() - 1);
+        }
+    }
+}
 void NodeModel::setVerificationProgress(double new_progress)
 {
     if (new_progress != m_verification_progress) {
+        setRemainingSyncTime(new_progress);
+
         m_verification_progress = new_progress;
         Q_EMIT verificationProgressChanged();
     }
@@ -54,6 +92,8 @@ void NodeModel::initializeResult([[maybe_unused]] bool success, interfaces::Bloc
     // TODO: Handle the `success` parameter,
     setBlockTipHeight(tip_info.block_height);
     setVerificationProgress(tip_info.verification_progress);
+
+    Q_EMIT setTimeRatioListInitial();
 }
 
 void NodeModel::startShutdownPolling()
@@ -84,6 +124,8 @@ void NodeModel::ConnectToBlockTipSignal()
             QMetaObject::invokeMethod(this, [this, tip, verification_progress] {
                 setBlockTipHeight(tip.block_height);
                 setVerificationProgress(verification_progress);
+
+                Q_EMIT setTimeRatioList(tip.block_time);
             });
         });
 }
