@@ -266,7 +266,7 @@ if(WITH_QML)
       Qt6::QuickControls2
   )
   message(STATUS "Including QML sources")
-  file(GLOB QML_SOURCES "../qml/*.cpp" "../qml/*.h")
+  file(GLOB_RECURSE QML_SOURCES "../qml/*.cpp" "../qml/*.h")
   list(APPEND SOURCES ${QML_SOURCES})
 
   set(QML_QRC "../qml/bitcoin_qml.qrc")
