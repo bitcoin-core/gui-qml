@@ -14,7 +14,32 @@ AbstractButton {
     property url iconSource: ""
 
     padding: 0
-    background: null
+    background: Rectangle {
+        id: bg
+        height: root.height
+        width: root.width
+        radius: 5
+        state:"DEFAULT"
+
+        states: [
+            State {
+                name: "DEFAULT"
+                PropertyChanges { target: bg; color: Theme.color.background }
+            },
+            State {
+                name: "HOVER"
+                PropertyChanges { target: bg; color: Theme.color.neutral2 }
+            },
+            State {
+                name: "PRESSED"
+                PropertyChanges { target: bg; color: Theme.color.neutral3 }
+            }
+        ]
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+    }
     contentItem: RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -33,7 +58,6 @@ AbstractButton {
                icon.height: root.iconHeight
                icon.width: root.iconWidth
                background: null
-               onClicked: root.clicked()
            }
         }
         Loader {
@@ -52,8 +76,24 @@ AbstractButton {
                    color: Theme.color.neutral9
                    text: root.text
               }
-              onClicked: root.clicked()
           }
-      }
+        }
+    }
+    MouseArea {
+        anchors.fill: parent
+        hoverEnabled: true
+        onEntered: {
+            root.background.state = "HOVER"
+        }
+        onExited: {
+            root.background.state = "DEFAULT"
+        }
+        onPressed: {
+            root.background.state = "PRESSED"
+        }
+        onReleased: {
+            root.background.state = "DEFAULT"
+            root.clicked()
+        }
     }
 }
