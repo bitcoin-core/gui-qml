@@ -57,7 +57,7 @@ ApplicationWindow {
             }
             NodeSettings {
                 navMiddleDetail: Header {
-                    bold: true
+                    headerBold: true
                     headerSize: 18
                     header: "Settings"
                 }
