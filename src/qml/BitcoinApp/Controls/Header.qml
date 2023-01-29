@@ -8,14 +8,16 @@ import QtQuick.Layouts
 
 ColumnLayout {
     id: root
-    property bool bold: false
     property bool center: true
     required property string header
     property int headerMargin
     property int headerSize: 28
+    property bool headerBold: false
     property string description: ""
     property int descriptionMargin: 10
     property int descriptionSize: 18
+    property string descriptionColor: Theme.color.neutral8
+    property bool descriptionBold: false
     property string subtext: ""
     property int subtextMargin
     property int subtextSize: 15
@@ -26,7 +28,7 @@ ColumnLayout {
         Layout.fillWidth: true
         topPadding: root.headerMargin
         font.family: "Inter"
-        font.styleName: root.bold ? "Semi Bold" : "Regular"
+        font.styleName: root.headerBold ? "Semi Bold" : "Regular"
         font.pixelSize: root.headerSize
         color: Theme.color.neutral9
         text: root.header
@@ -40,9 +42,9 @@ ColumnLayout {
         sourceComponent: Label {
             topPadding: root.descriptionMargin
             font.family: "Inter"
-            font.styleName: "Regular"
+            font.styleName: root.descriptionBold ? "Semi Bold" : "Regular"
             font.pixelSize: root.descriptionSize
-            color: Theme.color.neutral8
+            color: root.descriptionColor
             text: root.description
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
