@@ -121,7 +121,7 @@ void NodeModel::ConnectToBlockTipSignal()
 
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            QMetaObject::invokeMethod(this, [=] {
+            QMetaObject::invokeMethod(this, [&, this] {
                 setBlockTipHeight(tip.block_height);
                 setVerificationProgress(verification_progress);
 

@@ -9,6 +9,7 @@
 #include <common/system.h>
 #include <chainparams.h>
 #include <init.h>
+#include <interfaces/chain.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
@@ -16,6 +17,7 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#include <qml/chainmodel.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/options_model.h>
@@ -155,6 +157,12 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
+    std::unique_ptr<interfaces::Chain> chain = init->makeChain();
+    ChainModel chain_model{*chain};
+
+    QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
+    QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
+
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
         node->startShutdown();
@@ -170,6 +178,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
+    engine.rootContext()->setContextProperty("chainModel", &chain_model);
 
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);

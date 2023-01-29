@@ -260,6 +260,7 @@ if(WITH_QML)
   set(CMAKE_AUTOMOC_MOC_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/../qml")
   target_link_libraries(bitcoinqt
     PUBLIC
+      univalue
       Qt6::Qml
       Qt6::Quick
       Qt6::QuickControls2

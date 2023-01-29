@@ -5,7 +5,7 @@
 #ifndef BITCOIN_QML_OPTIONS_MODEL_H
 #define BITCOIN_QML_OPTIONS_MODEL_H
 
-#include <util/settings.h>
+#include <common/settings.h>
 
 #include <QObject>
 
@@ -59,7 +59,7 @@ private:
     bool m_server;
     bool m_upnp;
 
-    util::SettingsValue pruneSetting() const;
+    common::SettingsValue pruneSetting() const;
 };
 
 #endif // BITCOIN_QML_OPTIONS_MODEL_H
