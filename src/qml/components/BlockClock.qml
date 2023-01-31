@@ -65,21 +65,12 @@ Item {
         color: Theme.color.neutral4
     }
 
-    RowLayout {
-        id: peersIndicator
+    PeersIndicator {
         anchors.top: subText.bottom
         anchors.topMargin: 20
         anchors.horizontalCenter: root.horizontalCenter
-        spacing: 5
-        Repeater {
-            model: 5
-            Rectangle {
-                width: 3
-                height: width
-                radius: width/2
-                color: Theme.color.neutral9
-            }
-        }
+        numOutboundPeers: nodeModel.numOutboundPeers
+        maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
     }
 
     MouseArea {
