@@ -23,7 +23,7 @@ ApplicationWindow {
         Header {
             Layout.topMargin: 30
             Layout.fillWidth: true
-            bold: true
+            headerBold: true
             header: qsTr("There was an issue starting up.")
             headerSize: 21
             description: message
