@@ -12,9 +12,9 @@ AbstractButton {
     required property string link
     property string description: ""
     property int descriptionSize: 18
-    property url iconSource: ""
-    property int iconWidth: 18
-    property int iconHeight: 18
+    property url iconSource: "image://images/export"
+    property int iconWidth: 22
+    property int iconHeight: 22
     property color iconColor
     property color textColor
     state: root.parentState
@@ -66,21 +66,19 @@ AbstractButton {
                 }
             }
         }
-        Loader {
-            Layout.fillWidth: true
-            active: root.iconSource.toString().length > 0
-            visible: active
-            sourceComponent: Button {
-                icon.source: root.iconSource
-                icon.color: root.iconColor
-                icon.height: root.iconHeight
-                icon.width: root.iconWidth
-                background: null
-                onClicked: root.clicked()
+        Button {
+            leftPadding: 0
+            topPadding: 0
+            bottomPadding: 0
+            icon.source: root.iconSource
+            icon.color: root.iconColor
+            icon.height: root.iconHeight
+            icon.width: root.iconWidth
+            background: null
+            onClicked: root.clicked()
 
-                Behavior on icon.color {
-                    ColorAnimation { duration: 150 }
-                }
+            Behavior on icon.color {
+                ColorAnimation { duration: 150 }
             }
         }
     }
