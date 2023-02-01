@@ -13,6 +13,7 @@ ColumnLayout {
     property int headerMargin
     property int headerSize: 28
     property bool headerBold: false
+    property color headerColor: Theme.color.neutral9
     property string description: ""
     property int descriptionMargin: 10
     property int descriptionSize: 18
@@ -30,10 +31,14 @@ ColumnLayout {
         font.family: "Inter"
         font.styleName: root.headerBold ? "Semi Bold" : "Regular"
         font.pixelSize: root.headerSize
-        color: Theme.color.neutral9
+        color: root.headerColor
         text: root.header
         horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
         wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
     }
     Loader {
         Layout.fillWidth: true
