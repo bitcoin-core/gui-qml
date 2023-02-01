@@ -10,9 +10,11 @@ import "../controls"
 ColumnLayout {
     spacing: 20
     Setting {
+        id: websiteLink
         Layout.fillWidth: true
         header: qsTr("Website")
         actionItem: ExternalLink {
+            parentState: websiteLink.state
             description: "bitcoincore.org"
             link: "https://bitcoincore.org"
             iconSource: "image://images/caret-right"
@@ -20,9 +22,11 @@ ColumnLayout {
         onClicked: loadedItem.clicked()
     }
     Setting {
+        id: sourceLink
         Layout.fillWidth: true
         header: qsTr("Source code")
         actionItem: ExternalLink {
+            parentState: sourceLink.state
             description: "github.com/bitcoin/bitcoin"
             link: "https://github.com/bitcoin/bitcoin"
             iconSource: "image://images/caret-right"
@@ -30,9 +34,11 @@ ColumnLayout {
         onClicked: loadedItem.clicked()
     }
     Setting {
+        id: licenseLink
         Layout.fillWidth: true
         header: qsTr("License")
         actionItem: ExternalLink {
+            parentState: licenseLink.state
             description: "MIT"
             link: "https://opensource.org/licenses/MIT"
             iconSource: "image://images/caret-right"
@@ -40,9 +46,11 @@ ColumnLayout {
         onClicked: loadedItem.clicked()
     }
     Setting {
+        id: versionLink
         Layout.fillWidth: true
         header: qsTr("Version")
         actionItem: ExternalLink {
+            parentState: versionLink.state
             description: "v22.99.0-1e7564eca8a6"
             link: "https://bitcoin.org/en/download"
             iconSource: "image://images/caret-right"
