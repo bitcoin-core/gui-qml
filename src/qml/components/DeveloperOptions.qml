@@ -23,17 +23,21 @@ ColumnLayout {
         onClicked: loadedItem.clicked()
     }
     Setting {
+        id: dbcacheSetting
         Layout.fillWidth: true
         header: qsTr("Database cache size")
         actionItem: ValueInput {
+            parentState: dbcacheSetting.state
             description: ("450 MiB")
         }
         onClicked: loadedItem.forceActiveFocus()
     }
     Setting {
+        id: parSetting
         Layout.fillWidth: true
         header: qsTr("Script verification threads")
         actionItem: ValueInput {
+            parentState: parSetting.state
             description: ("0")
         }
         onClicked: loadedItem.forceActiveFocus()
