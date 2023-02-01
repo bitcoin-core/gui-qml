@@ -17,6 +17,10 @@ ColumnLayout {
             checked: optionsModel.listen
             onToggled: optionsModel.listen = checked
         }
+        onClicked: {
+          loadedItem.toggle()
+          loadedItem.toggled()
+        }
     }
     Setting {
         Layout.fillWidth: true
@@ -24,6 +28,10 @@ ColumnLayout {
         actionItem: OptionSwitch {
             checked: optionsModel.upnp
             onToggled: optionsModel.upnp = checked
+        }
+        onClicked: {
+          loadedItem.toggle()
+          loadedItem.toggled()
         }
     }
     Setting {
@@ -33,6 +41,10 @@ ColumnLayout {
             checked: optionsModel.natpmp
             onToggled: optionsModel.natpmp = checked
         }
+        onClicked: {
+          loadedItem.toggle()
+          loadedItem.toggled()
+        }
     }
     Setting {
         Layout.fillWidth: true
@@ -40,6 +52,10 @@ ColumnLayout {
         actionItem: OptionSwitch {
             checked: optionsModel.server
             onToggled: optionsModel.server = checked
+        }
+        onClicked: {
+          loadedItem.toggle()
+          loadedItem.toggled()
         }
     }
     Setting {
