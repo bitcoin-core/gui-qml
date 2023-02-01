@@ -19,7 +19,11 @@ AbstractButton {
     states: [
         State {
             name: "FILLED"
-            PropertyChanges { target: root; stateColor: Theme.color.neutral9 }
+            PropertyChanges {
+                target: root
+                enabled: true
+                stateColor: Theme.color.neutral9
+            }
         },
         State {
             name: "HOVER"
@@ -28,6 +32,14 @@ AbstractButton {
         State {
             name: "ACTIVE"
             PropertyChanges { target: root; stateColor: Theme.color.orange }
+        },
+        State {
+            name: "DISABLED"
+            PropertyChanges {
+                target: root
+                enabled: false
+                stateColor: Theme.color.neutral4
+            }
         }
     ]
 
