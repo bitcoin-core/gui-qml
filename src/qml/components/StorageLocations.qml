@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs 1.3
 import "../controls"
 
 ColumnLayout {
@@ -21,9 +22,23 @@ ColumnLayout {
         checked: true
     }
     OptionButton {
+        id: customDirOption
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Custom")
         description: qsTr("Choose the directory and storage device.")
+        customDir: fileDialog.folder
+        onClicked: fileDialog.open()
     }
+
+    FileDialog {
+        id: fileDialog
+        title: qsTr("Please choose a directory")
+        selectFolder: true
+        folder: shortcuts.home
+        onAccepted: {
+            customDirOption.customDir = fileDilog.folder
+        }
+    }
+
 }
