@@ -11,6 +11,7 @@ AbstractButton {
     property bool last: parent && root === parent.children[parent.children.length - 1]
     required property string header
     property alias actionItem: action_loader.sourceComponent
+    property alias loadedItem: action_loader.item
     property string description
 
     contentItem: ColumnLayout {
