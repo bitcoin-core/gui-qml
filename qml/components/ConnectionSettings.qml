@@ -59,15 +59,12 @@ ColumnLayout {
         }
     }
     Setting {
+        id: gotoProxy
         last: true
         Layout.fillWidth: true
         header: qsTr("Proxy settings")
-        actionItem: Button {
-            icon.source: "image://images/caret-right"
-            icon.color: Theme.color.neutral9
-            icon.height: 18
-            icon.width: 18
-            background: null
+        actionItem: CaretRightButton {
+            stateColor: gotoProxy.stateColor
         }
     }
 }
