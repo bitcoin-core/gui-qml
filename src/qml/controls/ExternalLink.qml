@@ -6,7 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-Control {
+AbstractButton {
     id: root
     required property string link
     property string description: ""
@@ -29,7 +29,6 @@ Control {
                 color: Theme.color.neutral7
                 textFormat: Text.RichText
                 text: "<style>a:link { color: " + Theme.color.neutral7 + "; text-decoration: none;}</style>" + "<a href=\"" + link + "\">" + root.description + "</a>"
-                onLinkActivated: Qt.openUrlExternally(link)
             }
         }
         Loader {
@@ -42,8 +41,9 @@ Control {
                 icon.height: root.iconHeight
                 icon.width: root.iconWidth
                 background: null
-                onClicked: Qt.openUrlExternally(link)
+                onClicked: root.clicked()
             }
         }
     }
+    onClicked: Qt.openUrlExternally(link)
 }
