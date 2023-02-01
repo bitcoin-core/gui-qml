@@ -44,6 +44,7 @@ Item {
                         checked: Theme.dark
                         onToggled: Theme.toggleDark()
                     }
+                    onClicked: loadedItem.toggled()
                 }
                 Setting {
                     Layout.fillWidth: true
@@ -58,6 +59,7 @@ Item {
                             nodeSettingsView.push(about_page)
                         }
                     }
+                    onClicked: loadedItem.clicked()
                 }
                 Setting {
                     Layout.fillWidth: true
@@ -72,6 +74,7 @@ Item {
                             nodeSettingsView.push(storage_page)
                         }
                     }
+                    onClicked: loadedItem.clicked()
                 }
                 Setting {
                     Layout.fillWidth: true
@@ -86,6 +89,7 @@ Item {
                             nodeSettingsView.push(connection_page)
                         }
                     }
+                    onClicked: loadedItem.clicked()
                 }
             }
         }

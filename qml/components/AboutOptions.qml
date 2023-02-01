@@ -17,6 +17,7 @@ ColumnLayout {
             link: "https://bitcoincore.org"
             iconSource: "image://images/caret-right"
         }
+        onClicked: loadedItem.clicked()
     }
     Setting {
         Layout.fillWidth: true
@@ -26,6 +27,7 @@ ColumnLayout {
             link: "https://github.com/bitcoin/bitcoin"
             iconSource: "image://images/caret-right"
         }
+        onClicked: loadedItem.clicked()
     }
     Setting {
         Layout.fillWidth: true
@@ -35,6 +37,7 @@ ColumnLayout {
             link: "https://opensource.org/licenses/MIT"
             iconSource: "image://images/caret-right"
         }
+        onClicked: loadedItem.clicked()
     }
     Setting {
         Layout.fillWidth: true
@@ -44,6 +47,7 @@ ColumnLayout {
             link: "https://bitcoin.org/en/download"
             iconSource: "image://images/caret-right"
         }
+        onClicked: loadedItem.clicked()
     }
     Setting {
         Layout.fillWidth: true
@@ -59,5 +63,6 @@ ColumnLayout {
                 aboutSwipe.incrementCurrentIndex()
             }
         }
+        onClicked: loadedItem.clicked()
     }
 }
