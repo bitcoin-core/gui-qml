@@ -10,9 +10,11 @@ import "../controls"
 ColumnLayout {
     spacing: 20
     Setting {
+        id: devDocsLink
         Layout.fillWidth: true
         header: qsTr("Developer documentation")
         actionItem: ExternalLink {
+            parentState: devDocsLink.state
             iconSource: "qrc:/icons/export"
             iconWidth: 30
             iconHeight: 30
