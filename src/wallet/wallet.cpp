@@ -1065,6 +1065,33 @@ CWalletTx* CWallet::AddToWallet(CTransactionRef tx, const TxState& state, const 
         }
     }
 
+    // Mark inactive coinbase transactions and their descendants as abandoned
+    if (wtx.IsCoinBase() && wtx.isInactive()) {
+        std::vector<CWalletTx*> txs{&wtx};
+
+        TxStateInactive inactive_state = TxStateInactive{/*abandoned=*/true};
+
+        while (!txs.empty()) {
+            CWalletTx* desc_tx = txs.back();
+            txs.pop_back();
+            desc_tx->m_state = inactive_state;
+            // Break caches since we have changed the state
+            desc_tx->MarkDirty();
+            batch.WriteTx(*desc_tx);
+            MarkInputsDirty(desc_tx->tx);
+            for (unsigned int i = 0; i < desc_tx->tx->vout.size(); ++i) {
+                COutPoint outpoint(desc_tx->GetHash(), i);
+                std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(outpoint);
+                for (TxSpends::const_iterator it = range.first; it != range.second; ++it) {
+                    const auto wit = mapWallet.find(it->second);
+                    if (wit != mapWallet.end()) {
+                        txs.push_back(&wit->second);
+                    }
+                }
+            }
+        }
+    }
+
     //// debug print
     WalletLogPrintf("AddToWallet %s  %s%s\n", hash.ToString(), (fInsertedNew ? "new" : ""), (fUpdated ? "update" : ""));
 
@@ -1274,7 +1301,11 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
             wtx.MarkDirty();
             batch.WriteTx(wtx);
             NotifyTransactionChanged(wtx.GetHash(), CT_UPDATED);
-            // Iterate over all its outputs, and mark transactions in the wallet that spend them abandoned too
+            // Iterate over all its outputs, and mark transactions in the wallet that spend them abandoned too.
+            // States are not permanent, so these transactions can become unabandoned if they are re-added to the
+            // mempool, or confirmed in a block, or conflicted.
+            // Note: If the reorged coinbase is re-added to the main chain, the descendants that have not had their
+            // states change will remain abandoned and will require manual broadcast if the user wants them.
             for (unsigned int i = 0; i < wtx.tx->vout.size(); ++i) {
                 std::pair<TxSpends::const_iterator, TxSpends::const_iterator> range = mapTxSpends.equal_range(COutPoint(now, i));
                 for (TxSpends::const_iterator iter = range.first; iter != range.second; ++iter) {
@@ -2995,7 +3026,7 @@ std::shared_ptr<CWallet> CWallet::Create(WalletContext& context, const std::stri
 
     if (args.IsArgSet("-mintxfee")) {
         std::optional<CAmount> min_tx_fee = ParseMoney(args.GetArg("-mintxfee", ""));
-        if (!min_tx_fee || min_tx_fee.value() == 0) {
+        if (!min_tx_fee) {
             error = AmountErrMsg("mintxfee", args.GetArg("-mintxfee", ""));
             return nullptr;
         } else if (min_tx_fee.value() > HIGH_TX_FEE_PER_KB) {
@@ -3775,26 +3806,27 @@ bool CWallet::MigrateToSQLite(bilingual_str& error)
 
     // Get all of the records for DB type migration
     std::unique_ptr<DatabaseBatch> batch = m_database->MakeBatch();
+    std::unique_ptr<DatabaseCursor> cursor = batch->GetNewCursor();
     std::vector<std::pair<SerializeData, SerializeData>> records;
-    if (!batch->StartCursor()) {
+    if (!cursor) {
         error = _("Error: Unable to begin reading all records in the database");
         return false;
     }
-    bool complete = false;
+    DatabaseCursor::Status status = DatabaseCursor::Status::FAIL;
     while (true) {
-        CDataStream ss_key(SER_DISK, CLIENT_VERSION);
-        CDataStream ss_value(SER_DISK, CLIENT_VERSION);
-        bool ret = batch->ReadAtCursor(ss_key, ss_value, complete);
-        if (!ret) {
+        DataStream ss_key{};
+        DataStream ss_value{};
+        status = cursor->Next(ss_key, ss_value);
+        if (status != DatabaseCursor::Status::MORE) {
             break;
         }
         SerializeData key(ss_key.begin(), ss_key.end());
         SerializeData value(ss_value.begin(), ss_value.end());
         records.emplace_back(key, value);
     }
-    batch->CloseCursor();
+    cursor.reset();
     batch.reset();
-    if (!complete) {
+    if (status != DatabaseCursor::Status::DONE) {
         error = _("Error: Unable to read all records in the database");
         return false;
     }
@@ -3820,8 +3852,8 @@ bool CWallet::MigrateToSQLite(bilingual_str& error)
     bool began = batch->TxnBegin();
     assert(began); // This is a critical error, the new db could not be written to. The original db exists as a backup, but we should not continue execution.
     for (const auto& [key, value] : records) {
-        CDataStream ss_key(key, SER_DISK, CLIENT_VERSION);
-        CDataStream ss_value(value, SER_DISK, CLIENT_VERSION);
+        DataStream ss_key{key};
+        DataStream ss_value{value};
         if (!batch->Write(ss_key, ss_value)) {
             batch->TxnAbort();
             m_database->Close();
