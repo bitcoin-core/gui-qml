@@ -58,15 +58,12 @@ ColumnLayout {
         onClicked: loadedItem.clicked()
     }
     Setting {
+        id: gotoDeveloper
         Layout.fillWidth: true
         header: qsTr("Developer options")
         description: qsTr("Only use these if you have development experience")
-        actionItem: Button {
-            icon.source: "image://images/caret-right"
-            icon.color: Theme.color.neutral9
-            icon.height: 18
-            icon.width: 18
-            background: null
+        actionItem: CaretRightButton{
+            stateColor: gotoDeveloper.stateColor
             onClicked: {
                 aboutSwipe.incrementCurrentIndex()
             }
