@@ -8,6 +8,9 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
+    id: root
+    property bool customStorage: false
+    property int customStorageAmount
     spacing: 4
     Setting {
         Layout.fillWidth: true
@@ -42,6 +45,8 @@ ColumnLayout {
                 if (parseInt(text) < 1) {
                     pruneTargetSetting.showErrorText = true
                 } else {
+                    root.customStorage = true
+                    root.customStorageAmount = parseInt(text)
                     optionsModel.pruneSizeGB = parseInt(text)
                     pruneTargetSetting.forceActiveFocus()
                     pruneTargetSetting.showErrorText = false
