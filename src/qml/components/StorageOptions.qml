@@ -23,6 +23,10 @@ ColumnLayout {
             optionsModel.prune = true
             optionsModel.pruneSizeGB = 2
         }
+        Component.onCompleted: {
+            optionsModel.prune = true
+            optionsModel.pruneSizeGB = 2
+        }
     }
     OptionButton {
         Layout.fillWidth: true
