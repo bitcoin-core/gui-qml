@@ -8,6 +8,9 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
+    id: root
+    property bool customStorage: false
+    property int customStorageAmount
     spacing: 4
     Setting {
         Layout.fillWidth: true
@@ -37,6 +40,8 @@ ColumnLayout {
             parentState: pruneTargetSetting.state
             description: optionsModel.pruneSizeGB
             onEditingFinished: {
+                root.customStorage = true
+                root.customStorageAmount = parseInt(text)
                 optionsModel.pruneSizeGB = parseInt(text)
                 pruneTargetSetting.forceActiveFocus()
             }

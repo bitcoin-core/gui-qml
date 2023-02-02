@@ -8,6 +8,9 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
+    id: root
+    property bool customStorage: false
+    property int customStorageAmount
     ButtonGroup {
         id: group
     }
@@ -35,6 +38,21 @@ ColumnLayout {
         description: qsTr("Uses about 550GB. Support the network.")
         onClicked: {
             optionsModel.prune = false
+        }
+    }
+    Loader {
+        Layout.fillWidth: true
+        active: root.customStorage
+        visible: active
+        sourceComponent: OptionButton {
+            ButtonGroup.group: group
+            checked: root.customStorage
+            text: qsTr("Custom")
+            description: qsTr("Storing recent blocks up to %1GB").arg(root.customStorageAmount)
+            onClicked: {
+                optionsModel.prune = true
+                optionsModel.pruneSizeGB = root.customStorageAmount
+            }
         }
     }
 }
