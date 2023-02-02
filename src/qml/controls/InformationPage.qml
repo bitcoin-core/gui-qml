@@ -12,6 +12,7 @@ Page {
     implicitHeight: parent.height
     property alias bannerItem: banner_loader.sourceComponent
     property alias detailItem: detail_loader.sourceComponent
+    property alias loadedDetailItem: detail_loader.item
     property alias navLeftDetail: navbar.leftDetail
     property alias navMiddleDetail: navbar.middleDetail
     property alias navRightDetail: navbar.rightDetail
