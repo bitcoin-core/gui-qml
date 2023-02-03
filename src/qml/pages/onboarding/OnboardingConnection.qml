@@ -34,14 +34,19 @@ Page {
             headerText: qsTr("Starting initial download")
             headerMargin: 30
             description: qsTr("The application will connect to the Bitcoin network and start downloading and verifying transactions.\n\nThis may take several hours, or even days, based on your connection.")
-            descriptionMargin: 20
+            descriptionMargin: 10
             detailActive: true
-            detailItem: TextButton {
-                text: qsTr("Connection settings")
-                onClicked: connections.incrementCurrentIndex()
+            detailTopMargin: 10
+            detailItem: RowLayout {
+                TextButton {
+                    Layout.alignment: Qt.AlignCenter
+                    text: qsTr("Connection settings")
+                    onClicked: connections.incrementCurrentIndex()
+                }
             }
             lastPage: true
             buttonText: qsTr("Next")
+            buttonMargin: 20
         }
         SettingsConnection {
             navRightDetail: NavButton {
