@@ -159,6 +159,11 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick.2"
       fi
 
+      dnl qtquickcontrols module paths
+      if test -d "$qt_plugin_path/../qml/QtQuick/Controls"; then
+        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Controls"
+      fi
+
       dnl qtquickcontrols2 module paths
       if test -d "$qt_plugin_path/../qml/QtQuick/Controls.2"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Controls.2"
@@ -204,6 +209,8 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2Plugin], [-lqtquick2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2WindowPlugin], [-lwindowplugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickLayoutsPlugin], [-lqquicklayoutsplugin])
+        dnl qtquickcontrols module plugins
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqtquickcontrolsplugin])
         dnl qtquickcontrols2 module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqtquickcontrols2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqtquicktemplates2plugin])
@@ -214,6 +221,8 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2Plugin], [-lqml_QtQuick_2_qtquick2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2WindowPlugin], [-lqml_QtQuick_Window_2_windowplugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickLayoutsPlugin], [-lqml_QtQuick_Layouts_qquicklayoutsplugin])
+        dnl qtquickcontrols module plugins
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqml_QtQuick_Controls_qtquickcontrolsplugin])
         dnl qtquickcontrols2 module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqml_QtQuick_Controls_2_qtquickcontrols2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqml_QtQuick_Templates_2_qtquicktemplates2plugin])
