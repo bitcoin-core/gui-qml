@@ -22,9 +22,11 @@ ColumnLayout {
         }
     }
     Setting {
+        id: pruneTargetSetting
         Layout.fillWidth: true
         header: qsTr("Storage limit (GB)")
         actionItem: ValueInput {
+            parentState: pruneTargetSetting.state
             description: optionsModel.pruneSizeGB
             onEditingFinished: optionsModel.pruneSizeGB = parseInt(text)
         }
