@@ -166,6 +166,9 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
       if test -d "$qt_plugin_path/../qml/Qt/labs/settings"; then
         QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/Qt/labs/settings"
       fi
+      if test -d "$qt_plugin_path/../qml/QtQuick/Dialogs"; then
+        QT_LIBS="$QT_LIBS -L$qt_plugin_path/../qml/QtQuick/Dialogs -L$qt_plugin_path/../qml/QtQuick/Dialogs/Private"
+      fi
 
       dnl qtquickcontrols2 module paths
       if test -d "$qt_plugin_path/../qml/QtQuick/Controls.2"; then
@@ -215,6 +218,9 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
         dnl qtquickcontrols module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqtquickcontrolsplugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QmlSettingsPlugin], [-lqmlsettingsplugin])
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2DialogsPlugin], [-ldialogplugin])
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2DialogsPrivatePlugin], [-ldialogsprivateplugin])
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqtquickcontrolsplugin])
         dnl qtquickcontrols2 module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqtquickcontrols2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqtquicktemplates2plugin])
@@ -228,6 +234,8 @@ AC_DEFUN([BITCOIN_QT_CONFIGURE],[
         dnl qtquickcontrols module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqml_QtQuick_Controls_qtquickcontrolsplugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QmlSettingsPlugin], [-lqml_Qt_labs_settings_qmlsettingsplugin])
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuick2DialogsPlugin], [-lqml_QtQuick_Dialogs_dialogplugin])
+        _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls1Plugin], [-lqml_QtQuick_Controls_qtquickcontrolsplugin])
         dnl qtquickcontrols2 module plugins
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickControls2Plugin], [-lqml_QtQuick_Controls_2_qtquickcontrols2plugin])
         _BITCOIN_QT_CHECK_STATIC_PLUGIN([QtQuickTemplates2Plugin], [-lqml_QtQuick_Templates_2_qtquicktemplates2plugin])

@@ -57,6 +57,10 @@ QT_END_NAMESPACE
 #include <QtPlugin>
 Q_IMPORT_PLUGIN(QtQmlPlugin)
 Q_IMPORT_PLUGIN(QtQmlModelsPlugin)
+Q_IMPORT_PLUGIN(QtQuick2DialogsPlugin)
+#ifndef QT_QPA_PLATFORM_ANDROID
+Q_IMPORT_PLUGIN(QtQuick2DialogsPrivatePlugin)
+#endif
 Q_IMPORT_PLUGIN(QtQuick2Plugin)
 Q_IMPORT_PLUGIN(QtQuick2WindowPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls1Plugin)
