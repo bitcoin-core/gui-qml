@@ -21,7 +21,7 @@ ApplicationWindow {
 
     StackView {
         id: main
-        initialItem: onboardingWizard
+        initialItem: needOnboarding ? onboardingWizard : node
         anchors.fill: parent
     }
 

@@ -94,6 +94,26 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
 }
+
+bool ConfigurationFileExists(ArgsManager& argsman)
+{
+    fs::path settings_path;
+    if (!argsman.GetSettingsPath(&settings_path)) {
+        // settings file is disabled
+        return true;
+    }
+    if (fs::exists(settings_path)) {
+        return true;
+    }
+
+    const fs::path rel_config_path = argsman.GetPathArg("-conf", BITCOIN_CONF_FILENAME);
+    const fs::path abs_config_path = AbsPathForConfigVal(argsman, rel_config_path, true);
+    if (fs::exists(abs_config_path)) {
+        return true;
+    }
+
+    return false;
+}
 } // namespace
 
 
@@ -138,6 +158,13 @@ int QmlGuiMain(int argc, char* argv[])
     gArgs.SoftSetBoolArg("-printtoconsole", false);
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
+
+    QVariant need_onboarding(true);
+    if (gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) {
+        need_onboarding.setValue(false);
+    } else if (ConfigurationFileExists(gArgs)) {
+        need_onboarding.setValue(false);
+    }
 
     // legacy GUI: createNode()
     std::unique_ptr<interfaces::Node> node = init->makeNode();
@@ -193,6 +220,7 @@ int QmlGuiMain(int argc, char* argv[])
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
 
+    engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
 #ifdef __ANDROID__
     AppMode app_mode(AppMode::MOBILE);
 #else
