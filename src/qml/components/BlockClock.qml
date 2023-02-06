@@ -96,7 +96,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: Math.round(nodeModel.verificationProgress * 100) + "%"
-                subText: Math.round(nodeModel.remainingSyncTime/60000) > 0 ? Math.round(nodeModel.remainingSyncTime/60000) + "mins" : Math.round(nodeModel.remainingSyncTime/1000) + "secs"
+                subText: formatRemainingSyncTime(nodeModel.remainingSyncTime)
             }
         },
 
@@ -145,4 +145,39 @@ Item {
             }
         }
     ]
+
+    function formatRemainingSyncTime(milliseconds) {
+        var minutes = Math.floor(milliseconds / 60000);
+        var seconds = Math.floor((milliseconds % 60000) / 1000);
+        var weeks = Math.floor(minutes / 10080);
+        minutes %= 10080;
+        var days = Math.floor(minutes / 1440);
+        minutes %= 1440;
+        var hours = Math.floor(minutes / 60);
+        minutes %= 60;
+
+        if (weeks > 0) {
+            return "~" + weeks + (weeks === 1 ? " week" : " weeks") + " left";
+        }
+        if (days > 0) {
+            return "~" + days + (days === 1 ? " day" : " days") + " left";
+        }
+        if (hours >= 5) {
+            return "~" + hours + (hours === 1 ? " hour" : " hours") + " left";
+        }
+        if (hours > 0) {
+            return "~" + hours + "h " + minutes + "m" + " left";
+        }
+        if (minutes >= 5) {
+            return "~" + minutes + (minutes === 1 ? " minute" : " minutes") + " left";
+        }
+        if (minutes > 0) {
+            return "~" + minutes + "m " + seconds + "s" + " left";
+        }
+        if (seconds > 0) {
+            return "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left";
+        }
+
+        return "~0 seconds left";
+    }
 }
