@@ -94,7 +94,7 @@ Item {
 
     states: [
         State {
-            name: "intialBlockDownload"; when: !synced && !paused && conns
+            name: "IBD"; when: !synced && !paused && conns
             PropertyChanges {
                 target: root
                 header: Math.round(nodeModel.verificationProgress * 100) + "%"
@@ -103,7 +103,7 @@ Item {
         },
 
         State {
-            name: "blockClock"; when: synced && !paused && conns
+            name: "BLOCKCLOCK"; when: synced && !paused && conns
             PropertyChanges {
                 target: root
                 header: Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0)
@@ -112,7 +112,7 @@ Item {
         },
 
         State {
-            name: "Manual Pause"; when: paused
+            name: "PAUSE"; when: paused
             PropertyChanges {
                 target: root
                 header: "Paused"
@@ -130,7 +130,7 @@ Item {
         },
 
         State {
-            name: "Connecting"; when: !paused && !conns
+            name: "CONNECTING"; when: !paused && !conns
             PropertyChanges {
                 target: root
                 header: "Connecting"
