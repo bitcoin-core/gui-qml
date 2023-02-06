@@ -34,6 +34,7 @@ Item {
         synced: nodeModel.verificationProgress > 0.999
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
+        confirmationColors: Theme.color.confirmationColors
     }
 
     Button {
