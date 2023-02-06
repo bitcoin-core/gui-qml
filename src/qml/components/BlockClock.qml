@@ -75,6 +75,7 @@ Item {
 
     MouseArea {
         anchors.fill: dial
+        cursorShape: Qt.PointingHandCursor
         onClicked: {
             root.paused = !root.paused
             nodeModel.pause = root.paused
