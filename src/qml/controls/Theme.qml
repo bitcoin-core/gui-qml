@@ -27,6 +27,7 @@ Control {
         required property color neutral7
         required property color neutral8
         required property color neutral9
+        required property var confirmationColors
     }
 
     component ImageSet: QtObject {
@@ -56,6 +57,14 @@ Control {
         neutral7: "#B0B0B0"
         neutral8: "#CCCCCC"
         neutral9: "#FFFFFF"
+        confirmationColors: [
+            "#FF1C1C", // red
+            "#ED6E46",
+            "#EE8847",
+            "#EFA148",
+            "#F0BB49",
+            "#F1D54A", // yellow
+        ]
     }
 
     ColorSet {
@@ -79,6 +88,14 @@ Control {
         neutral7: "#777777"
         neutral8: "#404040"
         neutral9: "#000000"
+        confirmationColors: [
+            "#FF1C1C", // red
+            "#ED6E46",
+            "#EE8847",
+            "#EFA148",
+            "#F0BB49",
+            "#F1D54A", // yellow
+        ]
     }
 
     ImageSet {
