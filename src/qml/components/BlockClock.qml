@@ -13,7 +13,6 @@ import "../controls"
 Item {
     id: root
 
-    Layout.alignment: Qt.AlignCenter
     implicitWidth: 200
     implicitHeight: 200
 
