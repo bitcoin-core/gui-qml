@@ -16,6 +16,7 @@ Control {
         required property color red
         required property color green
         required property color blue
+        required property color amber
         required property color purple
         required property color neutral0
         required property color neutral1
@@ -45,6 +46,7 @@ Control {
         red: "#EC6363"
         green: "#36B46B"
         blue: "#3CA3DE"
+        amber: "#C9B500"
         purple: "#C075DC"
         neutral0: "#000000"
         neutral1: "#1A1A1A"
@@ -68,6 +70,7 @@ Control {
         red: "#EB5757"
         green: "#27AE60"
         blue: "#2D9CDB"
+        amber: "#C9B500"
         purple: "#BB6BD9"
         neutral0: "#FFFFFF"
         neutral1: "#F8F8F8"
