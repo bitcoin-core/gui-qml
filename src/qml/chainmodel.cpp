@@ -5,6 +5,7 @@
 #include <qml/chainmodel.h>
 
 #include <QDateTime>
+#include <QString>
 #include <QThread>
 #include <QTime>
 #include <interfaces/chain.h>
@@ -19,6 +20,12 @@ ChainModel::ChainModel(interfaces::Chain& chain)
     QThread* timer_thread = new QThread;
     timer->moveToThread(timer_thread);
     timer_thread->start();
+}
+
+void ChainModel::setCurrentNetworkName(QString network_name)
+{
+    m_current_network_name = network_name.toUpper();
+    Q_EMIT currentNetworkNameChanged();
 }
 
 void ChainModel::setTimeRatioList(int new_time)

@@ -160,6 +160,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     std::unique_ptr<interfaces::Chain> chain = init->makeChain();
     ChainModel chain_model{*chain};
+    chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
