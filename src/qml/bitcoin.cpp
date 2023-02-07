@@ -175,6 +175,7 @@ int QmlGuiMain(int argc, char* argv[])
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
     ChainModel chain_model{*chain};
+    chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
