@@ -8,6 +8,7 @@
         <file>components/ConnectionSettings.qml</file>
         <file>components/PeersIndicator.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/NetworkIndicator.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
