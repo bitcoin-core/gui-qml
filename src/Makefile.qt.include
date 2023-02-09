@@ -330,6 +330,7 @@ QML_RES_QML = \
   qml/components/AboutOptions.qml \
   qml/components/BlockClock.qml \
   qml/components/BlockCounter.qml \
+  qml/components/CaretRightButton.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \

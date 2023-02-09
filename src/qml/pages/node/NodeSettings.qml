@@ -47,14 +47,11 @@ Item {
                     onClicked: loadedItem.toggled()
                 }
                 Setting {
+                    id: gotoAbout
                     Layout.fillWidth: true
                     header: qsTr("About")
-                    actionItem: Button {
-                        icon.source: "image://images/caret-right"
-                        icon.color: Theme.color.neutral9
-                        icon.height: 18
-                        icon.width: 18
-                        background: null
+                    actionItem: CaretRightButton {
+                        stateColor: gotoAbout.stateColor
                         onClicked: {
                             nodeSettingsView.push(about_page)
                         }
@@ -62,14 +59,11 @@ Item {
                     onClicked: loadedItem.clicked()
                 }
                 Setting {
+                    id: gotoStorage
                     Layout.fillWidth: true
                     header: qsTr("Storage")
-                    actionItem: Button {
-                        icon.source: "image://images/caret-right"
-                        icon.color: Theme.color.neutral9
-                        icon.height: 18
-                        icon.width: 18
-                        background: null
+                    actionItem: CaretRightButton {
+                        stateColor: gotoStorage.stateColor
                         onClicked: {
                             nodeSettingsView.push(storage_page)
                         }
@@ -77,14 +71,11 @@ Item {
                     onClicked: loadedItem.clicked()
                 }
                 Setting {
+                    id: gotoConnection
                     Layout.fillWidth: true
                     header: qsTr("Connection")
-                    actionItem: Button {
-                        icon.source: "image://images/caret-right"
-                        icon.color: Theme.color.neutral9
-                        icon.height: 18
-                        icon.width: 18
-                        background: null
+                    actionItem: CaretRightButton {
+                        stateColor: gotoConnection.stateColor
                         onClicked: {
                             nodeSettingsView.push(connection_page)
                         }
