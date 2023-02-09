@@ -19,9 +19,9 @@ Item {
     property alias header: mainText.text
     property alias subText: subText.text
     property int headerSize: 32
+    property bool connected: nodeModel.numOutboundPeers > 0
     property bool synced: nodeModel.verificationProgress > 0.999
     property bool paused: false
-    property bool conns: true
 
     BlockClockDial {
         id: dial
@@ -84,7 +84,7 @@ Item {
 
     states: [
         State {
-            name: "IBD"; when: !synced && !paused && conns
+            name: "IBD"; when: !synced && !paused && connected
             PropertyChanges {
                 target: root
                 header: Math.round(nodeModel.verificationProgress * 100) + "%"
@@ -93,7 +93,7 @@ Item {
         },
 
         State {
-            name: "BLOCKCLOCK"; when: synced && !paused && conns
+            name: "BLOCKCLOCK"; when: synced && !paused && connected
             PropertyChanges {
                 target: root
                 header: Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0)
@@ -120,7 +120,7 @@ Item {
         },
 
         State {
-            name: "CONNECTING"; when: !paused && !conns
+            name: "CONNECTING"; when: !paused && !connected
             PropertyChanges {
                 target: root
                 header: "Connecting"
