@@ -16,6 +16,7 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(bool synced READ synced WRITE setSynced)
     Q_PROPERTY(bool paused READ paused WRITE setPaused)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
+    Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors )
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
 
 public:
@@ -27,6 +28,7 @@ public:
     bool synced() const { return m_is_synced; };
     bool paused() const { return m_is_paused; };
     QColor backgroundColor() const { return m_background_color; };
+    QList<QColor> confirmationColors() const { return m_confirmation_colors; };
     QColor timeTickColor() const { return m_time_tick_color; };
 
 public Q_SLOTS:
@@ -35,6 +37,7 @@ public Q_SLOTS:
     void setSynced(bool synced);
     void setPaused(bool paused);
     void setBackgroundColor(QColor color);
+    void setConfirmationColors(QList<QColor> colorList);
     void setTimeTickColor(QColor color);
 
 private:
@@ -50,6 +53,7 @@ private:
     bool m_is_synced;
     bool m_is_paused;
     QColor m_background_color;
+    QList<QColor> m_confirmation_colors;
     QColor m_time_tick_color;
 };
 

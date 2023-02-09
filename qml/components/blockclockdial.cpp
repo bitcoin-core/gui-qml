@@ -13,6 +13,7 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
 : QQuickPaintedItem(parent)
 , m_time_ratio_list{0.0}
 , m_background_color{QColor("#2D2D2D")}
+, m_confirmation_colors{QList<QColor>{}}
 , m_time_tick_color{QColor("#000000")}
 {
 }
@@ -44,6 +45,12 @@ void BlockClockDial::setPaused(bool paused)
 void BlockClockDial::setBackgroundColor(QColor color)
 {
     m_background_color = color;
+    update();
+}
+
+void BlockClockDial::setConfirmationColors(QList<QColor> colorList)
+{
+    m_confirmation_colors = colorList;
     update();
 }
 
@@ -80,20 +87,11 @@ void BlockClockDial::paintBlocks(QPainter * painter)
         return;
     }
 
-    QPen pen(QColor("#F1D54A"));
+    QPen pen(m_confirmation_colors[5]);
     pen.setWidth(4);
     pen.setCapStyle(Qt::FlatCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
-
-    QColor confirmationColors[] = {
-        QColor("#FF1C1C"), // red
-        QColor("#ED6E46"),
-        QColor("#EE8847"),
-        QColor("#EFA148"),
-        QColor("#F0BB49"),
-        QColor("#F1D54A"), // yellow
-    };
 
     // The gap is calculated here and is used to create a
     // one pixel spacing between each block
@@ -102,7 +100,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
     // Paint blocks
     for (int i = 1; i < numberOfBlocks; i++) {
         if (numberOfBlocks - i <= 6) {
-            QPen pen(confirmationColors[numberOfBlocks - i - 1]);
+            QPen pen(m_confirmation_colors[numberOfBlocks - i - 1]);
             pen.setWidth(4);
             pen.setCapStyle(Qt::FlatCap);
             painter->setPen(pen);
@@ -125,7 +123,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
 
 void BlockClockDial::paintProgress(QPainter * painter)
 {
-    QPen pen(QColor("#F1D54A"));
+    QPen pen(m_confirmation_colors[5]);
     pen.setWidthF(4);
     pen.setCapStyle(Qt::RoundCap);
     const QRectF bounds = getBoundsForPen(pen);
