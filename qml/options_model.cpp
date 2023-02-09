@@ -7,18 +7,33 @@
 #include <interfaces/node.h>
 #include <qt/guiconstants.h>
 #include <qt/optionsmodel.h>
+#include <txdb.h>
 #include <univalue.h>
 #include <util/settings.h>
 #include <util/system.h>
+#include <validation.h>
 
 #include <cassert>
 
 OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
+
     int64_t prune_value{SettingToInt(m_node.getPersistentSetting("prune"), 0)};
     m_prune = (prune_value > 1);
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
+
+    m_script_threads = SettingToInt(m_node.getPersistentSetting("par"), DEFAULT_SCRIPTCHECK_THREADS);
+}
+
+void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
+{
+    if (new_dbcache_size_mib != m_dbcache_size_mib) {
+        m_dbcache_size_mib = new_dbcache_size_mib;
+        m_node.updateRwSetting("dbcache", new_dbcache_size_mib);
+        Q_EMIT dbcacheSizeMiBChanged(new_dbcache_size_mib);
+    }
 }
 
 void OptionsQmlModel::setListen(bool new_listen)
@@ -54,6 +69,15 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
         m_prune_size_gb = new_prune_size_gb;
         m_node.updateRwSetting("prune", pruneSetting());
         Q_EMIT pruneSizeGBChanged(new_prune_size_gb);
+    }
+}
+
+void OptionsQmlModel::setScriptThreads(int new_script_threads)
+{
+    if (new_script_threads != m_script_threads) {
+        m_script_threads = new_script_threads;
+        m_node.updateRwSetting("par", new_script_threads);
+        Q_EMIT scriptThreadsChanged(new_script_threads);
     }
 }
 
