@@ -25,10 +25,11 @@ ColumnLayout {
     Setting {
         id: dbcacheSetting
         Layout.fillWidth: true
-        header: qsTr("Database cache size")
+        header: qsTr("Database cache size (MiB)")
         actionItem: ValueInput {
             parentState: dbcacheSetting.state
-            description: ("450 MiB")
+            description: optionsModel.dbcacheSizeMiB
+            onEditingFinished: optionsModel.dbcacheSizeMiB = parseInt(text)
         }
         onClicked: loadedItem.forceActiveFocus()
     }
@@ -38,7 +39,8 @@ ColumnLayout {
         header: qsTr("Script verification threads")
         actionItem: ValueInput {
             parentState: parSetting.state
-            description: ("0")
+            description: optionsModel.scriptThreads
+            onEditingFinished: optionsModel.scriptThreads = parseInt(text)
         }
         onClicked: loadedItem.forceActiveFocus()
     }

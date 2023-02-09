@@ -17,16 +17,20 @@ class Node;
 class OptionsQmlModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(int dbcacheSizeMiB READ dbcacheSizeMiB WRITE setDbcacheSizeMiB NOTIFY dbcacheSizeMiBChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
+    Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
 
 public:
     explicit OptionsQmlModel(interfaces::Node& node);
 
+    int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
+    void setDbcacheSizeMiB(int new_dbcache_size_mib);
     bool listen() const { return m_listen; }
     void setListen(bool new_listen);
     bool natpmp() const { return m_natpmp; }
@@ -35,16 +39,20 @@ public:
     void setPrune(bool new_prune);
     int pruneSizeGB() const { return m_prune_size_gb; }
     void setPruneSizeGB(int new_prune_size);
+    int scriptThreads() const { return m_script_threads; }
+    void setScriptThreads(int new_script_threads);
     bool server() const { return m_server; }
     void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
 
 Q_SIGNALS:
+    void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
     void listenChanged(bool new_listen);
     void natpmpChanged(bool new_natpmp);
     void pruneChanged(bool new_prune);
     void pruneSizeGBChanged(int new_prune_size_gb);
+    void scriptThreadsChanged(int new_script_threads);
     void serverChanged(bool new_server);
     void upnpChanged(bool new_upnp);
 
@@ -52,10 +60,12 @@ private:
     interfaces::Node& m_node;
 
     // Properties that are exposed to QML.
+    int m_dbcache_size_mib;
     bool m_listen;
     bool m_natpmp;
     bool m_prune;
     int m_prune_size_gb;
+    int m_script_threads;
     bool m_server;
     bool m_upnp;
 
