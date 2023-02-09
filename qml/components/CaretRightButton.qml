@@ -8,6 +8,10 @@ import QtQuick.Controls 2.15
 Button {
     id: root
     required property color stateColor
+
+    leftPadding: 0
+    topPadding: 0
+    bottomPadding: 0
     icon.source: "image://images/caret-right"
     icon.color: root.stateColor
     icon.height: 18
