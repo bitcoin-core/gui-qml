@@ -9,13 +9,17 @@ TextInput {
     id: root
     required property string parentState
     property string description: ""
+    property bool filled: false
     property int descriptionSize: 18
     property color textColor
-    state: root.parentState
 
     states: [
         State {
-            name: "FILLED"
+            name: "EMPTY"; when: !filled
+            PropertyChanges { target: root; textColor: Theme.color.neutral5 }
+        },
+        State {
+            name: "FILLED"; when: filled && !(parentState == "HOVER") && !(parentState == "ACTIVE") && !(parentState == "DISABLED")
             PropertyChanges {
                 target: root
                 enabled: true
@@ -23,15 +27,15 @@ TextInput {
             }
         },
         State {
-            name: "HOVER"
+            name: "HOVER"; when: (parentState == "HOVER") && filled
             PropertyChanges { target: root; textColor: Theme.color.orangeLight1 }
         },
         State {
-            name: "ACTIVE"
+            name: "ACTIVE"; when: (parentState == "ACTIVE")
             PropertyChanges { target: root; textColor: Theme.color.orange }
         },
         State {
-            name: "DISABLED"
+            name: "DISABLED"; when: (parentState == "DISABLED")
             PropertyChanges {
                 target: root
                 enabled: false

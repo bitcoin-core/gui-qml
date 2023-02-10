@@ -46,6 +46,9 @@ ColumnLayout {
                 pruneTargetSetting.forceActiveFocus()
             }
         }
-        onClicked: loadedItem.forceActiveFocus()
+        onClicked: {
+            loadedItem.filled = true
+            loadedItem.forceActiveFocus()
+        }
     }
 }
