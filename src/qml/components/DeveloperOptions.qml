@@ -27,9 +27,12 @@ ColumnLayout {
         id: dbcacheSetting
         Layout.fillWidth: true
         header: qsTr("Database cache size (MiB)")
+        errorText: qsTr("This is not a valid cache size.")
+        showErrorText: !loadedItem.acceptableInput && loadedItem.length > 0
         actionItem: ValueInput {
             parentState: dbcacheSetting.state
             description: optionsModel.dbcacheSizeMiB
+            validator: IntValidator{bottom: 100;}
             onEditingFinished: {
                 optionsModel.dbcacheSizeMiB = parseInt(text)
                 dbcacheSetting.forceActiveFocus()
@@ -45,9 +48,12 @@ ColumnLayout {
         id: parSetting
         Layout.fillWidth: true
         header: qsTr("Script verification threads")
+        errorText: qsTr("This is not a valid thread count.")
+        showErrorText: !loadedItem.acceptableInput && loadedItem.length > 0
         actionItem: ValueInput {
             parentState: parSetting.state
             description: optionsModel.scriptThreads
+            validator: IntValidator{bottom: -10; top: 10;}
             onEditingFinished: {
                 optionsModel.scriptThreads = parseInt(text)
                 parSetting.forceActiveFocus()

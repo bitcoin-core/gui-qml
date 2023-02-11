@@ -36,9 +36,12 @@ ColumnLayout {
         id: pruneTargetSetting
         Layout.fillWidth: true
         header: qsTr("Storage limit (GB)")
+        errorText: qsTr("This is not a valid prune target.")
+        showErrorText: !loadedItem.acceptableInput && loadedItem.length > 0
         actionItem: ValueInput {
             parentState: pruneTargetSetting.state
             description: optionsModel.pruneSizeGB
+            validator: IntValidator{bottom: 2;}
             onEditingFinished: {
                 root.customStorage = true
                 root.customStorageAmount = parseInt(text)
