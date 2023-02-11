@@ -13,6 +13,8 @@ AbstractButton {
     property alias actionItem: action_loader.sourceComponent
     property alias loadedItem: action_loader.item
     property string description
+    property string errorText: ""
+    property bool showErrorText: false
     property color stateColor
     state: "FILLED"
 
@@ -74,6 +76,8 @@ AbstractButton {
             description: root.description
             descriptionSize: 15
             descriptionMargin: 0
+            subtext: root.showErrorText ? root.errorText : ""
+            subtextColor: Theme.color.blue
         }
         Loader {
             id: action_loader
