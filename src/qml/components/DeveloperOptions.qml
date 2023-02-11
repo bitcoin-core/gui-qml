@@ -27,12 +27,19 @@ ColumnLayout {
         id: dbcacheSetting
         Layout.fillWidth: true
         header: qsTr("Database cache size (MiB)")
+        errorText: qsTr("This is not a valid cache size. Please choose a value between %1 and %2 MiB.").arg(optionsModel.minDbcacheSizeMiB).arg(optionsModel.maxDbcacheSizeMiB)
+        showErrorText: false
         actionItem: ValueInput {
             parentState: dbcacheSetting.state
             description: optionsModel.dbcacheSizeMiB
             onEditingFinished: {
-                optionsModel.dbcacheSizeMiB = parseInt(text)
-                dbcacheSetting.forceActiveFocus()
+                if (checkValidity(optionsModel.minDbcacheSizeMiB, optionsModel.maxDbcacheSizeMiB, parseInt(text))) {
+                    optionsModel.dbcacheSizeMiB = parseInt(text)
+                    dbcacheSetting.forceActiveFocus()
+                    dbcacheSetting.showErrorText = false
+                } else {
+                    dbcacheSetting.showErrorText = true
+                }
             }
         }
         onClicked: {
@@ -45,12 +52,19 @@ ColumnLayout {
         id: parSetting
         Layout.fillWidth: true
         header: qsTr("Script verification threads")
+        errorText: qsTr("This is not a valid thread count. Please choose a value between %1 and %2 threads.").arg(optionsModel.minScriptThreads).arg(optionsModel.maxScriptThreads)
+        showErrorText: !loadedItem.acceptableInput && loadedItem.length > 0
         actionItem: ValueInput {
             parentState: parSetting.state
             description: optionsModel.scriptThreads
             onEditingFinished: {
-                optionsModel.scriptThreads = parseInt(text)
-                parSetting.forceActiveFocus()
+                if (checkValidity(optionsModel.minScriptThreads, optionsModel.maxScriptThreads, parseInt(text))) {
+                    optionsModel.scriptThreads = parseInt(text)
+                    parSetting.forceActiveFocus()
+                    parSetting.showErrorText = false
+                } else {
+                    parSetting.showErrorText = true
+                }
             }
         }
         onClicked: {

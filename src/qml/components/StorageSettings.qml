@@ -33,12 +33,19 @@ ColumnLayout {
         id: pruneTargetSetting
         Layout.fillWidth: true
         header: qsTr("Storage limit (GB)")
+        errorText: qsTr("This is not a valid prune target. Please choose a value that is equal to or larger than 1GB")
+        showErrorText: false
         actionItem: ValueInput {
             parentState: pruneTargetSetting.state
             description: optionsModel.pruneSizeGB
             onEditingFinished: {
-                optionsModel.pruneSizeGB = parseInt(text)
-                pruneTargetSetting.forceActiveFocus()
+                if (parseInt(text) < 1) {
+                    pruneTargetSetting.showErrorText = true
+                } else {
+                    optionsModel.pruneSizeGB = parseInt(text)
+                    pruneTargetSetting.forceActiveFocus()
+                    pruneTargetSetting.showErrorText = false
+                }
             }
         }
         onClicked: {
