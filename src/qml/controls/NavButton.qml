@@ -15,7 +15,10 @@ AbstractButton {
     property Rectangle iconBackground: null
     property color iconColor: Theme.color.neutral9
 
-    padding: 0
+    topPadding: text_background.active ? 7 : 14
+    bottomPadding: text_background.active ? 7 : 14
+    rightPadding: text_background.active ? 22 : 14
+    leftPadding: text_background.active ? 2 : 14
     background: Rectangle {
         id: bg
         height: root.height
@@ -43,7 +46,6 @@ AbstractButton {
         }
     }
     contentItem: RowLayout {
-        anchors.fill: parent
         spacing: 0
         Loader {
            id: button_background
@@ -63,22 +65,25 @@ AbstractButton {
            }
         }
         Loader {
-           active: root.text.length > 0
-           visible: active
-           sourceComponent: AbstractButton {
-               id: container
-               padding: 0
-               font.family: "Inter"
-               font.styleName: "Semi Bold"
-               font.pixelSize: root.textSize
-               background: null
-               contentItem: Text {
-                   anchors.verticalCenter: parent.verticalCenter
-                   font: container.font
-                   color: Theme.color.neutral9
-                   text: root.text
-              }
-          }
+            id: text_background
+            active: root.text.length > 0
+            visible: active
+            sourceComponent: AbstractButton {
+                id: container
+                topPadding: button_background.active ? 0 : 4
+                bottomPadding: button_background.active ? 0 : 4
+                rightPadding: 0
+                leftPadding: button_background.active ? 0 : 20
+                font.family: "Inter"
+                font.styleName: "Semi Bold"
+                font.pixelSize: root.textSize
+                contentItem: Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    font: container.font
+                    color: Theme.color.neutral9
+                    text: root.text
+                }
+            }
         }
     }
     MouseArea {
