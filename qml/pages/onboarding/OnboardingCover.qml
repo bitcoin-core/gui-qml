@@ -22,6 +22,11 @@ Page {
                 iconSource: "image://images/info"
                 iconHeight: 24
                 iconWidth: 24
+                iconColor: Theme.color.neutral0
+                iconBackground: Rectangle {
+                    radius: 12
+                    color: Theme.color.neutral9
+                }
                 onClicked: {
                     introductions.incrementCurrentIndex()
                 }
