@@ -21,6 +21,7 @@ Page {
             navRightDetail: NavButton {
                 iconSource: "image://images/info"
                 iconHeight: 24
+                iconWidth: 24
                 onClicked: {
                     introductions.incrementCurrentIndex()
                 }

@@ -53,6 +53,7 @@ ApplicationWindow {
                 navRightDetail: NavButton {
                     iconSource: "image://images/gear"
                     iconHeight: 24
+                    iconWidth: 24
                     onClicked: node_swipe.incrementCurrentIndex()
                 }
             }
