@@ -12,6 +12,7 @@ AbstractButton {
     property int iconWidth: 30
     property int textSize: 18
     property url iconSource: ""
+    property Rectangle iconBackground: null
 
     padding: 0
     background: Rectangle {
@@ -57,7 +58,7 @@ AbstractButton {
                icon.color: Theme.color.neutral9
                icon.height: root.iconHeight
                icon.width: root.iconWidth
-               background: null
+               background: root.iconBackground
            }
         }
         Loader {
