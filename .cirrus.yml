@@ -208,7 +208,6 @@ task:
 task:
   name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [jammy]'
   << : *GLOBAL_TASK_TEMPLATE
-  alias: win64
   container:
     image: ubuntu:jammy
   env:
@@ -319,7 +318,6 @@ task:
     folder: "depends/SDKs/$MACOS_SDK"
     fingerprint_key: "$MACOS_SDK"
   << : *MAIN_TEMPLATE
-  alias: macos
   container:
     image: ubuntu:focal
   env:
