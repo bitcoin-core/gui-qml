@@ -31,6 +31,7 @@ Item {
         timeRatioList: chainModel.timeRatioList
         verificationProgress: nodeModel.verificationProgress
         paused: root.paused
+        connected: root.connected
         synced: nodeModel.verificationProgress > 0.999
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
