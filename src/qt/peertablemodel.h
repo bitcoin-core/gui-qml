@@ -42,8 +42,8 @@ class PeerTableModel : public QAbstractTableModel
 public:
     explicit PeerTableModel(interfaces::Node& node, QObject* parent);
     ~PeerTableModel();
-    void startAutoRefresh();
-    void stopAutoRefresh();
+    Q_INVOKABLE void startAutoRefresh();
+    Q_INVOKABLE void stopAutoRefresh();
 
     enum ColumnIndex {
         NetNodeId = 0,

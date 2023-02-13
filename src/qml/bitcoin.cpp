@@ -22,11 +22,13 @@
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/options_model.h>
+#include <qml/peerlistsortproxy.h>
 #include <qml/util.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
+#include <qt/peertablemodel.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 
@@ -170,6 +172,10 @@ int QmlGuiMain(int argc, char* argv[])
         node->startShutdown();
     });
 
+    PeerTableModel peer_model{*node, nullptr};
+    PeerListSortProxy peer_model_sort_proxy{nullptr};
+    peer_model_sort_proxy.setSourceModel(&peer_model);
+
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
@@ -181,6 +187,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
+    engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
+    engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
 
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
