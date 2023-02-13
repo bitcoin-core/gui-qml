@@ -4,8 +4,10 @@
 
 #include <qml/components/blockclockdial.h>
 
+#include <QBrush>
 #include <QColor>
 #include <QPainterPath>
+#include <QConicalGradient>
 #include <QPen>
 #include <QtMath>
 
@@ -18,6 +20,26 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
 {
 }
 
+void BlockClockDial::setupConnectingGradient(const QPen & pen)
+{
+    m_connecting_gradient.setCenter(getBoundsForPen(pen).center());
+    m_connecting_gradient.setAngle(m_connecting_start_angle);
+    m_connecting_gradient.setColorAt(0, m_confirmation_colors[5]);
+    m_connecting_gradient.setColorAt(0.5, m_confirmation_colors[5]);
+    m_connecting_gradient.setColorAt(0.6, m_confirmation_colors[4]);
+    m_connecting_gradient.setColorAt(0.7, m_confirmation_colors[3]);
+    m_connecting_gradient.setColorAt(1, "transparent");
+}
+
+qreal BlockClockDial::decrementGradientAngle(qreal angle)
+{
+    if (angle == -360) {
+        return 0;
+    } else {
+        return angle -= 4;
+    }
+}
+
 void BlockClockDial::setTimeRatioList(QVariantList new_list)
 {
     m_time_ratio_list = new_list;
@@ -27,6 +49,12 @@ void BlockClockDial::setTimeRatioList(QVariantList new_list)
 void BlockClockDial::setVerificationProgress(double progress)
 {
     m_verification_progress = progress;
+    update();
+}
+
+void BlockClockDial::setConnected(bool connected)
+{
+    m_is_connected = connected;
     update();
 }
 
@@ -139,6 +167,20 @@ void BlockClockDial::paintProgress(QPainter * painter)
     painter->drawArc(bounds, startAngle * 16, spanAngle * 16);
 }
 
+void BlockClockDial::paintConnectingAnimation(QPainter * painter)
+{
+    QPen pen;
+    pen.setWidthF(4);
+    setupConnectingGradient(pen);
+    pen.setBrush(QBrush(m_connecting_gradient));
+    pen.setCapStyle(Qt::RoundCap);
+    const QRectF bounds = getBoundsForPen(pen);
+    painter->setPen(pen);
+    painter->drawArc(bounds, m_connecting_start_angle * 16, m_connecting_end_angle * 16);
+    m_connecting_start_angle = decrementGradientAngle(m_connecting_start_angle);
+    update();
+}
+
 void BlockClockDial::paintBackground(QPainter * painter)
 {
     QPen pen(m_background_color);
@@ -185,6 +227,11 @@ void BlockClockDial::paint(QPainter * painter)
     paintTimeTicks(painter);
 
     if (paused()) return;
+
+    if (!(connected())) {
+        paintConnectingAnimation(painter);
+        return;
+    }
 
     if (synced()) {
         paintBlocks(painter);
