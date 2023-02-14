@@ -34,6 +34,10 @@ Button {
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+
+        FocusBorder {
+            visible: root.visualFocus
+        }
     }
     states: [
         State {
@@ -76,6 +80,14 @@ Button {
         onReleased: {
             root.state = "DEFAULT"
             root.clicked()
+        }
+    }
+
+    onVisualFocusChanged: {
+        if (visualFocus && (focusReason == Qt.TabFocusReason || focusReason == Qt.BacktabFocusReason)) {
+            root.state = "HOVER"
+        } else {
+            root.state = "DEFAULT"
         }
     }
 }
