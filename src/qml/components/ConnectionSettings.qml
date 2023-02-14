@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
-    spacing: 20
+    spacing: 4
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable listening")
@@ -22,6 +22,7 @@ ColumnLayout {
           loadedItem.toggled()
         }
     }
+    Separator { Layout.fillWidth: true }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Map port using UPnP")
@@ -34,6 +35,7 @@ ColumnLayout {
           loadedItem.toggled()
         }
     }
+    Separator { Layout.fillWidth: true }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Map port using NAT-PMP")
@@ -46,6 +48,7 @@ ColumnLayout {
           loadedItem.toggled()
         }
     }
+    Separator { Layout.fillWidth: true }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable RPC server")
@@ -58,6 +61,7 @@ ColumnLayout {
           loadedItem.toggled()
         }
     }
+    Separator { Layout.fillWidth: true }
     Setting {
         id: gotoProxy
         last: true
