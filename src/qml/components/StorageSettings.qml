@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
-    spacing: 20
+    spacing: 4
     Setting {
         Layout.fillWidth: true
         header: qsTr("Store recent blocks only")
@@ -28,6 +28,7 @@ ColumnLayout {
           loadedItem.toggled()
         }
     }
+    Separator { Layout.fillWidth: true }
     Setting {
         id: pruneTargetSetting
         Layout.fillWidth: true

@@ -62,36 +62,24 @@ AbstractButton {
         }
     }
 
-    contentItem: ColumnLayout {
-        spacing: 20
-        width: parent.width
-        RowLayout {
-            Header {
-                Layout.fillWidth: true
-                center: false
-                header: root.header
-                headerSize: 18
-                headerColor: root.stateColor
-                description: root.description
-                descriptionSize: 15
-                descriptionMargin: 0
-            }
-            Loader {
-                id: action_loader
-                active: true
-                visible: active
-                sourceComponent: root.actionItem
-            }
+    contentItem: RowLayout {
+        Header {
+            Layout.topMargin: 14
+            Layout.bottomMargin: 14
+            Layout.fillWidth: true
+            center: false
+            header: root.header
+            headerSize: 18
+            headerColor: root.stateColor
+            description: root.description
+            descriptionSize: 15
+            descriptionMargin: 0
         }
         Loader {
-            Layout.fillWidth: true
-            Layout.columnSpan: 2
-            active: !last
+            id: action_loader
+            active: true
             visible: active
-            sourceComponent: Rectangle {
-                height: 1
-                color: Theme.color.neutral5
-            }
+            sourceComponent: root.actionItem
         }
     }
 }
