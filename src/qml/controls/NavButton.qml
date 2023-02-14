@@ -41,6 +41,10 @@ AbstractButton {
             }
         ]
 
+        FocusBorder {
+            visible: root.visualFocus
+        }
+
         Behavior on color {
             ColorAnimation { duration: 150 }
         }

@@ -44,6 +44,14 @@ AbstractButton {
         }
     ]
 
+    background: FocusBorder {
+        visible: root.visualFocus
+        topMargin: -4
+        bottomMargin: -4
+        leftMargin: -6
+        rightMargin: -6
+    }
+
     MouseArea {
         id: mouseArea
         anchors.fill: root
