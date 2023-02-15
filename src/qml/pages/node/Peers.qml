@@ -41,6 +41,30 @@ Page {
         model: peerListModelProxy
         spacing: 15
 
+        footer: Loader {
+            anchors.centerIn: parent
+            height: 75
+            active: nodeModel.numOutboundPeers < nodeModel.maxNumOutboundPeers
+            visible: active
+            sourceComponent: RowLayout {
+                spacing: 20
+                PeersIndicator {
+                    Layout.alignment: Qt.AlignHCenter
+                    numOutboundPeers: nodeModel.numOutboundPeers
+                    maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
+                }
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: qsTr("Looking for %1 more peer(s)").arg(
+                            nodeModel.maxNumOutboundPeers - nodeModel.numOutboundPeers)
+                    font.family: "Inter"
+                    font.styleName: "Regular"
+                    font.pixelSize: 15
+                    color: Theme.color.neutral7
+                }
+            }
+        }
+
         delegate: Item {
             required property int nodeId;
             required property string address;
