@@ -5,7 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-TextEdit {
+TextInput {
     id: root
     required property string parentState
     property string description: ""
@@ -44,7 +44,7 @@ TextEdit {
     font.styleName: "Regular"
     font.pixelSize: root.descriptionSize
     color: root.textColor
-    text: description
+    text: root.description
     horizontalAlignment: Text.AlignRight
     wrapMode: Text.WordWrap
 
