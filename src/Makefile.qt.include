@@ -342,6 +342,7 @@ QML_RES_QML = \
   qml/components/StorageSettings.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/ExternalLink.qml \
+  qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
   qml/controls/InformationPage.qml \
   qml/controls/NavButton.qml \
