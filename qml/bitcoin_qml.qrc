@@ -15,6 +15,7 @@
         <file>components/StorageSettings.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/ExternalLink.qml</file>
+        <file>controls/FocusBorder.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/InformationPage.qml</file>
         <file>controls/NavButton.qml</file>
