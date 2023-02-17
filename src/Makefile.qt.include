@@ -40,6 +40,7 @@ QT_MOC_CPP = \
   qml/moc_chainmodel.cpp \
   qml/moc_nodemodel.cpp \
   qml/moc_options_model.cpp \
+  qml/moc_peerlistsortproxy.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
@@ -118,6 +119,7 @@ BITCOIN_QT_H = \
   qml/imageprovider.h \
   qml/nodemodel.h \
   qml/options_model.h \
+  qml/peerlistsortproxy.h \
   qml/util.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
@@ -300,6 +302,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/imageprovider.cpp \
   qml/nodemodel.cpp \
   qml/options_model.cpp \
+  qml/peerlistsortproxy.cpp \
   qml/util.cpp
 
 QML_RES_FONTS = \
@@ -360,6 +363,7 @@ QML_RES_QML = \
   qml/pages/main.qml \
   qml/pages/node/NodeRunner.qml \
   qml/pages/node/NodeSettings.qml \
+  qml/pages/node/Peers.qml \
   qml/pages/onboarding/OnboardingBlockclock.qml \
   qml/pages/onboarding/OnboardingConnection.qml \
   qml/pages/onboarding/OnboardingCover.qml \
