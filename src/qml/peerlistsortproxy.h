@@ -14,6 +14,7 @@
 class PeerListSortProxy : public PeerTableSortProxy
 {
     Q_OBJECT
+    Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
 
 public:
     explicit PeerListSortProxy(QObject* parent);
@@ -21,6 +22,17 @@ public:
 
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
+    QString sortBy() const;
+
+public Q_SLOTS:
+    void setSortBy(const QString & roleName);
+
+Q_SIGNALS:
+    void sortByChanged(const QString & roleName);
+
+private:
+    int RoleNameToIndex(const QString & name) const;
+    QString m_sort_by;
 };
 
 #endif // BITCOIN_QML_PEERLISTSORTPROXY_H

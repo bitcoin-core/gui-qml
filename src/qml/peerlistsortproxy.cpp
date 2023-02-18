@@ -26,6 +26,17 @@ QHash<int, QByteArray> PeerListSortProxy::roleNames() const
     return roles;
 }
 
+int PeerListSortProxy::RoleNameToIndex(const QString & name) const
+{
+    auto role_names = roleNames();
+    auto keys = role_names.keys(name.toUtf8());
+    if (!keys.empty()) {
+        return keys.first();
+    } else {
+        return PeerTableModel::NetNodeId;
+    }
+}
+
 QVariant PeerListSortProxy::data(const QModelIndex& index, int role) const
 {
     if (role == PeerTableModel::StatsRole) {
@@ -34,4 +45,18 @@ QVariant PeerListSortProxy::data(const QModelIndex& index, int role) const
 
     QModelIndex converted_index = PeerTableSortProxy::index(index.row(), role);
     return PeerTableSortProxy::data(converted_index, Qt::DisplayRole);
+}
+
+QString PeerListSortProxy::sortBy() const
+{
+    return m_sort_by;
+}
+
+void PeerListSortProxy::setSortBy(const QString & roleName)
+{
+    if (m_sort_by != roleName) {
+        m_sort_by = roleName;
+        sort(RoleNameToIndex(roleName));
+        Q_EMIT sortByChanged(roleName);
+    }
 }
