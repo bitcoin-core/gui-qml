@@ -8,6 +8,7 @@
 #include <QQuickPaintedItem>
 #include <QConicalGradient>
 #include <QPainter>
+#include <QTimer>
 
 class BlockClockDial : public QQuickPaintedItem
 {
@@ -66,6 +67,8 @@ private:
     const qreal m_connecting_end_angle = -180;
     QList<QColor> m_confirmation_colors;
     QColor m_time_tick_color;
+    QTimer m_animation_timer;
+    QTimer m_delay_timer;
 };
 
 #endif // BITCOIN_QML_COMPONENTS_BLOCKCLOCKDIAL_H
