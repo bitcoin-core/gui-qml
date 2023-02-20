@@ -17,7 +17,18 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
 , m_background_color{QColor("#2D2D2D")}
 , m_confirmation_colors{QList<QColor>{}}
 , m_time_tick_color{QColor("#000000")}
+, m_animation_timer{QTimer(this)}
+, m_delay_timer{QTimer(this)}
 {
+    m_animation_timer.setTimerType(Qt::PreciseTimer);
+    m_animation_timer.setInterval(16);
+    m_delay_timer.setSingleShot(true);
+    m_delay_timer.setInterval(5000);
+    connect(&m_animation_timer, &QTimer::timeout,
+            this, [=]() { this->update(); });
+    connect(&m_delay_timer, &QTimer::timeout,
+            this, [=]() { this->m_animation_timer.start(); });
+    m_delay_timer.start();
 }
 
 void BlockClockDial::setupConnectingGradient(const QPen & pen)
@@ -54,7 +65,15 @@ void BlockClockDial::setVerificationProgress(double progress)
 
 void BlockClockDial::setConnected(bool connected)
 {
-    m_is_connected = connected;
+    if (m_is_connected != connected) {
+        m_is_connected = connected;
+        m_delay_timer.stop();
+        if (m_is_connected) {
+            m_animation_timer.stop();
+        } else {
+            m_delay_timer.start();
+        }
+    }
     update();
 }
 
@@ -178,7 +197,6 @@ void BlockClockDial::paintConnectingAnimation(QPainter * painter)
     painter->setPen(pen);
     painter->drawArc(bounds, m_connecting_start_angle * 16, m_connecting_end_angle * 16);
     m_connecting_start_angle = decrementGradientAngle(m_connecting_start_angle);
-    update();
 }
 
 void BlockClockDial::paintBackground(QPainter * painter)
@@ -228,14 +246,14 @@ void BlockClockDial::paint(QPainter * painter)
 
     if (paused()) return;
 
-    if (!(connected())) {
+    if (m_animation_timer.isActive()) {
         paintConnectingAnimation(painter);
         return;
     }
 
-    if (synced()) {
+    if (synced() && connected()) {
         paintBlocks(painter);
-    } else {
+    } else if (connected()) {
         paintProgress(painter);
     }
 }
