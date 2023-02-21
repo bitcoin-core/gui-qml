@@ -4,8 +4,13 @@ import QtQuick.Controls 2.15
 
 Control {
     property bool dark: true
+    property color windowColor: systemColor.window
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
+
+    SystemPalette {
+        id: systemColor
+    }
 
     component ColorSet: QtObject {
         required property color white
@@ -117,5 +122,19 @@ Control {
 
     function toggleDark() {
         dark = !dark
+    }
+
+    onWindowColorChanged: {
+        dark = isSystemDarkMode(windowColor)
+    }
+
+    function isSystemDarkMode(windowColor) {
+        var luminance = 0.2126 * windowColor.r + 0.7152 * windowColor.g + 0.0722 * windowColor.b;
+
+        if (luminance <= 0.5) {
+            return true;
+        } else {
+            return false;
+        }
     }
 }
