@@ -14,7 +14,7 @@ AbstractButton {
     property url iconSource: ""
     property Rectangle iconBackground: null
     property color iconColor: Theme.color.neutral9
-
+    hoverEnabled: true
     topPadding: text_background.active ? 7 : 14
     bottomPadding: text_background.active ? 7 : 14
     rightPadding: text_background.active ? 22 : 14

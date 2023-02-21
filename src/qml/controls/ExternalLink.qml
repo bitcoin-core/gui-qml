@@ -15,17 +15,17 @@ AbstractButton {
     property url iconSource: "image://images/export"
     property int iconWidth: 22
     property int iconHeight: 22
-    property color iconColor
-    property color textColor
+    property color iconColor: Theme.color.neutral9
+    property color textColor: Theme.color.neutral7
     state: root.parentState
 
     states: [
         State {
-            name: "FILLED"
+            name: "ACTIVE"
             PropertyChanges {
                 target: root
-                iconColor: Theme.color.neutral9
-                textColor: Theme.color.neutral7
+                iconColor: Theme.color.orange
+                textColor: Theme.color.orange
             }
         },
         State {
@@ -34,14 +34,6 @@ AbstractButton {
                 target: root
                 iconColor: Theme.color.orangeLight1
                 textColor: Theme.color.orangeLight1
-            }
-        },
-        State {
-            name: "ACTIVE"
-            PropertyChanges {
-                target: root
-                iconColor: Theme.color.orange
-                textColor: Theme.color.orange
             }
         }
     ]

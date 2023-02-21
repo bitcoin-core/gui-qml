@@ -14,6 +14,7 @@ AbstractButton {
     property alias loadedItem: action_loader.item
     property string description
     property color stateColor
+    hoverEnabled: true
     state: "FILLED"
 
     states: [

@@ -10,25 +10,18 @@ TextInput {
     required property string parentState
     property string description: ""
     property int descriptionSize: 18
-    property color textColor
+    property color textColor: Theme.color.neutral9
+    enabled: true
     state: root.parentState
 
     states: [
         State {
-            name: "FILLED"
-            PropertyChanges {
-                target: root
-                enabled: true
-                textColor: Theme.color.neutral9
-            }
+            name: "ACTIVE"
+            PropertyChanges { target: root; textColor: Theme.color.orange }
         },
         State {
             name: "HOVER"
             PropertyChanges { target: root; textColor: Theme.color.orangeLight1 }
-        },
-        State {
-            name: "ACTIVE"
-            PropertyChanges { target: root; textColor: Theme.color.orange }
         },
         State {
             name: "DISABLED"
