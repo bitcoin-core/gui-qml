@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_OPTIONS_MODEL_H
 #define BITCOIN_QML_OPTIONS_MODEL_H
 
+#include <txdb.h>
 #include <util/settings.h>
 #include <util/system.h>
 #include <validation.h>
@@ -21,6 +22,8 @@ class OptionsQmlModel : public QObject
     Q_OBJECT
     Q_PROPERTY(int dbcacheSizeMiB READ dbcacheSizeMiB WRITE setDbcacheSizeMiB NOTIFY dbcacheSizeMiBChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
+    Q_PROPERTY(int maxDbcacheSizeMiB READ maxDbcacheSizeMiB CONSTANT)
+    Q_PROPERTY(int minDbcacheSizeMiB READ minDbcacheSizeMiB CONSTANT)
     Q_PROPERTY(int maxScriptThreads READ maxScriptThreads CONSTANT)
     Q_PROPERTY(int minScriptThreads READ minScriptThreads CONSTANT)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
@@ -37,6 +40,8 @@ public:
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
     bool listen() const { return m_listen; }
     void setListen(bool new_listen);
+    int maxDbcacheSizeMiB() const { return m_max_dbcache_size_mib; }
+    int minDbcacheSizeMiB() const { return m_min_dbcache_size_mib; }
     int maxScriptThreads() const { return m_max_script_threads; }
     int minScriptThreads() const { return m_min_script_threads; }
     bool natpmp() const { return m_natpmp; }
@@ -67,6 +72,8 @@ private:
 
     // Properties that are exposed to QML.
     int m_dbcache_size_mib;
+    const int m_min_dbcache_size_mib{nMinDbCache};
+    const int m_max_dbcache_size_mib{nMaxDbCache};
     bool m_listen;
     const int m_max_script_threads{MAX_SCRIPTCHECK_THREADS};
     const int m_min_script_threads{-GetNumCores()};
