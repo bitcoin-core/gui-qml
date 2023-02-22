@@ -10,6 +10,7 @@ Button {
     font.family: "Inter"
     font.styleName: "Semi Bold"
     font.pixelSize: 18
+    hoverEnabled: true
     contentItem: Text {
         text: parent.text
         font: parent.font
@@ -23,42 +24,20 @@ Button {
         implicitWidth: 300
         color: Theme.color.orange
         radius: 5
-        state:"DEFAULT"
 
         states: [
             State {
-                name: "DEFAULT"
-                PropertyChanges { target: bg; color: Theme.color.orange }
-            },
-            State {
-                name: "HOVER"
-                PropertyChanges { target: bg; color: Theme.color.orangeLight1 }
-            },
-            State {
-                name: "PRESSED"
+                name: "PRESSED"; when: root.pressed
                 PropertyChanges { target: bg; color: Theme.color.orangeLight2 }
+            },
+            State {
+                name: "HOVER"; when: root.hovered
+                PropertyChanges { target: bg; color: Theme.color.orangeLight1 }
             }
         ]
 
         Behavior on color {
             ColorAnimation { duration: 150 }
-        }
-    }
-    MouseArea {
-        anchors.fill: parent
-        hoverEnabled: true
-        onEntered: {
-            root.background.state = "HOVER"
-        }
-        onExited: {
-            root.background.state = "DEFAULT"
-        }
-        onPressed: {
-            root.background.state = "PRESSED"
-        }
-        onReleased: {
-            root.background.state = "DEFAULT"
-            root.clicked()
         }
     }
 }
