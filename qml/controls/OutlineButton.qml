@@ -7,16 +7,12 @@ import QtQuick.Controls 2.15
 
 Button {
     id: root
-    font.family: "Inter"
-    font.styleName: "Semi Bold"
-    font.pixelSize: 18
     hoverEnabled: true
-    contentItem: Text {
+    contentItem: CoreText {
         text: parent.text
-        font: parent.font
+        bold: true
+        font.pixelSize: 18
         color: Theme.color.neutral9
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
     }
     background: Rectangle {
         id: bg
