@@ -12,17 +12,14 @@ Button {
     property color bgColor: Theme.color.background
     property bool bold: true
     property bool rightalign: false
-    font.family: "Inter"
-    font.styleName: bold ? "Semi Bold" : "Regular"
-    font.pixelSize: root.textSize
     padding: 15
     hoverEnabled: true
-    contentItem: Text {
+    contentItem: CoreText {
         text: root.text
-        font: root.font
+        bold: root.bold
+        font.pixelSize: root.textSize
         color: root.textColor
         horizontalAlignment: rightalign ? Text.AlignRight : Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
