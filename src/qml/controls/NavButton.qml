@@ -74,12 +74,10 @@ AbstractButton {
                 bottomPadding: button_background.active ? 0 : 4
                 rightPadding: 0
                 leftPadding: button_background.active ? 0 : 20
-                font.family: "Inter"
-                font.styleName: "Semi Bold"
-                font.pixelSize: root.textSize
-                contentItem: Text {
+                contentItem: CoreText {
                     anchors.verticalCenter: parent.verticalCenter
-                    font: container.font
+                    bold: true
+                    font.pixelSize: root.textSize
                     color: Theme.color.neutral9
                     text: root.text
                 }
