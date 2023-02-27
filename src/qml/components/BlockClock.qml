@@ -175,6 +175,6 @@ Item {
             return "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left";
         }
 
-        return "~0 seconds left";
+        return "Estimating";
     }
 }
