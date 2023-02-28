@@ -92,7 +92,7 @@ Item {
             name: "IBD"; when: !synced && !paused && connected
             PropertyChanges {
                 target: root
-                header: Math.round(nodeModel.verificationProgress * 100) + "%"
+                header: formatProgressPercentage(nodeModel.verificationProgress * 100)
                 subText: formatRemainingSyncTime(nodeModel.remainingSyncTime)
             }
         },
@@ -142,6 +142,18 @@ Item {
             }
         }
     ]
+
+    function formatProgressPercentage(progress) {
+        if (progress >= 1) {
+            return Math.round(progress) + "%"
+        } else if (progress >= 0.1) {
+            return progress.toFixed(1) + "%"
+        } else if (progress >= 0.01) {
+            return progress.toFixed(2) + "%"
+        } else {
+            return "0%"
+        }
+    }
 
     function formatRemainingSyncTime(milliseconds) {
         var minutes = Math.floor(milliseconds / 60000);
