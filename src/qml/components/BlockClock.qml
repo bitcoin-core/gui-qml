@@ -131,7 +131,7 @@ Item {
                 target: root
                 header: "Connecting"
                 headerSize: 24
-                subText: "Please Wait"
+                subText: "Please wait"
             }
             PropertyChanges {
                 target: bitcoinIcon
@@ -176,6 +176,6 @@ Item {
             return "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left";
         }
 
-        return "~0 seconds left";
+        return "Estimating";
     }
 }
