@@ -130,7 +130,7 @@ Item {
                 target: root
                 header: "Connecting"
                 headerSize: 24
-                subText: "Please Wait"
+                subText: "Please wait"
             }
             PropertyChanges {
                 target: bitcoinIcon
