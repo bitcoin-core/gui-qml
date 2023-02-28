@@ -20,6 +20,7 @@ NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
     ConnectToBlockTipSignal();
+    ConnectToHeaderTipSignal();
     ConnectToNumConnectionsChangedSignal();
 }
 
@@ -36,6 +37,47 @@ void NodeModel::setNumOutboundPeers(int new_num)
     if (new_num != m_num_outbound_peers) {
         m_num_outbound_peers = new_num;
         Q_EMIT numOutboundPeersChanged();
+    }
+}
+
+void NodeModel::setInHeaderSync(bool new_in_header_sync)
+{
+    if (new_in_header_sync != m_in_header_sync) {
+        m_in_header_sync = new_in_header_sync;
+        Q_EMIT inHeaderSyncChanged();
+    }
+}
+
+void NodeModel::setHeaderSyncProgress(int64_t header_height, const QDateTime& block_date)
+{
+    int estimated_headers_left = block_date.secsTo(QDateTime::currentDateTime()) / Params().GetConsensus().nPowTargetSpacing;
+    double new_header_sync_progress = (100.0 / (header_height + estimated_headers_left) * header_height) / 10000;
+
+    if (new_header_sync_progress != m_header_sync_progress) {
+        m_header_sync_progress = new_header_sync_progress;
+        setVerificationProgress(0.0);
+        Q_EMIT headerSyncProgressChanged();
+    }
+}
+
+void NodeModel::setInPreHeaderSync(bool new_in_pre_header_sync)
+{
+    if (new_in_pre_header_sync != m_in_pre_header_sync) {
+        m_in_pre_header_sync = new_in_pre_header_sync;
+        Q_EMIT inPreHeaderSyncChanged();
+    }
+}
+
+void NodeModel::setPreHeaderSyncProgress(int64_t header_height, const QDateTime& block_date)
+{
+    int estimated_headers_left = block_date.secsTo(QDateTime::currentDateTime()) / Params().GetConsensus().nPowTargetSpacing;
+    double new_pre_header_sync_progress = (100.0 / (header_height + estimated_headers_left) * header_height) / 10000;
+
+    if (new_pre_header_sync_progress != m_pre_header_sync_progress) {
+        m_pre_header_sync_progress = new_pre_header_sync_progress;
+        setVerificationProgress(0.0);
+        Q_EMIT preHeaderSyncProgressChanged();
+
     }
 }
 
@@ -74,12 +116,19 @@ void NodeModel::setRemainingSyncTime(double new_progress)
         }
     }
 }
+
 void NodeModel::setVerificationProgress(double new_progress)
 {
-    if (new_progress != m_verification_progress) {
-        setRemainingSyncTime(new_progress);
+    double header_progress = m_header_sync_progress + m_pre_header_sync_progress;
+    if (!m_in_header_sync && !m_in_pre_header_sync) {
+       if (new_progress != m_verification_progress) {
+            setRemainingSyncTime(new_progress);
 
-        m_verification_progress = new_progress;
+            m_verification_progress = header_progress + (new_progress - header_progress);
+            Q_EMIT verificationProgressChanged();
+        }
+    } else {
+        m_verification_progress = header_progress;
         Q_EMIT verificationProgressChanged();
     }
 }
@@ -140,8 +189,29 @@ void NodeModel::ConnectToBlockTipSignal()
             QMetaObject::invokeMethod(this, [=] {
                 setBlockTipHeight(tip.block_height);
                 setVerificationProgress(verification_progress);
-
+                setInHeaderSync(false);
+                setInPreHeaderSync(false);
                 Q_EMIT setTimeRatioList(tip.block_time);
+            });
+        });
+}
+
+void NodeModel::ConnectToHeaderTipSignal()
+{
+    assert(!m_handler_notify_header_tip);
+
+    m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(
+        [this](SynchronizationState sync_state, interfaces::BlockTip tip, bool presync) {
+            QMetaObject::invokeMethod(this, [=] {
+                if (presync) {
+                    setInHeaderSync(false);
+                    setInPreHeaderSync(true);
+                    setPreHeaderSyncProgress(tip.block_height, QDateTime::fromSecsSinceEpoch(tip.block_time));
+                } else {
+                    setInHeaderSync(true);
+                    setInPreHeaderSync(false);
+                    setHeaderSyncProgress(tip.block_height, QDateTime::fromSecsSinceEpoch(tip.block_time));
+                }
             });
         });
 }
