@@ -18,15 +18,9 @@ Button {
         border.color: button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
         radius: 10
         color: "transparent"
-        Rectangle {
+        FocusBorder {
             visible: button.visualFocus
-            anchors.fill: parent
-            anchors.margins: -4
-            border.width: 2
-            border.color: Theme.color.orange
-            radius: 14
-            color: "transparent"
-            opacity: 0.4
+            borderRadius: 14
         }
     }
     contentItem: RowLayout {
