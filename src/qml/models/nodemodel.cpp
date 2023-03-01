@@ -32,6 +32,15 @@ void NodeModel::setBlockTipHeight(int new_height)
     }
 }
 
+
+void NodeModel::setInIBD(bool new_ibd)
+{
+    if (new_ibd != m_in_ibd) {
+        m_in_ibd = new_ibd;
+        Q_EMIT inIBDChanged();
+    }
+}
+
 void NodeModel::setNumOutboundPeers(int new_num)
 {
     if (new_num != m_num_outbound_peers) {
@@ -188,6 +197,7 @@ void NodeModel::ConnectToBlockTipSignal()
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             QMetaObject::invokeMethod(this, [=] {
                 setBlockTipHeight(tip.block_height);
+                setInIBD(m_node.isInitialBlockDownload());
                 setVerificationProgress(verification_progress);
                 setInHeaderSync(false);
                 setInPreHeaderSync(false);
@@ -202,6 +212,7 @@ void NodeModel::ConnectToHeaderTipSignal()
 
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(
         [this](SynchronizationState sync_state, interfaces::BlockTip tip, bool presync) {
+            setInIBD(m_node.isInitialBlockDownload());
             QMetaObject::invokeMethod(this, [=] {
                 if (presync) {
                     setInHeaderSync(false);

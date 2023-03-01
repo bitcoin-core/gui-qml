@@ -28,6 +28,7 @@ class NodeModel : public QObject
     Q_OBJECT
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
+    Q_PROPERTY(bool inIBD READ inIBD NOTIFY inIBDChanged)
     Q_PROPERTY(int numOutboundPeers READ numOutboundPeers NOTIFY numOutboundPeersChanged)
     Q_PROPERTY(int maxNumOutboundPeers READ maxNumOutboundPeers CONSTANT)
     Q_PROPERTY(bool inHeaderSync READ inHeaderSync WRITE setInHeaderSync NOTIFY inHeaderSyncChanged)
@@ -44,6 +45,8 @@ public:
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
     QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
+    bool inIBD() const { return m_in_ibd; }
+    void setInIBD(bool new_ibd);
     int numOutboundPeers() const { return m_num_outbound_peers; }
     void setNumOutboundPeers(int new_num);
     int maxNumOutboundPeers() const { return m_max_num_outbound_peers; }
@@ -76,6 +79,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void blockTipHeightChanged();
+    void inIBDChanged();
     void numOutboundPeersChanged();
     void inHeaderSyncChanged();
     void headerSyncProgressChanged();
@@ -96,6 +100,7 @@ protected:
 private:
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+    bool m_in_ibd;
     int m_num_outbound_peers{0};
     static constexpr int m_max_num_outbound_peers{MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS};
     bool m_in_header_sync;
