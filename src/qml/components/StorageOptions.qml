@@ -5,6 +5,9 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+
+import org.bitcoincore.qt 1.0
+
 import "../controls"
 
 ColumnLayout {
@@ -19,7 +22,7 @@ ColumnLayout {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Reduce storage")
-        description: qsTr("Uses about 2GB. For simple wallet use.")
+        description: qsTr("Uses about %1GB. For simple wallet use.").arg(chainModel.assumedChainstateSize + 2)
         recommended: true
         checked: !root.customStorage && optionsModel.prune
         onClicked: {
@@ -36,7 +39,8 @@ ColumnLayout {
         ButtonGroup.group: group
         text: qsTr("Store all data")
         checked: !optionsModel.prune
-        description: qsTr("Uses about 550GB. Support the network.")
+        description: qsTr("Uses about %1GB. Support the network.").arg(
+            chainModel.assumedBlockchainSize + chainModel.assumedChainstateSize)
         onClicked: {
             optionsModel.prune = false
         }
@@ -49,7 +53,7 @@ ColumnLayout {
             ButtonGroup.group: group
             checked: root.customStorage && optionsModel.prune
             text: qsTr("Custom")
-            description: qsTr("Storing recent blocks up to %1GB").arg(root.customStorageAmount)
+            description: qsTr("Storing about %1GB of data.").arg(root.customStorageAmount + chainModel.assumedChainstateSize)
             onClicked: {
                 optionsModel.prune = true
                 optionsModel.pruneSizeGB = root.customStorageAmount

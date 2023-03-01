@@ -35,7 +35,7 @@ ColumnLayout {
     Setting {
         id: pruneTargetSetting
         Layout.fillWidth: true
-        header: qsTr("Storage limit (GB)")
+        header: qsTr("Block Storage limit (GB)")
         errorText: qsTr("This is not a valid prune target. Please choose a value that is equal to or larger than 1GB")
         showErrorText: false
         actionItem: ValueInput {
