@@ -25,6 +25,14 @@ ApplicationWindow {
         anchors.fill: parent
     }
 
+    Connections {
+        target: nodeModel
+        function onRequestedShutdown() {
+            main.clear()
+            main.push(shutdown)
+        }
+    }
+
     Component {
         id: onboardingWizard
         SwipeView {
@@ -41,6 +49,11 @@ ApplicationWindow {
 
             onFinishedChanged: main.push(node)
         }
+    }
+
+    Component {
+        id: shutdown
+        Shutdown {}
     }
 
     Component {

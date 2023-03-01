@@ -324,6 +324,7 @@ QML_RES_ICONS = \
   qml/res/icons/info.png \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
+  qml/res/icons/shutdown.png \
   qml/res/icons/storage-dark.png \
   qml/res/icons/storage-light.png
 
@@ -368,6 +369,7 @@ QML_RES_QML = \
   qml/pages/node/NodeRunner.qml \
   qml/pages/node/NodeSettings.qml \
   qml/pages/node/Peers.qml \
+  qml/pages/node/Shutdown.qml \
   qml/pages/onboarding/OnboardingBlockclock.qml \
   qml/pages/onboarding/OnboardingConnection.qml \
   qml/pages/onboarding/OnboardingCover.qml \
