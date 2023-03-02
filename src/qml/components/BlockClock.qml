@@ -37,6 +37,18 @@ Item {
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
+
+        Behavior on backgroundColor {
+            ColorAnimation { duration: 150 }
+        }
+
+        Behavior on timeTickColor {
+            ColorAnimation { duration: 150 }
+        }
+
+        Behavior on confirmationColors {
+            ColorAnimation { duration: 150 }
+        }
     }
 
     Button {
@@ -48,6 +60,10 @@ Item {
         icon.height: 40
         anchors.bottom: mainText.top
         anchors.horizontalCenter: root.horizontalCenter
+
+        Behavior on icon.color {
+            ColorAnimation { duration: 150 }
+        }
     }
 
     Label {
@@ -57,6 +73,10 @@ Item {
         font.styleName: "Semi Bold"
         font.pixelSize: 32
         color: Theme.color.neutral9
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
     }
 
     Label {
@@ -67,6 +87,10 @@ Item {
         font.styleName: "Semi Bold"
         font.pixelSize: 18
         color: Theme.color.neutral4
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
     }
 
     PeersIndicator {
