@@ -66,6 +66,10 @@ AbstractButton {
                icon.height: root.iconHeight
                icon.width: root.iconWidth
                background: root.iconBackground
+
+               Behavior on icon.color {
+                   ColorAnimation { duration: 150 }
+               }
            }
         }
         Loader {

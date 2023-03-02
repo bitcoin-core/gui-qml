@@ -9,4 +9,8 @@ import "../controls"
 Rectangle {
     height: 1
     color: Theme.color.neutral5
+
+    Behavior on color {
+        ColorAnimation { duration: 150 }
+    }
 }

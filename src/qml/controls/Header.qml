@@ -54,6 +54,10 @@ ColumnLayout {
             text: root.description
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
         }
     }
     Loader {
@@ -69,6 +73,10 @@ ColumnLayout {
             text: root.subtext
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
         }
     }
 }
