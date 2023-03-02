@@ -92,6 +92,26 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
 }
+
+bool ConfigurationFileExists(ArgsManager& argsman)
+{
+    fs::path settings_path;
+    if (!argsman.GetSettingsPath(&settings_path)) {
+        // settings file is disabled
+        return true;
+    }
+    if (fs::exists(settings_path)) {
+        return true;
+    }
+
+    const fs::path rel_config_path = argsman.GetPathArg("-conf", BITCOIN_CONF_FILENAME);
+    const fs::path abs_config_path = AbsPathForConfigVal(rel_config_path, true);
+    if (fs::exists(abs_config_path)) {
+        return true;
+    }
+
+    return false;
+}
 } // namespace
 
 
@@ -146,11 +166,19 @@ int QmlGuiMain(int argc, char* argv[])
     }
 
     /// Read and parse settings.json file.
-    if (!gArgs.InitSettings(error)) {
+    std::vector<std::string> errors;
+    if (!gArgs.ReadSettingsFile(&errors)) {
+        error = strprintf("Failed loading settings file:\n%s\n", MakeUnorderedList(errors));
         InitError(Untranslated(error));
         return EXIT_FAILURE;
     }
 
+    QVariant need_onboarding(true);
+    if (gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) {
+        need_onboarding.setValue(false);
+    } else if (ConfigurationFileExists(gArgs)) {
+        need_onboarding.setValue(false);
+    }
     // Default printtoconsole to false for the GUI. GUI programs should not
     // print to the console unnecessarily.
     gArgs.SoftSetBoolArg("-printtoconsole", false);
@@ -208,6 +236,7 @@ int QmlGuiMain(int argc, char* argv[])
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
 
+    engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
 #ifdef __ANDROID__
     AppMode app_mode(AppMode::MOBILE);
 #else
