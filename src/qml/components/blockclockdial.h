@@ -55,6 +55,7 @@ private:
     double degreesPerPixel();
     void setupConnectingGradient(const QPen & pen);
     qreal decrementGradientAngle(qreal angle);
+    qreal incrementAnimatingMaxAngle(qreal angle);
 
     QVariantList m_time_ratio_list;
     double m_verification_progress;
@@ -69,6 +70,7 @@ private:
     QColor m_time_tick_color;
     QTimer m_animation_timer;
     QTimer m_delay_timer;
+    qreal m_animating_max_angle = 0;
 };
 
 #endif // BITCOIN_QML_COMPONENTS_BLOCKCLOCKDIAL_H
