@@ -24,6 +24,7 @@ $(package)_patches += fast_fixed_dtoa_no_optimize.patch
 $(package)_patches += guix_cross_lib_path.patch
 $(package)_patches += fix_android_plugin_names.patch
 $(package)_patches += fix_riscv_atomic.patch
+$(package)_patches += fix_android_controls_file_location.patch
 
 $(package)_qtdeclarative_file_name = qtdeclarative-$($(package)_suffix)
 $(package)_qtdeclarative_sha256_hash = 5cc169d91efb15a1ee7f484862f872c3eaba592dacf3c0fbcb55c0f3c208254a
@@ -300,6 +301,7 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/guix_cross_lib_path.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_android_plugin_names.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_riscv_atomic.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_android_controls_file_location.patch && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
