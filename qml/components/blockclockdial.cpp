@@ -18,16 +18,21 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
 , m_confirmation_colors{QList<QColor>{}}
 , m_time_tick_color{QColor("#000000")}
 , m_animation_timer{QTimer(this)}
-, m_delay_timer{QTimer(this)}
 {
     m_animation_timer.setTimerType(Qt::PreciseTimer);
     m_animation_timer.setInterval(16);
     m_delay_timer.setSingleShot(true);
     m_delay_timer.setInterval(5000);
-    connect(&m_animation_timer, &QTimer::timeout,
-            this, [=]() { this->update(); });
     connect(&m_delay_timer, &QTimer::timeout,
             this, [=]() { this->m_animation_timer.start(); });
+    connect(&m_animation_timer, &QTimer::timeout,
+            this, [=]() {
+                if (m_is_connected
+                    && m_animating_max_angle >= 360) {
+                    m_animation_timer.stop();
+                }
+                this->update();
+            });
     m_delay_timer.start();
 }
 
@@ -51,6 +56,15 @@ qreal BlockClockDial::decrementGradientAngle(qreal angle)
     }
 }
 
+qreal BlockClockDial::incrementAnimatingMaxAngle(qreal angle)
+{
+    if (angle >= 360) {
+        return 360;
+    } else {
+        return angle += 4;
+    }
+}
+
 void BlockClockDial::setTimeRatioList(QVariantList new_list)
 {
     m_time_ratio_list = new_list;
@@ -67,26 +81,36 @@ void BlockClockDial::setConnected(bool connected)
 {
     if (m_is_connected != connected) {
         m_is_connected = connected;
-        m_delay_timer.stop();
+        m_animating_max_angle = 0;
         if (m_is_connected) {
-            m_animation_timer.stop();
+            m_animation_timer.start();
         } else {
+            m_animation_timer.stop();
             m_delay_timer.start();
         }
+        update();
     }
-    update();
 }
 
-void BlockClockDial::setSynced(bool synced)
+void BlockClockDial::setSynced(bool is_synced)
 {
-    m_is_synced = synced;
-    update();
+    if (m_is_synced != is_synced) {
+        m_is_synced = is_synced;
+        m_animating_max_angle = 0;
+        update();
+    }
 }
 
 void BlockClockDial::setPaused(bool paused)
 {
-    m_is_paused = paused;
-    update();
+    if (m_is_paused != paused) {
+        m_is_paused = paused;
+        if (m_is_paused) {
+            m_animation_timer.stop();
+        }
+        m_animating_max_angle = 0;
+        update();
+    }
 }
 
 void BlockClockDial::setBackgroundColor(QColor color)
@@ -111,7 +135,12 @@ QRectF BlockClockDial::getBoundsForPen(const QPen & pen)
 {
     const QRectF bounds = boundingRect();
     const qreal smallest = qMin(bounds.width(), bounds.height());
-    QRectF rect = QRectF(pen.widthF() / 2.0 + 1, pen.widthF() / 2.0 + 1, smallest - pen.widthF() - 2, smallest - pen.widthF() - 2);
+    QRectF rect = QRectF(
+        pen.widthF() / 2.0 + 1,
+        pen.widthF() / 2.0 + 1,
+        smallest - pen.widthF() - 2,
+        smallest - pen.widthF() - 2
+    );
     rect.moveCenter(bounds.center());
 
     // Make sure the arc is aligned to whole pixels.
@@ -160,9 +189,17 @@ void BlockClockDial::paintBlocks(QPainter * painter)
         } else {
             nextAngle = 90 + (-360 * m_time_ratio_list[i+1].toDouble());
         }
-        const qreal spanAngle = -1 * (startAngle - nextAngle) + gap;
+
         QPainterPath path;
         path.arcMoveTo(bounds, startAngle);
+
+        if (-1 * nextAngle + 90 > m_animating_max_angle) {
+            nextAngle = -1 * m_animating_max_angle + 90;
+            // end the loop early
+            i = numberOfBlocks;
+        }
+
+        const qreal spanAngle = -1 * (startAngle - nextAngle) + gap;
         path.arcTo(bounds, startAngle, spanAngle);
         painter->drawPath(path);
     }
@@ -180,7 +217,12 @@ void BlockClockDial::paintProgress(QPainter * painter)
     // so we must reverse the angles with * -1. Also, our angle origin is at 12 o'clock, whereas
     // QPainter's is 3 o'clock, hence - 90.
     const qreal startAngle = 90;
-    const qreal spanAngle = verificationProgress() * -360;
+    qreal spanAngle;
+    if (verificationProgress() * 360 > m_animating_max_angle) {
+        spanAngle = m_animating_max_angle * -1;
+    } else {
+        spanAngle = verificationProgress() * -360;
+    }
 
     // QPainter::drawArc parameters are 1/16 of a degree
     painter->drawArc(bounds, startAngle * 16, spanAngle * 16);
@@ -195,8 +237,12 @@ void BlockClockDial::paintConnectingAnimation(QPainter * painter)
     pen.setCapStyle(Qt::RoundCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
-    painter->drawArc(bounds, m_connecting_start_angle * 16, m_connecting_end_angle * 16);
-    m_connecting_start_angle = decrementGradientAngle(m_connecting_start_angle);
+    if (m_animating_max_angle < m_connecting_end_angle * -1) {
+        painter->drawArc(bounds, m_connecting_start_angle * 16, m_animating_max_angle * -16);
+    } else {
+        painter->drawArc(bounds, m_connecting_start_angle * 16, m_connecting_end_angle * 16);
+        m_connecting_start_angle = decrementGradientAngle(m_connecting_start_angle);
+    }
 }
 
 void BlockClockDial::paintBackground(QPainter * painter)
@@ -246,14 +292,12 @@ void BlockClockDial::paint(QPainter * painter)
 
     if (paused()) return;
 
-    if (m_animation_timer.isActive()) {
-        paintConnectingAnimation(painter);
-        return;
-    }
-
-    if (synced() && connected()) {
+    if (connected() && synced()) {
         paintBlocks(painter);
     } else if (connected()) {
         paintProgress(painter);
+    } else if (m_animation_timer.isActive()) {
+        paintConnectingAnimation(painter);
     }
+    m_animating_max_angle = incrementAnimatingMaxAngle(m_animating_max_angle);
 }
