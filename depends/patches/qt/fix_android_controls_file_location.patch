@@ -1,0 +1,13 @@
+diff --git a/qtquickcontrols/src/controls/plugin.cpp b/src/controls/plugin.cpp
+index 446357aa..a08957cd 100644
+--- a/qtquickcontrols/src/controls/plugin.cpp
++++ b/qtquickcontrols/src/controls/plugin.cpp
+@@ -240,7 +240,7 @@ void QtQuickControls1Plugin::initializeEngine(QQmlEngine *engine, const char *ur
+ QString QtQuickControls1Plugin::fileLocation() const
+ {
+ #ifdef Q_OS_ANDROID
+-    return "qrc:/android_rcc_bundle/qml/QtQuick/Controls";
++    return "qrc:/qt-project.org/imports/QtQuick/Controls";
+ #else
+ # ifndef QT_STATIC
+     if (isLoadedFromResource())
