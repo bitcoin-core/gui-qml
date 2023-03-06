@@ -68,8 +68,12 @@ AbstractButton {
             root.state = "ACTIVE"
         }
         onReleased: {
-            root.state = "HOVER"
-            root.clicked()
+            if (mouseArea.containsMouse) {
+                root.state = "HOVER"
+                root.clicked()
+            } else {
+                root.state = "FILLED"
+            }
         }
     }
 
