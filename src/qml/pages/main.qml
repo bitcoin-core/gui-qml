@@ -78,6 +78,7 @@ ApplicationWindow {
             OnboardingConnection {}
 
             onFinishedChanged: {
+                optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
                 } else {

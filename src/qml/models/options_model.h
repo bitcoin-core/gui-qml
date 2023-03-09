@@ -40,7 +40,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node);
+    explicit OptionsQmlModel(interfaces::Node& node, bool is_onboarded);
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
@@ -71,6 +71,7 @@ public Q_SLOTS:
         m_custom_datadir_string = new_custom_datadir_string;
         m_signalReceived = true;
     }
+    Q_INVOKABLE void onboard();
 
 Q_SIGNALS:
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
@@ -85,6 +86,7 @@ Q_SIGNALS:
 
 private:
     interfaces::Node& m_node;
+    bool m_onboarded;
 
     // Properties that are exposed to QML.
     int m_dbcache_size_mib;
