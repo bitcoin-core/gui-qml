@@ -62,6 +62,11 @@ void ChainModel::setTimeRatioListInitial()
     m_time_ratio_list.push_back(double(QDateTime::currentSecsSinceEpoch() - time_at_meridian) / SECS_IN_12_HOURS);
     m_time_ratio_list.push_back(0);
 
+    if (!m_chain.getHeight()) {
+        Q_EMIT timeRatioListChanged();
+        return;
+    }
+
     int first_block_height;
     int active_chain_height = m_chain.getHeight().value();
     bool success = m_chain.findFirstBlockWithTimeAndHeight(/*min_time=*/time_at_meridian, /*min_height=*/0, interfaces::FoundBlock().height(first_block_height));
