@@ -38,6 +38,7 @@ QT_MOC_CPP = \
   qml/components/moc_blockclockdial.cpp \
   qml/moc_appmode.cpp \
   qml/moc_chainmodel.cpp \
+  qml/moc_networktraffictower.cpp \
   qml/moc_nodemodel.cpp \
   qml/moc_options_model.cpp \
   qml/moc_peerlistsortproxy.cpp \
@@ -117,6 +118,7 @@ BITCOIN_QT_H = \
   qml/chainmodel.h \
   qml/components/blockclockdial.h \
   qml/imageprovider.h \
+  qml/networktraffictower.h \
   qml/nodemodel.h \
   qml/options_model.h \
   qml/peerlistsortproxy.h \
@@ -300,6 +302,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/chainmodel.cpp \
   qml/components/blockclockdial.cpp \
   qml/imageprovider.cpp \
+  qml/networktraffictower.cpp \
   qml/nodemodel.cpp \
   qml/options_model.cpp \
   qml/peerlistsortproxy.cpp \
