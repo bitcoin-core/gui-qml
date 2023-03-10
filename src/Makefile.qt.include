@@ -36,6 +36,7 @@ QT_FORMS_UI = \
 
 QT_MOC_CPP = \
   qml/components/moc_blockclockdial.cpp \
+  qml/controls/moc_linegraph.cpp \
   qml/moc_appmode.cpp \
   qml/moc_chainmodel.cpp \
   qml/moc_networktraffictower.cpp \
@@ -117,6 +118,7 @@ BITCOIN_QT_H = \
   qml/bitcoin.h \
   qml/chainmodel.h \
   qml/components/blockclockdial.h \
+  qml/controls/linegraph.h \
   qml/imageprovider.h \
   qml/networktraffictower.h \
   qml/nodemodel.h \
@@ -301,6 +303,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
   qml/chainmodel.cpp \
   qml/components/blockclockdial.cpp \
+  qml/controls/linegraph.cpp \
   qml/imageprovider.cpp \
   qml/networktraffictower.cpp \
   qml/nodemodel.cpp \
