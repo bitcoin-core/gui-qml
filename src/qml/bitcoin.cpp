@@ -19,6 +19,7 @@
 #include <qml/appmode.h>
 #include <qml/chainmodel.h>
 #include <qml/components/blockclockdial.h>
+#include <qml/controls/linegraph.h>
 #include <qml/networktraffictower.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
@@ -236,6 +237,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
+    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
     if (engine.rootObjects().isEmpty()) {
