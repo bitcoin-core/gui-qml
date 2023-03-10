@@ -374,6 +374,7 @@ QML_RES_QML = \
   qml/controls/ValueInput.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
+  qml/pages/node/NetworkTraffic.qml \
   qml/pages/node/NodeRunner.qml \
   qml/pages/node/NodeSettings.qml \
   qml/pages/node/Peers.qml \
