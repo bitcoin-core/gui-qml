@@ -46,6 +46,9 @@ public:
     bool pause() const { return m_pause; }
     void setPause(bool new_pause);
 
+    Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
+    Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
+
     Q_INVOKABLE void startNodeInitializionThread();
 
     void startShutdownPolling();
