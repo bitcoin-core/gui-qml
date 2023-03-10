@@ -28,7 +28,7 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
     connect(&m_animation_timer, &QTimer::timeout,
             this, [=]() {
                 if (m_is_connected
-                    && m_animating_max_angle >= 360) {
+                    && getTargetAnimationAngle() - m_animating_max_angle < 1) {
                     m_animation_timer.stop();
                 }
                 this->update();
@@ -56,12 +56,28 @@ qreal BlockClockDial::decrementGradientAngle(qreal angle)
     }
 }
 
+qreal BlockClockDial::getTargetAnimationAngle()
+{
+    if (connected() && synced()) {
+        return m_time_ratio_list[0].toDouble() * 360;
+    } else if (connected()) {
+        return verificationProgress() * 360;
+    } else {
+        return 360;
+    }
+}
+
 qreal BlockClockDial::incrementAnimatingMaxAngle(qreal angle)
 {
-    if (angle >= 360) {
-        return 360;
+    if (connected()) {
+        return angle += (getTargetAnimationAngle() - angle) * 0.05;
     } else {
-        return angle += 4;
+        // Use linear growth for the "Connecting" animation
+        if (angle >= 360) {
+            return 360;
+        } else {
+            return angle += 4;
+        }
     }
 }
 
@@ -97,6 +113,9 @@ void BlockClockDial::setSynced(bool is_synced)
     if (m_is_synced != is_synced) {
         m_is_synced = is_synced;
         m_animating_max_angle = 0;
+        if (m_is_synced && connected()) {
+            m_animation_timer.start();
+        }
         update();
     }
 }
