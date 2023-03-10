@@ -56,6 +56,7 @@ private:
     void setupConnectingGradient(const QPen & pen);
     qreal decrementGradientAngle(qreal angle);
     qreal incrementAnimatingMaxAngle(qreal angle);
+    qreal getTargetAnimationAngle();
 
     QVariantList m_time_ratio_list;
     double m_verification_progress;
