@@ -6,12 +6,14 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 Button {
+    property int bgRadius: 5
     property color bgDefaultColor: Theme.color.neutral2
     property color bgHoverColor: Theme.color.neutral2
     property color bgActiveColor: Theme.color.neutral5
     property color textColor: Theme.color.neutral7
     property color textHoverColor: Theme.color.orangeLight1
     property color textActiveColor: Theme.color.neutral9
+
     id: root
     checkable: true
     hoverEnabled: true
@@ -34,7 +36,7 @@ Button {
     background: Rectangle {
         id: bg
         color: root.bgDefaultColor
-        radius: 5
+        radius: root.bgRadius
 
         Behavior on color {
             ColorAnimation { duration: 150 }
