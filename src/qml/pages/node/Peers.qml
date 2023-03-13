@@ -21,59 +21,67 @@ Page {
         anchors.horizontalCenter: parent.horizontalCenter
         id: description
         width: Math.min(parent.width - 40, 450)
-        text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected to x, y and z, but not a, b, and c. Learn more.")
+        text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected" +
+            " to x, y and z, but not a, b, and c. Learn more.")
         font.pixelSize: 13
         color: Theme.color.neutral7
     }
 
-    Flow {
+    Flickable {
         id: sortSelection
         anchors.top: description.bottom
         anchors.topMargin: 20
         anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 40, 450)
-        spacing: 10
-        ToggleButton {
-            text: qsTr("ID")
-            autoExclusive: true
-            checked: true
-            onClicked: {
-                peerListModelProxy.sortBy = "nodeId"
+        width: Math.min(parent.width - 40, toggleButtons.width)
+        height: toggleButtons.height
+        contentWidth: toggleButtons.width
+        boundsMovement: width == toggleButtons.width ?
+            Flickable.StopAtBound : Flickable.FollowBoundsBehavior
+        RowLayout {
+            id: toggleButtons
+            spacing: 10
+            ToggleButton {
+                text: qsTr("ID")
+                autoExclusive: true
+                checked: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "nodeId"
+                }
             }
-        }
-        ToggleButton {
-            text: qsTr("Direction")
-            autoExclusive: true
-            onClicked: {
-                peerListModelProxy.sortBy = "direction"
+            ToggleButton {
+                text: qsTr("Direction")
+                autoExclusive: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "direction"
+                }
             }
-        }
-        ToggleButton {
-            text: qsTr("User Agent")
-            autoExclusive: true
-            onClicked: {
-                peerListModelProxy.sortBy = "subversion"
+            ToggleButton {
+                text: qsTr("User Agent")
+                autoExclusive: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "subversion"
+                }
             }
-        }
-        ToggleButton {
-            text: qsTr("Type")
-            autoExclusive: true
-            onClicked: {
-                peerListModelProxy.sortBy = "connectionType"
+            ToggleButton {
+                text: qsTr("Type")
+                autoExclusive: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "connectionType"
+                }
             }
-        }
-        ToggleButton {
-            text: qsTr("Ip")
-            autoExclusive: true
-            onClicked: {
-                peerListModelProxy.sortBy = "address"
+            ToggleButton {
+                text: qsTr("Ip")
+                autoExclusive: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "address"
+                }
             }
-        }
-        ToggleButton {
-            text: qsTr("Network")
-            autoExclusive: true
-            onClicked: {
-                peerListModelProxy.sortBy = "network"
+            ToggleButton {
+                text: qsTr("Network")
+                autoExclusive: true
+                onClicked: {
+                    peerListModelProxy.sortBy = "network"
+                }
             }
         }
     }
