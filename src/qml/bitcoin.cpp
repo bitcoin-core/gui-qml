@@ -179,6 +179,11 @@ int QmlGuiMain(int argc, char* argv[])
     } else if (ConfigurationFileExists(gArgs)) {
         need_onboarding.setValue(false);
     }
+
+    if (gArgs.IsArgSet("-resetguisettings")) {
+        need_onboarding.setValue(true);
+    }
+
     // Default printtoconsole to false for the GUI. GUI programs should not
     // print to the console unnecessarily.
     gArgs.SoftSetBoolArg("-printtoconsole", false);
