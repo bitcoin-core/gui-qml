@@ -6,6 +6,8 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import org.bitcoincore.qt 1.0
+
 AbstractButton {
     id: root
     property int iconHeight: 30
@@ -14,7 +16,7 @@ AbstractButton {
     property url iconSource: ""
     property Rectangle iconBackground: null
     property color iconColor: Theme.color.neutral9
-    hoverEnabled: true
+    hoverEnabled: AppMode.isDesktop
     topPadding: text_background.active ? 7 : 14
     bottomPadding: text_background.active ? 7 : 14
     rightPadding: text_background.active ? 22 : 14
@@ -94,7 +96,7 @@ AbstractButton {
     }
     MouseArea {
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: AppMode.isDesktop
         onEntered: {
             root.background.state = "HOVER"
         }

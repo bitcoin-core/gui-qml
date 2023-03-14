@@ -4,10 +4,11 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import org.bitcoincore.qt 1.0
 
 Button {
     id: root
-    hoverEnabled: true
+    hoverEnabled: AppMode.isDesktop
     contentItem: CoreText {
         text: parent.text
         bold: true

@@ -5,6 +5,8 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
+import org.bitcoincore.qt 1.0
+
 Button {
     id: root
     property int textSize: 18
@@ -13,7 +15,7 @@ Button {
     property bool bold: true
     property bool rightalign: false
     padding: 15
-    hoverEnabled: true
+    hoverEnabled: AppMode.isDesktop
     contentItem: CoreText {
         text: root.text
         bold: root.bold
