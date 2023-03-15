@@ -36,8 +36,10 @@ QT_FORMS_UI = \
 
 QT_MOC_CPP = \
   qml/components/moc_blockclockdial.cpp \
+  qml/controls/moc_linegraph.cpp \
   qml/moc_appmode.cpp \
   qml/moc_chainmodel.cpp \
+  qml/moc_networktraffictower.cpp \
   qml/moc_nodemodel.cpp \
   qml/moc_options_model.cpp \
   qml/moc_peerlistsortproxy.cpp \
@@ -116,7 +118,9 @@ BITCOIN_QT_H = \
   qml/bitcoin.h \
   qml/chainmodel.h \
   qml/components/blockclockdial.h \
+  qml/controls/linegraph.h \
   qml/imageprovider.h \
+  qml/networktraffictower.h \
   qml/nodemodel.h \
   qml/options_model.h \
   qml/peerlistsortproxy.h \
@@ -299,7 +303,9 @@ BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
   qml/chainmodel.cpp \
   qml/components/blockclockdial.cpp \
+  qml/controls/linegraph.cpp \
   qml/imageprovider.cpp \
+  qml/networktraffictower.cpp \
   qml/nodemodel.cpp \
   qml/options_model.cpp \
   qml/peerlistsortproxy.cpp \
@@ -339,12 +345,14 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/PeersIndicator.qml \
+  qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
+  qml/components/TotalBytesIndicator.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
   qml/controls/ExternalLink.qml \
@@ -366,6 +374,7 @@ QML_RES_QML = \
   qml/controls/ValueInput.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
+  qml/pages/node/NetworkTraffic.qml \
   qml/pages/node/NodeRunner.qml \
   qml/pages/node/NodeSettings.qml \
   qml/pages/node/Peers.qml \
