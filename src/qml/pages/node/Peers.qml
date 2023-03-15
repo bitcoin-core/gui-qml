@@ -16,86 +16,86 @@ Page {
         id: navbar
     }
 
-    CoreText {
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        id: description
-        width: Math.min(parent.width - 40, 450)
-        text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected" +
-            " to x, y and z, but not a, b, and c. Learn more.")
-        font.pixelSize: 13
-        color: Theme.color.neutral7
-    }
-
-    Flickable {
-        id: sortSelection
-        anchors.top: description.bottom
-        anchors.topMargin: 20
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(parent.width - 40, toggleButtons.width)
-        height: toggleButtons.height
-        contentWidth: toggleButtons.width
-        boundsMovement: width == toggleButtons.width ?
-            Flickable.StopAtBounds : Flickable.FollowBoundsBehavior
-        RowLayout {
-            id: toggleButtons
-            spacing: 10
-            ToggleButton {
-                text: qsTr("ID")
-                autoExclusive: true
-                checked: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "nodeId"
-                }
-            }
-            ToggleButton {
-                text: qsTr("Direction")
-                autoExclusive: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "direction"
-                }
-            }
-            ToggleButton {
-                text: qsTr("User Agent")
-                autoExclusive: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "subversion"
-                }
-            }
-            ToggleButton {
-                text: qsTr("Type")
-                autoExclusive: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "connectionType"
-                }
-            }
-            ToggleButton {
-                text: qsTr("Ip")
-                autoExclusive: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "address"
-                }
-            }
-            ToggleButton {
-                text: qsTr("Network")
-                autoExclusive: true
-                onClicked: {
-                    peerListModelProxy.sortBy = "network"
-                }
-            }
-        }
-    }
-
     ListView {
         id: listView
         clip: true
         width: Math.min(parent.width - 40, 450)
-        anchors.top: sortSelection.bottom
-        anchors.topMargin: 30
-        anchors.bottom: parent.bottom
+        height: parent.height
         anchors.horizontalCenter: parent.horizontalCenter
         model: peerListModelProxy
         spacing: 15
+
+        header: ColumnLayout {
+            spacing: 20
+            width: parent.width
+            CoreText {
+                id: description
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+                text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected" +
+                    " to x, y and z, but not a, b, and c. Learn more.")
+                font.pixelSize: 13
+                color: Theme.color.neutral7
+            }
+
+            Flickable {
+                id: sortSelection
+                Layout.fillWidth: true
+                Layout.bottomMargin: 30
+                Layout.alignment: Qt.AlignHCenter
+                height: toggleButtons.height
+                contentWidth: toggleButtons.width
+                boundsMovement: width == toggleButtons.width ?
+                    Flickable.StopAtBound : Flickable.FollowBoundsBehavior
+                RowLayout {
+                    id: toggleButtons
+                    spacing: 10
+                    ToggleButton {
+                        text: qsTr("ID")
+                        autoExclusive: true
+                        checked: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "nodeId"
+                        }
+                    }
+                    ToggleButton {
+                        text: qsTr("Direction")
+                        autoExclusive: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "direction"
+                        }
+                    }
+                    ToggleButton {
+                        text: qsTr("User Agent")
+                        autoExclusive: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "subversion"
+                        }
+                    }
+                    ToggleButton {
+                        text: qsTr("Type")
+                        autoExclusive: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "connectionType"
+                        }
+                    }
+                    ToggleButton {
+                        text: qsTr("Ip")
+                        autoExclusive: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "address"
+                        }
+                    }
+                    ToggleButton {
+                        text: qsTr("Network")
+                        autoExclusive: true
+                        onClicked: {
+                            peerListModelProxy.sortBy = "network"
+                        }
+                    }
+                }
+            }
+        }
 
         footer: Loader {
             height: 75
