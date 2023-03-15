@@ -15,6 +15,7 @@
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
+        <file>components/TotalBytesIndicator.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/ExternalLink.qml</file>
