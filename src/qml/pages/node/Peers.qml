@@ -33,7 +33,8 @@ Page {
                 id: description
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Peers are nodes you exchange data with.")
+                text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected" +
+                    " to x, y and z, but not a, b, and c. Learn more.")
                 font.pixelSize: 13
                 color: Theme.color.neutral7
             }
