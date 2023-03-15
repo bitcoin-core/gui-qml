@@ -345,6 +345,7 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/PeersIndicator.qml \
+  qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
