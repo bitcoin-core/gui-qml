@@ -105,8 +105,8 @@ InformationPage {
 
         TotalBytesIndicator {
             Layout.alignment: Qt.AlignHCenter
+            indicatorText: qsTr("Received: %1").arg(formatBytes(networkTrafficTower.totalBytesReceived))
             indicatorColor: Theme.color.green
-            totalBytes: networkTrafficTower.totalBytesReceived
         }
 
         NetworkTrafficGraph {
@@ -125,8 +125,8 @@ InformationPage {
 
         TotalBytesIndicator {
             Layout.alignment: Qt.AlignHCenter
+            indicatorText: qsTr("Sent: %1").arg(formatBytes(networkTrafficTower.totalBytesSent))
             indicatorColor: Theme.color.blue
-            totalBytes: networkTrafficTower.totalBytesSent
         }
 
         NetworkTrafficGraph {
@@ -141,5 +141,15 @@ InformationPage {
             valueList: networkTrafficTower.sentRateList
             maxRateBps: networkTrafficTower.maxSentRateBps
         }
+    }
+
+    function formatBytes(bytes) {
+        var suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
+        var index = 0;
+        while (bytes >= 1000 && index < suffixes.length - 1) {
+            bytes /= 1000;
+            index++;
+        }
+        return bytes.toFixed(0) + " " + suffixes[index];
     }
 }
