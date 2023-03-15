@@ -352,6 +352,7 @@ QML_RES_QML = \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
+  qml/components/TotalBytesIndicator.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
   qml/controls/ExternalLink.qml \
