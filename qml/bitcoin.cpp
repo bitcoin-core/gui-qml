@@ -15,6 +15,8 @@
 #include <qml/appmode.h>
 #include <qml/chainmodel.h>
 #include <qml/components/blockclockdial.h>
+#include <qml/controls/linegraph.h>
+#include <qml/networktraffictower.h>
 #include <qml/imageprovider.h>
 #include <qml/nodemodel.h>
 #include <qml/options_model.h>
@@ -209,6 +211,8 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
+    NetworkTrafficTower network_traffic_tower{node_model};
+
     ChainModel chain_model{*chain};
     chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
 
@@ -233,6 +237,7 @@ int QmlGuiMain(int argc, char* argv[])
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
+    engine.rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
     engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
@@ -250,6 +255,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
+    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
     if (engine.rootObjects().isEmpty()) {
