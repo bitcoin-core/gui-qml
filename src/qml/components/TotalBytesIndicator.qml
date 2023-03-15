@@ -9,8 +9,8 @@ import "../controls"
 
 RowLayout {
     id: root
+    property string indicatorText
     property color indicatorColor
-    property double totalBytes
 
     Rectangle {
         Layout.alignment: Qt.AlignVCenter
@@ -22,17 +22,7 @@ RowLayout {
     CoreText {
         Layout.alignment: Qt.AlignHCenter
         color: Theme.color.neutral9
-        text: qsTr("Received: %1").arg(formatBytes(root.totalBytes))
+        text: root.indicatorText
         font.pixelSize: 18
-    }
-
-    function formatBytes(bytes) {
-        var suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
-        var index = 0;
-        while (bytes >= 1000 && index < suffixes.length - 1) {
-            bytes /= 1000;
-            index++;
-        }
-        return bytes.toFixed(0) + " " + suffixes[index];
     }
 }
