@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_CHAINMODEL_H
 #define BITCOIN_QML_CHAINMODEL_H
 
+#include <chainparams.h>
 #include <interfaces/chain.h>
 
 #include <QObject>
@@ -23,6 +24,8 @@ class ChainModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString currentNetworkName READ currentNetworkName WRITE setCurrentNetworkName NOTIFY currentNetworkNameChanged)
+    Q_PROPERTY(quint64 assumedBlockchainSize READ assumedBlockchainSize CONSTANT)
+    Q_PROPERTY(quint64 assumedChainstateSize READ assumedChainstateSize CONSTANT)
     Q_PROPERTY(QVariantList timeRatioList READ timeRatioList NOTIFY timeRatioListChanged)
 
 public:
@@ -30,6 +33,8 @@ public:
 
     QString currentNetworkName() const { return m_current_network_name; };
     void setCurrentNetworkName(QString network_name);
+    quint64 assumedBlockchainSize() const { return m_assumed_blockchain_size; };
+    quint64 assumedChainstateSize() const { return m_assumed_chainstate_size; };
     QVariantList timeRatioList() const { return m_time_ratio_list; };
 
     int timestampAtMeridian();
@@ -46,6 +51,8 @@ Q_SIGNALS:
 
 private:
     QString m_current_network_name;
+    quint64 m_assumed_blockchain_size{ Params().AssumedBlockchainSize() };
+    quint64 m_assumed_chainstate_size{ Params().AssumedChainStateSize() };
     /* time_ratio: Ratio between the time at which an event
      * happened and 12 hours. So, for example, if a block is
      * found at 4 am or pm, the time_ratio would be 0.3.
