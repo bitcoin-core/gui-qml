@@ -67,7 +67,7 @@ Aside from the dependencies listed in [build-unix.md](../../doc/build-unix.md), 
 #### Debian-based systems:
 
 ```
-sudo apt install qtdeclarative5-dev qtquickcontrols2-5-dev
+sudo apt install qtdeclarative5-dev qtquickcontrols2-5-dev qttools5-dev-tools
 ```
 
 The following runtime dependencies are also required for dynamic builds;
