@@ -27,6 +27,13 @@ ApplicationWindow {
         id: main
         initialItem: needOnboarding ? onboardingWizard : node
         anchors.fill: parent
+        focus: true
+        Keys.onReleased: {
+            if (event.key == Qt.Key_Back) {
+                nodeModel.requestShutdown()
+                event.accepted = true
+            }
+        }
     }
 
     Connections {
