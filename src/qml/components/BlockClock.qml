@@ -14,7 +14,7 @@ Item {
     id: root
 
     implicitWidth: 200
-    implicitHeight: 200
+    implicitHeight: 200 + networkIndicator.height + networkIndicator.anchors.topMargin
 
     property alias header: mainText.text
     property alias subText: subText.text
@@ -27,7 +27,8 @@ Item {
 
     BlockClockDial {
         id: dial
-        anchors.fill: parent
+        width: 200
+        height: 200
         timeRatioList: chainModel.timeRatioList
         verificationProgress: nodeModel.verificationProgress
         paused: root.paused
@@ -67,7 +68,7 @@ Item {
 
     Label {
         id: mainText
-        anchors.centerIn: parent
+        anchors.centerIn: dial
         font.family: "Inter"
         font.styleName: "Semi Bold"
         font.pixelSize: 32
@@ -99,6 +100,13 @@ Item {
         numOutboundPeers: nodeModel.numOutboundPeers
         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
         paused: root.paused
+    }
+
+    NetworkIndicator {
+        id: networkIndicator
+        anchors.top: dial.bottom
+        anchors.topMargin: networkIndicator.visible ? 30 : 0
+        anchors.horizontalCenter: root.horizontalCenter
     }
 
     MouseArea {
