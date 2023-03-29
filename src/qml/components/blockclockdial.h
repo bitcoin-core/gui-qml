@@ -9,6 +9,7 @@
 #include <QConicalGradient>
 #include <QPainter>
 #include <QTimer>
+#include <QtGlobal>
 
 class BlockClockDial : public QQuickPaintedItem
 {
@@ -18,6 +19,7 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(bool connected READ connected WRITE setConnected)
     Q_PROPERTY(bool synced READ synced WRITE setSynced)
     Q_PROPERTY(bool paused READ paused WRITE setPaused)
+    Q_PROPERTY(qreal penWidth READ penWidth WRITE setPenWidth)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
     Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors )
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
@@ -31,6 +33,7 @@ public:
     bool connected() const { return m_is_connected; };
     bool synced() const { return m_is_synced; };
     bool paused() const { return m_is_paused; };
+    qreal penWidth() const { return m_pen_width; };
     QColor backgroundColor() const { return m_background_color; };
     QList<QColor> confirmationColors() const { return m_confirmation_colors; };
     QColor timeTickColor() const { return m_time_tick_color; };
@@ -41,6 +44,7 @@ public Q_SLOTS:
     void setConnected(bool connected);
     void setSynced(bool synced);
     void setPaused(bool paused);
+    void setPenWidth(qreal width);
     void setBackgroundColor(QColor color);
     void setConfirmationColors(QList<QColor> colorList);
     void setTimeTickColor(QColor color);
@@ -63,6 +67,7 @@ private:
     bool m_is_connected;
     bool m_is_synced;
     bool m_is_paused;
+    qreal m_pen_width;
     QColor m_background_color;
     QConicalGradient m_connecting_gradient;
     qreal m_connecting_start_angle = 90;
