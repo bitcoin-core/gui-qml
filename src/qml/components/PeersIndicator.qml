@@ -10,6 +10,7 @@ RowLayout {
     id: root
     required property int numOutboundPeers
     required property int maxNumOutboundPeers
+    required property bool paused
     property int size: 5
 
     spacing: 5
@@ -21,12 +22,17 @@ RowLayout {
             radius: width / 2
             color: Theme.color.neutral9
             opacity: (index === 0 && root.numOutboundPeers > 0) || (index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
-            Behavior on opacity { OpacityAnimator { duration: 100 } }
+            Behavior on opacity { OpacityAnimator { duration: 150 } }
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
-                running: numOutboundPeers === 0 && index === 0
+                running: numOutboundPeers === 0 && index === 0 && !root.paused
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
+            }
+            PropertyAnimation on opacity {
+                running: root.paused
+                to: .45;
+                duration: 150
             }
 
             Behavior on color {
