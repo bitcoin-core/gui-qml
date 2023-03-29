@@ -99,6 +99,7 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
         numOutboundPeers: nodeModel.numOutboundPeers
         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
+        paused: root.paused
     }
 
     MouseArea {
