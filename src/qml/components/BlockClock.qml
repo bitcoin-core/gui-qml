@@ -12,9 +12,11 @@ import "../controls"
 
 Item {
     id: root
+    property real parentWidth: 600
+    property real parentHeight: 600
 
-    implicitWidth: 200
-    implicitHeight: 200 + networkIndicator.height + networkIndicator.anchors.topMargin
+    width: dial.width
+    height: dial.height + networkIndicator.height + networkIndicator.anchors.topMargin
 
     property alias header: mainText.text
     property alias subText: subText.text
@@ -27,8 +29,10 @@ Item {
 
     BlockClockDial {
         id: dial
-        width: 200
-        height: 200
+        anchors.horizontalCenter: root.horizontalCenter
+        width: Math.min((root.parentWidth * (1/3)), (root.parentHeight * (1/3)))
+        height: dial.width
+        penWidth: dial.width / 50
         timeRatioList: chainModel.timeRatioList
         verificationProgress: nodeModel.verificationProgress
         paused: root.paused
@@ -56,8 +60,8 @@ Item {
         background: null
         icon.source: "image://images/bitcoin-circle"
         icon.color: Theme.color.neutral9
-        icon.width: 40
-        icon.height: 40
+        icon.width: Math.max(dial.width / 5, 1)
+        icon.height: Math.max(dial.width / 5, 1)
         anchors.bottom: mainText.top
         anchors.horizontalCenter: root.horizontalCenter
 
@@ -71,7 +75,7 @@ Item {
         anchors.centerIn: dial
         font.family: "Inter"
         font.styleName: "Semi Bold"
-        font.pixelSize: 32
+        font.pixelSize: dial.width * (4/25)
         color: Theme.color.neutral9
 
         Behavior on color {
@@ -85,7 +89,7 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
         font.family: "Inter"
         font.styleName: "Semi Bold"
-        font.pixelSize: 18
+        font.pixelSize: dial.width * (9/100)
         color: Theme.color.neutral4
 
         Behavior on color {
@@ -95,10 +99,12 @@ Item {
 
     PeersIndicator {
         anchors.top: subText.bottom
-        anchors.topMargin: 20
+        anchors.topMargin: dial.width / 10
         anchors.horizontalCenter: root.horizontalCenter
         numOutboundPeers: nodeModel.numOutboundPeers
         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
+        indicatorDimensions: dial.width * (3/200)
+        indicatorSpacing: dial.width / 40
         paused: root.paused
     }
 
@@ -145,16 +151,16 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Paused"
-                headerSize: 24
+                headerSize: dial.width * (3/25)
                 subText: "Tap to resume"
             }
             PropertyChanges {
                 target: bitcoinIcon
-                anchors.bottomMargin: 5
+                anchors.bottomMargin: dial.width / 40
             }
             PropertyChanges {
                 target: subText
-                anchors.topMargin: 4
+                anchors.topMargin: dial.width / 50
             }
         },
 
@@ -163,16 +169,16 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Connecting"
-                headerSize: 24
+                headerSize: dial.width * (3/25)
                 subText: "Please wait"
             }
             PropertyChanges {
                 target: bitcoinIcon
-                anchors.bottomMargin: 5
+                anchors.bottomMargin: dial.width / 40
             }
             PropertyChanges {
                 target: subText
-                anchors.topMargin: 4
+                anchors.topMargin: dial.width / 50
             }
         }
     ]

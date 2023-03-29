@@ -19,6 +19,8 @@ Page {
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
     BlockClock {
+        parentWidth: parent.width - 40
+        parentHeight: parent.height
         anchors.centerIn: parent
     }
 }
