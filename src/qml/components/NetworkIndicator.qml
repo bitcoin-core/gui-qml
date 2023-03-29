@@ -13,10 +13,10 @@ Button {
     id: root
     property color bgColor
     property int textSize: 15
-    topPadding: 2
-    bottomPadding: 2
-    leftPadding: 7
-    rightPadding: 7
+    topPadding: textSize * (2/15)
+    bottomPadding: textSize * (2/15)
+    leftPadding: textSize * (7/15)
+    rightPadding: textSize * (7/15)
     state: chainModel.currentNetworkName
     contentItem: CoreText {
         text: root.text
@@ -28,7 +28,7 @@ Button {
     background: Rectangle {
         id: bg
         color: root.bgColor
-        radius: 2
+        radius: textSize * (2/15)
 
         Behavior on color {
             ColorAnimation { duration: 150 }
