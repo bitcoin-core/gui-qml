@@ -352,6 +352,7 @@ QML_RES_QML = \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
+  qml/components/ThemeSettings.qml \
   qml/components/TotalBytesIndicator.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
@@ -389,7 +390,8 @@ QML_RES_QML = \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
   qml/pages/settings/SettingsProxy.qml \
-  qml/pages/settings/SettingsStorage.qml
+  qml/pages/settings/SettingsStorage.qml \
+  qml/pages/settings/SettingsTheme.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS

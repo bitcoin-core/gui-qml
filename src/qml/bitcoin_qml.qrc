@@ -15,6 +15,7 @@
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
+        <file>components/ThemeSettings.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
@@ -53,6 +54,7 @@
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
+        <file>pages/settings/SettingsTheme.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="arrow-down">res/icons/arrow-down.png</file>
