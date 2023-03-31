@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import Qt.labs.settings 1.0
 import org.bitcoincore.qt 1.0
 import "../components"
 import "../controls"
@@ -18,6 +19,13 @@ ApplicationWindow {
     minimumHeight: 665
     color: Theme.color.background
     visible: true
+
+    Settings {
+        property alias x: appWindow.x
+        property alias y: appWindow.y
+        property alias width: appWindow.width
+        property alias height: appWindow.height
+    }
 
     Behavior on color {
         ColorAnimation { duration: 150 }
