@@ -116,6 +116,19 @@ bool ConfigurationFileExists(ArgsManager& argsman)
 
     return false;
 }
+
+void setupChainQSettings(QGuiApplication* app, QString chain)
+{
+    if (chain.compare("MAIN") == 0) {
+        app->setApplicationName(QAPP_APP_NAME_DEFAULT);
+    } else if (chain.compare("TEST") == 0) {
+        app->setApplicationName(QAPP_APP_NAME_TESTNET);
+    } else if (chain.compare("SIGNET") == 0) {
+        app->setApplicationName(QAPP_APP_NAME_SIGNET);
+    } else if (chain.compare("REGTEST") == 0) {
+        app->setApplicationName(QAPP_APP_NAME_REGTEST);
+    }
+}
 } // namespace
 
 
@@ -148,6 +161,12 @@ int QmlGuiMain(int argc, char* argv[])
         InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
         return EXIT_FAILURE;
     }
+
+    // must be set before OptionsModel is initialized or translations are loaded,
+    // as it is used to locate QSettings
+    app.setOrganizationName(QAPP_ORG_NAME);
+    app.setOrganizationDomain(QAPP_ORG_DOMAIN);
+    app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
     /// Determine availability of data directory.
     if (!CheckDataDirOption()) {
@@ -217,6 +236,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     ChainModel chain_model{*chain};
     chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
+    setupChainQSettings(&app, chain_model.currentNetworkName());
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
