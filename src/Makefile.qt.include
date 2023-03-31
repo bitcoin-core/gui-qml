@@ -393,6 +393,7 @@ QML_RES_QML = \
   qml/pages/settings/SettingsBlockClockDisplayMode.qml \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
+  qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml
