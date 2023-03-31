@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import Qt.labs.settings 1.0
 
 import org.bitcoincore.qt 1.0
 
@@ -27,10 +28,15 @@ Item {
 
     activeFocusOnTab: true
 
+    Settings {
+        id: settings
+        property alias blockclocksize: dial.scale
+    }
+
     BlockClockDial {
         id: dial
         anchors.horizontalCenter: root.horizontalCenter
-        width: Math.min((root.parentWidth * (1/3)), (root.parentHeight * (1/3)))
+        width: Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale))
         height: dial.width
         penWidth: dial.width / 50
         timeRatioList: chainModel.timeRatioList
