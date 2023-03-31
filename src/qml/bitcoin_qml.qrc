@@ -2,6 +2,7 @@
     <qresource prefix="/qml">
         <file>components/AboutOptions.qml</file>
         <file>components/BlockClock.qml</file>
+        <file>components/BlockClockDisplayMode.qml</file>
         <file>components/BlockCounter.qml</file>
         <file>components/CaretRightButton.qml</file>
         <file>components/ConnectionOptions.qml</file>
@@ -50,6 +51,7 @@
         <file>pages/onboarding/OnboardingStorageLocation.qml</file>
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
+        <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>

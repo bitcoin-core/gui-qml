@@ -341,6 +341,7 @@ QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/AboutOptions.qml \
   qml/components/BlockClock.qml \
+  qml/components/BlockClockDisplayMode.qml \
   qml/components/BlockCounter.qml \
   qml/components/CaretRightButton.qml \
   qml/components/ConnectionOptions.qml \
@@ -389,6 +390,7 @@ QML_RES_QML = \
   qml/pages/onboarding/OnboardingStorageLocation.qml \
   qml/pages/onboarding/OnboardingStrengthen.qml \
   qml/pages/settings/SettingsAbout.qml \
+  qml/pages/settings/SettingsBlockClockDisplayMode.qml \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
   qml/pages/settings/SettingsProxy.qml \

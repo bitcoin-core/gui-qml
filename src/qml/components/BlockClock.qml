@@ -37,6 +37,7 @@ Item {
     BlockClockDial {
         id: dial
         anchors.horizontalCenter: root.horizontalCenter
+        scale: Theme.blockclocksize
         width: Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale))
         height: dial.width
         penWidth: dial.width / 50
