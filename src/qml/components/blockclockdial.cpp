@@ -16,6 +16,7 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
 : QQuickPaintedItem(parent)
 , m_time_ratio_list{0.0}
 , m_pen_width{4}
+, m_scale{5/12}
 , m_background_color{QColor("#2D2D2D")}
 , m_confirmation_colors{QList<QColor>{}}
 , m_time_tick_color{QColor("#000000")}
@@ -138,6 +139,14 @@ void BlockClockDial::setPenWidth(qreal width)
 {
     m_pen_width = width;
     update();
+}
+
+void BlockClockDial::setScale(qreal scale)
+{
+    m_scale = scale;
+    update();
+
+    Q_EMIT scaleChanged();
 }
 
 void BlockClockDial::setBackgroundColor(QColor color)
