@@ -195,6 +195,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
     QPen pen(m_confirmation_colors[5]);
     pen.setWidthF(m_pen_width);
     pen.setCapStyle(Qt::FlatCap);
+    pen.setCapStyle(Qt::RoundCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
 
@@ -207,9 +208,14 @@ void BlockClockDial::paintBlocks(QPainter * painter)
         if (numberOfBlocks - i <= 6) {
             QPen pen(m_confirmation_colors[numberOfBlocks - i - 1]);
             pen.setWidthF(m_pen_width);
-            pen.setCapStyle(Qt::FlatCap);
+            if (i == numberOfBlocks - 1) {
+                pen.setCapStyle(Qt::RoundCap);
+            } else {
+                pen.setCapStyle(Qt::FlatCap);
+            }
             painter->setPen(pen);
         }
+
 
         const qreal startAngle = 90 + (-360 * m_time_ratio_list[i].toDouble());
         qreal nextAngle;
@@ -220,7 +226,13 @@ void BlockClockDial::paintBlocks(QPainter * painter)
         }
 
         QPainterPath path;
-        path.arcMoveTo(bounds, startAngle);
+        if (i == numberOfBlocks - 1) {
+            // the last block is rounded so nudge it forward
+            // to prevent it from bleeding into the previous
+            path.arcMoveTo(bounds, startAngle - 2 * gap);
+        } else {
+            path.arcMoveTo(bounds, startAngle);
+        }
 
         if (-1 * nextAngle + 90 > m_animating_max_angle) {
             nextAngle = -1 * m_animating_max_angle + 90;
@@ -228,8 +240,36 @@ void BlockClockDial::paintBlocks(QPainter * painter)
             i = numberOfBlocks;
         }
 
-        const qreal spanAngle = -1 * (startAngle - nextAngle) + gap;
-        path.arcTo(bounds, startAngle, spanAngle);
+        const qreal spanAngle = -1 * (startAngle - nextAngle);
+        if (i == numberOfBlocks - 1) {
+            // nudge the last block foward
+            path.arcTo(bounds, startAngle - 2 * gap, spanAngle);
+        } else {
+            path.arcTo(bounds, startAngle, spanAngle);
+        }
+        painter->drawPath(path);
+    }
+
+    QPen gapPen(m_background_color);
+    gapPen.setWidthF(4);
+    gapPen.setCapStyle(Qt::FlatCap);
+    const QRectF gapBounds = getBoundsForPen(gapPen);
+    painter->setPen(gapPen);
+
+    // Paint Gaps
+    for (int i = 1; i < numberOfBlocks - 1; i++) {
+        qreal nextAngle = 90 + (-360 * m_time_ratio_list[i+1].toDouble());
+
+        QPainterPath path;
+        path.arcMoveTo(gapBounds, nextAngle + gap);
+
+        if (-1 * nextAngle + 90 > m_animating_max_angle) {
+            nextAngle = -1 * m_animating_max_angle + 90;
+            // end the loop early
+            i = numberOfBlocks;
+        }
+
+        path.arcTo(gapBounds, nextAngle, gap * 2);
         painter->drawPath(path);
     }
 }
