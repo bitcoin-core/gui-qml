@@ -1,11 +1,19 @@
 pragma Singleton
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import Qt.labs.settings 1.0
 
 Control {
+    id: root
     property bool dark: true
+    property real blockclocksize: (5/12)
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
+
+    Settings {
+        id: settings
+        property alias blockclocksize: root.blockclocksize
+    }
 
     component ColorSet: QtObject {
         required property color white
