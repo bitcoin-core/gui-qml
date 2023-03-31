@@ -12,6 +12,7 @@ Control {
 
     Settings {
         id: settings
+        property alias dark: root.dark
         property alias blockclocksize: root.blockclocksize
     }
 
