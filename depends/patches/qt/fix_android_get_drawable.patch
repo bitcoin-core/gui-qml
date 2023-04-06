@@ -1,0 +1,34 @@
+Android 13: Fix warnings on starting an application
+
+On Android 13, currently in beta, android triggers a warning because it
+is using a deprecated getDrawable function.
+The patch changes it to use the non-deprecated alternative as suggested
+in the warning.
+
+Fixes: QTBUG-103568
+
+Upstream commits:
+ - Qt 5.15.11 backport: unavailable
+ - Qt 6.5: e07fea6fb405c6e9affe6e377ad99a98a740c5be
+
+
+--- old/qtbase/src/android/jar/src/org/qtproject/qt5/android/QtActivityDelegate.java
++++ new/qtbase/src/android/jar/src/org/qtproject/qt5/android/QtActivityDelegate.java
+@@ -787,7 +787,7 @@
+                 m_splashScreenSticky = info.metaData.containsKey("android.app.splash_screen_sticky") && info.metaData.getBoolean("android.app.splash_screen_sticky");
+                 int id = info.metaData.getInt(splashScreenKey);
+                 m_splashScreen = new ImageView(m_activity);
+-                m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id));
++                m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id, m_activity.getTheme()));
+                 m_splashScreen.setScaleType(ImageView.ScaleType.FIT_XY);
+                 m_splashScreen.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                 m_layout.addView(m_splashScreen);
+@@ -1209,7 +1209,7 @@
+             if (attr.type >= TypedValue.TYPE_FIRST_COLOR_INT && attr.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                 m_activity.getWindow().setBackgroundDrawable(new ColorDrawable(attr.data));
+             } else {
+-                m_activity.getWindow().setBackgroundDrawable(m_activity.getResources().getDrawable(attr.resourceId));
++                m_activity.getWindow().setBackgroundDrawable(m_activity.getResources().getDrawable(attr.resourceId, m_activity.getTheme()));
+             }
+             if (m_dummyView != null) {
+                 m_layout.removeView(m_dummyView);
