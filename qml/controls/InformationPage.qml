@@ -9,7 +9,6 @@ import org.bitcoincore.qt 1.0
 
 Page {
     id: root
-    implicitHeight: parent.height
     property alias bannerItem: banner_loader.sourceComponent
     property alias detailItem: detail_loader.sourceComponent
     property alias loadedDetailItem: detail_loader.item
