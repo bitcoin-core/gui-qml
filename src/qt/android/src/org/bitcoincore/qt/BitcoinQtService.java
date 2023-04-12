@@ -7,6 +7,7 @@ package org.bitcoincore.qt;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.util.Log;
 import org.qtproject.qt5.android.bindings.QtService;
@@ -27,10 +28,14 @@ public class BitcoinQtService extends QtService
         NotificationManager notificationManager = getSystemService(NotificationManager.class);
         notificationManager.createNotificationChannel(channel);
 
+        Intent intent = new Intent(this, BitcoinQtActivity.class);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
+
         Notification notification = new Notification.Builder(this, "bitcoin_channel_id")
             .setSmallIcon(R.drawable.bitcoin)
             .setContentTitle("Running bitcoin")
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
             .build();
 
         startForeground(1, notification);
