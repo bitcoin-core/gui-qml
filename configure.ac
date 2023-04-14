@@ -818,12 +818,15 @@ case $host in
      case $host in
        *x86_64*)
           ANDROID_ARCH=x86_64
+          NDK_LIBCXX_DIR=x86_64-linux-android
           ;;
         *aarch64*)
           ANDROID_ARCH=arm64-v8a
+          NDK_LIBCXX_DIR=aarch64-linux-android
           ;;
         *armv7a*)
           ANDROID_ARCH=armeabi-v7a
+          NDK_LIBCXX_DIR=arm-linux-androideabi
           ;;
         *) AC_MSG_ERROR([Could not determine Android arch, or it is unsupported]) ;;
       esac
@@ -1969,6 +1972,7 @@ AC_SUBST(HAVE_BUILTIN_PREFETCH)
 AC_SUBST(HAVE_MM_PREFETCH)
 AC_SUBST(HAVE_STRONG_GETAUXVAL)
 AC_SUBST(ANDROID_ARCH)
+AC_SUBST(NDK_LIBCXX_DIR)
 AC_SUBST(HAVE_EVHTTP_CONNECTION_GET_PEER_CONST_CHAR)
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile share/setup.nsi share/qt/Info.plist test/config.ini])
 AC_CONFIG_FILES([contrib/devtools/split-debug.sh],[chmod +x contrib/devtools/split-debug.sh])
