@@ -9,6 +9,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 import org.qtproject.qt5.android.bindings.QtService;
 import android.content.Context;
@@ -17,6 +18,7 @@ import android.os.PowerManager;
 public class BitcoinQtService extends QtService
 {
     private PowerManager.WakeLock wakeLock;
+    private WifiManager.WifiLock wifiLock;
 
     @Override
     public void onCreate() {
@@ -44,12 +46,16 @@ public class BitcoinQtService extends QtService
         startForeground(1, notification);
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BitcoinCore::IBD");
+
+        WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "BitcoinCore::WIFI_LOCK");
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
         wakeLock.acquire();
+        wifiLock.acquire();
         return START_NOT_STICKY;
     }
 
@@ -58,6 +64,10 @@ public class BitcoinQtService extends QtService
         super.onDestroy();
         if (wakeLock.isHeld()) {
             wakeLock.release(); // Release the wake lock
+        }
+
+        if (wifiLock.isHeld()) {
+            wifiLock.release(); // Release the WiFi lock
         }
     }
 }
