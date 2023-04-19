@@ -24,7 +24,11 @@ Item {
     property int headerSize: 32
     property bool connected: nodeModel.numOutboundPeers > 0
     property bool synced: nodeModel.verificationProgress > 0.999
+    property string syncProgress: formatProgressPercentage(nodeModel.verificationProgress * 100)
     property bool paused: false
+    property var syncState: formatRemainingSyncTime(nodeModel.remainingSyncTime)
+    property string syncTime: syncState.text
+    property bool estimating: syncState.estimating
 
     activeFocusOnTab: true
 
@@ -93,15 +97,44 @@ Item {
     Label {
         id: subText
         anchors.top: mainText.bottom
+        property bool estimating: root.estimating
         anchors.horizontalCenter: root.horizontalCenter
         font.family: "Inter"
         font.styleName: "Semi Bold"
         font.pixelSize: dial.width * (9/100)
         color: Theme.color.neutral4
 
-        Behavior on color {
-            ColorAnimation { duration: 150 }
+        Component.onCompleted: {
+            colorChanged.connect(function() {
+                if (!subText.estimating) {
+                    themeChange.restart();
+                }
+            });
+
+            estimatingChanged.connect(function() {
+                if (subText.estimating) {
+                    estimatingTime.start();
+                } else {
+                    estimatingTime.stop();
+                }
+            });
+
+            subText.estimatingChanged(subText.estimating);
         }
+
+        ColorAnimation on color{
+            id: themeChange
+            target: subText
+            duration: 150
+        }
+
+        SequentialAnimation {
+            id: estimatingTime
+            loops: Animation.Infinite
+            ColorAnimation { target: subText; property: "color"; from: subText.color; to: Theme.color.neutral6; duration: 1000 }
+            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: subText.color; duration: 1000 }
+        }
+
     }
 
     PeersIndicator {
@@ -139,17 +172,17 @@ Item {
             name: "IBD"; when: !synced && !paused && connected
             PropertyChanges {
                 target: root
-                header: formatProgressPercentage(nodeModel.verificationProgress * 100)
-                subText: formatRemainingSyncTime(nodeModel.remainingSyncTime)
+                header: root.syncProgress
+                subText: root.syncTime
             }
         },
-
         State {
             name: "BLOCKCLOCK"; when: synced && !paused && connected
             PropertyChanges {
                 target: root
                 header: Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0)
                 subText: "Blocktime"
+                estimating: false
             }
         },
 
@@ -160,6 +193,7 @@ Item {
                 header: "Paused"
                 headerSize: dial.width * (3/25)
                 subText: "Tap to resume"
+                estimating: false
             }
             PropertyChanges {
                 target: bitcoinIcon
@@ -178,6 +212,7 @@ Item {
                 header: "Connecting"
                 headerSize: dial.width * (3/25)
                 subText: "Please wait"
+                estimating: false
             }
             PropertyChanges {
                 target: bitcoinIcon
@@ -211,29 +246,55 @@ Item {
         minutes %= 1440;
         var hours = Math.floor(minutes / 60);
         minutes %= 60;
+        var result = "";
+        var estimatingStatus = false;
 
         if (weeks > 0) {
-            return "~" + weeks + (weeks === 1 ? " week" : " weeks") + " left";
+            return {
+                text: "~" + weeks + (weeks === 1 ? " week" : " weeks") + " left",
+                estimating: false
+            };
         }
         if (days > 0) {
-            return "~" + days + (days === 1 ? " day" : " days") + " left";
+            return {
+                text: "~" + days + (days === 1 ? " day" : " days") + " left",
+                estimating: false
+            };
         }
         if (hours >= 5) {
-            return "~" + hours + (hours === 1 ? " hour" : " hours") + " left";
+            return {
+                text: "~" + hours + (hours === 1 ? " hour" : " hours") + " left",
+                estimating: false
+            };
         }
         if (hours > 0) {
-            return "~" + hours + "h " + minutes + "m" + " left";
+            return {
+                text: "~" + hours + "h " + minutes + "m" + " left",
+                estimating: false
+            };
         }
         if (minutes >= 5) {
-            return "~" + minutes + (minutes === 1 ? " minute" : " minutes") + " left";
+            return {
+                text: "~" + minutes + (minutes === 1 ? " minute" : " minutes") + " left",
+                estimating: false
+            };
         }
         if (minutes > 0) {
-            return "~" + minutes + "m " + seconds + "s" + " left";
+            return {
+                text: "~" + minutes + "m " + seconds + "s" + " left",
+                estimating: false
+            };
         }
         if (seconds > 0) {
-            return "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left";
+            return {
+                text: "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left",
+                estimating: false
+            };
+        } else {
+            return {
+                text: "Estimating",
+                estimating: true
+            };
         }
-
-        return "Estimating";
     }
 }
