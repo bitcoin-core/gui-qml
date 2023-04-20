@@ -3,9 +3,14 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import Qt.labs.settings 1.0
 
+import org.bitcoincore.qt 1.0
+
 Control {
     id: root
-    property bool dark: true
+    property bool dark: manualTheme ? manualDark : themeManager.darkMode
+    property bool systemThemeAvailable: themeManager.systemThemeAvailable
+    property bool manualTheme: false
+    property bool manualDark: true
     property real blockclocksize: (5/12)
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
@@ -13,7 +18,21 @@ Control {
     Settings {
         id: settings
         property alias dark: root.dark
+        property alias manualTheme: root.manualTheme
+        property alias manualDark: root.manualDark
         property alias blockclocksize: root.blockclocksize
+    }
+
+    SystemPalette {
+        id: systemColor
+
+        onBaseChanged: {
+            themeManager.systemBaseColor = systemColor.base
+        }
+    }
+
+    Component.onCompleted: {
+        themeManager.systemBaseColor = systemColor.base
     }
 
     component ColorSet: QtObject {

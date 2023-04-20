@@ -26,6 +26,7 @@
 #include <qml/models/options_model.h>
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/imageprovider.h>
+#include <qml/thememanager.h>
 #include <qml/util.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -243,6 +244,7 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
+    ThemeManager theme_manager{};
     NetworkTrafficTower network_traffic_tower{node_model};
 #ifdef __ANDROID__
     AndroidNotifier android_notifier{node_model};
@@ -278,6 +280,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
     engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
+    engine.rootContext()->setContextProperty("themeManager", &theme_manager);
 
     OptionsQmlModel options_model{*node};
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
