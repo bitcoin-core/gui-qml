@@ -11,6 +11,7 @@ import "../../components"
 Page {
     background: null
     property alias navLeftDetail: navbar.leftDetail
+    property alias navMiddleDetail: navbar.middleDetail
 
     header: NavigationBar {
         id: navbar
@@ -32,8 +33,7 @@ Page {
                 id: description
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Peers are nodes you are connected to. You want to ensure that you are connected" +
-                    " to x, y and z, but not a, b, and c. Learn more.")
+                text: qsTr("Peers are nodes you exchange data with.")
                 font.pixelSize: 13
                 color: Theme.color.neutral7
             }
