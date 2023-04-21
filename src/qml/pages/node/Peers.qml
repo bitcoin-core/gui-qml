@@ -36,7 +36,7 @@ Page {
         height: toggleButtons.height
         contentWidth: toggleButtons.width
         boundsMovement: width == toggleButtons.width ?
-            Flickable.StopAtBound : Flickable.FollowBoundsBehavior
+            Flickable.StopAtBounds : Flickable.FollowBoundsBehavior
         RowLayout {
             id: toggleButtons
             spacing: 10
