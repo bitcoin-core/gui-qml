@@ -36,7 +36,7 @@ Page {
         height: toggleButtons.height
         contentWidth: toggleButtons.width
         boundsMovement: width == toggleButtons.width ?
-            Flickable.StopAtBound : Flickable.FollowBoundsBehavior
+            Flickable.StopAtBounds : Flickable.FollowBoundsBehavior
         RowLayout {
             id: toggleButtons
             spacing: 10
@@ -107,6 +107,7 @@ Page {
                     anchors.centerIn: parent
                     spacing: 20
                     PeersIndicator {
+                        paused: false
                         numOutboundPeers: nodeModel.numOutboundPeers
                         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
                     }
