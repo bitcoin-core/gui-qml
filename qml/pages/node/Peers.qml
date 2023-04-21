@@ -107,6 +107,7 @@ Page {
                     anchors.centerIn: parent
                     spacing: 20
                     PeersIndicator {
+                        paused: false
                         numOutboundPeers: nodeModel.numOutboundPeers
                         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
                     }
