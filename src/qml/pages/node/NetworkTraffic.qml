@@ -28,8 +28,8 @@ InformationPage {
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
             color: Theme.color.neutral3
-            width: childrenRect.width + 6
-            height: childrenRect.height + 6
+            width: scaleRow.implicitWidth + 6
+            height: scaleRow.implicitHeight + 6
             radius: 3
 
             Behavior on color {
@@ -37,6 +37,7 @@ InformationPage {
             }
 
             RowLayout {
+                id: scaleRow
                 anchors.centerIn: parent
                 anchors.margins: 3
                 spacing: 5
