@@ -90,6 +90,7 @@
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>
