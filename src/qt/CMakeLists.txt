@@ -267,6 +267,7 @@ if(WITH_QML)
   )
   message(STATUS "Including QML sources")
   file(GLOB_RECURSE QML_SOURCES "../qml/*.cpp" "../qml/*.h")
+  list(FILTER QML_SOURCES EXCLUDE REGEX "androidnotifier\\.(cpp|h)$")
   list(APPEND SOURCES ${QML_SOURCES})
 
   set(QML_QRC "../qml/bitcoin_qml.qrc")
