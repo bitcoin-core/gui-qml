@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-define(_CLIENT_VERSION_MAJOR, 24)
+define(_CLIENT_VERSION_MAJOR, 25)
 define(_CLIENT_VERSION_MINOR, 99)
 define(_CLIENT_VERSION_BUILD, 0)
 define(_CLIENT_VERSION_RC, 0)
@@ -76,6 +76,12 @@ dnl we have those under control, re-enable that functionality.
 case $host in
   *mingw*)
      lt_cv_deplibs_check_method="pass_all"
+
+     dnl Remove unwanted -DDLL_EXPORT from these variables.
+     dnl We do not use this macro, but system headers may export unwanted symbols
+     dnl if it's set.
+     lt_cv_prog_compiler_pic="-DPIC"
+     lt_cv_prog_compiler_pic_CXX="-DPIC"
   ;;
 esac
 
@@ -963,11 +969,11 @@ if test "$use_hardening" != "no"; then
   dnl However, FORTIFY_SOURCE requires that there is some level of optimization, otherwise it does nothing and just creates a compiler warning.
   dnl Since FORTIFY_SOURCE is a no-op without optimizations, do not enable it when enable_debug is yes.
   if test "$enable_debug" != "yes"; then
-    AX_CHECK_PREPROC_FLAG([-D_FORTIFY_SOURCE=2],[
+    AX_CHECK_PREPROC_FLAG([-D_FORTIFY_SOURCE=3],[
       AX_CHECK_PREPROC_FLAG([-U_FORTIFY_SOURCE],[
         HARDENED_CPPFLAGS="$HARDENED_CPPFLAGS -U_FORTIFY_SOURCE"
       ])
-      HARDENED_CPPFLAGS="$HARDENED_CPPFLAGS -D_FORTIFY_SOURCE=2"
+      HARDENED_CPPFLAGS="$HARDENED_CPPFLAGS -D_FORTIFY_SOURCE=3"
     ])
   fi
 
@@ -1486,45 +1492,45 @@ if test "$use_boost" = "yes"; then
 fi
 
 if test "$use_external_signer" != "no"; then
-  case $host in
-    *mingw*)
-      dnl Boost Process uses Boost Filesystem when targeting Windows. Also,
-      dnl since Boost 1.71.0, Process does not work with mingw-w64 without
-      dnl workarounds. See 67669ab425b52a2b6be3d2f3b3b7e3939b676a2c.
-      if test "$use_external_signer" = "yes"; then
-        AC_MSG_ERROR([External signing is not supported on Windows])
-      fi
-      use_external_signer="no";
-    ;;
-    *)
-      AC_MSG_CHECKING([whether Boost.Process can be used])
-      TEMP_CXXFLAGS="$CXXFLAGS"
-      dnl Boost 1.78 requires the following workaround.
-      dnl See: https://github.com/boostorg/process/issues/235
-      CXXFLAGS="$CXXFLAGS -Wno-error=narrowing"
-      TEMP_CPPFLAGS="$CPPFLAGS"
-      CPPFLAGS="$CPPFLAGS $BOOST_CPPFLAGS"
-      TEMP_LDFLAGS="$LDFLAGS"
-      dnl Boost 1.73 and older require the following workaround.
-      LDFLAGS="$LDFLAGS $PTHREAD_CFLAGS"
-      AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <boost/process.hpp>]])],
-        [have_boost_process="yes"],
-        [have_boost_process="no"])
-      LDFLAGS="$TEMP_LDFLAGS"
-      CPPFLAGS="$TEMP_CPPFLAGS"
-      CXXFLAGS="$TEMP_CXXFLAGS"
-      AC_MSG_RESULT([$have_boost_process])
-      if test "$have_boost_process" = "yes"; then
-        use_external_signer="yes"
-        AC_DEFINE([ENABLE_EXTERNAL_SIGNER], [1], [Define if external signer support is enabled])
-      else
-        if test "$use_external_signer" = "yes"; then
-          AC_MSG_ERROR([External signing is not supported for this Boost version])
-        fi
-        use_external_signer="no";
-      fi
-    ;;
-  esac
+  AC_MSG_CHECKING([whether Boost.Process can be used])
+  TEMP_CXXFLAGS="$CXXFLAGS"
+  dnl Boost 1.78 requires the following workaround.
+  dnl See: https://github.com/boostorg/process/issues/235
+  CXXFLAGS="$CXXFLAGS -Wno-error=narrowing"
+  TEMP_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $BOOST_CPPFLAGS"
+  TEMP_LDFLAGS="$LDFLAGS"
+  dnl Boost 1.73 and older require the following workaround.
+  LDFLAGS="$LDFLAGS $PTHREAD_CFLAGS"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+    #define BOOST_PROCESS_USE_STD_FS
+    #include <boost/process.hpp>
+  ]],[[
+    namespace bp = boost::process;
+    bp::opstream stdin_stream;
+    bp::ipstream stdout_stream;
+    bp::child c("dummy", bp::std_out > stdout_stream, bp::std_err > stdout_stream, bp::std_in < stdin_stream);
+    stdin_stream << std::string{"test"} << std::endl;
+    if (c.running()) c.terminate();
+    c.wait();
+    c.exit_code();
+  ]])],
+    [have_boost_process="yes"],
+    [have_boost_process="no"])
+  LDFLAGS="$TEMP_LDFLAGS"
+  CPPFLAGS="$TEMP_CPPFLAGS"
+  CXXFLAGS="$TEMP_CXXFLAGS"
+  AC_MSG_RESULT([$have_boost_process])
+  if test "$have_boost_process" = "yes"; then
+    use_external_signer="yes"
+    AC_DEFINE([ENABLE_EXTERNAL_SIGNER], [1], [Define if external signer support is enabled])
+    AC_DEFINE([BOOST_PROCESS_USE_STD_FS], [1], [Defined to avoid Boost::Process trying to use Boost Filesystem])
+  else
+    if test "$use_external_signer" = "yes"; then
+      AC_MSG_ERROR([External signing is not supported for this Boost version])
+    fi
+    use_external_signer="no";
+  fi
 fi
 AM_CONDITIONAL([ENABLE_EXTERNAL_SIGNER], [test "$use_external_signer" = "yes"])
 
@@ -1761,7 +1767,7 @@ else
     use_upnp=yes
     AC_DEFINE([USE_UPNP], [1], [Define to 1 if UPnP support should be compiled in.])
     if test "$TARGET_OS" = "windows"; then
-      MINIUPNPC_CPPFLAGS="$MINIUPNPC_CPPFLAGS -DSTATICLIB -DMINIUPNP_STATICLIB"
+      MINIUPNPC_CPPFLAGS="$MINIUPNPC_CPPFLAGS -DMINIUPNP_STATICLIB"
     fi
   else
     AC_MSG_RESULT([no])

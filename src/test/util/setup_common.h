@@ -6,7 +6,6 @@
 #define BITCOIN_TEST_UTIL_SETUP_COMMON_H
 
 #include <chainparamsbase.h>
-#include <fs.h>
 #include <key.h>
 #include <node/caches.h>
 #include <node/context.h>
@@ -15,6 +14,7 @@
 #include <random.h>
 #include <stdexcept>
 #include <util/check.h>
+#include <util/fs.h>
 #include <util/string.h>
 #include <util/system.h>
 #include <util/vector.h>
@@ -70,12 +70,6 @@ static inline void SeedInsecureRand(SeedRand seed = SeedRand::SEED)
         Seed(g_insecure_rand_ctx);
     }
 }
-
-static inline uint32_t InsecureRand32() { return g_insecure_rand_ctx.rand32(); }
-static inline uint256 InsecureRand256() { return g_insecure_rand_ctx.rand256(); }
-static inline uint64_t InsecureRandBits(int bits) { return g_insecure_rand_ctx.randbits(bits); }
-static inline uint64_t InsecureRandRange(uint64_t range) { return g_insecure_rand_ctx.randrange(range); }
-static inline bool InsecureRandBool() { return g_insecure_rand_ctx.randbool(); }
 
 static constexpr CAmount CENT{1000000};
 

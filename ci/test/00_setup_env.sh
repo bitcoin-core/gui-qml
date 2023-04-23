@@ -44,7 +44,6 @@ export RUN_SECURITY_TESTS=${RUN_SECURITY_TESTS:-false}
 export TEST_RUNNER_TIMEOUT_FACTOR=${TEST_RUNNER_TIMEOUT_FACTOR:-40}
 export TEST_RUNNER_ENV=${TEST_RUNNER_ENV:-}
 export RUN_FUZZ_TESTS=${RUN_FUZZ_TESTS:-false}
-export EXPECTED_TESTS_DURATION_IN_SECONDS=${EXPECTED_TESTS_DURATION_IN_SECONDS:-1000}
 
 export CONTAINER_NAME=${CONTAINER_NAME:-ci_unnamed}
 export CI_IMAGE_NAME_TAG=${CI_IMAGE_NAME_TAG:-ubuntu:20.04}
@@ -66,6 +65,7 @@ export BASE_BUILD_DIR=${BASE_BUILD_DIR:-$BASE_SCRATCH_DIR/build}
 # The folder for previous release binaries.
 # This folder exists only on the ci guest, and on the ci host as a volume.
 export PREVIOUS_RELEASES_DIR=${PREVIOUS_RELEASES_DIR:-$BASE_ROOT_DIR/releases/$HOST}
+export DIR_IWYU="${BASE_SCRATCH_DIR}/iwyu"
 export SDK_URL=${SDK_URL:-https://bitcoincore.org/depends-sources/sdks}
 export CI_BASE_PACKAGES=${CI_BASE_PACKAGES:-build-essential libtool autotools-dev automake pkg-config bsdmainutils curl ca-certificates ccache python3 rsync git procps bison}
 export GOAL=${GOAL:-install}

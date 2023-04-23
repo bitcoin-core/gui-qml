@@ -469,7 +469,7 @@ class TestNode():
                 return
 
             if time.time() >= time_end:
-                print_log = " - " + "\n - ".join(log.splitlines())
+                print_log = " - " + "\n - ".join(log.decode("utf8", errors="replace").splitlines())
                 break
 
             # No sleep here because we want to detect the message fragment as fast as
@@ -829,7 +829,7 @@ class RPCOverloadWrapper():
             int(address ,16)
             is_hex = True
             desc = descsum_create('raw(' + address + ')')
-        except:
+        except Exception:
             desc = descsum_create('addr(' + address + ')')
         reqs = [{
             'desc': desc,

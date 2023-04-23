@@ -51,9 +51,11 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
         self.supports_cli = False
 
         # Set -maxmempool=0 to turn off mempool memory sharing with dbcache
-        # Set -rpcservertimeout=900 to reduce socket disconnects in this
-        # long-running test
-        self.base_args = ["-limitdescendantsize=0", "-maxmempool=0", "-rpcservertimeout=900", "-dbbatchsize=200000"]
+        self.base_args = [
+            "-limitdescendantsize=0",
+            "-maxmempool=0",
+            "-dbbatchsize=200000",
+        ]
 
         # Set different crash ratios and cache sizes.  Note that not all of
         # -dbcache goes to the in-memory coins cache.
@@ -85,7 +87,7 @@ class ChainstateWriteCrashTest(BitcoinTestFramework):
                 self.nodes[node_index].waitforblock(expected_tip)
                 utxo_hash = self.nodes[node_index].gettxoutsetinfo()['hash_serialized_2']
                 return utxo_hash
-            except:
+            except Exception:
                 # An exception here should mean the node is about to crash.
                 # If bitcoind exits, then try again.  wait_for_node_exit()
                 # should raise an exception if bitcoind doesn't exit.

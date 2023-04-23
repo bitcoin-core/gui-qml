@@ -6,9 +6,9 @@
 #ifndef BITCOIN_LOGGING_H
 #define BITCOIN_LOGGING_H
 
-#include <fs.h>
 #include <threadsafety.h>
 #include <tinyformat.h>
+#include <util/fs.h>
 #include <util/string.h>
 
 #include <atomic>
@@ -256,5 +256,12 @@ static inline void LogPrintf_(const std::string& logging_function, const std::st
             LogPrintLevel_(category, level, __VA_ARGS__); \
         }                                                 \
     } while (0)
+
+template <typename... Args>
+bool error(const char* fmt, const Args&... args)
+{
+    LogPrintf("ERROR: %s\n", tfm::format(fmt, args...));
+    return false;
+}
 
 #endif // BITCOIN_LOGGING_H

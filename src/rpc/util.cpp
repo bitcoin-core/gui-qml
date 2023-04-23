@@ -608,6 +608,7 @@ bool RPCHelpMan::IsValidNumArgs(size_t num_args) const
 std::vector<std::string> RPCHelpMan::GetArgNames() const
 {
     std::vector<std::string> ret;
+    ret.reserve(m_args.size());
     for (const auto& arg : m_args) {
         ret.emplace_back(arg.m_names);
     }
@@ -732,12 +733,12 @@ UniValue RPCArg::MatchesType(const UniValue& request) const
 
 std::string RPCArg::GetFirstName() const
 {
-    return m_names.substr(0, m_names.find("|"));
+    return m_names.substr(0, m_names.find('|'));
 }
 
 std::string RPCArg::GetName() const
 {
-    CHECK_NONFATAL(std::string::npos == m_names.find("|"));
+    CHECK_NONFATAL(std::string::npos == m_names.find('|'));
     return m_names;
 }
 
@@ -1172,4 +1173,27 @@ UniValue GetServicesNames(ServiceFlags services)
     }
 
     return servicesNames;
+}
+
+/** Convert a vector of bilingual strings to a UniValue::VARR containing their original untranslated values. */
+[[nodiscard]] static UniValue BilingualStringsToUniValue(const std::vector<bilingual_str>& bilingual_strings)
+{
+    CHECK_NONFATAL(!bilingual_strings.empty());
+    UniValue result{UniValue::VARR};
+    for (const auto& s : bilingual_strings) {
+        result.push_back(s.original);
+    }
+    return result;
+}
+
+void PushWarnings(const UniValue& warnings, UniValue& obj)
+{
+    if (warnings.empty()) return;
+    obj.pushKV("warnings", warnings);
+}
+
+void PushWarnings(const std::vector<bilingual_str>& warnings, UniValue& obj)
+{
+    if (warnings.empty()) return;
+    obj.pushKV("warnings", BilingualStringsToUniValue(warnings));
 }

@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <fs.h>
+#include <util/fs.h>
 #include <util/settings.h>
 
 #include <tinyformat.h>
@@ -99,6 +99,8 @@ bool ReadSettings(const fs::path& path, std::map<std::string, SettingsValue>& va
         auto inserted = values.emplace(in_keys[i], in_values[i]);
         if (!inserted.second) {
             errors.emplace_back(strprintf("Found duplicate key %s in settings file %s", in_keys[i], fs::PathToString(path)));
+            values.clear();
+            break;
         }
     }
     return errors.empty();

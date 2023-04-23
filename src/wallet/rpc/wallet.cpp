@@ -13,6 +13,7 @@
 #include <wallet/rpc/wallet.h>
 #include <wallet/rpc/util.h>
 #include <wallet/wallet.h>
+#include <wallet/walletutil.h>
 
 #include <optional>
 
@@ -20,6 +21,14 @@
 
 
 namespace wallet {
+
+static const std::map<uint64_t, std::string> WALLET_FLAG_CAVEATS{
+    {WALLET_FLAG_AVOID_REUSE,
+     "You need to rescan the blockchain in order to correctly mark used "
+     "destinations in the past. Until this is done, some destinations may "
+     "be considered unused, even if the opposite is the case."},
+};
+
 /** Checks if a CKey is in the given CWallet compressed or otherwise*/
 bool HaveKey(const SigningProvider& wallet, const CKey& key)
 {
@@ -207,7 +216,11 @@ static RPCHelpMan loadwallet()
                     RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::STR, "name", "The wallet name if loaded successfully."},
-                        {RPCResult::Type::STR, "warning", "Warning message if wallet was not loaded cleanly."},
+                        {RPCResult::Type::STR, "warning", /*optional=*/true, "Warning messages, if any, related to loading the wallet. Multiple messages will be delimited by newlines. (DEPRECATED, returned only if config option -deprecatedrpc=walletwarningfield is passed.)"},
+                        {RPCResult::Type::ARR, "warnings", /*optional=*/true, "Warning messages, if any, related to loading the wallet.",
+                        {
+                            {RPCResult::Type::STR, "", ""},
+                        }},
                     }
                 },
                 RPCExamples{
@@ -240,7 +253,10 @@ static RPCHelpMan loadwallet()
 
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("name", wallet->GetName());
-    obj.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+    if (wallet->chain().rpcEnableDeprecated("walletwarningfield")) {
+        obj.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+    }
+    PushWarnings(warnings, obj);
 
     return obj;
 },
@@ -335,7 +351,11 @@ static RPCHelpMan createwallet()
             RPCResult::Type::OBJ, "", "",
             {
                 {RPCResult::Type::STR, "name", "The wallet name if created successfully. If the wallet was created using a full path, the wallet_name will be the full path."},
-                {RPCResult::Type::STR, "warning", "Warning message if wallet was not loaded cleanly."},
+                {RPCResult::Type::STR, "warning", /*optional=*/true, "Warning messages, if any, related to creating the wallet. Multiple messages will be delimited by newlines. (DEPRECATED, returned only if config option -deprecatedrpc=walletwarningfield is passed.)"},
+                {RPCResult::Type::ARR, "warnings", /*optional=*/true, "Warning messages, if any, related to creating the wallet.",
+                {
+                    {RPCResult::Type::STR, "", ""},
+                }},
             }
         },
         RPCExamples{
@@ -359,7 +379,7 @@ static RPCHelpMan createwallet()
     passphrase.reserve(100);
     std::vector<bilingual_str> warnings;
     if (!request.params[3].isNull()) {
-        passphrase = request.params[3].get_str().c_str();
+        passphrase = std::string_view{request.params[3].get_str()};
         if (passphrase.empty()) {
             // Empty string means unencrypted
             warnings.emplace_back(Untranslated("Empty string given as passphrase, wallet will not be encrypted."));
@@ -405,7 +425,10 @@ static RPCHelpMan createwallet()
 
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("name", wallet->GetName());
-    obj.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+    if (wallet->chain().rpcEnableDeprecated("walletwarningfield")) {
+        obj.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+    }
+    PushWarnings(warnings, obj);
 
     return obj;
 },
@@ -422,7 +445,11 @@ static RPCHelpMan unloadwallet()
                     {"load_on_startup", RPCArg::Type::BOOL, RPCArg::Optional::OMITTED, "Save wallet name to persistent settings and load on startup. True to add wallet to startup list, false to remove, null to leave unchanged."},
                 },
                 RPCResult{RPCResult::Type::OBJ, "", "", {
-                    {RPCResult::Type::STR, "warning", "Warning message if wallet was not unloaded cleanly."},
+                    {RPCResult::Type::STR, "warning", /*optional=*/true, "Warning messages, if any, related to unloading the wallet. Multiple messages will be delimited by newlines. (DEPRECATED, returned only if config option -deprecatedrpc=walletwarningfield is passed.)"},
+                    {RPCResult::Type::ARR, "warnings", /*optional=*/true, "Warning messages, if any, related to unloading the wallet.",
+                    {
+                        {RPCResult::Type::STR, "", ""},
+                    }},
                 }},
                 RPCExamples{
                     HelpExampleCli("unloadwallet", "wallet_name")
@@ -460,11 +487,13 @@ static RPCHelpMan unloadwallet()
             throw JSONRPCError(RPC_MISC_ERROR, "Requested wallet already unloaded");
         }
     }
+    UniValue result(UniValue::VOBJ);
+    if (wallet->chain().rpcEnableDeprecated("walletwarningfield")) {
+        result.pushKV("warning", Join(warnings, Untranslated("\n")).original);
+    }
+    PushWarnings(warnings, result);
 
     UnloadWallet(std::move(wallet));
-
-    UniValue result(UniValue::VOBJ);
-    result.pushKV("warning", Join(warnings, Untranslated("\n")).original);
     return result;
 },
     };
@@ -720,9 +749,12 @@ static RPCHelpMan migratewallet()
         "A new wallet backup will need to be made.\n"
         "\nThe migration process will create a backup of the wallet before migrating. This backup\n"
         "file will be named <wallet name>-<timestamp>.legacy.bak and can be found in the directory\n"
-        "for this wallet. In the event of an incorrect migration, the backup can be restored using restorewallet." +
-        HELP_REQUIRING_PASSPHRASE,
-        {},
+        "for this wallet. In the event of an incorrect migration, the backup can be restored using restorewallet."
+        "\nEncrypted wallets must have the passphrase provided as an argument to this call.",
+        {
+            {"wallet_name", RPCArg::Type::STR, RPCArg::DefaultHint{"the wallet name from the RPC endpoint"}, "The name of the wallet to migrate. If provided both here and in the RPC endpoint, the two must be identical."},
+            {"passphrase", RPCArg::Type::STR, RPCArg::Optional::OMITTED, "The wallet passphrase"},
+        },
         RPCResult{
             RPCResult::Type::OBJ, "", "",
             {
@@ -738,16 +770,26 @@ static RPCHelpMan migratewallet()
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
         {
-            std::shared_ptr<CWallet> wallet = GetWalletForJSONRPCRequest(request);
-            if (!wallet) return NullUniValue;
+            std::string wallet_name;
+            if (GetWalletNameFromJSONRPCRequest(request, wallet_name)) {
+                if (!(request.params[0].isNull() || request.params[0].get_str() == wallet_name)) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "RPC endpoint wallet and wallet_name parameter specify different wallets");
+                }
+            } else {
+                if (request.params[0].isNull()) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Either RPC endpoint wallet or wallet_name parameter must be provided");
+                }
+                wallet_name = request.params[0].get_str();
+            }
 
-            if (wallet->IsCrypted()) {
-                throw JSONRPCError(RPC_WALLET_WRONG_ENC_STATE, "Error: migratewallet on encrypted wallets is currently unsupported.");
+            SecureString wallet_pass;
+            wallet_pass.reserve(100);
+            if (!request.params[1].isNull()) {
+                wallet_pass = std::string_view{request.params[1].get_str()};
             }
 
             WalletContext& context = EnsureWalletContext(request.context);
-
-            util::Result<MigrationResult> res = MigrateLegacyToDescriptor(std::move(wallet), context);
+            util::Result<MigrationResult> res = MigrateLegacyToDescriptor(wallet_name, wallet_pass, context);
             if (!res) {
                 throw JSONRPCError(RPC_WALLET_ERROR, util::ErrorString(res).original);
             }

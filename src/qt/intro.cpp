@@ -7,15 +7,16 @@
 #endif
 
 #include <chainparams.h>
-#include <fs.h>
 #include <qt/intro.h>
 #include <qt/forms/ui_intro.h>
+#include <util/fs.h>
 
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
 
 #include <interfaces/node.h>
+#include <util/fs_helpers.h>
 #include <util/system.h>
 #include <validation.h>
 
@@ -318,7 +319,7 @@ void Intro::on_dataDirectory_textChanged(const QString &dataDirStr)
 
 void Intro::on_ellipsisButton_clicked()
 {
-    QString dir = QDir::toNativeSeparators(QFileDialog::getExistingDirectory(nullptr, "Choose data directory", ui->dataDirectory->text()));
+    QString dir = QDir::toNativeSeparators(QFileDialog::getExistingDirectory(nullptr, tr("Choose data directory"), ui->dataDirectory->text()));
     if(!dir.isEmpty())
         ui->dataDirectory->setText(dir);
 }

@@ -6,6 +6,7 @@
 #include <coins.h>
 #include <script/standard.h>
 #include <streams.h>
+#include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <txdb.h>
 #include <uint256.h>
@@ -172,7 +173,7 @@ void SimulationTest(CCoinsView* base, bool fake_best_block)
 
             if (InsecureRandRange(5) == 0 || coin.IsSpent()) {
                 Coin newcoin;
-                newcoin.out.nValue = InsecureRand32();
+                newcoin.out.nValue = InsecureRandMoneyAmount();
                 newcoin.nHeight = 1;
 
                 // Infrequently test adding unspendable coins.
@@ -278,7 +279,7 @@ BOOST_AUTO_TEST_CASE(coins_cache_simulation_test)
     CCoinsViewTest base;
     SimulationTest(&base, false);
 
-    CCoinsViewDB db_base{"test", /*nCacheSize=*/1 << 23, /*fMemory=*/true, /*fWipe=*/false};
+    CCoinsViewDB db_base{{.path = "test", .cache_bytes = 1 << 23, .memory_only = true}, {}};
     SimulationTest(&db_base, true);
 }
 
@@ -1064,7 +1065,7 @@ void TestFlushBehavior(
 BOOST_AUTO_TEST_CASE(ccoins_flush_behavior)
 {
     // Create two in-memory caches atop a leveldb view.
-    CCoinsViewDB base{"test", /*nCacheSize=*/ 1 << 23, /*fMemory=*/ true, /*fWipe=*/ false};
+    CCoinsViewDB base{{.path = "test", .cache_bytes = 1 << 23, .memory_only = true}, {}};
     std::vector<std::unique_ptr<CCoinsViewCacheTest>> caches;
     caches.push_back(std::make_unique<CCoinsViewCacheTest>(&base));
     caches.push_back(std::make_unique<CCoinsViewCacheTest>(caches.back().get()));

@@ -6,7 +6,6 @@
 #include <test/data/bip341_wallet_vectors.json.h>
 
 #include <core_io.h>
-#include <fs.h>
 #include <key.h>
 #include <rpc/util.h>
 #include <script/script.h>
@@ -16,8 +15,10 @@
 #include <script/signingprovider.h>
 #include <streams.h>
 #include <test/util/json.h>
+#include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <test/util/transaction_utils.h>
+#include <util/fs.h>
 #include <util/strencodings.h>
 #include <util/system.h>
 

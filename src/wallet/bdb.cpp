@@ -4,18 +4,26 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <compat/compat.h>
-#include <fs.h>
+#include <util/fs.h>
 #include <wallet/bdb.h>
 #include <wallet/db.h>
 
 #include <util/check.h>
+#include <util/fs_helpers.h>
 #include <util/strencodings.h>
 #include <util/translation.h>
 
 #include <stdint.h>
 
-#ifndef WIN32
 #include <sys/stat.h>
+
+// Windows may not define S_IRUSR or S_IWUSR. We define both
+// here, with the same values as glibc (see stat.h).
+#ifdef WIN32
+#ifndef S_IRUSR
+#define S_IRUSR             0400
+#define S_IWUSR             0200
+#endif
 #endif
 
 namespace wallet {
@@ -432,6 +440,7 @@ void BerkeleyEnvironment::ReloadDbEnv()
     });
 
     std::vector<fs::path> filenames;
+    filenames.reserve(m_databases.size());
     for (const auto& it : m_databases) {
         filenames.push_back(it.first);
     }

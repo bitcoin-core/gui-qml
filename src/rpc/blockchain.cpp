@@ -15,7 +15,6 @@
 #include <core_io.h>
 #include <deploymentinfo.h>
 #include <deploymentstatus.h>
-#include <fs.h>
 #include <hash.h>
 #include <index/blockfilterindex.h>
 #include <index/coinstatsindex.h>
@@ -39,6 +38,7 @@
 #include <undo.h>
 #include <univalue.h>
 #include <util/check.h>
+#include <util/fs.h>
 #include <util/strencodings.h>
 #include <util/system.h>
 #include <util/translation.h>
@@ -432,7 +432,8 @@ static RPCHelpMan getblockfrompeer()
         "We must have the header for this block, e.g. using submitheader.\n"
         "Subsequent calls for the same block and a new peer will cause the response from the previous peer to be ignored.\n"
         "Peers generally ignore requests for a stale block that they never fully verified, or one that is more than a month old.\n"
-        "When a peer does not respond with a block, we will disconnect.\n\n"
+        "When a peer does not respond with a block, we will disconnect.\n"
+        "Note: The block could be re-pruned as soon as it is received.\n\n"
         "Returns an empty JSON object if the request was successfully scheduled.",
         {
             {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The block hash to try to fetch"},
@@ -1110,7 +1111,7 @@ static RPCHelpMan verifychain()
                     {"nblocks", RPCArg::Type::NUM, RPCArg::DefaultHint{strprintf("%d, 0=all", DEFAULT_CHECKBLOCKS)}, "The number of blocks to check."},
                 },
                 RPCResult{
-                    RPCResult::Type::BOOL, "", "Verified or not"},
+                    RPCResult::Type::BOOL, "", "Verification finished successfully. If false, check debug.log for reason."},
                 RPCExamples{
                     HelpExampleCli("verifychain", "")
             + HelpExampleRpc("verifychain", "")
@@ -1125,7 +1126,7 @@ static RPCHelpMan verifychain()
 
     Chainstate& active_chainstate = chainman.ActiveChainstate();
     return CVerifyDB().VerifyDB(
-        active_chainstate, chainman.GetParams().GetConsensus(), active_chainstate.CoinsTip(), check_level, check_depth);
+               active_chainstate, chainman.GetParams().GetConsensus(), active_chainstate.CoinsTip(), check_level, check_depth) == VerifyDBResult::SUCCESS;
 },
     };
 }
@@ -1248,7 +1249,6 @@ RPCHelpMan getblockchaininfo()
         },
         [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
 {
-    const ArgsManager& args{EnsureAnyArgsman(request.context)};
     ChainstateManager& chainman = EnsureAnyChainman(request.context);
     LOCK(cs_main);
     Chainstate& active_chainstate = chainman.ActiveChainstate();
@@ -1271,8 +1271,7 @@ RPCHelpMan getblockchaininfo()
     if (chainman.m_blockman.IsPruneMode()) {
         obj.pushKV("pruneheight", chainman.m_blockman.GetFirstStoredBlock(tip)->nHeight);
 
-        // if 0, execution bypasses the whole if block.
-        bool automatic_pruning{args.GetIntArg("-prune", 0) != 1};
+        const bool automatic_pruning{chainman.m_blockman.GetPruneTarget() != BlockManager::PRUNE_TARGET_MANUAL};
         obj.pushKV("automatic_pruning",  automatic_pruning);
         if (automatic_pruning) {
             obj.pushKV("prune_target_size", chainman.m_blockman.GetPruneTarget());
@@ -2106,6 +2105,10 @@ static RPCHelpMan scantxoutset()
         "    combo(<pubkey>)                      P2PK, P2PKH, P2WPKH, and P2SH-P2WPKH outputs for the given pubkey\n"
         "    pkh(<pubkey>)                        P2PKH outputs for the given pubkey\n"
         "    sh(multi(<n>,<pubkey>,<pubkey>,...)) P2SH-multisig outputs for the given threshold and pubkeys\n"
+        "    tr(<pubkey>)                         P2TR\n"
+        "    tr(<pubkey>,{pk(<pubkey>)})          P2TR with single fallback pubkey in tapscript\n"
+        "    rawtr(<pubkey>)                      P2TR with the specified key as output key rather than inner\n"
+        "    wsh(and_v(v:pk(<pubkey>),after(2)))  P2WSH miniscript with mandatory pubkey and a timelock\n"
         "\nIn the above, <pubkey> either refers to a fixed public key in hexadecimal notation, or to an xpub/xprv optionally followed by one\n"
         "or more path elements separated by \"/\", and optionally ending in \"/*\" (unhardened), or \"/*'\" or \"/*h\" (hardened) to specify all\n"
         "unhardened or hardened child keys.\n"
