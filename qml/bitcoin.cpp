@@ -109,7 +109,7 @@ bool ConfigurationFileExists(ArgsManager& argsman)
     }
 
     const fs::path rel_config_path = argsman.GetPathArg("-conf", BITCOIN_CONF_FILENAME);
-    const fs::path abs_config_path = AbsPathForConfigVal(rel_config_path, true);
+    const fs::path abs_config_path = AbsPathForConfigVal(argsman, rel_config_path, true);
     if (fs::exists(abs_config_path)) {
         return true;
     }
@@ -169,7 +169,7 @@ int QmlGuiMain(int argc, char* argv[])
     app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
     /// Determine availability of data directory.
-    if (!CheckDataDirOption()) {
+    if (!CheckDataDirOption(gArgs)) {
         InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));
         return EXIT_FAILURE;
     }
