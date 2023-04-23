@@ -17,8 +17,17 @@ import android.os.PowerManager;
 
 public class BitcoinQtService extends QtService
 {
+    private static final String TAG = "BitcoinQtService";
+    private static final int NOTIFICATION_ID = 21000000;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
+    private Notification.Builder notificationBuilder;
+    private boolean connected = false;
+    private boolean paused = false;
+    private boolean synced = false;
+    private int blockHeight = 0;
+    private double verificationProgress = 0.0;
+
 
     @Override
     public void onCreate() {
@@ -26,7 +35,8 @@ public class BitcoinQtService extends QtService
 
         CharSequence name = "Bitcoin Core";
         String description = "Bitcoin Core App notifications";
-        int importance = NotificationManager.IMPORTANCE_DEFAULT;
+        // IMPORTANCE_LOW notifications won't make sound
+        int importance = NotificationManager.IMPORTANCE_LOW;
         NotificationChannel channel = new NotificationChannel("bitcoin_channel_id", name, importance);
         channel.setDescription(description);
 
@@ -36,14 +46,13 @@ public class BitcoinQtService extends QtService
         Intent intent = new Intent(this, BitcoinQtActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, 0);
 
-        Notification notification = new Notification.Builder(this, "bitcoin_channel_id")
+        notificationBuilder = new Notification.Builder(this, "bitcoin_channel_id")
             .setSmallIcon(R.drawable.bitcoin)
             .setContentTitle("Running bitcoin")
             .setOngoing(true)
-            .setContentIntent(pendingIntent)
-            .build();
+            .setContentIntent(pendingIntent);
 
-        startForeground(1, notification);
+        startForeground(NOTIFICATION_ID, notificationBuilder.build());
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BitcoinCore::IBD");
 
@@ -56,6 +65,11 @@ public class BitcoinQtService extends QtService
         super.onStartCommand(intent, flags, startId);
         wakeLock.acquire();
         wifiLock.acquire();
+        if (register()) {
+            Log.d(TAG, "Registered JVM to native module");
+        } else {
+            Log.e(TAG, "Failed to register JVM to native module");
+        }
         return START_NOT_STICKY;
     }
 
@@ -70,4 +84,67 @@ public class BitcoinQtService extends QtService
             wifiLock.release(); // Release the WiFi lock
         }
     }
+
+    public void updateBlockTipHeight(int blockHeight) {
+        if (this.blockHeight != blockHeight) {
+            this.blockHeight = blockHeight;
+            if (synced && connected) {
+                updateNotification();
+            }
+        }
+     }
+
+    public void updateNumberOfPeers(int numPeers) {
+        boolean newConnectedState = numPeers > 0;
+        if (connected != newConnectedState) {
+            connected = newConnectedState;
+            updateNotification();
+        }
+    }
+
+    public void updatePaused(boolean paused) {
+        if (this.paused != paused) {
+            this.paused = paused;
+            updateNotification();
+        }
+    }
+
+    public void updateVerificationProgress(double progress) {
+        boolean newSyncedState = progress > 0.999;
+        boolean needNotificationUpdate = false;
+        if (synced != newSyncedState) {
+            synced = newSyncedState;
+            needNotificationUpdate = true;
+        }
+        double newProgress = Math.floor(progress * 10000) / 100.0;
+        if (verificationProgress != newProgress ) {
+            verificationProgress = newProgress;
+            needNotificationUpdate = true;
+        }
+        if (needNotificationUpdate) {
+            updateNotification();
+        }
+    }
+
+    private void updateNotification() {
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (paused) {
+            notificationBuilder.setContentTitle("Paused");
+        } else if (!connected) {
+            notificationBuilder.setContentTitle("Connecting...");
+        } else if (!synced) {
+            if (verificationProgress < 0) {
+                notificationBuilder.setContentTitle(String.format("%.2f%% loaded...", verificationProgress));
+            } else {
+                notificationBuilder.setContentTitle(String.format("%.0f%% loaded...", verificationProgress));
+            }
+        } else {
+            // Synced and connected
+            notificationBuilder.setContentTitle(String.format("Blocktime %,d", blockHeight));
+        }
+
+        notificationManager.notify(NOTIFICATION_ID, notificationBuilder.build());
+    }
+
+    public native boolean register();
 }
