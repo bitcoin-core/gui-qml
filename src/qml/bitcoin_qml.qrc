@@ -60,6 +60,8 @@
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
+        <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
+        <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
