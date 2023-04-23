@@ -4,17 +4,17 @@
 
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
-Unsecure CI artifacts are available for local testing of the master branch, avoiding the need to build:
-- for Windows: [`unsecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/unsecure_win_gui.zip)
-- for Intel macOS: [`unsecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/unsecure_mac_gui.zip)
-- for Apple Silicon macOS: [`unsecure_mac_arm64_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos_arm64/unsecure_mac_arm64_gui.zip)
-- for ARM64 Android: [`unsecure_android_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/unsecure_android_apk.zip)
+Insecure CI artifacts are available for local testing of the master branch, avoiding the need to build:
+- for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip)
+- for Intel macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip)
+- for Apple Silicon macOS: [`insecure_mac_arm64_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos_arm64/insecure_mac_arm64_gui.zip)
+- for ARM64 Android: [`insecure_android_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip)
 
 Note: For Apple Silicon macOS machines, the binary must be signed before it can
 be ran. To apply a signature, run the following on the unzipped CI artifact:
 
 ```
-codesign -s - ./Downloads/unsecure_mac_arm64_gui
+codesign -s - ./Downloads/insecure_mac_arm64_gui
 ```
 
 ## Goals and Limitations
