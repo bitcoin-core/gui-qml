@@ -315,8 +315,6 @@ task:
     MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_mac.sh"
-  macos_bitcoin_qt_artifacts:
-    path: "ci/scratch/build/bitcoin-x86_64-apple-darwin/src/qt/bitcoin-qt"
 
 task:
   name: 'macOS 13 native arm64 [gui, sqlite only] [no depends]'
