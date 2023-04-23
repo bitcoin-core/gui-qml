@@ -7,9 +7,10 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 Button {
+    id: button
     property string description
     property bool recommended: false
-    id: button
+    property string image: ""
     padding: 15
     checkable: true
     implicitWidth: 450
@@ -25,6 +26,19 @@ Button {
     }
     contentItem: RowLayout {
         spacing: 3
+        Loader {
+            active: button.image !== ""
+            visible: active
+            Layout.rightMargin: 7
+            sourceComponent: Button {
+                icon.source: button.image
+                icon.height: 40
+                icon.width: 40
+                icon.color: Theme.color.neutral9
+                padding: 0
+                background: null
+            }
+        }
         ColumnLayout {
             spacing: 3
             Layout.fillWidth: true
