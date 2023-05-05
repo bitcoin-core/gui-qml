@@ -2,15 +2,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <util/system.h>
-
 #include <clientversion.h>
-#include <fs.h>
 #include <hash.h> // For Hash()
 #include <key.h>  // For CKey
 #include <sync.h>
+#include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
+#include <util/bitdeque.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <util/getuniquepath.h>
 #include <util/message.h> // For MessageSign(), MessageVerify(), MESSAGE_MAGIC
 #include <util/moneystr.h>
@@ -21,7 +22,6 @@
 #include <util/string.h>
 #include <util/time.h>
 #include <util/vector.h>
-#include <util/bitdeque.h>
 
 #include <array>
 #include <cmath>
@@ -35,9 +35,11 @@
 #include <univalue.h>
 #include <utility>
 #include <vector>
+
+#include <sys/types.h>
+
 #ifndef WIN32
 #include <signal.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #endif
 
@@ -140,26 +142,52 @@ BOOST_AUTO_TEST_CASE(parse_hex)
     // Basic test vector
     result = ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f");
     BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
+    result = TryParseHex<uint8_t>("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f").value();
+    BOOST_CHECK_EQUAL_COLLECTIONS(result.begin(), result.end(), expected.begin(), expected.end());
 
     // Spaces between bytes must be supported
     result = ParseHex("12 34 56 78");
+    BOOST_CHECK(result.size() == 4 && result[0] == 0x12 && result[1] == 0x34 && result[2] == 0x56 && result[3] == 0x78);
+    result = TryParseHex<uint8_t>("12 34 56 78").value();
     BOOST_CHECK(result.size() == 4 && result[0] == 0x12 && result[1] == 0x34 && result[2] == 0x56 && result[3] == 0x78);
 
     // Leading space must be supported (used in BerkeleyEnvironment::Salvage)
     result = ParseHex(" 89 34 56 78");
     BOOST_CHECK(result.size() == 4 && result[0] == 0x89 && result[1] == 0x34 && result[2] == 0x56 && result[3] == 0x78);
+    result = TryParseHex<uint8_t>(" 89 34 56 78").value();
+    BOOST_CHECK(result.size() == 4 && result[0] == 0x89 && result[1] == 0x34 && result[2] == 0x56 && result[3] == 0x78);
 
-    // Embedded null is treated as end
+    // Mixed case and spaces are supported
+    result = ParseHex("     Ff        aA    ");
+    BOOST_CHECK(result.size() == 2 && result[0] == 0xff && result[1] == 0xaa);
+    result = TryParseHex<uint8_t>("     Ff        aA    ").value();
+    BOOST_CHECK(result.size() == 2 && result[0] == 0xff && result[1] == 0xaa);
+
+    // Empty string is supported
+    result = ParseHex("");
+    BOOST_CHECK(result.size() == 0);
+    result = TryParseHex<uint8_t>("").value();
+    BOOST_CHECK(result.size() == 0);
+
+    // Spaces between nibbles is treated as invalid
+    BOOST_CHECK_EQUAL(ParseHex("AAF F").size(), 0);
+    BOOST_CHECK(!TryParseHex("AAF F").has_value());
+
+    // Embedded null is treated as invalid
     const std::string with_embedded_null{" 11 "s
                                          " \0 "
                                          " 22 "s};
     BOOST_CHECK_EQUAL(with_embedded_null.size(), 11);
-    result = ParseHex(with_embedded_null);
-    BOOST_CHECK(result.size() == 1 && result[0] == 0x11);
+    BOOST_CHECK_EQUAL(ParseHex(with_embedded_null).size(), 0);
+    BOOST_CHECK(!TryParseHex(with_embedded_null).has_value());
 
-    // Stop parsing at invalid value
-    result = ParseHex("1234 invalid 1234");
-    BOOST_CHECK(result.size() == 2 && result[0] == 0x12 && result[1] == 0x34);
+    // Non-hex is treated as invalid
+    BOOST_CHECK_EQUAL(ParseHex("1234 invalid 1234").size(), 0);
+    BOOST_CHECK(!TryParseHex("1234 invalid 1234").has_value());
+
+    // Truncated input is treated as invalid
+    BOOST_CHECK_EQUAL(ParseHex("12 3").size(), 0);
+    BOOST_CHECK(!TryParseHex("12 3").has_value());
 }
 
 BOOST_AUTO_TEST_CASE(util_HexStr)

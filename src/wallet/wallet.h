@@ -7,19 +7,20 @@
 #define BITCOIN_WALLET_WALLET_H
 
 #include <consensus/amount.h>
-#include <fs.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
+#include <interfaces/wallet.h>
+#include <logging.h>
 #include <outputtype.h>
 #include <policy/feerate.h>
 #include <psbt.h>
 #include <tinyformat.h>
+#include <util/fs.h>
 #include <util/hasher.h>
 #include <util/message.h>
 #include <util/result.h>
 #include <util/strencodings.h>
 #include <util/string.h>
-#include <util/system.h>
 #include <util/time.h>
 #include <util/ui_change_type.h>
 #include <validationinterface.h>
@@ -145,8 +146,6 @@ static const std::map<std::string,WalletFlags> WALLET_FLAG_MAP{
     {"external_signer", WALLET_FLAG_EXTERNAL_SIGNER}
 };
 
-extern const std::map<uint64_t,std::string> WALLET_FLAG_CAVEATS;
-
 /** A wrapper to reserve an address from a wallet
  *
  * ReserveDestination is used to reserve an address.
@@ -200,27 +199,63 @@ public:
     void KeepDestination();
 };
 
-/** Address book data */
-class CAddressBookData
+/**
+ * Address book data.
+ */
+struct CAddressBookData
 {
-private:
-    bool m_change{true};
-    std::string m_label;
-public:
-    std::string purpose;
+    /**
+     * Address label which is always nullopt for change addresses. For sending
+     * and receiving addresses, it will be set to an arbitrary label string
+     * provided by the user, or to "", which is the default label. The presence
+     * or absence of a label is used to distinguish change addresses from
+     * non-change addresses by wallet transaction listing and fee bumping code.
+     */
+    std::optional<std::string> label;
 
-    CAddressBookData() : purpose("unknown") {}
+    /**
+     * Address purpose which was originally recorded for payment protocol
+     * support but now serves as a cached IsMine value. Wallet code should
+     * not rely on this field being set.
+     */
+    std::optional<AddressPurpose> purpose;
 
+    /**
+     * Additional address metadata map that can currently hold two types of keys:
+     *
+     *   "used" keys with values always set to "1" or "p" if present. This is set on
+     *       IsMine addresses that have already been spent from if the
+     *       avoid_reuse option is enabled
+     *
+     *   "rr##" keys where ## is a decimal number, with serialized
+     *       RecentRequestEntry objects as values
+     */
     typedef std::map<std::string, std::string> StringMap;
     StringMap destdata;
 
-    bool IsChange() const { return m_change; }
-    const std::string& GetLabel() const { return m_label; }
-    void SetLabel(const std::string& label) {
-        m_change = false;
-        m_label = label;
-    }
+    /** Accessor methods. */
+    bool IsChange() const { return !label.has_value(); }
+    std::string GetLabel() const { return label ? *label : std::string{}; }
+    void SetLabel(std::string name) { label = std::move(name); }
 };
+
+inline std::string PurposeToString(AddressPurpose p)
+{
+    switch(p) {
+    case AddressPurpose::RECEIVE: return "receive";
+    case AddressPurpose::SEND: return "send";
+    case AddressPurpose::REFUND: return "refund";
+    } // no default case so the compiler will warn when a new enum as added
+    assert(false);
+}
+
+inline std::optional<AddressPurpose> PurposeFromString(std::string_view s)
+{
+    if (s == "receive") return AddressPurpose::RECEIVE;
+    else if (s == "send") return AddressPurpose::SEND;
+    else if (s == "refund") return AddressPurpose::REFUND;
+    return {};
+}
 
 struct CRecipient
 {
@@ -243,6 +278,7 @@ private:
     std::atomic<bool> fAbortRescan{false};
     std::atomic<bool> fScanningWallet{false}; // controlled by WalletRescanReserver
     std::atomic<bool> m_attaching_chain{false};
+    std::atomic<bool> m_scanning_with_passphrase{false};
     std::atomic<int64_t> m_scanning_start{0};
     std::atomic<double> m_scanning_progress{0};
     friend class WalletRescanReserver;
@@ -299,16 +335,13 @@ private:
     /** WalletFlags set on this wallet. */
     std::atomic<uint64_t> m_wallet_flags{0};
 
-    bool SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::string& strPurpose);
+    bool SetAddressBookWithDB(WalletBatch& batch, const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& strPurpose);
 
     //! Unsets a wallet flag and saves it to disk
     void UnsetWalletFlagWithDB(WalletBatch& batch, uint64_t flag);
 
     //! Unset the blank wallet flag and saves it to disk
     void UnsetBlankWalletFlag(WalletBatch& batch) override;
-
-    /** Provider of aplication-wide arguments. */
-    const ArgsManager& m_args;
 
     /** Interface for accessing chain state. */
     interfaces::Chain* m_chain;
@@ -373,9 +406,8 @@ public:
     unsigned int nMasterKeyMaxID = 0;
 
     /** Construct wallet with specified name and database implementation. */
-    CWallet(interfaces::Chain* chain, const std::string& name, const ArgsManager& args, std::unique_ptr<WalletDatabase> database)
-        : m_args(args),
-          m_chain(chain),
+    CWallet(interfaces::Chain* chain, const std::string& name, std::unique_ptr<WalletDatabase> database)
+        : m_chain(chain),
           m_name(name),
           m_database(std::move(database))
     {
@@ -467,6 +499,7 @@ public:
     void AbortRescan() { fAbortRescan = true; }
     bool IsAbortingRescan() const { return fAbortRescan; }
     bool IsScanning() const { return fScanningWallet; }
+    bool IsScanningWithPassphrase() const { return m_scanning_with_passphrase; }
     int64_t ScanningDuration() const { return fScanningWallet ? GetTimeMillis() - m_scanning_start : 0; }
     double ScanningProgress() const { return fScanningWallet ? (double) m_scanning_progress : 0; }
 
@@ -486,6 +519,9 @@ public:
 
     // Used to prevent concurrent calls to walletpassphrase RPC.
     Mutex m_unlock_mutex;
+    // Used to prevent deleting the passphrase from memory when it is still in use.
+    RecursiveMutex m_relock_mutex;
+
     bool Unlock(const SecureString& strWalletPassphrase, bool accept_no_keys = false);
     bool ChangeWalletPassphrase(const SecureString& strOldWalletPassphrase, const SecureString& strNewWalletPassphrase);
     bool EncryptWallet(const SecureString& strWalletPassphrase);
@@ -591,12 +627,6 @@ public:
     bool SubmitTxMemoryPoolAndRelay(CWalletTx& wtx, std::string& err_string, bool relay) const
         EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    bool DummySignTx(CMutableTransaction &txNew, const std::set<CTxOut> &txouts, const CCoinControl* coin_control = nullptr) const
-    {
-        std::vector<CTxOut> v_txouts(txouts.size());
-        std::copy(txouts.begin(), txouts.end(), v_txouts.begin());
-        return DummySignTx(txNew, v_txouts, coin_control);
-    }
     bool DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> &txouts, const CCoinControl* coin_control = nullptr) const;
 
     bool ImportScripts(const std::set<CScript> scripts, int64_t timestamp) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
@@ -642,6 +672,12 @@ public:
     /** Absolute maximum transaction fee (in satoshis) used by default for the wallet */
     CAmount m_default_max_tx_fee{DEFAULT_TRANSACTION_MAXFEE};
 
+    /** Number of pre-generated keys/scripts by each spkm (part of the look-ahead process, used to detect payments) */
+    int64_t m_keypool_size{DEFAULT_KEYPOOL_SIZE};
+
+    /** Notify external script when a wallet transaction comes in or is updated (handled by -walletnotify) */
+    std::string m_notify_tx_changed_script;
+
     size_t KeypoolCountExternalKeys() const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
     bool TopUpKeyPool(unsigned int kpSize = 0);
 
@@ -663,13 +699,13 @@ public:
     /**
      * Retrieve all the known labels in the address book
      */
-    std::set<std::string> ListAddrBookLabels(const std::string& purpose) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+    std::set<std::string> ListAddrBookLabels(const std::optional<AddressPurpose> purpose) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
      * Walk-through the address book entries.
      * Stops when the provided 'ListAddrBookFunc' returns false.
      */
-    using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, const std::string& purpose, bool is_change)>;
+    using ListAddrBookFunc = std::function<void(const CTxDestination& dest, const std::string& label, bool is_change, const std::optional<AddressPurpose> purpose)>;
     void ForEachAddrBookEntry(const ListAddrBookFunc& func) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**
@@ -699,7 +735,7 @@ public:
     DBErrors LoadWallet();
     DBErrors ZapSelectTx(std::vector<uint256>& vHashIn, std::vector<uint256>& vHashOut) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
-    bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::string& purpose);
+    bool SetAddressBook(const CTxDestination& address, const std::string& strName, const std::optional<AddressPurpose>& purpose);
 
     bool DelAddressBook(const CTxDestination& address);
 
@@ -738,7 +774,7 @@ public:
      */
     boost::signals2::signal<void(const CTxDestination& address,
                                  const std::string& label, bool isMine,
-                                 const std::string& purpose, ChangeType status)>
+                                 AddressPurpose purpose, ChangeType status)>
         NotifyAddressBookChanged;
 
     /**
@@ -940,6 +976,9 @@ public:
     //! Adds the ScriptPubKeyMans given in MigrationData to this wallet, removes LegacyScriptPubKeyMan,
     //! and where needed, moves tx and address book entries to watchonly_wallet or solvable_wallet
     bool ApplyMigrationData(MigrationData& data, bilingual_str& error) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
+
+    //! Whether the (external) signer performs R-value signature grinding
+    bool CanGrindR() const;
 };
 
 /**
@@ -960,12 +999,13 @@ private:
 public:
     explicit WalletRescanReserver(CWallet& w) : m_wallet(w) {}
 
-    bool reserve()
+    bool reserve(bool with_passphrase = false)
     {
         assert(!m_could_reserve);
         if (m_wallet.fScanningWallet.exchange(true)) {
             return false;
         }
+        m_wallet.m_scanning_with_passphrase.exchange(with_passphrase);
         m_wallet.m_scanning_start = GetTimeMillis();
         m_wallet.m_scanning_progress = 0;
         m_could_reserve = true;
@@ -985,6 +1025,7 @@ public:
     {
         if (m_could_reserve) {
             m_wallet.fScanningWallet = false;
+            m_wallet.m_scanning_with_passphrase = false;
         }
     }
 };
@@ -995,7 +1036,7 @@ bool AddWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 //! Remove wallet name from persistent configuration so it will not be loaded on startup.
 bool RemoveWalletSetting(interfaces::Chain& chain, const std::string& wallet_name);
 
-bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut &txout, const CCoinControl* coin_control = nullptr);
+bool DummySignInput(const SigningProvider& provider, CTxIn &tx_in, const CTxOut &txout, bool can_grind_r, const CCoinControl* coin_control);
 
 bool FillInputToWeight(CTxIn& txin, int64_t target_weight);
 
@@ -1007,7 +1048,7 @@ struct MigrationResult {
 };
 
 //! Do all steps to migrate a legacy wallet to a descriptor wallet
-util::Result<MigrationResult> MigrateLegacyToDescriptor(std::shared_ptr<CWallet>&& wallet, WalletContext& context);
+util::Result<MigrationResult> MigrateLegacyToDescriptor(const std::string& wallet_name, const SecureString& passphrase, WalletContext& context);
 } // namespace wallet
 
 #endif // BITCOIN_WALLET_WALLET_H

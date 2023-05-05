@@ -7,6 +7,7 @@
 
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
+#include <outputtype.h>
 #include <policy/feerate.h>
 #include <primitives/transaction.h>
 #include <random.h>
@@ -152,6 +153,11 @@ struct CoinSelectionParams {
      * associated with the same address. This helps reduce privacy leaks resulting from address
      * reuse. Dust outputs are not eligible to be added to output groups and thus not considered. */
     bool m_avoid_partial_spends = false;
+    /**
+     * When true, allow unsafe coins to be selected during Coin Selection. This may spend unconfirmed outputs:
+     * 1) Received from other wallets, 2) replacing other txs, 3) that have been replaced.
+     */
+    bool m_include_unsafe_inputs = false;
 
     CoinSelectionParams(FastRandomContext& rng_fast, size_t change_output_size, size_t change_spend_size,
                         CAmount min_change_target, CFeeRate effective_feerate,
@@ -192,13 +198,18 @@ struct CoinEligibilityFilter
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_ancestors) {}
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors, uint64_t max_descendants) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_descendants) {}
     CoinEligibilityFilter(int conf_mine, int conf_theirs, uint64_t max_ancestors, uint64_t max_descendants, bool include_partial) : conf_mine(conf_mine), conf_theirs(conf_theirs), max_ancestors(max_ancestors), max_descendants(max_descendants), m_include_partial_groups(include_partial) {}
+
+    bool operator<(const CoinEligibilityFilter& other) const {
+        return std::tie(conf_mine, conf_theirs, max_ancestors, max_descendants, m_include_partial_groups)
+               < std::tie(other.conf_mine, other.conf_theirs, other.max_ancestors, other.max_descendants, other.m_include_partial_groups);
+    }
 };
 
 /** A group of UTXOs paid to the same output script. */
 struct OutputGroup
 {
     /** The list of UTXOs contained in this output group. */
-    std::vector<COutput> m_outputs;
+    std::vector<std::shared_ptr<COutput>> m_outputs;
     /** Whether the UTXOs were sent by the wallet to itself. This is relevant because we may want at
      * least a certain number of confirmations on UTXOs received from outside wallets while trusting
      * our own UTXOs more. */
@@ -216,8 +227,6 @@ struct OutputGroup
     CAmount effective_value{0};
     /** The fee to spend these UTXOs at the effective feerate. */
     CAmount fee{0};
-    /** The target feerate of the transaction we're trying to build. */
-    CFeeRate m_effective_feerate{0};
     /** The fee to spend these UTXOs at the long term feerate. */
     CAmount long_term_fee{0};
     /** The feerate for spending a created change output eventually (i.e. not urgently, and thus at
@@ -232,15 +241,38 @@ struct OutputGroup
 
     OutputGroup() {}
     OutputGroup(const CoinSelectionParams& params) :
-        m_effective_feerate(params.m_effective_feerate),
         m_long_term_feerate(params.m_long_term_feerate),
         m_subtract_fee_outputs(params.m_subtract_fee_outputs)
     {}
 
-    void Insert(const COutput& output, size_t ancestors, size_t descendants, bool positive_only);
+    void Insert(const std::shared_ptr<COutput>& output, size_t ancestors, size_t descendants);
     bool EligibleForSpending(const CoinEligibilityFilter& eligibility_filter) const;
     CAmount GetSelectionAmount() const;
 };
+
+struct Groups {
+    // Stores 'OutputGroup' containing only positive UTXOs (value > 0).
+    std::vector<OutputGroup> positive_group;
+    // Stores 'OutputGroup' which may contain both positive and negative UTXOs.
+    std::vector<OutputGroup> mixed_group;
+};
+
+/** Stores several 'Groups' whose were mapped by output type. */
+struct OutputGroupTypeMap
+{
+    // Maps output type to output groups.
+    std::map<OutputType, Groups> groups_by_type;
+    // All inserted groups, no type distinction.
+    Groups all_groups;
+
+    // Based on the insert flag; appends group to the 'mixed_group' and, if value > 0, to the 'positive_group'.
+    // This affects both; the groups filtered by type and the overall groups container.
+    void Push(const OutputGroup& group, OutputType type, bool insert_positive, bool insert_mixed);
+    // Different output types count
+    size_t TypesCount() { return groups_by_type.size(); }
+};
+
+typedef std::map<CoinEligibilityFilter, OutputGroupTypeMap> FilteredOutputGroups;
 
 /** Compute the waste for this result given the cost of change
  * and the opportunity cost of spending these inputs now vs in the future.
@@ -259,7 +291,7 @@ struct OutputGroup
  * @param[in] use_effective_value Whether to use the input's effective value (when true) or the real value (when false).
  * @return The waste
  */
-[[nodiscard]] CAmount GetSelectionWaste(const std::set<COutput>& inputs, CAmount change_cost, CAmount target, bool use_effective_value = true);
+[[nodiscard]] CAmount GetSelectionWaste(const std::set<std::shared_ptr<COutput>>& inputs, CAmount change_cost, CAmount target, bool use_effective_value = true);
 
 
 /** Choose a random change target for each transaction to make it harder to fingerprint the Core
@@ -292,7 +324,7 @@ struct SelectionResult
 {
 private:
     /** Set of inputs selected by the algorithm to use in the transaction */
-    std::set<COutput> m_selected_inputs;
+    std::set<std::shared_ptr<COutput>> m_selected_inputs;
     /** The target the algorithm selected for. Equal to the recipient amount plus non-input fees */
     CAmount m_target;
     /** The algorithm used to produce this result */
@@ -329,7 +361,7 @@ public:
     void Clear();
 
     void AddInput(const OutputGroup& group);
-    void AddInputs(const std::set<COutput>& inputs, bool subtract_fee_outputs);
+    void AddInputs(const std::set<std::shared_ptr<COutput>>& inputs, bool subtract_fee_outputs);
 
     /** Calculates and stores the waste for this selection via GetSelectionWaste */
     void ComputeAndSetWaste(const CAmount min_viable_change, const CAmount change_cost, const CAmount change_fee);
@@ -344,9 +376,9 @@ public:
     void Merge(const SelectionResult& other);
 
     /** Get m_selected_inputs */
-    const std::set<COutput>& GetInputSet() const;
+    const std::set<std::shared_ptr<COutput>>& GetInputSet() const;
     /** Get the vector of COutputs that will be used to fill in a CTransaction's vin */
-    std::vector<COutput> GetShuffledInputVector() const;
+    std::vector<std::shared_ptr<COutput>> GetShuffledInputVector() const;
 
     bool operator<(SelectionResult other) const;
 

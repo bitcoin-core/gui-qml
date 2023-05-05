@@ -4,7 +4,8 @@
 
 #include <wallet/dump.h>
 
-#include <fs.h>
+#include <util/fs.h>
+#include <util/system.h>
 #include <util/translation.h>
 #include <wallet/wallet.h>
 
@@ -202,7 +203,7 @@ bool CreateFromDump(const ArgsManager& args, const std::string& name, const fs::
 
     // dummy chain interface
     bool ret = true;
-    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, gArgs, std::move(database)), WalletToolReleaseWallet);
+    std::shared_ptr<CWallet> wallet(new CWallet(/*chain=*/nullptr, name, std::move(database)), WalletToolReleaseWallet);
     {
         LOCK(wallet->cs_wallet);
         DBErrors load_wallet_ret = wallet->LoadWallet();

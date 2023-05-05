@@ -5,18 +5,19 @@
 #include <node/blockstorage.h>
 
 #include <chain.h>
-#include <chainparams.h>
 #include <clientversion.h>
 #include <consensus/validation.h>
 #include <flatfile.h>
-#include <fs.h>
 #include <hash.h>
+#include <logging.h>
+#include <kernel/chainparams.h>
 #include <pow.h>
 #include <reverse_iterator.h>
 #include <shutdown.h>
 #include <signet.h>
 #include <streams.h>
 #include <undo.h>
+#include <util/fs.h>
 #include <util/syscall_sandbox.h>
 #include <util/system.h>
 #include <validation.h>
@@ -25,10 +26,7 @@
 #include <unordered_map>
 
 namespace node {
-std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
-bool fPruneMode = false;
-uint64_t nPruneTarget = 0;
 
 bool CBlockIndexWorkComparator::operator()(const CBlockIndex* pa, const CBlockIndex* pb) const
 {
@@ -153,7 +151,7 @@ void BlockManager::PruneOneBlockFile(const int fileNumber)
 
 void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nManualPruneHeight, int chain_tip_height)
 {
-    assert(fPruneMode && nManualPruneHeight > 0);
+    assert(IsPruneMode() && nManualPruneHeight > 0);
 
     LOCK2(cs_main, cs_LastBlockFile);
     if (chain_tip_height < 0) {
@@ -177,7 +175,7 @@ void BlockManager::FindFilesToPruneManual(std::set<int>& setFilesToPrune, int nM
 void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPruneAfterHeight, int chain_tip_height, int prune_height, bool is_ibd)
 {
     LOCK2(cs_main, cs_LastBlockFile);
-    if (chain_tip_height < 0 || nPruneTarget == 0) {
+    if (chain_tip_height < 0 || GetPruneTarget() == 0) {
         return;
     }
     if ((uint64_t)chain_tip_height <= nPruneAfterHeight) {
@@ -193,14 +191,14 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
     uint64_t nBytesToPrune;
     int count = 0;
 
-    if (nCurrentUsage + nBuffer >= nPruneTarget) {
+    if (nCurrentUsage + nBuffer >= GetPruneTarget()) {
         // On a prune event, the chainstate DB is flushed.
         // To avoid excessive prune events negating the benefit of high dbcache
         // values, we should not prune too rapidly.
         // So when pruning in IBD, increase the buffer a bit to avoid a re-prune too soon.
         if (is_ibd) {
             // Since this is only relevant during IBD, we use a fixed 10%
-            nBuffer += nPruneTarget / 10;
+            nBuffer += GetPruneTarget() / 10;
         }
 
         for (int fileNumber = 0; fileNumber < m_last_blockfile; fileNumber++) {
@@ -210,7 +208,7 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
                 continue;
             }
 
-            if (nCurrentUsage + nBuffer < nPruneTarget) { // are we below our target?
+            if (nCurrentUsage + nBuffer < GetPruneTarget()) { // are we below our target?
                 break;
             }
 
@@ -228,9 +226,9 @@ void BlockManager::FindFilesToPrune(std::set<int>& setFilesToPrune, uint64_t nPr
     }
 
     LogPrint(BCLog::PRUNE, "target=%dMiB actual=%dMiB diff=%dMiB max_prune_height=%d removed %d blk/rev pairs\n",
-           nPruneTarget/1024/1024, nCurrentUsage/1024/1024,
-           ((int64_t)nPruneTarget - (int64_t)nCurrentUsage)/1024/1024,
-           nLastBlockWeCanPrune, count);
+             GetPruneTarget() / 1024 / 1024, nCurrentUsage / 1024 / 1024,
+             (int64_t(GetPruneTarget()) - int64_t(nCurrentUsage)) / 1024 / 1024,
+             nLastBlockWeCanPrune, count);
 }
 
 void BlockManager::UpdatePruneLock(const std::string& name, const PruneLockInfo& lock_info) {
@@ -369,6 +367,23 @@ bool BlockManager::LoadBlockIndexDB(const Consensus::Params& consensus_params)
     if (fReindexing) fReindex = true;
 
     return true;
+}
+
+void BlockManager::ScanAndUnlinkAlreadyPrunedFiles()
+{
+    AssertLockHeld(::cs_main);
+    if (!m_have_pruned) {
+        return;
+    }
+
+    std::set<int> block_files_to_prune;
+    for (int file_number = 0; file_number < m_last_blockfile; file_number++) {
+        if (m_blockfile_info[file_number].nSize == 0) {
+            block_files_to_prune.insert(file_number);
+        }
+    }
+
+    UnlinkPrunedFiles(block_files_to_prune);
 }
 
 const CBlockIndex* BlockManager::GetLastCheckpoint(const CCheckpointData& data)
@@ -556,11 +571,14 @@ uint64_t BlockManager::CalculateCurrentUsage()
 
 void UnlinkPrunedFiles(const std::set<int>& setFilesToPrune)
 {
+    std::error_code ec;
     for (std::set<int>::iterator it = setFilesToPrune.begin(); it != setFilesToPrune.end(); ++it) {
         FlatFilePos pos(*it, 0);
-        fs::remove(BlockFileSeq().FileName(pos));
-        fs::remove(UndoFileSeq().FileName(pos));
-        LogPrint(BCLog::BLOCKSTORE, "Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
+        const bool removed_blockfile{fs::remove(BlockFileSeq().FileName(pos), ec)};
+        const bool removed_undofile{fs::remove(UndoFileSeq().FileName(pos), ec)};
+        if (removed_blockfile || removed_undofile) {
+            LogPrint(BCLog::BLOCKSTORE, "Prune: %s deleted blk/rev (%05u)\n", __func__, *it);
+        }
     }
 }
 
@@ -636,7 +654,7 @@ bool BlockManager::FindBlockPos(FlatFilePos& pos, unsigned int nAddSize, unsigne
         if (out_of_space) {
             return AbortNode("Disk space is too low!", _("Disk space is too low!"));
         }
-        if (bytes_allocated != 0 && fPruneMode) {
+        if (bytes_allocated != 0 && IsPruneMode()) {
             m_check_for_pruning = true;
         }
     }
@@ -660,7 +678,7 @@ bool BlockManager::FindUndoPos(BlockValidationState& state, int nFile, FlatFileP
     if (out_of_space) {
         return AbortNode(state, "Disk space is too low!", _("Disk space is too low!"));
     }
-    if (bytes_allocated != 0 && fPruneMode) {
+    if (bytes_allocated != 0 && IsPruneMode()) {
         m_check_for_pruning = true;
     }
 
@@ -825,17 +843,20 @@ FlatFilePos BlockManager::SaveBlockToDisk(const CBlock& block, int nHeight, CCha
     return blockPos;
 }
 
-struct CImportingNow {
-    CImportingNow()
-    {
-        assert(fImporting == false);
-        fImporting = true;
-    }
+class ImportingNow
+{
+    std::atomic<bool>& m_importing;
 
-    ~CImportingNow()
+public:
+    ImportingNow(std::atomic<bool>& importing) : m_importing{importing}
     {
-        assert(fImporting == true);
-        fImporting = false;
+        assert(m_importing == false);
+        m_importing = true;
+    }
+    ~ImportingNow()
+    {
+        assert(m_importing == true);
+        m_importing = false;
     }
 };
 
@@ -845,7 +866,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
     ScheduleBatchPriority();
 
     {
-        CImportingNow imp;
+        ImportingNow imp{chainman.m_blockman.m_importing};
 
         // -reindex
         if (fReindex) {
@@ -911,7 +932,7 @@ void ThreadImport(ChainstateManager& chainman, std::vector<fs::path> vImportFile
             StartShutdown();
             return;
         }
-    } // End scope of CImportingNow
+    } // End scope of ImportingNow
     chainman.ActiveChainstate().LoadMempool(mempool_path);
 }
 } // namespace node

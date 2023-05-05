@@ -16,7 +16,6 @@
 
 #include <base58.h>
 #include <chainparams.h>
-#include <fs.h>
 #include <interfaces/node.h>
 #include <key_io.h>
 #include <policy/policy.h>
@@ -24,6 +23,9 @@
 #include <protocol.h>
 #include <script/script.h>
 #include <script/standard.h>
+#include <util/exception.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <util/system.h>
 #include <util/time.h>
 
@@ -435,7 +437,7 @@ void openDebugLogfile()
 
 bool openBitcoinConf()
 {
-    fs::path pathConfig = GetConfigFile(gArgs.GetPathArg("-conf", BITCOIN_CONF_FILENAME));
+    fs::path pathConfig = gArgs.GetConfigFilePath();
 
     /* Create the file */
     std::ofstream configFile{pathConfig, std::ios_base::app};
@@ -679,12 +681,17 @@ QString NetworkToQString(Network net)
 {
     switch (net) {
     case NET_UNROUTABLE: return QObject::tr("Unroutable");
-    case NET_IPV4: return "IPv4";
-    case NET_IPV6: return "IPv6";
-    case NET_ONION: return "Onion";
-    case NET_I2P: return "I2P";
-    case NET_CJDNS: return "CJDNS";
-    case NET_INTERNAL: return QObject::tr("Internal");
+    //: Name of IPv4 network in peer info
+    case NET_IPV4: return QObject::tr("IPv4", "network name");
+    //: Name of IPv6 network in peer info
+    case NET_IPV6: return QObject::tr("IPv6", "network name");
+    //: Name of Tor network in peer info
+    case NET_ONION: return QObject::tr("Onion", "network name");
+    //: Name of I2P network in peer info
+    case NET_I2P: return QObject::tr("I2P", "network name");
+    //: Name of CJDNS network in peer info
+    case NET_CJDNS: return QObject::tr("CJDNS", "network name");
+    case NET_INTERNAL: return "Internal";  // should never actually happen
     case NET_MAX: assert(false);
     } // no default case, so the compiler can warn about missing cases
     assert(false);
