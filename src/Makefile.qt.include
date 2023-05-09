@@ -518,7 +518,7 @@ QT_BASE_TLD = $(shell tar tf $(QT_BASE_PATH) --exclude='*/*')
 
 bitcoin_qt_apk: FORCE
 	mkdir -p $(APK_LIB_DIR)
-	cp $(dir $(lastword $(CC)))../sysroot/usr/lib/$(host_alias)/libc++_shared.so $(APK_LIB_DIR)
+	cp $(dir $(lastword $(CC)))../sysroot/usr/lib/$(NDK_LIBCXX_DIR)/libc++_shared.so $(APK_LIB_DIR)
 	tar xf $(QT_BASE_PATH) -C qt/android/src/ $(QT_BASE_TLD)src/android/jar/src --strip-components=5
 	tar xf $(QT_BASE_PATH) -C qt/android/src/ $(QT_BASE_TLD)src/android/java/src --strip-components=5
 	patch -i ../depends/patches/qt/fix_android_get_drawable.patch qt/android/src/org/qtproject/qt5/android/QtActivityDelegate.java
