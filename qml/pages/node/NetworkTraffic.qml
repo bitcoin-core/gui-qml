@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import Qt.labs.settings 1.0
 import "../../controls"
 import "../../components"
 
@@ -12,7 +13,13 @@ import org.bitcoincore.qt 1.0
 
 InformationPage {
     id: root
-    property int maxSamples: 300
+    property int trafficGraphScale: 300
+
+    Settings {
+        id: settings
+        property alias trafficGraphScale: root.trafficGraphScale
+    }
+
     bannerActive: false
     bold: true
     headerText: qsTr("Network Traffic")
@@ -41,10 +48,11 @@ InformationPage {
                 anchors.centerIn: parent
                 anchors.margins: 3
                 spacing: 5
+
                 ToggleButton {
                     text: qsTr("5 min")
                     autoExclusive: true
-                    checked: true
+                    checked: root.trafficGraphScale === 300
                     bgRadius: 3
                     textColor: Theme.color.neutral9
                     textActiveColor: Theme.color.neutral0
@@ -52,14 +60,15 @@ InformationPage {
                     bgDefaultColor: Theme.color.neutral3
 
                     onClicked: {
-                        root.maxSamples = 300
-                        networkTrafficTower.updateFilterWindowSize(root.maxSamples / 10)
+                        root.trafficGraphScale = 300
+                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
                 ToggleButton {
                     text: qsTr("1 hour")
                     autoExclusive: true
+                    checked: root.trafficGraphScale === 3600
                     bgRadius: 3
                     textColor: Theme.color.neutral9
                     textActiveColor: Theme.color.neutral0
@@ -67,14 +76,15 @@ InformationPage {
                     bgDefaultColor: Theme.color.neutral3
 
                     onClicked: {
-                        root.maxSamples = 3600
-                        networkTrafficTower.updateFilterWindowSize(root.maxSamples / 10)
+                        root.trafficGraphScale = 3600
+                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
                 ToggleButton {
                     text: qsTr("12 hours")
                     autoExclusive: true
+                    checked: root.trafficGraphScale === 3600 * 12
                     bgRadius: 3
                     textColor: Theme.color.neutral9
                     textActiveColor: Theme.color.neutral0
@@ -82,14 +92,15 @@ InformationPage {
                     bgDefaultColor: Theme.color.neutral3
 
                     onClicked: {
-                        root.maxSamples = 3600 * 12
-                        networkTrafficTower.updateFilterWindowSize(root.maxSamples / 10)
+                        root.trafficGraphScale = 3600 * 12
+                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
 
                 ToggleButton {
                     text: qsTr("1 day")
                     autoExclusive: true
+                    checked: root.trafficGraphScale === 3600 * 24
                     bgRadius: 3
                     textColor: Theme.color.neutral9
                     textActiveColor: Theme.color.neutral0
@@ -97,8 +108,8 @@ InformationPage {
                     bgDefaultColor: Theme.color.neutral3
 
                     onClicked: {
-                        root.maxSamples = 3600 * 24
-                        networkTrafficTower.updateFilterWindowSize(root.maxSamples / 10)
+                        root.trafficGraphScale = 3600 * 24
+                        networkTrafficTower.updateFilterWindowSize(root.trafficGraphScale / 10)
                     }
                 }
             }
@@ -118,7 +129,7 @@ InformationPage {
             fillColor: Theme.color.green
             lineColor: Theme.color.green
             markerLineColor: Theme.color.neutral2
-            maxSamples: root.maxSamples
+            maxSamples: root.trafficGraphScale
             maxValue: networkTrafficTower.maxReceivedRateBps
             valueList: networkTrafficTower.receivedRateList
             maxRateBps: networkTrafficTower.maxReceivedRateBps
@@ -137,7 +148,7 @@ InformationPage {
             fillColor: Theme.color.blue
             lineColor: Theme.color.blue
             markerLineColor: Theme.color.neutral2
-            maxSamples: root.maxSamples
+            maxSamples: root.trafficGraphScale
             maxValue: networkTrafficTower.maxSentRateBps
             valueList: networkTrafficTower.sentRateList
             maxRateBps: networkTrafficTower.maxSentRateBps
