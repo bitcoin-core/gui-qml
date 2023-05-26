@@ -32,6 +32,7 @@ RowLayout {
         Loader {
             Layout.alignment: Qt.AlignHCenter
             id: middle_detail
+            Layout.topMargin: 4
             active: true
             visible: active
             sourceComponent: root.middleDetail
