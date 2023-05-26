@@ -2,10 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_NETWORKTRAFFICTOWER_H
-#define BITCOIN_QML_NETWORKTRAFFICTOWER_H
+#ifndef BITCOIN_QML_MODELS_NETWORKTRAFFICTOWER_H
+#define BITCOIN_QML_MODELS_NETWORKTRAFFICTOWER_H
 
-#include <qml/nodemodel.h>
+#include <qml/models/nodemodel.h>
 
 #include <QObject>
 #include <QQueue>
@@ -64,4 +64,4 @@ private:
     QQueue<float> m_smoothed_sent_rate_list;
 };
 
-#endif // BITCOIN_QML_NETWORKTRAFFICTOWER_H
+#endif // BITCOIN_QML_MODELS_NETWORKTRAFFICTOWER_H

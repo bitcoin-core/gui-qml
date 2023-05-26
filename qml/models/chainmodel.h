@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_CHAINMODEL_H
-#define BITCOIN_QML_CHAINMODEL_H
+#ifndef BITCOIN_QML_MODELS_CHAINMODEL_H
+#define BITCOIN_QML_MODELS_CHAINMODEL_H
 
 #include <chainparams.h>
 #include <interfaces/chain.h>
@@ -64,4 +64,4 @@ private:
     interfaces::Chain& m_chain;
 };
 
-#endif // BITCOIN_QML_CHAINMODEL_H
+#endif // BITCOIN_QML_MODELS_CHAINMODEL_H

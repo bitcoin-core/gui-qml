@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/options_model.h>
+#include <qml/models/options_model.h>
 
 #include <interfaces/node.h>
 #include <qt/guiconstants.h>
