@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_PEERLISTSORTPROXY_H
-#define BITCOIN_QML_PEERLISTSORTPROXY_H
+#ifndef BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H
+#define BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H
 
 #include <qt/peertablesortproxy.h>
 #include <QByteArray>
@@ -35,4 +35,4 @@ private:
     QString m_sort_by;
 };
 
-#endif // BITCOIN_QML_PEERLISTSORTPROXY_H
+#endif // BITCOIN_QML_MODELS_PEERLISTSORTPROXY_H

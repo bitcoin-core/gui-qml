@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_OPTIONS_MODEL_H
-#define BITCOIN_QML_OPTIONS_MODEL_H
+#ifndef BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 
 #include <common/settings.h>
 #include <common/system.h>
@@ -89,4 +89,4 @@ private:
     common::SettingsValue pruneSetting() const;
 };
 
-#endif // BITCOIN_QML_OPTIONS_MODEL_H
+#endif // BITCOIN_QML_MODELS_OPTIONS_MODEL_H

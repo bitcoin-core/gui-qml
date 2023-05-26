@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_NODEMODEL_H
-#define BITCOIN_QML_NODEMODEL_H
+#ifndef BITCOIN_QML_MODELS_NODEMODEL_H
+#define BITCOIN_QML_MODELS_NODEMODEL_H
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -98,4 +98,4 @@ private:
     void ConnectToNumConnectionsChangedSignal();
 };
 
-#endif // BITCOIN_QML_NODEMODEL_H
+#endif // BITCOIN_QML_MODELS_NODEMODEL_H
