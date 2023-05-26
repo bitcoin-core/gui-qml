@@ -37,12 +37,12 @@ QT_FORMS_UI = \
 QT_MOC_CPP = \
   qml/components/moc_blockclockdial.cpp \
   qml/controls/moc_linegraph.cpp \
+  qml/models/moc_chainmodel.cpp \
+  qml/models/moc_networktraffictower.cpp \
+  qml/models/moc_nodemodel.cpp \
+  qml/models/moc_options_model.cpp \
+  qml/models/moc_peerlistsortproxy.cpp \
   qml/moc_appmode.cpp \
-  qml/moc_chainmodel.cpp \
-  qml/moc_networktraffictower.cpp \
-  qml/moc_nodemodel.cpp \
-  qml/moc_options_model.cpp \
-  qml/moc_peerlistsortproxy.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
@@ -114,16 +114,16 @@ QT_QRC_LOCALE_CPP = qt/qrc_bitcoin_locale.cpp
 QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
-  qml/appmode.h \
-  qml/bitcoin.h \
-  qml/chainmodel.h \
   qml/components/blockclockdial.h \
   qml/controls/linegraph.h \
+  qml/models/chainmodel.h \
+  qml/models/networktraffictower.h \
+  qml/models/nodemodel.h \
+  qml/models/options_model.h \
+  qml/models/peerlistsortproxy.h \
+  qml/appmode.h \
+  qml/bitcoin.h \
   qml/imageprovider.h \
-  qml/networktraffictower.h \
-  qml/nodemodel.h \
-  qml/options_model.h \
-  qml/peerlistsortproxy.h \
   qml/util.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
@@ -301,14 +301,14 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
-  qml/chainmodel.cpp \
   qml/components/blockclockdial.cpp \
   qml/controls/linegraph.cpp \
+  qml/models/chainmodel.cpp \
+  qml/models/networktraffictower.cpp \
+  qml/models/nodemodel.cpp \
+  qml/models/options_model.cpp \
+  qml/models/peerlistsortproxy.cpp \
   qml/imageprovider.cpp \
-  qml/networktraffictower.cpp \
-  qml/nodemodel.cpp \
-  qml/options_model.cpp \
-  qml/peerlistsortproxy.cpp \
   qml/util.cpp
 
 QML_RES_FONTS = \
