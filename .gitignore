@@ -48,6 +48,7 @@ src/qt/*.moc
 src/qt/moc_*.cpp
 src/qml/components/moc_*.cpp
 src/qml/controls/moc_*.cpp
+src/qml/models/moc_*.cpp
 src/qt/forms/ui_*.h
 
 src/qt/test/moc*.cpp
