@@ -10,20 +10,6 @@ import "../controls"
 ColumnLayout {
     spacing: 4
     Setting {
-        id: devDocsLink
-        Layout.fillWidth: true
-        header: qsTr("Developer documentation")
-        actionItem: ExternalLink {
-            parentState: devDocsLink.state
-            iconSource: "qrc:/icons/export"
-            iconWidth: 30
-            iconHeight: 30
-            link: "https://bitcoin.org/en/bitcoin-core/contribute/documentation"
-        }
-        onClicked: loadedItem.clicked()
-    }
-    Separator { Layout.fillWidth: true }
-    Setting {
         id: dbcacheSetting
         Layout.fillWidth: true
         header: qsTr("Database cache size (MiB)")
