@@ -116,6 +116,9 @@ Page {
                 target: continueButton
                 anchors.top: undefined
                 anchors.bottom: continueButton.parent.bottom
+                anchors.horizontalCenter: undefined
+                anchors.right: continueButton.parent.right
+                anchors.left: continueButton.parent.left
             }
             PropertyChanges {
                 target: scrollView
