@@ -10,10 +10,13 @@
 #include <QConicalGradient>
 #include <QPen>
 #include <QtMath>
+#include <QtGlobal>
 
 BlockClockDial::BlockClockDial(QQuickItem *parent)
 : QQuickPaintedItem(parent)
 , m_time_ratio_list{0.0}
+, m_pen_width{4}
+, m_scale{5/12}
 , m_background_color{QColor("#2D2D2D")}
 , m_confirmation_colors{QList<QColor>{}}
 , m_time_tick_color{QColor("#000000")}
@@ -132,6 +135,20 @@ void BlockClockDial::setPaused(bool paused)
     }
 }
 
+void BlockClockDial::setPenWidth(qreal width)
+{
+    m_pen_width = width;
+    update();
+}
+
+void BlockClockDial::setScale(qreal scale)
+{
+    m_scale = scale;
+    update();
+
+    Q_EMIT scaleChanged();
+}
+
 void BlockClockDial::setBackgroundColor(QColor color)
 {
     m_background_color = color;
@@ -183,7 +200,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
     }
 
     QPen pen(m_confirmation_colors[5]);
-    pen.setWidth(4);
+    pen.setWidthF(m_pen_width);
     pen.setCapStyle(Qt::FlatCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
@@ -196,7 +213,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
     for (int i = 1; i < numberOfBlocks; i++) {
         if (numberOfBlocks - i <= 6) {
             QPen pen(m_confirmation_colors[numberOfBlocks - i - 1]);
-            pen.setWidth(4);
+            pen.setWidthF(m_pen_width);
             pen.setCapStyle(Qt::FlatCap);
             painter->setPen(pen);
         }
@@ -227,7 +244,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
 void BlockClockDial::paintProgress(QPainter * painter)
 {
     QPen pen(m_confirmation_colors[5]);
-    pen.setWidthF(4);
+    pen.setWidthF(m_pen_width);
     pen.setCapStyle(Qt::RoundCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
@@ -250,7 +267,7 @@ void BlockClockDial::paintProgress(QPainter * painter)
 void BlockClockDial::paintConnectingAnimation(QPainter * painter)
 {
     QPen pen;
-    pen.setWidthF(4);
+    pen.setWidthF(m_pen_width);
     setupConnectingGradient(pen);
     pen.setBrush(QBrush(m_connecting_gradient));
     pen.setCapStyle(Qt::RoundCap);
@@ -267,7 +284,7 @@ void BlockClockDial::paintConnectingAnimation(QPainter * painter)
 void BlockClockDial::paintBackground(QPainter * painter)
 {
     QPen pen(m_background_color);
-    pen.setWidthF(4);
+    pen.setWidthF(m_pen_width);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
 
@@ -283,12 +300,12 @@ double BlockClockDial::degreesPerPixel()
 void BlockClockDial::paintTimeTicks(QPainter * painter)
 {
     QPen pen(m_time_tick_color);
-    pen.setWidthF(4);
+    pen.setWidthF(m_pen_width);
     // Calculate bound based on width of default pen
     const QRectF bounds = getBoundsForPen(pen);
 
     QPen time_tick_pen = QPen(m_time_tick_color);
-    time_tick_pen.setWidth(2);
+    time_tick_pen.setWidthF(m_pen_width / 2);
     time_tick_pen.setCapStyle(Qt::RoundCap);
     painter->setPen(time_tick_pen);
     for (double angle = 0; angle < 360; angle += 30) {

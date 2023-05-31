@@ -319,6 +319,8 @@ QML_RES_ICONS = \
   qml/res/icons/arrow-down.png \
   qml/res/icons/arrow-up.png \
   qml/res/icons/bitcoin-circle.png \
+  qml/res/icons/blockclock-size-compact.png \
+  qml/res/icons/blockclock-size-showcase.png \
   qml/res/icons/blocktime-dark.png \
   qml/res/icons/blocktime-light.png \
   qml/res/icons/caret-left.png \
@@ -339,6 +341,7 @@ QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/AboutOptions.qml \
   qml/components/BlockClock.qml \
+  qml/components/BlockClockDisplayMode.qml \
   qml/components/BlockCounter.qml \
   qml/components/CaretRightButton.qml \
   qml/components/ConnectionOptions.qml \
@@ -352,6 +355,7 @@ QML_RES_QML = \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
+  qml/components/ThemeSettings.qml \
   qml/components/TotalBytesIndicator.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
@@ -386,10 +390,13 @@ QML_RES_QML = \
   qml/pages/onboarding/OnboardingStorageLocation.qml \
   qml/pages/onboarding/OnboardingStrengthen.qml \
   qml/pages/settings/SettingsAbout.qml \
+  qml/pages/settings/SettingsBlockClockDisplayMode.qml \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
+  qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
-  qml/pages/settings/SettingsStorage.qml
+  qml/pages/settings/SettingsStorage.qml \
+  qml/pages/settings/SettingsTheme.qml
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS

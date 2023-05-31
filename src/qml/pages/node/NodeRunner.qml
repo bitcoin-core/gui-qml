@@ -18,14 +18,9 @@ Page {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
-    ColumnLayout {
-        spacing: 30
+    BlockClock {
+        parentWidth: parent.width - 40
+        parentHeight: parent.height
         anchors.centerIn: parent
-        BlockClock {
-            Layout.alignment: Qt.AlignCenter
-        }
-        NetworkIndicator {
-            Layout.alignment: Qt.AlignCenter
-        }
     }
 }
