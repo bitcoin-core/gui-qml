@@ -13,6 +13,9 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#ifdef __ANDROID__
+#include <qml/androidnotifier.h>
+#endif
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/models/chainmodel.h>
@@ -233,6 +236,9 @@ int QmlGuiMain(int argc, char* argv[])
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
     NetworkTrafficTower network_traffic_tower{node_model};
+#ifdef __ANDROID__
+    AndroidNotifier android_notifier{node_model};
+#endif
 
     ChainModel chain_model{*chain};
     chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
