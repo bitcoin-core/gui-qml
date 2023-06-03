@@ -17,7 +17,6 @@ Button {
     background: Rectangle {
         id: bg
         implicitHeight: 46
-        implicitWidth: 300
         color: Theme.color.orange
         radius: 5
 
