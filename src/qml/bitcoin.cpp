@@ -82,6 +82,13 @@ bool InitErrorMessageBox(
     [[maybe_unused]] unsigned int style)
 {
     QQmlApplicationEngine engine;
+#ifdef __ANDROID__
+    AppMode app_mode(AppMode::MOBILE);
+#else
+    AppMode app_mode(AppMode::DESKTOP);
+#endif // __ANDROID__
+
+    qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
     if (engine.rootObjects().isEmpty()) {
