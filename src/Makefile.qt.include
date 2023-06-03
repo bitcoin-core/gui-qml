@@ -398,6 +398,12 @@ QML_RES_QML = \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml
 
+if TARGET_ANDROID
+BITCOIN_QT_H += qml/androidnotifier.h
+BITCOIN_QML_BASE_CPP += qml/androidnotifier.cpp
+QT_MOC_CPP += qml/moc_androidnotifier.cpp
+endif
+
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
 if TARGET_WINDOWS
 BITCOIN_QT_CPP += $(BITCOIN_QT_WINDOWS_CPP)
