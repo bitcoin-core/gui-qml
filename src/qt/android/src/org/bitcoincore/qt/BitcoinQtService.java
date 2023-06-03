@@ -45,29 +45,37 @@ public class BitcoinQtService extends QtService
 
         startForeground(1, notification);
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BitcoinCore::IBD");
+        if (powerManager != null) {
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BitcoinCore::IBD");
+        }
 
         WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
-        wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "BitcoinCore::WIFI_LOCK");
+        if (wifiManager != null) {
+            wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "BitcoinCore::WIFI_LOCK");
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         super.onStartCommand(intent, flags, startId);
-        wakeLock.acquire();
-        wifiLock.acquire();
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+        if (wifiLock != null && !wifiLock.isHeld()) {
+            wifiLock.acquire();
+        }
         return START_NOT_STICKY;
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (wakeLock.isHeld()) {
-            wakeLock.release(); // Release the wake lock
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
         }
 
-        if (wifiLock.isHeld()) {
-            wifiLock.release(); // Release the WiFi lock
+        if (wifiLock != null && wifiLock.isHeld()) {
+            wifiLock.release();
         }
     }
 }
