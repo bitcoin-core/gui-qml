@@ -9,6 +9,7 @@
         <file>components/ConnectionSettings.qml</file>
         <file>components/PeersIndicator.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/ExternalPopup.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NetworkIndicator.qml</file>
         <file>components/ProxySettings.qml</file>
