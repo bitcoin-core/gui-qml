@@ -10,11 +10,15 @@ import "../../components"
 
 Item {
     property alias navRightDetail: connectionSwipe.navRightDetail
+    property alias navMiddleDetail: connectionSwipe.navMiddleDetail
     property alias navLeftDetail: connectionSwipe.navLeftDetail
+    property alias showHeader: connectionSwipe.showHeader
     SwipeView {
         id: connectionSwipe
         property alias navRightDetail: connection_settings.navRightDetail
+        property alias navMiddleDetail: connection_settings.navMiddleDetail
         property alias navLeftDetail: connection_settings.navLeftDetail
+        property alias showHeader: connection_settings.showHeader
         anchors.fill: parent
         interactive: false
         orientation: Qt.Horizontal
