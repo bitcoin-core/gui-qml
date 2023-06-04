@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
 
 Page {
     id: root
@@ -23,6 +22,7 @@ Page {
     property bool lastPage: false
     property bool bold: false
     property bool center: true
+    property bool centerContent: false
     property int bannerMargin: 20
     required property string headerText
     property int headerMargin: 30
@@ -51,45 +51,48 @@ Page {
         contentWidth: width
 
         ColumnLayout {
-            id: information
-            width: Math.min(parent.width, 600)
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 0
-            Loader {
-                id: banner_loader
-                active: root.bannerActive
-                visible: active
-                Layout.alignment: Qt.AlignCenter
-                Layout.topMargin: root.bannerMargin
-                sourceComponent: root.bannerItem
-            }
-            Header {
-                Layout.fillWidth: true
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                headerBold: root.bold
-                center: root.center
-                header: root.headerText
-                headerMargin: root.headerMargin
-                headerSize: root.headerSize
-                description: root.description
-                descriptionMargin: root.descriptionMargin
-                descriptionSize: root.descriptionSize
-                subtext: root.subtext
-                subtextMargin: root.subtextMargin
-                subtextSize: root.subtextSize
-            }
-            Loader {
-                id: detail_loader
-                active: root.detailActive
-                visible: active
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignCenter
-                Layout.topMargin: root.detailTopMargin
-                Layout.leftMargin: 20
-                Layout.rightMargin: 20
-                Layout.maximumWidth: detailMaximumWidth
-                sourceComponent: root.detailItem
+            id: middleContent
+            width: parent.width
+            spacing: root.buttonMargin
+            ColumnLayout {
+                id: information
+                width: Math.min(parent.width, 600)
+                spacing: 0
+                Layout.alignment: Qt.AlignTop
+                Loader {
+                    id: banner_loader
+                    active: root.bannerActive
+                    visible: active
+                    Layout.alignment: Qt.AlignCenter
+                    Layout.topMargin: root.bannerMargin
+                    sourceComponent: root.bannerItem
+                }
+                Header {
+                    Layout.leftMargin: 20
+                    Layout.rightMargin: 20
+                    headerBold: root.bold
+                    center: root.center
+                    header: root.headerText
+                    headerMargin: root.headerMargin
+                    headerSize: root.headerSize
+                    description: root.description
+                    descriptionMargin: root.descriptionMargin
+                    descriptionSize: root.descriptionSize
+                    subtext: root.subtext
+                    subtextMargin: root.subtextMargin
+                    subtextSize: root.subtextSize
+                }
+                Loader {
+                    id: detail_loader
+                    active: root.detailActive
+                    visible: active
+                    Layout.alignment: Qt.AlignCenter
+                    Layout.topMargin: root.detailTopMargin
+                    Layout.leftMargin: 20
+                    Layout.rightMargin: 20
+                    Layout.maximumWidth: detailMaximumWidth
+                    sourceComponent: root.detailItem
+                }
             }
         }
         ContinueButton {
@@ -102,45 +105,49 @@ Page {
             anchors.leftMargin: 20
             anchors.rightMargin: 20
             anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
             text: root.buttonText
             onClicked: root.lastPage ? swipeView.finished = true : swipeView.incrementCurrentIndex()
         }
     }
 
-    state: AppMode.state
-
     states: [
         State {
-            name: "MOBILE"
+            name: "CENTER"; when: root.centerContent
             AnchorChanges {
                 target: continueButton
                 anchors.top: undefined
                 anchors.bottom: continueButton.parent.bottom
             }
             PropertyChanges {
-                target: scrollView
-                contentHeight: {
-                    var combinedHeight = information.height + continueButton.height
-                        + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
-                    if (scrollView.height < combinedHeight) {
-                        return combinedHeight
-                    } else {
-                        return scrollView.height
-                    }
-                }
+                target: information
+                Layout.alignment: Qt.AlignVCenter
+            }
+            PropertyChanges {
+                target: middleContent
+                height: parent.height - (continueButton.height
+                    + continueButton.anchors.topMargin
+                    + continueButton.anchors.bottomMargin)
             }
         },
         State {
-            name: "DESKTOP"
+            name: "TOP"; when: !root.centerContent
             AnchorChanges {
                 target: continueButton
-                anchors.top: information.bottom
                 anchors.bottom: undefined
             }
             PropertyChanges {
-                target: scrollView
-                contentHeight: information.height + continueButton.height
-                    + continueButton.anchors.topMargin + continueButton.anchors.bottomMargin
+                target: continueButton
+                anchors.topMargin: undefined
+                anchors.bottomMargin: undefined
+                anchors.leftMargin: undefined
+                anchors.rightMargin: undefined
+                anchors.horizontalCenter: undefined
+                Layout.alignment: Qt.AlignHCenter
+            }
+            ParentChange {
+                target: continueButton
+                parent: middleContent
             }
         }
     ]

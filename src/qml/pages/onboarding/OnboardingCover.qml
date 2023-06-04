@@ -5,6 +5,9 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+
+import org.bitcoincore.qt 1.0
+
 import "../../controls"
 import "../../components"
 import "../settings"
@@ -48,6 +51,7 @@ Page {
             descriptionSize: 24
             subtext: qsTr("100% open-source & open-design")
             buttonText: qsTr("Start")
+            centerContent: AppMode.isMobile
         }
         SettingsAbout {
             navLeftDetail: NavButton {
