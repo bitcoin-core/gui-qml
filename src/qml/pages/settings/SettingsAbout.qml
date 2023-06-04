@@ -10,9 +10,15 @@ import "../../components"
 
 Item {
     property alias navLeftDetail: aboutSwipe.navLeftDetail
+    property alias navMiddleDetail: aboutSwipe.navMiddleDetail
+    property alias devMiddleDetail: aboutSwipe.devMiddleDetail
+    property alias showHeader: aboutSwipe.showHeader
     SwipeView {
         id: aboutSwipe
         property alias navLeftDetail: about_settings.navLeftDetail
+        property alias navMiddleDetail: about_settings.navMiddleDetail
+        property alias devMiddleDetail: about_developer.navMiddleDetail
+        property alias showHeader: about_settings.showHeader
         anchors.fill: parent
         interactive: false
         orientation: Qt.Horizontal
@@ -29,6 +35,8 @@ Item {
             detailItem: AboutOptions {}
         }
         SettingsDeveloper {
+            id: about_developer
+            showHeader: about_settings.showHeader
             navLeftDetail: NavButton {
                 iconSource: "image://images/caret-left"
                 text: qsTr("Back")
