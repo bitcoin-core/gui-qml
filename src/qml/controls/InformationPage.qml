@@ -26,6 +26,7 @@ Page {
     property bool center: true
     property int bannerMargin: 20
     required property string headerText
+    property bool showHeader: true
     property int headerMargin: 30
     property int headerSize: 28
     property string description: ""
@@ -71,6 +72,7 @@ Page {
                 headerBold: root.bold
                 center: root.center
                 header: root.headerText
+                showHeader: root.showHeader
                 headerMargin: root.headerMargin
                 headerSize: root.headerSize
                 description: root.description

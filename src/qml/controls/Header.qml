@@ -10,6 +10,7 @@ ColumnLayout {
     id: root
     property bool center: true
     required property string header
+    property bool showHeader: true
     property int headerMargin
     property int headerSize: 28
     property bool headerBold: false
@@ -26,19 +27,24 @@ ColumnLayout {
     property bool wrap: true
 
     spacing: 0
-    Label {
+    Loader {
         Layout.fillWidth: true
-        topPadding: root.headerMargin
-        font.family: "Inter"
-        font.styleName: root.headerBold ? "Semi Bold" : "Regular"
-        font.pixelSize: root.headerSize
-        color: root.headerColor
-        text: root.header
-        horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
-        wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+        active: root.showHeader && root.header.length > 0
+        visible: active
+        sourceComponent: Label {
+            Layout.fillWidth: true
+            topPadding: root.headerMargin
+            font.family: "Inter"
+            font.styleName: root.headerBold ? "Semi Bold" : "Regular"
+            font.pixelSize: root.headerSize
+            color: root.headerColor
+            text: root.header
+            horizontalAlignment: center ? Text.AlignHCenter : Text.AlignLeft
+            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
-        Behavior on color {
-            ColorAnimation { duration: 150 }
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
         }
     }
     Loader {
@@ -46,7 +52,7 @@ ColumnLayout {
         active: root.description.length > 0
         visible: active
         sourceComponent: Label {
-            topPadding: root.descriptionMargin
+            topPadding: showHeader ? root.descriptionMargin : root.headerMargin
             font.family: "Inter"
             font.styleName: root.descriptionBold ? "Semi Bold" : "Regular"
             font.pixelSize: root.descriptionSize
