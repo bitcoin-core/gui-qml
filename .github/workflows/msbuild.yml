@@ -7,9 +7,13 @@ name: MSBuild
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+    - main
+    - release/*
   pull_request:
     branches: [ "main" ]
+    schedule:
+  - cron:  "0 2 * * 1-5"
 
 env:
   # Path to the solution file relative to the root of the project.
