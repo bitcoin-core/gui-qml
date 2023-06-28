@@ -16,7 +16,8 @@ RowLayout {
     spacing: 0
     Layout.fillWidth: true
     RowLayout {
-        Layout.preferredWidth: parent.width / 3
+        // Use ternary operator to set width based on whether the component is active
+        Layout.preferredWidth: left_detail.active ? parent.width / 3 : 0
         Loader {
             Layout.alignment: Qt.AlignLeft
             Layout.topMargin: 4
@@ -28,7 +29,8 @@ RowLayout {
         }
     }
     RowLayout {
-        Layout.preferredWidth: parent.width / 3
+        // Set the width of the middle part to fill the available space
+        Layout.fillWidth: true
         Loader {
             Layout.alignment: Qt.AlignHCenter
             id: middle_detail
@@ -39,7 +41,8 @@ RowLayout {
         }
     }
     RowLayout {
-        Layout.preferredWidth: parent.width / 3
+        // Use ternary operator to set width based on whether the component is active
+        Layout.preferredWidth: right_detail.active ? parent.width / 3 : 0
         Loader {
             id: right_detail
             Layout.alignment: Qt.AlignRight
