@@ -76,6 +76,9 @@ they are not needed for static builds:
 ```
 sudo apt install qml-module-qtquick2 qml-module-qtquick-controls qml-module-qtquick-controls2 qml-module-qtquick-layouts qml-module-qtquick-window2 qml-module-qt-labs-settings
 ```
+##### Important:
+
+If you're unable to install the dependencies through your system's package manager, you can instead perform a [depends build](../../depends/README.md).
 
 #### Fedora:
 
