@@ -362,6 +362,7 @@ QML_RES_QML = \
   qml/controls/ExternalLink.qml \
   qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
+  qml/controls/Icon.qml \
   qml/controls/InformationPage.qml \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
