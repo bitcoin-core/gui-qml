@@ -84,18 +84,12 @@ Button {
         Item {
             height: parent.height
             width: 40
-            Button {
+            Icon {
                 anchors.centerIn: parent
                 visible: button.checked
-                icon.source: "image://images/check"
-                icon.color: Theme.color.neutral9
-                icon.height: 24
-                icon.width: 24
-                background: null
-
-                Behavior on icon.color {
-                    ColorAnimation { duration: 150 }
-                }
+                source: "image://images/check"
+                color: Theme.color.neutral9
+                size: 24
             }
         }
     }
