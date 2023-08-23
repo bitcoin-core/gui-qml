@@ -41,12 +41,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Theme")
                     actionItem: CaretRightButton {
-                        stateColor: gotoTheme.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(theme_page)
-                        }
+                        color: gotoTheme.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(theme_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -54,12 +53,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Block clock display mode")
                     actionItem: CaretRightButton {
-                        stateColor: gotoBlockClockSize.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(blockclocksize_page)
-                        }
+                        color: gotoBlockClockSize.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(blockclocksize_page)
+                    }
                 }
             }
         }

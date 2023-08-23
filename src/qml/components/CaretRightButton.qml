@@ -7,10 +7,6 @@ import QtQuick.Controls 2.15
 import "../controls"
 
 Icon {
-    id: root
-    required property color stateColor
-    enabled: true
     source: "image://images/caret-right"
-    color: root.stateColor
     size: 18
 }
