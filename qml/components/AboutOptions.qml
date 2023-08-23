@@ -65,12 +65,11 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Developer options")
         description: qsTr("Only use these if you have development experience")
-        actionItem: CaretRightButton{
-            stateColor: gotoDeveloper.stateColor
-            onClicked: {
-                aboutSwipe.incrementCurrentIndex()
-            }
+        actionItem: CaretRightButton {
+            color: gotoDeveloper.stateColor
         }
-        onClicked: loadedItem.clicked()
+        onClicked: {
+            aboutSwipe.incrementCurrentIndex()
+        }
     }
 }
