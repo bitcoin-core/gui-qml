@@ -42,12 +42,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("About")
                     actionItem: CaretRightButton {
-                        stateColor: gotoAbout.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(about_page)
-                        }
+                        color: gotoAbout.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(about_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -55,12 +54,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Display")
                     actionItem: CaretRightButton {
-                        stateColor: gotoDisplay.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(display_page)
-                        }
+                        color: gotoDisplay.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(display_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -68,12 +66,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Storage")
                     actionItem: CaretRightButton {
-                        stateColor: gotoStorage.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(storage_page)
-                        }
+                        color: gotoStorage.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(storage_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -81,12 +78,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Connection")
                     actionItem: CaretRightButton {
-                        stateColor: gotoConnection.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(connection_page)
-                        }
+                        color: gotoConnection.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(connection_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -94,13 +90,12 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Peers")
                     actionItem: CaretRightButton {
-                        stateColor: gotoPeers.stateColor
-                        onClicked: {
-                            peerTableModel.startAutoRefresh();
-                            nodeSettingsView.push(peers_page)
-                        }
+                        color: gotoPeers.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        peerTableModel.startAutoRefresh();
+                        nodeSettingsView.push(peers_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
@@ -108,12 +103,11 @@ Item {
                     Layout.fillWidth: true
                     header: qsTr("Network Traffic")
                     actionItem: CaretRightButton {
-                        stateColor: gotoNetworkTraffic.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(networktraffic_page)
-                        }
+                        color: gotoNetworkTraffic.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(networktraffic_page)
+                    }
                 }
             }
         }
