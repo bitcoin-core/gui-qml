@@ -40,7 +40,7 @@ Item {
                     id: gotoTheme
                     Layout.fillWidth: true
                     header: qsTr("Theme")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoTheme.stateColor
                     }
                     onClicked: {
@@ -52,7 +52,7 @@ Item {
                     id: gotoBlockClockSize
                     Layout.fillWidth: true
                     header: qsTr("Block clock display mode")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoBlockClockSize.stateColor
                     }
                     onClicked: {
