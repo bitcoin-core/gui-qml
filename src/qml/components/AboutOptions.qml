@@ -65,7 +65,7 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Developer options")
         description: qsTr("Only use these if you have development experience")
-        actionItem: CaretRightButton {
+        actionItem: CaretRightIcon {
             color: gotoDeveloper.stateColor
         }
         onClicked: {

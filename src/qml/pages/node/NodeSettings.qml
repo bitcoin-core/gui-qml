@@ -41,7 +41,7 @@ Item {
                     id: gotoAbout
                     Layout.fillWidth: true
                     header: qsTr("About")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoAbout.stateColor
                     }
                     onClicked: {
@@ -53,7 +53,7 @@ Item {
                     id: gotoDisplay
                     Layout.fillWidth: true
                     header: qsTr("Display")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoDisplay.stateColor
                     }
                     onClicked: {
@@ -65,7 +65,7 @@ Item {
                     id: gotoStorage
                     Layout.fillWidth: true
                     header: qsTr("Storage")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoStorage.stateColor
                     }
                     onClicked: {
@@ -77,7 +77,7 @@ Item {
                     id: gotoConnection
                     Layout.fillWidth: true
                     header: qsTr("Connection")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoConnection.stateColor
                     }
                     onClicked: {
@@ -89,7 +89,7 @@ Item {
                     id: gotoPeers
                     Layout.fillWidth: true
                     header: qsTr("Peers")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoPeers.stateColor
                     }
                     onClicked: {
@@ -102,7 +102,7 @@ Item {
                     id: gotoNetworkTraffic
                     Layout.fillWidth: true
                     header: qsTr("Network Traffic")
-                    actionItem: CaretRightButton {
+                    actionItem: CaretRightIcon {
                         color: gotoNetworkTraffic.stateColor
                     }
                     onClicked: {
