@@ -67,19 +67,13 @@ Item {
         }
     }
 
-    Button {
+    Icon {
         id: bitcoinIcon
-        background: null
-        icon.source: "image://images/bitcoin-circle"
-        icon.color: Theme.color.neutral9
-        icon.width: Math.max(dial.width / 5, 1)
-        icon.height: Math.max(dial.width / 5, 1)
+        source: "image://images/bitcoin-circle"
+        color: Theme.color.neutral9
+        size: Math.max(dial.width / 5, 1)
         anchors.bottom: mainText.top
         anchors.horizontalCenter: root.horizontalCenter
-
-        Behavior on icon.color {
-            ColorAnimation { duration: 150 }
-        }
     }
 
     Label {
