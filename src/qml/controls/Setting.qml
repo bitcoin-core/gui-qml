@@ -10,7 +10,6 @@ import org.bitcoincore.qt 1.0
 
 AbstractButton {
     id: root
-    property bool last: parent && root === parent.children[parent.children.length - 1]
     required property string header
     property alias actionItem: action_loader.sourceComponent
     property alias loadedItem: action_loader.item
