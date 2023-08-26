@@ -64,7 +64,6 @@ ColumnLayout {
     Separator { Layout.fillWidth: true }
     Setting {
         id: gotoProxy
-        last: true
         Layout.fillWidth: true
         header: qsTr("Proxy settings")
         actionItem: CaretRightButton {
