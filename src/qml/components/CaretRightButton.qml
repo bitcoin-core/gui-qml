@@ -4,21 +4,13 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import "../controls"
 
-Button {
+Icon {
     id: root
     required property color stateColor
-
-    leftPadding: 0
-    topPadding: 0
-    bottomPadding: 0
-    icon.source: "image://images/caret-right"
-    icon.color: root.stateColor
-    icon.height: 18
-    icon.width: 18
-    background: null
-
-    Behavior on icon.color {
-        ColorAnimation { duration: 150 }
-    }
+    enabled: true
+    source: "image://images/caret-right"
+    color: root.stateColor
+    size: 18
 }

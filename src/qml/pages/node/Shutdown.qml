@@ -14,14 +14,12 @@ Page {
         anchors.centerIn: parent
         width: parent.width
         spacing: 10
-        Button {
+        Icon {
             Layout.alignment: Qt.AlignCenter
             Layout.bottomMargin: 20
-            background: null
-            icon.source: "image://images/shutdown"
-            icon.color: Theme.color.neutral9
-            icon.width: 60
-            icon.height: 60
+            source: "image://images/shutdown"
+            color: Theme.color.neutral9
+            size: 60
         }
         Header {
             Layout.alignment: Qt.AlignCenter
