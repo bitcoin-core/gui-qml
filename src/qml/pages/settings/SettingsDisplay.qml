@@ -65,17 +65,8 @@ Item {
     Component {
         id: theme_page
         SettingsTheme {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Theme")
+            onBackClicked: {
+                nodeSettingsView.pop()
             }
         }
     }
