@@ -82,11 +82,8 @@ ApplicationWindow {
             interactive: false
             orientation: Qt.Vertical
             NodeRunner {
-                navRightDetail: NavButton {
-                    iconSource: "image://images/gear"
-                    iconHeight: 24
-                    iconWidth: 24
-                    onClicked: node_swipe.incrementCurrentIndex()
+                onSettingsClicked: {
+                    node_swipe.incrementCurrentIndex()
                 }
             }
             NodeSettings {
