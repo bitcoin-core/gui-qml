@@ -205,7 +205,6 @@ task:
 
 task:
   name: 'Win64 [unit tests, no gui tests, no boost::process, no functional tests] [jammy]'
-  alias: win64
   << : *GLOBAL_TASK_TEMPLATE
   container:
     docker_arguments:
@@ -214,10 +213,6 @@ task:
   << : *CREDITS_TEMPLATE
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-  copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe insecure_win_gui.exe
-  insecure_win_gui_artifacts:
-    path: "insecure_win_gui.exe"
 
 task:
   name: '32-bit + dash [gui] [CentOS 8]'
