@@ -8,6 +8,8 @@
 #include <common/init.h>
 #include <common/system.h>
 #include <chainparams.h>
+#include <common/args.h>
+#include <common/system.h>
 #include <init.h>
 #include <interfaces/chain.h>
 #include <interfaces/init.h>
@@ -147,9 +149,10 @@ void setupChainQSettings(QGuiApplication* app, QString chain)
 int QmlGuiMain(int argc, char* argv[])
 {
 #ifdef WIN32
-    util::WinCmdLineArgs win_args;
-    std::tie(argc, argv) = win_args.get();
-#endif
+    common::WinCmdLineArgs winArgs;
+    std::tie(argc, argv) = winArgs.get();
+#endif // WIN32
+
 
     Q_INIT_RESOURCE(bitcoin_qml);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
