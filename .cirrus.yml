@@ -361,7 +361,6 @@ task:
 
 task:
   name: 'ARM64 Android APK [jammy]'
-  alias: android
   << : *CONTAINER_DEPENDS_TEMPLATE
   container:
     docker_arguments:
@@ -377,7 +376,3 @@ task:
   << : *MAIN_TEMPLATE
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-  copy_artifacts_script:
-    - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/insecure_android.apk
-  insecure_android_apk_artifacts:
-    path: "insecure_android.apk"
