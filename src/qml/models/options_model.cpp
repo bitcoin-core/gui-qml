@@ -4,13 +4,14 @@
 
 #include <qml/models/options_model.h>
 
+#include <common/args.h>
+#include <common/settings.h>
+#include <common/system.h>
 #include <interfaces/node.h>
 #include <qt/guiconstants.h>
 #include <qt/optionsmodel.h>
 #include <txdb.h>
 #include <univalue.h>
-#include <util/settings.h>
-#include <util/system.h>
 #include <validation.h>
 
 #include <cassert>
@@ -99,7 +100,7 @@ void OptionsQmlModel::setUpnp(bool new_upnp)
     }
 }
 
-util::SettingsValue OptionsQmlModel::pruneSetting() const
+common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
     return m_prune ? PruneGBtoMiB(m_prune_size_gb) : 0;

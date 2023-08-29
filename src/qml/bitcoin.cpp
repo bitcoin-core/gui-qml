@@ -5,6 +5,8 @@
 #include <qml/bitcoin.h>
 
 #include <chainparams.h>
+#include <common/args.h>
+#include <common/system.h>
 #include <init.h>
 #include <interfaces/chain.h>
 #include <interfaces/init.h>
@@ -30,7 +32,6 @@
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
 #include <qt/peertablemodel.h>
-#include <util/system.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 
@@ -145,7 +146,7 @@ void setupChainQSettings(QGuiApplication* app, QString chain)
 int QmlGuiMain(int argc, char* argv[])
 {
 #ifdef WIN32
-    util::WinCmdLineArgs winArgs;
+    common::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
 #endif // WIN32
 
@@ -192,7 +193,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     /// Check for chain settings (Params() calls are only valid after this clause).
     try {
-        SelectParams(gArgs.GetChainName());
+        SelectParams(gArgs.GetChainType());
     } catch(std::exception &e) {
         InitError(Untranslated(strprintf("%s\n", e.what())));
         return EXIT_FAILURE;
@@ -248,7 +249,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     ChainModel chain_model{*chain};
-    chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainName()));
+    chain_model.setCurrentNetworkName(QString::fromStdString(ChainTypeToString(gArgs.GetChainType())));
     setupChainQSettings(&app, chain_model.currentNetworkName());
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
@@ -268,7 +269,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
 
-    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
+    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
