@@ -20,7 +20,8 @@ fi
 
 export CONTAINER_NAME=ci_native_asan
 export APT_LLVM_V="20"
-export PACKAGES="systemtap-sdt-dev clang-${APT_LLVM_V} llvm-${APT_LLVM_V} libclang-rt-${APT_LLVM_V}-dev python3-zmq qt6-base-dev qt6-tools-dev qt6-l10n-tools libevent-dev libboost-dev libdb5.3++-dev libzmq3-dev libqrencode-dev libsqlite3-dev ${BPFCC_PACKAGE}"
+export PACKAGES="systemtap-sdt-dev clang-${APT_LLVM_V} llvm-${APT_LLVM_V} libclang-rt-${APT_LLVM_V}-dev python3-zmq qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-declarative-dev qt6-quickcontrols2-dev libevent-dev libboost-dev libdb5.3++-dev libzmq3-dev libqrencode-dev libsqlite3-dev ${BPFCC_PACKAGE}"
+
 export NO_DEPENDS=1
 export GOAL="install"
 export BITCOIN_CONFIG="\
