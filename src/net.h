@@ -48,7 +48,6 @@ class BanMan;
 class CNode;
 class CScheduler;
 struct bilingual_str;
-struct PeersNumByType;
 
 /** Default for -whitelistrelay. */
 static const bool DEFAULT_WHITELISTRELAY = true;
@@ -1044,11 +1043,7 @@ private:
     std::list<CNode*> m_nodes_disconnected;
     mutable RecursiveMutex m_nodes_mutex;
     std::atomic<NodeId> nLastNodeId{0};
-    int m_num_outbound_full_relay{0};
-    int m_num_block_relay{0};
-    int m_num_manual{0};
-    int m_num_inbound{0};
-
+    unsigned int nPrevNodeCount{0};
 
     /**
      * Cache responses to addr requests to minimize privacy leak.

@@ -20,14 +20,6 @@ class connection;
 }
 } // namespace boost
 
-struct PeersNumByType {
-    int outbound_full_relay{0};
-    int block_relay{0};
-    int manual{0};
-    int inbound{0};
-    int total{0};
-};
-
 /** Signals for UI communication. */
 class CClientUIInterface
 {
@@ -93,7 +85,7 @@ public:
     ADD_SIGNALS_DECL_WRAPPER(InitWallet, void, );
 
     /** Number of network connections changed. */
-    ADD_SIGNALS_DECL_WRAPPER(NotifyNumConnectionsChanged, void, PeersNumByType newNumConnections);
+    ADD_SIGNALS_DECL_WRAPPER(NotifyNumConnectionsChanged, void, int newNumConnections);
 
     /** Network activity state changed. */
     ADD_SIGNALS_DECL_WRAPPER(NotifyNetworkActiveChanged, void, bool networkActive);
