@@ -316,7 +316,6 @@ task:
 
 task:
   name: 'macOS 10.15 [gui, no tests] [focal]'
-  alias: macos
   << : *CONTAINER_DEPENDS_TEMPLATE
   container:
     docker_arguments:
@@ -330,12 +329,6 @@ task:
   env:
     MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-  copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-apple-darwin/src/qt/bitcoin-qt insecure_mac_gui
-    - tar -czf insecure_mac_gui.tar.gz insecure_mac_gui
-  insecure_mac_gui_artifacts:
-    path: "insecure_mac_gui.tar.gz"
-    type: "application/gzip"
 
 task:
   name: 'macOS 13 native arm64 [gui, sqlite only] [no depends]'
