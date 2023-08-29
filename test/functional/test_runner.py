@@ -69,14 +69,18 @@ if os.name != 'nt' or sys.getwindowsversion() >= (10, 0, 14393): #type:ignore
 TEST_EXIT_PASSED = 0
 TEST_EXIT_SKIPPED = 77
 
+# List of framework modules containing unit tests. Should be kept in sync with
+# the output of `git grep unittest.TestCase ./test/functional/test_framework`
 TEST_FRAMEWORK_MODULES = [
     "address",
     "blocktools",
-    "muhash",
+    "ellswift",
     "key",
+    "messages",
+    "muhash",
+    "ripemd160",
     "script",
     "segwit_addr",
-    "util",
 ]
 
 EXTENDED_SCRIPTS = [
@@ -119,6 +123,7 @@ BASE_SCRIPTS = [
     'feature_abortnode.py',
     'wallet_address_types.py --legacy-wallet',
     'wallet_address_types.py --descriptors',
+    'p2p_orphan_handling.py',
     'wallet_basic.py --legacy-wallet',
     'wallet_basic.py --descriptors',
     'feature_maxtipage.py',
@@ -163,11 +168,14 @@ BASE_SCRIPTS = [
     'p2p_compactblocks_blocksonly.py',
     'wallet_hd.py --legacy-wallet',
     'wallet_hd.py --descriptors',
+    'wallet_blank.py --legacy-wallet',
+    'wallet_blank.py --descriptors',
     'wallet_keypool_topup.py --legacy-wallet',
     'wallet_keypool_topup.py --descriptors',
     'wallet_fast_rescan.py --descriptors',
     'interface_zmq.py',
     'rpc_invalid_address_message.py',
+    'rpc_validateaddress.py',
     'interface_bitcoin_cli.py --legacy-wallet',
     'interface_bitcoin_cli.py --descriptors',
     'feature_bind_extra.py',
@@ -192,6 +200,8 @@ BASE_SCRIPTS = [
     'wallet_watchonly.py --legacy-wallet',
     'wallet_watchonly.py --usecli --legacy-wallet',
     'wallet_reorgsrestore.py',
+    'wallet_conflicts.py --legacy-wallet',
+    'wallet_conflicts.py --descriptors',
     'interface_http.py',
     'interface_rpc.py',
     'interface_usdt_coinselection.py',
@@ -202,7 +212,6 @@ BASE_SCRIPTS = [
     'rpc_users.py',
     'rpc_whitelist.py',
     'feature_proxy.py',
-    'feature_syscall_sandbox.py',
     'wallet_signrawtransactionwithwallet.py --legacy-wallet',
     'wallet_signrawtransactionwithwallet.py --descriptors',
     'rpc_signrawtransactionwithkey.py',
@@ -259,6 +268,7 @@ BASE_SCRIPTS = [
     'p2p_leak_tx.py',
     'p2p_eviction.py',
     'p2p_ibd_stalling.py',
+    'p2p_net_deadlock.py',
     'wallet_signmessagewithaddress.py',
     'rpc_signmessagewithprivkey.py',
     'rpc_generate.py',
@@ -320,6 +330,7 @@ BASE_SCRIPTS = [
     'feature_includeconf.py',
     'feature_addrman.py',
     'feature_asmap.py',
+    'feature_fastprune.py',
     'mempool_unbroadcast.py',
     'mempool_compatibility.py',
     'mempool_accept_wtxid.py',
@@ -524,6 +535,12 @@ def run_tests(*, test_list, src_dir, build_dir, tmpdir, jobs=1, enable_coverage=
 
     # Test Framework Tests
     print("Running Unit Tests for Test Framework Modules")
+
+    tests_dir = src_dir + '/test/functional/'
+    # This allows `test_runner.py` to work from an out-of-source build directory using a symlink,
+    # a hard link or a copy on any platform. See https://github.com/bitcoin/bitcoin/pull/27561.
+    sys.path.append(tests_dir)
+
     test_framework_tests = unittest.TestSuite()
     for module in TEST_FRAMEWORK_MODULES:
         test_framework_tests.addTest(unittest.TestLoader().loadTestsFromName("test_framework.{}".format(module)))
@@ -531,8 +548,6 @@ def run_tests(*, test_list, src_dir, build_dir, tmpdir, jobs=1, enable_coverage=
     if not result.wasSuccessful():
         logging.debug("Early exiting after failure in TestFramework unit tests")
         sys.exit(False)
-
-    tests_dir = src_dir + '/test/functional/'
 
     flags = ['--cachedir={}'.format(cache_dir)] + args
 
@@ -771,8 +786,8 @@ def check_script_prefixes():
 def check_script_list(*, src_dir, fail_on_warn):
     """Check scripts directory.
 
-    Check that there are no scripts in the functional tests directory which are
-    not being run by pull-tester.py."""
+    Check that all python files in this directory are categorized
+    as a test script or meta script."""
     script_dir = src_dir + '/test/functional/'
     python_files = set([test_file for test_file in os.listdir(script_dir) if test_file.endswith(".py")])
     missed_tests = list(python_files - set(map(lambda x: x.split()[0], ALL_SCRIPTS + NON_SCRIPTS)))

@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <chainparams.h>
-#include <chainparamsbase.h>
 #include <net.h>
 #include <net_permissions.h>
 #include <netaddress.h>
@@ -16,6 +15,7 @@
 #include <test/util/net.h>
 #include <test/util/setup_common.h>
 #include <util/asmap.h>
+#include <util/chaintype.h>
 
 #include <cstdint>
 #include <optional>
@@ -24,10 +24,10 @@
 
 void initialize_net()
 {
-    static const auto testing_setup = MakeNoLogFileContext<>(CBaseChainParams::MAIN);
+    static const auto testing_setup = MakeNoLogFileContext<>(ChainType::MAIN);
 }
 
-FUZZ_TARGET_INIT(net, initialize_net)
+FUZZ_TARGET(net, .init = initialize_net)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     SetMockTime(ConsumeTime(fuzzed_data_provider));

@@ -122,6 +122,9 @@ struct CSerializedNetMsg {
 
     std::vector<unsigned char> data;
     std::string m_type;
+
+    /** Compute total memory usage of this object (own memory + any dynamic memory). */
+    size_t GetMemoryUsage() const noexcept;
 };
 
 /**
@@ -164,8 +167,8 @@ bool AddLocal(const CNetAddr& addr, int nScore = LOCAL_NONE);
 void RemoveLocal(const CService& addr);
 bool SeenLocal(const CService& addr);
 bool IsLocal(const CService& addr);
-bool GetLocal(CService &addr, const CNetAddr *paddrPeer = nullptr);
-CService GetLocalAddress(const CNetAddr& addrPeer);
+bool GetLocal(CService& addr, const CNode& peer);
+CService GetLocalAddress(const CNode& peer);
 CService MaybeFlipIPv6toCJDNS(const CService& service);
 
 
@@ -200,7 +203,9 @@ public:
     int nVersion;
     std::string cleanSubVer;
     bool fInbound;
+    // We requested high bandwidth connection to peer
     bool m_bip152_highbandwidth_to;
+    // Peer requested high bandwidth connection
     bool m_bip152_highbandwidth_from;
     int m_starting_height;
     uint64_t nSendBytes;
@@ -251,42 +256,105 @@ public:
     }
 };
 
-/** The TransportDeserializer takes care of holding and deserializing the
- * network receive buffer. It can deserialize the network buffer into a
- * transport protocol agnostic CNetMessage (message type & payload)
- */
-class TransportDeserializer {
+/** The Transport converts one connection's sent messages to wire bytes, and received bytes back. */
+class Transport {
 public:
-    // returns true if the current deserialization is complete
-    virtual bool Complete() const = 0;
-    // set the serialization context version
-    virtual void SetVersion(int version) = 0;
-    /** read and deserialize data, advances msg_bytes data pointer */
-    virtual int Read(Span<const uint8_t>& msg_bytes) = 0;
-    // decomposes a message from the context
-    virtual CNetMessage GetMessage(std::chrono::microseconds time, bool& reject_message) = 0;
-    virtual ~TransportDeserializer() {}
+    virtual ~Transport() {}
+
+    // 1. Receiver side functions, for decoding bytes received on the wire into transport protocol
+    // agnostic CNetMessage (message type & payload) objects.
+
+    /** Returns true if the current message is complete (so GetReceivedMessage can be called). */
+    virtual bool ReceivedMessageComplete() const = 0;
+    /** Set the deserialization context version for objects returned by GetReceivedMessage. */
+    virtual void SetReceiveVersion(int version) = 0;
+
+    /** Feed wire bytes to the transport.
+     *
+     * @return false if some bytes were invalid, in which case the transport can't be used anymore.
+     *
+     * Consumed bytes are chopped off the front of msg_bytes.
+     */
+    virtual bool ReceivedBytes(Span<const uint8_t>& msg_bytes) = 0;
+
+    /** Retrieve a completed message from transport.
+     *
+     * This can only be called when ReceivedMessageComplete() is true.
+     *
+     * If reject_message=true is returned the message itself is invalid, but (other than false
+     * returned by ReceivedBytes) the transport is not in an inconsistent state.
+     */
+    virtual CNetMessage GetReceivedMessage(std::chrono::microseconds time, bool& reject_message) = 0;
+
+    // 2. Sending side functions, for converting messages into bytes to be sent over the wire.
+
+    /** Set the next message to send.
+     *
+     * If no message can currently be set (perhaps because the previous one is not yet done being
+     * sent), returns false, and msg will be unmodified. Otherwise msg is enqueued (and
+     * possibly moved-from) and true is returned.
+     */
+    virtual bool SetMessageToSend(CSerializedNetMsg& msg) noexcept = 0;
+
+    /** Return type for GetBytesToSend, consisting of:
+     *  - Span<const uint8_t> to_send: span of bytes to be sent over the wire (possibly empty).
+     *  - bool more: whether there will be more bytes to be sent after the ones in to_send are
+     *    all sent (as signaled by MarkBytesSent()).
+     *  - const std::string& m_type: message type on behalf of which this is being sent.
+     */
+    using BytesToSend = std::tuple<
+        Span<const uint8_t> /*to_send*/,
+        bool /*more*/,
+        const std::string& /*m_type*/
+    >;
+
+    /** Get bytes to send on the wire.
+     *
+     * As a const function, it does not modify the transport's observable state, and is thus safe
+     * to be called multiple times.
+     *
+     * The bytes returned by this function act as a stream which can only be appended to. This
+     * means that with the exception of MarkBytesSent, operations on the transport can only append
+     * to what is being returned.
+     *
+     * Note that m_type and to_send refer to data that is internal to the transport, and calling
+     * any non-const function on this object may invalidate them.
+     */
+    virtual BytesToSend GetBytesToSend() const noexcept = 0;
+
+    /** Report how many bytes returned by the last GetBytesToSend() have been sent.
+     *
+     * bytes_sent cannot exceed to_send.size() of the last GetBytesToSend() result.
+     *
+     * If bytes_sent=0, this call has no effect.
+     */
+    virtual void MarkBytesSent(size_t bytes_sent) noexcept = 0;
+
+    /** Return the memory usage of this transport attributable to buffered data to send. */
+    virtual size_t GetSendMemoryUsage() const noexcept = 0;
 };
 
-class V1TransportDeserializer final : public TransportDeserializer
+class V1Transport final : public Transport
 {
 private:
-    const CChainParams& m_chain_params;
+    CMessageHeader::MessageStartChars m_magic_bytes;
     const NodeId m_node_id; // Only for logging
-    mutable CHash256 hasher;
-    mutable uint256 data_hash;
-    bool in_data;                   // parsing header (false) or data (true)
-    CDataStream hdrbuf;             // partially received header
-    CMessageHeader hdr;             // complete header
-    CDataStream vRecv;              // received message data
-    unsigned int nHdrPos;
-    unsigned int nDataPos;
+    mutable Mutex m_recv_mutex; //!< Lock for receive state
+    mutable CHash256 hasher GUARDED_BY(m_recv_mutex);
+    mutable uint256 data_hash GUARDED_BY(m_recv_mutex);
+    bool in_data GUARDED_BY(m_recv_mutex); // parsing header (false) or data (true)
+    CDataStream hdrbuf GUARDED_BY(m_recv_mutex); // partially received header
+    CMessageHeader hdr GUARDED_BY(m_recv_mutex); // complete header
+    CDataStream vRecv GUARDED_BY(m_recv_mutex); // received message data
+    unsigned int nHdrPos GUARDED_BY(m_recv_mutex);
+    unsigned int nDataPos GUARDED_BY(m_recv_mutex);
 
-    const uint256& GetMessageHash() const;
-    int readHeader(Span<const uint8_t> msg_bytes);
-    int readData(Span<const uint8_t> msg_bytes);
+    const uint256& GetMessageHash() const EXCLUSIVE_LOCKS_REQUIRED(m_recv_mutex);
+    int readHeader(Span<const uint8_t> msg_bytes) EXCLUSIVE_LOCKS_REQUIRED(m_recv_mutex);
+    int readData(Span<const uint8_t> msg_bytes) EXCLUSIVE_LOCKS_REQUIRED(m_recv_mutex);
 
-    void Reset() {
+    void Reset() EXCLUSIVE_LOCKS_REQUIRED(m_recv_mutex) {
+        AssertLockHeld(m_recv_mutex);
         vRecv.clear();
         hdrbuf.clear();
         hdrbuf.resize(24);
@@ -297,52 +365,60 @@ private:
         hasher.Reset();
     }
 
-public:
-    V1TransportDeserializer(const CChainParams& chain_params, const NodeId node_id, int nTypeIn, int nVersionIn)
-        : m_chain_params(chain_params),
-          m_node_id(node_id),
-          hdrbuf(nTypeIn, nVersionIn),
-          vRecv(nTypeIn, nVersionIn)
+    bool CompleteInternal() const noexcept EXCLUSIVE_LOCKS_REQUIRED(m_recv_mutex)
     {
-        Reset();
+        AssertLockHeld(m_recv_mutex);
+        if (!in_data) return false;
+        return hdr.nMessageSize == nDataPos;
     }
 
-    bool Complete() const override
+    /** Lock for sending state. */
+    mutable Mutex m_send_mutex;
+    /** The header of the message currently being sent. */
+    std::vector<uint8_t> m_header_to_send GUARDED_BY(m_send_mutex);
+    /** The data of the message currently being sent. */
+    CSerializedNetMsg m_message_to_send GUARDED_BY(m_send_mutex);
+    /** Whether we're currently sending header bytes or message bytes. */
+    bool m_sending_header GUARDED_BY(m_send_mutex) {false};
+    /** How many bytes have been sent so far (from m_header_to_send, or from m_message_to_send.data). */
+    size_t m_bytes_sent GUARDED_BY(m_send_mutex) {0};
+
+public:
+    V1Transport(const NodeId node_id, int nTypeIn, int nVersionIn) noexcept;
+
+    bool ReceivedMessageComplete() const override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex)
     {
-        if (!in_data)
-            return false;
-        return (hdr.nMessageSize == nDataPos);
+        AssertLockNotHeld(m_recv_mutex);
+        return WITH_LOCK(m_recv_mutex, return CompleteInternal());
     }
-    void SetVersion(int nVersionIn) override
+
+    void SetReceiveVersion(int nVersionIn) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex)
     {
+        AssertLockNotHeld(m_recv_mutex);
+        LOCK(m_recv_mutex);
         hdrbuf.SetVersion(nVersionIn);
         vRecv.SetVersion(nVersionIn);
     }
-    int Read(Span<const uint8_t>& msg_bytes) override
+
+    bool ReceivedBytes(Span<const uint8_t>& msg_bytes) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex)
     {
+        AssertLockNotHeld(m_recv_mutex);
+        LOCK(m_recv_mutex);
         int ret = in_data ? readData(msg_bytes) : readHeader(msg_bytes);
         if (ret < 0) {
             Reset();
         } else {
             msg_bytes = msg_bytes.subspan(ret);
         }
-        return ret;
+        return ret >= 0;
     }
-    CNetMessage GetMessage(std::chrono::microseconds time, bool& reject_message) override;
-};
 
-/** The TransportSerializer prepares messages for the network transport
- */
-class TransportSerializer {
-public:
-    // prepare message for transport (header construction, error-correction computation, payload encryption, etc.)
-    virtual void prepareForTransport(CSerializedNetMsg& msg, std::vector<unsigned char>& header) const = 0;
-    virtual ~TransportSerializer() {}
-};
+    CNetMessage GetReceivedMessage(std::chrono::microseconds time, bool& reject_message) override EXCLUSIVE_LOCKS_REQUIRED(!m_recv_mutex);
 
-class V1TransportSerializer : public TransportSerializer {
-public:
-    void prepareForTransport(CSerializedNetMsg& msg, std::vector<unsigned char>& header) const override;
+    bool SetMessageToSend(CSerializedNetMsg& msg) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
+    BytesToSend GetBytesToSend() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
+    void MarkBytesSent(size_t bytes_sent) noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
+    size_t GetSendMemoryUsage() const noexcept override EXCLUSIVE_LOCKS_REQUIRED(!m_send_mutex);
 };
 
 struct CNodeOptions
@@ -357,8 +433,9 @@ struct CNodeOptions
 class CNode
 {
 public:
-    const std::unique_ptr<TransportDeserializer> m_deserializer; // Used only by SocketHandler thread
-    const std::unique_ptr<const TransportSerializer> m_serializer;
+    /** Transport serializer/deserializer. The receive side functions are only called under cs_vRecv, while
+     * the sending side functions are only called under cs_vSend. */
+    const std::unique_ptr<Transport> m_transport;
 
     const NetPermissionFlags m_permission_flags;
 
@@ -372,12 +449,12 @@ public:
      */
     std::shared_ptr<Sock> m_sock GUARDED_BY(m_sock_mutex);
 
-    /** Total size of all vSendMsg entries */
-    size_t nSendSize GUARDED_BY(cs_vSend){0};
-    /** Offset inside the first vSendMsg already sent */
-    size_t nSendOffset GUARDED_BY(cs_vSend){0};
+    /** Sum of GetMemoryUsage of all vSendMsg entries. */
+    size_t m_send_memusage GUARDED_BY(cs_vSend){0};
+    /** Total number of bytes sent on the wire to this peer. */
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
-    std::deque<std::vector<unsigned char>> vSendMsg GUARDED_BY(cs_vSend);
+    /** Messages still to be fed to m_transport->SetMessageToSend. */
+    std::deque<CSerializedNetMsg> vSendMsg GUARDED_BY(cs_vSend);
     Mutex cs_vSend;
     Mutex m_sock_mutex;
     Mutex cs_vRecv;
@@ -461,6 +538,22 @@ public:
 
     bool IsManualConn() const {
         return m_conn_type == ConnectionType::MANUAL;
+    }
+
+    bool IsManualOrFullOutboundConn() const
+    {
+        switch (m_conn_type) {
+        case ConnectionType::INBOUND:
+        case ConnectionType::FEELER:
+        case ConnectionType::BLOCK_RELAY:
+        case ConnectionType::ADDR_FETCH:
+                return false;
+        case ConnectionType::OUTBOUND_FULL_RELAY:
+        case ConnectionType::MANUAL:
+                return true;
+        } // no default case, so the compiler can warn about missing cases
+
+        assert(false);
     }
 
     bool IsBlockOnlyConn() const {
@@ -775,6 +868,9 @@ public:
     void OpenNetworkConnection(const CAddress& addrConnect, bool fCountFailure, CSemaphoreGrant* grantOutbound, const char* strDest, ConnectionType conn_type) EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
     bool CheckIncomingNonce(uint64_t nonce);
 
+    // alias for thread safety annotations only, not defined
+    RecursiveMutex& GetNodesMutex() const LOCK_RETURNED(m_nodes_mutex);
+
     bool ForNode(NodeId id, std::function<bool(CNode* pnode)> func);
 
     void PushMessage(CNode* pnode, CSerializedNetMsg&& msg) EXCLUSIVE_LOCKS_REQUIRED(!m_total_bytes_sent_mutex);
@@ -851,6 +947,7 @@ public:
     bool AddConnection(const std::string& address, ConnectionType conn_type) EXCLUSIVE_LOCKS_REQUIRED(!m_unused_i2p_sessions_mutex);
 
     size_t GetNodeCount(ConnectionDirection) const;
+    uint32_t GetMappedAS(const CNetAddr& addr) const;
     void GetNodeStats(std::vector<CNodeStats>& vstats) const;
     bool DisconnectNode(const std::string& node);
     bool DisconnectNode(const CSubNet& subnet);
@@ -889,6 +986,8 @@ public:
 
     /** Return true if we should disconnect the peer for failing an inactivity check. */
     bool ShouldRunInactivityChecks(const CNode& node, std::chrono::seconds now) const;
+
+    bool MultipleManualOrFullOutboundConns(Network net) const EXCLUSIVE_LOCKS_REQUIRED(m_nodes_mutex);
 
 private:
     struct ListenSocket {
@@ -989,7 +1088,9 @@ private:
 
     NodeId GetNewNodeId();
 
-    size_t SocketSendData(CNode& node) const EXCLUSIVE_LOCKS_REQUIRED(node.cs_vSend);
+    /** (Try to) send data from node's vSendMsg. Returns (bytes_sent, data_left). */
+    std::pair<size_t, bool> SocketSendData(CNode& node) const EXCLUSIVE_LOCKS_REQUIRED(node.cs_vSend);
+
     void DumpAddresses();
 
     // Network stats
@@ -1006,6 +1107,18 @@ private:
      * Return vector of current BLOCK_RELAY peers.
      */
     std::vector<CAddress> GetCurrentBlockRelayOnlyConns() const;
+
+    /**
+     * Search for a "preferred" network, a reachable network to which we
+     * currently don't have any OUTBOUND_FULL_RELAY or MANUAL connections.
+     * There needs to be at least one address in AddrMan for a preferred
+     * network to be picked.
+     *
+     * @param[out]    network        Preferred network, if found.
+     *
+     * @return           bool        Whether a preferred network was found.
+     */
+    bool MaybePickPreferredNetwork(std::optional<Network>& network);
 
     // Whether the node should be passed out in ForEach* callbacks
     static bool NodeFullyConnected(const CNode* pnode);
@@ -1044,6 +1157,9 @@ private:
     mutable RecursiveMutex m_nodes_mutex;
     std::atomic<NodeId> nLastNodeId{0};
     unsigned int nPrevNodeCount{0};
+
+    // Stores number of full-tx connections (outbound and manual) per network
+    std::array<unsigned int, Network::NET_MAX> m_network_conn_counts GUARDED_BY(m_nodes_mutex) = {};
 
     /**
      * Cache responses to addr requests to minimize privacy leak.
@@ -1216,7 +1332,6 @@ private:
         std::vector<CNode*> m_nodes_copy;
     };
 
-    friend struct CConnmanTest;
     friend struct ConnmanTestMsg;
 };
 
