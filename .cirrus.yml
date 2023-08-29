@@ -215,9 +215,9 @@ task:
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
   copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe unsecure_win_gui.exe
-  unsecure_win_gui_artifacts:
-    path: "unsecure_win_gui.exe"
+    - cp ci/scratch/build/bitcoin-x86_64-w64-mingw32/release/bitcoin-qt.exe insecure_win_gui.exe
+  insecure_win_gui_artifacts:
+    path: "insecure_win_gui.exe"
 
 task:
   name: '32-bit + dash [gui] [CentOS 8]'
@@ -336,10 +336,10 @@ task:
     MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
   copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-x86_64-apple-darwin/src/qt/bitcoin-qt unsecure_mac_gui
-    - tar -czf unsecure_mac_gui.tar.gz unsecure_mac_gui
-  unsecure_mac_gui_artifacts:
-    path: "unsecure_mac_gui.tar.gz"
+    - cp ci/scratch/build/bitcoin-x86_64-apple-darwin/src/qt/bitcoin-qt insecure_mac_gui
+    - tar -czf insecure_mac_gui.tar.gz insecure_mac_gui
+  insecure_mac_gui_artifacts:
+    path: "insecure_mac_gui.tar.gz"
     type: "application/gzip"
 
 task:
@@ -359,10 +359,10 @@ task:
     MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
   copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-arm64-apple-darwin/src/qt/bitcoin-qt unsecure_mac_arm64_gui
-    - tar -czf unsecure_mac_arm64_gui.tar.gz unsecure_mac_arm64_gui
-  unsecure_mac_arm64_gui_artifacts:
-    path: "unsecure_mac_arm64_gui.tar.gz"
+    - cp ci/scratch/build/bitcoin-arm64-apple-darwin/src/qt/bitcoin-qt insecure_mac_arm64_gui
+    - tar -czf insecure_mac_arm64_gui.tar.gz insecure_mac_arm64_gui
+  insecure_mac_arm64_gui_artifacts:
+    path: "insecure_mac_arm64_gui.tar.gz"
     type: "application/gzip"
 
 task:
@@ -401,6 +401,6 @@ task:
   env:
     << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
   copy_artifacts_script:
-    - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/unsecure_android.apk
-  unsecure_android_apk_artifacts:
-    path: "unsecure_android.apk"
+    - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/insecure_android.apk
+  insecure_android_apk_artifacts:
+    path: "insecure_android.apk"
