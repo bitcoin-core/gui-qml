@@ -232,10 +232,9 @@ task:
   previous_releases_cache:
     folder: "releases"
   << : *GLOBAL_TASK_TEMPLATE
-  container:
-    image: ubuntu:bionic
+  << : *PERSISTENT_WORKER_TEMPLATE
   env:
-    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
+    << : *PERSISTENT_WORKER_TEMPLATE_ENV
     FILE_ENV: "./ci/test/00_setup_env_native_qt5.sh"
 
 task:
