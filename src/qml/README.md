@@ -9,7 +9,6 @@ Unsecure CI artifacts are available for local testing of the master branch, avoi
 - for Intel macOS: [`unsecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/unsecure_mac_gui.zip)
 - for Apple Silicon macOS: [`unsecure_mac_arm64_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos_arm64/unsecure_mac_arm64_gui.zip)
 - for ARM64 Android: [`unsecure_android_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/unsecure_android_apk.zip)
-- for ARM32 Android: [`unsecure_android_32bit_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android32/unsecure_android_32bit_apk.zip)
 
 Note: For Apple Silicon macOS machines, the binary must be signed before it can
 be ran. To apply a signature, run the following on the unzipped CI artifact:

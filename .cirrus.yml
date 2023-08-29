@@ -393,26 +393,3 @@ task:
     - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/unsecure_android.apk
   unsecure_android_apk_artifacts:
     path: "unsecure_android.apk"
-
-task:
-  name: 'ARM32 Android APK [jammy]'
-  alias: android32
-  << : *CONTAINER_DEPENDS_TEMPLATE
-  container:
-    docker_arguments:
-      CI_IMAGE_NAME_TAG: ubuntu:jammy
-      FILE_ENV: "./ci/test/00_setup_env_android32.sh"
-  << : *CREDITS_TEMPLATE
-  android_sdk_cache:
-    folder: "depends/SDKs/android"
-    fingerprint_key: "ANDROID_API_LEVEL=28 ANDROID_BUILD_TOOLS_VERSION=28.0.3 ANDROID_NDK_VERSION=23.2.8568313"
-  depends_sources_cache:
-    folder: "depends/sources"
-    fingerprint_script: git rev-parse HEAD:depends/packages
-  << : *MAIN_TEMPLATE
-  env:
-    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-  copy_artifacts_script:
-    - cp src/qt/android/build/outputs/apk/debug/android-debug.apk ${CIRRUS_WORKING_DIR}/unsecure_android_32bit.apk
-  unsecure_android_32bit_apk_artifacts:
-    path: "unsecure_android_32bit.apk"
