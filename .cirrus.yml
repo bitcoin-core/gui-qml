@@ -343,29 +343,6 @@ task:
     type: "application/gzip"
 
 task:
-  name: 'macOS arm64 [gui, no tests] [jammy]'
-  alias: macos_arm64
-  << : *CONTAINER_DEPENDS_TEMPLATE
-  container:
-    docker_arguments:
-      CI_IMAGE_NAME_TAG: ubuntu:jammy
-      FILE_ENV: "./ci/test/00_setup_env_mac_arm64.sh"
-  << : *CREDITS_TEMPLATE
-  macos_sdk_cache:
-    folder: "depends/SDKs/$MACOS_SDK"
-    fingerprint_key: "$MACOS_SDK"
-  << : *MAIN_TEMPLATE
-  env:
-    MACOS_SDK: "Xcode-12.2-12B45b-extracted-SDK-with-libcxx-headers"
-    << : *CIRRUS_EPHEMERAL_WORKER_TEMPLATE_ENV
-  copy_artifacts_script:
-    - cp ci/scratch/build/bitcoin-arm64-apple-darwin/src/qt/bitcoin-qt insecure_mac_arm64_gui
-    - tar -czf insecure_mac_arm64_gui.tar.gz insecure_mac_arm64_gui
-  insecure_mac_arm64_gui_artifacts:
-    path: "insecure_mac_arm64_gui.tar.gz"
-    type: "application/gzip"
-
-task:
   name: 'macOS 13 native arm64 [gui, sqlite only] [no depends]'
   macos_instance:
     # Use latest image, but hardcode version to avoid silent upgrades (and breaks)
