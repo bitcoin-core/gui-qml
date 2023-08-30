@@ -16,14 +16,6 @@
 
 LineGraph::LineGraph(QQuickItem *parent)
     : QQuickPaintedItem(parent)
-    , m_background_color{QColor("#2D2D2D")}
-    , m_border_color{QColor("#000000")}
-    , m_fill_color{QColor("#000000")}
-    , m_fill_gradient{QLinearGradient(0, 0, 0, 0)}
-    , m_line_color{QColor("#000000")}
-    , m_marker_line_color{("#000000")}
-    , m_max_samples{0}
-    , m_max_value{0}
 {
     setFillColor(m_background_color);
 }

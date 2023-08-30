@@ -54,10 +54,10 @@ private:
 
     NodeModel& m_node;
     int m_filter_window_size;
-    float m_total_bytes_received;
-    float m_total_bytes_sent;
-    float m_max_received_rate_bps;
-    float m_max_sent_rate_bps;
+    float m_total_bytes_received{0.0f};
+    float m_total_bytes_sent{0.0f};
+    float m_max_received_rate_bps{0.0f};
+    float m_max_sent_rate_bps{0.0f};
     QQueue<float> m_received_rate_list;
     QQueue<float> m_smoothed_received_rate_list;
     QQueue<float> m_sent_rate_list;
