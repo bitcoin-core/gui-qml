@@ -13,14 +13,7 @@
 #include <QtGlobal>
 
 BlockClockDial::BlockClockDial(QQuickItem *parent)
-: QQuickPaintedItem(parent)
-, m_time_ratio_list{0.0}
-, m_pen_width{4}
-, m_scale{5/12}
-, m_background_color{QColor("#2D2D2D")}
-, m_confirmation_colors{QList<QColor>{}}
-, m_time_tick_color{QColor("#000000")}
-, m_animation_timer{QTimer(this)}
+    : QQuickPaintedItem(parent)
 {
     m_animation_timer.setTimerType(Qt::PreciseTimer);
     m_animation_timer.setInterval(16);
