@@ -68,20 +68,20 @@ private:
     qreal incrementAnimatingMaxAngle(qreal angle);
     qreal getTargetAnimationAngle();
 
-    QVariantList m_time_ratio_list;
+    QVariantList m_time_ratio_list{0.0};
     double m_verification_progress;
     bool m_is_connected;
     bool m_is_synced;
     bool m_is_paused;
-    qreal m_pen_width;
-    qreal m_scale;
-    QColor m_background_color;
+    qreal m_pen_width{4};
+    qreal m_scale{5/12};
+    QColor m_background_color{"#2D2D2D"};
     QConicalGradient m_connecting_gradient;
     qreal m_connecting_start_angle = 90;
     const qreal m_connecting_end_angle = -180;
-    QList<QColor> m_confirmation_colors;
-    QColor m_time_tick_color;
-    QTimer m_animation_timer;
+    QList<QColor> m_confirmation_colors{};
+    QColor m_time_tick_color{"#000000"};
+    QTimer m_animation_timer{this};
     QTimer m_delay_timer;
     qreal m_animating_max_angle = 0;
 };

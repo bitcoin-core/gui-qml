@@ -12,10 +12,6 @@
 
 NetworkTrafficTower::NetworkTrafficTower(NodeModel& node)
     : m_node{node}
-    , m_total_bytes_received{0.0f}
-    , m_total_bytes_sent{0.0f}
-    , m_max_received_rate_bps{0.0f}
-    , m_max_sent_rate_bps{0.0f}
 {
     QTimer* timer = new QTimer();
     connect(timer, &QTimer::timeout, this, &NetworkTrafficTower::updateTrafficStats);
