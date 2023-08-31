@@ -6,8 +6,8 @@
 #define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 
 #include <txdb.h>
-#include <util/settings.h>
-#include <util/system.h>
+#include <common/settings.h>
+#include <common/system.h>
 #include <validation.h>
 
 #include <QObject>
@@ -84,7 +84,7 @@ private:
     bool m_server;
     bool m_upnp;
 
-    util::SettingsValue pruneSetting() const;
+    common::SettingsValue pruneSetting() const;
 };
 
 #endif // BITCOIN_QML_MODELS_OPTIONS_MODEL_H
