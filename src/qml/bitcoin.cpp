@@ -164,6 +164,16 @@ int QmlGuiMain(int argc, char* argv[])
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
     auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
+    SetupEnvironment();
+    util::ThreadSetInternalName("main");
+
+    // must be set before parsing command-line options; otherwise,
+    // if invalid parameters were passed, QSetting initialization would fail
+    // and the error will be displayed on terminal
+    app.setOrganizationName(QAPP_ORG_NAME);
+    app.setOrganizationDomain(QAPP_ORG_DOMAIN);
+    app.setApplicationName(QAPP_APP_NAME_DEFAULT);
+
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs, init->canListenIpc());
 
