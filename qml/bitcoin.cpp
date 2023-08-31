@@ -164,6 +164,13 @@ int QmlGuiMain(int argc, char* argv[])
     SetupEnvironment();
     util::ThreadSetInternalName("main");
 
+    // must be set before parsing command-line options; otherwise,
+    // if invalid parameters were passed, QSetting initialization would fail
+    // and the error will be displayed on terminal
+    app.setOrganizationName(QAPP_ORG_NAME);
+    app.setOrganizationDomain(QAPP_ORG_DOMAIN);
+    app.setApplicationName(QAPP_APP_NAME_DEFAULT);
+
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
     SetupUIArgs(gArgs);
@@ -172,12 +179,6 @@ int QmlGuiMain(int argc, char* argv[])
         InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
         return EXIT_FAILURE;
     }
-
-    // must be set before OptionsModel is initialized or translations are loaded,
-    // as it is used to locate QSettings
-    app.setOrganizationName(QAPP_ORG_NAME);
-    app.setOrganizationDomain(QAPP_ORG_DOMAIN);
-    app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
     /// Determine availability of data directory.
     if (!CheckDataDirOption(gArgs)) {
