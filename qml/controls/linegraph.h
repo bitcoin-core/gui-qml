@@ -53,14 +53,14 @@ class LineGraph : public QQuickPaintedItem
         void paintTraffic(QPainter * painter);
         void setupGradient(QPainterPath * painter);
 
-        QColor m_background_color;
-        QColor m_border_color;
-        QColor m_fill_color;
-        QLinearGradient m_fill_gradient;
-        QColor m_line_color;
-        QColor m_marker_line_color;
-        int m_max_samples;
-        float m_max_value;
+        QColor m_background_color{"#2D2D2D"};
+        QColor m_border_color{"#000000"};
+        QColor m_fill_color{"#000000"};
+        QLinearGradient m_fill_gradient{0, 0, 0, 0};
+        QColor m_line_color{"#000000"};
+        QColor m_marker_line_color{"#000000"};
+        int m_max_samples{0};
+        float m_max_value{0};
         QQueue<float> m_value_list;
 };
 
