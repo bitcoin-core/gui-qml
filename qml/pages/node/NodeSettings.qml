@@ -41,79 +41,73 @@ Item {
                     id: gotoAbout
                     Layout.fillWidth: true
                     header: qsTr("About")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoAbout.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(about_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoAbout.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(about_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoDisplay
                     Layout.fillWidth: true
                     header: qsTr("Display")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoDisplay.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(display_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoDisplay.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(display_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoStorage
                     Layout.fillWidth: true
                     header: qsTr("Storage")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoStorage.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(storage_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoStorage.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(storage_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoConnection
                     Layout.fillWidth: true
                     header: qsTr("Connection")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoConnection.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(connection_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoConnection.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(connection_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoPeers
                     Layout.fillWidth: true
                     header: qsTr("Peers")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoPeers.stateColor
-                        onClicked: {
-                            peerTableModel.startAutoRefresh();
-                            nodeSettingsView.push(peers_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoPeers.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        peerTableModel.startAutoRefresh();
+                        nodeSettingsView.push(peers_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoNetworkTraffic
                     Layout.fillWidth: true
                     header: qsTr("Network Traffic")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoNetworkTraffic.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(networktraffic_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoNetworkTraffic.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(networktraffic_page)
+                    }
                 }
             }
         }

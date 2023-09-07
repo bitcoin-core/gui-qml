@@ -40,26 +40,24 @@ Item {
                     id: gotoTheme
                     Layout.fillWidth: true
                     header: qsTr("Theme")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoTheme.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(theme_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoTheme.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(theme_page)
+                    }
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoBlockClockSize
                     Layout.fillWidth: true
                     header: qsTr("Block clock display mode")
-                    actionItem: CaretRightButton {
-                        stateColor: gotoBlockClockSize.stateColor
-                        onClicked: {
-                            nodeSettingsView.push(blockclocksize_page)
-                        }
+                    actionItem: CaretRightIcon {
+                        color: gotoBlockClockSize.stateColor
                     }
-                    onClicked: loadedItem.clicked()
+                    onClicked: {
+                        nodeSettingsView.push(blockclocksize_page)
+                    }
                 }
             }
         }
