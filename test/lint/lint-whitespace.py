@@ -76,7 +76,7 @@ def get_diff(commit_range, check_only_code):
     exclude_args = [":(exclude)" + dir for dir in EXCLUDED_DIRS]
 
     if check_only_code:
-        what_files = ["*.cpp", "*.h", "*.md", "*.py", "*.sh"]
+        what_files = ["*.cpp", "*.h", "*.md", "*.py", "*.sh", "*.qml"]
     else:
         what_files = ["."]
 
