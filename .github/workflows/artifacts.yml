@@ -1,0 +1,124 @@
+# Copyright (c) 2023 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+name: Artifacts
+on:
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request.
+  pull_request:
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#push.
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}${{ github.event_name != 'pull_request' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cross-build:
+    name: ${{ matrix.host.name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        host:
+          - name: 'macOS arm64'
+            packages: ''
+            triplet: 'arm64-apple-darwin'
+            compiler: 'clang'
+            configure_options: ''
+            gui_exe: 'bitcoin-qt'
+            artifact: 'unsecure_macos_apple_silicon_gui'
+          - name: 'macOS x86_64'
+            packages: ''
+            triplet: 'x86_64-apple-darwin'
+            compiler: 'clang'
+            configure_options: ''
+            gui_exe: 'bitcoin-qt'
+            artifact: 'unsecure_macos_intel_gui'
+          - name: 'Windows'
+            packages: 'g++-mingw-w64-x86-64-posix'
+            triplet: 'x86_64-w64-mingw32'
+            compiler: 'x86_64-w64-mingw32-g++-posix'
+            configure_options: 'CXXFLAGS=-Wno-return-type'
+            gui_exe: 'bitcoin-qt.exe'
+            artifact: 'unsecure_windows_gui'
+
+    env:
+      XCODE_VERSION: '12.2'
+      XCODE_BUILD_ID: '12B45b'
+      CCACHE_MAXSIZE: '30M'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependency packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install ccache ${{ matrix.host.packages }}
+          echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> "$GITHUB_ENV"
+
+      - name: Depends fingerprint
+        id: depends_fingerprint
+        run: |
+          if ${{ !endsWith(matrix.host.triplet, '-apple-darwin') }}; then ${{ matrix.host.compiler }} -v 2>&1 | tee depends/compiler-version; fi
+          if ${{ endsWith(matrix.host.triplet, '-apple-darwin') }}; then echo ${{ env.XCODE_VERSION }} ${{ env.XCODE_BUILD_ID }} > depends/sdk-version; fi
+          echo "hash=${{ hashFiles('./depends/**') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Depends cache
+        id: depends_cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            depends/built
+            depends/SDKs
+          key: ${{ matrix.host.triplet }}-depends-${{ steps.depends_fingerprint.outputs.hash }}
+
+      - name: Fetch SDK
+        if: endsWith(matrix.host.triplet, '-apple-darwin') && steps.depends_cache.outputs.cache-hit != 'true'
+        run: |
+          curl --location --fail https://bitcoincore.org/depends-sources/sdks/Xcode-${{ env.XCODE_VERSION }}-${{ env.XCODE_BUILD_ID }}-extracted-SDK-with-libcxx-headers.tar.gz -o sdk.tar.gz
+          mkdir depends/SDKs
+          tar -C depends/SDKs -xf sdk.tar.gz
+
+      - name: Build depends
+        run: |
+          patch -p1 -i ci/hosts_darwin_mk.patch
+          cd depends
+          make -j$(nproc) HOST=${{ matrix.host.triplet }} LOG=1
+
+      - name: Restore Ccache cache
+        uses: actions/cache/restore@v3
+        id: ccache-cache
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ matrix.host.triplet }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ matrix.host.triplet }}-ccache-
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          ./configure CONFIG_SITE=${{ github.workspace }}/depends/${{ matrix.host.triplet }}/share/config.site --disable-dependency-tracking --enable-werror ${{ matrix.host.configure_options }} || (cat config.log; false)
+
+      - name: Build GUI
+        run: |
+          ccache --zero-stats
+          make -j$(nproc) src/qt/${{ matrix.host.gui_exe }}
+          ccache --version | head -n 1 && ccache --show-stats
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v3
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ matrix.host.triplet }}-ccache-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.host.artifact }}
+          path: src/qt/${{ matrix.host.gui_exe }}
