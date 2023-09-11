@@ -1,0 +1,29 @@
+macos: Fix Ccache issue
+
+See:
+  - https://github.com/bitcoin/bitcoin/issues/21552
+  - https://github.com/ccache/ccache/issues/1326
+
+--- a/depends/hosts/darwin.mk
++++ b/depends/hosts/darwin.mk
+@@ -72,18 +72,12 @@ $(foreach TOOL,$(cctools_TOOLS),$(eval darwin_$(TOOL) = $$(build_prefix)/bin/$$(
+ #         Adds the desired paths from the SDK
+ #
+
+-darwin_CC=env -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH \
+-              -u OBJC_INCLUDE_PATH -u OBJCPLUS_INCLUDE_PATH -u CPATH \
+-              -u LIBRARY_PATH \
+-            $(clang_prog) --target=$(host) -mmacosx-version-min=$(OSX_MIN_VERSION) \
++darwin_CC=$(clang_prog) --target=$(host) -mmacosx-version-min=$(OSX_MIN_VERSION) \
+               -B$(build_prefix)/bin -mlinker-version=$(LD64_VERSION) \
+               -isysroot$(OSX_SDK) -nostdlibinc \
+               -iwithsysroot/usr/include -iframeworkwithsysroot/System/Library/Frameworks
+
+-darwin_CXX=env -u C_INCLUDE_PATH -u CPLUS_INCLUDE_PATH \
+-               -u OBJC_INCLUDE_PATH -u OBJCPLUS_INCLUDE_PATH -u CPATH \
+-               -u LIBRARY_PATH \
+-             $(clangxx_prog) --target=$(host) -mmacosx-version-min=$(OSX_MIN_VERSION) \
++darwin_CXX=$(clangxx_prog) --target=$(host) -mmacosx-version-min=$(OSX_MIN_VERSION) \
+                -B$(build_prefix)/bin -mlinker-version=$(LD64_VERSION) \
+                -isysroot$(OSX_SDK) -nostdlibinc \
+                -iwithsysroot/usr/include/c++/v1 \
