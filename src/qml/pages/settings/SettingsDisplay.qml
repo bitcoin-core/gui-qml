@@ -9,28 +9,33 @@ import "../../controls"
 import "../../components"
 
 Item {
-    property alias navLeftDetail: displaySettingsView.navLeftDetail
-    property alias navMiddleDetail: displaySettingsView.navMiddleDetail
+    signal backClicked
+
+    id: root
+
     StackView {
         id: displaySettingsView
-        property alias navLeftDetail: displaySettings.navLeftDetail
-        property alias navMiddleDetail: displaySettings.navMiddleDetail
-        property bool newcompilebool: false
         anchors.fill: parent
-
 
         initialItem: Page {
             id: displaySettings
-            property alias navLeftDetail: navbar.leftDetail
-            property alias navMiddleDetail: navbar.middleDetail
             background: null
             implicitWidth: 450
             leftPadding: 20
             rightPadding: 20
             topPadding: 30
 
-            header: NavigationBar {
-                id: navbar
+            header: NavigationBar2 {
+                leftItem: NavButton {
+                    iconSource: "image://images/caret-left"
+                    text: qsTr("Back")
+                    onClicked: root.backClicked()
+                }
+                centerItem: Header {
+                    headerBold: true
+                    headerSize: 18
+                    header: qsTr("Display settings")
+                }
             }
             ColumnLayout {
                 spacing: 4
