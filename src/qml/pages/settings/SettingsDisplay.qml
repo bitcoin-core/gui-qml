@@ -78,17 +78,8 @@ Item {
     Component {
         id: blockclocksize_page
         SettingsBlockClockDisplayMode {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Block clock display mode")
+            onBackClicked: {
+                nodeSettingsView.pop()
             }
         }
     }
