@@ -142,17 +142,8 @@ Item {
     Component {
         id: display_page
         SettingsDisplay {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Display settings")
+            onBackClicked: {
+                nodeSettingsView.pop()
             }
         }
     }
