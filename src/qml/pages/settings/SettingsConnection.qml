@@ -34,17 +34,8 @@ Item {
             detailItem: ConnectionSettings {}
         }
         SettingsProxy {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    connectionSwipe.decrementCurrentIndex()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Proxy Settings")
+            onBackClicked: {
+                connectionSwipe.decrementCurrentIndex()
             }
         }
     }
