@@ -122,3 +122,68 @@ jobs:
         with:
           name: ${{ matrix.host.artifact }}
           path: src/qt/${{ matrix.host.gui_exe }}
+
+  android:
+    name: ${{ matrix.host.name }}
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        host:
+          - name: 'Android ARM 64-bit APK'
+            triplet: 'aarch64-linux-android'
+            artifact: 'unsecure_android_arm64'
+          - name: 'Android ARM 32-bit APK'
+            triplet: 'armv7a-linux-android'
+            artifact: 'unsecure_android_arm32'
+          - name: 'Android x86_64 APK'
+            triplet: 'x86_64-linux-android'
+            artifact: 'unsecure_android_x86_64'
+
+    env:
+      ANDROID_HOME: '/tmp/Android'
+      ANDROID_API_LEVEL: '28'
+      ANDROID_BUILD_TOOLS_VERSION: '28.0.3'
+      ANDROID_NDK_VERSION: '23.2.8568313'
+      ANDROID_TOOLS_URL: 'https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependency packages
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y autoconf automake ca-certificates curl g++ gradle lbzip2 libtool make openjdk-8-jdk patch pkg-config python3 unzip xz-utils
+
+      - name: Install Android tools
+        run: |
+          curl --location --fail ${{ env.ANDROID_TOOLS_URL }} -o android-tools.zip
+          mkdir -p ${{ env.ANDROID_HOME }}
+          unzip -o android-tools.zip -d ${{ env.ANDROID_HOME }}
+          yes | ${{ env.ANDROID_HOME }}/cmdline-tools/bin/sdkmanager --sdk_root=${{ env.ANDROID_HOME }} --install "build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}" "platform-tools" "platforms;android-31" "platforms;android-${{ env.ANDROID_API_LEVEL }}" "ndk;${{ env.ANDROID_NDK_VERSION }}"
+
+      - name: Build depends
+        run: |
+          cd depends
+          make -j$(nproc) HOST=${{ matrix.host.triplet }} ANDROID_SDK=${{ env.ANDROID_HOME }} ANDROID_NDK=${{ env.ANDROID_HOME }}/ndk/${{ env.ANDROID_NDK_VERSION }} ANDROID_API_LEVEL=${{ env.ANDROID_API_LEVEL }} ANDROID_TOOLCHAIN_BIN=${{ env.ANDROID_HOME }}/ndk/${{ env.ANDROID_NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          ./configure CONFIG_SITE=$PWD/depends/${{ matrix.host.triplet }}/share/config.site --disable-dependency-tracking --disable-tests --disable-bench --disable-fuzz-binary || (cat config.log; false)
+
+      - name: Build GUI
+        run: |
+          make -j$(nproc) -C src/qt bitcoin-qt
+
+      - name: Build APK
+        run: |
+          make -j$(nproc) -C src/qt apk
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.host.artifact }}
+          path: src/qt/android/build/outputs/apk/debug/android-debug.apk
