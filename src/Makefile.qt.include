@@ -367,6 +367,7 @@ QML_RES_QML = \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
+  qml/controls/NavigationBar2.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/OutlineButton.qml \

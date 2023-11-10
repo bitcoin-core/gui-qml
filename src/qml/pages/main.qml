@@ -82,22 +82,13 @@ ApplicationWindow {
             interactive: false
             orientation: Qt.Vertical
             NodeRunner {
-                navRightDetail: NavButton {
-                    iconSource: "image://images/gear"
-                    iconHeight: 24
-                    iconWidth: 24
-                    onClicked: node_swipe.incrementCurrentIndex()
+                onSettingsClicked: {
+                    node_swipe.incrementCurrentIndex()
                 }
             }
             NodeSettings {
-                navMiddleDetail: Header {
-                    headerBold: true
-                    headerSize: 18
-                    header: "Settings"
-                }
-                navRightDetail: NavButton {
-                    text: qsTr("Done")
-                    onClicked: node_swipe.decrementCurrentIndex()
+                onDoneClicked: {
+                    node_swipe.decrementCurrentIndex()
                 }
             }
         }

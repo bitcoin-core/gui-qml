@@ -10,28 +10,32 @@ import "../../components"
 import "../settings"
 
 Item {
-    id: nodeSettings
-    property alias navMiddleDetail: nodeSettingsView.navMiddleDetail
-    property alias navRightDetail: nodeSettingsView.navRightDetail
+    signal doneClicked
+
+    id: root
 
     StackView {
         id: nodeSettingsView
-        property alias navMiddleDetail: node_settings.navMiddleDetail
-        property alias navRightDetail: node_settings.navRightDetail
         anchors.fill: parent
 
         initialItem: Page {
             id: node_settings
-            property alias navMiddleDetail: navbar.middleDetail
-            property alias navRightDetail: navbar.rightDetail
             background: null
             implicitWidth: 450
             leftPadding: 20
             rightPadding: 20
             topPadding: 30
 
-            header: NavigationBar {
-                id: navbar
+            header: NavigationBar2 {
+                centerItem: Header {
+                    headerBold: true
+                    headerSize: 18
+                    header: "Settings"
+                }
+                rightItem: NavButton {
+                    text: qsTr("Done")
+                    onClicked: root.doneClicked()
+                }
             }
             ColumnLayout {
                 spacing: 4
@@ -138,17 +142,8 @@ Item {
     Component {
         id: display_page
         SettingsDisplay {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Display settings")
+            onBackClicked: {
+                nodeSettingsView.pop()
             }
         }
     }
@@ -191,18 +186,9 @@ Item {
     Component {
         id: peers_page
         Peers {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                    peerTableModel.stopAutoRefresh();
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Peers")
+            onBackClicked: {
+                nodeSettingsView.pop()
+                peerTableModel.stopAutoRefresh();
             }
         }
     }

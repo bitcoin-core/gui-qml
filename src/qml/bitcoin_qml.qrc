@@ -28,6 +28,7 @@
         <file>controls/NavButton.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
+        <file>controls/NavigationBar2.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
