@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import Qt.labs.settings 1.0
 import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
@@ -26,6 +27,15 @@ Page {
             headerSize: 18
             header: qsTr("Peers")
         }
+    }
+
+    Settings {
+        id: settings
+        property string peerListSortBy: "nodeId"
+    }
+
+    Component.onCompleted: {
+        peerListModelProxy.sortBy = settings.peerListSortBy
     }
 
     ListView {
@@ -64,44 +74,55 @@ Page {
                     ToggleButton {
                         text: qsTr("ID")
                         autoExclusive: true
-                        checked: true
+                        checked: settings.peerListSortBy === "nodeId"
                         onClicked: {
                             peerListModelProxy.sortBy = "nodeId"
+                            settings.peerListSortBy = "nodeId"
                         }
                     }
                     ToggleButton {
                         text: qsTr("Direction")
                         autoExclusive: true
+                        checked: settings.peerListSortBy === "direction"
                         onClicked: {
                             peerListModelProxy.sortBy = "direction"
+                            settings.peerListSortBy = "direction"
                         }
                     }
                     ToggleButton {
                         text: qsTr("User Agent")
                         autoExclusive: true
+                        checked: settings.peerListSortBy === "subversion"
                         onClicked: {
                             peerListModelProxy.sortBy = "subversion"
+                            settings.peerListSortBy = "subversion"
                         }
                     }
                     ToggleButton {
                         text: qsTr("Type")
                         autoExclusive: true
+                        checked: settings.peerListSortBy === "connectionType"
                         onClicked: {
                             peerListModelProxy.sortBy = "connectionType"
+                            settings.peerListSortBy = "connectionType"
                         }
                     }
                     ToggleButton {
                         text: qsTr("Ip")
                         autoExclusive: true
+                        checked: settings.peerListSortBy === "address"
                         onClicked: {
                             peerListModelProxy.sortBy = "address"
+                            settings.peerListSortBy = "address"
                         }
                     }
                     ToggleButton {
                         text: qsTr("Network")
                         autoExclusive: true
+                        checked: settings.peerListSortBy === "network"
                         onClicked: {
                             peerListModelProxy.sortBy = "network"
+                            settings.peerListSortBy = "network"
                         }
                     }
                 }
