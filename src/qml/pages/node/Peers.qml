@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -122,14 +123,53 @@ Page {
         }
 
         delegate: Item {
+            id: delegate
             required property int nodeId;
             required property string address;
             required property string subversion;
             required property string direction;
             required property string connectionType;
             required property string network;
+            property color stateColor;
             implicitHeight: 60
             implicitWidth: listView.width
+            state: "FILLED"
+
+            states: [
+                State {
+                    name: "FILLED"
+                    PropertyChanges { target: delegate; stateColor: Theme.color.neutral9 }
+                },
+                State {
+                    name: "HOVER"
+                    PropertyChanges { target: delegate; stateColor: Theme.color.orangeLight1 }
+                },
+                State {
+                    name: "ACTIVE"
+                    PropertyChanges { target: delegate; stateColor: Theme.color.orange }
+                }
+            ]
+
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: AppMode.isDesktop
+                onEntered: {
+                    delegate.state = "HOVER"
+                }
+                onExited: {
+                    delegate.state = "FILLED"
+                }
+                onPressed: {
+                    delegate.state = "ACTIVE"
+                }
+                onReleased: {
+                    if (mouseArea.containsMouse) {
+                        delegate.state = "HOVER"
+                    } else {
+                        delegate.state = "FILLED"
+                    }
+                }
+            }
 
             Connections {
                 target: peerListModelProxy
@@ -190,7 +230,7 @@ Page {
                     Layout.alignment: Qt.AlignLeft
                     id: primary
                     font.pixelSize: 18
-                    color: Theme.color.neutral9
+                    color: delegate.stateColor
                 }
                 CoreText {
                     Layout.alignment: Qt.AlignLeft
@@ -205,7 +245,7 @@ Page {
                     Layout.alignment: Qt.AlignRight
                     id: secondary
                     font.pixelSize: 18
-                    color: Theme.color.neutral9
+                    color: delegate.stateColor
                 }
                 CoreText {
                     Layout.alignment: Qt.AlignRight
