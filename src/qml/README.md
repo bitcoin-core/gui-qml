@@ -4,17 +4,13 @@
 
 This directory contains the source code for an experimental Bitcoin Core graphical user interface (GUI) built using the [Qt Quick](https://doc.qt.io/qt-5/qtquick-index.html) framework.
 
-Insecure CI artifacts are available for local testing of the master branch, avoiding the need to build:
-- for Windows: [`insecure_win_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/win64/insecure_win_gui.zip)
-- for Intel macOS: [`insecure_mac_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos/insecure_mac_gui.zip)
-- for Apple Silicon macOS: [`insecure_mac_arm64_gui.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/macos_arm64/insecure_mac_arm64_gui.zip)
-- for ARM64 Android: [`insecure_android_apk.zip`](https://api.cirrus-ci.com/v1/artifact/github/bitcoin-core/gui-qml/android/insecure_android_apk.zip)
+Unsecure CI artifacts are available for local testing of the master branch, avoiding the need to build. These can be found under the [Actions](https://github.com/bitcoin-core/gui-qml/actions?query=branch%3Amain) tab. It is required to have and be logged into a github account in order to download these.
 
-Note: For Apple Silicon macOS machines, the binary must be signed before it can
-be ran. To apply a signature, run the following on the unzipped CI artifact:
+Note: For macOS, the CI artifact binary must be made executable and code-signed before it can
+be ran. To make executable and apply a signature, run the following on the unzipped CI artifact:
 
 ```
-codesign -s - ./Downloads/insecure_mac_arm64_gui
+chmod +x ./Downloads/bitcoin-qt && codesign -s - ./Downloads/bitcoin-qt
 ```
 
 ## Goals and Limitations
