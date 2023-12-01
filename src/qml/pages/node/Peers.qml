@@ -232,10 +232,10 @@ Page {
                     width: parent.width
                 }
             }
-            contentItem: RowLayout {
-                spacing: 15
-                ColumnLayout {
+            contentItem: ColumnLayout {
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: 15
                     CoreText {
                         Layout.alignment: Qt.AlignLeft
                         Layout.fillWidth: true
@@ -248,6 +248,14 @@ Page {
                         horizontalAlignment: Text.AlignLeft
                     }
                     CoreText {
+                        Layout.alignment: Qt.AlignRight
+                        id: secondary
+                        font.pixelSize: 18
+                        color: delegate.stateColor
+                    }
+                }
+                RowLayout {
+                    CoreText {
                         Layout.alignment: Qt.AlignLeft
                         Layout.fillWidth: true
                         Layout.preferredWidth: 0
@@ -257,15 +265,6 @@ Page {
                         elide: Text.ElideMiddle
                         wrapMode: Text.NoWrap
                         horizontalAlignment: Text.AlignLeft
-                    }
-                }
-                ColumnLayout {
-                    Layout.fillWidth: false
-                    CoreText {
-                        Layout.alignment: Qt.AlignRight
-                        id: secondary
-                        font.pixelSize: 18
-                        color: delegate.stateColor
                     }
                     CoreText {
                         Layout.alignment: Qt.AlignRight
