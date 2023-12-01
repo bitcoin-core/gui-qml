@@ -33,7 +33,9 @@ Alternatively, or in addition, debugging information can be skipped for compilat
     ./configure CXXFLAGS="-O2"
 
 Finally, clang (often less resource hungry) can be used instead of gcc, which is used by default:
+Make sure clang is installed
 
+    sudo apt install clang
     ./configure CXX=clang++ CC=clang
 
 ## Linux Distribution Specific Instructions
