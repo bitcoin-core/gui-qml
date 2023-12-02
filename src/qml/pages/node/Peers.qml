@@ -153,7 +153,7 @@ Page {
             }
         }
 
-        delegate: Item {
+        delegate: ItemDelegate {
             id: delegate
             required property int nodeId;
             required property string address;
@@ -161,47 +161,14 @@ Page {
             required property string direction;
             required property string connectionType;
             required property string network;
-            property color stateColor;
-            implicitHeight: 60
-            implicitWidth: listView.width
-            state: "FILLED"
-
-            states: [
-                State {
-                    name: "FILLED"
-                    PropertyChanges { target: delegate; stateColor: Theme.color.neutral9 }
-                },
-                State {
-                    name: "HOVER"
-                    PropertyChanges { target: delegate; stateColor: Theme.color.orangeLight1 }
-                },
-                State {
-                    name: "ACTIVE"
-                    PropertyChanges { target: delegate; stateColor: Theme.color.orange }
+            readonly property color stateColor: {
+                if (delegate.down) {
+                    return Theme.color.orange
+                } else if (delegate.hovered) {
+                    return Theme.color.orangeLight1
                 }
-            ]
-
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: AppMode.isDesktop
-                onEntered: {
-                    delegate.state = "HOVER"
-                }
-                onExited: {
-                    delegate.state = "FILLED"
-                }
-                onPressed: {
-                    delegate.state = "ACTIVE"
-                }
-                onReleased: {
-                    if (mouseArea.containsMouse) {
-                        delegate.state = "HOVER"
-                    } else {
-                        delegate.state = "FILLED"
-                    }
-                }
+                return Theme.color.neutral9
             }
-
             Connections {
                 target: peerListModelProxy
                 function onSortByChanged(roleName) {
@@ -254,40 +221,58 @@ Page {
                     quaternary.text = subversion
                 }
             }
-
-            ColumnLayout {
-                anchors.left: parent.left
-                CoreText {
-                    Layout.alignment: Qt.AlignLeft
-                    id: primary
-                    font.pixelSize: 18
-                    color: delegate.stateColor
-                }
-                CoreText {
-                    Layout.alignment: Qt.AlignLeft
-                    id: tertiary
-                    font.pixelSize: 15
-                    color: Theme.color.neutral7
+            leftPadding: 0
+            rightPadding: 0
+            topPadding: 0
+            bottomPadding: 14
+            width: listView.width
+            background: Item {
+                Separator {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
                 }
             }
-            ColumnLayout {
-                anchors.right: parent.right
-                CoreText {
-                    Layout.alignment: Qt.AlignRight
-                    id: secondary
-                    font.pixelSize: 18
-                    color: delegate.stateColor
+            contentItem: ColumnLayout {
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 15
+                    CoreText {
+                        Layout.alignment: Qt.AlignLeft
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        id: primary
+                        font.pixelSize: 18
+                        color: delegate.stateColor
+                        elide: Text.ElideMiddle
+                        wrapMode: Text.NoWrap
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        Layout.alignment: Qt.AlignRight
+                        id: secondary
+                        font.pixelSize: 18
+                        color: delegate.stateColor
+                    }
                 }
-                CoreText {
-                    Layout.alignment: Qt.AlignRight
-                    id: quaternary
-                    font.pixelSize: 15
-                    color: Theme.color.neutral7
+                RowLayout {
+                    CoreText {
+                        Layout.alignment: Qt.AlignLeft
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0
+                        id: tertiary
+                        font.pixelSize: 15
+                        color: Theme.color.neutral7
+                        elide: Text.ElideMiddle
+                        wrapMode: Text.NoWrap
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                    CoreText {
+                        Layout.alignment: Qt.AlignRight
+                        id: quaternary
+                        font.pixelSize: 15
+                        color: Theme.color.neutral7
+                    }
                 }
-            }
-            Separator {
-                anchors.bottom: parent.bottom
-                width: parent.width
             }
         }
     }
