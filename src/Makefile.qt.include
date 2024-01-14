@@ -347,6 +347,7 @@ QML_RES_QML = \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
+  qml/components/ExternalPopup.qml \
   qml/components/PeersIndicator.qml \
   qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
