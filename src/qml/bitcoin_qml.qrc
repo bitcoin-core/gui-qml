@@ -45,6 +45,7 @@
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
         <file>pages/node/Peers.qml</file>
+        <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
