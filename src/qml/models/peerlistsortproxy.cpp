@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/peerlistsortproxy.h>
+#include <qml/models/peerdetailsmodel.h>
 #include <qt/peertablemodel.h>
 
 PeerListSortProxy::PeerListSortProxy(QObject* parent)
@@ -23,6 +24,7 @@ QHash<int, QByteArray> PeerListSortProxy::roleNames() const
     roles[PeerTableModel::Sent] = "sent";
     roles[PeerTableModel::Received] = "received";
     roles[PeerTableModel::Subversion] = "subversion";
+    roles[PeerTableModel::StatsRole] = "stats";
     return roles;
 }
 
@@ -40,6 +42,10 @@ int PeerListSortProxy::RoleNameToIndex(const QString & name) const
 QVariant PeerListSortProxy::data(const QModelIndex& index, int role) const
 {
     if (role == PeerTableModel::StatsRole) {
+        auto stats = PeerTableSortProxy::data(index, role);
+        auto details = new PeerDetailsModel(stats.value<CNodeCombinedStats*>(), qobject_cast<PeerTableModel*>(sourceModel()));
+        return QVariant::fromValue(details);
+    } else if (role == PeerTableModel::NetNodeId) {
         return PeerTableSortProxy::data(index, role);
     }
 
