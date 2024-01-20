@@ -12,6 +12,7 @@ import "../../components"
 
 Page {
     signal backClicked
+    signal peerSelected(PeerDetailsModel peerDetails)
 
     id: root
     background: null
@@ -161,6 +162,7 @@ Page {
             required property string direction;
             required property string connectionType;
             required property string network;
+            required property PeerDetailsModel stats;
             readonly property color stateColor: {
                 if (delegate.down) {
                     return Theme.color.orange
@@ -231,6 +233,9 @@ Page {
                     anchors.bottom: parent.bottom
                     width: parent.width
                 }
+            }
+            onClicked: {
+                root.peerSelected(stats)
             }
             contentItem: ColumnLayout {
                 RowLayout {
