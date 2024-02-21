@@ -29,6 +29,7 @@
         <file>controls/Icon.qml</file>
         <file>controls/InformationPage.qml</file>
         <file>controls/IPAddressValueInput.qml</file>
+        <file>controls/KeyValueRow.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
