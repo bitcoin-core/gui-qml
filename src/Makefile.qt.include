@@ -385,6 +385,7 @@ QML_RES_QML = \
   qml/controls/Icon.qml \
   qml/controls/InformationPage.qml \
   qml/controls/IPAddressValueInput.qml \
+  qml/controls/KeyValueRow.qml \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
