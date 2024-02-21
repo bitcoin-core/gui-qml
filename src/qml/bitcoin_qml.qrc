@@ -96,6 +96,7 @@
         <file alias="gear-outline">res/icons/gear-outline.png</file>
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info">res/icons/info.png</file>
+        <file alias="minus">res/icons/minus.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="plus">res/icons/plus.png</file>
