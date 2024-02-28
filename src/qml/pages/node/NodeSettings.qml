@@ -190,6 +190,17 @@ Item {
                 nodeSettingsView.pop()
                 peerTableModel.stopAutoRefresh();
             }
+            onPeerSelected: (peerDetails) => {
+                nodeSettingsView.push(peer_details, {"details": peerDetails})
+            }
+        }
+    }
+    Component {
+        id: peer_details
+        PeerDetails {
+            onBackClicked: {
+                nodeSettingsView.pop()
+            }
         }
     }
     Component {
