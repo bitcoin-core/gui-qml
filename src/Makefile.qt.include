@@ -35,11 +35,13 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
+  qml/moc_bitcoin.cpp \
   qml/components/moc_blockclockdial.cpp \
   qml/controls/moc_linegraph.cpp \
   qml/models/moc_chainmodel.cpp \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
+  qml/models/moc_onboardingmodel.cpp \
   qml/models/moc_options_model.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
   qml/moc_appmode.cpp \
@@ -119,6 +121,7 @@ BITCOIN_QT_H = \
   qml/models/chainmodel.h \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
+  qml/models/onboardingmodel.h \
   qml/models/options_model.h \
   qml/models/peerlistsortproxy.h \
   qml/appmode.h \
@@ -306,6 +309,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/chainmodel.cpp \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
+  qml/models/onboardingmodel.cpp \
   qml/models/options_model.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/imageprovider.cpp \
