@@ -14,9 +14,10 @@ ColumnLayout {
         header: qsTr("Enable listening")
         description: qsTr("Allows incoming connections")
         actionItem: OptionSwitch {
-            checked: optionsModel.listen
-            onToggled: optionsModel.listen = checked
+            checked: onboardingModel.listen
+            onToggled: onboardingModel.listen = checked
         }
+        Component.onCompleted: onboardingModel.listen = false
         onClicked: {
           loadedItem.toggle()
           loadedItem.toggled()
@@ -27,9 +28,10 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Map port using UPnP")
         actionItem: OptionSwitch {
-            checked: optionsModel.upnp
-            onToggled: optionsModel.upnp = checked
+            checked: onboardingModel.upnp
+            onToggled: onboardingModel.upnp = checked
         }
+        Component.onCompleted: onboardingModel.upnp = false
         onClicked: {
           loadedItem.toggle()
           loadedItem.toggled()
@@ -40,9 +42,10 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Map port using NAT-PMP")
         actionItem: OptionSwitch {
-            checked: optionsModel.natpmp
-            onToggled: optionsModel.natpmp = checked
+            checked: onboardingModel.natpmp
+            onToggled: onboardingModel.natpmp = checked
         }
+        Component.onCompleted: onboardingModel.natpmp = false
         onClicked: {
           loadedItem.toggle()
           loadedItem.toggled()
@@ -53,9 +56,10 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Enable RPC server")
         actionItem: OptionSwitch {
-            checked: optionsModel.server
-            onToggled: optionsModel.server = checked
+            checked: onboardingModel.server
+            onToggled: onboardingModel.server = checked
         }
+        Component.onCompleted: onboardingModel.server = false
         onClicked: {
           loadedItem.toggle()
           loadedItem.toggled()

@@ -16,8 +16,8 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Store recent blocks only")
         actionItem: OptionSwitch {
-            checked: optionsModel.prune
-            onToggled: optionsModel.prune = checked
+            checked: onboardingModel.prune
+            onToggled: onboardingModel.prune = checked
             onCheckedChanged: {
                 if (checked == false) {
                     pruneTargetSetting.state = "DISABLED"
@@ -40,14 +40,14 @@ ColumnLayout {
         showErrorText: false
         actionItem: ValueInput {
             parentState: pruneTargetSetting.state
-            description: optionsModel.pruneSizeGB
+            description: onboardingModel.pruneSizeGB
             onEditingFinished: {
                 if (parseInt(text) < 1) {
                     pruneTargetSetting.showErrorText = true
                 } else {
                     root.customStorage = true
                     root.customStorageAmount = parseInt(text)
-                    optionsModel.pruneSizeGB = parseInt(text)
+                    onboardingModel.pruneSizeGB = parseInt(text)
                     pruneTargetSetting.forceActiveFocus()
                     pruneTargetSetting.showErrorText = false
                 }
