@@ -5,6 +5,10 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs 1.3
+
+import org.bitcoincore.qt 1.0
+
 import "../controls"
 
 ColumnLayout {
@@ -19,11 +23,30 @@ ColumnLayout {
         description: qsTr("Your application directory.")
         recommended: true
         checked: true
+        onClicked: {
+            onboardingModel.defaultReset()
+        }
     }
     OptionButton {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Custom")
         description: qsTr("Choose the directory and storage device.")
+        onClicked: fileDialog.open()
+    }
+    FileDialog {
+        id: fileDialog
+        selectFolder: true
+        folder: onboardingModel.getDefaultDataDirectory
+        onAccepted: {
+            onboardingModel.setCustomDataDirString(fileDialog.fileUrls[0].toString())
+            var customDataDir = fileDialog.fileUrl.toString();
+            if (customDataDir !== "") {
+            onboardingModel.setCustomDataDirArgs(customDataDir);
+            }
+        }
+        onRejected: {
+            console.log("Canceled")
+        }
     }
 }
