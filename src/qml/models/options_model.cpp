@@ -16,8 +16,9 @@
 
 #include <cassert>
 
-OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
+OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     : m_node{node}
+    , m_onboarded{is_onboarded}
 {
     m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
 
@@ -32,7 +33,9 @@ void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
 {
     if (new_dbcache_size_mib != m_dbcache_size_mib) {
         m_dbcache_size_mib = new_dbcache_size_mib;
-        m_node.updateRwSetting("dbcache", new_dbcache_size_mib);
+        if (m_onboarded) {
+            m_node.updateRwSetting("dbcache", new_dbcache_size_mib);
+        }
         Q_EMIT dbcacheSizeMiBChanged(new_dbcache_size_mib);
     }
 }
@@ -41,7 +44,9 @@ void OptionsQmlModel::setListen(bool new_listen)
 {
     if (new_listen != m_listen) {
         m_listen = new_listen;
-        m_node.updateRwSetting("listen", new_listen);
+        if (m_onboarded) {
+            m_node.updateRwSetting("listen", new_listen);
+        }
         Q_EMIT listenChanged(new_listen);
     }
 }
@@ -50,7 +55,9 @@ void OptionsQmlModel::setNatpmp(bool new_natpmp)
 {
     if (new_natpmp != m_natpmp) {
         m_natpmp = new_natpmp;
-        m_node.updateRwSetting("natpmp", new_natpmp);
+        if (m_onboarded) {
+            m_node.updateRwSetting("natpmp", new_natpmp);
+        }
         Q_EMIT natpmpChanged(new_natpmp);
     }
 }
@@ -59,7 +66,9 @@ void OptionsQmlModel::setPrune(bool new_prune)
 {
     if (new_prune != m_prune) {
         m_prune = new_prune;
-        m_node.updateRwSetting("prune", pruneSetting());
+        if (m_onboarded) {
+            m_node.updateRwSetting("prune", pruneSetting());
+        }
         Q_EMIT pruneChanged(new_prune);
     }
 }
@@ -68,7 +77,9 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
 {
     if (new_prune_size_gb != m_prune_size_gb) {
         m_prune_size_gb = new_prune_size_gb;
-        m_node.updateRwSetting("prune", pruneSetting());
+        if (m_onboarded) {
+            m_node.updateRwSetting("prune", pruneSetting());
+        }
         Q_EMIT pruneSizeGBChanged(new_prune_size_gb);
     }
 }
@@ -77,7 +88,9 @@ void OptionsQmlModel::setScriptThreads(int new_script_threads)
 {
     if (new_script_threads != m_script_threads) {
         m_script_threads = new_script_threads;
-        m_node.updateRwSetting("par", new_script_threads);
+        if (m_onboarded) {
+            m_node.updateRwSetting("par", new_script_threads);
+        }
         Q_EMIT scriptThreadsChanged(new_script_threads);
     }
 }
@@ -86,7 +99,9 @@ void OptionsQmlModel::setServer(bool new_server)
 {
     if (new_server != m_server) {
         m_server = new_server;
-        m_node.updateRwSetting("server", new_server);
+        if (m_onboarded) {
+            m_node.updateRwSetting("server", new_server);
+        }
         Q_EMIT serverChanged(new_server);
     }
 }
@@ -95,7 +110,9 @@ void OptionsQmlModel::setUpnp(bool new_upnp)
 {
     if (new_upnp != m_upnp) {
         m_upnp = new_upnp;
-        m_node.updateRwSetting("upnp", new_upnp);
+        if (m_onboarded) {
+            m_node.updateRwSetting("upnp", new_upnp);
+        }
         Q_EMIT upnpChanged(new_upnp);
     }
 }
@@ -104,4 +121,31 @@ common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
     return m_prune ? PruneGBtoMiB(m_prune_size_gb) : 0;
+}
+
+void OptionsQmlModel::onboard()
+{
+    m_node.resetSettings();
+    if (m_dbcache_size_mib != nDefaultDbCache) {
+        m_node.updateRwSetting("dbcache", m_dbcache_size_mib);
+    }
+    if (m_listen) {
+        m_node.updateRwSetting("listen", m_listen);
+    }
+    if (m_natpmp) {
+        m_node.updateRwSetting("natpmp", m_natpmp);
+    }
+    if (m_prune) {
+        m_node.updateRwSetting("prune", pruneSetting());
+    }
+    if (m_script_threads != DEFAULT_SCRIPTCHECK_THREADS) {
+        m_node.updateRwSetting("par", m_script_threads);
+    }
+    if (m_server) {
+        m_node.updateRwSetting("server", m_server);
+    }
+    if (m_upnp) {
+        m_node.updateRwSetting("upnp", m_upnp);
+    }
+    m_onboarded = true;
 }

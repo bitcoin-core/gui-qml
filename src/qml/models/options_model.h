@@ -34,7 +34,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node);
+    explicit OptionsQmlModel(interfaces::Node& node, bool is_onboarded);
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
@@ -56,6 +56,7 @@ public:
     void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
+    Q_INVOKABLE void onboard();
 
 Q_SIGNALS:
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
@@ -69,6 +70,7 @@ Q_SIGNALS:
 
 private:
     interfaces::Node& m_node;
+    bool m_onboarded;
 
     // Properties that are exposed to QML.
     int m_dbcache_size_mib;
