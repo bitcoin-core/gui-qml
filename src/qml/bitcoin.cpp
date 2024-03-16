@@ -198,7 +198,7 @@ bool BitcoinQmlApplication::createNode(QQmlApplicationEngine& engine, int& argc,
 
     m_network_traffic_tower = new NetworkTrafficTower{*m_node_model};
 #ifdef __ANDROID__
-    AndroidNotifier android_notifier{m_node_model};
+    AndroidNotifier android_notifier{*m_node_model};
 #endif
 
     m_chain_model = new ChainModel{*m_chain};
