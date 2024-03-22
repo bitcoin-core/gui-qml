@@ -20,9 +20,18 @@ ColumnLayout {
     }
     Separator { Layout.fillWidth: true }
     Setting {
+        id: defaultProxyEnable
         Layout.fillWidth: true
         header: qsTr("Enable")
-        actionItem: OptionSwitch {}
+        actionItem: OptionSwitch {
+            onCheckedChanged: {
+                if (checked == false) {
+                    defaultProxy.state = "DISABLED"
+                } else {
+                    defaultProxy.state = "FILLED"
+                }
+            }
+        }
         onClicked: {
             loadedItem.toggle()
             loadedItem.toggled()
@@ -33,6 +42,8 @@ ColumnLayout {
         id: defaultProxy
         Layout.fillWidth: true
         header: qsTr("IP and Port")
+        errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
+        state: !defaultProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
         actionItem: ValueInput {
             parentState: defaultProxy.state
             description: "127.0.0.1:9050"
@@ -55,10 +66,18 @@ ColumnLayout {
     }
     Separator { Layout.fillWidth: true }
     Setting {
+        id: torProxyEnable
         Layout.fillWidth: true
         header: qsTr("Enable")
-        actionItem: OptionSwitch {}
-        description: qsTr("When disabled, Tor connections will use the default proxy (if enabled).")
+        actionItem: OptionSwitch {
+            onCheckedChanged: {
+                if (checked == false) {
+                    torProxy.state = "DISABLED"
+                } else {
+                    torProxy.state = "FILLED"
+                }
+            }
+        }
         onClicked: {
             loadedItem.toggle()
             loadedItem.toggled()
@@ -69,6 +88,8 @@ ColumnLayout {
         id: torProxy
         Layout.fillWidth: true
         header: qsTr("IP and Port")
+        errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
+        state: !torProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
         actionItem: ValueInput {
             parentState: torProxy.state
             description: "127.0.0.1:9050"
