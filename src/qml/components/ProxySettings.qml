@@ -44,14 +44,16 @@ ColumnLayout {
         header: qsTr("IP and Port")
         errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
         state: !defaultProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
-        actionItem: ValueInput {
+        showErrorText: !defaultProxy.loadedItem.validInput && defaultProxyEnable.loadedItem.checked
+        actionItem: IPAddressValueInput {
             parentState: defaultProxy.state
             description: "127.0.0.1:9050"
-            onEditingFinished: {
-                defaultProxy.forceActiveFocus()
-            }
+            activeFocusOnTab: true
         }
-        onClicked: loadedItem.forceActiveFocus()
+        onClicked: {
+            loadedItem.filled = true
+            loadedItem.forceActiveFocus()
+        }
     }
     Separator { Layout.fillWidth: true }
     Header {
@@ -90,14 +92,16 @@ ColumnLayout {
         header: qsTr("IP and Port")
         errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
         state: !torProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
-        actionItem: ValueInput {
+        showErrorText: !torProxy.loadedItem.validInput && torProxyEnable.loadedItem.checked
+        actionItem: IPAddressValueInput {
             parentState: torProxy.state
             description: "127.0.0.1:9050"
-            onEditingFinished: {
-                torProxy.forceActiveFocus()
-            }
+            activeFocusOnTab: true
         }
-        onClicked: loadedItem.forceActiveFocus()
+        onClicked: {
+            loadedItem.filled = true
+            loadedItem.forceActiveFocus()
+        }
     }
     Separator { Layout.fillWidth: true }
 }
