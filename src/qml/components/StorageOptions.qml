@@ -22,27 +22,27 @@ ColumnLayout {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Reduce storage")
-        description: qsTr("Uses about %1GB. For simple wallet use.").arg(chainModel.assumedChainstateSize + 2)
+        description: qsTr("Uses about %1GB. For simple wallet use.").arg(onboardingModel.assumedChainstateSize + 2)
         recommended: true
-        checked: !root.customStorage && optionsModel.prune
+        checked: !root.customStorage && onboardingModel.prune
         onClicked: {
-            optionsModel.prune = true
-            optionsModel.pruneSizeGB = 2
+            onboardingModel.prune = true
+            onboardingModel.pruneSizeGB = 2
         }
         Component.onCompleted: {
-            optionsModel.prune = true
-            optionsModel.pruneSizeGB = 2
+            onboardingModel.prune = true
+            onboardingModel.pruneSizeGB = 2
         }
     }
     OptionButton {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Store all data")
-        checked: !optionsModel.prune
+        checked: !onboardingModel.prune
         description: qsTr("Uses about %1GB. Support the network.").arg(
-            chainModel.assumedBlockchainSize + chainModel.assumedChainstateSize)
+            onboardingModel.assumedBlockchainSize + onboardingModel.assumedChainstateSize)
         onClicked: {
-            optionsModel.prune = false
+            onboardingModel.prune = false
         }
     }
     Loader {
@@ -51,12 +51,12 @@ ColumnLayout {
         visible: active
         sourceComponent: OptionButton {
             ButtonGroup.group: group
-            checked: root.customStorage && optionsModel.prune
+            checked: root.customStorage && onboardingModel.prune
             text: qsTr("Custom")
-            description: qsTr("Storing about %1GB of data.").arg(root.customStorageAmount + chainModel.assumedChainstateSize)
+            description: qsTr("Storing about %1GB of data.").arg(root.customStorageAmount + onboardingModel.assumedChainstateSize)
             onClicked: {
-                optionsModel.prune = true
-                optionsModel.pruneSizeGB = root.customStorageAmount
+                onboardingModel.prune = true
+                onboardingModel.pruneSizeGB = root.customStorageAmount
             }
         }
     }

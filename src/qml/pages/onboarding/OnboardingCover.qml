@@ -7,7 +7,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
-import "../settings"
 
 Page {
     background: null
@@ -18,19 +17,7 @@ Page {
         interactive: false
         orientation: Qt.Horizontal
         InformationPage {
-            navRightDetail: NavButton {
-                iconSource: "image://images/info"
-                iconHeight: 24
-                iconWidth: 24
-                iconColor: Theme.color.neutral0
-                iconBackground: Rectangle {
-                    radius: 12
-                    color: Theme.color.neutral9
-                }
-                onClicked: {
-                    introductions.incrementCurrentIndex()
-                }
-            }
+            // TODO: reinstate the info button
             bannerItem: Image {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignCenter
@@ -49,14 +36,6 @@ Page {
             subtext: qsTr("100% open-source & open-design")
             buttonText: qsTr("Start")
         }
-        SettingsAbout {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    introductions.decrementCurrentIndex()
-                }
-            }
-        }
+        // TODO: resintate the info button linking to settings
     }
 }

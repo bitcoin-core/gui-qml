@@ -1,25 +1,33 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2024 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef BITCOIN_QML_MODELS_OPTIONS_MODEL_H
-#define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 
-#include <txdb.h>
+#ifndef BITCOIN_QML_MODELS_ONBOARDINGMODEL_H
+#define BITCOIN_QML_MODELS_ONBOARDINGMODEL_H
+
+
 #include <common/settings.h>
 #include <common/system.h>
+#include <chainparams.h>
+#include <clientversion.h>
+#include <interfaces/chain.h>
+#include <univalue.h>
 #include <validation.h>
 
+#include <string>
+
 #include <QObject>
+#include <QString>
+#include <QUrl>
 
-namespace interfaces {
-class Node;
-}
-
-/** Model for Bitcoin client options. */
-class OptionsQmlModel : public QObject
+class OnboardingModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
+    Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
+    Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
+    Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(int dbcacheSizeMiB READ dbcacheSizeMiB WRITE setDbcacheSizeMiB NOTIFY dbcacheSizeMiBChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(int maxDbcacheSizeMiB READ maxDbcacheSizeMiB CONSTANT)
@@ -27,14 +35,16 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int maxScriptThreads READ maxScriptThreads CONSTANT)
     Q_PROPERTY(int minScriptThreads READ minScriptThreads CONSTANT)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
-    Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
-    Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
+    Q_PROPERTY(quint64 assumedBlockchainSize READ assumedBlockchainSize CONSTANT)
+    Q_PROPERTY(quint64 assumedChainstateSize READ assumedChainstateSize CONSTANT)
+    Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
+
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node, bool is_onboarded);
+    explicit OnboardingModel();
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
@@ -56,9 +66,25 @@ public:
     void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
-    Q_INVOKABLE void onboard();
+    quint64 assumedBlockchainSize() const { return m_assumed_blockchain_size; };
+    quint64 assumedChainstateSize() const { return m_assumed_chainstate_size; };
+    QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
+    QString getDefaultDataDirString();
+    QUrl getDefaultDataDirectory();
+    Q_INVOKABLE void defaultReset();
+    Q_INVOKABLE void setCustomDataDirArgs(QString path);
+    Q_INVOKABLE void requestShutdown();
+
+public Q_SLOTS:
+    void setCustomDataDirString(const QString &new_custom_datadir_string) {
+        m_custom_datadir_string = new_custom_datadir_string;
+        m_signalReceived = true;
+    }
 
 Q_SIGNALS:
+    void customDataDirStringChanged(QString new_custom_datadir_string);
+    void onboardingFinished();
+    void requestedShutdown();
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
     void listenChanged(bool new_listen);
     void natpmpChanged(bool new_natpmp);
@@ -69,10 +95,9 @@ Q_SIGNALS:
     void upnpChanged(bool new_upnp);
 
 private:
-    interfaces::Node& m_node;
-    bool m_onboarded;
-
-    // Properties that are exposed to QML.
+    QString m_custom_datadir_string;
+    bool m_signalReceived = false;
+    common::Settings m_previous_settings;
     int m_dbcache_size_mib;
     const int m_min_dbcache_size_mib{nMinDbCache};
     const int m_max_dbcache_size_mib{nMaxDbCache};
@@ -85,8 +110,10 @@ private:
     int m_script_threads;
     bool m_server;
     bool m_upnp;
+    quint64 m_assumed_blockchain_size{ Params().AssumedBlockchainSize() };
+    quint64 m_assumed_chainstate_size{ Params().AssumedChainStateSize() };
 
     common::SettingsValue pruneSetting() const;
 };
 
-#endif // BITCOIN_QML_MODELS_OPTIONS_MODEL_H
+#endif // BITCOIN_QML_MODELS_ONBOARDINGMODEL_H

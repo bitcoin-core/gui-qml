@@ -38,14 +38,14 @@ ApplicationWindow {
         focus: true
         Keys.onReleased: {
             if (event.key == Qt.Key_Back) {
-                nodeModel.requestShutdown()
+                onboardingModel.requestShutdown()
                 event.accepted = true
             }
         }
     }
 
     Connections {
-        target: nodeModel
+        target: onboardingModel
         function onRequestedShutdown() {
             main.clear()
             main.push(shutdown)
@@ -66,7 +66,13 @@ ApplicationWindow {
             OnboardingStorageAmount {}
             OnboardingConnection {}
 
-            onFinishedChanged: main.push(node)
+            onFinishedChanged:{
+                if (swipeView.finished) {
+                    onboardingModel.onboardingFinished()
+                    optionsModel.onboard()
+                    main.push(node)
+                }
+            }
         }
     }
 
