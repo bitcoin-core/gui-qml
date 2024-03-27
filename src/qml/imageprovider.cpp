@@ -117,6 +117,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/shutdown").pixmap(requested_size);
     }
 
+    if (id == "singlesig-wallet") {
+        *size = requested_size;
+        return QIcon(":/icons/singlesig-wallet").pixmap(requested_size);
+    }
+
     if (id == "storage-dark") {
         *size = requested_size;
         return QIcon(":/icons/storage-dark").pixmap(requested_size);
