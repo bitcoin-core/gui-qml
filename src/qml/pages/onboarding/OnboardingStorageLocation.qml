@@ -10,6 +10,7 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
+    objectName: "onboardingStorageLocation"
     navLeftDetail: NavButton {
         iconSource: "image://images/caret-left"
         text: qsTr("Back")

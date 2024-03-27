@@ -12,6 +12,7 @@ import "../settings"
 Page {
     background: null
     clip: true
+    objectName: "onboardingCover"
     SwipeView {
         id: introductions
         anchors.fill: parent

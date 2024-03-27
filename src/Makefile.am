@@ -1147,4 +1147,8 @@ if ENABLE_QT_TESTS
 include Makefile.qttest.include
 endif
 
+if ENABLE_QML_TESTS
+include Makefile.qmltest.include
+endif
+
 include Makefile.univalue.include

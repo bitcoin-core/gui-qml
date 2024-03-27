@@ -10,6 +10,7 @@ import "../../components"
 import "../settings"
 
 Page {
+    objectName: "onboardingStorageAmount"
     background: null
     clip: true
     SwipeView {
