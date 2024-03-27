@@ -334,6 +334,7 @@ QML_RES_ICONS = \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
   qml/res/icons/shutdown.png \
+  qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
   qml/res/icons/storage-light.png
 
