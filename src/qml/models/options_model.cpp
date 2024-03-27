@@ -9,12 +9,19 @@
 #include <common/system.h>
 #include <interfaces/node.h>
 #include <qt/guiconstants.h>
+#include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
 #include <txdb.h>
 #include <univalue.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <validation.h>
 
 #include <cassert>
+
+#include <QDebug>
+#include <QDir>
+#include <QSettings>
 
 OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
     : m_node{node}
@@ -104,4 +111,29 @@ common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
     return m_prune ? PruneGBtoMiB(m_prune_size_gb) : 0;
+}
+
+QString PathToQString(const fs::path &path)
+{
+    return QString::fromStdString(path.u8string());
+}
+
+QString OptionsQmlModel::getDefaultDataDirString()
+{
+    return PathToQString(GetDefaultDataDir());
+}
+
+
+QUrl OptionsQmlModel::getDefaultDataDirectory()
+{
+    QString path = getDefaultDataDirString();
+    return QUrl::fromLocalFile(path);
+}
+
+void OptionsQmlModel::setCustomDataDirArgs(QString path)
+{
+    if (!path.isEmpty()) {
+        // TODO: add actual custom data wiring
+        qDebug() << "PlaceHolder: Created data directory: " << path;
+    }
 }
