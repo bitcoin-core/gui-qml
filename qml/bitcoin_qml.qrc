@@ -31,6 +31,7 @@
         <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
+        <file>controls/NavigationTab.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
@@ -62,6 +63,7 @@
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
+        <file>pages/wallet/DesktopWallets.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="arrow-down">res/icons/arrow-down.png</file>
