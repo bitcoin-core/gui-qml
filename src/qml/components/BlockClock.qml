@@ -15,6 +15,7 @@ Item {
     id: root
     property real parentWidth: 600
     property real parentHeight: 600
+    property bool showNetworkIndicator: true
 
     width: dial.width
     height: dial.height + networkIndicator.height + networkIndicator.anchors.topMargin
@@ -146,6 +147,7 @@ Item {
 
     NetworkIndicator {
         id: networkIndicator
+        show: root.showNetworkIndicator
         anchors.top: dial.bottom
         anchors.topMargin: networkIndicator.visible ? 30 : 0
         anchors.horizontalCenter: root.horizontalCenter

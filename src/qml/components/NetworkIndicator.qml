@@ -12,12 +12,14 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     property color bgColor
+    property bool shorten: false
+    property bool show: true
     property int textSize: 15
     topPadding: 2
     bottomPadding: 2
     leftPadding: 7
     rightPadding: 7
-    state: chainModel.currentNetworkName
+    state: show ? chainModel.currentNetworkName : "MAIN"
     contentItem: CoreText {
         text: root.text
         font.pixelSize: root.textSize
@@ -47,7 +49,7 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: qsTr("Test Network")
+                text: shorten ? qsTr("Testnet") : qsTr("Test Network")
                 bgColor: Theme.color.green
             }
         },
@@ -56,7 +58,7 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: qsTr("Signet Network")
+                text: shorten ? qsTr("Signet") : qsTr("Signet Network")
                 bgColor: Theme.color.amber
             }
         },
@@ -65,7 +67,7 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: qsTr("Regtest Mode")
+                text: shorten ? qsTr("Regtest") : qsTr("Regtest Mode")
                 bgColor: Theme.color.blue
             }
         }
