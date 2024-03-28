@@ -11,6 +11,8 @@
 #include <validation.h>
 
 #include <QObject>
+#include <QString>
+#include <QUrl>
 
 namespace interfaces {
 class Node;
@@ -32,6 +34,8 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
+    Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
+    Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
 
 public:
     explicit OptionsQmlModel(interfaces::Node& node);
@@ -56,6 +60,15 @@ public:
     void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
+    QString getDefaultDataDirString();
+    QUrl getDefaultDataDirectory();
+    Q_INVOKABLE void setCustomDataDirArgs(QString path);
+
+public Q_SLOTS:
+    void setCustomDataDirString(const QString &new_custom_datadir_string) {
+        m_custom_datadir_string = new_custom_datadir_string;
+        m_signalReceived = true;
+    }
 
 Q_SIGNALS:
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
@@ -66,6 +79,7 @@ Q_SIGNALS:
     void scriptThreadsChanged(int new_script_threads);
     void serverChanged(bool new_server);
     void upnpChanged(bool new_upnp);
+    void customDataDirStringChanged(QString new_custom_datadir_string);
 
 private:
     interfaces::Node& m_node;
@@ -83,6 +97,8 @@ private:
     int m_script_threads;
     bool m_server;
     bool m_upnp;
+    QString m_custom_datadir_string;
+    bool m_signalReceived = false;
 
     common::SettingsValue pruneSetting() const;
 };
