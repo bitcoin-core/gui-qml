@@ -36,6 +36,7 @@ Button {
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
+        isMini: true
     }
 
     background: Item {

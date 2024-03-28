@@ -317,16 +317,28 @@ void BlockClockDial::paint(QPainter * painter)
     painter->setRenderHint(QPainter::Antialiasing);
 
     paintBackground(painter);
-    paintTimeTicks(painter);
+    if (!m_is_mini) {
+        paintTimeTicks(painter);
+    }
 
     if (paused()) return;
 
     if (connected() && synced()) {
-        paintBlocks(painter);
+        if (m_is_mini) {
+            paintProgress(painter);
+        } else {
+            paintBlocks(painter);
+        }
     } else if (connected()) {
         paintProgress(painter);
     } else if (m_animation_timer.isActive()) {
         paintConnectingAnimation(painter);
     }
     m_animating_max_angle = incrementAnimatingMaxAngle(m_animating_max_angle);
+}
+
+void BlockClockDial::setMini(bool is_mini)
+{
+    m_is_mini = is_mini;
+    update();
 }

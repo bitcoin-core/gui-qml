@@ -22,8 +22,9 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(qreal penWidth READ penWidth WRITE setPenWidth)
     Q_PROPERTY(qreal scale READ scale WRITE setScale NOTIFY scaleChanged)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
-    Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors )
+    Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors)
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
+    Q_PROPERTY(bool isMini READ isMini WRITE setMini)
 
 public:
     explicit BlockClockDial(QQuickItem * parent = nullptr);
@@ -39,6 +40,7 @@ public:
     QColor backgroundColor() const { return m_background_color; };
     QList<QColor> confirmationColors() const { return m_confirmation_colors; };
     QColor timeTickColor() const { return m_time_tick_color; };
+    bool isMini() const { return m_is_mini; };
 
 public Q_SLOTS:
     void setTimeRatioList(QVariantList new_time);
@@ -51,6 +53,7 @@ public Q_SLOTS:
     void setBackgroundColor(QColor color);
     void setConfirmationColors(QList<QColor> colorList);
     void setTimeTickColor(QColor color);
+    void setMini(bool is_mini);
 
 Q_SIGNALS:
     void scaleChanged();
@@ -84,6 +87,7 @@ private:
     QTimer m_animation_timer{this};
     QTimer m_delay_timer;
     qreal m_animating_max_angle = 0;
+    bool m_is_mini = false;
 };
 
 #endif // BITCOIN_QML_COMPONENTS_BLOCKCLOCKDIAL_H
