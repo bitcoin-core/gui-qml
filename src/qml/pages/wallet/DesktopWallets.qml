@@ -116,6 +116,7 @@ Page {
             }
         }
         NodeSettings {
+            showDoneButton: false
         }
     }
 
