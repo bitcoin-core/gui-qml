@@ -110,6 +110,7 @@ Page {
                 parentWidth: parent.width - 40
                 parentHeight: parent.height
                 anchors.fill: parent
+                showNetworkIndicator: false
             }
         }
         NodeSettings {

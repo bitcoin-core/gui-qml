@@ -12,12 +12,13 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     property color bgColor
+    property bool show: true
     property int textSize: 15
     topPadding: 2
     bottomPadding: 2
     leftPadding: 7
     rightPadding: 7
-    state: chainModel.currentNetworkName
+    state: show ? chainModel.currentNetworkName : "MAIN"
     contentItem: CoreText {
         text: root.text
         font.pixelSize: root.textSize
