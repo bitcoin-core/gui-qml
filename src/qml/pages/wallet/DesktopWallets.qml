@@ -64,6 +64,7 @@ Page {
             NetworkIndicator {
                 textSize: 11
                 Layout.rightMargin: 5
+                shorten: true
             }
             NavigationBlockClockTab {
                 Layout.preferredWidth: 30
