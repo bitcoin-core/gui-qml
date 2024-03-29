@@ -8,6 +8,7 @@
 #include <common/settings.h>
 #include <common/system.h>
 #include <interfaces/node.h>
+#include <mapport.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
 #include <qt/optionsmodel.h>
@@ -28,11 +29,19 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node)
 {
     m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
 
+    m_listen = SettingToBool(m_node.getPersistentSetting("listen"), DEFAULT_LISTEN);
+
+    m_natpmp = SettingToBool(m_node.getPersistentSetting("natpmp"), DEFAULT_NATPMP);
+
     int64_t prune_value{SettingToInt(m_node.getPersistentSetting("prune"), 0)};
     m_prune = (prune_value > 1);
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
 
     m_script_threads = SettingToInt(m_node.getPersistentSetting("par"), DEFAULT_SCRIPTCHECK_THREADS);
+
+    m_server = SettingToBool(m_node.getPersistentSetting("server"), false);
+
+    m_upnp = SettingToBool(m_node.getPersistentSetting("upnp"), DEFAULT_UPNP);
 }
 
 void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
