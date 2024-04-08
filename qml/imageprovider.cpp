@@ -92,6 +92,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/gear").pixmap(requested_size);
     }
 
+    if (id == "gear-outline") {
+        *size = requested_size;
+        return QIcon(":/icons/gear-outline").pixmap(requested_size);
+    }
+
     if (id == "info") {
         *size = requested_size;
         return QIcon(":/icons/info").pixmap(requested_size);
@@ -110,6 +115,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "shutdown") {
         *size = requested_size;
         return QIcon(":/icons/shutdown").pixmap(requested_size);
+    }
+
+    if (id == "singlesig-wallet") {
+        *size = requested_size;
+        return QIcon(":/icons/singlesig-wallet").pixmap(requested_size);
     }
 
     if (id == "storage-dark") {
