@@ -31,6 +31,7 @@
         <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
+        <file>controls/NavigationTab.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
@@ -62,6 +63,7 @@
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
+        <file>pages/wallet/DesktopWallets.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="arrow-down">res/icons/arrow-down.png</file>
@@ -78,10 +80,12 @@
         <file alias="cross">res/icons/cross.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="gear">res/icons/gear.png</file>
+        <file alias="gear-outline">res/icons/gear-outline.png</file>
         <file alias="info">res/icons/info.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
+        <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
     </qresource>

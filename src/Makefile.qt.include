@@ -329,10 +329,12 @@ QML_RES_ICONS = \
   qml/res/icons/cross.png \
   qml/res/icons/export.png \
   qml/res/icons/gear.png \
+  qml/res/icons/gear-outline.png \
   qml/res/icons/info.png \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
   qml/res/icons/shutdown.png \
+  qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
   qml/res/icons/storage-light.png
 
@@ -369,6 +371,7 @@ QML_RES_QML = \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
   qml/controls/NavigationBar2.qml \
+  qml/controls/NavigationTab.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/OutlineButton.qml \
@@ -399,7 +402,8 @@ QML_RES_QML = \
   qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsStorage.qml \
-  qml/pages/settings/SettingsTheme.qml
+  qml/pages/settings/SettingsTheme.qml \
+  qml/pages/wallet/DesktopWallets.qml
 
 if TARGET_ANDROID
 BITCOIN_QT_H += qml/androidnotifier.h

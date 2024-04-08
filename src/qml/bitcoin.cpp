@@ -75,17 +75,33 @@ void SetupUIArgs(ArgsManager& argsman)
     argsman.AddArg("-splash", strprintf("Show splash screen on startup (default: %u)", DEFAULT_SPLASHSCREEN), ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 }
 
+AppMode SetupAppMode()
+{
+    bool wallet_enabled;
+    AppMode::Mode mode;
+    #ifdef __ANDROID__
+        mode = AppMode::MOBILE;
+    #else
+        mode = AppMode::DESKTOP;
+    #endif // __ANDROID__
+
+    #ifdef ENABLE_WALLET
+        wallet_enabled = true;
+    #else
+        wallet_enabled = false;
+    #endif // ENABLE_WALLET
+
+    return AppMode(mode, wallet_enabled);
+}
+
 bool InitErrorMessageBox(
     const bilingual_str& message,
     [[maybe_unused]] const std::string& caption,
     [[maybe_unused]] unsigned int style)
 {
     QQmlApplicationEngine engine;
-#ifdef __ANDROID__
-    AppMode app_mode(AppMode::MOBILE);
-#else
-    AppMode app_mode(AppMode::DESKTOP);
-#endif // __ANDROID__
+
+    AppMode app_mode = SetupAppMode();
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
@@ -284,11 +300,8 @@ int QmlGuiMain(int argc, char* argv[])
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
 
     engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
-#ifdef __ANDROID__
-    AppMode app_mode(AppMode::MOBILE);
-#else
-    AppMode app_mode(AppMode::DESKTOP);
-#endif // __ANDROID__
+
+    AppMode app_mode = SetupAppMode();
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
