@@ -14,7 +14,7 @@ ColumnLayout {
         center: false
         header: qsTr("Default Proxy")
         headerSize: 24
-        description: qsTr("Run peer connections through a proxy (SOCKS5) for improved privacy. The default proxy supports connections via IPv4, IPv6 and Tor. Tor connections can also be run through a separate Tor proxy.")
+        description: qsTr("Run peer connections through a proxy (SOCKS5) for improved privacy. The default proxy supports connections via IPv4, IPv6 and Tor.")
         descriptionSize: 15
         Layout.bottomMargin: 10
     }
@@ -61,7 +61,7 @@ ColumnLayout {
         center: false
         header: qsTr("Tor Proxy")
         headerSize: 24
-        description: qsTr("Enable to run Tor connections through a dedicated proxy.")
+        description: qsTr("Run Tor connections through a dedicated proxy.")
         descriptionSize: 15
         Layout.topMargin: 35
         Layout.bottomMargin: 10
