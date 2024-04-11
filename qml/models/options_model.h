@@ -34,6 +34,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
+    Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
 
@@ -60,14 +61,16 @@ public:
     void setServer(bool new_server);
     bool upnp() const { return m_upnp; }
     void setUpnp(bool new_upnp);
+    QString dataDir() const { return m_dataDir; }
+    void setDataDir(QString new_data_dir);
     QString getDefaultDataDirString();
     QUrl getDefaultDataDirectory();
-    Q_INVOKABLE void setCustomDataDirArgs(QString path);
+    Q_INVOKABLE bool setCustomDataDirArgs(QString path);
+    Q_INVOKABLE QString getCustomDataDirString();
 
 public Q_SLOTS:
     void setCustomDataDirString(const QString &new_custom_datadir_string) {
         m_custom_datadir_string = new_custom_datadir_string;
-        m_signalReceived = true;
     }
     Q_INVOKABLE void onboard();
 
@@ -81,6 +84,7 @@ Q_SIGNALS:
     void serverChanged(bool new_server);
     void upnpChanged(bool new_upnp);
     void customDataDirStringChanged(QString new_custom_datadir_string);
+    void dataDirChanged(QString new_data_dir);
 
 private:
     interfaces::Node& m_node;
@@ -100,7 +104,7 @@ private:
     bool m_server;
     bool m_upnp;
     QString m_custom_datadir_string;
-    bool m_signalReceived = false;
+    QString m_dataDir;
 
     common::SettingsValue pruneSetting() const;
 };
