@@ -16,7 +16,7 @@ TextInput {
     property bool validInput: true
     enabled: true
     state: root.parentState
-    validator: RegExpValidator { regExp: /[0-9.:]*/ } // Allow only digits, dots, and colons
+    validator: RegularExpressionValidator { regularExpression: /[0-9.:]*/ } // Allow only digits, dots, and colons
 
     maximumLength: 21
 
