@@ -123,6 +123,7 @@ BITCOIN_QT_H = \
   qml/models/peerlistsortproxy.h \
   qml/appmode.h \
   qml/bitcoin.h \
+  qml/guiconstants.h \
   qml/imageprovider.h \
   qml/util.h \
   qt/addressbookpage.h \
@@ -140,7 +141,6 @@ BITCOIN_QT_H = \
   qt/createwalletdialog.h \
   qt/csvmodelwriter.h \
   qt/editaddressdialog.h \
-  qt/guiconstants.h \
   qt/guiutil.h \
   qt/initexecutor.h \
   qt/intro.h \
