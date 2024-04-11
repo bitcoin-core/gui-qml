@@ -58,4 +58,17 @@ ColumnLayout {
             loadedItem.forceActiveFocus()
         }
     }
+    Separator { Layout.fillWidth: true }
+    Setting {
+        id: customDataDirSetting
+        Layout.fillWidth: true
+        header: qsTr("Data Directory")
+    }
+    CoreText {
+        Layout.fillWidth: true
+        text: optionsModel.dataDir
+        color: Theme.color.neutral7
+        font.pixelSize: 15
+        horizontalAlignment: Text.AlignLeft
+    }
 }
