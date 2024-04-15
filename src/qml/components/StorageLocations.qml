@@ -37,7 +37,28 @@ ColumnLayout {
         description: qsTr("Choose the directory and storage device.")
         customDir: customDirOption.checked ? fileDialog.folder : ""
         checked: optionsModel.dataDir !== optionsModel.getDefaultDataDirString
-        onClicked: fileDialog.open()
+        onClicked: {
+            if (AppMode.isDesktop) {
+                if (!singleClickTimer.running) {
+                    // Start the timer if it's not already running
+                    singleClickTimer.start();
+                } else {
+                    // If the timer is running, it's a double-click
+                    singleClickTimer.stop();
+                }
+            } else {
+                fileDialog.open()
+            }
+        }
+        Timer {
+            id: singleClickTimer
+            interval: 300
+            onTriggered: {
+                // If the timer times out, it's a single-click
+                fileDialog.open()
+            }
+            repeat: false // No need to repeat the timer
+        }
     }
     FileDialog {
         id: fileDialog
