@@ -132,5 +132,15 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/storage-light").pixmap(requested_size);
     }
 
+    if (id == "tooltip-arrow-dark") {
+        *size = requested_size;
+        return QIcon(":/icons/tooltip-arrow-dark").pixmap(requested_size);
+    }
+
+    if (id == "tooltip-arrow-light") {
+        *size = requested_size;
+        return QIcon(":/icons/tooltip-arrow-light").pixmap(requested_size);
+    }
+
     return {};
 }
