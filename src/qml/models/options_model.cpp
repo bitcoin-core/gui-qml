@@ -167,7 +167,7 @@ void OptionsQmlModel::setCustomDataDirArgs(QString path)
 void OptionsQmlModel::onboard()
 {
     m_node.resetSettings();
-    if (m_dbcache_size_mib != nDefaultDbCache) {
+    if (m_dbcache_size_mib != DEFAULT_DB_CACHE >> 20) {
         m_node.updateRwSetting("dbcache", m_dbcache_size_mib);
     }
     if (m_listen) {

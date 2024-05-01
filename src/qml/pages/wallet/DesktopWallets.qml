@@ -5,8 +5,11 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+
 import org.bitcoincore.qt 1.0
+
 import "../../controls"
+import "../../controls/utils.js" as Utils
 import "../../components"
 import "../node"
 
@@ -67,10 +70,36 @@ Page {
                 shorten: true
             }
             NavigationTab {
+                id: blockClockTabButton
                 Layout.preferredWidth: 30
                 Layout.rightMargin: 10
                 property int index: 3
                 ButtonGroup.group: navigationTabs
+
+                Tooltip {
+                    id: blockClockTooltip
+                    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
+                    property bool synced: nodeModel.verificationProgress > 0.9999
+                    property bool paused: nodeModel.pause
+                    property bool connected: nodeModel.numOutboundPeers > 0
+
+                    anchors.top: blockClockTabButton.bottom
+                    anchors.topMargin: -5
+                    anchors.horizontalCenter: blockClockTabButton.horizontalCenter
+
+                    visible: blockClockTabButton.hovered
+                    text: {
+                        if (paused) {
+                            qsTr("Paused")
+                        } else if (connected && synced) {
+                            qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
+                        } else if (connected){
+                            qsTr("Downloading blocks\n" +  syncState.text)
+                        } else {
+                            qsTr("Connecting")
+                        }
+                    }
+                }
             }
             NavigationTab {
                 iconSource: "image://images/gear-outline"

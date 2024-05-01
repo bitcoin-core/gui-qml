@@ -19,6 +19,7 @@
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
+        <file>components/Tooltip.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/ExternalLink.qml</file>
@@ -41,6 +42,7 @@
         <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
+        <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/main.qml</file>
@@ -88,6 +90,8 @@
         <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
+        <file alias="tooltip-arrow-dark">res/icons/tooltip-arrow-dark.png</file>
+        <file alias="tooltip-arrow-light">res/icons/tooltip-arrow-light.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="inter/regular">res/fonts/Inter-Regular.otf</file>
