@@ -409,7 +409,8 @@ QML_RES_QML = \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
-  qml/pages/wallet/DesktopWallets.qml
+  qml/pages/wallet/DesktopWallets.qml \
+  qml/pages/wallet/WalletBadge.qml
 
 if TARGET_ANDROID
 BITCOIN_QT_H += qml/androidnotifier.h
