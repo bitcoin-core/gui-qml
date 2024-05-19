@@ -73,6 +73,7 @@
         <file>pages/wallet/CreateName.qml</file>
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/WalletBadge.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
