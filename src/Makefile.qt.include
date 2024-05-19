@@ -423,7 +423,8 @@ QML_RES_QML = \
   qml/pages/wallet/CreateIntro.qml \
   qml/pages/wallet/CreateName.qml \
   qml/pages/wallet/CreatePassword.qml \
-  qml/pages/wallet/DesktopWallets.qml
+  qml/pages/wallet/DesktopWallets.qml \
+  qml/pages/wallet/WalletBadge.qml
 
 if TARGET_ANDROID
 BITCOIN_QT_H += qml/androidnotifier.h
