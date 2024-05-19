@@ -7,6 +7,8 @@ import QtQuick.Controls 2.15
 
 Button {
     id: root
+    width: icon.width
+    height: icon.height
     required property color color
     required property url source
     property int size: 32

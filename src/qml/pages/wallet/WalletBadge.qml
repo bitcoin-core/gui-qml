@@ -105,8 +105,10 @@ Button {
             visible: root.showIcon
             source: "image://images/singlesig-wallet"
             color: Theme.color.neutral8
+            size: 30
+            Layout.minimumWidth: 30
             Layout.preferredWidth: 30
-            Layout.preferredHeight: 30
+            Layout.maximumWidth: 30
         }
         ColumnLayout {
             spacing: 2

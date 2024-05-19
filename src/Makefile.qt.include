@@ -42,6 +42,7 @@ QT_MOC_CPP = \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
+  qml/models/moc_walletlistmodel.cpp \
   qml/moc_appmode.cpp \
   qml/moc_walletcontroller.cpp \
   qt/moc_addressbookpage.cpp \
@@ -122,6 +123,7 @@ BITCOIN_QT_H = \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
   qml/models/peerlistsortproxy.h \
+  qml/models/walletlistmodel.h \
   qml/appmode.h \
   qml/bitcoin.h \
   qml/guiconstants.h \
@@ -311,6 +313,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
   qml/models/peerlistsortproxy.cpp \
+  qml/models/walletlistmodel.cpp \
   qml/imageprovider.cpp \
   qml/util.cpp \
   qml/walletcontroller.cpp
@@ -339,6 +342,7 @@ QML_RES_ICONS = \
   qml/res/icons/info.png \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
+  qml/res/icons/plus.png \
   qml/res/icons/shutdown.png \
   qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
@@ -424,7 +428,8 @@ QML_RES_QML = \
   qml/pages/wallet/CreateName.qml \
   qml/pages/wallet/CreatePassword.qml \
   qml/pages/wallet/DesktopWallets.qml \
-  qml/pages/wallet/WalletBadge.qml
+  qml/pages/wallet/WalletBadge.qml \
+  qml/pages/wallet/WalletSelect.qml
 
 if TARGET_ANDROID
 BITCOIN_QT_H += qml/androidnotifier.h
