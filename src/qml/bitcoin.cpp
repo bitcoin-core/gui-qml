@@ -25,6 +25,7 @@
 #include <qml/models/nodemodel.h>
 #include <qml/models/options_model.h>
 #include <qml/models/peerlistsortproxy.h>
+#include <qml/models/walletlistmodel.h>
 #include <qml/imageprovider.h>
 #include <qml/util.h>
 #include <qml/guiconstants.h>
@@ -292,11 +293,14 @@ int QmlGuiMain(int argc, char* argv[])
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
+    WalletListModel wallet_list_model{*node, nullptr};
+
     engine.rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
     engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
+    engine.rootContext()->setContextProperty("walletListModel", &wallet_list_model);
 
     OptionsQmlModel options_model(*node, !need_onboarding.toBool());
     engine.rootContext()->setContextProperty("optionsModel", &options_model);

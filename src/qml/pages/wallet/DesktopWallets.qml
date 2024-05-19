@@ -24,7 +24,23 @@ Page {
         leftItem: WalletBadge {
             implicitWidth: 164
             implicitHeight: 60
-            text: qsTr("Singlesig Wallet")
+            text: walletListModel.selectedWallet
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    walletListModel.listWalletDir()
+                    walletSelect.opened ? walletSelect.close() : walletSelect.open()
+                }
+            }
+
+            WalletSelect {
+                id: walletSelect
+                model: walletListModel
+                closePolicy: Popup.CloseOnPressOutside
+                x: 0
+                y: parent.height - 5
+            }
         }
         centerItem: RowLayout {
             NavigationTab {
