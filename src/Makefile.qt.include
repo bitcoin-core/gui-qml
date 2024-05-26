@@ -141,6 +141,7 @@ BITCOIN_QT_H = \
   qt/createwalletdialog.h \
   qt/csvmodelwriter.h \
   qt/editaddressdialog.h \
+  qt/guiconstants.h \
   qt/guiutil.h \
   qt/initexecutor.h \
   qt/intro.h \
