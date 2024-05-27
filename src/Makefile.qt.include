@@ -141,6 +141,7 @@ BITCOIN_QT_H = \
   qt/createwalletdialog.h \
   qt/csvmodelwriter.h \
   qt/editaddressdialog.h \
+  qt/guiconstants.h \
   qt/guiutil.h \
   qt/initexecutor.h \
   qt/intro.h \
@@ -367,6 +368,7 @@ QML_RES_QML = \
   qml/controls/Header.qml \
   qml/controls/Icon.qml \
   qml/controls/InformationPage.qml \
+  qml/controls/IPAddressValueInput.qml \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
