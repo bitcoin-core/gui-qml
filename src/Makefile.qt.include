@@ -337,7 +337,9 @@ QML_RES_ICONS = \
   qml/res/icons/shutdown.png \
   qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
-  qml/res/icons/storage-light.png
+  qml/res/icons/storage-light.png \
+  qml/res/icons/tooltip-arrow-dark.png \
+  qml/res/icons/tooltip-arrow-light.png
 
 QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
@@ -361,6 +363,7 @@ QML_RES_QML = \
   qml/components/StorageSettings.qml \
   qml/components/ThemeSettings.qml \
   qml/components/TotalBytesIndicator.qml \
+  qml/components/Tooltip.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
   qml/controls/ExternalLink.qml \
@@ -383,6 +386,7 @@ QML_RES_QML = \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ToggleButton.qml \
+  qml/controls/utils.js \
   qml/controls/ValueInput.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
