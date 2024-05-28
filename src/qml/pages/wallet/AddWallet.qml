@@ -57,6 +57,9 @@ StackView {
                 Layout.bottomMargin: 20
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Create wallet")
+                onClicked: {
+                    addWalletStack.push("qrc:/qml/pages/wallet/CreateIntro.qml");
+                }
             }
 
             ContinueButton {
