@@ -10,7 +10,7 @@ import org.bitcoincore.qt 1.0
 
 AbstractButton {
     id: root
-    required property string header
+    property string header
     property alias actionItem: action_loader.sourceComponent
     property alias loadedItem: action_loader.item
     property string description
