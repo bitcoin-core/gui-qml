@@ -24,6 +24,7 @@
 #endif
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/guiconstants.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
@@ -31,7 +32,7 @@
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/imageprovider.h>
 #include <qml/util.h>
-#include <qml/guiconstants.h>
+#include <qml/walletcontroller.h>
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
@@ -279,6 +280,8 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
+    WalletController wallet_controller(*node);
+
     QQmlApplicationEngine engine;
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
@@ -290,6 +293,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
     engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
+    engine.rootContext()->setContextProperty("walletController", &wallet_controller);
 
     OptionsQmlModel options_model(*node, !need_onboarding.toBool());
     engine.rootContext()->setContextProperty("optionsModel", &options_model);

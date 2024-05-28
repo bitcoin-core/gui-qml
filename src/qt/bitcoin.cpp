@@ -637,7 +637,7 @@ int GuiMain(int argc, char* argv[])
     qApp->installNativeEventFilter(new WinShutdownMonitor([&app] { app.node().startShutdown(); }));
 #endif
     // Install qDebug() message handler to route to debug.log
-    qInstallMessageHandler(DebugMessageHandler);
+    //qInstallMessageHandler(DebugMessageHandler);
     // Allow parameter interaction before we create the options model
     app.parameterSetup();
     GUIUtil::LogQtInfo();
