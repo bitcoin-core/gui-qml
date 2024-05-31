@@ -28,9 +28,10 @@
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/models/walletlistmodel.h>
+#include <qml/models/walletqmlmodel.h>
 #include <qml/imageprovider.h>
 #include <qml/util.h>
-#include <qml/walletcontroller.h>
+#include <qml/walletqmlcontroller.h>
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
@@ -259,8 +260,17 @@ int QmlGuiMain(int argc, char* argv[])
 
     NodeModel node_model{*node};
     InitExecutor init_executor{*node};
+#ifdef ENABLE_WALLET
+    WalletQmlController wallet_controller(*node);
+    QObject::connect(&init_executor, &InitExecutor::initializeResult, &wallet_controller, &WalletQmlController::initialize);
+#endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, [&] {
+#ifdef ENABLE_WALLET
+        wallet_controller.unloadWallets();
+#endif
+        init_executor.shutdown();
+    });
     QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
     // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
@@ -277,8 +287,12 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
 
+
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
+#ifdef ENABLE_WALLET
+        wallet_controller.unloadWallets();
+#endif
         node->startShutdown();
     });
 
@@ -289,23 +303,22 @@ int QmlGuiMain(int argc, char* argv[])
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
-    WalletController wallet_controller(*node);
-
     QQmlApplicationEngine engine;
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 
-    WalletListModel wallet_list_model{*node, nullptr};
-
     engine.rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
     engine.rootContext()->setContextProperty("chainModel", &chain_model);
     engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
+#ifdef ENABLE_WALLET
+    WalletListModel wallet_list_model{*node, nullptr};
     engine.rootContext()->setContextProperty("walletController", &wallet_controller);
     engine.rootContext()->setContextProperty("walletListModel", &wallet_list_model);
+#endif
 
     OptionsQmlModel options_model(*node, !need_onboarding.toBool());
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
@@ -318,6 +331,10 @@ int QmlGuiMain(int argc, char* argv[])
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
 
+#ifdef ENABLE_WALLET
+    qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
+                                               "WalletQmlModel cannot be instantiated from QML");
+#endif
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
     if (engine.rootObjects().isEmpty()) {
