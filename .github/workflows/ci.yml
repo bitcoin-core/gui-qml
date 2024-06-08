@@ -135,8 +135,10 @@ jobs:
           brew install --quiet python@3 || brew link --overwrite python@3
           brew install --quiet coreutils ninja pkgconf gnu-getopt ccache boost libevent zeromq qt@6 qrencode
 
-      - name: Set Ccache directory
-        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+      - name: Set environment variables
+        run: |
+          echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+          echo "IN_GETOPT_BIN=$(brew --prefix gnu-getopt)/bin/getopt" >> "$GITHUB_ENV"
 
       - name: Restore Ccache cache
         id: ccache-cache
