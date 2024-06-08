@@ -62,8 +62,10 @@ jobs:
       - name: Install Homebrew packages
         run: brew install boost libevent qt@5 miniupnpc libnatpmp ccache zeromq qrencode libtool automake gnu-getopt
 
-      - name: Set Ccache directory
-        run: echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+      - name: Set environment variables
+        run: |
+          echo "CCACHE_DIR=${RUNNER_TEMP}/ccache_dir" >> "$GITHUB_ENV"
+          echo "IN_GETOPT_BIN=$(brew --prefix gnu-getopt)/bin/getopt" >> "$GITHUB_ENV"
 
       - name: Restore Ccache cache
         uses: actions/cache/restore@v4
