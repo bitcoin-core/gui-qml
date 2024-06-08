@@ -43,6 +43,8 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     m_server = SettingToBool(m_node.getPersistentSetting("server"), false);
 
     m_upnp = SettingToBool(m_node.getPersistentSetting("upnp"), DEFAULT_UPNP);
+
+    m_dataDir = getDefaultDataDirString();
 }
 
 void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
@@ -156,11 +158,46 @@ QUrl OptionsQmlModel::getDefaultDataDirectory()
     return QUrl::fromLocalFile(path);
 }
 
-void OptionsQmlModel::setCustomDataDirArgs(QString path)
+bool OptionsQmlModel::setCustomDataDirArgs(QString path)
 {
     if (!path.isEmpty()) {
-        // TODO: add actual custom data wiring
+    // TODO: add actual custom data wiring
+#ifdef __ANDROID__
+    QString uri = path;
+    QString originalPrefix = "content://com.android.externalstorage.documents/tree/primary%3A";
+    QString newPrefix = "/storage/self/primary/";
+    QString path = uri.replace(originalPrefix, newPrefix);
+#else
+    path = QUrl(path).toLocalFile();
+#endif // __ANDROID__
         qDebug() << "PlaceHolder: Created data directory: " << path;
+
+        m_custom_datadir_string = path;
+        Q_EMIT customDataDirStringChanged(path);
+        setDataDir(path);
+        return true;
+    }
+    return false;
+}
+
+QString OptionsQmlModel::getCustomDataDirString()
+{
+#ifdef __ANDROID__
+    m_custom_datadir_string = m_custom_datadir_string.replace("content://com.android.externalstorage.documents/tree/primary%3A", "/storage/self/primary/");
+#endif // __ANDROID__
+    return m_custom_datadir_string;
+}
+
+void OptionsQmlModel::setDataDir(QString new_data_dir)
+{
+    if (new_data_dir != m_dataDir) {
+        m_dataDir = new_data_dir;
+        if (!getCustomDataDirString().isEmpty() && (new_data_dir != getDefaultDataDirString())) {
+            m_dataDir = getCustomDataDirString();
+        } else {
+            m_dataDir = getDefaultDataDirString();
+        }
+        Q_EMIT dataDirChanged(new_data_dir);
     }
 }
 
