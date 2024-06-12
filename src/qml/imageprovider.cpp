@@ -82,6 +82,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/cross").pixmap(requested_size);
     }
 
+    if (id == "error") {
+        *size = requested_size;
+        return QIcon(":/icons/error").pixmap(requested_size);
+    }
+
     if (id == "export") {
         *size = requested_size;
         return QIcon(":/icons/export").pixmap(requested_size);
