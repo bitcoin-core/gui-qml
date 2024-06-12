@@ -21,13 +21,14 @@ ColumnLayout {
         header: qsTr("Light")
         actionItem: Icon {
             anchors.centerIn: parent
-            visible: !Theme.dark
+            visible: !Theme.manualDark && Theme.manualTheme
             source: "image://images/check"
             color: Theme.color.neutral9
             size: 24
         }
         onClicked: {
-            Theme.dark = false
+            Theme.manualTheme = true;
+            Theme.manualDark = false;
         }
     }
     Separator { Layout.fillWidth: true }
@@ -36,13 +37,37 @@ ColumnLayout {
         header: qsTr("Dark")
         actionItem: Icon {
             anchors.centerIn: parent
-            visible: Theme.dark
+            visible: Theme.manualDark && Theme.manualTheme
             source: "image://images/check"
             color: Theme.color.neutral9
             size: 24
         }
         onClicked: {
-            Theme.dark = true;
+            Theme.manualTheme = true;
+            Theme.manualDark = true;
+        }
+    }
+    Separator { Layout.fillWidth: true }
+    Setting {
+        id: systemThemeSetting
+        property bool systemThemeAvailable: Theme.systemThemeAvailable
+        Layout.fillWidth: true
+        header: qsTr("System")
+        actionItem: Icon {
+            anchors.centerIn: parent
+            visible: !Theme.manualTheme
+            source: "image://images/check"
+            size: 24
+        }
+        Component.onCompleted: {
+            if (systemThemeAvailable) {
+                systemThemeSetting.state = "FILLED"
+            } else {
+                systemThemeSetting.state = "DISABLED"
+            }
+        }
+        onClicked: {
+            Theme.manualTheme = false
         }
     }
 }
