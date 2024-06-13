@@ -24,8 +24,8 @@ void WalletListModel::listWalletDir()
         existing_names.insert(name);
     }
 
-    for (const std::string &name : m_node.walletLoader().listWalletDir()) {
-        QString qname = QString::fromStdString(name);
+    for (const auto& [path, info] : m_node.walletLoader().listWalletDir()) {
+        QString qname = QString::fromStdString(path);
         if (!existing_names.contains(qname)) {
             addItem({ qname });
         }
