@@ -7,7 +7,6 @@
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <clientversion.h>
 
 #include <memory>
 
@@ -27,7 +26,6 @@ class NodeModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
-    Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
     Q_PROPERTY(int numOutboundPeers READ numOutboundPeers NOTIFY numOutboundPeersChanged)
     Q_PROPERTY(int maxNumOutboundPeers READ maxNumOutboundPeers CONSTANT)
     Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
@@ -40,7 +38,6 @@ public:
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
-    QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
     int numOutboundPeers() const { return m_num_outbound_peers; }
     void setNumOutboundPeers(int new_num);
     int maxNumOutboundPeers() const { return m_max_num_outbound_peers; }
