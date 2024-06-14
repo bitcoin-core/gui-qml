@@ -6,8 +6,11 @@
 #define BITCOIN_QML_MODELS_OPTIONS_MODEL_H
 
 #include <txdb.h>
+#include <chainparams.h>
+#include <clientversion.h>
 #include <common/settings.h>
 #include <common/system.h>
+#include <interfaces/chain.h>
 #include <validation.h>
 
 #include <QObject>
@@ -37,10 +40,14 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
+    Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
+    Q_PROPERTY(quint64 assumedBlockchainSize READ assumedBlockchainSize CONSTANT)
+    Q_PROPERTY(quint64 assumedChainstateSize READ assumedChainstateSize CONSTANT)
 
 public:
-    explicit OptionsQmlModel(interfaces::Node& node, bool is_onboarded);
+    explicit OptionsQmlModel(interfaces::Node* node, bool is_onboarded);
 
+    void setNode(interfaces::Node* node, bool is_onboarded);
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
     bool listen() const { return m_listen; }
@@ -67,12 +74,17 @@ public:
     QUrl getDefaultDataDirectory();
     Q_INVOKABLE bool setCustomDataDirArgs(QString path);
     Q_INVOKABLE QString getCustomDataDirString();
+    Q_INVOKABLE void defaultReset();
+    QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
+    quint64 assumedBlockchainSize() const { return m_assumed_blockchain_size; };
+    quint64 assumedChainstateSize() const { return m_assumed_chainstate_size; };
 
 public Q_SLOTS:
     void setCustomDataDirString(const QString &new_custom_datadir_string) {
         m_custom_datadir_string = new_custom_datadir_string;
     }
     Q_INVOKABLE void onboard();
+    Q_INVOKABLE void requestShutdown();
 
 Q_SIGNALS:
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
@@ -83,11 +95,13 @@ Q_SIGNALS:
     void scriptThreadsChanged(int new_script_threads);
     void serverChanged(bool new_server);
     void upnpChanged(bool new_upnp);
+    void onboardingFinished();
+    void requestedShutdown();
     void customDataDirStringChanged(QString new_custom_datadir_string);
     void dataDirChanged(QString new_data_dir);
 
 private:
-    interfaces::Node& m_node;
+    interfaces::Node* m_node;
     bool m_onboarded;
 
     // Properties that are exposed to QML.
@@ -105,6 +119,10 @@ private:
     bool m_upnp;
     QString m_custom_datadir_string;
     QString m_dataDir;
+    common::Settings m_previous_settings;
+    common::Settings m_cli_settings;
+    quint64 m_assumed_blockchain_size{ Params().AssumedBlockchainSize() };
+    quint64 m_assumed_chainstate_size{ Params().AssumedChainStateSize() };
 
     common::SettingsValue pruneSetting() const;
 };
