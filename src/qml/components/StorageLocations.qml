@@ -22,11 +22,22 @@ ColumnLayout {
         ButtonGroup.group: group
         text: qsTr("Default")
         description: qsTr("Your application directory.")
-        customDir: optionsModel.getDefaultDataDirString
-        checked: optionsModel.dataDir === optionsModel.getDefaultDataDirString
+        checked: true
+        customDir: updateCustomDir()
+        function updateCustomDir() {
+            if (checked) {
+                optionsModel.dataDir = optionsModel.getDefaultDataDirString;
+                optionsModel.defaultReset();
+                return optionsModel.dataDir;
+            } else {
+                return "";
+            }
+        }
         onClicked: {
             defaultDirOption.checked = true
+            customDirOption.checked = false
             optionsModel.dataDir = optionsModel.getDefaultDataDirString
+            optionsModel.defaultReset()
         }
     }
     OptionButton {
@@ -35,9 +46,12 @@ ColumnLayout {
         ButtonGroup.group: group
         text: qsTr("Custom")
         description: qsTr("Choose the directory and storage device.")
-        customDir: customDirOption.checked ? fileDialog.folder : ""
+        customDir: customDirOption.checked ? optionsModel.getCustomDataDirString() : ""
         checked: optionsModel.dataDir !== optionsModel.getDefaultDataDirString
-        onClicked: fileDialog.open()
+        onClicked: {
+            defaultDirOption.checked = false
+            fileDialog.open();
+        }
     }
     FileDialog {
         id: fileDialog
@@ -49,10 +63,8 @@ ColumnLayout {
             if (customDataDir !== "") {
                 optionsModel.setCustomDataDirArgs(customDataDir)
                 customDirOption.customDir = optionsModel.getCustomDataDirString()
-                if (optionsModel.dataDir !== optionsModel.getDefaultDataDirString) {
-                    customDirOption.checked = true
-                    defaultDirOption.checked = false
-                }
+                customDirOption.checked = true
+                defaultDirOption.checked = false
             }
         }
         onRejected: {
