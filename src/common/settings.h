@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <map>
 #include <string>
+#include <univalue.h>
 #include <vector>
 
 class UniValue;
