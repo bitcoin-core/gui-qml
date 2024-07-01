@@ -17,6 +17,7 @@
 #include <qml/appmode.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
+#include <qml/androidcustomdatadir.h>
 #endif
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
@@ -47,6 +48,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QSettings>
 #include <QString>
 #include <QStyleHints>
 #include <QUrl>
@@ -160,6 +162,194 @@ void setupChainQSettings(QGuiApplication* app, QString chain)
         app->setApplicationName(QAPP_APP_NAME_REGTEST);
     }
 }
+
+bool setCustomDataDir(QString strDataDir)
+{
+    if(fs::exists(GUIUtil::QStringToPath(strDataDir))){
+        gArgs.SoftSetArg("-datadir", fs::PathToString(GUIUtil::QStringToPath(strDataDir)));
+        gArgs.ClearPathCache();
+    return true;
+    } else {
+        return false;
+    }
+}
+
+QGuiApplication* m_app;
+QQmlApplicationEngine* m_engine;
+boost::signals2::connection m_handler_message_box;
+std::unique_ptr<interfaces::Init> m_init;
+std::unique_ptr<interfaces::Node> m_node;
+std::unique_ptr<interfaces::Chain> m_chain;
+NodeModel* m_node_model{nullptr};
+InitExecutor* m_executor{nullptr};
+ChainModel* m_chain_model{nullptr};
+OptionsQmlModel* m_options_model{nullptr};
+int m_argc;
+char** m_argv;
+NetworkTrafficTower* m_network_traffic_tower;
+PeerTableModel* m_peer_model;
+PeerListSortProxy* m_peer_model_sort_proxy;
+bool m_isOnboarded;
+WalletController *m_wallet_controller;
+WalletListModel *m_wallet_list_model;
+
+bool createNode(QGuiApplication& app, QQmlApplicationEngine& engine, int& argc, char* argv[], ArgsManager& gArgs)
+{
+    m_engine = &engine;
+
+    InitLogging(gArgs);
+    InitParameterInteraction(gArgs);
+
+    m_init = interfaces::MakeGuiInit(argc, argv);
+
+    m_node = m_init->makeNode();
+    m_chain = m_init->makeChain();
+
+    if (!m_node->baseInitialize()) {
+        // A dialog with detailed error will have been shown by InitError().
+        return EXIT_FAILURE;
+    }
+
+    m_handler_message_box.disconnect();
+
+    m_node_model = new NodeModel{*m_node};
+    m_executor = new InitExecutor{*m_node};
+    QObject::connect(m_node_model, &NodeModel::requestedInitialize, m_executor, &InitExecutor::initialize);
+    QObject::connect(m_node_model, &NodeModel::requestedShutdown, m_executor, &InitExecutor::shutdown);
+    QObject::connect(m_executor, &InitExecutor::initializeResult, m_node_model, &NodeModel::initializeResult);
+    QObject::connect(m_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
+
+    m_network_traffic_tower = new NetworkTrafficTower{*m_node_model};
+#ifdef __ANDROID__
+    AndroidNotifier android_notifier{*m_node_model};
+#endif
+
+    m_chain_model = new ChainModel{*m_chain};
+    m_chain_model->setCurrentNetworkName(QString::fromStdString(ChainTypeToString(gArgs.GetChainType())));
+    setupChainQSettings(m_app, m_chain_model->currentNetworkName());
+
+    QObject::connect(m_node_model, &NodeModel::setTimeRatioList, m_chain_model, &ChainModel::setTimeRatioList);
+    QObject::connect(m_node_model, &NodeModel::setTimeRatioListInitial, m_chain_model, &ChainModel::setTimeRatioListInitial);
+
+    qGuiApp->setQuitOnLastWindowClosed(false);
+    QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
+        m_node->startShutdown();
+    });
+
+    m_peer_model = new PeerTableModel{*m_node, nullptr};
+    m_peer_model_sort_proxy = new PeerListSortProxy{nullptr};
+    m_peer_model_sort_proxy->setSourceModel(m_peer_model);
+
+    m_wallet_controller = new WalletController{*m_node};
+
+    m_wallet_list_model = new WalletListModel{*m_node, nullptr};
+
+    m_engine->rootContext()->setContextProperty("networkTrafficTower", m_network_traffic_tower);
+    m_engine->rootContext()->setContextProperty("nodeModel", m_node_model);
+    m_engine->rootContext()->setContextProperty("chainModel", m_chain_model);
+    m_engine->rootContext()->setContextProperty("peerTableModel", m_peer_model);
+    m_engine->rootContext()->setContextProperty("peerListModelProxy", m_peer_model_sort_proxy);
+    m_engine->rootContext()->setContextProperty("walletController", m_wallet_controller);
+    m_engine->rootContext()->setContextProperty("walletListModel", m_wallet_list_model);
+
+    m_options_model->setNode(&(*m_node), m_isOnboarded);
+
+    QObject::connect(m_options_model, &OptionsQmlModel::requestedShutdown, m_executor, &InitExecutor::shutdown);
+
+    m_engine->rootContext()->setContextProperty("optionsModel", m_options_model);
+
+    m_node_model->startShutdownPolling();
+
+    return true;
+}
+
+void startNodeAndTransitionSlot() { createNode(*m_app, *m_engine, m_argc, m_argv, gArgs); }
+
+int initializeAndRunApplication(QGuiApplication* app, QQmlApplicationEngine* m_engine) {
+    AppMode app_mode = SetupAppMode();
+
+    // Register the singleton instance for AppMode with the QML engine
+    qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
+
+    // Register custom QML types
+    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
+    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+
+    // Load the main QML file
+    m_engine->load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
+
+    // Check if the QML engine failed to load the main QML file
+    if (m_engine->rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
+    }
+
+    // Get the first root object as a QQuickWindow
+    auto window = qobject_cast<QQuickWindow*>(m_engine->rootObjects().first());
+    if (!window) {
+        return EXIT_FAILURE;
+    }
+
+    // Install the custom message handler for qDebug()
+    qInstallMessageHandler(DebugMessageHandler);
+
+    // Log the graphics API in use
+    qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
+
+    // Execute the application
+    return qGuiApp->exec();
+}
+
+bool startNode(QGuiApplication& app, QQmlApplicationEngine& engine, int& argc, char* argv[])
+{
+    m_engine = &engine;
+    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
+    assert(!network_style.isNull());
+    m_engine->addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
+
+    m_isOnboarded = true;
+
+    m_options_model = new OptionsQmlModel{nullptr, m_isOnboarded};
+    m_engine->rootContext()->setContextProperty("optionsModel", m_options_model);
+
+    // the settings.json file is read and parsed before creating the node
+    std::string error;
+    /// Read and parse settings.json file.
+    std::vector<std::string> errors;
+    if (!gArgs.ReadSettingsFile(&errors)) {
+        error = strprintf("Failed loading settings file:\n%s\n", MakeUnorderedList(errors));
+        InitError(Untranslated(error));
+        return EXIT_FAILURE;
+    }
+
+    createNode(*m_app, *m_engine, argc, argv, gArgs);
+
+    initializeAndRunApplication(&app, m_engine);
+    return true;
+}
+
+bool startOnboarding(QGuiApplication& app, QQmlApplicationEngine& engine, ArgsManager& gArgs)
+{
+    m_engine = &engine;
+    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
+    assert(!network_style.isNull());
+    m_engine->addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
+
+    m_isOnboarded = false;
+
+    m_options_model = new OptionsQmlModel{nullptr, m_isOnboarded};
+
+    if (gArgs.IsArgSet("-resetguisettings")) {
+        m_options_model->defaultReset();
+    }
+
+    m_engine->rootContext()->setContextProperty("optionsModel", m_options_model);
+
+    QObject::connect(m_options_model, &OptionsQmlModel::onboardingFinished, startNodeAndTransitionSlot);
+
+    initializeAndRunApplication(&app, m_engine);
+
+    return true;
+}
 } // namespace
 
 
@@ -177,9 +367,7 @@ int QmlGuiMain(int argc, char* argv[])
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
-    auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
-
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+    auto m_handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
     SetupEnvironment();
     util::ThreadSetInternalName("main");
@@ -190,6 +378,10 @@ int QmlGuiMain(int argc, char* argv[])
     app.setOrganizationName(QAPP_ORG_NAME);
     app.setOrganizationDomain(QAPP_ORG_DOMAIN);
     app.setApplicationName(QAPP_APP_NAME_DEFAULT);
+
+    QSettings settings;
+    QString dataDir;
+    dataDir = settings.value("strDataDir", dataDir).toString();
 
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
@@ -220,20 +412,24 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    /// Read and parse settings.json file.
-    std::vector<std::string> errors;
-    if (!gArgs.ReadSettingsFile(&errors)) {
-        error = strprintf("Failed loading settings file:\n%s\n", MakeUnorderedList(errors));
-        InitError(Untranslated(error));
-        return EXIT_FAILURE;
-    }
-
     QVariant need_onboarding(true);
-    if (gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) {
+#ifdef __ANDROID__
+    AndroidCustomDataDir custom_data_dir;
+    QString storePath = custom_data_dir.readCustomDataDir();
+    if (!storePath.isEmpty()) {
+        custom_data_dir.setDataDir(storePath);
         need_onboarding.setValue(false);
     } else if (ConfigurationFileExists(gArgs)) {
         need_onboarding.setValue(false);
     }
+#else
+    if ((gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) || fs::exists(GUIUtil::QStringToPath(dataDir)) ) {
+        setCustomDataDir(dataDir);
+        need_onboarding.setValue(false);
+    } else if (ConfigurationFileExists(gArgs)) {
+        need_onboarding.setValue(false);
+    }
+#endif // __ANDROID__
 
     if (gArgs.IsArgSet("-resetguisettings")) {
         need_onboarding.setValue(true);
@@ -242,95 +438,22 @@ int QmlGuiMain(int argc, char* argv[])
     // Default printtoconsole to false for the GUI. GUI programs should not
     // print to the console unnecessarily.
     gArgs.SoftSetBoolArg("-printtoconsole", false);
-    InitLogging(gArgs);
-    InitParameterInteraction(gArgs);
 
     GUIUtil::LogQtInfo();
-
-    std::unique_ptr<interfaces::Node> node = init->makeNode();
-    std::unique_ptr<interfaces::Chain> chain = init->makeChain();
-    if (!node->baseInitialize()) {
-        // A dialog with detailed error will have been shown by InitError().
-        return EXIT_FAILURE;
-    }
-
-    handler_message_box.disconnect();
-
-    NodeModel node_model{*node};
-    InitExecutor init_executor{*node};
-    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
-    QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
-    QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
-    // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
-
-    NetworkTrafficTower network_traffic_tower{node_model};
-#ifdef __ANDROID__
-    AndroidNotifier android_notifier{node_model};
-#endif
-
-    ChainModel chain_model{*chain};
-    chain_model.setCurrentNetworkName(QString::fromStdString(ChainTypeToString(gArgs.GetChainType())));
-    setupChainQSettings(&app, chain_model.currentNetworkName());
-
-    QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
-    QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
-
-    qGuiApp->setQuitOnLastWindowClosed(false);
-    QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
-        node->startShutdown();
-    });
-
-    PeerTableModel peer_model{*node, nullptr};
-    PeerListSortProxy peer_model_sort_proxy{nullptr};
-    peer_model_sort_proxy.setSourceModel(&peer_model);
-
     GUIUtil::LoadFont(":/fonts/inter/regular");
     GUIUtil::LoadFont(":/fonts/inter/semibold");
 
-    WalletController wallet_controller(*node);
+    m_app = &app;
 
     QQmlApplicationEngine engine;
 
-    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
-    assert(!network_style.isNull());
-    engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
-
-    WalletListModel wallet_list_model{*node, nullptr};
-
-    engine.rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
-    engine.rootContext()->setContextProperty("nodeModel", &node_model);
-    engine.rootContext()->setContextProperty("chainModel", &chain_model);
-    engine.rootContext()->setContextProperty("peerTableModel", &peer_model);
-    engine.rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
-    engine.rootContext()->setContextProperty("walletController", &wallet_controller);
-    engine.rootContext()->setContextProperty("walletListModel", &wallet_list_model);
-
-    OptionsQmlModel options_model(*node, !need_onboarding.toBool());
-    engine.rootContext()->setContextProperty("optionsModel", &options_model);
     engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
 
-    AppMode app_mode = SetupAppMode();
-
-    qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
-    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
-    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
-
-    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));
-    if (engine.rootObjects().isEmpty()) {
-        return EXIT_FAILURE;
+    if(need_onboarding.toBool()) {
+        startOnboarding(*m_app, engine, gArgs);
+    } else {
+        startNode(*m_app, engine, argc, argv);
     }
 
-    auto window = qobject_cast<QQuickWindow*>(engine.rootObjects().first());
-    if (!window) {
-        return EXIT_FAILURE;
-    }
-
-    // Install qDebug() message handler to route to debug.log
-    qInstallMessageHandler(DebugMessageHandler);
-
-    qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
-
-    node_model.startShutdownPolling();
-    return qGuiApp->exec();
+    return 0;
 }
