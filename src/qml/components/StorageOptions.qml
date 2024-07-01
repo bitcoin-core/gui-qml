@@ -22,7 +22,7 @@ ColumnLayout {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Reduce storage")
-        description: qsTr("Uses about %1GB. For simple wallet use.").arg(chainModel.assumedChainstateSize + 2)
+        description: qsTr("Uses about %1GB. For simple wallet use.").arg(optionsModel.assumedChainstateSize + 2)
         recommended: true
         checked: !root.customStorage && optionsModel.prune
         onClicked: {
@@ -40,7 +40,7 @@ ColumnLayout {
         text: qsTr("Store all data")
         checked: !optionsModel.prune
         description: qsTr("Uses about %1GB. Support the network.").arg(
-            chainModel.assumedBlockchainSize + chainModel.assumedChainstateSize)
+            optionsModel.assumedBlockchainSize + optionsModel.assumedChainstateSize)
         onClicked: {
             optionsModel.prune = false
         }

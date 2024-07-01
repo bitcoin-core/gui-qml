@@ -49,14 +49,14 @@ ApplicationWindow {
         focus: true
         Keys.onReleased: {
             if (event.key == Qt.Key_Back) {
-                nodeModel.requestShutdown()
+                optionsModel.requestShutdown()
                 event.accepted = true
             }
         }
     }
 
     Connections {
-        target: nodeModel
+        target: optionsModel
         function onRequestedShutdown() {
             main.clear()
             main.push(shutdown)
@@ -78,6 +78,7 @@ ApplicationWindow {
             OnboardingConnection {}
 
             onFinishedChanged: {
+                optionsModel.onboardingFinished()
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
