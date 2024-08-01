@@ -142,5 +142,25 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/tooltip-arrow-light").pixmap(requested_size);
     }
 
+    if (id == "add-wallet-dark") {
+        *size = requested_size;
+        return QIcon(":/icons/add-wallet-dark").pixmap(requested_size);
+    }
+
+    if (id == "wallet") {
+        *size = requested_size;
+        return QIcon(":/icons/wallet").pixmap(requested_size);
+    }
+
+    if (id == "visible") {
+        *size = requested_size;
+        return QIcon(":/icons/visible").pixmap(requested_size);
+    }
+
+    if (id == "hidden") {
+        *size = requested_size;
+        return QIcon(":/icons/hidden").pixmap(requested_size);
+    }
+
     return {};
 }
