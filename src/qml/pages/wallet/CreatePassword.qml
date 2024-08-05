@@ -62,6 +62,7 @@ Page {
             Layout.topMargin: 5
             Layout.leftMargin: 20
             Layout.rightMargin: 20
+            focus: true
             hideText: true
             placeholderText: qsTr("Enter password...")
         }
