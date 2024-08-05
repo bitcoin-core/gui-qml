@@ -40,6 +40,7 @@ Page {
 
         CoreTextField {
             id: walletNameInput
+            focus: true
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
