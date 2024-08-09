@@ -162,5 +162,9 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/hidden").pixmap(requested_size);
     }
 
+    if (id == "plus") {
+        *size = requested_size;
+        return QIcon(":/icons/plus").pixmap(requested_size);
+    }
     return {};
 }
