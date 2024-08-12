@@ -69,6 +69,7 @@ Popup {
             id: listView
             interactive: true
             spacing: 2
+            ScrollBar.vertical: ScrollBar { }
             model: walletListModel
 
             delegate: WalletBadge {
