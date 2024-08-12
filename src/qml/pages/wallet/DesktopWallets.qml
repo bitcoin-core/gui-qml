@@ -21,26 +21,25 @@ Page {
 
     header: NavigationBar2 {
         id: navBar
-        leftItem: RowLayout {
-            spacing: 5
-            Icon {
-                source: "image://images/singlesig-wallet"
-                color: Theme.color.neutral8
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                Layout.leftMargin: 10
+        leftItem: WalletBadge {
+            implicitWidth: 154
+            implicitHeight: 46
+            text: walletListModel.selectedWallet
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    walletListModel.listWalletDir()
+                    walletSelect.opened ? walletSelect.close() : walletSelect.open()
+                }
             }
-            Column {
-                spacing: 2
-                CoreText {
-                    text: "Singlesig Wallet"
-                    color: Theme.color.neutral7
-                    bold: true
-                }
-                CoreText {
-                    text: "<font color=\""+Theme.color.white+"\">₿</font> 0.00 <font color=\""+Theme.color.white+"\">167 599</font>"
-                    color: Theme.color.neutral7
-                }
+
+            WalletSelect {
+                id: walletSelect
+                model: walletListModel
+                closePolicy: Popup.CloseOnPressOutside
+                x: 0
+                y: parent.height
             }
         }
         centerItem: RowLayout {

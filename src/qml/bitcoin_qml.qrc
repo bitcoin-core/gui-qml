@@ -73,6 +73,8 @@
         <file>pages/wallet/CreateName.qml</file>
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/WalletBadge.qml</file>
+        <file>pages/wallet/WalletSelect.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
@@ -95,6 +97,7 @@
         <file alias="info">res/icons/info.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
+        <file alias="plus">res/icons/plus.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
         <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
