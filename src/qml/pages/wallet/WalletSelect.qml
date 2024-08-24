@@ -16,6 +16,8 @@ Popup {
     implicitWidth: 250
     clip: true
 
+    signal addWallet()
+
     background: Item {
         anchors.fill: parent
         Rectangle {
@@ -90,6 +92,10 @@ Popup {
 
         AddWalletButton {
             id: addWallet
+            onClicked: {
+                root.addWallet()
+                root.close()
+            }
         }
     }
 }
