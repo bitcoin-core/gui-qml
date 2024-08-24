@@ -81,7 +81,7 @@ ApplicationWindow {
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
-                    main.push(addWallet)
+                    main.push(addWalletFlow)
                 } else {
                     main.push(node)
                 }
@@ -91,11 +91,15 @@ ApplicationWindow {
 
     Component {
         id: desktopWallets
-        DesktopWallets {}
+        DesktopWallets {
+            onAddWallet: {
+                main.push(addWalletFlow)
+            }
+        }
     }
 
     Component {
-        id: addWallet
+        id: addWalletFlow
         AddWallet {
             onFinished: {
                 main.pop()
