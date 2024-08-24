@@ -88,29 +88,8 @@ Popup {
             }
         }
 
-        RowLayout {
+        AddWalletButton {
             id: addWallet
-            Layout.preferredWidth: addIcon.size + addText.width
-            Layout.preferredHeight: 45
-            Layout.alignment: Qt.AlignHCenter
-            Icon {
-                id: addIcon
-                Layout.alignment: Qt.AlignHCenter
-                source: "image://images/plus"
-                color: Theme.color.neutral8
-                size: 14
-                topPadding: 5
-                bottomPadding: 10
-            }
-            CoreText {
-                id: addText
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Add Wallet")
-                color: Theme.color.neutral9
-                font.pixelSize: 15
-                topPadding: 5
-                bottomPadding: 10
-            }
         }
     }
 }
