@@ -16,6 +16,8 @@ Popup {
     implicitWidth: 250
     clip: true
 
+    signal addWallet()
+
     background: Item {
         anchors.fill: parent
         Rectangle {
@@ -95,6 +97,10 @@ Popup {
             Layout.alignment: Qt.AlignHCenter
             Layout.preferredWidth: 220
             Layout.preferredHeight: 30
+            onClicked: {
+                root.addWallet()
+                root.close()
+            }
         }
     }
 }
