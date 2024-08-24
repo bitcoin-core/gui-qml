@@ -382,6 +382,7 @@ QML_RES_QML = \
   qml/components/ThemeSettings.qml \
   qml/components/TotalBytesIndicator.qml \
   qml/components/Tooltip.qml \
+  qml/controls/AddWalletButton.qml \
   qml/controls/CaretRightIcon.qml \
   qml/controls/ContinueButton.qml \
   qml/controls/CoreText.qml \
