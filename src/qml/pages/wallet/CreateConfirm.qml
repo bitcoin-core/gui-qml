@@ -55,6 +55,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             header: qsTr("Your wallet has been created")
+            headerBold: true
             description: qsTr("It is good practice to make a small test transaction before you actively use this wallet for larger amounts.")
         }
 

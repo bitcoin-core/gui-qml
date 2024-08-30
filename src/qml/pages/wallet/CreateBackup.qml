@@ -55,6 +55,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             header: qsTr("Back up your wallet")
+            headerBold: true
             description: qsTr("Your wallet is a file stored on your hard disk.\nTo prevent accidental loss, it is recommended you keep a copy of your wallet file in a secure place, like a dedicated USB Drive.")
         }
 
