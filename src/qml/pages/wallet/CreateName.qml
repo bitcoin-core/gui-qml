@@ -36,6 +36,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             header: qsTr("Choose a wallet name")
+            headerBold: true
         }
 
         CoreTextField {

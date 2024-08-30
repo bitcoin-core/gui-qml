@@ -72,7 +72,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             Layout.fillWidth: true
-            color: Theme.color.neutral7
+            color: Theme.color.neutral4
         }
 
         CoreText {
@@ -88,7 +88,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             Layout.fillWidth: true
-            color: Theme.color.neutral7
+            color: Theme.color.neutral4
         }
 
         CoreText {
