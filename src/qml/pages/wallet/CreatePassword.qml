@@ -44,6 +44,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             header: qsTr("Choose a password")
+            headerBold: true
             description: qsTr("It is recommended to set a password to protect your wallet file from unwanted access from others.")
         }
 
