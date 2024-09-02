@@ -46,6 +46,7 @@ StackView {
                 Layout.leftMargin: 20
                 Layout.rightMargin: 20
                 header: qsTr("Add a wallet")
+                headerBold: true
                 description: qsTr("In this early stage of development, only wallet.dat files are supported.")
             }
 
