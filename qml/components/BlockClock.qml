@@ -32,6 +32,7 @@ Item {
     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
     property string syncTime: syncState.text
     property bool estimating: syncState.estimating
+    property bool faulted: nodeModel.faulted
 
     activeFocusOnTab: true
 
@@ -50,7 +51,7 @@ Item {
         penWidth: dial.width / 50
         timeRatioList: chainModel.timeRatioList
         verificationProgress: nodeModel.verificationProgress
-        paused: root.paused
+        paused: root.paused || root.faulted
         connected: root.connected
         synced: nodeModel.verificationProgress > 0.999
         backgroundColor: Theme.color.neutral2
@@ -143,7 +144,7 @@ Item {
         maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
         indicatorDimensions: dial.width * (3/200)
         indicatorSpacing: dial.width / 40
-        paused: root.paused
+        paused: root.paused || root.faulted
     }
 
     NetworkIndicator {
@@ -156,10 +157,13 @@ Item {
 
     MouseArea {
         anchors.fill: dial
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
+        enabled: !root.faulted
         onClicked: {
-            root.paused = !root.paused
-            nodeModel.pause = root.paused
+            if (!root.faulted) {
+                root.paused = !root.paused
+                nodeModel.pause = root.paused
+            }
         }
         FocusBorder {
             visible: root.activeFocus
@@ -175,6 +179,7 @@ Item {
                 subText: root.syncTime
             }
         },
+
         State {
             name: "BLOCKCLOCK"; when: synced && !paused && connected
             PropertyChanges {
@@ -186,7 +191,7 @@ Item {
         },
 
         State {
-            name: "PAUSE"; when: paused
+            name: "PAUSE"; when: paused && !faulted
             PropertyChanges {
                 target: root
                 header: "Paused"
@@ -201,6 +206,20 @@ Item {
             PropertyChanges {
                 target: subText
                 anchors.topMargin: dial.width / 50
+            }
+        },
+
+        State {
+            name: "ERROR"; when: faulted
+            PropertyChanges {
+                target: root
+                header: "Error"
+                headerSize: dial.width * (3/25)
+            }
+            PropertyChanges {
+                target: bitcoinIcon
+                anchors.bottomMargin: dial.width / 40
+                icon.source: "image://images/error"
             }
         },
 
@@ -223,6 +242,7 @@ Item {
             }
         }
     ]
+
 
     function formatProgressPercentage(progress) {
         if (progress >= 1) {
