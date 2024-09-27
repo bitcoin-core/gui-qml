@@ -433,9 +433,12 @@ QML_RES_QML = \
   qml/pages/wallet/WalletSelect.qml
 
 if TARGET_ANDROID
-BITCOIN_QT_H += qml/androidnotifier.h
-BITCOIN_QML_BASE_CPP += qml/androidnotifier.cpp
-QT_MOC_CPP += qml/moc_androidnotifier.cpp
+BITCOIN_QT_H += qml/androidnotifier.h \
+                qml/androidcustomdatadir.h
+BITCOIN_QML_BASE_CPP += qml/androidnotifier.cpp \
+                        qml/androidcustomdatadir.cpp
+QT_MOC_CPP += qml/moc_androidnotifier.cpp \
+              qml/moc_androidcustomdatadir.cpp
 endif
 
 BITCOIN_QT_CPP = $(BITCOIN_QT_BASE_CPP)
