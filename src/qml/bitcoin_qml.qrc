@@ -29,6 +29,7 @@
         <file>controls/Icon.qml</file>
         <file>controls/InformationPage.qml</file>
         <file>controls/IPAddressValueInput.qml</file>
+        <file>controls/KeyValueRow.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
@@ -51,6 +52,7 @@
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
         <file>pages/node/Peers.qml</file>
+        <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
@@ -96,6 +98,7 @@
         <file alias="gear-outline">res/icons/gear-outline.png</file>
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info">res/icons/info.png</file>
+        <file alias="minus">res/icons/minus.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="plus">res/icons/plus.png</file>

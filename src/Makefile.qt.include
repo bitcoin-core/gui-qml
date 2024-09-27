@@ -41,6 +41,7 @@ QT_MOC_CPP = \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
+  qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
   qml/models/moc_walletlistmodel.cpp \
   qml/moc_appmode.cpp \
@@ -122,6 +123,7 @@ BITCOIN_QT_H = \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
+  qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/walletlistmodel.h \
   qml/appmode.h \
@@ -312,6 +314,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
+  qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/walletlistmodel.cpp \
   qml/imageprovider.cpp \
@@ -385,6 +388,7 @@ QML_RES_QML = \
   qml/controls/Icon.qml \
   qml/controls/InformationPage.qml \
   qml/controls/IPAddressValueInput.qml \
+  qml/controls/KeyValueRow.qml \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
@@ -407,6 +411,7 @@ QML_RES_QML = \
   qml/pages/node/NodeRunner.qml \
   qml/pages/node/NodeSettings.qml \
   qml/pages/node/Peers.qml \
+  qml/pages/node/PeerDetails.qml \
   qml/pages/node/Shutdown.qml \
   qml/pages/onboarding/OnboardingBlockclock.qml \
   qml/pages/onboarding/OnboardingConnection.qml \
