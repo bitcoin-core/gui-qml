@@ -20,6 +20,7 @@
         <file>components/ThemeSettings.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
         <file>components/Tooltip.qml</file>
+        <file>controls/AddWalletButton.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/CoreTextField.qml</file>
