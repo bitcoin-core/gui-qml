@@ -27,6 +27,7 @@ Control {
         required property color blue
         required property color amber
         required property color purple
+        required property color transparent
         required property color neutral0
         required property color neutral1
         required property color neutral2
@@ -59,6 +60,7 @@ Control {
         blue: "#3CA3DE"
         amber: "#C9B500"
         purple: "#C075DC"
+        transparent: "#00000000"
         neutral0: "#000000"
         neutral1: "#1A1A1A"
         neutral2: "#2D2D2D"
@@ -91,6 +93,7 @@ Control {
         blue: "#2D9CDB"
         amber: "#C9B500"
         purple: "#BB6BD9"
+        transparent: "#00000000"
         neutral0: "#FFFFFF"
         neutral1: "#F8F8F8"
         neutral2: "#F4F4F4"
