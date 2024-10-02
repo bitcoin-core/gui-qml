@@ -13,6 +13,11 @@ Item {
     property alias navMiddleDetail: connectionSwipe.navMiddleDetail
     property alias navLeftDetail: connectionSwipe.navLeftDetail
     property alias showHeader: connectionSwipe.showHeader
+
+    function setSnapshotImported(imported) {
+        connection_settings.loadedDetailItem.setSnapshotImported(imported)
+    }
+
     SwipeView {
         id: connectionSwipe
         property alias navRightDetail: connection_settings.navRightDetail
@@ -35,6 +40,15 @@ Item {
         }
         SettingsProxy {
             onBackClicked: {
+                connectionSwipe.decrementCurrentIndex()
+            }
+        }
+        SettingsSnapshot {
+            onSnapshotImportCompleted: {
+                setSnapshotImported(true)
+            }
+            onBackClicked: {
+                connectionSwipe.decrementCurrentIndex()
                 connectionSwipe.decrementCurrentIndex()
             }
         }

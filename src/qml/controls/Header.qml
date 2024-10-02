@@ -25,6 +25,7 @@ ColumnLayout {
     property int subtextSize: 15
     property color subtextColor: Theme.color.neutral9
     property bool wrap: true
+    property real descriptionLineHeight: 1
 
     spacing: 0
     Loader {
@@ -60,6 +61,7 @@ ColumnLayout {
             text: root.description
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+            lineHeight: root.descriptionLineHeight
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
