@@ -340,11 +340,14 @@ QML_RES_ICONS = \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
   qml/res/icons/check.png \
+  qml/res/icons/circle-file.png \
+  qml/res/icons/circle-green-check.png \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
   qml/res/icons/gear.png \
   qml/res/icons/gear-outline.png \
+  qml/res/icons/green-check.png \
   qml/res/icons/hidden.png \
   qml/res/icons/info.png \
   qml/res/icons/minus.png \
@@ -376,6 +379,7 @@ QML_RES_QML = \
   qml/components/NetworkIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
+  qml/components/SnapshotSettings.qml \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
@@ -431,6 +435,7 @@ QML_RES_QML = \
   qml/pages/settings/SettingsDeveloper.qml \
   qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
+  qml/pages/settings/SettingsSnapshot.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
   qml/pages/wallet/CreateBackup.qml \
