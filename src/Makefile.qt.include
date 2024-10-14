@@ -344,6 +344,7 @@ QML_RES_ICONS = \
   qml/res/icons/gear-outline.png \
   qml/res/icons/hidden.png \
   qml/res/icons/info.png \
+  qml/res/icons/minus.png \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
   qml/res/icons/plus.png \
