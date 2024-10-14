@@ -44,8 +44,9 @@ QT_MOC_CPP = \
   qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
   qml/models/moc_walletlistmodel.cpp \
+  qml/models/moc_walletqmlmodel.cpp \
   qml/moc_appmode.cpp \
-  qml/moc_walletcontroller.cpp \
+  qml/moc_walletqmlcontroller.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
   qt/moc_askpassphrasedialog.cpp \
@@ -126,12 +127,13 @@ BITCOIN_QT_H = \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/walletlistmodel.h \
+  qml/models/walletqmlmodel.h \
   qml/appmode.h \
   qml/bitcoin.h \
   qml/guiconstants.h \
   qml/imageprovider.h \
   qml/util.h \
-  qml/walletcontroller.h \
+  qml/walletqmlcontroller.h \
   qt/addressbookpage.h \
   qt/addresstablemodel.h \
   qt/askpassphrasedialog.h \
@@ -317,9 +319,10 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/walletlistmodel.cpp \
+  qml/models/walletqmlmodel.cpp \
   qml/imageprovider.cpp \
   qml/util.cpp \
-  qml/walletcontroller.cpp
+  qml/walletqmlcontroller.cpp
 
 QML_RES_FONTS = \
   qml/res/fonts/Inter-Regular.otf \
