@@ -16,6 +16,9 @@
 #include <QMetaObject>
 #include <QTimerEvent>
 #include <QString>
+#include <QThread>
+#include <QUrl>
+#include <QDebug>
 
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
@@ -121,6 +124,8 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
     setVerificationProgress(tip_info.verification_progress);
 
     Q_EMIT setTimeRatioListInitial();
+    // TODO: fix this so that it works once storing the snapshot path is implemented
+    Q_EMIT initializationFinished();
 }
 
 void NodeModel::startShutdownPolling()
@@ -165,4 +170,26 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
         [this](PeersNumByType new_num_peers) {
             setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
         });
+}
+
+// Loads a snapshot from a given path using FileDialog
+void NodeModel::initializeSnapshot(bool initLoadSnapshot, QString path_file) {
+    if (initLoadSnapshot) {
+        // TODO: this is to deal with FileDialog returning a QUrl
+        path_file = QUrl(path_file).toLocalFile();
+        // TODO: Remove this before release
+        // qDebug() << "path_file: " << path_file;
+        QThread* snapshot_thread = new QThread();
+
+        // Capture path_file by value
+        auto lambda = [this, path_file]() {
+            bool result = this->snapshotLoad(path_file);
+            Q_EMIT snapshotLoaded(result);
+        };
+
+        connect(snapshot_thread, &QThread::started, lambda);
+        connect(snapshot_thread, &QThread::finished, snapshot_thread, &QThread::deleteLater);
+
+        snapshot_thread->start();
+    }
 }

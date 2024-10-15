@@ -22,11 +22,27 @@ Page {
         }
     }
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    Component.onCompleted: {
+        nodeModel.startNodeInitializionThread();
+        // TODO: Fix this so that it works once storing the snapshot path is implemented
+        // nodeModel.initializationFinished.connect(onInitializationFinished);
+        nodeModel.initializationFinished.connect(function() {
+            console.log("Initialization finished, initializing snapshot...")
+        });
+    }
 
     BlockClock {
         parentWidth: parent.width - 40
         parentHeight: parent.height
         anchors.centerIn: parent
+    }
+
+    function onInitializationFinished() {
+        // TODO: Fix this so that it works once storing the snapshot path is implemented
+        console.log("Initialization finished, initializing snapshot...")
+        // if (optionsModel.getLoadUtxo() && !optionsModel.getSnapshotLoaded()) {
+        // nodeModel.initializeSnapshot(true, optionsModel.getSnapshotDirectory());
+        // optionsModel.setSnapshotLoaded(true);
+        // }
     }
 }

@@ -5,6 +5,8 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs 1.3
+
 
 import "../controls"
 
@@ -18,7 +20,7 @@ ColumnLayout {
     width: Math.min(parent.width, 450)
     anchors.horizontalCenter: parent.horizontalCenter
 
-
+    // TODO: Remove simulation timer before release
     Timer {
         id: snapshotSimulationTimer
         interval: 50 // Update every 50ms
@@ -78,8 +80,25 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Choose snapshot file")
                 onClicked: {
-                    settingsStack.currentIndex = 1
-                    snapshotSimulationTimer.start()
+                    // TODO: Connect this to snapshot loading
+                    // settingsStack.currentIndex = 1
+                    fileDialog.open()
+                }
+            }
+
+            FileDialog {
+                id: fileDialog
+                folder: shortcuts.home
+                selectMultiple: false
+                onAccepted: {
+                    console.log("File chosen:", fileDialog.fileUrls)
+                    var snapshotFileName = fileDialog.fileUrl.toString()
+                    console.log("Snapshot file name:", snapshotFileName)
+                    if (snapshotFileName.endsWith(".dat")) {
+                        // optionsModel.setSnapshotDirectory(snapshotFileName)
+                        // console.log("Snapshot directory set:", optionsModel.getSnapshotDirectory())
+                        nodeModel.initializeSnapshot(true, snapshotFileName)
+                    }
                 }
             }
         }
