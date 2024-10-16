@@ -17,6 +17,8 @@ Page {
         anchors.fill: parent
         interactive: false
         orientation: Qt.Vertical
+        // TODO: Remove this once storing the snapshot path is implemented
+        property bool isOnboarding: true
         InformationPage {
             navLeftDetail: NavButton {
                 iconSource: "image://images/caret-left"
@@ -49,6 +51,8 @@ Page {
             buttonMargin: 20
         }
         SettingsConnection {
+            // TODO: Remove this once storing the snapshot path is implemented
+            isOnboarding: connections.isOnboarding
             navRightDetail: NavButton {
                 text: qsTr("Done")
                 onClicked: {

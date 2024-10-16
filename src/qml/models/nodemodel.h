@@ -59,6 +59,9 @@ public:
     Q_INVOKABLE void startNodeInitializionThread();
     Q_INVOKABLE void requestShutdown();
 
+    Q_INVOKABLE void initializeSnapshot(bool initLoadSnapshot, QString path_file);
+    Q_INVOKABLE bool snapshotLoad(QString path_file) const { return m_node.snapshotLoad(path_file.toStdString()); }
+
     void startShutdownPolling();
     void stopShutdownPolling();
 
@@ -77,6 +80,8 @@ Q_SIGNALS:
 
     void setTimeRatioList(int new_time);
     void setTimeRatioListInitial();
+    void initializationFinished();
+    void snapshotLoaded(bool result);
 
 protected:
     void timerEvent(QTimerEvent* event) override;

@@ -13,8 +13,18 @@ Item {
     property alias navMiddleDetail: connectionSwipe.navMiddleDetail
     property alias navLeftDetail: connectionSwipe.navLeftDetail
     property alias showHeader: connectionSwipe.showHeader
+
+    // TODO: Remove this once storing the snapshot path is implemented
+    property bool isOnboarding: false
+
+    function setSnapshotImported(imported) {
+        connection_settings.loadedDetailItem.setSnapshotImported(imported)
+    }
+
     SwipeView {
         id: connectionSwipe
+        // TODO: Remove this once storing the snapshot path is implemented
+        property bool isOnboarding: parent.isOnboarding
         property alias navRightDetail: connection_settings.navRightDetail
         property alias navMiddleDetail: connection_settings.navMiddleDetail
         property alias navLeftDetail: connection_settings.navLeftDetail
@@ -31,10 +41,21 @@ Item {
             headerText: qsTr("Connection settings")
             headerMargin: 0
             detailActive: true
-            detailItem: ConnectionSettings {}
+            detailItem: ConnectionSettings {
+                isOnboarding: connectionSwipe.isOnboarding
+            }
         }
         SettingsProxy {
             onBackClicked: {
+                connectionSwipe.decrementCurrentIndex()
+            }
+        }
+        SettingsSnapshot {
+            onSnapshotImportCompleted: {
+                setSnapshotImported(true)
+            }
+            onBackClicked: {
+                connectionSwipe.decrementCurrentIndex()
                 connectionSwipe.decrementCurrentIndex()
             }
         }

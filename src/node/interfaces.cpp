@@ -29,6 +29,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <node/transaction.h>
+#include <node/utxo_snapshot.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -394,6 +395,65 @@ public:
     void setContext(NodeContext* context) override
     {
         m_context = context;
+    }
+    bool snapshotLoad(const std::string& path_string) override
+    {
+        const fs::path path = fs::u8path(path_string);
+        if (!fs::exists(path)) {
+            LogPrintf("[loadsnapshot] Snapshot file %s does not exist\n", path.u8string());
+            return false;
+        }
+
+        AutoFile afile{fsbridge::fopen(path, "rb")};
+        if (afile.IsNull()) {
+            LogPrintf("[loadsnapshot] Failed to open snapshot file %s\n", path.u8string());
+            return false;
+        }
+
+        SnapshotMetadata metadata;
+        try {
+            afile >> metadata;
+        } catch (const std::exception& e) {
+            LogPrintf("[loadsnapshot] Failed to read snapshot metadata: %s\n", e.what());
+            return false;
+        }
+
+        const uint256& base_blockhash = metadata.m_base_blockhash;
+        LogPrintf("[loadsnapshot] Waiting for blockheader %s in headers chain before snapshot activation\n",
+            base_blockhash.ToString());
+
+        if (!m_context->chainman) {
+            LogPrintf("[loadsnapshot] Chainman is null\n");
+            return false;
+        }
+
+        ChainstateManager& chainman = *m_context->chainman;
+        CBlockIndex* snapshot_start_block = nullptr;
+
+        // Wait for the block to appear in the block index
+        constexpr int max_wait_seconds = 600; // 10 minutes
+        for (int i = 0; i < max_wait_seconds; ++i) {
+            snapshot_start_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(base_blockhash));
+            if (snapshot_start_block) break;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        if (!snapshot_start_block) {
+            LogPrintf("[loadsnapshot] Timed out waiting for snapshot start blockheader %s\n", base_blockhash.ToString());
+            return false;
+        }
+
+        // Activate the snapshot
+        if (!chainman.ActivateSnapshot(afile, metadata, false)) {
+            LogPrintf("[loadsnapshot] Unable to load UTXO snapshot %s\n", path.u8string());
+            return false;
+        }
+
+        CBlockIndex* new_tip = WITH_LOCK(::cs_main, return chainman.ActiveTip());
+        LogPrintf("[loadsnapshot] Loaded %d coins from snapshot %s at height %d\n",
+                  metadata.m_coins_count, new_tip->GetBlockHash().ToString(), new_tip->nHeight);
+
+        return true;
     }
     ArgsManager& args() { return *Assert(Assert(m_context)->args); }
     ChainstateManager& chainman() { return *Assert(m_context->chainman); }
