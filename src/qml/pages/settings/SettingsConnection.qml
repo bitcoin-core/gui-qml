@@ -31,7 +31,9 @@ Item {
             headerText: qsTr("Connection settings")
             headerMargin: 0
             detailActive: true
-            detailItem: ConnectionSettings {}
+            detailItem: ConnectionSettings {
+                onNext: connectionSwipe.incrementCurrentIndex()
+            }
         }
         SettingsProxy {
             onBackClicked: {

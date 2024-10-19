@@ -32,7 +32,9 @@ Item {
             description: qsTr("Bitcoin Core is an open source project.\nIf you find it useful, please contribute.\n\n This is experimental software.")
             descriptionMargin: 20
             detailActive: true
-            detailItem: AboutOptions {}
+            detailItem: AboutOptions {
+                onNext: aboutSwipe.incrementCurrentIndex()
+            }
         }
         SettingsDeveloper {
             id: about_developer
