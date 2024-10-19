@@ -79,7 +79,7 @@ Item {
             }
         }
         SettingsProxy {
-            onBackClicked: {
+            onBack: {
                 connectionSwipe.decrementCurrentIndex()
             }
         }
