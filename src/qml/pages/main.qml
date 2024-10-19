@@ -98,7 +98,7 @@ ApplicationWindow {
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
-                    main.push(addWallet)
+                    main.push(createWalletWizard)
                 } else {
                     main.push(node)
                 }
@@ -112,8 +112,8 @@ ApplicationWindow {
     }
 
     Component {
-        id: addWallet
-        AddWallet {
+        id: createWalletWizard
+        CreateWalletWizard {
             onFinished: {
                 main.pop()
             }

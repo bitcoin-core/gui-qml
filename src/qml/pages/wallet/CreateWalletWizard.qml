@@ -11,9 +11,10 @@ import "../settings"
 import "../wallet"
 
 StackView {
-    id: addWalletStack
+    id: root
 
     signal finished()
+    property string walletName: ""
 
     initialItem: Page {
         background: null
@@ -23,7 +24,7 @@ StackView {
             rightItem: NavButton {
                 text: qsTr("Skip")
                 onClicked: {
-                    addWalletStack.finished()
+                    root.finished()
                 }
             }
         }
@@ -59,7 +60,7 @@ StackView {
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Create wallet")
                 onClicked: {
-                    addWalletStack.push("qrc:/qml/pages/wallet/CreateIntro.qml");
+                    root.push(intro)
                 }
             }
 
@@ -79,5 +80,44 @@ StackView {
             }
         }
     }
+    Component {
+        id: intro
+        CreateIntro {
+            onBack: root.pop()
+            onNext: root.push(name)
+        }
+    }
+    Component {
+        id: name
+        CreateName {
+            id: createName
+            onBack: root.pop()
+            onNext: {
+                root.walletName = createName.walletName
+                root.push(password)
+            }
+        }
+    }
+    Component {
+        id: password
+        CreatePassword {
+            walletName: root.walletName
+            onBack: root.pop()
+            onNext: root.push(confirm)
+        }
+    }
+    Component {
+        id: confirm
+        CreateConfirm {
+            onBack: root.pop()
+            onNext: root.push(backup)
+        }
+    }
+    Component {
+        id: backup
+        CreateBackup {
+            onBack: root.pop()
+            onNext: root.finished()
+        }
+    }
 }
-
