@@ -12,6 +12,9 @@ import "../settings"
 
 Page {
     id: root
+    signal back
+    signal next
+    property string walletName: ""
     background: null
 
     header: NavigationBar2 {
@@ -20,7 +23,7 @@ Page {
             iconSource: "image://images/caret-left"
             text: qsTr("Back")
             onClicked: {
-                root.StackView.view.pop()
+                root.back()
             }
         }
     }
@@ -46,7 +49,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             placeholderText: qsTr("Eg. My bitcoin wallet...")
-            validator: RegExpValidator { regExp: /^[a-zA-Z0-9_]{1,20}$/ }
+            validator: RegularExpressionValidator { regularExpression: /^[a-zA-Z0-9_]{1,20}$/ }
             onTextChanged: {
                 continueButton.enabled = walletNameInput.text.length > 0
             }
@@ -62,14 +65,8 @@ Page {
             text: qsTr("Continue")
             onClicked: {
                 console.log("Creating wallet with name: " + walletNameInput.text)
-                root.StackView.view.push(createPassword)
-            }
-        }
-
-        Component {
-            id: createPassword
-            CreatePassword {
-                walletName: walletNameInput.text
+                root.walletName = walletNameInput.text
+                root.next()
             }
         }
     }
