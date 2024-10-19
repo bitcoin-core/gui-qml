@@ -128,7 +128,7 @@ Item {
     Component {
         id: display_page
         SettingsDisplay {
-            onBackClicked: {
+            onBack: {
                 nodeSettingsView.pop()
             }
         }
@@ -148,7 +148,7 @@ Item {
     Component {
         id: peers_page
         Peers {
-            onBackClicked: {
+            onBack: {
                 nodeSettingsView.pop()
                 peerTableModel.stopAutoRefresh();
             }
@@ -160,7 +160,7 @@ Item {
     Component {
         id: peer_details
         PeerDetails {
-            onBackClicked: {
+            onBack: {
                 nodeSettingsView.pop()
             }
         }
