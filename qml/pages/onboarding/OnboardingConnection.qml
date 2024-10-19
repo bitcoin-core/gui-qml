@@ -53,12 +53,8 @@ Page {
             onNext: root.next()
         }
         SettingsConnection {
-            navRightDetail: NavButton {
-                text: qsTr("Done")
-                onClicked: {
-                    connections.decrementCurrentIndex()
-                }
-            }
+            onboarding: true
+            onBack: connections.decrementCurrentIndex()
         }
     }
 }

@@ -53,13 +53,8 @@ Page {
             onNext: root.next()
         }
         SettingsAbout {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    introductions.decrementCurrentIndex()
-                }
-            }
+            onboarding: true
+            onBack: introductions.decrementCurrentIndex()
         }
     }
 }

@@ -19,7 +19,16 @@ InformationPage {
         id: settings
         property alias trafficGraphScale: root.trafficGraphScale
     }
-
+    navLeftDetail: NavButton {
+        iconSource: "image://images/caret-left"
+        text: qsTr("Back")
+        onClicked: root.back()
+    }
+    navMiddleDetail: Header {
+        headerBold: true
+        headerSize: 18
+        header: qsTr("Network traffic")
+    }
     bannerActive: false
     bold: true
     headerText: qsTr("Network Traffic")
