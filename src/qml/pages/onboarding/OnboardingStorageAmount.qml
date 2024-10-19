@@ -54,12 +54,8 @@ Page {
         }
         SettingsStorage {
             id: advancedStorage
-            navRightDetail: NavButton {
-                text: qsTr("Done")
-                onClicked: {
-                    storages.decrementCurrentIndex()
-                }
-            }
+            onboarding: true
+            onBack: storages.decrementCurrentIndex()
         }
     }
 }
