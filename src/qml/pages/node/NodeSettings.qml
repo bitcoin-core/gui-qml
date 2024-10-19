@@ -122,24 +122,7 @@ Item {
     Component {
         id: about_page
         SettingsAbout {
-            showHeader: false
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("About")
-            }
-            devMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Developer settings")
-            }
+            onBack: nodeSettingsView.pop()
         }
     }
     Component {
@@ -153,37 +136,13 @@ Item {
     Component {
         id: storage_page
         SettingsStorage {
-            showHeader: false
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Storage settings")
-            }
+            onBack: nodeSettingsView.pop()
         }
     }
     Component {
         id: connection_page
         SettingsConnection {
-            showHeader: false
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Connection settings")
-            }
+            onBack: nodeSettingsView.pop()
         }
     }
     Component {
@@ -210,18 +169,7 @@ Item {
         id: networktraffic_page
         NetworkTraffic {
             showHeader: false
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    nodeSettingsView.pop()
-                }
-            }
-            navMiddleDetail: Header {
-                headerBold: true
-                headerSize: 18
-                header: qsTr("Network traffic")
-            }
+            onBack: nodeSettingsView.pop()
         }
     }
 }

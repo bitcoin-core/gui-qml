@@ -9,10 +9,46 @@ import "../../controls"
 import "../../components"
 
 InformationPage {
+    id: root
+    property bool onboarding: false
+    navLeftDetail: NavButton {
+        iconSource: "image://images/caret-left"
+        text: qsTr("Back")
+        onClicked: {
+            root.back()
+        }
+    }
     bannerActive: false
     bold: true
+    showHeader: root.onboarding
     headerText: qsTr("Developer options")
     headerMargin: 0
     detailActive: true
     detailItem: DeveloperOptions {}
+
+    states: [
+        State {
+            when: root.onboarding
+            PropertyChanges {
+                target: root
+                navMiddleDetail: null
+            }
+        },
+        State {
+            when: !root.onboarding
+            PropertyChanges {
+                target: root
+                navMiddleDetail: header
+            }
+        }
+    ]
+
+    Component {
+        id: header
+        Header {
+            headerBold: true
+            headerSize: 18
+            header: qsTr("Developer settings")
+        }
+    }
 }
