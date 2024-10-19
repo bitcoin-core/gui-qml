@@ -65,36 +65,8 @@ ApplicationWindow {
 
     Component {
         id: onboardingWizard
-        SwipeView {
-            id: swipeView
-            property bool finished: false
-            interactive: false
-
-            OnboardingCover {
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStrengthen {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingBlockclock {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStorageLocation {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStorageAmount {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingConnection {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.finished = true
-            }
-
-            onFinishedChanged: {
+        OnboardingWizard {
+            onFinished: {
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
