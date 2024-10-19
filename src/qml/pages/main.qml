@@ -70,12 +70,29 @@ ApplicationWindow {
             property bool finished: false
             interactive: false
 
-            OnboardingCover {}
-            OnboardingStrengthen {}
-            OnboardingBlockclock {}
-            OnboardingStorageLocation {}
-            OnboardingStorageAmount {}
-            OnboardingConnection {}
+            OnboardingCover {
+                onNext: swipeView.incrementCurrentIndex()
+            }
+            OnboardingStrengthen {
+                onBack: swipeView.decrementCurrentIndex()
+                onNext: swipeView.incrementCurrentIndex()
+            }
+            OnboardingBlockclock {
+                onBack: swipeView.decrementCurrentIndex()
+                onNext: swipeView.incrementCurrentIndex()
+            }
+            OnboardingStorageLocation {
+                onBack: swipeView.decrementCurrentIndex()
+                onNext: swipeView.incrementCurrentIndex()
+            }
+            OnboardingStorageAmount {
+                onBack: swipeView.decrementCurrentIndex()
+                onNext: swipeView.incrementCurrentIndex()
+            }
+            OnboardingConnection {
+                onBack: swipeView.decrementCurrentIndex()
+                onNext: swipeView.finished = true
+            }
 
             onFinishedChanged: {
                 optionsModel.onboard()
