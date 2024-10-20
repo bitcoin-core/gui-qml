@@ -99,18 +99,24 @@ ApplicationWindow {
 
     Component {
         id: node
-        SwipeView {
-            id: node_swipe
-            interactive: false
-            orientation: Qt.Vertical
-            NodeRunner {
-                onSettingsClicked: {
-                    node_swipe.incrementCurrentIndex()
+        PageStack {
+            id: nodeStack
+            vertical: true
+            initialItem: node
+            Component {
+                id: node
+                NodeRunner {
+                    onSettingsClicked: {
+                        nodeStack.push(nodeSettings)
+                    }
                 }
             }
-            NodeSettings {
-                onDoneClicked: {
-                    node_swipe.decrementCurrentIndex()
+            Component {
+                id: nodeSettings
+                 NodeSettings {
+                    onDoneClicked: {
+                        nodeStack.pop()
+                    }
                 }
             }
         }
