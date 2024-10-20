@@ -14,10 +14,6 @@ Page {
     id: root
 
     background: null
-    implicitWidth: 450
-    leftPadding: 20
-    rightPadding: 20
-    topPadding: 30
 
     header: NavigationBar2 {
         leftItem: NavButton {
