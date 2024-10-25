@@ -38,6 +38,7 @@
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
+        <file>controls/PageStack.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/qmldir</file>
         <file>controls/Setting.qml</file>
