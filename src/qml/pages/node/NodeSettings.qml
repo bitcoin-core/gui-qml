@@ -16,7 +16,7 @@ Item {
 
     id: root
 
-    StackView {
+    PageStack {
         id: nodeSettingsView
         anchors.fill: parent
 

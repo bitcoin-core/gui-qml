@@ -32,7 +32,7 @@ ApplicationWindow {
         ColorAnimation { duration: 150 }
     }
 
-    StackView {
+    PageStack {
         id: main
         initialItem: {
             if (needOnboarding) {
