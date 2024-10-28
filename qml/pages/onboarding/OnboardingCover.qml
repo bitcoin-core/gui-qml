@@ -10,6 +10,8 @@ import "../../components"
 import "../settings"
 
 Page {
+    id: root
+    signal next
     background: null
     clip: true
     SwipeView {
@@ -48,15 +50,11 @@ Page {
             descriptionSize: 24
             subtext: qsTr("100% open-source & open-design")
             buttonText: qsTr("Start")
+            onNext: root.next()
         }
         SettingsAbout {
-            navLeftDetail: NavButton {
-                iconSource: "image://images/caret-left"
-                text: qsTr("Back")
-                onClicked: {
-                    introductions.decrementCurrentIndex()
-                }
-            }
+            onboarding: true
+            onBack: introductions.decrementCurrentIndex()
         }
     }
 }

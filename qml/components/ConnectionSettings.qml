@@ -8,6 +8,8 @@ import QtQuick.Layouts 1.15
 import "../controls"
 
 ColumnLayout {
+    id: root
+    signal next
     spacing: 4
     Setting {
         Layout.fillWidth: true
@@ -69,6 +71,6 @@ ColumnLayout {
         actionItem: CaretRightIcon {
             color: gotoProxy.stateColor
         }
-        onClicked: connectionSwipe.incrementCurrentIndex()
+        onClicked: root.next()
     }
 }
