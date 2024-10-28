@@ -9,7 +9,7 @@ import "../../controls"
 import "../../components"
 
 Item {
-    signal backClicked
+    signal back
 
     id: root
 
@@ -29,7 +29,7 @@ Item {
                 leftItem: NavButton {
                     iconSource: "image://images/caret-left"
                     text: qsTr("Back")
-                    onClicked: root.backClicked()
+                    onClicked: root.back()
                 }
                 centerItem: Header {
                     headerBold: true
@@ -70,7 +70,7 @@ Item {
     Component {
         id: theme_page
         SettingsTheme {
-            onBackClicked: {
+            onBack: {
                 nodeSettingsView.pop()
             }
         }
@@ -78,7 +78,7 @@ Item {
     Component {
         id: blockclocksize_page
         SettingsBlockClockDisplayMode {
-            onBackClicked: {
+            onBack: {
                 nodeSettingsView.pop()
             }
         }

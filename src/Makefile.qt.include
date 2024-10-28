@@ -428,12 +428,12 @@ QML_RES_QML = \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
-  qml/pages/wallet/AddWallet.qml \
   qml/pages/wallet/CreateBackup.qml \
   qml/pages/wallet/CreateConfirm.qml \
   qml/pages/wallet/CreateIntro.qml \
   qml/pages/wallet/CreateName.qml \
   qml/pages/wallet/CreatePassword.qml \
+  qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
   qml/pages/wallet/WalletBadge.qml \
   qml/pages/wallet/WalletSelect.qml

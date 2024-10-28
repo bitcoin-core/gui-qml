@@ -12,6 +12,8 @@ import "../settings"
 
 Page {
     id: root
+    signal back
+    signal next
     background: null
 
     header: NavigationBar2 {
@@ -20,7 +22,7 @@ Page {
             iconSource: "image://images/caret-left"
             text: qsTr("Back")
             onClicked: {
-                root.StackView.view.pop()
+                root.back()
             }
         }
     }
@@ -107,7 +109,7 @@ Page {
             Layout.alignment: Qt.AlignCenter
             text: qsTr("Start")
             onClicked: {
-                root.StackView.view.push("qrc:/qml/pages/wallet/CreateName.qml")
+                root.next()
             }
         }
     }

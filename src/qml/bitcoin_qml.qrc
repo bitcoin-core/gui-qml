@@ -68,12 +68,12 @@
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
-        <file>pages/wallet/AddWallet.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
         <file>pages/wallet/CreateIntro.qml</file>
         <file>pages/wallet/CreateName.qml</file>
         <file>pages/wallet/CreatePassword.qml</file>
+        <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
