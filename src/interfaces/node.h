@@ -23,6 +23,9 @@
 #include <tuple>
 #include <vector>
 
+static const char DEFAULT_PROXY_HOST[] = "127.0.0.1";
+static constexpr uint16_t DEFAULT_PROXY_PORT = 9050;
+
 class BanMan;
 class CFeeRate;
 class CNodeStats;
@@ -126,6 +129,12 @@ public:
 
     //! Get proxy.
     virtual bool getProxy(Network net, Proxy& proxy_info) = 0;
+
+    //! Get default proxy address.
+    virtual std::string defaultProxyAddress() = 0;
+
+    //! Validate a proxy address.
+    virtual bool validateProxyAddress(const std::string& addr_port) = 0;
 
     //! Get number of connections.
     virtual size_t getNodeCount(ConnectionDirection flags) = 0;
