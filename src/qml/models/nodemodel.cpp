@@ -36,7 +36,21 @@ void NodeModel::setNumOutboundPeers(int new_num)
 {
     if (new_num != m_num_outbound_peers) {
         m_num_outbound_peers = new_num;
+
+        bool new_connected = (m_num_outbound_peers > 0);
+        if (new_connected != m_connected) {
+            setConnected(new_connected);
+        }
+
         Q_EMIT numOutboundPeersChanged();
+    }
+}
+
+void NodeModel::setConnected(bool new_connected)
+{
+    if (new_connected != m_connected) {
+        m_connected = new_connected;
+        Q_EMIT connectedChanged();
     }
 }
 

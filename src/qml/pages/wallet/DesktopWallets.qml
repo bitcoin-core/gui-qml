@@ -80,7 +80,7 @@ Page {
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
                     property bool synced: nodeModel.verificationProgress > 0.9999
                     property bool paused: nodeModel.pause
-                    property bool connected: nodeModel.numOutboundPeers > 0
+                    property bool connected: nodeModel.connected
 
                     anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: -5

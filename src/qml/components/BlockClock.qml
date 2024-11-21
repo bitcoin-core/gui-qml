@@ -25,7 +25,7 @@ Item {
     property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
     property int headerSize: 32
-    property bool connected: nodeModel.numOutboundPeers > 0
+    property bool connected: nodeModel.connected
     property bool synced: nodeModel.verificationProgress > 0.999
     property string syncProgress: nodeModel.formattedVerificationProgress
     property bool paused: false

@@ -30,6 +30,7 @@ class NodeModel : public QObject
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
     Q_PROPERTY(int numOutboundPeers READ numOutboundPeers NOTIFY numOutboundPeersChanged)
     Q_PROPERTY(int maxNumOutboundPeers READ maxNumOutboundPeers CONSTANT)
+    Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(QString formattedVerificationProgress READ formattedVerificationProgress NOTIFY verificationProgressChanged)
@@ -45,6 +46,7 @@ public:
     int numOutboundPeers() const { return m_num_outbound_peers; }
     void setNumOutboundPeers(int new_num);
     int maxNumOutboundPeers() const { return m_max_num_outbound_peers; }
+    bool connected() const { return m_connected; }
     int remainingSyncTime() const { return m_remaining_sync_time; }
     void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
@@ -70,6 +72,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     void blockTipHeightChanged();
     void numOutboundPeersChanged();
+    void connectedChanged();
     void remainingSyncTimeChanged();
     void requestedInitialize();
     void requestedShutdown();
@@ -84,11 +87,13 @@ protected:
     void timerEvent(QTimerEvent* event) override;
 
 private:
+    void setConnected(bool new_connected);
     void setFormattedVerificationProgress(double new_progress);
 
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
     int m_num_outbound_peers{0};
+    bool m_connected{false};
     static constexpr int m_max_num_outbound_peers{MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS};
     int m_remaining_sync_time{0};
     double m_verification_progress{0.0};
