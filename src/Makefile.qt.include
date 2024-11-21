@@ -404,7 +404,6 @@ QML_RES_QML = \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ToggleButton.qml \
-  qml/controls/utils.js \
   qml/controls/ValueInput.qml \
   qml/pages/initerrormessage.qml \
   qml/pages/main.qml \
