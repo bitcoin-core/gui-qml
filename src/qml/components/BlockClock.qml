@@ -27,7 +27,7 @@ Item {
     property int headerSize: 32
     property bool connected: nodeModel.numOutboundPeers > 0
     property bool synced: nodeModel.verificationProgress > 0.999
-    property string syncProgress: formatProgressPercentage(nodeModel.verificationProgress * 100)
+    property string syncProgress: nodeModel.formattedVerificationProgress
     property bool paused: false
     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
     property string syncTime: syncState.text
@@ -242,17 +242,4 @@ Item {
             }
         }
     ]
-
-
-    function formatProgressPercentage(progress) {
-        if (progress >= 1) {
-            return Math.round(progress) + "%"
-        } else if (progress >= 0.1) {
-            return progress.toFixed(1) + "%"
-        } else if (progress >= 0.01) {
-            return progress.toFixed(2) + "%"
-        } else {
-            return "0%"
-        }
-    }
 }

@@ -75,13 +75,29 @@ void NodeModel::setRemainingSyncTime(double new_progress)
         }
     }
 }
+
 void NodeModel::setVerificationProgress(double new_progress)
 {
     if (new_progress != m_verification_progress) {
         setRemainingSyncTime(new_progress);
+        setFormattedVerificationProgress(new_progress);
 
         m_verification_progress = new_progress;
         Q_EMIT verificationProgressChanged();
+    }
+}
+
+void NodeModel::setFormattedVerificationProgress(double new_progress)
+{
+    double percentage = new_progress * 100.00;
+
+    if (percentage >= 99.99) {
+        m_formatted_verification_progress = QStringLiteral("100%"); 
+    } else if (percentage == 0.0) {
+        m_formatted_verification_progress = QStringLiteral("0%");
+    } else {
+        int decimal_places = (percentage >= 10.0) ? 1 : 2;
+        m_formatted_verification_progress = QString::number(percentage, 'f', decimal_places) + '%';
     }
 }
 

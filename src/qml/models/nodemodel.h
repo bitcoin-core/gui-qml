@@ -32,6 +32,7 @@ class NodeModel : public QObject
     Q_PROPERTY(int maxNumOutboundPeers READ maxNumOutboundPeers CONSTANT)
     Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
+    Q_PROPERTY(QString formattedVerificationProgress READ formattedVerificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
 
@@ -48,6 +49,7 @@ public:
     void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
+    QString formattedVerificationProgress() const { return m_formatted_verification_progress; }
     bool pause() const { return m_pause; }
     void setPause(bool new_pause);
     bool errorState() const { return m_faulted; }
@@ -82,12 +84,15 @@ protected:
     void timerEvent(QTimerEvent* event) override;
 
 private:
+    void setFormattedVerificationProgress(double new_progress);
+
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
     int m_num_outbound_peers{0};
     static constexpr int m_max_num_outbound_peers{MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS};
     int m_remaining_sync_time{0};
     double m_verification_progress{0.0};
+    QString m_formatted_verification_progress;
     bool m_pause{false};
     bool m_faulted{false};
 
