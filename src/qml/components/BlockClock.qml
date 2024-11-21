@@ -10,7 +10,6 @@ import Qt.labs.settings 1.0
 import org.bitcoincore.qt 1.0
 
 import "../controls"
-import "../controls/utils.js" as Utils
 
 Item {
     id: root
@@ -29,9 +28,8 @@ Item {
     property bool synced: nodeModel.synced
     property string syncProgress: nodeModel.formattedVerificationProgress
     property bool paused: false
-    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-    property string syncTime: syncState.text
-    property bool estimating: syncState.estimating
+    property string syncTime: nodeModel.formattedRemainingSyncTime
+    property bool estimating: nodeModel.estimatingSyncTime
     property bool faulted: nodeModel.faulted
 
     activeFocusOnTab: true

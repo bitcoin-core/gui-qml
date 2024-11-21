@@ -54,6 +54,14 @@ void NodeModel::setConnected(bool new_connected)
     }
 }
 
+void NodeModel::setEstimatingSyncTime(bool new_estimating)
+{
+    if (m_estimating_sync_time != new_estimating) {
+        m_estimating_sync_time = new_estimating;
+        Q_EMIT estimatingSyncTimeChanged();
+    }
+}
+
 void NodeModel::setRemainingSyncTime(double new_progress)
 {
     int currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
@@ -80,12 +88,77 @@ void NodeModel::setRemainingSyncTime(double new_progress)
         }
         if (remainingMSecs > 0 && m_block_process_time.count() % 1000 == 0) {
             m_remaining_sync_time = remainingMSecs;
+            setFormattedRemainingSyncTime(m_remaining_sync_time);
 
             Q_EMIT remainingSyncTimeChanged();
         }
         static const int MAX_SAMPLES = 5000;
         if (m_block_process_time.count() > MAX_SAMPLES) {
             m_block_process_time.remove(1, m_block_process_time.count() - 1);
+        }
+    } else {
+        m_remaining_sync_time = 0;
+        setFormattedRemainingSyncTime(m_remaining_sync_time);
+        
+        Q_EMIT remainingSyncTimeChanged();
+    }
+}
+
+void NodeModel::setFormattedRemainingSyncTime(int new_time)
+{
+    int minutes = new_time / 60000;
+    int seconds = (new_time % 60000) / 1000;
+
+    int weeks = minutes / 10080;
+    minutes %= 10080;
+
+    int days = minutes / 1440;
+    minutes %= 1440;
+
+    int hours = minutes / 60;
+    minutes %= 60;
+
+    if (weeks > 0) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1 %2 left")
+            .arg(weeks)
+            .arg(weeks == 1 ? QObject::tr("week") : QObject::tr("weeks"));
+        setEstimatingSyncTime(false);
+    } else if (days > 0) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1 %2 left")
+            .arg(days)
+            .arg(days == 1 ? QObject::tr("day") : QObject::tr("days"));
+        setEstimatingSyncTime(false);
+    } else if (hours >= 5) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1 %2 left")
+            .arg(hours)
+            .arg(hours == 1 ? QObject::tr("hour") : QObject::tr("hours"));
+        setEstimatingSyncTime(false);
+    } else if (hours > 0) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1h %2m left")
+            .arg(hours)
+            .arg(minutes);
+        setEstimatingSyncTime(false);
+    } else if (minutes >= 5) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1 %2 left")
+            .arg(minutes)
+            .arg(minutes == 1 ? QObject::tr("minute") : QObject::tr("minutes"));
+        setEstimatingSyncTime(false);
+    } else if (minutes > 0) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1m %2s left")
+            .arg(minutes)
+            .arg(seconds);
+        setEstimatingSyncTime(false);
+    } else if (seconds > 0) {
+        m_formatted_remaining_sync_time = QObject::tr("~%1 %2 left")
+            .arg(seconds)
+            .arg(seconds == 1 ? QObject::tr("second") : QObject::tr("seconds"));
+        setEstimatingSyncTime(false);
+    } else {
+        if (m_synced) {
+            setEstimatingSyncTime(false);
+        } else {
+            m_formatted_remaining_sync_time = QObject::tr("Estimating");
+            setEstimatingSyncTime(true);
         }
     }
 }

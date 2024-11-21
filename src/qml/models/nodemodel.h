@@ -32,6 +32,8 @@ class NodeModel : public QObject
     Q_PROPERTY(int maxNumOutboundPeers READ maxNumOutboundPeers CONSTANT)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
+    Q_PROPERTY(QString formattedRemainingSyncTime READ formattedRemainingSyncTime NOTIFY remainingSyncTimeChanged)
+    Q_PROPERTY(bool estimatingSyncTime READ estimatingSyncTime NOTIFY estimatingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(QString formattedVerificationProgress READ formattedVerificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool synced READ synced NOTIFY syncedChanged)
@@ -50,6 +52,8 @@ public:
     bool connected() const { return m_connected; }
     int remainingSyncTime() const { return m_remaining_sync_time; }
     void setRemainingSyncTime(double new_progress);
+    QString formattedRemainingSyncTime() const { return m_formatted_remaining_sync_time; }
+    bool estimatingSyncTime() const { return m_estimating_sync_time; }
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
     QString formattedVerificationProgress() const { return m_formatted_verification_progress; }
@@ -76,6 +80,7 @@ Q_SIGNALS:
     void numOutboundPeersChanged();
     void connectedChanged();
     void remainingSyncTimeChanged();
+    void estimatingSyncTimeChanged();
     void requestedInitialize();
     void requestedShutdown();
     void verificationProgressChanged();
@@ -91,6 +96,8 @@ protected:
 
 private:
     void setConnected(bool new_connected);
+    void setEstimatingSyncTime(bool new_estimating);
+    void setFormattedRemainingSyncTime(int new_time);
     void setFormattedVerificationProgress(double new_progress);
     void setSynced(bool new_synced);
 
@@ -100,6 +107,8 @@ private:
     bool m_connected{false};
     static constexpr int m_max_num_outbound_peers{MAX_OUTBOUND_FULL_RELAY_CONNECTIONS + MAX_BLOCK_RELAY_ONLY_CONNECTIONS};
     int m_remaining_sync_time{0};
+    QString m_formatted_remaining_sync_time;
+    bool m_estimating_sync_time{false};
     double m_verification_progress{0.0};
     QString m_formatted_verification_progress;
     bool m_synced{false};
