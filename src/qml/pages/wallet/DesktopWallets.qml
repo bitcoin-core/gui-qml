@@ -78,7 +78,7 @@ Page {
                 Tooltip {
                     id: blockClockTooltip
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.verificationProgress > 0.9999
+                    property bool synced: nodeModel.synced
                     property bool paused: nodeModel.pause
                     property bool connected: nodeModel.connected
 

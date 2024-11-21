@@ -96,6 +96,10 @@ void NodeModel::setVerificationProgress(double new_progress)
         setRemainingSyncTime(new_progress);
         setFormattedVerificationProgress(new_progress);
 
+        if (new_progress >= 0.999) {
+            setSynced(true);
+        }
+
         m_verification_progress = new_progress;
         Q_EMIT verificationProgressChanged();
     }
@@ -112,6 +116,14 @@ void NodeModel::setFormattedVerificationProgress(double new_progress)
     } else {
         int decimal_places = (percentage >= 10.0) ? 1 : 2;
         m_formatted_verification_progress = QString::number(percentage, 'f', decimal_places) + '%';
+    }
+}
+
+void NodeModel::setSynced(bool new_synced)
+{
+    if (m_synced != new_synced) {
+        m_synced = new_synced;
+        Q_EMIT syncedChanged();
     }
 }
 

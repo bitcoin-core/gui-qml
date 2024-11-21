@@ -26,7 +26,7 @@ Item {
     property alias subText: subText.text
     property int headerSize: 32
     property bool connected: nodeModel.connected
-    property bool synced: nodeModel.verificationProgress > 0.999
+    property bool synced: nodeModel.synced
     property string syncProgress: nodeModel.formattedVerificationProgress
     property bool paused: false
     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
@@ -53,7 +53,7 @@ Item {
         verificationProgress: nodeModel.verificationProgress
         paused: root.paused || root.faulted
         connected: root.connected
-        synced: nodeModel.verificationProgress > 0.999
+        synced: root.synced
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors

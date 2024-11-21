@@ -34,6 +34,7 @@ class NodeModel : public QObject
     Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(QString formattedVerificationProgress READ formattedVerificationProgress NOTIFY verificationProgressChanged)
+    Q_PROPERTY(bool synced READ synced NOTIFY syncedChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
 
@@ -52,6 +53,7 @@ public:
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
     QString formattedVerificationProgress() const { return m_formatted_verification_progress; }
+    bool synced() const { return m_synced; }
     bool pause() const { return m_pause; }
     void setPause(bool new_pause);
     bool errorState() const { return m_faulted; }
@@ -77,6 +79,7 @@ Q_SIGNALS:
     void requestedInitialize();
     void requestedShutdown();
     void verificationProgressChanged();
+    void syncedChanged();
     void pauseChanged(bool new_pause);
     void errorStateChanged(bool new_error_state);
 
@@ -89,6 +92,7 @@ protected:
 private:
     void setConnected(bool new_connected);
     void setFormattedVerificationProgress(double new_progress);
+    void setSynced(bool new_synced);
 
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
@@ -98,6 +102,7 @@ private:
     int m_remaining_sync_time{0};
     double m_verification_progress{0.0};
     QString m_formatted_verification_progress;
+    bool m_synced{false};
     bool m_pause{false};
     bool m_faulted{false};
 
