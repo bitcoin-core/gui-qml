@@ -344,6 +344,7 @@ QML_RES_ICONS = \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
+  qml/res/icons/flip-vertical.png \
   qml/res/icons/gear.png \
   qml/res/icons/gear-outline.png \
   qml/res/icons/hidden.png \
