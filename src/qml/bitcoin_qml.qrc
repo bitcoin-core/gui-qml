@@ -23,6 +23,7 @@
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/CoreTextField.qml</file>
+        <file>controls/LabeledTextInput.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/Header.qml</file>
