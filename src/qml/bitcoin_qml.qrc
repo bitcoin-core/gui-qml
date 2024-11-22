@@ -78,6 +78,7 @@
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/RequestPayment.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
     </qresource>

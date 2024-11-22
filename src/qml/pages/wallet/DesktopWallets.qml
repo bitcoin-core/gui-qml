@@ -129,9 +129,8 @@ Page {
             id: sendTab
             CoreText { text: "Send" }
         }
-        Item {
+        RequestPayment {
             id: receiveTab
-            CoreText { text: "Receive" }
         }
         Item {
             id: blockClockTab
