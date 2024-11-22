@@ -340,6 +340,7 @@ QML_RES_ICONS = \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
   qml/res/icons/check.png \
+  qml/res/icons/copy.png \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
