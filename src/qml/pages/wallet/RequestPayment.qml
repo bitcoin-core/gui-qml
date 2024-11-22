@@ -143,9 +143,16 @@ PageStack {
                         Layout.rightMargin: 20
                         Layout.alignment: Qt.AlignCenter
                         text: qsTr("Continue")
+                        onClicked: stackView.push(confirmationComponent)
                     }
                 }
             }
+        }
+    }
+
+    Component {
+        id: confirmationComponent
+        RequestConfirmation {
         }
     }
 }
