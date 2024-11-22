@@ -40,6 +40,7 @@ Item {
         color: Theme.color.neutral9
         placeholderTextColor: Theme.color.neutral7
         background: Item {}
+        selectByMouse: true
         onTextEdited: root.textEdited()
     }
 
