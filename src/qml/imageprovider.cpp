@@ -132,6 +132,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/network-light").pixmap(requested_size);
     }
 
+    if (id == "pending") {
+        *size = requested_size;
+        return QIcon(":/icons/pending").pixmap(requested_size);
+    }
+
     if (id == "shutdown") {
         *size = requested_size;
         return QIcon(":/icons/shutdown").pixmap(requested_size);
