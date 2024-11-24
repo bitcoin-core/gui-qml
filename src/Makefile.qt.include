@@ -398,6 +398,7 @@ QML_RES_QML = \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/OutlineButton.qml \
+  qml/controls/PageStack.qml \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
   qml/controls/Setting.qml \
@@ -420,6 +421,7 @@ QML_RES_QML = \
   qml/pages/onboarding/OnboardingStorageAmount.qml \
   qml/pages/onboarding/OnboardingStorageLocation.qml \
   qml/pages/onboarding/OnboardingStrengthen.qml \
+  qml/pages/onboarding/OnboardingWizard.qml \
   qml/pages/settings/SettingsAbout.qml \
   qml/pages/settings/SettingsBlockClockDisplayMode.qml \
   qml/pages/settings/SettingsConnection.qml \

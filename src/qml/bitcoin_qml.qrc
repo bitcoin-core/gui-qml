@@ -38,6 +38,7 @@
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
+        <file>controls/PageStack.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/qmldir</file>
         <file>controls/Setting.qml</file>
@@ -60,6 +61,7 @@
         <file>pages/onboarding/OnboardingStorageAmount.qml</file>
         <file>pages/onboarding/OnboardingStorageLocation.qml</file>
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
+        <file>pages/onboarding/OnboardingWizard.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>

@@ -14,47 +14,50 @@ Page {
     signal next
     background: null
     clip: true
-    SwipeView {
-        id: introductions
+    PageStack {
+        id: coverStack
         anchors.fill: parent
-        interactive: false
-        orientation: Qt.Horizontal
-        InformationPage {
-            navRightDetail: NavButton {
-                iconSource: "image://images/info"
-                iconHeight: 24
-                iconWidth: 24
-                iconColor: Theme.color.neutral0
-                iconBackground: Rectangle {
-                    radius: 12
-                    color: Theme.color.neutral9
+        initialItem: onboardingCover
+        Component {
+            id: onboardingCover
+            InformationPage {
+                navRightDetail: NavButton {
+                    iconSource: "image://images/info"
+                    iconHeight: 24
+                    iconWidth: 24
+                    iconColor: Theme.color.neutral0
+                    iconBackground: Rectangle {
+                        radius: 12
+                        color: Theme.color.neutral9
+                    }
+                    onClicked: coverStack.push(coverSettings)
                 }
-                onClicked: {
-                    introductions.incrementCurrentIndex()
+                bannerItem: Image {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignCenter
+                    source: "image://images/app"
+                    // Bitcoin icon has ~11% padding
+                    sourceSize.width: 112
+                    sourceSize.height: 112
                 }
+                bannerMargin: 0
+                bold: true
+                headerText: qsTr("Bitcoin Core App")
+                headerSize: 36
+                description: qsTr("Be part of the Bitcoin network.")
+                descriptionMargin: 10
+                descriptionSize: 24
+                subtext: qsTr("100% open-source & open-design")
+                buttonText: qsTr("Start")
+                onNext: root.next()
             }
-            bannerItem: Image {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignCenter
-                source: "image://images/app"
-                // Bitcoin icon has ~11% padding
-                sourceSize.width: 112
-                sourceSize.height: 112
-            }
-            bannerMargin: 0
-            bold: true
-            headerText: qsTr("Bitcoin Core App")
-            headerSize: 36
-            description: qsTr("Be part of the Bitcoin network.")
-            descriptionMargin: 10
-            descriptionSize: 24
-            subtext: qsTr("100% open-source & open-design")
-            buttonText: qsTr("Start")
-            onNext: root.next()
         }
-        SettingsAbout {
-            onboarding: true
-            onBack: introductions.decrementCurrentIndex()
+        Component {
+            id: coverSettings
+            SettingsAbout {
+                onboarding: true
+                onBack: coverStack.pop()
+            }
         }
     }
 }
