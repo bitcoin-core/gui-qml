@@ -32,7 +32,7 @@ ApplicationWindow {
         ColorAnimation { duration: 150 }
     }
 
-    StackView {
+    PageStack {
         id: main
         initialItem: {
             if (needOnboarding) {
@@ -65,36 +65,8 @@ ApplicationWindow {
 
     Component {
         id: onboardingWizard
-        SwipeView {
-            id: swipeView
-            property bool finished: false
-            interactive: false
-
-            OnboardingCover {
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStrengthen {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingBlockclock {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStorageLocation {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingStorageAmount {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.incrementCurrentIndex()
-            }
-            OnboardingConnection {
-                onBack: swipeView.decrementCurrentIndex()
-                onNext: swipeView.finished = true
-            }
-
-            onFinishedChanged: {
+        OnboardingWizard {
+            onFinished: {
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
                     main.push(desktopWallets)
@@ -127,18 +99,24 @@ ApplicationWindow {
 
     Component {
         id: node
-        SwipeView {
-            id: node_swipe
-            interactive: false
-            orientation: Qt.Vertical
-            NodeRunner {
-                onSettingsClicked: {
-                    node_swipe.incrementCurrentIndex()
+        PageStack {
+            id: nodeStack
+            vertical: true
+            initialItem: node
+            Component {
+                id: node
+                NodeRunner {
+                    onSettingsClicked: {
+                        nodeStack.push(nodeSettings)
+                    }
                 }
             }
-            NodeSettings {
-                onDoneClicked: {
-                    node_swipe.decrementCurrentIndex()
+            Component {
+                id: nodeSettings
+                 NodeSettings {
+                    onDoneClicked: {
+                        nodeStack.pop()
+                    }
                 }
             }
         }
