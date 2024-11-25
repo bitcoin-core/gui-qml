@@ -166,3 +166,13 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
             setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
         });
 }
+
+bool NodeModel::validateProxyAddress(QString address_port)
+{
+    return m_node.validateProxyAddress(address_port.toStdString());
+}
+
+QString NodeModel::defaultProxyAddress()
+{
+    return QString::fromStdString(m_node.defaultProxyAddress());
+}
