@@ -74,6 +74,7 @@ Page {
                 Layout.rightMargin: 10
                 property int index: 3
                 ButtonGroup.group: navigationTabs
+                iconSource: Theme.image.blocktime
 
                 Tooltip {
                     id: blockClockTooltip
