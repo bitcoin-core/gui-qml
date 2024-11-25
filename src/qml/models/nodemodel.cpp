@@ -7,6 +7,9 @@
 #include <interfaces/node.h>
 #include <net.h>
 #include <node/interface_ui.h>
+#include <node/utxo_snapshot.h>
+#include <util/fs.h>
+#include <util/fs_helpers.h>
 #include <validation.h>
 
 #include <cassert>
@@ -16,6 +19,9 @@
 #include <QMetaObject>
 #include <QTimerEvent>
 #include <QString>
+#include <QUrl>
+#include <QThread>
+#include <QDebug>
 
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
@@ -165,4 +171,37 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
         [this](PeersNumByType new_num_peers) {
             setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
         });
+}
+
+// Loads a snapshot from a given path using FileDialog
+void NodeModel::initializeSnapshot(bool initLoadSnapshot, QString path_file) {
+    if (initLoadSnapshot) {
+        // TODO: this is to deal with FileDialog returning a QUrl
+        path_file = QUrl(path_file).toLocalFile();
+        m_snapshot_loading = true;
+        Q_EMIT snapshotLoadingChanged();
+        // TODO: Remove this before release
+        // qDebug() << "path_file: " << path_file;
+        QThread* snapshot_thread = new QThread();
+
+        auto lambda = [this, path_file]() {
+            bool result = this->snapshotLoad(path_file);
+            m_snapshot_loading = false;
+            m_snapshot_loaded = result;
+            Q_EMIT snapshotLoaded(result);
+            Q_EMIT snapshotLoadingChanged();
+        };
+
+        connect(snapshot_thread, &QThread::started, lambda);
+        connect(snapshot_thread, &QThread::finished, snapshot_thread, &QThread::deleteLater);
+
+        snapshot_thread->start();
+    }
+}
+
+void NodeModel::setSnapshotProgress(double new_progress) {
+    if (new_progress != m_snapshot_progress) {
+        m_snapshot_progress = new_progress;
+        Q_EMIT snapshotProgressChanged();
+    }
 }
