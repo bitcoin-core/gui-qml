@@ -45,6 +45,7 @@
 #include <uint256.h>
 #include <univalue.h>
 #include <util/check.h>
+#include <util/strencodings.h>
 #include <util/translation.h>
 #include <validation.h>
 #include <validationinterface.h>
@@ -169,6 +170,27 @@ public:
     }
     void mapPort(bool use_upnp, bool use_natpmp) override { StartMapPort(use_upnp, use_natpmp); }
     bool getProxy(Network net, Proxy& proxy_info) override { return GetProxy(net, proxy_info); }
+    std::string defaultProxyAddress() override
+    {
+        return std::string(DEFAULT_PROXY_HOST) + ":" + ToString(DEFAULT_PROXY_PORT);
+    }
+    bool validateProxyAddress(const std::string& addr_port) override
+    {
+        uint16_t port{0};
+        std::string hostname;
+        // First, attempt to split the input address into hostname and port components.
+        // We call SplitHostPort to validate that a port is provided in addr_port.
+        // If either splitting fails or port is zero (not specified), return false.
+        if (!SplitHostPort(addr_port, port, hostname) || !port) return false;
+
+        // Create a service endpoint (CService) from the address and port.
+        // If port is missing in addr_port, DEFAULT_PROXY_PORT is used as the fallback.
+        CService serv(LookupNumeric(addr_port, DEFAULT_PROXY_PORT));
+
+        // Construct the Proxy with the service endpoint and return if it's valid
+        Proxy addrProxy = Proxy(serv, true);
+        return addrProxy.IsValid();
+    }
     size_t getNodeCount(ConnectionDirection flags) override
     {
         return m_context->connman ? m_context->connman->GetNodeCount(flags) : 0;

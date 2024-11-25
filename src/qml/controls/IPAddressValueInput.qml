@@ -16,9 +16,9 @@ TextInput {
     property bool validInput: true
     enabled: true
     state: root.parentState
-    validator: RegExpValidator { regExp: /[0-9.:]*/ } // Allow only digits, dots, and colons
+    validator: RegularExpressionValidator { regularExpression: /^[\][0-9a-f.:]+$/i } // Allow only IPv4/ IPv6 chars
 
-    maximumLength: 21
+    maximumLength: 47
 
     states: [
         State {
@@ -52,31 +52,5 @@ TextInput {
 
     Behavior on color {
         ColorAnimation { duration: 150 }
-    }
-
-    function isValidIPPort(input)
-    {
-        var parts = input.split(":");
-        if (parts.length !== 2) return false;
-        if (parts[1].length === 0) return false; // port part is empty
-        var ipAddress = parts[0];
-        var ipAddressParts = ipAddress.split(".");
-        if (ipAddressParts.length !== 4) return false;
-        for (var i = 0; (i < ipAddressParts.length); i++) {
-            if (ipAddressParts[i].length === 0) return false; // ip group number part is empty
-            if (parseInt(ipAddressParts[i]) > 255) return false;
-        }
-        var port = parseInt(parts[1]);
-        if (port < 1 || port > 65535) return false;
-        return true;
-    }
-
-    // Connections element to ensure validation on editing finished
-    Connections {
-        target: root
-        function onTextChanged() {
-            // Validate the input whenever editing is finished
-            validInput = isValidIPPort(root.text);
-        }
     }
 }

@@ -37,6 +37,14 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
+    Q_PROPERTY(QString proxyAddress READ proxyAddress WRITE setProxyAddress NOTIFY proxyAddressChanged)
+    Q_PROPERTY(bool isProxySet READ isProxySet WRITE setIsProxySet NOTIFY isProxySetChanged)
+    Q_PROPERTY(QString torProxyAddress READ torProxyAddress WRITE setTorProxyAddress NOTIFY proxyAddressChanged)
+    Q_PROPERTY(bool isTorProxySet READ isTorProxySet WRITE setIsTorProxySet NOTIFY isTorProxySetChanged)
+
+protected:
+    bool evaluateIfProxyIsSet();
+    bool evaluateIfTorProxyIsSet();
 
 public:
     explicit OptionsQmlModel(interfaces::Node& node, bool is_onboarded);
@@ -67,6 +75,14 @@ public:
     QUrl getDefaultDataDirectory();
     Q_INVOKABLE bool setCustomDataDirArgs(QString path);
     Q_INVOKABLE QString getCustomDataDirString();
+    QString proxyAddress() const { return m_proxy_address; }
+    Q_INVOKABLE void setProxyAddress(QString new_proxy_address);
+    bool isProxySet() const { return m_is_proxy_set; }
+    Q_INVOKABLE void setIsProxySet(bool is_set);
+    QString torProxyAddress() const { return m_tor_proxy_address; }
+    Q_INVOKABLE void setTorProxyAddress(QString new_proxy_address);
+    bool isTorProxySet() const { return m_is_tor_proxy_set; }
+    Q_INVOKABLE void setIsTorProxySet(bool is_set);
 
 public Q_SLOTS:
     void setCustomDataDirString(const QString &new_custom_datadir_string) {
@@ -85,6 +101,10 @@ Q_SIGNALS:
     void upnpChanged(bool new_upnp);
     void customDataDirStringChanged(QString new_custom_datadir_string);
     void dataDirChanged(QString new_data_dir);
+    void proxyAddressChanged(QString new_proxy_address);
+    void isProxySetChanged(bool is_set);
+    void torProxyAddressChanged(QString new_proxy_address);
+    void isTorProxySetChanged(bool is_set);
 
 private:
     interfaces::Node& m_node;
@@ -105,6 +125,10 @@ private:
     bool m_upnp;
     QString m_custom_datadir_string;
     QString m_dataDir;
+    QString m_proxy_address;
+    bool m_is_proxy_set;
+    QString m_tor_proxy_address;
+    bool m_is_tor_proxy_set;
 
     common::SettingsValue pruneSetting() const;
 };
