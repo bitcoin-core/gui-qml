@@ -5,12 +5,22 @@
 #include <qml/walletqmlcontroller.h>
 
 #include <interfaces/node.h>
+#include <util/threadnames.h>
+
+#include <QTimer>
 
 WalletQmlController::WalletQmlController(interfaces::Node& node, QObject *parent)
     : QObject(parent)
     , m_node(node)
+    , m_selected_wallet(new WalletQmlModel(parent))
+    , m_worker(new QObject)
+    , m_worker_thread(new QThread(this))
 {
-    m_selected_wallet = new WalletQmlModel(parent);
+    m_worker->moveToThread(m_worker_thread);
+    m_worker_thread->start();
+    QTimer::singleShot(0, m_worker, []() {
+        util::ThreadRename("qml-walletctrl");
+    });
 }
 
 WalletQmlController::~WalletQmlController()
@@ -18,17 +28,24 @@ WalletQmlController::~WalletQmlController()
     if (m_handler_load_wallet) {
         m_handler_load_wallet->disconnect();
     }
+    m_worker_thread->quit();
+    m_worker_thread->wait();
+    delete m_worker;
 }
 
 void WalletQmlController::setSelectedWallet(QString path)
 {
-    std::vector<bilingual_str>  warning_message;
-    auto wallet{m_node.walletLoader().loadWallet(path.toStdString(), warning_message)};
-    if (wallet.has_value()) {
-        m_selected_wallet = new WalletQmlModel(std::move(wallet.value()));
-        m_wallets.push_back(m_selected_wallet);
-        Q_EMIT selectedWalletChanged();
-    }
+    QTimer::singleShot(0, m_worker, [this, path = path.toStdString()]() {
+        std::vector<bilingual_str> warning_message;
+        auto wallet{m_node.walletLoader().loadWallet(path, warning_message)};
+        if (wallet.has_value()) {
+            auto wallet_model = new WalletQmlModel(std::move(wallet.value()));
+            wallet_model->moveToThread(this->thread());
+            m_selected_wallet = wallet_model;
+            m_wallets.push_back(m_selected_wallet);
+            Q_EMIT selectedWalletChanged();
+        }
+    });
 }
 
 WalletQmlModel* WalletQmlController::selectedWallet() const

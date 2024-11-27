@@ -11,6 +11,7 @@
 #include <interfaces/wallet.h>
 
 #include <QObject>
+#include <QThread>
 #include <memory>
 
 class WalletQmlController : public QObject
@@ -38,6 +39,8 @@ private:
 
     interfaces::Node& m_node;
     WalletQmlModel* m_selected_wallet;
+    QObject* m_worker;
+    QThread* m_worker_thread;
     std::vector<WalletQmlModel*> m_wallets;
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
 };
