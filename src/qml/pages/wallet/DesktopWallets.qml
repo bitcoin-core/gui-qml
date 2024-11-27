@@ -73,27 +73,59 @@ Page {
                 Layout.preferredWidth: 30
                 Layout.rightMargin: 10
                 property int index: 3
-                ButtonGroup.group: navigationTabs
-                iconSource: Theme.image.blocktime
+                property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
+                property bool synced: nodeModel.verificationProgress > 0.9999
+                property bool paused: nodeModel.pause
+                property bool connected: nodeModel.numOutboundPeers > 0
+                ButtonGroup.group: navigationTabs  
+                property bool estimating: syncState.estimating
+                property bool faulted: nodeModel.faulted
+                
+
+                BlockClockDial {
+                    anchors.horizontalCenter: blockClockTabButton.horizontalCenter
+                    scale: Theme.blockclocksize
+                    width: blockClockTabButton.width
+                    height: width * 2
+                    penWidth: width / 20
+                    timeRatioList: chainModel.timeRatioList
+                    verificationProgress: nodeModel.verificationProgress
+                    paused: blockClockTabButton.paused || blockClockTabButton.faulted
+                    connected: blockClockTabButton.connected
+                    synced: nodeModel.verificationProgress > 0.999
+                    backgroundColor: Theme.color.neutral2
+                    timeTickColor: Theme.color.neutral5
+                    confirmationColors: Theme.color.confirmationColors
+                    
+
+                    Behavior on backgroundColor {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    Behavior on timeTickColor {
+                        ColorAnimation { duration: 150 }
+                    }
+
+                    Behavior on confirmationColors {
+                        ColorAnimation { duration: 150 }
+                    }
+                }
+
+    
 
                 Tooltip {
                     id: blockClockTooltip
-                    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.verificationProgress > 0.9999
-                    property bool paused: nodeModel.pause
-                    property bool connected: nodeModel.numOutboundPeers > 0
-
                     anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: -5
                     anchors.horizontalCenter: blockClockTabButton.horizontalCenter
 
                     visible: blockClockTabButton.hovered
                     text: {
-                        if (paused) {
+                        if (blockClockTabButton.paused) {
                             qsTr("Paused")
-                        } else if (connected && synced) {
+                        } else if (blockClockTabButton.connected && blockClockTabButton.synced) {
                             qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
-                        } else if (connected){
+                        } else if (blockClockTabButton.connected){
                             qsTr("Downloading blocks\n" +  syncState.text)
                         } else {
                             qsTr("Connecting")
