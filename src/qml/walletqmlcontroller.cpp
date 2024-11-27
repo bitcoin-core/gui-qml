@@ -41,8 +41,11 @@ void WalletQmlController::setSelectedWallet(QString path)
         if (wallet.has_value()) {
             auto wallet_model = new WalletQmlModel(std::move(wallet.value()));
             wallet_model->moveToThread(this->thread());
-            m_selected_wallet = wallet_model;
-            m_wallets.push_back(m_selected_wallet);
+            {
+                QMutexLocker locker(&m_wallets_mutex);
+                m_selected_wallet = wallet_model;
+                m_wallets.push_back(m_selected_wallet);
+            }
             Q_EMIT selectedWalletChanged();
         }
     });
@@ -56,6 +59,7 @@ WalletQmlModel* WalletQmlController::selectedWallet() const
 void WalletQmlController::unloadWallets()
 {
     m_handler_load_wallet->disconnect();
+    QMutexLocker locker(&m_wallets_mutex);
     for (WalletQmlModel* wallet : m_wallets) {
         delete wallet;
     }
@@ -64,17 +68,20 @@ void WalletQmlController::unloadWallets()
 
 void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> wallet)
 {
-    if (!m_wallets.empty()) {
-        QString name = QString::fromStdString(wallet->getWalletName());
-        for (WalletQmlModel* wallet_model : m_wallets) {
-            if (wallet_model->name() == name) {
-                return;
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        if (!m_wallets.empty()) {
+            QString name = QString::fromStdString(wallet->getWalletName());
+            for (WalletQmlModel* wallet_model : m_wallets) {
+                if (wallet_model->name() == name) {
+                    return;
+                }
             }
         }
-    }
 
-    m_selected_wallet = new WalletQmlModel(std::move(wallet));
-    m_wallets.push_back(m_selected_wallet);
+        m_selected_wallet = new WalletQmlModel(std::move(wallet));
+        m_wallets.push_back(m_selected_wallet);
+    }
     Q_EMIT selectedWalletChanged();
 }
 

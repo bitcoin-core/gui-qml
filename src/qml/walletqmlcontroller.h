@@ -10,6 +10,7 @@
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
 
+#include <QMutex>
 #include <QObject>
 #include <QThread>
 #include <memory>
@@ -41,6 +42,7 @@ private:
     WalletQmlModel* m_selected_wallet;
     QObject* m_worker;
     QThread* m_worker_thread;
+    QMutex m_wallets_mutex;
     std::vector<WalletQmlModel*> m_wallets;
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
 };
