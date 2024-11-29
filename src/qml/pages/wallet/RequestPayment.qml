@@ -89,6 +89,7 @@ PageStack {
                             placeholderTextColor: Theme.color.neutral7
                             background: Item {}
                             placeholderText: "0.00000000"
+                            selectByMouse: true
                             onTextEdited: {
                                 amountInput.text = bitcoinAmount.sanitize(amountInput.text)
                             }
