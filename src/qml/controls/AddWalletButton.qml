@@ -15,37 +15,34 @@ Button {
     property color textColor: Theme.color.neutral7
     property color textHoverColor: Theme.color.orange
     property color textActiveColor: Theme.color.orange
-    property color iconColor: "transparent"
-    property string iconSource: ""
-    property bool showBalance: true
-    property bool showIcon: true
 
     hoverEnabled: AppMode.isDesktop
-    implicitHeight: 46
+    implicitHeight: 30
     implicitWidth: 220
-    bottomPadding: 10
-    topPadding: 0
 
-    contentItem: RowLayout {
-        implicitWidth: addIcon.size + addText.width
-        implicitHeight: 45
-        Icon {
-            id: addIcon
-            Layout.alignment: Qt.AlignHCenter
-            source: "image://images/plus"
-            color: Theme.color.neutral8
-            size: 14
-            topPadding: 5
-            bottomPadding: 10
-        }
-        CoreText {
-            id: addText
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Add Wallet")
-            color: Theme.color.neutral9
-            font.pixelSize: 15
-            topPadding: 5
-            bottomPadding: 10
+    contentItem: Item {
+        anchors.fill: parent
+        RowLayout {
+            anchors.centerIn: parent
+            spacing: 3
+            Icon {
+                id: addIcon
+                Layout.alignment: Qt.AlignRight
+                source: "image://images/plus"
+                color: Theme.color.neutral7
+                size: 16
+                Layout.minimumWidth: 16
+                Layout.preferredWidth: 16
+                Layout.maximumWidth: 16
+            }
+            CoreText {
+                id: addText
+                Layout.fillHeight: true
+                Layout.alignment: Qt.AlignLeft
+                text: qsTr("Add Wallet")
+                color: Theme.color.neutral7
+                font.pixelSize: 15
+            }
         }
     }
 
@@ -54,8 +51,6 @@ Button {
         height: 30
         width: 220
         radius: 5
-        anchors.topMargin: 5
-        anchors.bottomMargin: 10
         color: Theme.color.neutral3
         visible: root.hovered || root.checked
 
@@ -74,6 +69,8 @@ Button {
         },
         State {
             name: "HOVER"; when: root.hovered
+            PropertyChanges { target: addText; color: textHoverColor }
+            PropertyChanges { target: addIcon; color: textHoverColor }
         }
     ]
 }

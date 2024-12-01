@@ -12,7 +12,7 @@ Popup {
     id: root
 
     property alias model: listView.model
-    implicitHeight: layout.height + arrow.height
+    implicitHeight: layout.height + arrow.height + 11
     implicitWidth: 250
     clip: true
 
@@ -92,6 +92,9 @@ Popup {
 
         AddWalletButton {
             id: addWallet
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: 220
+            Layout.preferredHeight: 30
             onClicked: {
                 root.addWallet()
                 root.close()
