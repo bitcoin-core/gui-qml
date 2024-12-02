@@ -20,6 +20,13 @@ Button {
     implicitHeight: 30
     implicitWidth: 220
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: false
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+    }
+
     contentItem: Item {
         anchors.fill: parent
         RowLayout {
