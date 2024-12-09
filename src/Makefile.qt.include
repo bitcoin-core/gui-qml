@@ -444,7 +444,6 @@ QML_RES_QML = \
   qml/pages/wallet/CreatePassword.qml \
   qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
-  qml/pages/wallet/RequestConfirmation.qml \
   qml/pages/wallet/RequestPayment.qml \
   qml/pages/wallet/WalletBadge.qml \
   qml/pages/wallet/WalletSelect.qml
