@@ -15,6 +15,7 @@
         <file>components/ProxySettings.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>components/Separator.qml</file>
+        <file>components/SnapshotSettings.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
@@ -25,6 +26,7 @@
         <file>controls/CoreTextField.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
+        <file>controls/GreenCheckIcon.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/InformationPage.qml</file>
@@ -68,6 +70,7 @@
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsDisplay.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
+        <file>pages/settings/SettingsSnapshot.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
@@ -93,11 +96,14 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
+        <file alias="circle-file">res/icons/circle-file.png</file>
+        <file alias="circle-green-check">res/icons/circle-green-check.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>
+        <file alias="green-check">res/icons/green-check.png</file>
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info">res/icons/info.png</file>
         <file alias="minus">res/icons/minus.png</file>

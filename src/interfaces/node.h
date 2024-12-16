@@ -199,6 +199,12 @@ public:
     //! List rpc commands.
     virtual std::vector<std::string> listRpcCommands() = 0;
 
+    //! Load UTXO Snapshot.
+    virtual bool snapshotLoad(const std::string& path_string) = 0;
+
+    //! Get snapshot progress.
+    virtual double getSnapshotProgress() = 0;
+
     //! Set RPC timer interface if unset.
     virtual void rpcSetTimerInterfaceIfUnset(RPCTimerInterface* iface) = 0;
 

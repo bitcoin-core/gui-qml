@@ -29,6 +29,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <node/transaction.h>
+#include <node/utxo_snapshot.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -395,9 +396,42 @@ public:
     {
         m_context = context;
     }
+    double getSnapshotProgress() override { return m_snapshot_progress.load(); }
+    bool snapshotLoad(const std::string& path_string) override
+    {
+        const fs::path path = fs::u8path(path_string);
+        if (!fs::exists(path)) { return false; }
+
+        AutoFile afile{fsbridge::fopen(path, "rb")};
+        if (afile.IsNull()) { return false; }
+
+        SnapshotMetadata metadata;
+        try {
+            afile >> metadata;
+        } catch (const std::exception& e) { return false; }
+
+        const uint256& base_blockhash = metadata.m_base_blockhash;
+
+        if (!m_context->chainman) { return false; }
+
+        ChainstateManager& chainman = *m_context->chainman;
+        CBlockIndex* snapshot_start_block = nullptr;
+
+        // Wait for the block to appear in the block index
+        //TODO: remove this once another method is implemented
+        constexpr int max_wait_seconds = 600; // 10 minutes
+        for (int i = 0; i < max_wait_seconds; ++i) {
+            snapshot_start_block = WITH_LOCK(::cs_main, return chainman.m_blockman.LookupBlockIndex(base_blockhash));
+            if (snapshot_start_block) break;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        return chainman.ActivateSnapshot(afile, metadata, false);
+    }
     ArgsManager& args() { return *Assert(Assert(m_context)->args); }
     ChainstateManager& chainman() { return *Assert(m_context->chainman); }
     NodeContext* m_context{nullptr};
+    std::atomic<double> m_snapshot_progress{0.0};
 };
 
 bool FillBlock(const CBlockIndex* index, const FoundBlock& block, UniqueLock<RecursiveMutex>& lock, const CChain& active, const BlockManager& blockman)
@@ -510,7 +544,7 @@ public:
 class ChainImpl : public Chain
 {
 public:
-    explicit ChainImpl(NodeContext& node) : m_node(node) {}
+    explicit ChainImpl(node::NodeContext& node) : m_node(node) {}
     std::optional<int> getHeight() override
     {
         const int height{WITH_LOCK(::cs_main, return chainman().ActiveChain().Height())};

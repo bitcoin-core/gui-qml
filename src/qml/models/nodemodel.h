@@ -34,6 +34,9 @@ class NodeModel : public QObject
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
+    Q_PROPERTY(double snapshotProgress READ snapshotProgress WRITE setSnapshotProgress NOTIFY snapshotProgressChanged)
+    Q_PROPERTY(bool snapshotLoading READ snapshotLoading NOTIFY snapshotLoadingChanged)
+    Q_PROPERTY(bool isSnapshotLoaded READ isSnapshotLoaded NOTIFY snapshotLoaded)
 
 public:
     explicit NodeModel(interfaces::Node& node);
@@ -52,12 +55,19 @@ public:
     void setPause(bool new_pause);
     bool errorState() const { return m_faulted; }
     void setErrorState(bool new_error);
+    bool isSnapshotLoaded() const { return m_snapshot_loaded; }
+    double snapshotProgress() const { return m_snapshot_progress; }
+    void setSnapshotProgress(double new_progress);
+    bool snapshotLoading() const { return m_snapshot_loading; }
 
     Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
     Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
 
     Q_INVOKABLE void startNodeInitializionThread();
     Q_INVOKABLE void requestShutdown();
+
+    Q_INVOKABLE void initializeSnapshot(bool initLoadSnapshot, QString path_file);
+    Q_INVOKABLE bool snapshotLoad(QString path_file) const { return m_node.snapshotLoad(path_file.toStdString()); }
 
     void startShutdownPolling();
     void stopShutdownPolling();
@@ -77,7 +87,10 @@ Q_SIGNALS:
 
     void setTimeRatioList(int new_time);
     void setTimeRatioListInitial();
-
+    void initializationFinished();
+    void snapshotLoaded(bool result);
+    void snapshotProgressChanged();
+    void snapshotLoadingChanged();
 protected:
     void timerEvent(QTimerEvent* event) override;
 
@@ -90,9 +103,11 @@ private:
     double m_verification_progress{0.0};
     bool m_pause{false};
     bool m_faulted{false};
-
+    double m_snapshot_progress{0.0};
     int m_shutdown_polling_timer_id{0};
-
+    int m_snapshot_timer_id{0};
+    bool m_snapshot_loading{false};
+    bool m_snapshot_loaded{false};
     QVector<QPair<int, double>> m_block_process_time;
 
     interfaces::Node& m_node;
