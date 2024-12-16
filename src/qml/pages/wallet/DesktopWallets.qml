@@ -9,7 +9,6 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
-import "../../controls/utils.js" as Utils
 import "../../components"
 import "../node"
 
@@ -78,10 +77,10 @@ Page {
 
                 Tooltip {
                     id: blockClockTooltip
-                    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.verificationProgress > 0.9999
+                    property string remainingSyncTime: nodeModel.formattedRemainingSyncTime
+                    property bool synced: nodeModel.synced
                     property bool paused: nodeModel.pause
-                    property bool connected: nodeModel.numOutboundPeers > 0
+                    property bool connected: nodeModel.connected
 
                     anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: -5
@@ -94,7 +93,7 @@ Page {
                         } else if (connected && synced) {
                             qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
                         } else if (connected){
-                            qsTr("Downloading blocks\n" +  syncState.text)
+                            qsTr("Downloading blocks\n" +  blockClockTooltip.remainingSyncTime)
                         } else {
                             qsTr("Connecting")
                         }
