@@ -62,6 +62,9 @@ public:
     void startShutdownPolling();
     void stopShutdownPolling();
 
+    Q_INVOKABLE bool validateProxyAddress(QString addr_port);
+    Q_INVOKABLE QString defaultProxyAddress();
+
 public Q_SLOTS:
     void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
 

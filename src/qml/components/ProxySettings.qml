@@ -7,7 +7,12 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
 
+import org.bitcoincore.qt 1.0
+
 ColumnLayout {
+    property string ipAndPortHeader: qsTr("IP and Port")
+    property string invalidIpError: qsTr("Invalid IP address or port format. Use '255.255.255.255:65535' or '[ffff::]:65535'")
+
     spacing: 4
     Header {
         headerBold: true
@@ -30,7 +35,9 @@ ColumnLayout {
                 } else {
                     defaultProxy.state = "FILLED"
                 }
+                optionsModel.setIsProxySet(checked)
             }
+            checked: optionsModel.isProxySet
         }
         onClicked: {
             loadedItem.toggle()
@@ -41,14 +48,19 @@ ColumnLayout {
     Setting {
         id: defaultProxy
         Layout.fillWidth: true
-        header: qsTr("IP and Port")
-        errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
+        header: ipAndPortHeader
+        errorText: invalidIpError
         state: !defaultProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
         showErrorText: !defaultProxy.loadedItem.validInput && defaultProxyEnable.loadedItem.checked
         actionItem: IPAddressValueInput {
             parentState: defaultProxy.state
-            description: "127.0.0.1:9050"
+            text: optionsModel.proxyAddress
             activeFocusOnTab: true
+            onTextChanged: {
+                if (validInput = nodeModel.validateProxyAddress(text)) {
+                    optionsModel.setProxyAddress(text);
+                }
+            }
         }
         onClicked: {
             loadedItem.filled = true
@@ -78,7 +90,9 @@ ColumnLayout {
                 } else {
                     torProxy.state = "FILLED"
                 }
+                optionsModel.setIsTorProxySet(checked)
             }
+            checked: optionsModel.isTorProxySet
         }
         onClicked: {
             loadedItem.toggle()
@@ -89,14 +103,19 @@ ColumnLayout {
     Setting {
         id: torProxy
         Layout.fillWidth: true
-        header: qsTr("IP and Port")
-        errorText: qsTr("Invalid IP address or port format. Please use the format '255.255.255.255:65535'.")
+        header: ipAndPortHeader
+        errorText: invalidIpError
         state: !torProxyEnable.loadedItem.checked ? "DISABLED" : "FILLED"
         showErrorText: !torProxy.loadedItem.validInput && torProxyEnable.loadedItem.checked
         actionItem: IPAddressValueInput {
             parentState: torProxy.state
-            description: "127.0.0.1:9050"
+            text: optionsModel.torProxyAddress
             activeFocusOnTab: true
+            onTextChanged: {
+                if (validInput = nodeModel.validateProxyAddress(text)) {
+                    optionsModel.setTorProxyAddress(text);
+                }
+            }
         }
         onClicked: {
             loadedItem.filled = true

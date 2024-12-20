@@ -45,6 +45,14 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     m_upnp = SettingToBool(m_node.getPersistentSetting("upnp"), DEFAULT_UPNP);
 
     m_dataDir = getDefaultDataDirString();
+
+    m_proxy_address = QString::fromStdString(SettingToString(m_node.getPersistentSetting("proxy"), ""));
+
+    m_is_proxy_set = evaluateIfProxyIsSet();
+
+    m_tor_proxy_address = QString::fromStdString(SettingToString(m_node.getPersistentSetting("onion"), ""));
+
+    m_is_tor_proxy_set = evaluateIfTorProxyIsSet();
 }
 
 void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
@@ -225,5 +233,95 @@ void OptionsQmlModel::onboard()
     if (m_upnp) {
         m_node.updateRwSetting("upnp", m_upnp);
     }
+    if (m_is_proxy_set && !m_proxy_address.isEmpty() && m_node.validateProxyAddress(m_proxy_address.toStdString())) {
+        m_node.updateRwSetting("proxy", m_proxy_address.toStdString());
+    }
+    if (m_is_tor_proxy_set && !m_tor_proxy_address.isEmpty() && m_node.validateProxyAddress(m_tor_proxy_address.toStdString())) {
+        m_node.updateRwSetting("onion", m_tor_proxy_address.toStdString());
+    }
     m_onboarded = true;
+}
+
+void OptionsQmlModel::setProxyAddress(QString new_proxy_address)
+{
+    if (new_proxy_address != m_proxy_address) {
+        m_proxy_address = new_proxy_address;
+        if (m_onboarded && m_node.validateProxyAddress(new_proxy_address.toStdString())) {
+            m_node.updateRwSetting("proxy", new_proxy_address.toStdString());
+        }
+        Q_EMIT proxyAddressChanged(new_proxy_address);
+    }
+}
+
+void OptionsQmlModel::setIsProxySet(bool is_set)
+{
+    if (is_set != m_is_proxy_set) {
+        m_is_proxy_set = is_set;
+        if (m_onboarded && m_is_proxy_set && m_node.validateProxyAddress(m_proxy_address.toStdString())) {
+            m_node.updateRwSetting("proxy", m_proxy_address.toStdString());
+        }
+        if (!m_is_proxy_set) {
+            m_node.updateRwSetting("proxy", {});
+        }
+        Q_EMIT isProxySetChanged(is_set);
+    }
+}
+
+bool OptionsQmlModel::evaluateIfProxyIsSet()
+{
+    bool proxyHasBeenSet;
+
+    if (!m_proxy_address.isEmpty()) {
+        if (!m_node.validateProxyAddress(m_proxy_address.toStdString())) {
+            m_proxy_address = "";
+        }
+    }
+
+    proxyHasBeenSet = !m_proxy_address.isEmpty();
+    if (!proxyHasBeenSet) {
+        m_proxy_address = QString::fromStdString(m_node.defaultProxyAddress());
+    }
+    return proxyHasBeenSet;
+}
+
+void OptionsQmlModel::setTorProxyAddress(QString new_proxy_address)
+{
+    if (new_proxy_address != m_tor_proxy_address) {
+        m_tor_proxy_address = new_proxy_address;
+        if (m_onboarded && m_node.validateProxyAddress(new_proxy_address.toStdString())) {
+            m_node.updateRwSetting("onion", new_proxy_address.toStdString());
+        }
+        Q_EMIT torProxyAddressChanged(new_proxy_address);
+    }
+}
+
+void OptionsQmlModel::setIsTorProxySet(bool is_set)
+{
+    if (is_set != m_is_tor_proxy_set) {
+        m_is_tor_proxy_set = is_set;
+        if (m_onboarded && m_is_proxy_set && m_node.validateProxyAddress(m_tor_proxy_address.toStdString())) {
+            m_node.updateRwSetting("onion", m_tor_proxy_address.toStdString());
+        }
+        if (!m_is_proxy_set) {
+            m_node.updateRwSetting("onion", {});
+        }
+        Q_EMIT isTorProxySetChanged(is_set);
+    }
+}
+
+bool OptionsQmlModel::evaluateIfTorProxyIsSet()
+{
+    bool proxyHasBeenSet;
+
+    if (!m_tor_proxy_address.isEmpty()) {
+        if (!m_node.validateProxyAddress(m_tor_proxy_address.toStdString())) {
+            m_tor_proxy_address = "";
+        }
+    }
+
+    proxyHasBeenSet = !m_tor_proxy_address.isEmpty();
+    if (!proxyHasBeenSet) {
+        m_tor_proxy_address = QString::fromStdString(m_node.defaultProxyAddress());
+    }
+    return proxyHasBeenSet;
 }
