@@ -10,7 +10,6 @@ import Qt.labs.settings 1.0
 import org.bitcoincore.qt 1.0
 
 import "../controls"
-import "../controls/utils.js" as Utils
 
 Item {
     id: root
@@ -25,13 +24,12 @@ Item {
     property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
     property int headerSize: 32
-    property bool connected: nodeModel.numOutboundPeers > 0
-    property bool synced: nodeModel.verificationProgress > 0.999
-    property string syncProgress: formatProgressPercentage(nodeModel.verificationProgress * 100)
+    property bool connected: nodeModel.connected
+    property bool synced: nodeModel.synced
+    property string syncProgress: nodeModel.formattedVerificationProgress
     property bool paused: false
-    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-    property string syncTime: syncState.text
-    property bool estimating: syncState.estimating
+    property string syncTime: nodeModel.formattedRemainingSyncTime
+    property bool estimating: nodeModel.estimatingSyncTime
     property bool faulted: nodeModel.faulted
 
     activeFocusOnTab: true
@@ -53,7 +51,7 @@ Item {
         verificationProgress: nodeModel.verificationProgress
         paused: root.paused || root.faulted
         connected: root.connected
-        synced: nodeModel.verificationProgress > 0.999
+        synced: root.synced
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
@@ -242,17 +240,4 @@ Item {
             }
         }
     ]
-
-
-    function formatProgressPercentage(progress) {
-        if (progress >= 1) {
-            return Math.round(progress) + "%"
-        } else if (progress >= 0.1) {
-            return progress.toFixed(1) + "%"
-        } else if (progress >= 0.01) {
-            return progress.toFixed(2) + "%"
-        } else {
-            return "0%"
-        }
-    }
 }
