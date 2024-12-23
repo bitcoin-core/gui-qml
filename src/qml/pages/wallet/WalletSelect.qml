@@ -12,9 +12,11 @@ Popup {
     id: root
 
     property alias model: listView.model
-    implicitHeight: layout.height + arrow.height
+    implicitHeight: layout.height + arrow.height + 11
     implicitWidth: 250
     clip: true
+
+    signal addWallet()
 
     background: Item {
         anchors.fill: parent
@@ -89,28 +91,14 @@ Popup {
             }
         }
 
-        RowLayout {
+        AddWalletButton {
             id: addWallet
-            Layout.preferredWidth: addIcon.size + addText.width
-            Layout.preferredHeight: 45
             Layout.alignment: Qt.AlignHCenter
-            Icon {
-                id: addIcon
-                Layout.alignment: Qt.AlignHCenter
-                source: "image://images/plus"
-                color: Theme.color.neutral8
-                size: 14
-                topPadding: 5
-                bottomPadding: 10
-            }
-            CoreText {
-                id: addText
-                Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Add Wallet")
-                color: Theme.color.neutral9
-                font.pixelSize: 15
-                topPadding: 5
-                bottomPadding: 10
+            Layout.preferredWidth: 220
+            Layout.preferredHeight: 30
+            onClicked: {
+                root.addWallet()
+                root.close()
             }
         }
     }
