@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QtGlobal>
 
-class BlockClockDial : public QQuickPaintedItem
+class BlockStatusDial : public QQuickPaintedItem
 {
     Q_OBJECT
     Q_PROPERTY(QVariantList timeRatioList READ timeRatioList WRITE setTimeRatioList)
@@ -26,7 +26,7 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
 
 public:
-    explicit BlockClockDial(QQuickItem * parent = nullptr);
+    explicit BlockStatusDial(QQuickItem * parent = nullptr);
     void paint(QPainter * painter) override;
 
     QVariantList timeRatioList() const { return m_time_ratio_list; };

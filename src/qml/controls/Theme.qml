@@ -6,14 +6,14 @@ import Qt.labs.settings 1.0
 Control {
     id: root
     property bool dark: true
-    property real blockclocksize: (5/12)
+    property real blockstatussize: (5/12)
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
 
     Settings {
         id: settings
         property alias dark: root.dark
-        property alias blockclocksize: root.blockclocksize
+        property alias blockstatussize: root.blockstatussize
     }
 
     component ColorSet: QtObject {

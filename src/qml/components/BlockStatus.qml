@@ -38,13 +38,13 @@ Item {
 
     Settings {
         id: settings
-        property alias blockclocksize: dial.scale
+        property alias blockstatussize: dial.scale
     }
 
-    BlockClockDial {
+    BlockStatusDial {
         id: dial
         anchors.horizontalCenter: root.horizontalCenter
-        scale: Theme.blockclocksize
+        scale: Theme.blockstatussize
         width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width

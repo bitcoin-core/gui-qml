@@ -37,14 +37,14 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/bitcoin-circle").pixmap(requested_size);
     }
 
-    if (id == "blockclock-size-compact") {
+    if (id == "blockstatus-size-compact") {
         *size = requested_size;
-        return QIcon(":/icons/blockclock-size-compact").pixmap(requested_size);
+        return QIcon(":/icons/blockstatus-size-compact").pixmap(requested_size);
     }
 
-    if (id == "blockclock-size-showcase") {
+    if (id == "blockstatus-size-showcase") {
         *size = requested_size;
-        return QIcon(":/icons/blockclock-size-showcase").pixmap(requested_size);
+        return QIcon(":/icons/blockstatus-size-showcase").pixmap(requested_size);
     }
 
     if (id == "blocktime-dark") {

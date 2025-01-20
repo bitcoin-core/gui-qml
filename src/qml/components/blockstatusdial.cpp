@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <qml/components/blockclockdial.h>
+#include <qml/components/blockstatusdial.h>
 
 #include <QBrush>
 #include <QColor>
@@ -12,7 +12,7 @@
 #include <QtMath>
 #include <QtGlobal>
 
-BlockClockDial::BlockClockDial(QQuickItem *parent)
+BlockStatusDial::BlockStatusDial(QQuickItem *parent)
     : QQuickPaintedItem(parent)
 {
     m_animation_timer.setTimerType(Qt::PreciseTimer);
@@ -32,7 +32,7 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
     m_delay_timer.start();
 }
 
-void BlockClockDial::setupConnectingGradient(const QPen & pen)
+void BlockStatusDial::setupConnectingGradient(const QPen & pen)
 {
     m_connecting_gradient.setCenter(getBoundsForPen(pen).center());
     m_connecting_gradient.setAngle(m_connecting_start_angle);
@@ -43,7 +43,7 @@ void BlockClockDial::setupConnectingGradient(const QPen & pen)
     m_connecting_gradient.setColorAt(1, "transparent");
 }
 
-qreal BlockClockDial::decrementGradientAngle(qreal angle)
+qreal BlockStatusDial::decrementGradientAngle(qreal angle)
 {
     if (angle == -360) {
         return 0;
@@ -52,7 +52,7 @@ qreal BlockClockDial::decrementGradientAngle(qreal angle)
     }
 }
 
-qreal BlockClockDial::getTargetAnimationAngle()
+qreal BlockStatusDial::getTargetAnimationAngle()
 {
     if (connected() && synced()) {
         return m_time_ratio_list[0].toDouble() * 360;
@@ -63,7 +63,7 @@ qreal BlockClockDial::getTargetAnimationAngle()
     }
 }
 
-qreal BlockClockDial::incrementAnimatingMaxAngle(qreal angle)
+qreal BlockStatusDial::incrementAnimatingMaxAngle(qreal angle)
 {
     if (connected()) {
         return angle += (getTargetAnimationAngle() - angle) * 0.05;
@@ -77,19 +77,19 @@ qreal BlockClockDial::incrementAnimatingMaxAngle(qreal angle)
     }
 }
 
-void BlockClockDial::setTimeRatioList(QVariantList new_list)
+void BlockStatusDial::setTimeRatioList(QVariantList new_list)
 {
     m_time_ratio_list = new_list;
     update();
 }
 
-void BlockClockDial::setVerificationProgress(double progress)
+void BlockStatusDial::setVerificationProgress(double progress)
 {
     m_verification_progress = progress;
     update();
 }
 
-void BlockClockDial::setConnected(bool connected)
+void BlockStatusDial::setConnected(bool connected)
 {
     if (m_is_connected != connected) {
         m_is_connected = connected;
@@ -104,7 +104,7 @@ void BlockClockDial::setConnected(bool connected)
     }
 }
 
-void BlockClockDial::setSynced(bool is_synced)
+void BlockStatusDial::setSynced(bool is_synced)
 {
     if (m_is_synced != is_synced) {
         m_is_synced = is_synced;
@@ -116,7 +116,7 @@ void BlockClockDial::setSynced(bool is_synced)
     }
 }
 
-void BlockClockDial::setPaused(bool paused)
+void BlockStatusDial::setPaused(bool paused)
 {
     if (m_is_paused != paused) {
         m_is_paused = paused;
@@ -128,13 +128,13 @@ void BlockClockDial::setPaused(bool paused)
     }
 }
 
-void BlockClockDial::setPenWidth(qreal width)
+void BlockStatusDial::setPenWidth(qreal width)
 {
     m_pen_width = width;
     update();
 }
 
-void BlockClockDial::setScale(qreal scale)
+void BlockStatusDial::setScale(qreal scale)
 {
     m_scale = scale;
     update();
@@ -142,25 +142,25 @@ void BlockClockDial::setScale(qreal scale)
     Q_EMIT scaleChanged();
 }
 
-void BlockClockDial::setBackgroundColor(QColor color)
+void BlockStatusDial::setBackgroundColor(QColor color)
 {
     m_background_color = color;
     update();
 }
 
-void BlockClockDial::setConfirmationColors(QList<QColor> colorList)
+void BlockStatusDial::setConfirmationColors(QList<QColor> colorList)
 {
     m_confirmation_colors = colorList;
     update();
 }
 
-void BlockClockDial::setTimeTickColor(QColor color)
+void BlockStatusDial::setTimeTickColor(QColor color)
 {
     m_time_tick_color = color;
     update();
 }
 
-QRectF BlockClockDial::getBoundsForPen(const QPen & pen)
+QRectF BlockStatusDial::getBoundsForPen(const QPen & pen)
 {
     const QRectF bounds = boundingRect();
     const qreal smallest = qMin(bounds.width(), bounds.height());
@@ -185,7 +185,7 @@ QRectF BlockClockDial::getBoundsForPen(const QPen & pen)
     return rect;
 }
 
-void BlockClockDial::paintBlocks(QPainter * painter)
+void BlockStatusDial::paintBlocks(QPainter * painter)
 {
     int numberOfBlocks = m_time_ratio_list.length();
     if (numberOfBlocks < 2) {
@@ -234,7 +234,7 @@ void BlockClockDial::paintBlocks(QPainter * painter)
     }
 }
 
-void BlockClockDial::paintProgress(QPainter * painter)
+void BlockStatusDial::paintProgress(QPainter * painter)
 {
     QPen pen(m_confirmation_colors[5]);
     pen.setWidthF(m_pen_width);
@@ -257,7 +257,7 @@ void BlockClockDial::paintProgress(QPainter * painter)
     painter->drawArc(bounds, startAngle * 16, spanAngle * 16);
 }
 
-void BlockClockDial::paintConnectingAnimation(QPainter * painter)
+void BlockStatusDial::paintConnectingAnimation(QPainter * painter)
 {
     QPen pen;
     pen.setWidthF(m_pen_width);
@@ -274,7 +274,7 @@ void BlockClockDial::paintConnectingAnimation(QPainter * painter)
     }
 }
 
-void BlockClockDial::paintBackground(QPainter * painter)
+void BlockStatusDial::paintBackground(QPainter * painter)
 {
     QPen pen(m_background_color);
     pen.setWidthF(m_pen_width);
@@ -284,13 +284,13 @@ void BlockClockDial::paintBackground(QPainter * painter)
     painter->drawEllipse(bounds);
 }
 
-double BlockClockDial::degreesPerPixel()
+double BlockStatusDial::degreesPerPixel()
 {
     double circumference = width() * 3.1415926;
     return 360 / circumference;
 }
 
-void BlockClockDial::paintTimeTicks(QPainter * painter)
+void BlockStatusDial::paintTimeTicks(QPainter * painter)
 {
     QPen pen(m_time_tick_color);
     pen.setWidthF(m_pen_width);
@@ -309,7 +309,7 @@ void BlockClockDial::paintTimeTicks(QPainter * painter)
     }
 }
 
-void BlockClockDial::paint(QPainter * painter)
+void BlockStatusDial::paint(QPainter * painter)
 {
     if (width() <= 0 || height() <= 0) {
         return;

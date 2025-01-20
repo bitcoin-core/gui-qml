@@ -1,8 +1,8 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
         <file>components/AboutOptions.qml</file>
-        <file>components/BlockClock.qml</file>
-        <file>components/BlockClockDisplayMode.qml</file>
+        <file>components/BlockStatus.qml</file>
+        <file>components/BlockStatusDisplayMode.qml</file>
         <file>components/BlockCounter.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>components/ConnectionOptions.qml</file>
@@ -55,7 +55,7 @@
         <file>pages/node/Peers.qml</file>
         <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
-        <file>pages/onboarding/OnboardingBlockclock.qml</file>
+        <file>pages/onboarding/OnboardingBlockStatus.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
         <file>pages/onboarding/OnboardingCover.qml</file>
         <file>pages/onboarding/OnboardingStorageAmount.qml</file>
@@ -63,7 +63,7 @@
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/onboarding/OnboardingWizard.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
-        <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
+        <file>pages/settings/SettingsBlockStatusDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsDisplay.qml</file>
@@ -85,8 +85,8 @@
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
-        <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
-        <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
+        <file alias="blockstatus-size-compact">res/icons/blockstatus-size-compact.png</file>
+        <file alias="blockstatus-size-showcase">res/icons/blockstatus-size-showcase.png</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>

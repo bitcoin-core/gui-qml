@@ -70,24 +70,24 @@ Page {
                 shorten: true
             }
             NavigationTab {
-                id: blockClockTabButton
+                id: blockStatusTabButton
                 Layout.preferredWidth: 30
                 Layout.rightMargin: 10
                 property int index: 3
                 ButtonGroup.group: navigationTabs
 
                 Tooltip {
-                    id: blockClockTooltip
+                    id: blockStatusTooltip
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
                     property bool synced: nodeModel.verificationProgress > 0.9999
                     property bool paused: nodeModel.pause
                     property bool connected: nodeModel.numOutboundPeers > 0
 
-                    anchors.top: blockClockTabButton.bottom
+                    anchors.top: blockStatusTabButton.bottom
                     anchors.topMargin: -5
-                    anchors.horizontalCenter: blockClockTabButton.horizontalCenter
+                    anchors.horizontalCenter: blockStatusTabButton.horizontalCenter
 
-                    visible: blockClockTabButton.hovered
+                    visible: blockStatusTabButton.hovered
                     text: {
                         if (paused) {
                             qsTr("Paused")
@@ -135,9 +135,9 @@ Page {
             CoreText { text: "Receive" }
         }
         Item {
-            id: blockClockTab
+            id: blockStatusTab
             anchors.fill: parent
-            BlockClock {
+            BlockStatus {
                 parentWidth: parent.width - 40
                 parentHeight: parent.height
                 anchors.centerIn: parent
