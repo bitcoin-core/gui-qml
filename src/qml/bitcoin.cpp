@@ -20,12 +20,14 @@
 #include <noui.h>
 #include <qml/appmode.h>
 #include <qml/bitcoinamount.h>
+#include <qml/clipboard.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
+#include <qml/models/activitylistmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
@@ -319,12 +321,15 @@ int QmlGuiMain(int argc, char* argv[])
     engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
 
     AppMode app_mode = SetupAppMode();
+    Clipboard clipboard;
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
+    qmlRegisterSingletonInstance<Clipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", &clipboard);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
     qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
+    qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
 
 #ifdef ENABLE_WALLET
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
