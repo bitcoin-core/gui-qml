@@ -18,21 +18,23 @@ Item {
     signal textEdited
 
     id: root
-    implicitHeight: label.height + input.height
+    implicitHeight: input.height
 
     CoreText {
         id: label
         anchors.left: parent.left
-        anchors.top: parent.top
-        color: Theme.color.neutral7
-        font.pixelSize: 15
+        anchors.verticalCenter: parent.verticalCenter
+        horizontalAlignment: Text.AlignLeft
+        width: 110
+        color: Theme.color.neutral9
+        font.pixelSize: 18
     }
 
     TextField {
         id: input
-        anchors.left: parent.left
+        anchors.left: label.right
         anchors.right: iconContainer.left
-        anchors.bottom: parent.bottom
+        anchors.verticalCenter: parent.verticalCenter
         leftPadding: 0
         font.family: "Inter"
         font.styleName: "Regular"

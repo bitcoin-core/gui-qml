@@ -32,14 +32,15 @@
         <file>controls/InformationPage.qml</file>
         <file>controls/IPAddressValueInput.qml</file>
         <file>controls/KeyValueRow.qml</file>
+        <file>controls/LabeledTextInput.qml</file>
         <file>controls/NavButton.qml</file>
-        <file>controls/PageIndicator.qml</file>
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
         <file>controls/NavigationTab.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
+        <file>controls/PageIndicator.qml</file>
         <file>controls/PageStack.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/qmldir</file>
@@ -72,6 +73,8 @@
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
+        <file>pages/wallet/Activity.qml</file>
+        <file>pages/wallet/ActivityDetails.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
         <file>pages/wallet/CreateIntro.qml</file>
@@ -97,6 +100,7 @@
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
         <file alias="copy">res/icons/copy.png</file>
+        <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
@@ -116,6 +120,8 @@
         <file alias="storage-light">res/icons/storage-light.png</file>
         <file alias="tooltip-arrow-dark">res/icons/tooltip-arrow-dark.png</file>
         <file alias="tooltip-arrow-light">res/icons/tooltip-arrow-light.png</file>
+        <file alias="triangle-down">res/icons/triangle-down.png</file>
+        <file alias="triangle-up">res/icons/triangle-up.png</file>
         <file alias="wallet">res/icons/wallet.png</file>
         <file alias="visible">res/icons/visible.png</file>
     </qresource>
