@@ -90,7 +90,7 @@ ApplicationWindow {
     Component {
         id: createWalletWizard
         CreateWalletWizard {
-           onFinished: {
+            onFinished: {
                 main.pop()
             }
         }
