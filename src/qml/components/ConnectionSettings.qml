@@ -11,13 +11,13 @@ ColumnLayout {
     id: root
     signal next
     signal gotoSnapshot
-    property bool snapshotImported: false
-    function setSnapshotImported(imported) {
-        snapshotImported = imported
-    }
+    property bool snapshotImportCompleted: chainModel.isSnapshotActive
+    property bool onboarding: false
+
     spacing: 4
     Setting {
         id: gotoSnapshot
+        visible: !root.onboarding
         Layout.fillWidth: true
         header: qsTr("Load snapshot")
         description: qsTr("Instant use with background sync")
@@ -26,19 +26,22 @@ ColumnLayout {
             height: 26
             CaretRightIcon {
                 anchors.centerIn: parent
-                visible: !snapshotImported
+                visible: !snapshotImportCompleted
                 color: gotoSnapshot.stateColor
             }
             GreenCheckIcon {
                 anchors.centerIn: parent
-                visible: snapshotImported
+                visible: snapshotImportCompleted
                 color: Theme.color.transparent
                 size: 30
             }
         }
         onClicked: root.gotoSnapshot()
     }
-    Separator { Layout.fillWidth: true }
+    Separator {
+        visible: !root.onboarding
+        Layout.fillWidth: true
+    }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable listening")
