@@ -99,14 +99,5 @@ Page {
                 onBack: stack.pop()
             }
         }
-        Component {
-            id: generateSnapshotSettings
-            SettingsSnapshotGen {
-                onboarding: root.onboarding
-                generateSnapshot: true
-                isSnapshotGenerated: ( nodeModel.isSnapshotFileExists() || nodeModel.isSnapshotGenerated )
-                onBack: stack.pop()
-            }
-        }
     }
 }
