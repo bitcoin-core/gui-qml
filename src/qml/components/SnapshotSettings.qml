@@ -5,44 +5,29 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Dialogs 1.3
 
 import "../controls"
 
 ColumnLayout {
-    signal snapshotImportCompleted()
-    property int snapshotVerificationCycles: 0
-    property real snapshotVerificationProgress: 0
-    property bool snapshotVerified: false
-
     id: columnLayout
+    signal back
+    property bool snapshotLoading: nodeModel.snapshotLoading
+    property bool snapshotLoaded: nodeModel.isSnapshotLoaded
+    property bool snapshotImportCompleted: onboarding ? false : chainModel.isSnapshotActive
+    property bool onboarding: false
+    property bool snapshotVerified: onboarding ? false : chainModel.isSnapshotActive
+    property string snapshotFileName: ""
+    property var snapshotInfo: (snapshotVerified || snapshotLoaded) ? chainModel.getSnapshotInfo() : ({})
+    property string selectedFile: ""
+    property bool headersSynced: nodeModel.headersSynced
+
     width: Math.min(parent.width, 450)
     anchors.horizontalCenter: parent.horizontalCenter
 
-
-    Timer {
-        id: snapshotSimulationTimer
-        interval: 50 // Update every 50ms
-        running: false
-        repeat: true
-        onTriggered: {
-            if (snapshotVerificationProgress < 1) {
-                snapshotVerificationProgress += 0.01
-            } else {
-                snapshotVerificationCycles++
-                if (snapshotVerificationCycles < 1) {
-                    snapshotVerificationProgress = 0
-                } else {
-                    running = false
-                    snapshotVerified = true
-                    settingsStack.currentIndex = 2
-                }
-            }
-        }
-    }
-
     StackLayout {
         id: settingsStack
-        currentIndex: 0
+        currentIndex: onboarding ? 0 : snapshotLoaded ? 2 : snapshotVerified ? 2 : snapshotLoading ? 1 : 0
 
         ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
@@ -69,6 +54,19 @@ ColumnLayout {
                 " It will be automatically verified in the background.")
             }
 
+            CoreText {
+                Layout.fillWidth: true
+                Layout.topMargin: 20
+                color: Theme.color.neutral6
+                font.pixelSize: 17
+                visible: !headersSynced
+                text: !headersSynced
+                    ? qsTr("Please wait for headers to sync before loading a snapshot.")
+                    : qsTr("")
+                wrap: true
+                wrapMode: Text.WordWrap
+            }
+
             ContinueButton {
                 Layout.preferredWidth: Math.min(300, columnLayout.width - 2 * Layout.leftMargin)
                 Layout.topMargin: 40
@@ -77,11 +75,23 @@ ColumnLayout {
                 Layout.bottomMargin: 20
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Choose snapshot file")
-                onClicked: {
-                    settingsStack.currentIndex = 1
-                    snapshotSimulationTimer.start()
+                enabled: headersSynced
+                onClicked: fileDialog.open()
+            }
+
+            FileDialog {
+                id: fileDialog
+                folder: shortcuts.home
+                selectMultiple: false
+                selectExisting: true
+                nameFilters: ["Snapshot files (*.dat)", "All files (*)"]
+                onAccepted: {
+                    selectedFile = fileUrl.toString()
+                    snapshotFileName = selectedFile
+                    nodeModel.snapshotLoadThread(snapshotFileName)
                 }
             }
+            // TODO: Handle file error signal
         }
 
         ColumnLayout {
@@ -102,6 +112,7 @@ ColumnLayout {
                 Layout.leftMargin: 20
                 Layout.rightMargin: 20
                 header: qsTr("Loading Snapshot")
+                description: qsTr("This might take a while...")
             }
 
             ProgressIndicator {
@@ -109,7 +120,7 @@ ColumnLayout {
                 Layout.topMargin: 20
                 width: 200
                 height: 20
-                progress: snapshotVerificationProgress
+                progress: nodeModel.snapshotProgress
                 Layout.alignment: Qt.AlignCenter
                 progressColor: Theme.color.blue
             }
@@ -137,8 +148,10 @@ ColumnLayout {
                 descriptionColor: Theme.color.neutral6
                 descriptionSize: 17
                 descriptionLineHeight: 1.1
-                description: qsTr("It contains transactions up to January 12, 2024. Newer transactions still need to be downloaded." +
-                " The data will be verified in the background.")
+                description: snapshotInfo && snapshotInfo["date"] ?
+                    qsTr("It contains unspent transactions up to %1. Next, transactions will be verified and newer transactions downloaded.").arg(snapshotInfo["date"]) :
+                    qsTr("It contains transactions up to DEBUG. Newer transactions still need to be downloaded." +
+                    " The data will be verified in the background.")
             }
 
             ContinueButton {
@@ -147,9 +160,8 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Done")
                 onClicked: {
-                    snapshotImportCompleted()
-                    connectionSwipe.decrementCurrentIndex()
-                    connectionSwipe.decrementCurrentIndex()
+                    chainModel.isSnapshotActiveChanged()
+                    back()
                 }
             }
 
@@ -188,15 +200,28 @@ ColumnLayout {
                         font.pixelSize: 14
                     }
                     CoreText {
-                        text: qsTr("200,000")
+                        text: snapshotInfo && snapshotInfo["height"] ?
+                            snapshotInfo["height"] : qsTr("DEBUG")
                         Layout.alignment: Qt.AlignRight
                         font.pixelSize: 14
                     }
                 }
                 Separator { Layout.fillWidth: true }
-                CoreText {
-                    text: qsTr("Hash: 0x1234567890abcdef...")
-                    font.pixelSize: 14
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 5
+                    CoreText {
+                        text: qsTr("Hash:")
+                        font.pixelSize: 14
+                    }
+                    CoreText {
+                        text: snapshotInfo && snapshotInfo["hashSerializedFirstHalf"] ?
+                            snapshotInfo["hashSerializedFirstHalf"] + "\n" + snapshotInfo["hashSerializedSecondHalf"] :
+                            qsTr("DEBUG")
+                        Layout.fillWidth: true
+                        font.pixelSize: 14
+                        textFormat: Text.PlainText
+                    }
                 }
             }
         }
