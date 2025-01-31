@@ -49,6 +49,7 @@ QT_MOC_CPP = \
   qml/models/moc_sendrecipientslistmodel.cpp \
   qml/models/moc_transaction.cpp \
   qml/models/moc_sendrecipient.cpp \
+  qml/models/moc_snapshotqml.cpp \
   qml/models/moc_walletlistmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
@@ -141,6 +142,7 @@ BITCOIN_QT_H = \
   qml/models/transaction.h \
   qml/models/sendrecipient.h \
   qml/models/sendrecipientslistmodel.h \
+  qml/models/snapshotqml.h \
   qml/models/walletlistmodel.h \
   qml/models/walletqmlmodel.h \
   qml/models/walletqmlmodeltransaction.h \
@@ -343,6 +345,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/transaction.cpp \
   qml/models/sendrecipient.cpp \
   qml/models/sendrecipientslistmodel.cpp \
+  qml/models/snapshotqml.cpp \
   qml/models/walletlistmodel.cpp \
   qml/models/walletqmlmodel.cpp \
   qml/models/walletqmlmodeltransaction.cpp \

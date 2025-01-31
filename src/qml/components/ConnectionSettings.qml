@@ -39,7 +39,7 @@ ColumnLayout {
         onClicked: root.gotoSnapshot()
     }
     Separator {
-            visible: !root.onboarding && !snapshotImportCompleted
+            visible: !root.onboarding && !snapshotImportCompleted && !root.isIBDCompleted
         Layout.fillWidth: true
     }
     Setting {
