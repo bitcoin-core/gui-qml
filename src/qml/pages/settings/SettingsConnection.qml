@@ -91,5 +91,13 @@ Page {
                 onBack: stack.pop()
             }
         }
+        Component {
+            id: snapshotSettings
+            SettingsSnapshot {
+                onboarding: root.onboarding
+                snapshotImportCompleted: root.snapshotImportCompleted
+                onBack: stack.pop()
+            }
+        }
     }
 }
