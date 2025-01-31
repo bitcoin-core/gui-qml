@@ -9,8 +9,9 @@ import "../../controls"
 import "../../components"
 
 Page {
-    signal backClicked
-    signal snapshotImportCompleted
+    signal back
+    property bool snapshotImportCompleted: chainModel.isSnapshotActive
+    property bool onboarding: false
 
     id: root
 
@@ -24,14 +25,14 @@ Page {
         leftItem: NavButton {
             iconSource: "image://images/caret-left"
             text: qsTr("Back")
-            onClicked: root.backClicked()
+            onClicked: root.back()
         }
     }
     SnapshotSettings {
         width: Math.min(parent.width, 450)
         anchors.horizontalCenter: parent.horizontalCenter
-        onSnapshotImportCompleted: {
-            root.snapshotImportCompleted()
-        }
+        onboarding: root.onboarding
+        snapshotImportCompleted: root.snapshotImportCompleted
+        onBack: root.back()
     }
 }

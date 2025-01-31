@@ -9,9 +9,13 @@
 #include <QThread>
 #include <QTime>
 #include <interfaces/chain.h>
+#include <node/utxo_snapshot.h>
+#include <kernel/chainparams.h>
+#include <validation.h>
 
 ChainModel::ChainModel(interfaces::Chain& chain)
     : m_chain{chain}
+    //   m_params{Params()}
 {
     QTimer* timer = new QTimer();
     connect(timer, &QTimer::timeout, this, &ChainModel::setCurrentTimeRatio);
@@ -100,4 +104,30 @@ void ChainModel::setCurrentTimeRatio()
     }
 
     Q_EMIT timeRatioListChanged();
+}
+
+// TODO: Change this once a better solution has been found.
+// Using hardcoded snapshot info to display in SnapshotSettings.qml
+QVariantMap ChainModel::getSnapshotInfo() {
+    QVariantMap snapshot_info;
+
+   const MapAssumeutxo& valid_assumeutxos_map = Params().Assumeutxo();
+    if (!valid_assumeutxos_map.empty()) {
+        const int height = valid_assumeutxos_map.rbegin()->first;
+        const auto& hash_serialized = valid_assumeutxos_map.rbegin()->second.hash_serialized;
+        int64_t date = m_chain.getBlockTime(height);
+
+        QString fullHash = QString::fromStdString(hash_serialized.ToString());
+
+        int midPoint = fullHash.length() / 2;
+        QString firstHalf = fullHash.left(midPoint);
+        QString secondHalf = fullHash.mid(midPoint);
+
+        snapshot_info["height"] = height;
+        snapshot_info["hashSerializedFirstHalf"] = firstHalf;
+        snapshot_info["hashSerializedSecondHalf"] = secondHalf;
+        snapshot_info["date"] = QDateTime::fromSecsSinceEpoch(date).toString("MMMM d yyyy");
+    }
+
+    return snapshot_info;
 }
