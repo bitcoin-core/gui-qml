@@ -27,10 +27,10 @@ Page {
         centerItem: Header {
             headerBold: true
             headerSize: 18
-            header: qsTr("Block clock display mode")
+            header: qsTr("Block status display mode")
         }
     }
-    BlockClockDisplayMode {
+    BlockStatusDisplayMode {
         width: Math.min(parent.width, 450)
         anchors.horizontalCenter: parent.horizontalCenter
     }

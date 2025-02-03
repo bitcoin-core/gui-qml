@@ -23,12 +23,12 @@ PageStack {
         id: strengthen
         OnboardingStrengthen {
             onBack: root.pop()
-            onNext: root.push(blockclock)
+            onNext: root.push(blockstatus)
         }
     }
     Component {
-        id: blockclock
-        OnboardingBlockclock {
+        id: blockstatus
+        OnboardingBlockStatus {
             onBack: root.pop()
             onNext: root.push(storageLocation)
         }

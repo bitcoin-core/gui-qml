@@ -18,7 +18,7 @@
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
-#include <qml/components/blockclockdial.h>
+#include <qml/components/blockstatusdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/models/chainmodel.h>
@@ -327,7 +327,7 @@ int QmlGuiMain(int argc, char* argv[])
     AppMode app_mode = SetupAppMode();
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
-    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
+    qmlRegisterType<BlockStatusDial>("org.bitcoincore.qt", 1, 0, "BlockStatusDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
 
