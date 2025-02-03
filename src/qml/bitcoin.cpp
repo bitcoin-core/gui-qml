@@ -15,18 +15,21 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
+#include <qml/clipboard.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
+#include <qml/models/activitylistmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
 #include <qml/models/options_model.h>
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistsortproxy.h>
+#include <qml/models/transaction.h>
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <qml/imageprovider.h>
@@ -318,6 +321,9 @@ int QmlGuiMain(int argc, char* argv[])
     WalletListModel wallet_list_model{*node, nullptr};
     engine.rootContext()->setContextProperty("walletController", &wallet_controller);
     engine.rootContext()->setContextProperty("walletListModel", &wallet_list_model);
+
+    ActivityListModel actitvity_list_model{nullptr};
+    engine.rootContext()->setContextProperty("activityListModel", &actitvity_list_model);
 #endif
 
     OptionsQmlModel options_model(*node, !need_onboarding.toBool());
@@ -325,11 +331,14 @@ int QmlGuiMain(int argc, char* argv[])
     engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
 
     AppMode app_mode = SetupAppMode();
+    Clipboard clipboard;
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
+    qmlRegisterSingletonInstance<Clipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", &clipboard);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
+    qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
 
 #ifdef ENABLE_WALLET
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",

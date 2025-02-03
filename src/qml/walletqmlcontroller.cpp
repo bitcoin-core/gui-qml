@@ -4,6 +4,8 @@
 
 #include <qml/walletqmlcontroller.h>
 
+#include <qml/models/walletqmlmodel.h>
+
 #include <interfaces/node.h>
 #include <util/threadnames.h>
 
