@@ -19,6 +19,8 @@ Page {
 
     ButtonGroup { id: navigationTabs }
 
+    signal addWallet()
+
     header: NavigationBar2 {
         id: navBar
         leftItem: WalletBadge {
@@ -41,6 +43,10 @@ Page {
                 closePolicy: Popup.CloseOnPressOutside
                 x: 0
                 y: parent.height
+
+                onAddWallet: {
+                    root.addWallet()
+                }
             }
         }
         centerItem: RowLayout {
