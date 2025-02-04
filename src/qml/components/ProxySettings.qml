@@ -35,7 +35,9 @@ ColumnLayout {
                 } else {
                     defaultProxy.state = "FILLED"
                 }
+                optionsModel.setIsProxySet(checked)
             }
+            checked: optionsModel.isProxySet
         }
         onClicked: {
             loadedItem.toggle()
@@ -52,10 +54,12 @@ ColumnLayout {
         showErrorText: !defaultProxy.loadedItem.validInput && defaultProxyEnable.loadedItem.checked
         actionItem: IPAddressValueInput {
             parentState: defaultProxy.state
-            description: nodeModel.defaultProxyAddress()
+            text: optionsModel.proxyAddress
             activeFocusOnTab: true
             onTextChanged: {
-                validInput = nodeModel.validateProxyAddress(text);
+                if (validInput = nodeModel.validateProxyAddress(text)) {
+                    optionsModel.setProxyAddress(text);
+                }
             }
         }
         onClicked: {
@@ -86,7 +90,9 @@ ColumnLayout {
                 } else {
                     torProxy.state = "FILLED"
                 }
+                optionsModel.setIsTorProxySet(checked)
             }
+            checked: optionsModel.isTorProxySet
         }
         onClicked: {
             loadedItem.toggle()
@@ -103,10 +109,12 @@ ColumnLayout {
         showErrorText: !torProxy.loadedItem.validInput && torProxyEnable.loadedItem.checked
         actionItem: IPAddressValueInput {
             parentState: torProxy.state
-            description: nodeModel.defaultProxyAddress()
+            text: optionsModel.torProxyAddress
             activeFocusOnTab: true
             onTextChanged: {
-                validInput = nodeModel.validateProxyAddress(text);
+                if (validInput = nodeModel.validateProxyAddress(text)) {
+                    optionsModel.setTorProxyAddress(text);
+                }
             }
         }
         onClicked: {
