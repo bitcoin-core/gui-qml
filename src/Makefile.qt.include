@@ -46,6 +46,7 @@ QT_MOC_CPP = \
   qml/models/moc_walletlistmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
   qml/moc_appmode.cpp \
+  qml/moc_bitcoinamount.cpp \
   qml/moc_walletqmlcontroller.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
@@ -130,6 +131,7 @@ BITCOIN_QT_H = \
   qml/models/walletqmlmodel.h \
   qml/appmode.h \
   qml/bitcoin.h \
+  qml/bitcoinamount.h \
   qml/guiconstants.h \
   qml/imageprovider.h \
   qml/util.h \
@@ -310,6 +312,7 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
+  qml/bitcoinamount.cpp \
   qml/components/blockclockdial.cpp \
   qml/controls/linegraph.cpp \
   qml/models/chainmodel.cpp \
@@ -340,9 +343,11 @@ QML_RES_ICONS = \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
   qml/res/icons/check.png \
+  qml/res/icons/copy.png \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
+  qml/res/icons/flip-vertical.png \
   qml/res/icons/gear.png \
   qml/res/icons/gear-outline.png \
   qml/res/icons/hidden.png \
@@ -351,6 +356,7 @@ QML_RES_ICONS = \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
   qml/res/icons/plus.png \
+  qml/res/icons/pending.png \
   qml/res/icons/shutdown.png \
   qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
@@ -393,6 +399,7 @@ QML_RES_QML = \
   qml/controls/InformationPage.qml \
   qml/controls/IPAddressValueInput.qml \
   qml/controls/KeyValueRow.qml \
+  qml/controls/LabeledTextInput.qml \
   qml/controls/NavButton.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
@@ -440,6 +447,7 @@ QML_RES_QML = \
   qml/pages/wallet/CreatePassword.qml \
   qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
+  qml/pages/wallet/RequestPayment.qml \
   qml/pages/wallet/WalletBadge.qml \
   qml/pages/wallet/WalletSelect.qml
 
