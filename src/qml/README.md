@@ -79,7 +79,7 @@ If you're unable to install the dependencies through your system's package manag
 #### Fedora:
 
 ```
-sudo dnf install qt5-qtdeclarative-devel qt5-qtquickcontrols2-devel
+sudo dnf install qt5-qtdeclarative-devel qt5-qtquickcontrols qt5-qtquickcontrols2-devel
 ```
 
 ### Build
