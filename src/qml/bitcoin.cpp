@@ -27,6 +27,7 @@
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
+#include <qml/imageprovider.h>
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/networktraffictower.h>
@@ -34,9 +35,10 @@
 #include <qml/models/options_model.h>
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistsortproxy.h>
+#include <qml/models/sendrecipient.h>
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
-#include <qml/imageprovider.h>
+#include <qml/models/walletqmlmodeltransaction.h>
 #include <qml/util.h>
 #include <qml/walletqmlcontroller.h>
 #include <qt/guiutil.h>
@@ -330,10 +332,13 @@ int QmlGuiMain(int argc, char* argv[])
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
     qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
     qmlRegisterUncreatableType<Transaction>("org.bitcoincore.qt", 1, 0, "Transaction", "");
+    qmlRegisterUncreatableType<SendRecipient>("org.bitcoincore.qt", 1, 0, "SendRecipient", "");
 
 #ifdef ENABLE_WALLET
     qmlRegisterUncreatableType<WalletQmlModel>("org.bitcoincore.qt", 1, 0, "WalletQmlModel",
                                                "WalletQmlModel cannot be instantiated from QML");
+    qmlRegisterUncreatableType<WalletQmlModelTransaction>("org.bitcoincore.qt", 1, 0, "WalletQmlModelTransaction",
+                                                          "WalletQmlModelTransaction cannot be instantiated from QML");
 #endif
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));

@@ -20,6 +20,7 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
+    signal sendTransaction()
 
     header: NavigationBar2 {
         id: navBar
@@ -131,9 +132,9 @@ Page {
         Activity {
             id: activityTab
         }
-        Item {
+        Send {
             id: sendTab
-            CoreText { text: "Send" }
+            onTransactionPrepared: root.sendTransaction()
         }
         RequestPayment {
             id: receiveTab
