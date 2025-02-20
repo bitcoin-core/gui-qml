@@ -5,6 +5,8 @@
 #include <qml/walletqmlcontroller.h>
 
 #include <interfaces/node.h>
+#include <support/allocators/secure.h>
+#include <wallet/walletutil.h>
 #include <util/threadnames.h>
 
 #include <QTimer>
@@ -64,6 +66,21 @@ void WalletQmlController::unloadWallets()
         delete wallet;
     }
     m_wallets.clear();
+}
+
+void WalletQmlController::createSingleSigWallet(const QString &name, const QString &passphrase)
+{
+    const SecureString secure_passphrase{passphrase.toStdString()};
+    const std::string wallet_name{name.toStdString()};
+    auto wallet{m_node.walletLoader().createWallet(wallet_name, secure_passphrase, wallet::WALLET_FLAG_DESCRIPTORS, m_warning_messages)};
+    QMutexLocker locker(&m_wallets_mutex);
+    if (wallet) {
+        m_selected_wallet = new WalletQmlModel(std::move(*wallet));
+        m_wallets.push_back(m_selected_wallet);
+        Q_EMIT selectedWalletChanged();
+    } else {
+        m_error_message = util::ErrorString(wallet);
+    }
 }
 
 void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> wallet)
