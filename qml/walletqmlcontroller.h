@@ -25,6 +25,7 @@ public:
     ~WalletQmlController();
 
     Q_INVOKABLE void setSelectedWallet(QString path);
+    Q_INVOKABLE void createSingleSigWallet(const QString &name, const QString &passphrase);
 
     WalletQmlModel* selectedWallet() const;
     void unloadWallets();
@@ -45,6 +46,9 @@ private:
     QMutex m_wallets_mutex;
     std::vector<WalletQmlModel*> m_wallets;
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
+
+    bilingual_str m_error_message;
+    std::vector<bilingual_str> m_warning_messages;
 };
 
 #endif // BITCOIN_QML_WALLETQMLCONTROLLER_H
