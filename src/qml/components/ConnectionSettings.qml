@@ -11,10 +11,40 @@ ColumnLayout {
     id: root
     signal next
     signal gotoSnapshot
+    signal gotoGenerateSnapshot
     property bool snapshotImportCompleted: chainModel.isSnapshotActive
     property bool onboarding: false
+    property bool generateSnapshot: false
+    property bool isSnapshotGenerated: nodeModel.isSnapshotGenerated
 
     spacing: 4
+    Setting {
+        id: gotoGenerateSnapshot
+        visible: !root.onboarding
+        Layout.fillWidth: true
+        header: qsTr("Generate snapshot")
+        description: qsTr("Speed up the setup of other nodes")
+        actionItem: Item {
+            width: 26
+            height: 26
+            CaretRightIcon {
+                anchors.centerIn: parent
+                color: gotoGenerateSnapshot.stateColor
+            }
+        }
+        onClicked: {
+            if (!nodeModel.isSnapshotFileExists()) {
+                root.generateSnapshot = true
+                root.gotoGenerateSnapshot()
+            } else {
+                root.gotoGenerateSnapshot()
+            }
+        }
+    }
+    Separator {
+        visible: !root.onboarding
+        Layout.fillWidth: true
+    }
     Setting {
         id: gotoSnapshot
         visible: !root.onboarding
