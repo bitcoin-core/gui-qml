@@ -251,6 +251,10 @@ public:
     using SnapshotLoadProgressFn = std::function<void(double progress)>;
     virtual std::unique_ptr<Handler> handleSnapshotLoadProgress(SnapshotLoadProgressFn fn) = 0;
 
+    //! Register handler for rewind progress messages.
+    using RewindProgressFn = std::function<void(double progress)>;
+    virtual std::unique_ptr<Handler> handleRewindProgress(RewindProgressFn fn) = 0;
+
     //! Register handler for wallet loader constructed messages.
     using InitWalletFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleInitWallet(InitWalletFn fn) = 0;
