@@ -113,11 +113,17 @@ public:
     /** Snapshot load progress. */
     ADD_SIGNALS_DECL_WRAPPER(SnapshotLoadProgress, void, double progress);
 
+    /** Rewind progress. */
+    ADD_SIGNALS_DECL_WRAPPER(RewindProgress, void, double progress);
+
     /** New block has been accepted */
     ADD_SIGNALS_DECL_WRAPPER(NotifyBlockTip, void, SynchronizationState, const CBlockIndex*);
 
     /** Best header has changed */
     ADD_SIGNALS_DECL_WRAPPER(NotifyHeaderTip, void, SynchronizationState, int64_t height, int64_t timestamp, bool presync);
+
+    /** Block disconnected */
+    ADD_SIGNALS_DECL_WRAPPER(NotifyBlockDisconnected, void, SynchronizationState, const CBlockIndex*);
 
     /** Banlist did change. */
     ADD_SIGNALS_DECL_WRAPPER(BannedListChanged, void, void);

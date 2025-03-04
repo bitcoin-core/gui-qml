@@ -33,6 +33,8 @@ public:
 
     void snapshotLoadProgress(double progress) override;
 
+    void rewindProgress(double progress) override;
+
     void warning(const bilingual_str& warning) override;
 
     void flushError(const std::string& debug_message) override;

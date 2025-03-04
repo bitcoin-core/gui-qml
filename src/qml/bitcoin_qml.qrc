@@ -15,6 +15,7 @@
         <file>components/ProxySettings.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>components/Separator.qml</file>
+        <file>components/SnapshotGenSettings.qml</file>
         <file>components/SnapshotSettings.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
@@ -80,6 +81,7 @@
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsDisplay.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
+        <file>pages/settings/SettingsSnapshotGen.qml</file>
         <file>pages/settings/SettingsSnapshot.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>

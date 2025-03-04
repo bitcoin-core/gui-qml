@@ -414,6 +414,7 @@ QML_RES_QML = \
   qml/components/PeersIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
+  qml/components/SnapshotGenSettings.qml \
   qml/components/SnapshotSettings.qml \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
@@ -480,6 +481,7 @@ QML_RES_QML = \
   qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsSnapshot.qml \
+  qml/pages/settings/SettingsSnapshotGen.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
   qml/pages/wallet/Activity.qml \

@@ -83,6 +83,11 @@ void KernelNotifications::snapshotLoadProgress(double progress)
     uiInterface.SnapshotLoadProgress(progress);
 }
 
+void KernelNotifications::rewindProgress(double progress)
+{
+    uiInterface.RewindProgress(progress);
+}
+
 void KernelNotifications::warning(const bilingual_str& warning)
 {
     DoWarning(warning);

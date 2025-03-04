@@ -5,12 +5,17 @@
 #ifndef BITCOIN_QML_MODELS_NODEMODEL_H
 #define BITCOIN_QML_MODELS_NODEMODEL_H
 
+#include <common/args.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
+#include <logging/timer.h>
+#include <node/context.h>
+#include <node/utxo_snapshot.h>
 #include <clientversion.h>
+#include <validation.h>
 
 #include <memory>
-
+#include <QUrl>
 #include <QObject>
 #include <QString>
 
@@ -38,7 +43,11 @@ class NodeModel : public QObject
     Q_PROPERTY(bool snapshotLoading READ snapshotLoading NOTIFY snapshotLoadingChanged)
     Q_PROPERTY(bool isSnapshotLoaded READ isSnapshotLoaded NOTIFY snapshotLoaded)
     Q_PROPERTY(bool headersSynced READ headersSynced WRITE setHeadersSynced NOTIFY headersSyncedChanged)
-
+    Q_PROPERTY(bool snapshotGenerating READ snapshotGenerating NOTIFY snapshotGeneratingChanged)
+    Q_PROPERTY(bool isIBDCompleted READ isIBDCompleted WRITE setIBDCompleted NOTIFY isIBDCompletedChanged)
+    Q_PROPERTY(bool isRewinding READ isRewinding WRITE setIsRewinding NOTIFY isRewindingChanged)
+    Q_PROPERTY(double rewindProgress READ rewindProgress WRITE setRewindProgress NOTIFY rewindProgressChanged)
+    Q_PROPERTY(bool isSnapshotGenerated READ isSnapshotGenerated WRITE setIsSnapshotGenerated NOTIFY isSnapshotGeneratedChanged)
 public:
     explicit NodeModel(interfaces::Node& node);
 
@@ -62,6 +71,15 @@ public:
     bool snapshotLoading() const { return m_snapshot_loading; }
     bool headersSynced() const { return m_headers_synced; }
     void setHeadersSynced(bool new_synced);
+    bool snapshotGenerating() const { return m_snapshot_generating; }
+    bool isIBDCompleted() const { return m_is_ibd_completed; }
+    void setIBDCompleted(bool completed);
+    bool isRewinding() const { return m_is_rewinding; }
+    void setIsRewinding(bool is_rewinding);
+    double rewindProgress() const { return m_rewind_progress; }
+    void setRewindProgress(double progress);
+    bool isSnapshotGenerated() const { return m_is_snapshot_generated; }
+    void setIsSnapshotGenerated(bool generated);
 
     Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
     Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
@@ -70,6 +88,10 @@ public:
     Q_INVOKABLE void requestShutdown();
 
     Q_INVOKABLE void snapshotLoadThread(QString path_file);
+    Q_INVOKABLE void generateSnapshotThread();
+    Q_INVOKABLE void cancelSnapshotGeneration();
+    Q_INVOKABLE bool isSnapshotFileExists();
+    Q_INVOKABLE QUrl getSnapshotDirectory();
 
     void startShutdownPolling();
     void stopShutdownPolling();
@@ -96,7 +118,11 @@ Q_SIGNALS:
     void snapshotLoaded(bool result);
     void snapshotProgressChanged();
     void snapshotLoadingChanged();
-    void showProgress(const QString& title, int progress);
+    void snapshotGeneratingChanged();
+    void isIBDCompletedChanged();
+    void rewindProgressChanged();
+    void isSnapshotGeneratedChanged();
+    void isRewindingChanged();
     void headersSyncedChanged();
 protected:
     void timerEvent(QTimerEvent* event) override;
@@ -116,15 +142,24 @@ private:
     bool m_snapshot_loading{false};
     bool m_snapshot_loaded{false};
     bool m_headers_synced{false};
+    bool m_snapshot_generating{false};
     QVector<QPair<int, double>> m_block_process_time;
-
+    bool m_is_ibd_completed{false};
+    double m_rewind_progress{0.0};
+    bool m_is_snapshot_generated{false};
+    bool m_is_rewinding{false};
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_num_peers_changed;
     std::unique_ptr<interfaces::Handler> m_handler_snapshot_load_progress;
+    std::unique_ptr<interfaces::Handler> m_handler_show_progress;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_block_disconnected;
+    std::unique_ptr<interfaces::Handler> m_handler_rewind_progress;
+    std::atomic<bool> m_snapshot_cancel{false};
     void ConnectToBlockTipSignal();
     void ConnectToNumConnectionsChangedSignal();
     void ConnectToSnapshotLoadProgressSignal();
+    void ConnectToRewindProgressSignal();
 };
 
 #endif // BITCOIN_QML_MODELS_NODEMODEL_H

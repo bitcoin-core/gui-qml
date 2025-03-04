@@ -35,6 +35,7 @@ Page {
                     onGotoSnapshot: stack.push(snapshotSettings)
                     snapshotImportCompleted: root.snapshotImportCompleted
                     onboarding: root.onboarding
+                    onGotoGenerateSnapshot: stack.push(generateSnapshotSettings)
                 }
 
                 states: [
@@ -96,6 +97,15 @@ Page {
             SettingsSnapshot {
                 onboarding: root.onboarding
                 snapshotImportCompleted: root.snapshotImportCompleted
+                onBack: stack.pop()
+            }
+        }
+        Component {
+            id: generateSnapshotSettings
+            SettingsSnapshotGen {
+                onboarding: root.onboarding
+                generateSnapshot: true
+                isSnapshotGenerated: ( nodeModel.isSnapshotFileExists() || nodeModel.isSnapshotGenerated )
                 onBack: stack.pop()
             }
         }
