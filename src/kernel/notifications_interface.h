@@ -39,8 +39,10 @@ public:
 
     [[nodiscard]] virtual InterruptResult blockTip(SynchronizationState state, CBlockIndex& index) { return {}; }
     virtual void headerTip(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) {}
+    virtual void blockTipDisconnected(SynchronizationState state, CBlockIndex& index) {}
     virtual void progress(const bilingual_str& title, int progress_percent, bool resume_possible) {}
     virtual void snapshotLoadProgress(double progress) {}
+    virtual void rewindProgress(double progress) {}
     virtual void warning(const bilingual_str& warning) {}
 
     //! The flush error notification is sent to notify the user that an error
