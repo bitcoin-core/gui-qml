@@ -22,8 +22,10 @@ struct UISignals {
     boost::signals2::signal<CClientUIInterface::NotifyAlertChangedSig> NotifyAlertChanged;
     boost::signals2::signal<CClientUIInterface::ShowProgressSig> ShowProgress;
     boost::signals2::signal<CClientUIInterface::SnapshotLoadProgressSig> SnapshotLoadProgress;
+    boost::signals2::signal<CClientUIInterface::RewindProgressSig> RewindProgress;
     boost::signals2::signal<CClientUIInterface::NotifyBlockTipSig> NotifyBlockTip;
     boost::signals2::signal<CClientUIInterface::NotifyHeaderTipSig> NotifyHeaderTip;
+    boost::signals2::signal<CClientUIInterface::NotifyBlockDisconnectedSig> NotifyBlockDisconnected;
     boost::signals2::signal<CClientUIInterface::BannedListChangedSig> BannedListChanged;
 };
 static UISignals g_ui_signals;
@@ -44,9 +46,10 @@ ADD_SIGNALS_IMPL_WRAPPER(NotifyAlertChanged);
 ADD_SIGNALS_IMPL_WRAPPER(ShowProgress);
 ADD_SIGNALS_IMPL_WRAPPER(NotifyBlockTip);
 ADD_SIGNALS_IMPL_WRAPPER(NotifyHeaderTip);
+ADD_SIGNALS_IMPL_WRAPPER(NotifyBlockDisconnected);
 ADD_SIGNALS_IMPL_WRAPPER(BannedListChanged);
 ADD_SIGNALS_IMPL_WRAPPER(SnapshotLoadProgress);
-
+ADD_SIGNALS_IMPL_WRAPPER(RewindProgress);
 bool CClientUIInterface::ThreadSafeMessageBox(const bilingual_str& message, const std::string& caption, unsigned int style) { return g_ui_signals.ThreadSafeMessageBox(message, caption, style).value_or(false);}
 bool CClientUIInterface::ThreadSafeQuestion(const bilingual_str& message, const std::string& non_interactive_message, const std::string& caption, unsigned int style) { return g_ui_signals.ThreadSafeQuestion(message, non_interactive_message, caption, style).value_or(false);}
 void CClientUIInterface::InitMessage(const std::string& message) { return g_ui_signals.InitMessage(message); }
@@ -56,8 +59,10 @@ void CClientUIInterface::NotifyNetworkActiveChanged(bool networkActive) { return
 void CClientUIInterface::NotifyAlertChanged() { return g_ui_signals.NotifyAlertChanged(); }
 void CClientUIInterface::ShowProgress(const std::string& title, int nProgress, bool resume_possible) { return g_ui_signals.ShowProgress(title, nProgress, resume_possible); }
 void CClientUIInterface::SnapshotLoadProgress(double progress) { return g_ui_signals.SnapshotLoadProgress(progress); }
+void CClientUIInterface::RewindProgress(double progress) { return g_ui_signals.RewindProgress(progress); }
 void CClientUIInterface::NotifyBlockTip(SynchronizationState s, const CBlockIndex* i) { return g_ui_signals.NotifyBlockTip(s, i); }
 void CClientUIInterface::NotifyHeaderTip(SynchronizationState s, int64_t height, int64_t timestamp, bool presync) { return g_ui_signals.NotifyHeaderTip(s, height, timestamp, presync); }
+void CClientUIInterface::NotifyBlockDisconnected(SynchronizationState s, const CBlockIndex* i) { return g_ui_signals.NotifyBlockDisconnected(s, i); }
 void CClientUIInterface::BannedListChanged() { return g_ui_signals.BannedListChanged(); }
 
 bool InitError(const bilingual_str& str)

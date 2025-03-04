@@ -2661,6 +2661,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
+    m_chainman.GetNotifications().rewindProgress(GuessVerificationProgress(params.TxData(), pindexNew));
     UpdateTipLog(coins_tip, pindexNew, params, __func__, "", warning_messages.original);
 }
 
