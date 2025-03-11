@@ -80,13 +80,17 @@ ApplicationWindow {
 
     Component {
         id: desktopWallets
-        DesktopWallets {}
+        DesktopWallets {
+            onAddWallet: {
+                main.push(createWalletWizard)
+            }
+        }
     }
 
     Component {
         id: createWalletWizard
         CreateWalletWizard {
-            onFinished: {
+           onFinished: {
                 main.pop()
             }
         }
