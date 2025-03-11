@@ -80,7 +80,11 @@ ApplicationWindow {
 
     Component {
         id: desktopWallets
-        DesktopWallets {}
+        DesktopWallets {
+            onSendTransaction: {
+                main.push(sendReviewPage)
+            }
+        }
     }
 
     Component {
@@ -88,6 +92,20 @@ ApplicationWindow {
         CreateWalletWizard {
             onFinished: {
                 main.pop()
+            }
+        }
+    }
+
+    Component {
+        id: sendReviewPage
+        SendReview {
+            onBack: {
+                main.pop()
+            }
+            onTransactionSent: {
+                walletController.selectedWallet.sendRecipient.clear()
+                main.pop()
+                sendResult.open()
             }
         }
     }

@@ -19,6 +19,8 @@ Page {
 
     ButtonGroup { id: navigationTabs }
 
+    signal sendTransaction()
+
     header: NavigationBar2 {
         id: navBar
         leftItem: WalletBadge {
@@ -126,9 +128,9 @@ Page {
             id: activityTab
             CoreText { text: "Activity" }
         }
-        Item {
+        Send {
             id: sendTab
-            CoreText { text: "Send" }
+            onTransactionPrepared: root.sendTransaction()
         }
         Item {
             id: receiveTab
