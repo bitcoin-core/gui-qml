@@ -35,7 +35,7 @@ QT_FORMS_UI = \
   qt/forms/transactiondescdialog.ui
 
 QT_MOC_CPP = \
-  qml/components/moc_blockclockdial.cpp \
+  qml/components/moc_blockstatusdial.cpp \
   qml/controls/moc_linegraph.cpp \
   qml/models/moc_chainmodel.cpp \
   qml/models/moc_networktraffictower.cpp \
@@ -118,7 +118,7 @@ QT_QRC_LOCALE_CPP = qt/qrc_bitcoin_locale.cpp
 QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 
 BITCOIN_QT_H = \
-  qml/components/blockclockdial.h \
+  qml/components/blockstatusdial.h \
   qml/controls/linegraph.h \
   qml/models/chainmodel.h \
   qml/models/networktraffictower.h \
@@ -310,7 +310,7 @@ BITCOIN_QT_WALLET_CPP = \
 
 BITCOIN_QML_BASE_CPP = \
   qml/bitcoin.cpp \
-  qml/components/blockclockdial.cpp \
+  qml/components/blockstatusdial.cpp \
   qml/controls/linegraph.cpp \
   qml/models/chainmodel.cpp \
   qml/models/networktraffictower.cpp \
@@ -333,8 +333,8 @@ QML_RES_ICONS = \
   qml/res/icons/arrow-down.png \
   qml/res/icons/arrow-up.png \
   qml/res/icons/bitcoin-circle.png \
-  qml/res/icons/blockclock-size-compact.png \
-  qml/res/icons/blockclock-size-showcase.png \
+  qml/res/icons/blockstatus-size-compact.png \
+  qml/res/icons/blockstatus-size-showcase.png \
   qml/res/icons/blocktime-dark.png \
   qml/res/icons/blocktime-light.png \
   qml/res/icons/caret-left.png \
@@ -364,8 +364,8 @@ QML_QRC_CPP = qml/qrc_bitcoin.cpp
 QML_QRC = qml/bitcoin_qml.qrc
 QML_RES_QML = \
   qml/components/AboutOptions.qml \
-  qml/components/BlockClock.qml \
-  qml/components/BlockClockDisplayMode.qml \
+  qml/components/BlockStatus.qml \
+  qml/components/BlockStatusDisplayMode.qml \
   qml/components/BlockCounter.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
@@ -418,7 +418,7 @@ QML_RES_QML = \
   qml/pages/node/Peers.qml \
   qml/pages/node/PeerDetails.qml \
   qml/pages/node/Shutdown.qml \
-  qml/pages/onboarding/OnboardingBlockclock.qml \
+  qml/pages/onboarding/OnboardingBlockStatus.qml \
   qml/pages/onboarding/OnboardingConnection.qml \
   qml/pages/onboarding/OnboardingCover.qml \
   qml/pages/onboarding/OnboardingStorageAmount.qml \
@@ -426,7 +426,7 @@ QML_RES_QML = \
   qml/pages/onboarding/OnboardingStrengthen.qml \
   qml/pages/onboarding/OnboardingWizard.qml \
   qml/pages/settings/SettingsAbout.qml \
-  qml/pages/settings/SettingsBlockClockDisplayMode.qml \
+  qml/pages/settings/SettingsBlockStatusDisplayMode.qml \
   qml/pages/settings/SettingsConnection.qml \
   qml/pages/settings/SettingsDeveloper.qml \
   qml/pages/settings/SettingsDisplay.qml \

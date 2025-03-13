@@ -54,14 +54,14 @@ Item {
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
-                    id: gotoBlockClockSize
+                    id: gotoBlockStatusSize
                     Layout.fillWidth: true
-                    header: qsTr("Block clock display mode")
+                    header: qsTr("Block status display mode")
                     actionItem: CaretRightIcon {
-                        color: gotoBlockClockSize.stateColor
+                        color: gotoBlockStatusSize.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(blockclocksize_page)
+                        nodeSettingsView.push(blockstatus_size_page)
                     }
                 }
             }
@@ -76,8 +76,8 @@ Item {
         }
     }
     Component {
-        id: blockclocksize_page
-        SettingsBlockClockDisplayMode {
+        id: blockstatus_size_page
+        SettingsBlockStatusDisplayMode {
             onBack: {
                 nodeSettingsView.pop()
             }

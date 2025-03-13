@@ -21,10 +21,10 @@ ColumnLayout {
         ButtonGroup.group: group
         text: qsTr("Compact")
         description: qsTr("For personal use on a computer or smartphone.")
-        image: "image://images/blockclock-size-compact"
-        checked: Theme.blockclocksize == (1/3)
+        image: "image://images/blockstatus-size-compact"
+        checked: Theme.blockstatussize == (1/3)
         onClicked: {
-            Theme.blockclocksize = (1/3)
+            Theme.blockstatussize = (1/3)
         }
     }
 
@@ -32,11 +32,11 @@ ColumnLayout {
         Layout.fillWidth: true
         ButtonGroup.group: group
         text: qsTr("Showcase")
-        description: qsTr("A larger block clock for public display on a tablet or other large screen.")
-        image: "image://images/blockclock-size-showcase"
-        checked: Theme.blockclocksize == (1/2)
+        description: qsTr("A larger block status for public display on a tablet or other large screen.")
+        image: "image://images/blockstatus-size-showcase"
+        checked: Theme.blockstatussize == (1/2)
         onClicked: {
-            Theme.blockclocksize = (1/2)
+            Theme.blockstatussize = (1/2)
         }
     }
 }

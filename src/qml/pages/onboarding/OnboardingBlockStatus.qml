@@ -20,9 +20,9 @@ InformationPage {
         sourceSize.height: 200
     }
     bold: true
-    headerText: qsTr("The block clock")
+    headerText: qsTr("The block status")
     description: qsTr("The Bitcoin network targets a new block every 10 minutes. " +
-        "Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each " +
+        "Sometimes it's faster and sometimes slower.\n\nThe block status indicates each " +
         "block on a dial that represents the current day.")
     buttonText: qsTr("Next")
 }
