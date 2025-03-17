@@ -77,6 +77,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/check").pixmap(requested_size);
     }
 
+    if (id == "copy") {
+        *size = requested_size;
+        return QIcon(":/icons/copy").pixmap(requested_size);
+    }
+
     if (id == "cross") {
         *size = requested_size;
         return QIcon(":/icons/cross").pixmap(requested_size);
@@ -90,6 +95,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "export") {
         *size = requested_size;
         return QIcon(":/icons/export").pixmap(requested_size);
+    }
+
+    if (id == "flip-vertical") {
+        *size = requested_size;
+        return QIcon(":/icons/flip-vertical").pixmap(requested_size);
     }
 
     if (id == "gear") {
@@ -120,6 +130,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "network-light") {
         *size = requested_size;
         return QIcon(":/icons/network-light").pixmap(requested_size);
+    }
+
+    if (id == "pending") {
+        *size = requested_size;
+        return QIcon(":/icons/pending").pixmap(requested_size);
     }
 
     if (id == "shutdown") {
