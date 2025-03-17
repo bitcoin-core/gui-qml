@@ -23,6 +23,7 @@
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/CoreTextField.qml</file>
+        <file>controls/LabeledTextInput.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/Header.qml</file>
@@ -77,6 +78,7 @@
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/RequestPayment.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
     </qresource>
@@ -93,9 +95,11 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
+        <file alias="copy">res/icons/copy.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
+        <file alias="flip-vertical">res/icons/flip-vertical.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>
         <file alias="hidden">res/icons/hidden.png</file>
@@ -104,6 +108,7 @@
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="plus">res/icons/plus.png</file>
+        <file alias="pending">res/icons/pending.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
         <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
