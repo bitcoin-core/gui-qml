@@ -72,6 +72,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/caret-right").pixmap(requested_size);
     }
 
+    if (id == "coinbase") {
+        *size = requested_size;
+        return QIcon(":/icons/coinbase").pixmap(requested_size);
+    }
+
     if (id == "check") {
         *size = requested_size;
         return QIcon(":/icons/check").pixmap(requested_size);
@@ -165,6 +170,16 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "tooltip-arrow-light") {
         *size = requested_size;
         return QIcon(":/icons/tooltip-arrow-light").pixmap(requested_size);
+    }
+
+    if (id == "triangle-up") {
+        *size = requested_size;
+        return QIcon(":/icons/triangle-up").pixmap(requested_size);
+    }
+
+    if (id == "triangle-down") {
+        *size = requested_size;
+        return QIcon(":/icons/triangle-down").pixmap(requested_size);
     }
 
     if (id == "add-wallet-dark") {
