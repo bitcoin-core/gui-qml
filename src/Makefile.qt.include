@@ -37,16 +37,19 @@ QT_FORMS_UI = \
 QT_MOC_CPP = \
   qml/components/moc_blockclockdial.cpp \
   qml/controls/moc_linegraph.cpp \
+  qml/models/moc_activitylistmodel.cpp \
   qml/models/moc_chainmodel.cpp \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
   qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
+  qml/models/moc_transaction.cpp \
   qml/models/moc_walletlistmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
   qml/moc_appmode.cpp \
   qml/moc_bitcoinamount.cpp \
+  qml/moc_clipboard.cpp \
   qml/moc_walletqmlcontroller.cpp \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
@@ -121,15 +124,18 @@ QT_QRC_LOCALE = qt/bitcoin_locale.qrc
 BITCOIN_QT_H = \
   qml/components/blockclockdial.h \
   qml/controls/linegraph.h \
+  qml/models/activitylistmodel.h \
   qml/models/chainmodel.h \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
+  qml/models/transaction.h \
   qml/models/walletlistmodel.h \
   qml/models/walletqmlmodel.h \
   qml/appmode.h \
+  qml/clipboard.h \
   qml/bitcoin.h \
   qml/bitcoinamount.h \
   qml/guiconstants.h \
@@ -315,12 +321,14 @@ BITCOIN_QML_BASE_CPP = \
   qml/bitcoinamount.cpp \
   qml/components/blockclockdial.cpp \
   qml/controls/linegraph.cpp \
+  qml/models/activitylistmodel.cpp \
   qml/models/chainmodel.cpp \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
+  qml/models/transaction.cpp \
   qml/models/walletlistmodel.cpp \
   qml/models/walletqmlmodel.cpp \
   qml/imageprovider.cpp \
@@ -344,6 +352,7 @@ QML_RES_ICONS = \
   qml/res/icons/caret-right.png \
   qml/res/icons/check.png \
   qml/res/icons/copy.png \
+  qml/res/icons/coinbase.png \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
@@ -361,6 +370,8 @@ QML_RES_ICONS = \
   qml/res/icons/singlesig-wallet.png \
   qml/res/icons/storage-dark.png \
   qml/res/icons/storage-light.png \
+  qml/res/icons/triangle-up.png \
+  qml/res/icons/triangle-down.png \
   qml/res/icons/tooltip-arrow-dark.png \
   qml/res/icons/tooltip-arrow-light.png \
   qml/res/icons/wallet.png \
@@ -402,13 +413,13 @@ QML_RES_QML = \
   qml/controls/KeyValueRow.qml \
   qml/controls/LabeledTextInput.qml \
   qml/controls/NavButton.qml \
-  qml/controls/PageIndicator.qml \
   qml/controls/NavigationBar.qml \
   qml/controls/NavigationBar2.qml \
   qml/controls/NavigationTab.qml \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/OutlineButton.qml \
+  qml/controls/PageIndicator.qml \
   qml/controls/PageStack.qml \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
@@ -441,6 +452,8 @@ QML_RES_QML = \
   qml/pages/settings/SettingsProxy.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
+  qml/pages/wallet/Activity.qml \
+  qml/pages/wallet/ActivityDetails.qml \
   qml/pages/wallet/CreateBackup.qml \
   qml/pages/wallet/CreateConfirm.qml \
   qml/pages/wallet/CreateIntro.qml \
