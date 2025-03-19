@@ -45,6 +45,7 @@ QT_MOC_CPP = \
   qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
   qml/models/moc_transaction.cpp \
+  qml/models/moc_snapshotqml.cpp \
   qml/models/moc_walletlistmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
   qml/moc_appmode.cpp \
@@ -132,6 +133,7 @@ BITCOIN_QT_H = \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/transaction.h \
+  qml/models/snapshotqml.h \
   qml/models/walletlistmodel.h \
   qml/models/walletqmlmodel.h \
   qml/appmode.h \
@@ -329,6 +331,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/transaction.cpp \
+  qml/models/snapshotqml.cpp \
   qml/models/walletlistmodel.cpp \
   qml/models/walletqmlmodel.cpp \
   qml/imageprovider.cpp \
@@ -353,12 +356,15 @@ QML_RES_ICONS = \
   qml/res/icons/check.png \
   qml/res/icons/copy.png \
   qml/res/icons/coinbase.png \
+  qml/res/icons/circle-file.png \
+  qml/res/icons/circle-green-check.png \
   qml/res/icons/cross.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
   qml/res/icons/flip-vertical.png \
   qml/res/icons/gear.png \
   qml/res/icons/gear-outline.png \
+  qml/res/icons/green-check.png \
   qml/res/icons/hidden.png \
   qml/res/icons/info.png \
   qml/res/icons/minus.png \
@@ -393,6 +399,8 @@ QML_RES_QML = \
   qml/components/NetworkIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
+  qml/components/SnapshotGenSettings.qml \
+  qml/components/SnapshotSettings.qml \
   qml/components/StorageLocations.qml \
   qml/components/StorageOptions.qml \
   qml/components/StorageSettings.qml \
@@ -450,6 +458,8 @@ QML_RES_QML = \
   qml/pages/settings/SettingsDeveloper.qml \
   qml/pages/settings/SettingsDisplay.qml \
   qml/pages/settings/SettingsProxy.qml \
+  qml/pages/settings/SettingsSnapshot.qml \
+  qml/pages/settings/SettingsSnapshotGen.qml \
   qml/pages/settings/SettingsStorage.qml \
   qml/pages/settings/SettingsTheme.qml \
   qml/pages/wallet/Activity.qml \
