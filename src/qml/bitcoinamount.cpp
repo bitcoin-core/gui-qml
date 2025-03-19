@@ -68,15 +68,28 @@ QString BitcoinAmount::amount() const
     return m_amount;
 }
 
+QString BitcoinAmount::satoshiAmount() const
+{
+    return toSatoshis(m_amount);
+}
+
 void BitcoinAmount::setAmount(const QString& new_amount)
 {
     m_amount = sanitize(new_amount);
     Q_EMIT amountChanged();
 }
 
+QString BitcoinAmount::toSatoshis(const QString& text) const
+{
+    if (m_unit == Unit::SAT) {
+        return text;
+    } else {
+        return convert(text, m_unit);
+    }
+}
+
 long long BitcoinAmount::toSatoshis(QString& amount, const Unit unit)
 {
-
     int num_decimals = decimals(unit);
 
     QStringList parts = amount.remove(' ').split(".");
@@ -93,7 +106,7 @@ long long BitcoinAmount::toSatoshis(QString& amount, const Unit unit)
     return str.toLongLong();
 }
 
-QString BitcoinAmount::convert(const QString &amount, Unit unit)
+QString BitcoinAmount::convert(const QString& amount, Unit unit) const
 {
     if (amount == "") {
         return amount;
@@ -113,6 +126,10 @@ QString BitcoinAmount::convert(const QString &amount, Unit unit)
             result.append(QString(8 - numDigitsAfterDecimal, '0'));
         }
         result.remove(decimalPosition, 1);
+
+        while (result.startsWith('0') && result.length() > 1) {
+            result.remove(0, 1);
+        }
     } else if (unit == Unit::SAT) {
         result.remove(decimalPosition, 1);
         int newDecimalPosition = decimalPosition - 8;
@@ -121,6 +138,16 @@ QString BitcoinAmount::convert(const QString &amount, Unit unit)
             newDecimalPosition = 0;
         }
         result.insert(newDecimalPosition, ".");
+
+        while (result.endsWith('0') && result.contains('.')) {
+            result.chop(1);
+        }
+        if (result.endsWith('.')) {
+            result.chop(1);
+        }
+        if (result.startsWith('.')) {
+            result.insert(0, "0");
+        }
     }
 
     return result;

@@ -84,6 +84,9 @@ ApplicationWindow {
             onAddWallet: {
                 main.push(createWalletWizard)
             }
+            onSendTransaction: {
+                main.push(sendReviewPage)
+            }
         }
     }
 
@@ -94,6 +97,25 @@ ApplicationWindow {
                 main.pop()
             }
         }
+    }
+
+    Component {
+        id: sendReviewPage
+        SendReview {
+            onBack: {
+                main.pop()
+            }
+            onTransactionSent: {
+                walletController.selectedWallet.sendRecipient.clear()
+                main.pop()
+                sendResult.open()
+            }
+        }
+    }
+
+    SendResult {
+        id: sendResult
+        closePolicy: Popup.CloseOnPressOutside
     }
 
     Component {

@@ -206,5 +206,10 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         *size = requested_size;
         return QIcon(":/icons/plus").pixmap(requested_size);
     }
+
+    if (id == "flip-vertical") {
+        *size = requested_size;
+        return QIcon(":/icons/flip-vertical").pixmap(requested_size);
+    }
     return {};
 }

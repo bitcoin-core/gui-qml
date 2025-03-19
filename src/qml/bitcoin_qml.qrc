@@ -24,7 +24,6 @@
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/CoreTextField.qml</file>
-        <file>controls/LabeledTextInput.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/Header.qml</file>
@@ -83,6 +82,9 @@
         <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/RequestPayment.qml</file>
+        <file>pages/wallet/Send.qml</file>
+        <file>pages/wallet/SendResult.qml</file>
+        <file>pages/wallet/SendReview.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
     </qresource>
