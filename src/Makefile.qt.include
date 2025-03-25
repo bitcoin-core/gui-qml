@@ -400,9 +400,10 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/ExternalPopup.qml \
-  qml/components/PeersIndicator.qml \
   qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
+  qml/components/OptionPopup.qml \
+  qml/components/PeersIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
   qml/components/StorageLocations.qml \
@@ -414,8 +415,11 @@ QML_RES_QML = \
   qml/controls/AddWalletButton.qml \
   qml/controls/CaretRightIcon.qml \
   qml/controls/ContinueButton.qml \
+  qml/controls/CoreCheckBox.qml \
   qml/controls/CoreText.qml \
   qml/controls/CoreTextField.qml \
+  qml/controls/EllipsisMenuButton.qml \
+  qml/controls/EllipsisMenuToggleItem.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
@@ -424,6 +428,7 @@ QML_RES_QML = \
   qml/controls/IPAddressValueInput.qml \
   qml/controls/KeyValueRow.qml \
   qml/controls/LabeledTextInput.qml \
+  qml/controls/LabeledCoinControlButton.qml \
   qml/controls/NavButton.qml \
   qml/controls/NavigationBar.qml \
   qml/controls/NavigationBar2.qml \
@@ -436,6 +441,7 @@ QML_RES_QML = \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
   qml/controls/Setting.qml \
+  qml/controls/SendOptionsPopup.qml \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ToggleButton.qml \
@@ -466,6 +472,7 @@ QML_RES_QML = \
   qml/pages/settings/SettingsTheme.qml \
   qml/pages/wallet/Activity.qml \
   qml/pages/wallet/ActivityDetails.qml \
+  qml/pages/wallet/CoinSelection.qml \
   qml/pages/wallet/CreateBackup.qml \
   qml/pages/wallet/CreateConfirm.qml \
   qml/pages/wallet/CreateIntro.qml \
