@@ -45,8 +45,11 @@ QT_MOC_CPP = \
   qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \
   qml/models/moc_transaction.cpp \
+  qml/models/moc_sendrecipient.cpp \
   qml/models/moc_walletlistmodel.cpp \
   qml/models/moc_walletqmlmodel.cpp \
+  qml/models/moc_walletqmlmodel.cpp \
+  qml/models/moc_walletqmlmodeltransaction.cpp \
   qml/moc_appmode.cpp \
   qml/moc_bitcoinamount.cpp \
   qml/moc_clipboard.cpp \
@@ -132,8 +135,10 @@ BITCOIN_QT_H = \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/transaction.h \
+  qml/models/sendrecipient.h \
   qml/models/walletlistmodel.h \
   qml/models/walletqmlmodel.h \
+  qml/models/walletqmlmodeltransaction.h \
   qml/appmode.h \
   qml/clipboard.h \
   qml/bitcoin.h \
@@ -329,8 +334,10 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/transaction.cpp \
+  qml/models/sendrecipient.cpp \
   qml/models/walletlistmodel.cpp \
   qml/models/walletqmlmodel.cpp \
+  qml/models/walletqmlmodeltransaction.cpp \
   qml/imageprovider.cpp \
   qml/util.cpp \
   qml/walletqmlcontroller.cpp
@@ -462,6 +469,9 @@ QML_RES_QML = \
   qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
   qml/pages/wallet/RequestPayment.qml \
+  qml/pages/wallet/Send.qml \
+  qml/pages/wallet/SendResult.qml \
+  qml/pages/wallet/SendReview.qml \
   qml/pages/wallet/WalletBadge.qml \
   qml/pages/wallet/WalletSelect.qml
 
