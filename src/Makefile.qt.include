@@ -361,6 +361,7 @@ QML_RES_ICONS = \
   qml/res/icons/copy.png \
   qml/res/icons/coinbase.png \
   qml/res/icons/cross.png \
+  qml/res/icons/ellipsis.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
   qml/res/icons/flip-vertical.png \

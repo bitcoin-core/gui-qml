@@ -104,6 +104,7 @@
         <file alias="copy">res/icons/copy.png</file>
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="ellipsis">res/icons/ellipsis.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="flip-vertical">res/icons/flip-vertical.png</file>
