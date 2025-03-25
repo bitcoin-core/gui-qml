@@ -39,6 +39,7 @@ QT_MOC_CPP = \
   qml/controls/moc_linegraph.cpp \
   qml/models/moc_activitylistmodel.cpp \
   qml/models/moc_chainmodel.cpp \
+  qml/models/moc_coinslistmodel.cpp \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
@@ -129,6 +130,7 @@ BITCOIN_QT_H = \
   qml/controls/linegraph.h \
   qml/models/activitylistmodel.h \
   qml/models/chainmodel.h \
+  qml/models/coinslistmodel.h \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
@@ -328,6 +330,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/controls/linegraph.cpp \
   qml/models/activitylistmodel.cpp \
   qml/models/chainmodel.cpp \
+  qml/models/coinslistmodel.cpp \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
