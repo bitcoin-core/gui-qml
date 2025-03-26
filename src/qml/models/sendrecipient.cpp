@@ -70,6 +70,9 @@ bool SendRecipient::subtractFeeFromAmount() const
 CAmount SendRecipient::cAmount() const
 {
     // TODO: Figure out who owns the parsing of SendRecipient::amount to CAmount
+    if (m_amount == "") {
+        return 0;
+    }
     return m_amount.toLongLong();
 }
 
