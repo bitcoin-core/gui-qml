@@ -39,6 +39,7 @@ QT_MOC_CPP = \
   qml/controls/moc_linegraph.cpp \
   qml/models/moc_activitylistmodel.cpp \
   qml/models/moc_chainmodel.cpp \
+  qml/models/moc_coinslistmodel.cpp \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
@@ -129,6 +130,7 @@ BITCOIN_QT_H = \
   qml/controls/linegraph.h \
   qml/models/activitylistmodel.h \
   qml/models/chainmodel.h \
+  qml/models/coinslistmodel.h \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
@@ -328,6 +330,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/controls/linegraph.cpp \
   qml/models/activitylistmodel.cpp \
   qml/models/chainmodel.cpp \
+  qml/models/coinslistmodel.cpp \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
@@ -361,6 +364,7 @@ QML_RES_ICONS = \
   qml/res/icons/copy.png \
   qml/res/icons/coinbase.png \
   qml/res/icons/cross.png \
+  qml/res/icons/ellipsis.png \
   qml/res/icons/error.png \
   qml/res/icons/export.png \
   qml/res/icons/flip-vertical.png \
@@ -368,6 +372,7 @@ QML_RES_ICONS = \
   qml/res/icons/gear-outline.png \
   qml/res/icons/hidden.png \
   qml/res/icons/info.png \
+  qml/res/icons/lock.png \
   qml/res/icons/minus.png \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
@@ -395,9 +400,10 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/ExternalPopup.qml \
-  qml/components/PeersIndicator.qml \
   qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
+  qml/components/OptionPopup.qml \
+  qml/components/PeersIndicator.qml \
   qml/components/ProxySettings.qml \
   qml/components/Separator.qml \
   qml/components/StorageLocations.qml \
@@ -409,8 +415,11 @@ QML_RES_QML = \
   qml/controls/AddWalletButton.qml \
   qml/controls/CaretRightIcon.qml \
   qml/controls/ContinueButton.qml \
+  qml/controls/CoreCheckBox.qml \
   qml/controls/CoreText.qml \
   qml/controls/CoreTextField.qml \
+  qml/controls/EllipsisMenuButton.qml \
+  qml/controls/EllipsisMenuToggleItem.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
@@ -419,6 +428,7 @@ QML_RES_QML = \
   qml/controls/IPAddressValueInput.qml \
   qml/controls/KeyValueRow.qml \
   qml/controls/LabeledTextInput.qml \
+  qml/controls/LabeledCoinControlButton.qml \
   qml/controls/NavButton.qml \
   qml/controls/NavigationBar.qml \
   qml/controls/NavigationBar2.qml \
@@ -431,6 +441,7 @@ QML_RES_QML = \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
   qml/controls/Setting.qml \
+  qml/controls/SendOptionsPopup.qml \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ToggleButton.qml \
@@ -461,6 +472,7 @@ QML_RES_QML = \
   qml/pages/settings/SettingsTheme.qml \
   qml/pages/wallet/Activity.qml \
   qml/pages/wallet/ActivityDetails.qml \
+  qml/pages/wallet/CoinSelection.qml \
   qml/pages/wallet/CreateBackup.qml \
   qml/pages/wallet/CreateConfirm.qml \
   qml/pages/wallet/CreateIntro.qml \

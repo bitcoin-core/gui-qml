@@ -129,6 +129,7 @@ Page {
         width: parent.width
         height: parent.height
         currentIndex: navigationTabs.checkedButton.index
+        clip: true
         Activity {
             id: activityTab
         }
