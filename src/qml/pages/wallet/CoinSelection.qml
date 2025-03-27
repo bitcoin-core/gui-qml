@@ -34,63 +34,67 @@ Page {
         color: Theme.color.neutral0
     }
 
+    ColumnLayout {
+        id: header
+        width: Math.min(parent.width - 40, 450)
+        anchors.horizontalCenter: parent.horizontalCenter
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 15
+            CoreText {
+                Layout.alignment: Qt.AlignLeft
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                font.pixelSize: 18
+                color: Theme.color.neutral9
+                elide: Text.ElideMiddle
+                wrapMode: Text.NoWrap
+                horizontalAlignment: Text.AlignLeft
+                text: qsTr("Total selected")
+            }
+            CoreText {
+                Layout.alignment: Qt.AlignRight
+                color: Theme.color.neutral9
+                font.pixelSize: 18
+                text: root.wallet.coinsListModel.totalSelected
+            }
+        }
+        RowLayout {
+            Layout.bottomMargin: 30
+            CoreText {
+                Layout.alignment: Qt.AlignLeft
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                font.pixelSize: 15
+                color: Theme.color.neutral7
+                elide: Text.ElideMiddle
+                wrapMode: Text.NoWrap
+                horizontalAlignment: Text.AlignLeft
+                text: if (root.wallet.coinsListModel.overRequiredAmount) {
+                    qsTr("Over required amount")
+                } else {
+                    qsTr("Remaining to select")
+                }
+            }
+            CoreText {
+                Layout.alignment: Qt.AlignRight
+                font.pixelSize: 15
+                color: Theme.color.neutral7
+                text: root.wallet.coinsListModel.changeAmount
+            }
+        }
+    }
+
     ListView {
         id: listView
         clip: true
         width: Math.min(parent.width - 40, 450)
-        height: parent.height
+        height: parent.height - header.height - 20
+        anchors.top: header.bottom
         anchors.horizontalCenter: parent.horizontalCenter
         model: root.wallet.coinsListModel
         spacing: 15
-
-        header: ColumnLayout {
-            width: listView.width
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 15
-                CoreText {
-                    Layout.alignment: Qt.AlignLeft
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
-                    font.pixelSize: 18
-                    color: Theme.color.neutral9
-                    elide: Text.ElideMiddle
-                    wrapMode: Text.NoWrap
-                    horizontalAlignment: Text.AlignLeft
-                    text: qsTr("Total selected")
-                }
-                CoreText {
-                    Layout.alignment: Qt.AlignRight
-                    color: Theme.color.neutral9
-                    font.pixelSize: 18
-                    text: root.wallet.coinsListModel.totalSelected
-                }
-            }
-            RowLayout {
-                Layout.bottomMargin: 30
-                CoreText {
-                    Layout.alignment: Qt.AlignLeft
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 0
-                    font.pixelSize: 15
-                    color: Theme.color.neutral7
-                    elide: Text.ElideMiddle
-                    wrapMode: Text.NoWrap
-                    horizontalAlignment: Text.AlignLeft
-                    text: if (root.wallet.coinsListModel.overRequiredAmount) {
-                        qsTr("Over required amount")
-                    } else {
-                        qsTr("Remaining to select")
-                    }
-                }
-                CoreText {
-                    Layout.alignment: Qt.AlignRight
-                    font.pixelSize: 15
-                    color: Theme.color.neutral7
-                    text: root.wallet.coinsListModel.changeAmount
-                }
-            }
-        }
 
         delegate: ItemDelegate {
             id: delegate
@@ -113,13 +117,13 @@ Page {
 
             leftPadding: 0
             rightPadding: 0
-            topPadding: 14
+            topPadding: 0
             bottomPadding: 14
             width: listView.width
 
             background: Item {
                 Separator {
-                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
                     width: parent.width
                 }
             }
