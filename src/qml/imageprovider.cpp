@@ -87,6 +87,16 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
         return QIcon(":/icons/copy").pixmap(requested_size);
     }
 
+    if (id == "circle-file") {
+        *size = requested_size;
+        return QIcon(":/icons/circle-file").pixmap(requested_size);
+    }
+
+    if (id == "circle-green-check") {
+        *size = requested_size;
+        return QIcon(":/icons/circle-green-check").pixmap(requested_size);
+    }
+
     if (id == "cross") {
         *size = requested_size;
         return QIcon(":/icons/cross").pixmap(requested_size);
@@ -115,6 +125,11 @@ QPixmap ImageProvider::requestPixmap(const QString& id, QSize* size, const QSize
     if (id == "gear-outline") {
         *size = requested_size;
         return QIcon(":/icons/gear-outline").pixmap(requested_size);
+    }
+
+    if (id == "green-check") {
+        *size = requested_size;
+        return QIcon(":/icons/green-check").pixmap(requested_size);
     }
 
     if (id == "info") {
