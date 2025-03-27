@@ -36,8 +36,9 @@ Page {
 
     ColumnLayout {
         id: header
-        width: Math.min(parent.width - 40, 450)
+        anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width - 40, 450)
 
         RowLayout {
             Layout.fillWidth: true
@@ -86,81 +87,88 @@ Page {
         }
     }
 
-    ListView {
-        id: listView
-        clip: true
-        width: Math.min(parent.width - 40, 450)
+    ScrollView {
+        id: scrollView
+        width: Math.min(parent.width - 40, 460)
         height: parent.height - header.height - 20
         anchors.top: header.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        model: root.wallet.coinsListModel
-        spacing: 15
+        anchors.left: header.left
+        clip: true
 
-        delegate: ItemDelegate {
-            id: delegate
-            required property string address;
-            required property string amount;
-            required property string label;
-            required property bool locked;
-            required property bool selected;
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-            required property int index;
+        ListView {
+            id: listView
+            width: parent.width
+            model: root.wallet.coinsListModel
+            spacing: 15
 
-            readonly property color stateColor: {
-                if (delegate.down) {
-                    return Theme.color.orange
-                } else if (delegate.hovered) {
-                    return Theme.color.orangeLight1
-                }
-                return Theme.color.neutral9
-            }
+            delegate: ItemDelegate {
+                id: delegate
+                required property string address;
+                required property string amount;
+                required property string label;
+                required property bool locked;
+                required property bool selected;
 
-            leftPadding: 0
-            rightPadding: 0
-            topPadding: 0
-            bottomPadding: 14
-            width: listView.width
+                required property int index;
 
-            background: Item {
-                Separator {
-                    anchors.bottom: parent.bottom
-                    width: parent.width
-                }
-            }
-
-            contentItem: RowLayout {
-                width: parent.width
-                CoreCheckBox {
-                    id: checkBox
-                    Layout.minimumWidth: 20
-                    enabled: !locked
-                    checked: selected
-                    visible: !locked
-                    MouseArea {
-                        anchors.fill: parent
-                        enabled: false
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
+                readonly property color stateColor: {
+                    if (delegate.down) {
+                        return Theme.color.orange
+                    } else if (delegate.hovered) {
+                        return Theme.color.orangeLight1
                     }
+                    return Theme.color.neutral9
+                }
 
-                    onToggled: listView.model.toggleCoinSelection(index)
+                leftPadding: 0
+                rightPadding: 10
+                topPadding: 0
+                bottomPadding: 14
+                width: listView.width
+
+                background: Item {
+                    Separator {
+                        anchors.bottom: parent.bottom
+                        width: parent.width - 10
+                    }
                 }
-                Icon {
-                    source: "qrc:/icons/lock"
-                    color: Theme.color.neutral9
-                    visible: locked
-                    size: 20
-                }
-                CoreText {
-                    text: amount
-                    font.pixelSize: 18
-                }
-                CoreText {
-                    Layout.fillWidth: true
-                    text: label != "" ? label : address
-                    font.pixelSize: 18
-                    elide: Text.ElideMiddle
-                    wrapMode: Text.NoWrap
+
+                contentItem: RowLayout {
+                    width: parent.width
+                    CoreCheckBox {
+                        id: checkBox
+                        Layout.minimumWidth: 20
+                        enabled: !locked
+                        checked: selected
+                        visible: !locked
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: false
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        onToggled: listView.model.toggleCoinSelection(index)
+                    }
+                    Icon {
+                        source: "qrc:/icons/lock"
+                        color: Theme.color.neutral9
+                        visible: locked
+                        size: 20
+                    }
+                    CoreText {
+                        text: amount
+                        font.pixelSize: 18
+                    }
+                    CoreText {
+                        Layout.fillWidth: true
+                        text: label != "" ? label : address
+                        font.pixelSize: 18
+                        elide: Text.ElideMiddle
+                        wrapMode: Text.NoWrap
+                    }
                 }
             }
         }
