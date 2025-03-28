@@ -25,6 +25,7 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObje
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
     m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::WalletQmlModel(QObject* parent)
@@ -33,6 +34,7 @@ WalletQmlModel::WalletQmlModel(QObject* parent)
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
     m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::~WalletQmlModel()
@@ -40,6 +42,7 @@ WalletQmlModel::~WalletQmlModel()
     delete m_activity_list_model;
     delete m_coins_list_model;
     delete m_current_recipient;
+    delete m_send_recipients;
     if (m_current_transaction) {
         delete m_current_transaction;
     }
