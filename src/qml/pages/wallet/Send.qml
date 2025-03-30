@@ -33,6 +33,7 @@ PageStack {
         Settings {
             id: settings
             property alias coinControlEnabled: sendOptionsPopup.coinControlEnabled
+            property alias multipleRecipientsEnabled: sendOptionsPopup.multipleRecipientsEnabled
         }
 
         ScrollView {
@@ -55,6 +56,7 @@ PageStack {
                     Layout.fillWidth: true
                     Layout.topMargin: 30
                     Layout.bottomMargin: 20
+
                     CoreText {
                         id: title
                         anchors.left: parent.left
@@ -64,6 +66,7 @@ PageStack {
                         color: Theme.color.neutral9
                         bold: true
                     }
+
                     EllipsisMenuButton {
                         id: menuButton
                         anchors.right: parent.right
@@ -78,8 +81,6 @@ PageStack {
                         id: sendOptionsPopup
                         x: menuButton.x - width + menuButton.width
                         y: menuButton.y + menuButton.height
-                        width: 300
-                        height: 50
                     }
                 }
 
