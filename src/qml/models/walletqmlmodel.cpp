@@ -208,3 +208,13 @@ std::vector<COutPoint> WalletQmlModel::listSelectedCoins() const
 {
     return m_coin_control.ListSelected();
 }
+
+int WalletQmlModel::recipientIndex() const
+{
+    return 1;
+}
+
+int WalletQmlModel::recipientsCount() const
+{
+    return 1;
+}
