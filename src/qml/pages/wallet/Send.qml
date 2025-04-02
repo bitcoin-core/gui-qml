@@ -84,6 +84,34 @@ PageStack {
                     }
                 }
 
+                RowLayout {
+                    id: selectAndAddRecipients
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    Layout.bottomMargin: 10
+                    visible: settings.multipleRecipientsEnabled
+
+                    NavButton {
+                        iconSource: "image://images/caret-left"
+                    }
+
+                    NavButton {
+                        iconSource: "image://images/caret-right"
+                    }
+
+                    CoreText {
+                        id: selectAndAddRecipientsLabel
+                        text: qsTr("Recipient %1 of %2").arg(wallet.recipientIndex).arg(wallet.recipientsCount)
+                        font.pixelSize: 18
+                        color: Theme.color.neutral9
+                    }
+                }
+
+                Separator {
+                    visible: settings.multipleRecipientsEnabled
+                    Layout.fillWidth: true
+                }
+
                 LabeledTextInput {
                     id: address
                     Layout.fillWidth: true
