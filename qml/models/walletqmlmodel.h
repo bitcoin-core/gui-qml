@@ -30,6 +30,8 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(SendRecipient* sendRecipient READ sendRecipient CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
+    Q_PROPERTY(int recipientIndex READ recipientIndex NOTIFY recipientIndexChanged)
+    Q_PROPERTY(int recipientsCount READ recipientsCount NOTIFY recipientsCountChanged)
 
 public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObject* parent = nullptr);
@@ -66,10 +68,15 @@ public:
     bool isSelectedCoin(const COutPoint& output);
     std::vector<COutPoint> listSelectedCoins() const;
 
+    int recipientIndex() const;
+    int recipientsCount() const;
+
 Q_SIGNALS:
     void nameChanged();
     void balanceChanged();
     void currentTransactionChanged();
+    void recipientIndexChanged();
+    void recipientsCountChanged();
 
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
