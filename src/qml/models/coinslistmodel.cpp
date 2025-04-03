@@ -13,7 +13,7 @@
 #include <vector>
 
 CoinsListModel::CoinsListModel(WalletQmlModel* parent)
-    : QAbstractListModel(parent), m_wallet_model(parent)
+    : QAbstractListModel(parent), m_wallet_model(parent), m_sort_by("amount"), m_total_amount(0)
 {
 }
 
