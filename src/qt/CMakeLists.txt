@@ -250,10 +250,31 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   )
 endif()
 
-add_executable(bitcoin-qt
-  main.cpp
-  ../init/bitcoin-qt.cpp
+
+set(SOURCES
+    main.cpp
+    ../init/bitcoin-qt.cpp
 )
+
+if(WITH_QML)
+  set(CMAKE_AUTOMOC_MOC_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}/../qml")
+  target_link_libraries(bitcoinqt
+    PUBLIC
+      Qt6::Qml
+      Qt6::Quick
+      Qt6::QuickControls2
+  )
+  message(STATUS "Including QML sources")
+  file(GLOB QML_SOURCES "../qml/*.cpp")
+  list(APPEND SOURCES ${QML_SOURCES})
+
+#  set(QML_QRC "../qml/bitcoin_qml.qrc")
+#  qt6_add_resources(QML_QRC_CPP ${QML_QRC})
+#  list(APPEND SOURCES ${QML_QRC_CPP})
+endif()
+
+add_executable(bitcoin-qt ${SOURCES})
+
 
 add_windows_resources(bitcoin-qt res/bitcoin-qt-res.rc)
 

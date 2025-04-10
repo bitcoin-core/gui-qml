@@ -144,4 +144,7 @@
 /* Define if QR support should be compiled in */
 #cmakedefine USE_QRCODE 1
 
+/* Define if the GUI should be built with QML */
+#cmakedefine USE_QML 1
+
 #endif //BITCOIN_CONFIG_H
