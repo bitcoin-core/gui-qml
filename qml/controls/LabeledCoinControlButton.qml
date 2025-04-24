@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 
 Item {
     property int coinsSelected: 0
+    property int coinCount: 0
 
     signal openCoinControl
 
@@ -32,7 +33,9 @@ Item {
         color: Theme.color.orangeLight1
         font.pixelSize: 18
         text: {
-            if (coinsSelected === 0) {
+            if (coinCount === 0) {
+                qsTr("No coins available")
+            } else if (coinsSelected === 0) {
                 qsTr("Select")
             } else {
                 qsTr("%1 input%2 selected")
@@ -43,7 +46,11 @@ Item {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: root.openCoinControl()
+            onClicked: {
+                if (coinCount > 0) {
+                    root.openCoinControl()
+                }
+            }
             cursorShape: Qt.PointingHandCursor
         }
     }
