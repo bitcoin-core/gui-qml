@@ -20,6 +20,7 @@ class CoinsListModel : public QAbstractListModel
     Q_OBJECT
     Q_PROPERTY(int lockedCoinsCount READ lockedCoinsCount NOTIFY lockedCoinsCountChanged)
     Q_PROPERTY(int selectedCoinsCount READ selectedCoinsCount NOTIFY selectedCoinsCountChanged)
+    Q_PROPERTY(int coinCount READ coinCount NOTIFY coinCountChanged)
     Q_PROPERTY(QString totalSelected READ totalSelected NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(QString changeAmount READ changeAmount NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(bool overRequiredAmount READ overRequiredAmount NOTIFY selectedCoinsCountChanged)
@@ -50,11 +51,13 @@ public Q_SLOTS:
     QString totalSelected() const;
     QString changeAmount() const;
     bool overRequiredAmount() const;
+    int coinCount() const;
 
 Q_SIGNALS:
     void sortByChanged(const QString& roleName);
     void lockedCoinsCountChanged();
     void selectedCoinsCountChanged();
+    void coinCountChanged();
 
 private:
     WalletQmlModel* m_wallet_model;
