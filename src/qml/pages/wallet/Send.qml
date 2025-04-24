@@ -185,6 +185,7 @@ PageStack {
                     visible: settings.coinControlEnabled
                     Layout.fillWidth: true
                     coinsSelected: wallet.coinsListModel.selectedCoinsCount
+                    coinCount: wallet.coinsListModel.coinCount
                     onOpenCoinControl: {
                         root.wallet.coinsListModel.update()
                         root.push(coinSelectionPage)
