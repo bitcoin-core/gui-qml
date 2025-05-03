@@ -92,10 +92,18 @@ PageStack {
                     visible: settings.multipleRecipientsEnabled
 
                     NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 30
+                        iconHeight: 30
                         iconSource: "image://images/caret-left"
                     }
 
                     NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 30
+                        iconHeight: 30
                         iconSource: "image://images/caret-right"
                     }
 
