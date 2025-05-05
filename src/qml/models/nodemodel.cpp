@@ -86,7 +86,7 @@ void NodeModel::setVerificationProgress(double new_progress)
     if (new_progress != m_verification_progress) {
         setRemainingSyncTime(new_progress);
 
-        if (new_progress >= 0.00001) {
+        if (new_progress >= 0.00014) {
             setHeadersSynced(true);
         }
 
@@ -213,6 +213,8 @@ void NodeModel::snapshotLoadThread(QString path_file) {
         if (!result) {
             m_snapshot_loading = false;
             Q_EMIT snapshotLoadingChanged();
+            m_snapshot_error = true;
+            Q_EMIT snapshotErrorChanged();
         } else {
             m_snapshot_loaded = true;
             Q_EMIT snapshotLoaded(result);
@@ -236,6 +238,7 @@ void NodeModel::setHeadersSynced(bool new_synced) {
     if (new_synced != m_headers_synced) {
         m_headers_synced = new_synced;
         Q_EMIT headersSyncedChanged();
+        checkAndLoadSnapshot();
     }
 }
 
@@ -243,5 +246,26 @@ void NodeModel::setIsIBDCompleted(bool new_completed) {
     if (new_completed != m_is_ibd_completed) {
         m_is_ibd_completed = new_completed;
         Q_EMIT isIBDCompletedChanged();
+    }
+}
+
+void NodeModel::setSnapshotFilePath(const QString& new_path) {
+    if (new_path != m_snapshot_file_path) {
+        m_snapshot_file_path = new_path;
+        Q_EMIT snapshotFilePathChanged();
+    }
+}
+
+void NodeModel::checkAndLoadSnapshot()
+{
+    if (m_headers_synced && !m_snapshot_file_path.isEmpty()) {
+        snapshotLoadThread(m_snapshot_file_path);
+    }
+}
+
+void NodeModel::setSnapshotError(bool new_error) {
+    if (new_error != m_snapshot_error) {
+        m_snapshot_error = new_error;
+        Q_EMIT snapshotErrorChanged();
     }
 }

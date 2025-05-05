@@ -17,7 +17,7 @@ ColumnLayout {
     spacing: 4
     Setting {
         id: gotoSnapshot
-        visible: !root.onboarding && !snapshotImportCompleted && !root.isIBDCompleted
+        visible: !snapshotImportCompleted && !root.isIBDCompleted
         Layout.fillWidth: true
         header: qsTr("Load snapshot")
         description: qsTr("Instant use with background sync")
@@ -39,7 +39,7 @@ ColumnLayout {
         onClicked: root.gotoSnapshot()
     }
     Separator {
-            visible: !root.onboarding && !snapshotImportCompleted && !root.isIBDCompleted
+        visible: !snapshotImportCompleted && !root.isIBDCompleted
         Layout.fillWidth: true
     }
     Setting {

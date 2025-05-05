@@ -21,7 +21,7 @@ ColumnLayout {
     property var snapshotInfo: (snapshotVerified || snapshotLoaded) ? chainModel.getSnapshotInfo() : ({})
     property string selectedFile: ""
     property bool headersSynced: nodeModel.headersSynced
-    property bool snapshotError: false
+    property bool snapshotError: nodeModel.snapshotError
 
     width: Math.min(parent.width, 450)
     anchors.horizontalCenter: parent.horizontalCenter
@@ -60,7 +60,7 @@ ColumnLayout {
                 Layout.topMargin: 20
                 color: Theme.color.neutral6
                 font.pixelSize: 17
-                visible: !headersSynced
+                visible: !headersSynced && !onboarding
                 text: !headersSynced
                     ? qsTr("Please wait for headers to sync before loading a snapshot.")
                     : qsTr("")
@@ -76,7 +76,7 @@ ColumnLayout {
                 Layout.bottomMargin: 20
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("Choose snapshot file")
-                enabled: headersSynced
+                enabled: headersSynced || onboarding
                 onClicked: fileDialog.open()
             }
 
@@ -89,8 +89,11 @@ ColumnLayout {
                 onAccepted: {
                     selectedFile = fileUrl.toString()
                     snapshotFileName = selectedFile
-                    if (!nodeModel.snapshotLoadThread(snapshotFileName)) {
-                        snapshotError = true
+                    if (!onboarding) {
+                        nodeModel.snapshotLoadThread(snapshotFileName)
+                    } else {
+                        nodeModel.setSnapshotFilePath(snapshotFileName)
+                        back()
                     }
                 }
             }
@@ -259,7 +262,7 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignCenter
                 text: qsTr("OK")
                 onClicked: {
-                    snapshotError = false
+                    nodeModel.setSnapshotError(false)
                     back()
                 }
             }
