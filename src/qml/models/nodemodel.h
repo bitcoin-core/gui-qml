@@ -39,6 +39,8 @@ class NodeModel : public QObject
     Q_PROPERTY(bool isSnapshotLoaded READ isSnapshotLoaded NOTIFY snapshotLoaded)
     Q_PROPERTY(bool headersSynced READ headersSynced WRITE setHeadersSynced NOTIFY headersSyncedChanged)
     Q_PROPERTY(bool isIBDCompleted READ isIBDCompleted WRITE setIsIBDCompleted NOTIFY isIBDCompletedChanged)
+    Q_PROPERTY(QString snapshotFilePath READ snapshotFilePath WRITE setSnapshotFilePath NOTIFY snapshotFilePathChanged)
+    Q_PROPERTY(bool snapshotError READ snapshotError WRITE setSnapshotError NOTIFY snapshotErrorChanged)
 
 public:
     explicit NodeModel(interfaces::Node& node);
@@ -65,6 +67,10 @@ public:
     void setHeadersSynced(bool new_synced);
     bool isIBDCompleted() const { return m_is_ibd_completed; }
     void setIsIBDCompleted(bool new_completed);
+    QString snapshotFilePath() const { return m_snapshot_file_path; }
+    Q_INVOKABLE void setSnapshotFilePath(const QString& new_path);
+    bool snapshotError() const { return m_snapshot_error; }
+    Q_INVOKABLE void setSnapshotError(bool new_error);
 
     Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
     Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
@@ -73,6 +79,7 @@ public:
     Q_INVOKABLE void requestShutdown();
 
     Q_INVOKABLE void snapshotLoadThread(QString path_file);
+    Q_INVOKABLE void checkAndLoadSnapshot();
 
     void startShutdownPolling();
     void stopShutdownPolling();
@@ -102,6 +109,8 @@ Q_SIGNALS:
     void showProgress(const QString& title, int progress);
     void headersSyncedChanged();
     void isIBDCompletedChanged();
+    void snapshotFilePathChanged();
+    void snapshotErrorChanged();
 protected:
     void timerEvent(QTimerEvent* event) override;
 
@@ -121,7 +130,8 @@ private:
     bool m_snapshot_loaded{false};
     bool m_headers_synced{false};
     bool m_is_ibd_completed{false};
-
+    QString m_snapshot_file_path;
+    bool m_snapshot_error{false};
     QVector<QPair<int, double>> m_block_process_time;
 
     interfaces::Node& m_node;
