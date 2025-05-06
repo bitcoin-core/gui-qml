@@ -5,15 +5,16 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 
-#include <interfaces/wallet.h>
 #include <interfaces/handler.h>
-
+#include <interfaces/wallet.h>
 #include <qml/models/activitylistmodel.h>
-
+#include <qml/models/coinslistmodel.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/walletqmlmodeltransaction.h>
+#include <wallet/coincontrol.h>
 
 #include <QObject>
+#include <memory>
 #include <vector>
 
 class ActivityListModel;
@@ -24,6 +25,7 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
     Q_PROPERTY(QString balance READ balance NOTIFY balanceChanged)
     Q_PROPERTY(ActivityListModel* activityListModel READ activityListModel CONSTANT)
+    Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipient* sendRecipient READ sendRecipient CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
 
@@ -35,6 +37,7 @@ public:
     QString name() const;
     QString balance() const;
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
+    CoinsListModel* coinsListModel() const { return m_coins_list_model; }
 
     std::set<interfaces::WalletTx> getWalletTxs() const;
     interfaces::WalletTx getWalletTx(const uint256& hash) const;
@@ -51,6 +54,16 @@ public:
     using TransactionChangedFn = std::function<void(const uint256& txid, ChangeType status)>;
     virtual std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn fn);
 
+    interfaces::Wallet::CoinsList listCoins() const;
+    bool lockCoin(const COutPoint& output);
+    bool unlockCoin(const COutPoint& output);
+    bool isLockedCoin(const COutPoint& output);
+    void listLockedCoins(std::vector<COutPoint>& outputs);
+    void selectCoin(const COutPoint& output);
+    void unselectCoin(const COutPoint& output);
+    bool isSelectedCoin(const COutPoint& output);
+    std::vector<COutPoint> listSelectedCoins() const;
+
 Q_SIGNALS:
     void nameChanged();
     void balanceChanged();
@@ -59,8 +72,10 @@ Q_SIGNALS:
 private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     ActivityListModel* m_activity_list_model{nullptr};
+    CoinsListModel* m_coins_list_model{nullptr};
     SendRecipient* m_current_recipient{nullptr};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
+    wallet::CCoinControl m_coin_control;
 };
 
 #endif // BITCOIN_QML_MODELS_WALLETQMLMODEL_H
