@@ -35,12 +35,18 @@ QHash<int, QByteArray> SendRecipientsListModel::roleNames() const
 {
     return {
         {AddressRole, "address"},
-        {LabelRole, "label"}};
+        {LabelRole, "label"},
+        {AmountRole, "amount"},
+        {MessageRole, "message"},
+    };
 }
 
-void SendRecipientsListModel::addRecipient()
+void SendRecipientsListModel::add()
 {
-    beginInsertRows(QModelIndex(), m_recipients.size(), m_recipients.size());
+    const int row = m_recipients.size();
+    beginInsertRows(QModelIndex(), row, row);
     m_recipients.append(new SendRecipient(this));
     endInsertRows();
+    Q_EMIT  countChanged();
+    setCurrentIndex(row)
 }
