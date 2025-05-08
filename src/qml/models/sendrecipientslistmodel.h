@@ -9,13 +9,14 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <qobjectdefs.h>
 
 class SendRecipientsListModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_PROPERTY(int recipientIndex READ recipientIndex NOTIFY recipientIndexChanged)
+    Q_PROPERTY(int currentIndex READ currentIndex NOTIFY currentIndexChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
-    Q_PROPERTY(SendRecipient* currentRecipient READ currentRecipient NOTIFY currentRecipientChanged)
+    Q_PROPERTY(SendRecipient* current READ currentRecipient NOTIFY currentRecipientChanged)
 
 public:
     enum Roles {
@@ -34,9 +35,9 @@ public:
     Q_INVOKABLE void add();
     Q_INVOKABLE void next();
     Q_INVOKABLE void prev();
-    Q_INVOKABLE void clearAll();
+    Q_INVOKABLE void remove();
 
-    int currentIndex() const { return m_current; }
+    int currentIndex() const { return m_current+1; }
     void setCurrentIndex(int row);
     SendRecipient* currentRecipient() const;
     int count() const { return m_recipients.size(); }
