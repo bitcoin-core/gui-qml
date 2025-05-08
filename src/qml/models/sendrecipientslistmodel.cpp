@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/sendrecipientslistmodel.h>
+#include <qobjectdefs.h>
 
 #include <qml/models/sendrecipient.h>
 

@@ -16,7 +16,7 @@ PageStack {
     vertical: true
 
     property WalletQmlModel wallet: walletController.selectedWallet
-    property SendRecipient recipient: wallet.sendRecipient
+    property SendRecipient recipient: wallet.recipients.current
 
     signal transactionPrepared()
 
@@ -97,6 +97,9 @@ PageStack {
                         iconWidth: 30
                         iconHeight: 30
                         iconSource: "image://images/caret-left"
+                        onClicked: {
+                            wallet.recipients.prev()
+                        }
                     }
 
                     NavButton {
@@ -105,13 +108,40 @@ PageStack {
                         iconWidth: 30
                         iconHeight: 30
                         iconSource: "image://images/caret-right"
+                        onClicked: {
+                            wallet.recipients.next()
+                        }
                     }
 
                     CoreText {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
                         id: selectAndAddRecipientsLabel
-                        text: qsTr("Recipient %1 of %2").arg(wallet.recipientIndex).arg(wallet.recipientsCount)
+                        text: qsTr("Recipient %1 of %2").arg(wallet.recipients.currentIndex).arg(wallet.recipients.count)
                         font.pixelSize: 18
                         color: Theme.color.neutral9
+                    }
+
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 20
+                        iconHeight: 20
+                        iconSource: "image://images/plus"
+                        onClicked: {
+                            wallet.recipients.add()
+                        }
+                    }
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 20
+                        iconHeight: 20
+                        iconSource: "image://images/minus"
+                        visible: wallet.recipients.count > 1
+                        onClicked: {
+                            wallet.recipients.remove()
+                        }
                     }
                 }
 
