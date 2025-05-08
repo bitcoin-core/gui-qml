@@ -9,6 +9,7 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <qobjectdefs.h>
 
 class SendRecipientsListModel : public QAbstractListModel
 {

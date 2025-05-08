@@ -1,3 +1,4 @@
+
 // Copyright (c) 2024 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -6,6 +7,7 @@
 
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
@@ -207,14 +209,4 @@ bool WalletQmlModel::isSelectedCoin(const COutPoint& output)
 std::vector<COutPoint> WalletQmlModel::listSelectedCoins() const
 {
     return m_coin_control.ListSelected();
-}
-
-int WalletQmlModel::recipientIndex() const
-{
-    return 1;
-}
-
-int WalletQmlModel::recipientsCount() const
-{
-    return 1;
 }
