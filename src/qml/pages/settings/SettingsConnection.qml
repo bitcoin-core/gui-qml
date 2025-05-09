@@ -12,6 +12,7 @@ Page {
     id: root
     signal back
     property bool onboarding: false
+    property bool snapshotImportCompleted: onboarding ? false : chainModel.isSnapshotActive
     background: null
     PageStack {
         id: stack
@@ -31,6 +32,9 @@ Page {
                 detailActive: true
                 detailItem: ConnectionSettings {
                     onNext: stack.push(proxySettings)
+                    onGotoSnapshot: stack.push(snapshotSettings)
+                    snapshotImportCompleted: root.snapshotImportCompleted
+                    onboarding: root.onboarding
                 }
 
                 states: [
@@ -84,6 +88,14 @@ Page {
         Component {
             id: proxySettings
             SettingsProxy {
+                onBack: stack.pop()
+            }
+        }
+        Component {
+            id: snapshotSettings
+            SettingsSnapshot {
+                onboarding: root.onboarding
+                snapshotImportCompleted: root.snapshotImportCompleted
                 onBack: stack.pop()
             }
         }

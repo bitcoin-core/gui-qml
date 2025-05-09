@@ -11,6 +11,7 @@
 #include <net_types.h>                 // For banmap_t
 #include <netaddress.h>                // For Network
 #include <netbase.h>                   // For ConnectionDirection
+#include <node/utxo_snapshot.h>         // For SnapshotMetadata
 #include <support/allocators/secure.h> // For SecureString
 #include <util/translation.h>
 
@@ -208,6 +209,9 @@ public:
     //! List rpc commands.
     virtual std::vector<std::string> listRpcCommands() = 0;
 
+    //! Load UTXO Snapshot.
+    virtual bool loadSnapshot(AutoFile& afile, const node::SnapshotMetadata& metadata, bool in_memory) = 0;
+
     //! Set RPC timer interface if unset.
     virtual void rpcSetTimerInterfaceIfUnset(RPCTimerInterface* iface) = 0;
 
@@ -242,6 +246,10 @@ public:
     //! Register handler for progress messages.
     using ShowProgressFn = std::function<void(const std::string& title, int progress, bool resume_possible)>;
     virtual std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn) = 0;
+
+    //! Register handler for snapshot load progress.
+    using SnapshotLoadProgressFn = std::function<void(double progress)>;
+    virtual std::unique_ptr<Handler> handleSnapshotLoadProgress(SnapshotLoadProgressFn fn) = 0;
 
     //! Register handler for wallet loader constructed messages.
     using InitWalletFn = std::function<void()>;
