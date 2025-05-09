@@ -34,6 +34,11 @@ class NodeModel : public QObject
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
+    Q_PROPERTY(double snapshotProgress READ snapshotProgress WRITE setSnapshotProgress NOTIFY snapshotProgressChanged)
+    Q_PROPERTY(bool snapshotLoading READ snapshotLoading NOTIFY snapshotLoadingChanged)
+    Q_PROPERTY(bool isSnapshotLoaded READ isSnapshotLoaded NOTIFY snapshotLoaded)
+    Q_PROPERTY(bool headersSynced READ headersSynced WRITE setHeadersSynced NOTIFY headersSyncedChanged)
+    Q_PROPERTY(bool isIBDCompleted READ isIBDCompleted WRITE setIsIBDCompleted NOTIFY isIBDCompletedChanged)
 
 public:
     explicit NodeModel(interfaces::Node& node);
@@ -52,12 +57,22 @@ public:
     void setPause(bool new_pause);
     bool errorState() const { return m_faulted; }
     void setErrorState(bool new_error);
+    bool isSnapshotLoaded() const { return m_snapshot_loaded; }
+    double snapshotProgress() const { return m_snapshot_progress; }
+    void setSnapshotProgress(double new_progress);
+    bool snapshotLoading() const { return m_snapshot_loading; }
+    bool headersSynced() const { return m_headers_synced; }
+    void setHeadersSynced(bool new_synced);
+    bool isIBDCompleted() const { return m_is_ibd_completed; }
+    void setIsIBDCompleted(bool new_completed);
 
     Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
     Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
 
     Q_INVOKABLE void startNodeInitializionThread();
     Q_INVOKABLE void requestShutdown();
+
+    Q_INVOKABLE void snapshotLoadThread(QString path_file);
 
     void startShutdownPolling();
     void stopShutdownPolling();
@@ -80,7 +95,13 @@ Q_SIGNALS:
 
     void setTimeRatioList(int new_time);
     void setTimeRatioListInitial();
-
+    void initializationFinished();
+    void snapshotLoaded(bool result);
+    void snapshotProgressChanged();
+    void snapshotLoadingChanged();
+    void showProgress(const QString& title, int progress);
+    void headersSyncedChanged();
+    void isIBDCompletedChanged();
 protected:
     void timerEvent(QTimerEvent* event) override;
 
@@ -93,17 +114,23 @@ private:
     double m_verification_progress{0.0};
     bool m_pause{false};
     bool m_faulted{false};
-
+    double m_snapshot_progress{0.0};
     int m_shutdown_polling_timer_id{0};
+    int m_snapshot_timer_id{0};
+    bool m_snapshot_loading{false};
+    bool m_snapshot_loaded{false};
+    bool m_headers_synced{false};
+    bool m_is_ibd_completed{false};
 
     QVector<QPair<int, double>> m_block_process_time;
 
     interfaces::Node& m_node;
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_num_peers_changed;
-
+    std::unique_ptr<interfaces::Handler> m_handler_snapshot_load_progress;
     void ConnectToBlockTipSignal();
     void ConnectToNumConnectionsChangedSignal();
+    void ConnectToSnapshotLoadProgressSignal();
 };
 
 #endif // BITCOIN_QML_MODELS_NODEMODEL_H
