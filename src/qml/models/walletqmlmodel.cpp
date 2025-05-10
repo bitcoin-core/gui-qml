@@ -107,16 +107,21 @@ bool WalletQmlModel::prepareTransaction()
         return false;
     }
 
-    CScript scriptPubKey = GetScriptForDestination(DecodeDestination(m_current_recipient->address().toStdString()));
-    wallet::CRecipient recipient = {scriptPubKey, m_current_recipient->cAmount(), m_current_recipient->subtractFeeFromAmount()};
-    m_coin_control.m_feerate = CFeeRate(1000);
+    std::vector<wallet::CRecipient> vecSend;
+    CAmount total = 0;
+    for (auto* recipient : m_send_recipients->recipients()) {
+        CScript scriptPubKey = GetScriptForDestination(DecodeDestination(recipient->address().toStdString()));
+        wallet::CRecipient c_recipient = {scriptPubKey, recipient->cAmount(), recipient->subtractFeeFromAmount()};
+        m_coin_control.m_feerate = CFeeRate(1000);
+        vecSend.push_back(c_recipient);
+        total += recipient->cAmount();
+    }
 
     CAmount balance = m_wallet->getBalance();
-    if (balance < recipient.nAmount) {
+    if (balance < total) {
         return false;
     }
 
-    std::vector<wallet::CRecipient> vecSend{recipient};
     int nChangePosRet = -1;
     CAmount nFeeRequired = 0;
     const auto& res = m_wallet->createTransaction(vecSend, m_coin_control, true, nChangePosRet, nFeeRequired);
