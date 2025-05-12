@@ -1,8 +1,15 @@
+
 // Copyright (c) 2024 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/walletqmlmodel.h>
+
+#include <qml/models/activitylistmodel.h>
+#include <qml/models/paymentrequest.h>
+#include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
+#include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
 #include <interfaces/wallet.h>
@@ -24,6 +31,7 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObje
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
     m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::WalletQmlModel(QObject* parent)
@@ -32,6 +40,7 @@ WalletQmlModel::WalletQmlModel(QObject* parent)
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
     m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::~WalletQmlModel()
