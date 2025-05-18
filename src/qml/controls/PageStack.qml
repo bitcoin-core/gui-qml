@@ -13,9 +13,8 @@ StackView {
             property: vertical ? "y" : "x"
             from: vertical ? parent.height : parent.width
             to: 0
-            duration: 400
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.5, 0.0, 0.2, 1.0]
+            duration: 500
+            easing.type: Easing.InOutCubic
         }
     }
     pushExit: Transition {
@@ -23,9 +22,8 @@ StackView {
             property: vertical ? "y" : "x"
             from: 0
             to: vertical ? -parent.height : -parent.width
-            duration: 400
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.5, 0.0, 0.2, 1.0]
+            duration: 500
+            easing.type: Easing.InOutCubic
         }
     }
     popEnter: Transition {
@@ -33,9 +31,8 @@ StackView {
             property: vertical ? "y" : "x"
             from: vertical ? -parent.height : -parent.width
             to: 0
-            duration: 400
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.5, 0.0, 0.2, 1.0]
+            duration: 500
+            easing.type: Easing.InOutCubic
         }
     }
     popExit: Transition {
@@ -43,9 +40,8 @@ StackView {
             property: vertical ? "y" : "x"
             from: 0
             to: vertical ? parent.height : parent.width
-            duration: 400
-            easing.type: Easing.Bezier
-            easing.bezierCurve: [0.5, 0.0, 0.2, 1.0]
+            duration: 500
+            easing.type: Easing.InOutCubic
         }
     }
 }
