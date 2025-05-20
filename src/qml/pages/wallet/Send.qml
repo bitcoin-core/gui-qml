@@ -16,7 +16,7 @@ PageStack {
     vertical: true
 
     property WalletQmlModel wallet: walletController.selectedWallet
-    property SendRecipient recipient: wallet.sendRecipient
+    property SendRecipient recipient: wallet.recipients.current
 
     signal transactionPrepared()
 
@@ -33,6 +33,7 @@ PageStack {
         Settings {
             id: settings
             property alias coinControlEnabled: sendOptionsPopup.coinControlEnabled
+            property alias multipleRecipientsEnabled: sendOptionsPopup.multipleRecipientsEnabled
         }
 
         ScrollView {
@@ -53,6 +54,7 @@ PageStack {
                     Layout.fillWidth: true
                     Layout.topMargin: 30
                     Layout.bottomMargin: 20
+
                     CoreText {
                         id: title
                         anchors.left: parent.left
@@ -61,6 +63,7 @@ PageStack {
                         font.pixelSize: 21
                         bold: true
                     }
+
                     EllipsisMenuButton {
                         id: menuButton
                         anchors.right: parent.right
@@ -75,9 +78,73 @@ PageStack {
                         id: sendOptionsPopup
                         x: menuButton.x - width + menuButton.width
                         y: menuButton.y + menuButton.height
-                        width: 300
-                        height: 50
                     }
+                }
+
+                RowLayout {
+                    id: selectAndAddRecipients
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    Layout.bottomMargin: 10
+                    visible: settings.multipleRecipientsEnabled
+
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 30
+                        iconHeight: 30
+                        iconSource: "image://images/caret-left"
+                        onClicked: {
+                            wallet.recipients.prev()
+                        }
+                    }
+
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 30
+                        iconHeight: 30
+                        iconSource: "image://images/caret-right"
+                        onClicked: {
+                            wallet.recipients.next()
+                        }
+                    }
+
+                    CoreText {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
+                        id: selectAndAddRecipientsLabel
+                        text: qsTr("Recipient %1 of %2").arg(wallet.recipients.currentIndex).arg(wallet.recipients.count)
+                        font.pixelSize: 18
+                        color: Theme.color.neutral9
+                    }
+
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 20
+                        iconHeight: 20
+                        iconSource: "image://images/plus"
+                        onClicked: {
+                            wallet.recipients.add()
+                        }
+                    }
+                    NavButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        iconWidth: 20
+                        iconHeight: 20
+                        iconSource: "image://images/minus"
+                        visible: wallet.recipients.count > 1
+                        onClicked: {
+                            wallet.recipients.remove()
+                        }
+                    }
+                }
+
+                Separator {
+                    visible: settings.multipleRecipientsEnabled
+                    Layout.fillWidth: true
                 }
 
                 LabeledTextInput {
