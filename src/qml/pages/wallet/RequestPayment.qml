@@ -221,19 +221,26 @@ Page {
                         clearRequest.visible = false
                         title.text = qsTr("Request a payment")
                         address.text = ""
+                        qrImage.code = ""
                         continueButton.text = qsTr("Create bitcoin address")
                     }
                 }
             }
 
-            Rectangle {
-                id: qrPlaceholder
+            Pane {
                 Layout.alignment: Qt.AlignTop
                 Layout.minimumWidth: 150
-                Layout.maximumWidth: 150
-                color: Theme.color.neutral2
-                width: 150
-                height: 150
+                Layout.minimumHeight: 150
+                padding: 0
+                background: Rectangle {
+                    color: Theme.color.neutral2
+                    visible: qrImage.code === ""
+                }
+                contentItem: QRImage {
+                    id: qrImage
+                    backgroundColor: "transparent"
+                    foregroundColor: Theme.color.neutral9
+                }
             }
         }
     }
