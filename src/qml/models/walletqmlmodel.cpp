@@ -4,13 +4,14 @@
 
 #include <qml/models/walletqmlmodel.h>
 
+#include <qml/models/activitylistmodel.h>
+#include <qml/models/sendrecipient.h>
+#include <qml/models/walletqmlmodeltransaction.h>
+
 #include <consensus/amount.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
 #include <outputtype.h>
-#include <qml/models/activitylistmodel.h>
-#include <qml/models/sendrecipient.h>
-#include <qml/models/walletqmlmodeltransaction.h>
 #include <qt/bitcoinunits.h>
 #include <wallet/coincontrol.h>
 #include <wallet/wallet.h>
