@@ -35,6 +35,7 @@
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
+#include <qml/qrimageprovider.h>
 #include <qml/util.h>
 #include <qml/walletqmlcontroller.h>
 #include <qt/guiutil.h>
@@ -313,6 +314,7 @@ int QmlGuiMain(int argc, char* argv[])
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
+    engine.addImageProvider(QStringLiteral("qr"), new QRImageProvider);
 
     engine.rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
     engine.rootContext()->setContextProperty("nodeModel", &node_model);
