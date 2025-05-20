@@ -438,6 +438,7 @@ QML_RES_QML = \
   qml/controls/OptionButton.qml \
   qml/controls/OptionSwitch.qml \
   qml/controls/OutlineButton.qml \
+  qml/controls/QRImage.qml \
   qml/controls/PageIndicator.qml \
   qml/controls/PageStack.qml \
   qml/controls/ProgressIndicator.qml \
