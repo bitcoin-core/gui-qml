@@ -64,6 +64,12 @@ Button {
         RowLayout {
             visible: !root.loading
 
+            opacity: visible ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation { duration: 400 }
+            }
+
             anchors.leftMargin: 5
             anchors.rightMargin: 5
             anchors.centerIn: parent
