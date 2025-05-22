@@ -43,6 +43,7 @@ Button {
             Skeleton {
                 Layout.preferredHeight: 30
                 Layout.preferredWidth: 30
+                loading: root.loading
             }
             ColumnLayout {
                 spacing: 2
@@ -52,11 +53,13 @@ Button {
                 Skeleton {
                     Layout.preferredHeight: 15
                     Layout.preferredWidth: 50
+                    loading: root.loading
                 }
 
                 Skeleton {
                     Layout.preferredHeight: 15
                     Layout.preferredWidth: 114
+                    loading: root.loading
                 }
             }
         }
