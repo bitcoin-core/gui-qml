@@ -9,6 +9,7 @@ Rectangle {
     property color baseColor: Theme.color.neutral1
     property color highlightColor: Theme.color.neutral2
     property int shimmerDuration: 2500
+    property bool loading: true
 
     radius: 3
 
@@ -32,7 +33,7 @@ Rectangle {
     }
 
     ParallelAnimation  {
-        running: true
+        running: loading
         loops: Animation.Infinite
         NumberAnimation {
             target: stop1
