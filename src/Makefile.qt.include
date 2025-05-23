@@ -443,8 +443,9 @@ QML_RES_QML = \
   qml/controls/PageStack.qml \
   qml/controls/ProgressIndicator.qml \
   qml/controls/qmldir \
-  qml/controls/Setting.qml \
   qml/controls/SendOptionsPopup.qml \
+  qml/controls/Setting.qml \
+  qml/controls/Skeleton.qml \
   qml/controls/TextButton.qml \
   qml/controls/Theme.qml \
   qml/controls/ToggleButton.qml \

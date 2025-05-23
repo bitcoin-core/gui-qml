@@ -120,4 +120,7 @@ void WalletQmlController::initialize()
         m_selected_wallet = m_wallets.front();
         Q_EMIT selectedWalletChanged();
     }
+
+    m_initialized = true;
+    Q_EMIT initializedChanged();
 }
