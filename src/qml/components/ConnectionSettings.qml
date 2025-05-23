@@ -10,7 +10,35 @@ import "../controls"
 ColumnLayout {
     id: root
     signal next
+    signal gotoSnapshot
+    property bool snapshotImported: false
+    function setSnapshotImported(imported) {
+        snapshotImported = imported
+    }
     spacing: 4
+    Setting {
+        id: gotoSnapshot
+        Layout.fillWidth: true
+        header: qsTr("Load snapshot")
+        description: qsTr("Instant use with background sync")
+        actionItem: Item {
+            width: 26
+            height: 26
+            CaretRightIcon {
+                anchors.centerIn: parent
+                visible: !snapshotImported
+                color: gotoSnapshot.stateColor
+            }
+            GreenCheckIcon {
+                anchors.centerIn: parent
+                visible: snapshotImported
+                color: Theme.color.transparent
+                size: 30
+            }
+        }
+        onClicked: root.gotoSnapshot()
+    }
+    Separator { Layout.fillWidth: true }
     Setting {
         Layout.fillWidth: true
         header: qsTr("Enable listening")
