@@ -43,6 +43,10 @@ Button {
         State {
             name: "HOVER"; when: root.hovered
             PropertyChanges { target: ellipsisIcon; color: hoverColor }
+        },
+        State {
+            name: "DISABLED"; when: !root.enabled
+            PropertyChanges { target: ellipsisIcon; color: Theme.color.neutral4 }
         }
     ]
 }
