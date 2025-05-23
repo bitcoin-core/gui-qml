@@ -26,7 +26,6 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignLeft
         width: 110
-        color: Theme.color.neutral9
         font.pixelSize: 18
     }
 
@@ -40,7 +39,7 @@ Item {
         font.styleName: "Regular"
         font.pixelSize: 18
         color: Theme.color.neutral9
-        placeholderTextColor: Theme.color.neutral7
+        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
         background: Item {}
         selectByMouse: true
         onTextEdited: root.textEdited()
@@ -54,7 +53,7 @@ Item {
         Icon {
             id: icon
             source: ""
-            color: Theme.color.neutral8
+            color: enabled ? Theme.color.neutral8 : Theme.color.neutral4
             size: 30
             enabled: source != ""
             onClicked: root.iconClicked()

@@ -8,7 +8,7 @@ import QtQuick.Controls 2.15
 Text {
     property bool bold: false
     property bool wrap: true
-    color: Theme.color.neutral9
+    color: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     font.family: "Inter"
     font.styleName: bold ? "Semi Bold" : "Regular"
     font.pixelSize: 13
