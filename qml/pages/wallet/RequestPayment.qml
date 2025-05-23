@@ -35,6 +35,9 @@ Page {
 
         RowLayout {
             id: contentRow
+
+            enabled: walletController.initialized
+
             anchors.top: title.bottom
             anchors.topMargin: 40
             anchors.horizontalCenter: parent.horizontalCenter
@@ -59,7 +62,6 @@ Page {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         horizontalAlignment: Text.AlignLeft
-                        color: Theme.color.neutral9
                         text: "Amount"
                         font.pixelSize: 18
                     }
@@ -73,7 +75,7 @@ Page {
                         font.styleName: "Regular"
                         font.pixelSize: 18
                         color: Theme.color.neutral9
-                        placeholderTextColor: Theme.color.neutral7
+                        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                         background: Item {}
                         placeholderText: "0.00000000"
                         selectByMouse: true
@@ -104,14 +106,14 @@ Page {
                             anchors.verticalCenter: parent.verticalCenter
                             text: bitcoinAmount.unitLabel
                             font.pixelSize: 18
-                            color: Theme.color.neutral7
+                            color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                         }
                         Icon {
                             id: flipIcon
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             source: "image://images/flip-vertical"
-                            color: Theme.color.neutral8
+                            color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
                             size: 30
                         }
                     }
@@ -156,7 +158,6 @@ Page {
                         width: 110
                         text: qsTr("Address")
                         font.pixelSize: 18
-                        color: Theme.color.neutral9
                     }
                     CoreText {
                         id: copyLabel
@@ -166,7 +167,7 @@ Page {
                         width: 110
                         text: qsTr("copy")
                         font.pixelSize: 18
-                        color: Theme.color.neutral7
+                        color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                     }
 
                     Rectangle {
@@ -182,7 +183,6 @@ Page {
                             anchors.leftMargin: 5
                             horizontalAlignment: Text.AlignLeft
                             font.pixelSize: 18
-                            color: Theme.color.neutral9
                             wrap: true
                         }
                     }

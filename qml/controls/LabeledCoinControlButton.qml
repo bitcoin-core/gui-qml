@@ -21,7 +21,6 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignLeft
         width: 110
-        color: Theme.color.neutral9
         font.pixelSize: 18
         text: qsTr("Inputs")
     }
@@ -30,7 +29,7 @@ Item {
         anchors.left: label.right
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignLeft
-        color: Theme.color.orangeLight1
+        color: enabled ? Theme.color.orangeLight1 : Theme.color.neutral2
         font.pixelSize: 18
         text: {
             if (coinCount === 0) {

@@ -15,7 +15,7 @@ AbstractButton {
     property int textSize: 18
     property url iconSource: ""
     property Rectangle iconBackground: null
-    property color iconColor: Theme.color.neutral9
+    property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.neutral2
     hoverEnabled: AppMode.isDesktop
     topPadding: text_background.active ? 7 : 14
     bottomPadding: text_background.active ? 7 : 14
@@ -88,7 +88,6 @@ AbstractButton {
                     anchors.verticalCenter: parent.verticalCenter
                     bold: true
                     font.pixelSize: root.textSize
-                    color: Theme.color.neutral9
                     text: root.text
                 }
             }
