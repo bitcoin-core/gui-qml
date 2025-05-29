@@ -90,6 +90,7 @@
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/MultipleSendReview.qml</file>
         <file>pages/wallet/RequestPayment.qml</file>
         <file>pages/wallet/Send.qml</file>
         <file>pages/wallet/SendResult.qml</file>
