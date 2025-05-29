@@ -85,7 +85,11 @@ ApplicationWindow {
                 main.push(createWalletWizard)
             }
             onSendTransaction: {
-                main.push(sendReviewPage)
+                if (multipleRecipientsEnabled) {
+                    main.push(multipleSendReviewPage)
+                } else {
+                    main.push(sendReviewPage)
+                }
             }
         }
     }
@@ -102,6 +106,20 @@ ApplicationWindow {
     Component {
         id: sendReviewPage
         SendReview {
+            onBack: {
+                main.pop()
+            }
+            onTransactionSent: {
+                walletController.selectedWallet.sendRecipient.clear()
+                main.pop()
+                sendResult.open()
+            }
+        }
+    }
+
+    Component {
+        id: multipleSendReviewPage
+        MultipleSendReview {
             onBack: {
                 main.pop()
             }

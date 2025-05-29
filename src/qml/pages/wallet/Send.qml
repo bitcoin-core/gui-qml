@@ -18,7 +18,7 @@ PageStack {
     property WalletQmlModel wallet: walletController.selectedWallet
     property SendRecipient recipient: wallet.recipients.current
 
-    signal transactionPrepared()
+    signal transactionPrepared(bool multipleRecipientsEnabled)
 
     Connections {
         target: walletController
@@ -293,7 +293,7 @@ PageStack {
                     text: qsTr("Review")
                     onClicked: {
                         if (root.wallet.prepareTransaction()) {
-                            root.transactionPrepared()
+                            root.transactionPrepared(settings.multipleRecipientsEnabled);
                         }
                     }
                 }

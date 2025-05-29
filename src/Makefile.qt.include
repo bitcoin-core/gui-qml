@@ -488,6 +488,7 @@ QML_RES_QML = \
   qml/pages/wallet/CreatePassword.qml \
   qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
+  qml/pages/wallet/MultipleSendReview.qml \
   qml/pages/wallet/RequestPayment.qml \
   qml/pages/wallet/Send.qml \
   qml/pages/wallet/SendResult.qml \
