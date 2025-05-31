@@ -110,7 +110,7 @@ ApplicationWindow {
                 main.pop()
             }
             onTransactionSent: {
-                walletController.selectedWallet.sendRecipient.clear()
+                walletController.selectedWallet.recipients.clear()
                 main.pop()
                 sendResult.open()
             }
@@ -124,7 +124,7 @@ ApplicationWindow {
                 main.pop()
             }
             onTransactionSent: {
-                walletController.selectedWallet.sendRecipient.clear()
+                walletController.selectedWallet.recipients.clear()
                 main.pop()
                 sendResult.open()
             }
