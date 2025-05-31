@@ -40,6 +40,7 @@ PageStack {
             clip: true
             width: parent.width
             height: parent.height
+
             contentWidth: width
 
             ColumnLayout {
@@ -166,10 +167,6 @@ PageStack {
                 }
 
                 Item {
-                    BitcoinAmount {
-                        id: bitcoinAmount
-                    }
-
                     height: amountInput.height
                     Layout.fillWidth: true
                     CoreText {
@@ -195,10 +192,8 @@ PageStack {
                         background: Item {}
                         placeholderText: "0.00000000"
                         selectByMouse: true
-                        onTextEdited: {
-                            amountInput.text = bitcoinAmount.amount = bitcoinAmount.sanitize(amountInput.text)
-                            root.recipient.amount = bitcoinAmount.satoshiAmount
-                        }
+                        text: root.recipient.amount.display
+                        onEditingFinished: root.recipient.amount.display = text
                     }
                     Item {
                         width: unitLabel.width + flipIcon.width
@@ -208,20 +203,15 @@ PageStack {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (bitcoinAmount.unit == BitcoinAmount.BTC) {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.BTC)
-                                    bitcoinAmount.unit = BitcoinAmount.SAT
-                                } else {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.SAT)
-                                    bitcoinAmount.unit = BitcoinAmount.BTC
-                                }
+                                root.recipient.amount.display = amountInput.text
+                                root.recipient.amount.flipUnit()
                             }
                         }
                         CoreText {
                             id: unitLabel
                             anchors.right: flipIcon.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: bitcoinAmount.unitLabel
+                            text: root.recipient.amount.unitLabel
                             font.pixelSize: 18
                             color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                         }

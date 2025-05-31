@@ -5,17 +5,18 @@
 #ifndef BITCOIN_QML_MODELS_SENDRECIPIENT_H
 #define BITCOIN_QML_MODELS_SENDRECIPIENT_H
 
+#include <qml/bitcoinamount.h>
+
 #include <QObject>
 #include <QString>
-#include <qml/bitcoinamount.h>
 
 class SendRecipient : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString address READ address WRITE setAddress NOTIFY addressChanged)
     Q_PROPERTY(QString label READ label WRITE setLabel NOTIFY labelChanged)
-    Q_PROPERTY(QString amount READ amount WRITE setAmount NOTIFY amountChanged)
     Q_PROPERTY(QString message READ message WRITE setMessage NOTIFY messageChanged)
+    Q_PROPERTY(BitcoinAmount* amount READ amount CONSTANT)
 
 public:
     explicit SendRecipient(QObject* parent = nullptr);
@@ -26,7 +27,7 @@ public:
     QString label() const;
     void setLabel(const QString& label);
 
-    QString amount() const;
+    BitcoinAmount* amount() const;
     void setAmount(const QString& amount);
 
     QString message() const;
@@ -41,14 +42,13 @@ public:
 Q_SIGNALS:
     void addressChanged();
     void labelChanged();
-    void amountChanged();
     void messageChanged();
 
 private:
-    QString m_address;
-    QString m_label;
-    QString m_amount;
-    QString m_message;
+    QString m_address{""};
+    QString m_label{""};
+    QString m_message{""};
+    BitcoinAmount* m_amount;
     bool m_subtractFeeFromAmount{false};
 };
 
