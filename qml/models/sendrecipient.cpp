@@ -3,10 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/sendrecipient.h>
-#include <qobjectdefs.h>
+
+#include <qml/bitcoinamount.h>
 
 SendRecipient::SendRecipient(QObject* parent)
-    : QObject(parent), m_address(""), m_label(""), m_amount(""), m_message("")
+    : QObject(parent), m_amount(new BitcoinAmount(this))
 {
 }
 
@@ -36,17 +37,9 @@ void SendRecipient::setLabel(const QString& label)
     }
 }
 
-QString SendRecipient::amount() const
+BitcoinAmount* SendRecipient::amount() const
 {
     return m_amount;
-}
-
-void SendRecipient::setAmount(const QString& amount)
-{
-    if (m_amount != amount) {
-        m_amount = amount;
-        Q_EMIT amountChanged();
-    }
 }
 
 QString SendRecipient::message() const
@@ -69,22 +62,17 @@ bool SendRecipient::subtractFeeFromAmount() const
 
 CAmount SendRecipient::cAmount() const
 {
-    // TODO: Figure out who owns the parsing of SendRecipient::amount to CAmount
-    if (m_amount == "") {
-        return 0;
-    }
-    return m_amount.toLongLong();
+    return m_amount->satoshi();
 }
 
 void SendRecipient::clear()
 {
     m_address = "";
     m_label = "";
-    m_amount = "";
+    m_amount->setSatoshi(0);
     m_message = "";
     m_subtractFeeFromAmount = false;
     Q_EMIT addressChanged();
     Q_EMIT labelChanged();
-    Q_EMIT amountChanged();
     Q_EMIT messageChanged();
 }

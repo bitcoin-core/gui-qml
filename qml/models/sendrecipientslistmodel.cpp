@@ -27,7 +27,7 @@ QVariant SendRecipientsListModel::data(const QModelIndex& index, int role) const
     switch (role) {
     case AddressRole: return r->address();
     case LabelRole: return r->label();
-    case AmountRole: return r->amount();
+    case AmountRole: return r->amount()->toDisplay();
     case MessageRole: return r->message();
     default: return {};
     }

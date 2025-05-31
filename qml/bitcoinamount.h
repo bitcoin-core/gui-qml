@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Bitcoin Core developers
+// Copyright (c) 2024-2025 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,8 +15,8 @@ class BitcoinAmount : public QObject
     Q_OBJECT
     Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
     Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY unitChanged)
-    Q_PROPERTY(QString amount READ amount WRITE setAmount NOTIFY amountChanged)
-    Q_PROPERTY(QString satoshiAmount READ satoshiAmount NOTIFY amountChanged)
+    Q_PROPERTY(QString display READ toDisplay WRITE fromDisplay NOTIFY amountChanged)
+    Q_PROPERTY(qint64 satoshi READ satoshi WRITE setSatoshi NOTIFY amountChanged)
 
 public:
     enum class Unit {
@@ -30,27 +30,28 @@ public:
     Unit unit() const;
     void setUnit(Unit unit);
     QString unitLabel() const;
-    QString amount() const;
-    void setAmount(const QString& new_amount);
-    QString satoshiAmount() const;
+
+    QString toDisplay() const;
+    void fromDisplay(const QString& new_amount);
+    qint64 satoshi() const;
+    void setSatoshi(qint64 new_amount);
 
 public Q_SLOTS:
-    QString sanitize(const QString& text);
-    QString convert(const QString& text, Unit unit) const;
-    QString toSatoshis(const QString& text) const;
+    void flipUnit();
+    void clear();
 
 Q_SIGNALS:
     void unitChanged();
-    void unitLabelChanged();
     void amountChanged();
 
 private:
-    long long toSatoshis(QString &amount, const Unit unit);
-    int decimals(Unit unit);
+    QString sanitize(const QString& text);
+    static QString satsToBtc(qint64 sat);
+    static qint64 btcToSats(const QString& btc);
 
-    Unit m_unit;
-    QString m_unitLabel;
-    QString m_amount;
+    qint64 m_satoshi{0};
+    bool m_isSet{false};
+    Unit m_unit{Unit::BTC};
 };
 
 #endif // BITCOIN_QML_BITCOINAMOUNT_H

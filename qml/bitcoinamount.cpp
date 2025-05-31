@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Bitcoin Core developers
+// Copyright (c) 2024-2025 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,19 +7,9 @@
 #include <QRegExp>
 #include <QStringList>
 
-
-BitcoinAmount::BitcoinAmount(QObject *parent) : QObject(parent)
+BitcoinAmount::BitcoinAmount(QObject* parent)
+    : QObject(parent)
 {
-    m_unit = Unit::BTC;
-}
-
-int BitcoinAmount::decimals(Unit unit)
-{
-    switch (unit) {
-    case Unit::BTC: return 8;
-    case Unit::SAT: return 0;
-    } // no default case, so the compiler can warn about missing cases
-    assert(false);
 }
 
 QString BitcoinAmount::sanitize(const QString &text)
@@ -43,6 +33,30 @@ QString BitcoinAmount::sanitize(const QString &text)
     return result;
 }
 
+qint64 BitcoinAmount::satoshi() const
+{
+    return m_satoshi;
+}
+
+void BitcoinAmount::setSatoshi(qint64 new_amount)
+{
+    m_isSet = true;
+    if (m_satoshi != new_amount) {
+        m_satoshi = new_amount;
+        Q_EMIT amountChanged();
+    }
+}
+
+void BitcoinAmount::clear()
+{
+    if (!m_isSet && m_satoshi == 0) {
+        return;
+    }
+    m_satoshi = 0;
+    m_isSet = false;
+    Q_EMIT amountChanged();
+}
+
 BitcoinAmount::Unit BitcoinAmount::unit() const
 {
     return m_unit;
@@ -58,97 +72,82 @@ QString BitcoinAmount::unitLabel() const
 {
     switch (m_unit) {
     case Unit::BTC: return "₿";
-    case Unit::SAT: return "Sat";
+    case Unit::SAT: return "sat";
     }
     assert(false);
 }
 
-QString BitcoinAmount::amount() const
+void BitcoinAmount::flipUnit()
 {
-    return m_amount;
-}
-
-QString BitcoinAmount::satoshiAmount() const
-{
-    return toSatoshis(m_amount);
-}
-
-void BitcoinAmount::setAmount(const QString& new_amount)
-{
-    m_amount = sanitize(new_amount);
+    if (m_unit == Unit::BTC) {
+        m_unit = Unit::SAT;
+    } else {
+        m_unit = Unit::BTC;
+    }
+    Q_EMIT unitChanged();
     Q_EMIT amountChanged();
 }
 
-QString BitcoinAmount::toSatoshis(const QString& text) const
+QString BitcoinAmount::satsToBtc(qint64 sat)
 {
-    if (m_unit == Unit::SAT) {
-        return text;
-    } else {
-        return convert(text, m_unit);
+    const bool negative = sat < 0;
+    qint64 absSat = negative ? -sat : sat;
+
+    const qint64 wholePart = absSat / COIN;
+    const qint64 fracInt = absSat % COIN;
+    QString fracPart = QString("%1").arg(fracInt, 8, 10, QLatin1Char('0'));
+
+    QString result = QString::number(wholePart) + '.' + fracPart;
+    if (negative) {
+        result.prepend('-');
     }
-}
-
-long long BitcoinAmount::toSatoshis(QString& amount, const Unit unit)
-{
-    int num_decimals = decimals(unit);
-
-    QStringList parts = amount.remove(' ').split(".");
-
-    QString whole = parts[0];
-    QString decimals;
-
-    if(parts.size() > 1)
-    {
-        decimals = parts[1];
-    }
-    QString str = whole + decimals.leftJustified(num_decimals, '0', true);
-
-    return str.toLongLong();
-}
-
-QString BitcoinAmount::convert(const QString& amount, Unit unit) const
-{
-    if (amount == "") {
-        return amount;
-    }
-
-    QString result = amount;
-    int decimalPosition  = result.indexOf(".");
-
-    if (decimalPosition == -1) {
-        decimalPosition = result.length();
-        result.append(".");
-    }
-
-    if (unit == Unit::BTC) {
-        int numDigitsAfterDecimal = result.length() - decimalPosition - 1;
-        if (numDigitsAfterDecimal < 8) {
-            result.append(QString(8 - numDigitsAfterDecimal, '0'));
-        }
-        result.remove(decimalPosition, 1);
-
-        while (result.startsWith('0') && result.length() > 1) {
-            result.remove(0, 1);
-        }
-    } else if (unit == Unit::SAT) {
-        result.remove(decimalPosition, 1);
-        int newDecimalPosition = decimalPosition - 8;
-        if (newDecimalPosition < 1) {
-            result = QString("0").repeated(-newDecimalPosition) + result;
-            newDecimalPosition = 0;
-        }
-        result.insert(newDecimalPosition, ".");
-
-        while (result.endsWith('0') && result.contains('.')) {
-            result.chop(1);
-        }
-        if (result.endsWith('.')) {
-            result.chop(1);
-        }
-        if (result.startsWith('.')) {
-            result.insert(0, "0");
-        }
-    }
-
     return result;
+}
+
+QString BitcoinAmount::toDisplay() const
+{
+    if (!m_isSet) {
+        return "";
+    }
+    if (m_unit == Unit::SAT) {
+        return QString::number(m_satoshi);
+    } else {
+        return satsToBtc(m_satoshi);
+    }
+}
+
+qint64 BitcoinAmount::btcToSats(const QString& btcSanitized)
+{
+    if (btcSanitized.isEmpty() || btcSanitized == ".") return 0;
+
+    QString cleaned = btcSanitized;
+    if (cleaned.startsWith('.')) cleaned.prepend('0');
+
+    QStringList parts = cleaned.split('.');
+    const qint64 whole = parts[0].isEmpty() ? 0 : parts[0].toLongLong();
+    qint64 frac = 0;
+    if (parts.size() == 2) {
+        frac = parts[1].leftJustified(8, '0').toLongLong();
+    }
+
+    return whole * COIN + frac;
+}
+
+void BitcoinAmount::fromDisplay(const QString& text)
+{
+    if (text.trimmed().isEmpty()) {
+        clear();
+        return;
+    }
+
+    qint64 newSat = 0;
+    if (m_unit == Unit::BTC) {
+        QString sanitized = sanitize(text);
+        newSat = btcToSats(sanitized);
+    } else {
+        QString digitsOnly = text;
+        digitsOnly.remove(QRegExp("[^0-9]"));
+        newSat = digitsOnly.trimmed().isEmpty() ? 0 : digitsOnly.toLongLong();
+    }
+    setSatoshi(newSat);
 }
