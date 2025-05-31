@@ -425,12 +425,12 @@ QML_RES_QML = \
   qml/controls/CoreCheckBox.qml \
   qml/controls/CoreText.qml \
   qml/controls/CoreTextField.qml \
-  qml/controls/EllipsisMenuButton.qml \
   qml/controls/EllipsisMenuToggleItem.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
   qml/controls/Icon.qml \
+  qml/controls/IconButton.qml \
   qml/controls/InformationPage.qml \
   qml/controls/IPAddressValueInput.qml \
   qml/controls/KeyValueRow.qml \
