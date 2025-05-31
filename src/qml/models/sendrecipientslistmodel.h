@@ -17,6 +17,7 @@ class SendRecipientsListModel : public QAbstractListModel
     Q_PROPERTY(int currentIndex READ currentIndex NOTIFY currentIndexChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(SendRecipient* current READ currentRecipient NOTIFY currentRecipientChanged)
+    Q_PROPERTY(QString totalAmount READ totalAmount NOTIFY totalAmountChanged)
 
 public:
     enum Roles {
@@ -42,15 +43,21 @@ public:
     SendRecipient* currentRecipient() const;
     int count() const { return m_recipients.size(); }
     QList<SendRecipient*> recipients() const { return m_recipients; }
+    QString totalAmount() const;
+    qint64 totalAmountSatoshi() const { return m_totalAmount; }
 
 Q_SIGNALS:
     void currentIndexChanged();
     void currentRecipientChanged();
     void countChanged();
+    void totalAmountChanged();
 
 private:
+    void updateTotalAmount();
+
     QList<SendRecipient*> m_recipients;
     int m_current{0};
+    qint64 m_totalAmount{0};
 };
 
 #endif // BITCOIN_QML_MODELS_SENDRECIPIENTSLISTMODEL_H

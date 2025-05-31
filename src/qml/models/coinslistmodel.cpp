@@ -122,14 +122,14 @@ QString CoinsListModel::totalSelected() const
 
 QString CoinsListModel::changeAmount() const
 {
-    CAmount change = m_total_amount - m_wallet_model->sendRecipient()->cAmount();
+    CAmount change = m_total_amount - m_wallet_model->sendRecipientList()->totalAmountSatoshi();
     change = std::abs(change);
     return BitcoinUnits::format(BitcoinUnits::Unit::BTC, change);
 }
 
 bool CoinsListModel::overRequiredAmount() const
 {
-    return m_total_amount > m_wallet_model->sendRecipient()->cAmount();
+    return m_total_amount > m_wallet_model->sendRecipientList()->totalAmountSatoshi();
 }
 
 int CoinsListModel::coinCount() const

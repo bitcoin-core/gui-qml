@@ -88,7 +88,7 @@ void BitcoinAmount::flipUnit()
     Q_EMIT amountChanged();
 }
 
-QString BitcoinAmount::satsToBtc(qint64 sat)
+QString BitcoinAmount::satsToBtcString(qint64 sat)
 {
     const bool negative = sat < 0;
     qint64 absSat = negative ? -sat : sat;
@@ -112,7 +112,7 @@ QString BitcoinAmount::toDisplay() const
     if (m_unit == Unit::SAT) {
         return QString::number(m_satoshi);
     } else {
-        return satsToBtc(m_satoshi);
+        return satsToBtcString(m_satoshi);
     }
 }
 
