@@ -36,6 +36,8 @@ public:
     qint64 satoshi() const;
     void setSatoshi(qint64 new_amount);
 
+    static QString satsToBtcString(qint64 sat);
+
 public Q_SLOTS:
     void flipUnit();
     void clear();
@@ -46,7 +48,6 @@ Q_SIGNALS:
 
 private:
     QString sanitize(const QString& text);
-    static QString satsToBtc(qint64 sat);
     static qint64 btcToSats(const QString& btc);
 
     qint64 m_satoshi{0};

@@ -3,14 +3,16 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/sendrecipientslistmodel.h>
-#include <qobjectdefs.h>
 
 #include <qml/models/sendrecipient.h>
 
 SendRecipientsListModel::SendRecipientsListModel(QObject* parent)
     : QAbstractListModel(parent)
 {
-    m_recipients.append(new SendRecipient(this));
+    auto* recipient = new SendRecipient(this);
+    connect(recipient->amount(), &BitcoinAmount::amountChanged,
+            this, &SendRecipientsListModel::updateTotalAmount);
+    m_recipients.append(recipient);
 }
 
 int SendRecipientsListModel::rowCount(const QModelIndex&) const
@@ -48,7 +50,10 @@ void SendRecipientsListModel::add()
 {
     const int row = m_recipients.size();
     beginInsertRows(QModelIndex(), row, row);
-    m_recipients.append(new SendRecipient(this));
+    auto* recipient = new SendRecipient(this);
+    connect(recipient->amount(), &BitcoinAmount::amountChanged,
+            this, &SendRecipientsListModel::updateTotalAmount);
+    m_recipients.append(recipient);
     endInsertRows();
     Q_EMIT countChanged();
     setCurrentIndex(row);
@@ -97,4 +102,19 @@ SendRecipient* SendRecipientsListModel::currentRecipient() const
         return nullptr;
 
     return m_recipients[m_current];
+}
+
+void SendRecipientsListModel::updateTotalAmount()
+{
+    qint64 total = 0;
+    for (const auto& recipient : m_recipients) {
+        total += recipient->amount()->satoshi();
+    }
+    m_totalAmount = total;
+    Q_EMIT totalAmountChanged();
+}
+
+QString SendRecipientsListModel::totalAmount() const
+{
+    return BitcoinAmount::satsToBtcString(m_totalAmount);
 }
