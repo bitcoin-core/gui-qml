@@ -130,7 +130,7 @@ bool WalletQmlModel::prepareTransaction()
             delete m_current_transaction;
         }
         CTransactionRef newTx = *res;
-        m_current_transaction = new WalletQmlModelTransaction(m_current_recipient, this);
+        m_current_transaction = new WalletQmlModelTransaction(m_send_recipients, this);
         m_current_transaction->setWtx(newTx);
         m_current_transaction->setTransactionFee(nFeeRequired);
         Q_EMIT currentTransactionChanged();
