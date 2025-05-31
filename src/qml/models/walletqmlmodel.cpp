@@ -205,3 +205,16 @@ std::vector<COutPoint> WalletQmlModel::listSelectedCoins() const
 {
     return m_coin_control.ListSelected();
 }
+
+unsigned int WalletQmlModel::feeTargetBlocks() const
+{
+    return m_coin_control.m_confirm_target.value_or(wallet::DEFAULT_TX_CONFIRM_TARGET);
+}
+
+void WalletQmlModel::setFeeTargetBlocks(unsigned int target_blocks)
+{
+    if (m_coin_control.m_confirm_target != target_blocks) {
+        m_coin_control.m_confirm_target = target_blocks;
+        Q_EMIT feeTargetBlocksChanged();
+    }
+}
