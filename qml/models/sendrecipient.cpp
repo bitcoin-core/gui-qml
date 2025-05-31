@@ -75,4 +75,5 @@ void SendRecipient::clear()
     Q_EMIT addressChanged();
     Q_EMIT labelChanged();
     Q_EMIT messageChanged();
+    Q_EMIT amount()->amountChanged();
 }
