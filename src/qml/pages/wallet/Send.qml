@@ -16,9 +16,9 @@ PageStack {
     vertical: true
 
     property WalletQmlModel wallet: walletController.selectedWallet
-    property SendRecipient recipient: wallet.sendRecipient
+    property SendRecipient recipient: wallet.recipients.current
 
-    signal transactionPrepared()
+    signal transactionPrepared(bool multipleRecipientsEnabled)
 
     Connections {
         target: walletController
@@ -33,12 +33,14 @@ PageStack {
         Settings {
             id: settings
             property alias coinControlEnabled: sendOptionsPopup.coinControlEnabled
+            property alias multipleRecipientsEnabled: sendOptionsPopup.multipleRecipientsEnabled
         }
 
         ScrollView {
             clip: true
             width: parent.width
             height: parent.height
+
             contentWidth: width
 
             ColumnLayout {
@@ -55,6 +57,7 @@ PageStack {
                     Layout.fillWidth: true
                     Layout.topMargin: 30
                     Layout.bottomMargin: 20
+
                     CoreText {
                         id: title
                         anchors.left: parent.left
@@ -64,11 +67,13 @@ PageStack {
                         color: Theme.color.neutral9
                         bold: true
                     }
-                    EllipsisMenuButton {
+
+                    IconButton {
                         id: menuButton
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         checked: sendOptionsPopup.opened
+                        iconSource: "image://images/ellipsis"
                         onClicked: {
                             sendOptionsPopup.open()
                         }
@@ -78,9 +83,74 @@ PageStack {
                         id: sendOptionsPopup
                         x: menuButton.x - width + menuButton.width
                         y: menuButton.y + menuButton.height
-                        width: 300
-                        height: 50
                     }
+                }
+
+                RowLayout {
+                    id: selectAndAddRecipients
+                    Layout.fillWidth: true
+                    Layout.topMargin: 10
+                    Layout.bottomMargin: 10
+                    visible: settings.multipleRecipientsEnabled
+
+                    CoreText {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignLeft
+                        id: selectAndAddRecipientsLabel
+                        text: qsTr("Recipient %1 of %2").arg(wallet.recipients.currentIndex).arg(wallet.recipients.count)
+                        horizontalAlignment: Text.AlignLeft
+                        font.pixelSize: 18
+                        color: Theme.color.neutral9
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/caret-left"
+                        enabled: wallet.recipients.currentIndex - 1 > 0
+                        onClicked: {
+                            wallet.recipients.prev()
+
+                        }
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/caret-right"
+                        enabled: wallet.recipients.currentIndex < wallet.recipients.count
+                        onClicked: {
+                            wallet.recipients.next()
+                        }
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/plus-big-filled"
+                        onClicked: {
+                            wallet.recipients.add()
+                        }
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/minus"
+                        enabled: wallet.recipients.count > 1
+                        onClicked: {
+                            wallet.recipients.remove()
+                        }
+                    }
+                }
+
+                Separator {
+                    visible: settings.multipleRecipientsEnabled
+                    Layout.fillWidth: true
                 }
 
                 LabeledTextInput {
@@ -97,10 +167,6 @@ PageStack {
                 }
 
                 Item {
-                    BitcoinAmount {
-                        id: bitcoinAmount
-                    }
-
                     height: amountInput.height
                     Layout.fillWidth: true
                     CoreText {
@@ -126,9 +192,12 @@ PageStack {
                         background: Item {}
                         placeholderText: "0.00000000"
                         selectByMouse: true
-                        onTextEdited: {
-                            amountInput.text = bitcoinAmount.amount = bitcoinAmount.sanitize(amountInput.text)
-                            root.recipient.amount = bitcoinAmount.satoshiAmount
+                        text: root.recipient.amount.display
+                        onEditingFinished: root.recipient.amount.display = text
+                        onActiveFocusChanged: {
+                            if (!activeFocus) {
+                                root.recipient.amount.display = text
+                            }
                         }
                     }
                     Item {
@@ -138,21 +207,13 @@ PageStack {
                         anchors.verticalCenter: parent.verticalCenter
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: {
-                                if (bitcoinAmount.unit == BitcoinAmount.BTC) {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.BTC)
-                                    bitcoinAmount.unit = BitcoinAmount.SAT
-                                } else {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.SAT)
-                                    bitcoinAmount.unit = BitcoinAmount.BTC
-                                }
-                            }
+                            onClicked: root.recipient.amount.flipUnit()
                         }
                         CoreText {
                             id: unitLabel
                             anchors.right: flipIcon.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: bitcoinAmount.unitLabel
+                            text: root.recipient.amount.unitLabel
                             font.pixelSize: 18
                             color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                         }
@@ -226,7 +287,7 @@ PageStack {
                     text: qsTr("Review")
                     onClicked: {
                         if (root.wallet.prepareTransaction()) {
-                            root.transactionPrepared()
+                            root.transactionPrepared(settings.multipleRecipientsEnabled);
                         }
                     }
                 }
