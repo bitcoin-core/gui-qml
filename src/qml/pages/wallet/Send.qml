@@ -67,11 +67,12 @@ PageStack {
                         bold: true
                     }
 
-                    EllipsisMenuButton {
+                    IconButton {
                         id: menuButton
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         checked: sendOptionsPopup.opened
+                        iconSource: "image://images/ellipsis"
                         onClicked: {
                             sendOptionsPopup.open()
                         }
@@ -91,54 +92,55 @@ PageStack {
                     Layout.bottomMargin: 10
                     visible: settings.multipleRecipientsEnabled
 
-                    NavButton {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        iconWidth: 30
-                        iconHeight: 30
-                        iconSource: "image://images/caret-left"
-                        onClicked: {
-                            wallet.recipients.prev()
-                        }
-                    }
-
-                    NavButton {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        iconWidth: 30
-                        iconHeight: 30
-                        iconSource: "image://images/caret-right"
-                        onClicked: {
-                            wallet.recipients.next()
-                        }
-                    }
-
                     CoreText {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignLeft
                         id: selectAndAddRecipientsLabel
                         text: qsTr("Recipient %1 of %2").arg(wallet.recipients.currentIndex).arg(wallet.recipients.count)
+                        horizontalAlignment: Text.AlignLeft
                         font.pixelSize: 18
                         color: Theme.color.neutral9
                     }
 
-                    NavButton {
+                    IconButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
-                        iconWidth: 20
-                        iconHeight: 20
-                        iconSource: "image://images/plus"
+                        size: 30
+                        iconSource: "image://images/caret-left"
+                        enabled: wallet.recipients.currentIndex - 1 > 0
+                        onClicked: {
+                            wallet.recipients.prev()
+
+                        }
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/caret-right"
+                        enabled: wallet.recipients.currentIndex < wallet.recipients.count
+                        onClicked: {
+                            wallet.recipients.next()
+                        }
+                    }
+
+                    IconButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        size: 30
+                        iconSource: "image://images/plus-big-filled"
                         onClicked: {
                             wallet.recipients.add()
                         }
                     }
-                    NavButton {
+
+                    IconButton {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
-                        iconWidth: 20
-                        iconHeight: 20
+                        size: 30
                         iconSource: "image://images/minus"
-                        visible: wallet.recipients.count > 1
+                        enabled: wallet.recipients.count > 1
                         onClicked: {
                             wallet.recipients.remove()
                         }
