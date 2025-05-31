@@ -403,6 +403,7 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/ExternalPopup.qml \
+  qml/components/FeeSelection.qml \
   qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
   qml/components/OptionPopup.qml \
