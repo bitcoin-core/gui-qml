@@ -118,3 +118,25 @@ QString SendRecipientsListModel::totalAmount() const
 {
     return BitcoinAmount::satsToBtcString(m_totalAmount);
 }
+
+void SendRecipientsListModel::clear()
+{
+    beginResetModel();
+    for (auto* recipient : m_recipients) {
+        delete recipient;
+    }
+    m_recipients.clear();
+    m_current = 0;
+    m_totalAmount = 0;
+
+    auto* recipient = new SendRecipient(this);
+    connect(recipient->amount(), &BitcoinAmount::amountChanged,
+            this, &SendRecipientsListModel::updateTotalAmount);
+    m_recipients.append(recipient);
+    endResetModel();
+
+    Q_EMIT countChanged();
+    Q_EMIT totalAmountChanged();
+    Q_EMIT currentRecipientChanged();
+    Q_EMIT currentIndexChanged();
+}
