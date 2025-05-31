@@ -34,6 +34,54 @@ PageStack {
             bold: true
         }
 
+        Loader {
+            id: skeletonOverlay
+
+            width: Math.min(parent.width - 40, 600)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: title.bottom
+            anchors.bottom: parent.bottom
+
+            active: !walletController.initialized
+
+            sourceComponent: Column {
+                spacing: 0
+                Repeater {
+                    model: 5
+                    delegate: ItemDelegate {
+                        height: 51
+                        width: skeletonOverlay.width
+                        contentItem: RowLayout {
+                            spacing: 12
+                            Skeleton {
+                                Layout.leftMargin: 6
+                                width: 15
+                                height: 15
+                            }
+                            Skeleton {
+                                height: 15
+                                Layout.fillWidth: true
+                            }
+                            Skeleton {
+                                width: 75
+                                height: 15
+                            }
+                            Skeleton {
+                                width: 120
+                                height: 15
+                            }
+                        }
+                        background: Item {
+                            Separator {
+                                anchors.bottom: parent.bottom
+                                width: parent.width
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         ListView {
             id: listView
             clip: true
