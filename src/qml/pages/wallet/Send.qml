@@ -194,6 +194,11 @@ PageStack {
                         selectByMouse: true
                         text: root.recipient.amount.display
                         onEditingFinished: root.recipient.amount.display = text
+                        onActiveFocusChanged: {
+                            if (!activeFocus) {
+                                root.recipient.amount.display = text
+                            }
+                        }
                     }
                     Item {
                         width: unitLabel.width + flipIcon.width
@@ -202,10 +207,7 @@ PageStack {
                         anchors.verticalCenter: parent.verticalCenter
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: {
-                                root.recipient.amount.display = amountInput.text
-                                root.recipient.amount.flipUnit()
-                            }
+                            onClicked: root.recipient.amount.flipUnit()
                         }
                         CoreText {
                             id: unitLabel
