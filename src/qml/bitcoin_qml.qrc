@@ -107,6 +107,7 @@
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
         <file alias="bitcoin">../qt/res/icons/bitcoin.png</file>
+        <file alias="caret-down-medium-filled">res/icons/caret-down-medium-filled.png</file>
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
