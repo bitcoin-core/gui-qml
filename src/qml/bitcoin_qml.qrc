@@ -101,6 +101,7 @@
     </qresource>
     <qresource prefix="/icons">
         <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
+        <file alias="alert-filled">res/icons/alert-filled.png</file>
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
