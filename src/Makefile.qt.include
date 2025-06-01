@@ -357,6 +357,7 @@ QML_RES_FONTS = \
 
 QML_RES_ICONS = \
   qml/res/icons/add-wallet-dark.png \
+  qml/res/icons/alert-filled.png \
   qml/res/icons/arrow-down.png \
   qml/res/icons/arrow-up.png \
   qml/res/icons/bitcoin-circle.png \
