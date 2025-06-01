@@ -20,146 +20,136 @@ PageStack {
         }
     }
 
-    initialItem: Page {
-        id: root
-        background: null
+    initialItem: RowLayout {
+        Page {
+            Layout.alignment: Qt.AlignCenter
+            Layout.fillHeight: true
+            Layout.fillWidth: true
+            Layout.maximumWidth: 600
+            Layout.margins: 20
+            id: root
+            background: null
 
-        CoreText {
-            id: title
-            text: qsTr("Activity")
-            anchors.left: listView.left
-            anchors.top: parent.top
-            anchors.topMargin: 20
-            font.pixelSize: 21
-            bold: true
-        }
+            header: CoreText {
+                id: title
+                horizontalAlignment: Text.AlignLeft
+                text: qsTr("Activity")
+                font.pixelSize: 21
+                bold: true
+            }
 
-        ListView {
-            id: listView
-            clip: true
-            width: Math.min(parent.width - 40, 600)
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: title.bottom
-            anchors.bottom: parent.bottom
+            contentItem: ListView {
+                id: listView
+                clip: true
+                model: walletController.selectedWallet.activityListModel
+                delegate: ItemDelegate {
+                    id: delegate
+                    required property string address;
+                    required property string amount;
+                    required property string date;
+                    required property int depth;
+                    required property string label;
+                    required property int status;
+                    required property int type;
 
-            model: walletController.selectedWallet.activityListModel
-            delegate: ItemDelegate {
-                id: delegate
-                required property string address;
-                required property string amount;
-                required property string date;
-                required property int depth;
-                required property string label;
-                required property int status;
-                required property int type;
-
-                width: listView.width
-                height: 51
-
-                background: Item {
-                    Separator {
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                    }
-                }
-
-                contentItem: Item {
-                    Icon {
-                        id: directionIcon
-                        anchors.left: parent.left
-                        anchors.margins: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        source: {
-                            if (delegate.type == Transaction.RecvWithAddress
-                                || delegate.type == Transaction.RecvFromOther) {
-                                "qrc:/icons/triangle-down"
-                            } else if (delegate.type == Transaction.Generated) {
-                                "qrc:/icons/coinbase"
-                            } else {
-                                "qrc:/icons/triangle-up"
-                            }
-                        }
-                        color: {
-                            if (delegate.status == Transaction.Confirmed) {
-                                if (delegate.type == Transaction.RecvWithAddress ||
-                                    delegate.type == Transaction.RecvFromOther ||
-                                    delegate.type == Transaction.Generated) {
-                                    Theme.color.green
-                                } else {
-                                    Theme.color.orange
-                                }
-                            } else {
-                                Theme.color.blue
-                            }
-                        }
-                        size: 14
-                    }
-                    CoreText {
-                        id: label
-                        anchors.left: directionIcon.right
-                        anchors.right: date.left
-                        anchors.margins: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        elide: Text.ElideMiddle
-                        text: {
-                            if (delegate.label != "") {
-                                delegate.label
-                            } else {
-                                delegate.address
-                            }
-                        }
-                        font.pixelSize: 15
-                        horizontalAlignment: Text.AlignLeft
-                        clip: true
-                    }
-
-                    CoreText {
-                        id: date
-                        anchors.right: amount.left
-                        anchors.margins: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: delegate.date
-                        font.pixelSize: 15
-                        horizontalAlignment: Text.AlignRight
-                    }
-
-                    CoreText {
-                        id: amount
-                        anchors.right: parent.right
-                        anchors.margins: 6
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: delegate.amount
-                        font.pixelSize: 15
-                        horizontalAlignment: Text.AlignRight
-                        color: {
-                            if (delegate.type == Transaction.RecvWithAddress
-                                || delegate.type == Transaction.RecvFromOther
-                                || delegate.type == Transaction.Generated) {
-                                Theme.color.green
-                            } else {
-                                Theme.color.neutral9
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: stackView.push(detailsPage)
-                        hoverEnabled: true
-                        onEntered: label.color = Theme.color.orange
-                        onExited: label.color = Theme.color.neutral9
+                    HoverHandler {
                         cursorShape: Qt.PointingHandCursor
                     }
 
-                    Component {
-                        id: detailsPage
-                        ActivityDetails {
-                            amount: delegate.amount
-                            date: delegate.date
-                            depth: delegate.depth
-                            type: delegate.type
-                            status: delegate.status
-                            address: delegate.address
+                    onClicked: stackView.push(detailsPage)
+
+                    width: ListView.view.width
+
+                    background: Item {
+                        Separator {
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                        }
+                    }
+
+                    contentItem: RowLayout {
+                        Icon {
+                            Layout.alignment: Qt.AlignCenter
+                            Layout.margins: 6
+                            source: {
+                                if (delegate.type == Transaction.RecvWithAddress
+                                    || delegate.type == Transaction.RecvFromOther) {
+                                    "qrc:/icons/triangle-down"
+                                } else if (delegate.type == Transaction.Generated) {
+                                    "qrc:/icons/coinbase"
+                                } else {
+                                    "qrc:/icons/triangle-up"
+                                }
+                            }
+                            color: {
+                                if (delegate.status == Transaction.Confirmed) {
+                                    if (delegate.type == Transaction.RecvWithAddress ||
+                                        delegate.type == Transaction.RecvFromOther ||
+                                        delegate.type == Transaction.Generated) {
+                                        Theme.color.green
+                                    } else {
+                                        Theme.color.orange
+                                    }
+                                } else {
+                                    Theme.color.blue
+                                }
+                            }
+                            size: 14
+                        }
+                        CoreText {
+                            Layout.alignment: Qt.AlignCenter
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 0
+                            Layout.margins: 6
+                            color: delegate.hovered ? Theme.color.orange : Theme.color.neutral9
+                            elide: Text.ElideMiddle
+                            text: {
+                                if (delegate.label != "") {
+                                    delegate.label
+                                } else {
+                                    delegate.address
+                                }
+                            }
+                            font.pixelSize: 15
+                            horizontalAlignment: Text.AlignLeft
+                            clip: true
+                        }
+
+                        CoreText {
+                            Layout.alignment: Qt.AlignCenter
+                            Layout.margins: 6
+                            text: delegate.date
+                            font.pixelSize: 15
+                            horizontalAlignment: Text.AlignRight
+                        }
+
+                        CoreText {
+                            Layout.alignment: Qt.AlignCenter
+                            Layout.margins: 6
+                            text: delegate.amount
+                            font.pixelSize: 15
+                            horizontalAlignment: Text.AlignRight
+                            color: {
+                                if (delegate.type == Transaction.RecvWithAddress
+                                    || delegate.type == Transaction.RecvFromOther
+                                    || delegate.type == Transaction.Generated) {
+                                    Theme.color.green
+                                } else {
+                                    Theme.color.neutral9
+                                }
+                            }
+                        }
+
+                        Component {
+                            id: detailsPage
+                            ActivityDetails {
+                                amount: delegate.amount
+                                date: delegate.date
+                                depth: delegate.depth
+                                type: delegate.type
+                                status: delegate.status
+                                address: delegate.address
+                            }
                         }
                     }
                 }
