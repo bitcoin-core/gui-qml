@@ -9,7 +9,7 @@ import QtQuick.Layouts 1.15
 import "../controls"
 import "../components"
 
-Item {
+RowLayout {
     id: root
 
     property int selectedIndex: 1
@@ -22,16 +22,14 @@ Item {
 
     CoreText {
         id: label
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
+        Layout.fillWidth: true
+        horizontalAlignment: Text.AlignLeft
         text: qsTr("Fee")
         font.pixelSize: 15
     }
 
     Button {
         id: dropDownButton
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
         text: root.selectedLabel
         font.pixelSize: 15
 
@@ -45,7 +43,6 @@ Item {
 
         contentItem: RowLayout {
             spacing: 5
-            anchors.centerIn: parent
 
             CoreText {
                 id: value
@@ -108,8 +105,8 @@ Item {
 
         width: 260
         height: Math.min(feeModel.count * 40 + 20, 300)
-        x: parent.width - width
-        y: parent.height
+        x: feePopup.parent.width - feePopup.width
+        y: feePopup.parent.height
 
         contentItem: ListView {
             id: feeList
@@ -118,6 +115,7 @@ Item {
             width: 260
             height: contentHeight
             delegate: ItemDelegate {
+                id: delegate
                 required property string feeLabel
                 required property int index
                 required property int target
@@ -133,20 +131,18 @@ Item {
                     visible: mouseArea.containsMouse
                 }
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 12
+                contentItem: RowLayout {
                     spacing: 10
 
                     CoreText {
                         text: feeLabel
+                        horizontalAlignment: Text.AlignLeft
+                        Layout.fillWidth: true
                         font.pixelSize: 15
                     }
 
-                    Item { Layout.fillWidth: true }
-
                     Icon {
-                        visible: index === root.selectedIndex
+                        visible: delegate.index === root.selectedIndex
                         source: "image://images/check"
                         color: Theme.color.orange
                         size: 20
@@ -159,7 +155,7 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        root.selectedIndex = index
+                        root.selectedIndex = delegate.index
                         root.selectedLabel = feeLabel
                         root.feeChanged(target)
                         feePopup.close()
@@ -172,7 +168,7 @@ Item {
                     anchors.bottom: parent.bottom
                     height: 1
                     color: Theme.color.neutral3
-                    visible: index < feeModel.count - 1
+                    visible: delegate.index < feeModel.count - 1
                 }
             }
         }
