@@ -202,7 +202,7 @@ PageStack {
                 FeeSelection {
                     id: feeSelection
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 50
+
                     onFeeChanged: {
                         root.wallet.targetBlocks = target
                     }
