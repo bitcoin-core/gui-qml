@@ -36,6 +36,8 @@ public:
     qint64 satoshi() const;
     void setSatoshi(qint64 new_amount);
 
+    bool isSet() const { return m_isSet; }
+
     static QString satsToBtcString(qint64 sat);
 
 public Q_SLOTS:

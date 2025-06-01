@@ -111,7 +111,6 @@ PageStack {
                         enabled: wallet.recipients.currentIndex - 1 > 0
                         onClicked: {
                             wallet.recipients.prev()
-
                         }
                     }
 
@@ -153,77 +152,125 @@ PageStack {
                     Layout.fillWidth: true
                 }
 
-                LabeledTextInput {
-                    id: address
+                ColumnLayout {
                     Layout.fillWidth: true
-                    labelText: qsTr("Send to")
-                    placeholderText: qsTr("Enter address...")
-                    text: root.recipient.address
-                    onTextEdited: root.recipient.address = address.text
+
+                    LabeledTextInput {
+                        id: address
+                        Layout.fillWidth: true
+                        labelText: qsTr("Send to")
+                        placeholderText: qsTr("Enter address...")
+                        text: root.recipient.address
+                        onTextEdited: root.recipient.address = address.text
+                    }
+
+                    RowLayout {
+                        id: addressIssue
+                        Layout.fillWidth: true
+                        visible: root.recipient.addressError.length > 0
+
+                        Icon {
+                            source: "image://images/alert-filled"
+                            size: 22
+                            color: Theme.color.red
+                        }
+
+                        CoreText {
+                            id: warningText
+                            text: root.recipient.addressError
+                            font.pixelSize: 15
+                            color: Theme.color.red
+                            horizontalAlignment: Text.AlignLeft
+                            Layout.fillWidth: true
+                        }
+                    }
                 }
 
                 Separator {
                     Layout.fillWidth: true
                 }
 
-                Item {
-                    height: amountInput.height
+                ColumnLayout {
                     Layout.fillWidth: true
-                    CoreText {
-                        id: amountLabel
-                        width: 110
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignLeft
-                        text: qsTr("Amount")
-                        font.pixelSize: 18
-                    }
 
-                    TextField {
-                        id: amountInput
-                        anchors.left: amountLabel.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 0
-                        font.family: "Inter"
-                        font.styleName: "Regular"
-                        font.pixelSize: 18
-                        color: Theme.color.neutral9
-                        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                        background: Item {}
-                        placeholderText: "0.00000000"
-                        selectByMouse: true
-                        text: root.recipient.amount.display
-                        onEditingFinished: root.recipient.amount.display = text
-                        onActiveFocusChanged: {
-                            if (!activeFocus) {
-                                root.recipient.amount.display = text
+                    Item {
+                        height: amountInput.height
+                        Layout.fillWidth: true
+                        CoreText {
+                            id: amountLabel
+                            width: 110
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            horizontalAlignment: Text.AlignLeft
+                            text: qsTr("Amount")
+                            font.pixelSize: 18
+                        }
+
+                        TextField {
+                            id: amountInput
+                            anchors.left: amountLabel.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            leftPadding: 0
+                            font.family: "Inter"
+                            font.styleName: "Regular"
+                            font.pixelSize: 18
+                            color: Theme.color.neutral9
+                            placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+                            background: Item {}
+                            placeholderText: "0.00000000"
+                            selectByMouse: true
+                            text: root.recipient.amount.display
+                            onEditingFinished: root.recipient.amount.display = text
+                            onActiveFocusChanged: {
+                                if (!activeFocus) {
+                                    root.recipient.amount.display = text
+                                }
+                            }
+                        }
+                        Item {
+                            width: unitLabel.width + flipIcon.width
+                            height: Math.max(unitLabel.height, flipIcon.height)
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: root.recipient.amount.flipUnit()
+                            }
+                            CoreText {
+                                id: unitLabel
+                                anchors.right: flipIcon.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.recipient.amount.unitLabel
+                                font.pixelSize: 18
+                                color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+                            }
+                            Icon {
+                                id: flipIcon
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                source: "image://images/flip-vertical"
+                                icon.color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
+                                size: 30
                             }
                         }
                     }
-                    Item {
-                        width: unitLabel.width + flipIcon.width
-                        height: Math.max(unitLabel.height, flipIcon.height)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: root.recipient.amount.flipUnit()
-                        }
-                        CoreText {
-                            id: unitLabel
-                            anchors.right: flipIcon.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.recipient.amount.unitLabel
-                            font.pixelSize: 18
-                            color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                        }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.recipient.amountError.length > 0
+
                         Icon {
-                            id: flipIcon
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "image://images/flip-vertical"
-                            icon.color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
-                            size: 30
+                            source: "image://images/alert-filled"
+                            size: 22
+                            color: Theme.color.red
+                        }
+
+                        CoreText {
+                            text: root.recipient.amountError
+                            font.pixelSize: 15
+                            color: Theme.color.red
+                            horizontalAlignment: Text.AlignLeft
+                            Layout.fillWidth: true
                         }
                     }
                 }
@@ -285,6 +332,7 @@ PageStack {
                     Layout.fillWidth: true
                     Layout.topMargin: 30
                     text: qsTr("Review")
+                    enabled: root.recipient.isValid
                     onClicked: {
                         if (root.wallet.prepareTransaction()) {
                             root.transactionPrepared(settings.multipleRecipientsEnabled);

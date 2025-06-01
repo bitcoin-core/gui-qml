@@ -3,13 +3,15 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/sendrecipientslistmodel.h>
+#include <qml/models/walletqmlmodel.h>
 
 #include <qml/models/sendrecipient.h>
 
 SendRecipientsListModel::SendRecipientsListModel(QObject* parent)
     : QAbstractListModel(parent)
 {
-    auto* recipient = new SendRecipient(this);
+    m_wallet = qobject_cast<WalletQmlModel*>(parent);
+    auto* recipient = new SendRecipient(m_wallet, this);
     connect(recipient->amount(), &BitcoinAmount::amountChanged,
             this, &SendRecipientsListModel::updateTotalAmount);
     m_recipients.append(recipient);
@@ -50,7 +52,7 @@ void SendRecipientsListModel::add()
 {
     const int row = m_recipients.size();
     beginInsertRows(QModelIndex(), row, row);
-    auto* recipient = new SendRecipient(this);
+    auto* recipient = new SendRecipient(m_wallet, this);
     connect(recipient->amount(), &BitcoinAmount::amountChanged,
             this, &SendRecipientsListModel::updateTotalAmount);
     m_recipients.append(recipient);
@@ -129,7 +131,7 @@ void SendRecipientsListModel::clear()
     m_current = 0;
     m_totalAmount = 0;
 
-    auto* recipient = new SendRecipient(this);
+    auto* recipient = new SendRecipient(m_wallet, this);
     connect(recipient->amount(), &BitcoinAmount::amountChanged,
             this, &SendRecipientsListModel::updateTotalAmount);
     m_recipients.append(recipient);
