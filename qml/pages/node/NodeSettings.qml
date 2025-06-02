@@ -9,41 +9,35 @@ import "../../controls"
 import "../../components"
 import "../settings"
 
-Item {
+PageStack {
     signal doneClicked
 
     property alias showDoneButton: doneButton.visible
 
     id: root
 
-    PageStack {
-        id: nodeSettingsView
-        anchors.fill: parent
-
-        initialItem: Page {
-            id: node_settings
-            background: null
-            implicitWidth: 450
-            leftPadding: 20
-            rightPadding: 20
-            topPadding: 30
-
-            header: NavigationBar2 {
-                centerItem: Header {
-                    headerBold: true
-                    headerSize: 18
-                    header: "Settings"
-                }
-                rightItem: NavButton {
-                    id: doneButton
-                    text: qsTr("Done")
-                    onClicked: root.doneClicked()
-                }
+    initialItem: Page {
+        background: null
+        header: NavigationBar2 {
+            centerItem: Header {
+                headerBold: true
+                headerSize: 18
+                header: "Settings"
             }
+            rightItem: NavButton {
+                id: doneButton
+                text: qsTr("Done")
+                onClicked: root.doneClicked()
+            }
+        }
+        contentItem: RowLayout {
             ColumnLayout {
+                Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
+                Layout.fillHeight: false
+                Layout.fillWidth: true
+                Layout.margins: 20
+                Layout.maximumWidth: 450
                 spacing: 4
-                width: Math.min(parent.width, 450)
-                anchors.horizontalCenter: parent.horizontalCenter
                 Setting {
                     id: gotoAbout
                     Layout.fillWidth: true
@@ -52,7 +46,7 @@ Item {
                         color: gotoAbout.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(about_page)
+                        root.push(about_page)
                     }
                 }
                 Separator { Layout.fillWidth: true }
@@ -64,7 +58,7 @@ Item {
                         color: gotoDisplay.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(display_page)
+                        root.push(display_page)
                     }
                 }
                 Separator { Layout.fillWidth: true }
@@ -76,7 +70,7 @@ Item {
                         color: gotoStorage.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(storage_page)
+                        root.push(storage_page)
                     }
                 }
                 Separator { Layout.fillWidth: true }
@@ -88,7 +82,7 @@ Item {
                         color: gotoConnection.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(connection_page)
+                        root.push(connection_page)
                     }
                 }
                 Separator { Layout.fillWidth: true }
@@ -101,7 +95,7 @@ Item {
                     }
                     onClicked: {
                         peerTableModel.startAutoRefresh();
-                        nodeSettingsView.push(peers_page)
+                        root.push(peers_page)
                     }
                 }
                 Separator { Layout.fillWidth: true }
@@ -113,47 +107,51 @@ Item {
                         color: gotoNetworkTraffic.stateColor
                     }
                     onClicked: {
-                        nodeSettingsView.push(networktraffic_page)
+                        root.push(networktraffic_page)
                     }
+                }
+                Item {
+                    Layout.fillHeight: true
                 }
             }
         }
     }
+
     Component {
         id: about_page
         SettingsAbout {
-            onBack: nodeSettingsView.pop()
+            onBack: root.pop()
         }
     }
     Component {
         id: display_page
         SettingsDisplay {
             onBack: {
-                nodeSettingsView.pop()
+                root.pop()
             }
         }
     }
     Component {
         id: storage_page
         SettingsStorage {
-            onBack: nodeSettingsView.pop()
+            onBack: root.pop()
         }
     }
     Component {
         id: connection_page
         SettingsConnection {
-            onBack: nodeSettingsView.pop()
+            onBack: root.pop()
         }
     }
     Component {
         id: peers_page
         Peers {
             onBack: {
-                nodeSettingsView.pop()
+                root.pop()
                 peerTableModel.stopAutoRefresh();
             }
             onPeerSelected: (peerDetails) => {
-                nodeSettingsView.push(peer_details, {"details": peerDetails})
+                root.push(peer_details, {"details": peerDetails})
             }
         }
     }
@@ -161,7 +159,7 @@ Item {
         id: peer_details
         PeerDetails {
             onBack: {
-                nodeSettingsView.pop()
+                root.pop()
             }
         }
     }
@@ -169,7 +167,7 @@ Item {
         id: networktraffic_page
         NetworkTraffic {
             showHeader: false
-            onBack: nodeSettingsView.pop()
+            onBack: root.pop()
         }
     }
 }
