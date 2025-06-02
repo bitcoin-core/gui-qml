@@ -16,6 +16,8 @@ Page {
     background: null
 
     property int requestCounter: 0
+    property WalletQmlModel wallet: walletController.selectedWallet
+    property PaymentRequest request: wallet.currentPaymentRequest
 
     ScrollView {
         clip: true
@@ -49,74 +51,11 @@ Page {
 
                 spacing: 5
 
-                Item {
-                    BitcoinAmount {
-                        id: bitcoinAmount
-                    }
-
-                    height: amountInput.height
+                BitcoinAmountInputField {
                     Layout.fillWidth: true
-                    CoreText {
-                        id: amountLabel
-                        width: 110
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignLeft
-                        text: "Amount"
-                        font.pixelSize: 18
-                    }
-
-                    TextField {
-                        id: amountInput
-                        anchors.left: amountLabel.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        leftPadding: 0
-                        font.family: "Inter"
-                        font.styleName: "Regular"
-                        font.pixelSize: 18
-                        color: Theme.color.neutral9
-                        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                        background: Item {}
-                        placeholderText: "0.00000000"
-                        selectByMouse: true
-                        onTextEdited: {
-                            amountInput.text = bitcoinAmount.sanitize(amountInput.text)
-                        }
-                    }
-                    Item {
-                        width: unitLabel.width + flipIcon.width
-                        height: Math.max(unitLabel.height, flipIcon.height)
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                if (bitcoinAmount.unit == BitcoinAmount.BTC) {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.BTC)
-                                    bitcoinAmount.unit = BitcoinAmount.SAT
-                                } else {
-                                    amountInput.text = bitcoinAmount.convert(amountInput.text, BitcoinAmount.SAT)
-                                    bitcoinAmount.unit = BitcoinAmount.BTC
-                                }
-                            }
-                        }
-                        CoreText {
-                            id: unitLabel
-                            anchors.right: flipIcon.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: bitcoinAmount.unitLabel
-                            font.pixelSize: 18
-                            color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                        }
-                        Icon {
-                            id: flipIcon
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "image://images/flip-vertical"
-                            color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
-                            size: 30
-                        }
-                    }
+                    enabled: walletController.initialized
+                    amount: root.request.amount
+                    errorText: root.request.amountError
                 }
 
                 Separator {
@@ -147,7 +86,7 @@ Page {
 
                 Item {
                     Layout.fillWidth: true
-                    Layout.minimumHeight: addressLabel.height + copyLabel.height
+                    Layout.minimumHeight: addressLabel.height + copyLabel.height + 20
                     Layout.topMargin: 10
                     height: addressLabel.height + copyLabel.height
                     CoreText {
@@ -179,11 +118,12 @@ Page {
                         radius: 5
                         CoreText {
                             id: address
+                            text: root.request.address
                             anchors.fill: parent
                             anchors.leftMargin: 5
                             horizontalAlignment: Text.AlignLeft
                             font.pixelSize: 18
-                            wrap: true
+                            wrapMode: Text.WrapAnywhere
                         }
                     }
                 }
@@ -197,9 +137,8 @@ Page {
                         if (!clearRequest.visible) {
                             requestCounter = requestCounter + 1
                             clearRequest.visible = true
+                            wallet.commitPaymentRequest()
                             title.text = qsTr("Payment request #" + requestCounter)
-                            address.text = "bc1q f5xe y2tf 89k9 zy6k gnru wszy 5fsa truy 9te1 bu"
-                            qrImage.code = "bc1qf5xey2tf89k9zy6kgnruwszy5fsatruy9te1bu"
                             continueButton.text = qsTr("Copy payment request")
                         }
                     }
@@ -220,8 +159,7 @@ Page {
                     onClicked: {
                         clearRequest.visible = false
                         title.text = qsTr("Request a payment")
-                        address.text = ""
-                        qrImage.code = ""
+                        root.request.clear()
                         continueButton.text = qsTr("Create bitcoin address")
                     }
                 }
@@ -240,6 +178,7 @@ Page {
                     id: qrImage
                     backgroundColor: "transparent"
                     foregroundColor: Theme.color.neutral9
+                    code: root.request.address
                 }
             }
         }

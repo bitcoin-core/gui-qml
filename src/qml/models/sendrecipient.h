@@ -36,7 +36,6 @@ public:
     void setLabel(const QString& label);
 
     BitcoinAmount* amount() const;
-    void setAmount(const QString& amount);
     QString amountError() const;
     void setAmountError(const QString& error);
 
