@@ -190,89 +190,11 @@ PageStack {
                     Layout.fillWidth: true
                 }
 
-                ColumnLayout {
+                BitcoinAmountInputField {
                     Layout.fillWidth: true
-
-                    Item {
-                        height: amountInput.height
-                        Layout.fillWidth: true
-                        CoreText {
-                            id: amountLabel
-                            width: 110
-                            anchors.left: parent.left
-                            anchors.verticalCenter: parent.verticalCenter
-                            horizontalAlignment: Text.AlignLeft
-                            text: qsTr("Amount")
-                            font.pixelSize: 18
-                        }
-
-                        TextField {
-                            id: amountInput
-                            anchors.left: amountLabel.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            leftPadding: 0
-                            font.family: "Inter"
-                            font.styleName: "Regular"
-                            font.pixelSize: 18
-                            color: Theme.color.neutral9
-                            placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                            background: Item {}
-                            placeholderText: "0.00000000"
-                            selectByMouse: true
-                            text: root.recipient.amount.display
-                            onEditingFinished: root.recipient.amount.display = text
-                            onActiveFocusChanged: {
-                                if (!activeFocus) {
-                                    root.recipient.amount.display = text
-                                }
-                            }
-                        }
-                        Item {
-                            width: unitLabel.width + flipIcon.width
-                            height: Math.max(unitLabel.height, flipIcon.height)
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: root.recipient.amount.flipUnit()
-                            }
-                            CoreText {
-                                id: unitLabel
-                                anchors.right: flipIcon.left
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: root.recipient.amount.unitLabel
-                                font.pixelSize: 18
-                                color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-                            }
-                            Icon {
-                                id: flipIcon
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                source: "image://images/flip-vertical"
-                                icon.color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
-                                size: 30
-                            }
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: root.recipient.amountError.length > 0
-
-                        Icon {
-                            source: "image://images/alert-filled"
-                            size: 22
-                            color: Theme.color.red
-                        }
-
-                        CoreText {
-                            text: root.recipient.amountError
-                            font.pixelSize: 15
-                            color: Theme.color.red
-                            horizontalAlignment: Text.AlignLeft
-                            Layout.fillWidth: true
-                        }
-                    }
+                    enabled: walletController.initialized
+                    amount: root.recipient.amount
+                    errorText: root.recipient.amountError
                 }
 
                 Separator {

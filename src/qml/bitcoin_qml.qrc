@@ -4,6 +4,7 @@
         <file>components/BlockClock.qml</file>
         <file>components/BlockClockDisplayMode.qml</file>
         <file>components/BlockCounter.qml</file>
+        <file>components/BitcoinAmountInputField.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
         <file>components/DeveloperOptions.qml</file>
