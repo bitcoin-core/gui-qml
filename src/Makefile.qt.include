@@ -43,8 +43,11 @@ QT_MOC_CPP = \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
+  qml/models/moc_paymentrequest.cpp \
   qml/models/moc_peerdetailsmodel.cpp \
-  qml/models/moc_peerlistsortproxy.cpp \
+  qml/models/moc_peerlistsortproxy.cpp \\
+  qml/models/moc_sendrecipient.cpp \
+  qml/models/moc_sendrecipientslistmodel.cpp \
   qml/models/moc_transaction.cpp \
   qml/models/moc_sendrecipient.cpp \
   qml/models/moc_walletlistmodel.cpp \
@@ -134,10 +137,12 @@ BITCOIN_QT_H = \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
+  qml/models/paymentrequest.h \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/transaction.h \
   qml/models/sendrecipient.h \
+  qml/models/sendrecipientslistmodel.h \
   qml/models/walletlistmodel.h \
   qml/models/walletqmlmodel.h \
   qml/models/walletqmlmodeltransaction.h \
@@ -335,10 +340,12 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
+  qml/models/paymentrequest.cpp \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/transaction.cpp \
   qml/models/sendrecipient.cpp \
+  qml/models/sendrecipientslistmodel.cpp \
   qml/models/walletlistmodel.cpp \
   qml/models/walletqmlmodel.cpp \
   qml/models/walletqmlmodeltransaction.cpp \
@@ -353,6 +360,7 @@ QML_RES_FONTS = \
 
 QML_RES_ICONS = \
   qml/res/icons/add-wallet-dark.png \
+  qml/res/icons/alert-filled.png \
   qml/res/icons/arrow-down.png \
   qml/res/icons/arrow-up.png \
   qml/res/icons/bitcoin-circle.png \
@@ -379,6 +387,7 @@ QML_RES_ICONS = \
   qml/res/icons/network-dark.png \
   qml/res/icons/network-light.png \
   qml/res/icons/plus.png \
+  qml/res/icons/plus-big-filled.png \
   qml/res/icons/pending.png \
   qml/res/icons/shutdown.png \
   qml/res/icons/singlesig-wallet.png \
@@ -398,6 +407,7 @@ QML_RES_QML = \
   qml/components/BlockClock.qml \
   qml/components/BlockClockDisplayMode.qml \
   qml/components/BlockCounter.qml \
+  qml/components/BitcoinAmountInputField.qml \
   qml/components/ConnectionOptions.qml \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
@@ -420,12 +430,12 @@ QML_RES_QML = \
   qml/controls/CoreCheckBox.qml \
   qml/controls/CoreText.qml \
   qml/controls/CoreTextField.qml \
-  qml/controls/EllipsisMenuButton.qml \
   qml/controls/EllipsisMenuToggleItem.qml \
   qml/controls/ExternalLink.qml \
   qml/controls/FocusBorder.qml \
   qml/controls/Header.qml \
   qml/controls/Icon.qml \
+  qml/controls/IconButton.qml \
   qml/controls/InformationPage.qml \
   qml/controls/IPAddressValueInput.qml \
   qml/controls/KeyValueRow.qml \
@@ -484,6 +494,7 @@ QML_RES_QML = \
   qml/pages/wallet/CreatePassword.qml \
   qml/pages/wallet/CreateWalletWizard.qml \
   qml/pages/wallet/DesktopWallets.qml \
+  qml/pages/wallet/MultipleSendReview.qml \
   qml/pages/wallet/RequestPayment.qml \
   qml/pages/wallet/Send.qml \
   qml/pages/wallet/SendResult.qml \

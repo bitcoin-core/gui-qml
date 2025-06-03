@@ -11,12 +11,16 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
 
+    property color iconColor: Theme.color.orange
     property color hoverColor: Theme.color.orange
     property color activeColor: Theme.color.orange
+    property int size: 35
+    property alias iconSource: icon.source
 
     hoverEnabled: AppMode.isDesktop
-    implicitHeight: 35
-    implicitWidth: 35
+    height: root.size
+    width: root.size
+    padding: 0
 
     MouseArea {
         anchors.fill: parent
@@ -25,28 +29,44 @@ Button {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: null
+    background: Rectangle {
+        id: bg
+        anchors.fill: parent
+        radius: 5
+        color: Theme.color.background
+
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+    }
 
     contentItem: Icon {
-        id: ellipsisIcon
+        id: icon
         anchors.fill: parent
         source: "image://images/ellipsis"
-        color: Theme.color.neutral9
-        size: 35
+        size: root.size
+        color: iconColor
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
     }
 
     states: [
         State {
             name: "CHECKED"; when: root.checked
-            PropertyChanges { target: ellipsisIcon; color: activeColor }
+            PropertyChanges { target: icon; color: activeColor }
         },
         State {
             name: "HOVER"; when: root.hovered
-            PropertyChanges { target: ellipsisIcon; color: hoverColor }
+            PropertyChanges { target: icon; color: hoverColor }
+            PropertyChanges { target: bg; color: Theme.color.neutral2 }
         },
         State {
             name: "DISABLED"; when: !root.enabled
-            PropertyChanges { target: ellipsisIcon; color: Theme.color.neutral4 }
+            PropertyChanges { target: icon; color: Theme.color.neutral2 }
+            PropertyChanges { target: bg; color: Theme.color.background }
         }
     ]
 }

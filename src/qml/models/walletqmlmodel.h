@@ -5,19 +5,22 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 
-#include <interfaces/handler.h>
-#include <interfaces/wallet.h>
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/coinslistmodel.h>
+#include <qml/models/paymentrequest.h>
 #include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
+
+#include <consensus/amount.h>
+#include <interfaces/handler.h>
+#include <interfaces/wallet.h>
 #include <wallet/coincontrol.h>
 
-#include <QObject>
 #include <memory>
 #include <vector>
 
-class ActivityListModel;
+#include <QObject>
 
 class WalletQmlModel : public QObject
 {
@@ -26,8 +29,9 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(QString balance READ balance NOTIFY balanceChanged)
     Q_PROPERTY(ActivityListModel* activityListModel READ activityListModel CONSTANT)
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
-    Q_PROPERTY(SendRecipient* sendRecipient READ sendRecipient CONSTANT)
+    Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
+    Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
 
 public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObject* parent = nullptr);
@@ -36,8 +40,16 @@ public:
 
     QString name() const;
     QString balance() const;
+    CAmount balanceSatoshi() const;
+    Q_INVOKABLE void commitPaymentRequest();
+    PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
+
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
+    SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
+    WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
+    Q_INVOKABLE bool prepareTransaction();
+    Q_INVOKABLE void sendTransaction();
 
     std::set<interfaces::WalletTx> getWalletTxs() const;
     interfaces::WalletTx getWalletTx(const uint256& hash) const;
@@ -45,11 +57,6 @@ public:
                         interfaces::WalletTxStatus& tx_status,
                         int& num_blocks,
                         int64_t& block_time) const;
-
-    SendRecipient* sendRecipient() const { return m_current_recipient; }
-    WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
-    Q_INVOKABLE bool prepareTransaction();
-    Q_INVOKABLE void sendTransaction();
 
     using TransactionChangedFn = std::function<void(const uint256& txid, ChangeType status)>;
     virtual std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn fn);
@@ -70,10 +77,13 @@ Q_SIGNALS:
     void currentTransactionChanged();
 
 private:
+    static unsigned int m_next_payment_request_id;
+
     std::unique_ptr<interfaces::Wallet> m_wallet;
+    PaymentRequest* m_current_payment_request{nullptr};
     ActivityListModel* m_activity_list_model{nullptr};
     CoinsListModel* m_coins_list_model{nullptr};
-    SendRecipient* m_current_recipient{nullptr};
+    SendRecipientsListModel* m_send_recipients{nullptr};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
 };
