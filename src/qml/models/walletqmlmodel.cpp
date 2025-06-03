@@ -1,11 +1,12 @@
 
-// Copyright (c) 2024 The Bitcoin Core developers
+// Copyright (c) 2024-2025 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/walletqmlmodel.h>
 
 #include <qml/models/activitylistmodel.h>
+#include <qml/models/paymentrequest.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
@@ -19,6 +20,8 @@
 #include <wallet/wallet.h>
 
 #include <QTimer>
+
+unsigned int WalletQmlModel::m_next_payment_request_id{1};
 
 WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObject *parent)
     : QObject(parent)
@@ -69,6 +72,29 @@ QString WalletQmlModel::name() const
         return QString();
     }
     return QString::fromStdString(m_wallet->getWalletName());
+}
+
+void WalletQmlModel::commitPaymentRequest()
+{
+    if (!m_current_payment_request) {
+        return;
+    }
+
+    if (m_current_payment_request->id().isEmpty()) {
+        m_current_payment_request->setId(m_next_payment_request_id++);
+    }
+
+    if (m_current_payment_request->address().isEmpty()) {
+        // TODO: handle issues with getting the new address (wallet unlock?)
+        auto destination = m_wallet->getNewDestination(OutputType::BECH32M,
+                                                       m_current_payment_request->label().toStdString())
+                               .value();
+        std::string address = EncodeDestination(destination);
+        m_current_payment_request->setDestination(destination);
+    }
+
+    m_wallet->setAddressReceiveRequest(
+        m_current_payment_request->destination(), m_current_payment_request->id().toStdString(), m_current_payment_request->message().toStdString());
 }
 
 std::set<interfaces::WalletTx> WalletQmlModel::getWalletTxs() const

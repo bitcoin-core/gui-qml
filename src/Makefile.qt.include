@@ -43,6 +43,7 @@ QT_MOC_CPP = \
   qml/models/moc_networktraffictower.cpp \
   qml/models/moc_nodemodel.cpp \
   qml/models/moc_options_model.cpp \
+  qml/models/moc_paymentrequest.cpp \
   qml/models/moc_peerdetailsmodel.cpp \
   qml/models/moc_peerlistsortproxy.cpp \\
   qml/models/moc_sendrecipient.cpp \
@@ -136,6 +137,7 @@ BITCOIN_QT_H = \
   qml/models/networktraffictower.h \
   qml/models/nodemodel.h \
   qml/models/options_model.h \
+  qml/models/paymentrequest.h \
   qml/models/peerdetailsmodel.h \
   qml/models/peerlistsortproxy.h \
   qml/models/transaction.h \
@@ -338,6 +340,7 @@ BITCOIN_QML_BASE_CPP = \
   qml/models/networktraffictower.cpp \
   qml/models/nodemodel.cpp \
   qml/models/options_model.cpp \
+  qml/models/paymentrequest.cpp \
   qml/models/peerdetailsmodel.cpp \
   qml/models/peerlistsortproxy.cpp \
   qml/models/transaction.cpp \

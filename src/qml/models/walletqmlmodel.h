@@ -7,6 +7,7 @@
 
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/coinslistmodel.h>
+#include <qml/models/paymentrequest.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
@@ -30,6 +31,7 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
+    Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
 
 public:
     WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObject* parent = nullptr);
@@ -39,6 +41,8 @@ public:
     QString name() const;
     QString balance() const;
     CAmount balanceSatoshi() const;
+    Q_INVOKABLE void commitPaymentRequest();
+    PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
 
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
@@ -73,7 +77,10 @@ Q_SIGNALS:
     void currentTransactionChanged();
 
 private:
+    static unsigned int m_next_payment_request_id;
+
     std::unique_ptr<interfaces::Wallet> m_wallet;
+    PaymentRequest* m_current_payment_request{nullptr};
     ActivityListModel* m_activity_list_model{nullptr};
     CoinsListModel* m_coins_list_model{nullptr};
     SendRecipientsListModel* m_send_recipients{nullptr};
