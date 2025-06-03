@@ -131,6 +131,7 @@ PageStack {
                         Layout.preferredHeight: 30
                         size: 30
                         iconSource: "image://images/plus-big-filled"
+                        enabled: wallet.recipients.count < 25
                         onClicked: {
                             wallet.recipients.add()
                         }
