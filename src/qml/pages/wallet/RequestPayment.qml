@@ -109,21 +109,18 @@ Page {
                         color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
                     }
 
-                    Rectangle {
+                    CoreText {
+                        id: address
                         anchors.left: addressLabel.right
                         anchors.right: parent.right
                         anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        color: Theme.color.neutral2
-                        radius: 5
-                        CoreText {
-                            id: address
-                            text: root.request.address
-                            anchors.fill: parent
-                            anchors.leftMargin: 5
-                            horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 18
-                            wrapMode: Text.WrapAnywhere
+                        text: root.request.address
+                        horizontalAlignment: Text.AlignLeft
+                        font.pixelSize: 18
+                        wrapMode: Text.WrapAnywhere
+                        background: Rectangle {
+                            color: Theme.color.neutral2
+                            radius: 5
                         }
                     }
                 }
