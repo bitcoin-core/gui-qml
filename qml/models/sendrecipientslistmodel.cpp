@@ -93,7 +93,11 @@ void SendRecipientsListModel::remove()
     endRemoveRows();
     Q_EMIT countChanged();
 
-    setCurrentIndex(m_current - 1);
+    if (m_current > 0) {
+        setCurrentIndex(m_current - 1);
+    } else {
+        Q_EMIT currentRecipientChanged();
+    }
 }
 
 SendRecipient* SendRecipientsListModel::currentRecipient() const
