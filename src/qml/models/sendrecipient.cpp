@@ -112,7 +112,13 @@ void SendRecipient::clear()
 void SendRecipient::validateAddress()
 {
     if (!m_address.isEmpty() && !IsValidDestinationString(m_address.toStdString())) {
-        setAddressError(tr("Invalid address"));
+        if (IsValidDestinationString(m_address.toStdString(), *CChainParams::Main())) {
+            setAddressError(tr("Address is valid for mainnet, not the current network"));
+        } else if (IsValidDestinationString(m_address.toStdString(), *CChainParams::TestNet())) {
+            setAddressError(tr("Address is valid for testnet, not the current network"));
+        } else {
+            setAddressError(tr("Invalid address format"));
+        }
     } else {
         setAddressError("");
     }
