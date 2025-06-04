@@ -30,6 +30,7 @@ Page {
             text: walletController.selectedWallet.name
             balance: walletController.selectedWallet.balance
             loading: !walletController.initialized
+            noWalletAvailable: !walletController.isWalletLoaded
 
             MouseArea {
                 anchors.fill: parent
@@ -52,9 +53,9 @@ Page {
             }
         }
         centerItem: RowLayout {
+            visible: walletController.isWalletLoaded
             NavigationTab {
                 id: activityTabButton
-                checked: true
                 text: qsTr("Activity")
                 property int index: 0
                 ButtonGroup.group: navigationTabs
@@ -79,6 +80,7 @@ Page {
             }
             NavigationTab {
                 id: blockClockTabButton
+                checked: true
                 Layout.preferredWidth: 30
                 Layout.rightMargin: 10
                 property int index: 3
