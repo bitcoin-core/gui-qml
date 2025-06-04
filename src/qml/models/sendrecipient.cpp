@@ -111,10 +111,10 @@ void SendRecipient::clear()
 
 void SendRecipient::validateAddress()
 {
-    setAddressError("");
-
     if (!m_address.isEmpty() && !IsValidDestinationString(m_address.toStdString())) {
         setAddressError(tr("Invalid address"));
+    } else {
+        setAddressError("");
     }
 
     Q_EMIT isValidChanged();
@@ -122,8 +122,6 @@ void SendRecipient::validateAddress()
 
 void SendRecipient::validateAmount()
 {
-    setAmountError("");
-
     if (m_amount->isSet()) {
         if (m_amount->satoshi() <= 0) {
             setAmountError(tr("Amount must be greater than zero"));
@@ -131,6 +129,8 @@ void SendRecipient::validateAmount()
             setAmountError(tr("Amount exceeds maximum limit of 21,000,000 BTC"));
         } else if (m_amount->satoshi() > m_wallet->balanceSatoshi()) {
             setAmountError(tr("Amount exceeds available balance"));
+        } else {
+            setAmountError("");
         }
     }
 
