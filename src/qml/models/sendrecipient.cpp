@@ -128,7 +128,7 @@ void SendRecipient::validateAmount()
         if (m_amount->satoshi() <= 0) {
             setAmountError(tr("Amount must be greater than zero"));
         } else if (m_amount->satoshi() > MAX_MONEY) {
-            setAmountError(tr("Amount exceeds maximum limit"));
+            setAmountError(tr("Amount exceeds maximum limit of 21,000,000 BTC"));
         } else if (m_amount->satoshi() > m_wallet->balanceSatoshi()) {
             setAmountError(tr("Amount exceeds available balance"));
         }
