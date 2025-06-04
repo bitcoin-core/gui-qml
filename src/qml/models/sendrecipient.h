@@ -63,7 +63,7 @@ private:
     void validateAddress();
     void validateAmount();
 
-    WalletQmlModel* m_wallet;
+    const WalletQmlModel* m_wallet;
     QString m_address{""};
     QString m_addressError{""};
     QString m_label{""};
