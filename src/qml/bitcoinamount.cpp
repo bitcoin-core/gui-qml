@@ -66,6 +66,7 @@ void BitcoinAmount::setUnit(const Unit unit)
 {
     m_unit = unit;
     Q_EMIT unitChanged();
+    Q_EMIT displayChanged();
 }
 
 QString BitcoinAmount::unitLabel() const
@@ -85,7 +86,7 @@ void BitcoinAmount::flipUnit()
         m_unit = Unit::BTC;
     }
     Q_EMIT unitChanged();
-    Q_EMIT amountChanged();
+    Q_EMIT displayChanged();
 }
 
 QString BitcoinAmount::satsToBtcString(qint64 sat)
@@ -150,4 +151,9 @@ void BitcoinAmount::fromDisplay(const QString& text)
         newSat = digitsOnly.trimmed().isEmpty() ? 0 : digitsOnly.toLongLong();
     }
     setSatoshi(newSat);
+}
+
+void BitcoinAmount::format()
+{
+    Q_EMIT displayChanged();
 }
