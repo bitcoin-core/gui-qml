@@ -237,10 +237,11 @@ PageStack {
                             placeholderText: "0.00000000"
                             selectByMouse: true
                             text: root.recipient.amount.display
-                            onEditingFinished: root.recipient.amount.display = text
+                            onTextEdited: root.recipient.amount.display = text
+                            onEditingFinished: root.recipient.amount.format()
                             onActiveFocusChanged: {
                                 if (!activeFocus) {
-                                    root.recipient.amount.display = text
+                                    root.recipient.amount.format()
                                 }
                             }
                         }
