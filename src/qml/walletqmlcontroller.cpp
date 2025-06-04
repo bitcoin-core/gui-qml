@@ -94,6 +94,7 @@ void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> w
             if (wallet_model->name() == name) {
                 m_selected_wallet = wallet_model;
                 Q_EMIT selectedWalletChanged();
+                setWalletLoaded(true);
                 return;
             }
         }
@@ -104,6 +105,7 @@ void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> w
     m_selected_wallet = wallet_model;
     m_wallets.push_back(m_selected_wallet);
     Q_EMIT selectedWalletChanged();
+    setWalletLoaded(true);
 }
 
 void WalletQmlController::initialize()
@@ -118,9 +120,18 @@ void WalletQmlController::initialize()
     }
     if (!m_wallets.empty()) {
         m_selected_wallet = m_wallets.front();
+        setWalletLoaded(true);
         Q_EMIT selectedWalletChanged();
     }
 
     m_initialized = true;
     Q_EMIT initializedChanged();
+}
+
+void WalletQmlController::setWalletLoaded(bool loaded)
+{
+    if (m_is_wallet_loaded != loaded) {
+        m_is_wallet_loaded = loaded;
+        Q_EMIT isWalletLoadedChanged();
+    }
 }
