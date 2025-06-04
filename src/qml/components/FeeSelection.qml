@@ -13,19 +13,17 @@ RowLayout {
     id: root
 
     property int selectedIndex: 1
-    property string selectedLabel: feeModel.get(selectedIndex).feeLabel
+    property string selectedLabel: feeModel.get(root.selectedIndex).feeLabel
 
     signal feeChanged(int target)
 
-    width: parent ? parent.width : 300
     height: 40
 
     CoreText {
-        id: label
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignLeft
-        text: qsTr("Fee")
         font.pixelSize: 15
+        text: qsTr("Fee")
     }
 
     Button {
@@ -123,12 +121,19 @@ RowLayout {
                 width: ListView.view.width
                 height: 40
 
-                background: Rectangle {
-                    width: parent.width - 4
-                    height: parent.height - 4
-                    radius: 6
-                    color: Theme.color.neutral3
-                    visible: mouseArea.containsMouse
+                background: Item {
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: Theme.color.neutral3
+                        visible: delegate.hovered
+                    }
+                    Separator {
+                        width: parent.width
+                        anchors.top: parent.top
+                        color: Theme.color.neutral2
+                        visible: delegate.index > 0
+                    }
                 }
 
                 contentItem: RowLayout {
@@ -149,26 +154,15 @@ RowLayout {
                     }
                 }
 
-                MouseArea {
-                    id: mouseArea
-                    anchors.fill: parent
-                    hoverEnabled: true
+                HoverHandler {
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        root.selectedIndex = delegate.index
-                        root.selectedLabel = feeLabel
-                        root.feeChanged(target)
-                        feePopup.close()
-                    }
                 }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 1
-                    color: Theme.color.neutral3
-                    visible: delegate.index < feeModel.count - 1
+                onClicked: {
+                    root.selectedIndex = delegate.index
+                    root.selectedLabel = feeLabel
+                    root.feeChanged(target)
+                    feePopup.close()
                 }
             }
         }
