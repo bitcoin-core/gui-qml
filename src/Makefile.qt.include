@@ -360,6 +360,7 @@ QML_RES_ICONS = \
   qml/res/icons/blockclock-size-showcase.png \
   qml/res/icons/blocktime-dark.png \
   qml/res/icons/blocktime-light.png \
+  qml/res/icons/caret-down-medium-filled.png \
   qml/res/icons/caret-left.png \
   qml/res/icons/caret-right.png \
   qml/res/icons/check.png \
@@ -402,6 +403,7 @@ QML_RES_QML = \
   qml/components/ConnectionSettings.qml \
   qml/components/DeveloperOptions.qml \
   qml/components/ExternalPopup.qml \
+  qml/components/FeeSelection.qml \
   qml/components/NetworkTrafficGraph.qml \
   qml/components/NetworkIndicator.qml \
   qml/components/OptionPopup.qml \

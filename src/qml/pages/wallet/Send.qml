@@ -199,23 +199,12 @@ PageStack {
                     Layout.fillWidth: true
                 }
 
-                Item {
-                    height: feeLabel.height + feeValue.height
+                FeeSelection {
+                    id: feeSelection
                     Layout.fillWidth: true
-                    CoreText {
-                        id: feeLabel
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        text: "Fee"
-                        font.pixelSize: 15
-                    }
 
-                    CoreText {
-                        id: feeValue
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        text: qsTr("Default (~2,000 sats)")
-                        font.pixelSize: 15
+                    onFeeChanged: {
+                        root.wallet.targetBlocks = target
                     }
                 }
 
