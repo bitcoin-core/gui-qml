@@ -30,13 +30,20 @@ Page {
             text: walletController.selectedWallet.name
             balance: walletController.selectedWallet.balance
             loading: !walletController.initialized
-            noWalletAvailable: !walletController.isWalletLoaded
+            noWalletLoaded: !walletController.isWalletLoaded
+            noWalletsFound: walletController.noWalletsFound
 
             MouseArea {
                 anchors.fill: parent
                 onClicked: {
-                    walletListModel.listWalletDir()
-                    walletSelect.opened ? walletSelect.close() : walletSelect.open()
+                    if (walletController.initialized) {
+                        walletListModel.listWalletDir()
+                        if (walletController.noWalletsFound) {
+                            root.addWallet()
+                        } else {
+                            walletSelect.opened ? walletSelect.close() : walletSelect.open()
+                        }
+                    }
                 }
             }
 

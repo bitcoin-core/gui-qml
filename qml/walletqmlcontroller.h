@@ -23,6 +23,7 @@ class WalletQmlController : public QObject
     Q_PROPERTY(WalletQmlModel* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
     Q_PROPERTY(bool initialized READ initialized NOTIFY initializedChanged)
     Q_PROPERTY(bool isWalletLoaded READ isWalletLoaded NOTIFY isWalletLoadedChanged)
+    Q_PROPERTY(bool noWalletsFound READ noWalletsFound NOTIFY noWalletsFoundChanged)
 
 public:
     explicit WalletQmlController(interfaces::Node& node, QObject *parent = nullptr);
@@ -36,11 +37,14 @@ public:
     bool initialized() const { return m_initialized; }
     bool isWalletLoaded() const { return m_is_wallet_loaded; }
     void setWalletLoaded(bool loaded);
+    bool noWalletsFound() const { return m_no_wallets_found; }
+    void setNoWalletsFound(bool no_wallets_found);
 
 Q_SIGNALS:
     void selectedWalletChanged();
     void initializedChanged();
     void isWalletLoadedChanged();
+    void noWalletsFoundChanged();
 
 public Q_SLOTS:
     void initialize();
@@ -57,6 +61,7 @@ private:
     std::vector<WalletQmlModel*> m_wallets;
     std::unique_ptr<interfaces::Handler> m_handler_load_wallet;
     bool m_is_wallet_loaded{false};
+    bool m_no_wallets_found{false};
 
     bilingual_str m_error_message;
     std::vector<bilingual_str> m_warning_messages;
