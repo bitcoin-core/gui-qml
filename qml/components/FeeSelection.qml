@@ -14,6 +14,7 @@ RowLayout {
 
     property int selectedIndex: 1
     property string selectedLabel: feeModel.get(root.selectedIndex).feeLabel
+    property string selectedDuration: feeModel.get(root.selectedIndex).feeDuration
 
     signal feeChanged(int target)
 
@@ -22,16 +23,22 @@ RowLayout {
     CoreText {
         Layout.fillWidth: true
         horizontalAlignment: Text.AlignLeft
-        font.pixelSize: 15
+        font.pixelSize: 18
         text: qsTr("Fee")
     }
 
     Button {
         id: dropDownButton
         text: root.selectedLabel
-        font.pixelSize: 15
+        font.pixelSize: 18
 
         hoverEnabled: true
+
+        leftPadding: 10
+        rightPadding: 4
+        topPadding: 2
+        bottomPadding: 2
+        height: 28
 
         HoverHandler {
             cursorShape: Qt.PointingHandCursor
@@ -40,12 +47,25 @@ RowLayout {
         onPressed: feePopup.open()
 
         contentItem: RowLayout {
-            spacing: 5
+            spacing: 0
 
             CoreText {
                 id: value
                 text: root.selectedLabel
-                font.pixelSize: 15
+                font.pixelSize: 18
+
+                Behavior on color {
+                    ColorAnimation { duration: 150 }
+                }
+            }
+
+            Item { width: 5 }
+
+            CoreText {
+                id: duration
+                text: root.selectedDuration
+                font.pixelSize: 18
+                color: dropDownButton.enabled ? Theme.color.neutral7 : Theme.color.neutral4
 
                 Behavior on color {
                     ColorAnimation { duration: 150 }
@@ -98,13 +118,14 @@ RowLayout {
         background: Rectangle {
             color: Theme.color.background
             radius: 6
-            border.color: Theme.color.neutral3
+            border.color: Theme.color.neutral4
         }
 
         width: 260
-        height: Math.min(feeModel.count * 40 + 20, 300)
+        height: Math.min(feeModel.count * 36 + 10, 300)
         x: feePopup.parent.width - feePopup.width
-        y: feePopup.parent.height
+        y: feePopup.parent.height + 2
+        padding: 5
 
         contentItem: ListView {
             id: feeList
@@ -115,35 +136,42 @@ RowLayout {
             delegate: ItemDelegate {
                 id: delegate
                 required property string feeLabel
+                required property string feeDuration
                 required property int index
                 required property int target
 
                 width: ListView.view.width
-                height: 40
+                height: 36
+
+                leftPadding: 10
+                rightPadding: 4
+                topPadding: 2
+                bottomPadding: 2
 
                 background: Item {
                     Rectangle {
                         anchors.fill: parent
                         radius: 6
-                        color: Theme.color.neutral3
-                        visible: delegate.hovered
-                    }
-                    Separator {
-                        width: parent.width
-                        anchors.top: parent.top
                         color: Theme.color.neutral2
-                        visible: delegate.index > 0
+                        visible: delegate.hovered
                     }
                 }
 
                 contentItem: RowLayout {
-                    spacing: 10
+                    spacing: 5
 
                     CoreText {
                         text: feeLabel
                         horizontalAlignment: Text.AlignLeft
+                        font.pixelSize: 15
+                    }
+
+                    CoreText {
+                        text: feeDuration
+                        horizontalAlignment: Text.AlignLeft
                         Layout.fillWidth: true
                         font.pixelSize: 15
+                        color: Theme.color.neutral7
                     }
 
                     Icon {
@@ -161,6 +189,7 @@ RowLayout {
                 onClicked: {
                     root.selectedIndex = delegate.index
                     root.selectedLabel = feeLabel
+                    root.selectedDuration = feeDuration
                     root.feeChanged(target)
                     feePopup.close()
                 }
@@ -170,8 +199,8 @@ RowLayout {
 
     ListModel {
         id: feeModel
-        ListElement { feeLabel: qsTr("High (~10 mins)"); target: 1 }
-        ListElement { feeLabel: qsTr("Default (~60 mins)"); target: 6 }
-        ListElement { feeLabel: qsTr("Low (~24 hrs)"); target: 144 }
+        ListElement { feeLabel: qsTr("High"); feeDuration: qsTr("(~10 mins)"); target: 1 }
+        ListElement { feeLabel: qsTr("Default"); feeDuration: qsTr("(~60 mins)"); target: 6 }
+        ListElement { feeLabel: qsTr("Low"); feeDuration: qsTr("(~24 hrs)"); target: 144 }
     }
 }
