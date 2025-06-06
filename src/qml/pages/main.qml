@@ -69,8 +69,10 @@ ApplicationWindow {
             onFinished: {
                 optionsModel.onboard()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
-                    main.push(desktopWallets)
-                    main.push(createWalletWizard)
+                    main.push([
+                        desktopWallets, {},
+                        createWalletWizard, { "launchContext": CreateWalletWizard.Context.Onboarding }
+                    ])
                 } else {
                     main.push(node)
                 }
@@ -82,7 +84,7 @@ ApplicationWindow {
         id: desktopWallets
         DesktopWallets {
             onAddWallet: {
-                main.push(createWalletWizard)
+                main.push(createWalletWizard, { "launchContext": CreateWalletWizard.Context.Main })
             }
             onSendTransaction: {
                 main.push(sendReviewPage)
