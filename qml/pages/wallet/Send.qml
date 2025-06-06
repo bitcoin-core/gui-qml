@@ -38,6 +38,8 @@ PageStack {
             onMultipleRecipientsEnabledChanged: {
                 if (!multipleRecipientsEnabled) {
                     root.wallet.recipients.clearToFront()
+                } else {
+                    root.wallet.recipients.add()
                 }
             }
         }
