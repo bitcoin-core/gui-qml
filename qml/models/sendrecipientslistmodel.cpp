@@ -53,7 +53,11 @@ void SendRecipientsListModel::add()
     auto* recipient = new SendRecipient(this);
     connect(recipient->amount(), &BitcoinAmount::amountChanged,
             this, &SendRecipientsListModel::updateTotalAmount);
+    if (m_recipients.size() > 0) {
+        recipient->amount()->setUnit(m_recipients[m_current]->amount()->unit());
+    }
     m_recipients.append(recipient);
+
     endInsertRows();
     Q_EMIT countChanged();
     setCurrentIndex(row);
