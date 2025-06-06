@@ -34,6 +34,12 @@ PageStack {
             id: settings
             property alias coinControlEnabled: sendOptionsPopup.coinControlEnabled
             property alias multipleRecipientsEnabled: sendOptionsPopup.multipleRecipientsEnabled
+
+            onMultipleRecipientsEnabledChanged: {
+                if (!multipleRecipientsEnabled) {
+                    root.wallet.recipients.clearToFront()
+                }
+            }
         }
 
         ScrollView {
