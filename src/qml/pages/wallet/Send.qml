@@ -245,6 +245,7 @@ PageStack {
                     Layout.fillWidth: true
                     labelText: qsTr("Note to self")
                     placeholderText: qsTr("Enter ...")
+                    text: root.recipient.label
                     onTextEdited: root.recipient.label = label.text
                 }
 
