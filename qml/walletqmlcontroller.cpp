@@ -79,6 +79,7 @@ void WalletQmlController::createSingleSigWallet(const QString &name, const QStri
     if (wallet) {
         m_selected_wallet = new WalletQmlModel(std::move(*wallet));
         m_wallets.push_back(m_selected_wallet);
+        setNoWalletsFound(false);
         Q_EMIT selectedWalletChanged();
     } else {
         m_error_message = util::ErrorString(wallet);
@@ -94,6 +95,7 @@ void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> w
             if (wallet_model->name() == name) {
                 m_selected_wallet = wallet_model;
                 Q_EMIT selectedWalletChanged();
+                setWalletLoaded(true);
                 return;
             }
         }
@@ -104,6 +106,7 @@ void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> w
     m_selected_wallet = wallet_model;
     m_wallets.push_back(m_selected_wallet);
     Q_EMIT selectedWalletChanged();
+    setWalletLoaded(true);
 }
 
 void WalletQmlController::initialize()
@@ -118,9 +121,32 @@ void WalletQmlController::initialize()
     }
     if (!m_wallets.empty()) {
         m_selected_wallet = m_wallets.front();
+        setWalletLoaded(true);
         Q_EMIT selectedWalletChanged();
+    }
+
+    if (m_node.walletLoader().listWalletDir().size() == 0) {
+        setNoWalletsFound(true);
+    } else {
+        setNoWalletsFound(false);
     }
 
     m_initialized = true;
     Q_EMIT initializedChanged();
+}
+
+void WalletQmlController::setWalletLoaded(bool loaded)
+{
+    if (m_is_wallet_loaded != loaded) {
+        m_is_wallet_loaded = loaded;
+        Q_EMIT isWalletLoadedChanged();
+    }
+}
+
+void WalletQmlController::setNoWalletsFound(bool no_wallets_found)
+{
+    if (m_no_wallets_found != no_wallets_found) {
+        m_no_wallets_found = no_wallets_found;
+        Q_EMIT noWalletsFoundChanged();
+    }
 }

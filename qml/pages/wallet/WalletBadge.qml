@@ -23,6 +23,8 @@ Button {
     property bool showIcon: true
     property string balance: "0.0 000 000"
     property bool loading: false
+    property bool noWalletLoaded: false
+    property bool noWalletsFound: false
 
     checkable: true
     hoverEnabled: AppMode.isDesktop
@@ -31,6 +33,10 @@ Button {
     bottomPadding: 0
     topPadding: 0
     clip: true
+
+    HoverHandler{
+        cursorShape: Qt.PointingHandCursor
+    }
 
     contentItem: Item {
         RowLayout {
@@ -65,7 +71,40 @@ Button {
         }
 
         RowLayout {
-            visible: !root.loading
+            visible: !root.loading && root.noWalletLoaded
+
+            opacity: visible ? 1 : 0
+
+            Behavior on opacity {
+                NumberAnimation { duration: 400 }
+            }
+
+            anchors.leftMargin: 5
+            anchors.rightMargin: 5
+            anchors.centerIn: parent
+            clip: true
+            spacing: 5
+            Icon {
+                visible: root.showIcon
+                source: root.noWalletsFound ? "image://images/plus" : "image://images/caret-down-medium-filled"
+                color: Theme.color.neutral8
+                size: 30
+                Layout.minimumWidth: 25
+                Layout.preferredWidth: 25
+                Layout.maximumWidth: 25
+            }
+            CoreText {
+                horizontalAlignment: Text.AlignLeft
+                Layout.fillWidth: true
+                wrap: false
+                font.pixelSize: 15
+                text: root.noWalletsFound ? qsTr("Add Wallet") : qsTr("Select Wallet")
+                color: root.textColor
+            }
+        }
+
+        RowLayout {
+            visible: !root.loading && !root.noWalletLoaded
 
             opacity: visible ? 1 : 0
 
