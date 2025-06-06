@@ -38,6 +38,7 @@ public:
     Q_INVOKABLE void prev();
     Q_INVOKABLE void remove();
     Q_INVOKABLE void clear();
+    Q_INVOKABLE void clearToFront();
 
     int currentIndex() const { return m_current + 1; }
     void setCurrentIndex(int row);
