@@ -53,6 +53,7 @@ Q_SIGNALS:
     void currentRecipientChanged();
     void countChanged();
     void totalAmountChanged();
+    void listCleared();
 
 private:
     void updateTotalAmount();
