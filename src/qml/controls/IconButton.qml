@@ -65,7 +65,7 @@ Button {
         },
         State {
             name: "DISABLED"; when: !root.enabled
-            PropertyChanges { target: icon; color: Theme.color.neutral2 }
+            PropertyChanges { target: icon; color: Theme.color.neutral4 }
             PropertyChanges { target: bg; color: Theme.color.background }
         }
     ]
