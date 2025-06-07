@@ -27,6 +27,14 @@ PageStack {
         }
     }
 
+    Connections {
+        target: root.wallet.recipients
+        function onListCleared() {
+            settings.multipleRecipientsEnabled = false
+        }
+    }
+
+
     initialItem: Page {
         background: null
 

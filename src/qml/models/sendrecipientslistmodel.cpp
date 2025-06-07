@@ -147,6 +147,7 @@ void SendRecipientsListModel::clear()
     Q_EMIT totalAmountChanged();
     Q_EMIT currentRecipientChanged();
     Q_EMIT currentIndexChanged();
+    Q_EMIT listCleared();
 }
 
 void SendRecipientsListModel::clearToFront()
