@@ -16,9 +16,12 @@ qt6_add_qml_module(bitcoin_qml
     stub.qml
 )
 
+add_subdirectory(Components)
+
 target_link_libraries(bitcoin_qml
   INTERFACE
     bitcoin_qmlplugin
+    bitcoin_qml_componentsplugin
   PUBLIC
     Qt6::Widgets
     Qt6::Quick
