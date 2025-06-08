@@ -11,6 +11,7 @@ qt6_add_qml_module(bitcoin_qml
     nodemodel.cpp
   RESOURCE_PREFIX /qt/qml/
   QML_FILES
+    initerrormessage.qml
     stub.qml
 )
 
