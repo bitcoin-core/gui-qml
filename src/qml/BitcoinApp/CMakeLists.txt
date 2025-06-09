@@ -8,6 +8,9 @@ qt6_add_qml_module(bitcoin_qml
   STATIC
   SOURCES
     bitcoin.cpp
+  RESOURCE_PREFIX /qt/qml/
+  QML_FILES
+    stub.qml
 )
 
 target_link_libraries(bitcoin_qml
