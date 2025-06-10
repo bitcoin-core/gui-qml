@@ -102,8 +102,7 @@ bool WalletQmlModel::prepareTransaction()
         return false;
     }
 
-    CScript scriptPubKey = GetScriptForDestination(DecodeDestination(m_current_recipient->address().toStdString()));
-    wallet::CRecipient recipient = {scriptPubKey, m_current_recipient->cAmount(), m_current_recipient->subtractFeeFromAmount()};
+    wallet::CRecipient recipient = {DecodeDestination(m_current_recipient->address().toStdString()), m_current_recipient->cAmount(), m_current_recipient->subtractFeeFromAmount()};
     m_coin_control.m_feerate = CFeeRate(1000);
 
     CAmount balance = m_wallet->getBalance();
