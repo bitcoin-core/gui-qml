@@ -161,7 +161,7 @@ PageStack {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             source: "image://images/flip-vertical"
-                            icon.color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
+                            color: unitLabel.enabled ? Theme.color.neutral8 : Theme.color.neutral4
                             size: 30
                         }
                     }
