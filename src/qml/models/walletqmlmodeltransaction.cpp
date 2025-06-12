@@ -5,10 +5,9 @@
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <policy/policy.h>
-#include <qobject.h>
 
-WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipient* recipient, QObject* parent)
-    : QObject(parent), m_address(recipient->address()), m_amount(recipient->cAmount()), m_fee(0), m_label(recipient->label()), m_wtx(nullptr)
+WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent)
+    : QObject(parent), m_address(recipient->recipients().at(0)->address()), m_amount(recipient->totalAmountSatoshi()), m_fee(0), m_label(recipient->recipients().at(0)->label()), m_wtx(nullptr)
 {
 }
 
