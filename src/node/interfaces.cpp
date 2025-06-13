@@ -29,6 +29,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <node/transaction.h>
+#include <node/utxo_snapshot.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -378,6 +379,10 @@ public:
     {
         return MakeSignalHandler(::uiInterface.ShowProgress_connect(fn));
     }
+    std::unique_ptr<Handler> handleSnapshotLoadProgress(SnapshotLoadProgressFn fn) override
+    {
+        return MakeSignalHandler(::uiInterface.SnapshotLoadProgress_connect(fn));
+    }
     std::unique_ptr<Handler> handleInitWallet(InitWalletFn fn) override
     {
         return MakeSignalHandler(::uiInterface.InitWallet_connect(fn));
@@ -416,6 +421,10 @@ public:
     void setContext(NodeContext* context) override
     {
         m_context = context;
+    }
+    bool loadSnapshot(AutoFile& afile, const node::SnapshotMetadata& metadata, bool in_memory) override
+    {
+        return chainman().ActivateSnapshot(afile, metadata, in_memory);
     }
     ArgsManager& args() { return *Assert(Assert(m_context)->args); }
     ChainstateManager& chainman() { return *Assert(m_context->chainman); }
@@ -532,7 +541,7 @@ public:
 class ChainImpl : public Chain
 {
 public:
-    explicit ChainImpl(NodeContext& node) : m_node(node) {}
+    explicit ChainImpl(node::NodeContext& node) : m_node(node) {}
     std::optional<int> getHeight() override
     {
         const int height{WITH_LOCK(::cs_main, return chainman().ActiveChain().Height())};
