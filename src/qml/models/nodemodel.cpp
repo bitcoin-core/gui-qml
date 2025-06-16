@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/nodemodel.h>
+#include <qml/models/snapshotqml.h>
 
 #include <interfaces/node.h>
 #include <net.h>
@@ -14,14 +15,20 @@
 
 #include <QDateTime>
 #include <QMetaObject>
+#include <QObject>
 #include <QTimerEvent>
 #include <QString>
+#include <QUrl>
+#include <QThread>
+#include <QDebug>
 
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
     ConnectToBlockTipSignal();
     ConnectToNumConnectionsChangedSignal();
+    ConnectToSnapshotLoadProgressSignal();
+    ConnectToRewindProgressSignal();
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
@@ -79,6 +86,14 @@ void NodeModel::setVerificationProgress(double new_progress)
 {
     if (new_progress != m_verification_progress) {
         setRemainingSyncTime(new_progress);
+
+        if (new_progress >= 0.999) {
+            setIBDCompleted(true);
+        }
+
+        if (new_progress >= 0.00001) {
+            setHeadersSynced(true);
+        }
 
         m_verification_progress = new_progress;
         Q_EMIT verificationProgressChanged();
@@ -151,8 +166,6 @@ void NodeModel::ConnectToBlockTipSignal()
             QMetaObject::invokeMethod(this, [=] {
                 setBlockTipHeight(tip.block_height);
                 setVerificationProgress(verification_progress);
-
-                Q_EMIT setTimeRatioList(tip.block_time);
             });
         });
 }
@@ -175,4 +188,134 @@ bool NodeModel::validateProxyAddress(QString address_port)
 QString NodeModel::defaultProxyAddress()
 {
     return QString::fromStdString(m_node.defaultProxyAddress());
+}
+
+void NodeModel::ConnectToSnapshotLoadProgressSignal()
+{
+    assert(!m_handler_snapshot_load_progress);
+
+    m_handler_snapshot_load_progress = m_node.handleSnapshotLoadProgress(
+        [this](double progress) {
+            setSnapshotProgress(progress);
+        });
+}
+
+void NodeModel::ConnectToRewindProgressSignal()
+{
+    assert(!m_handler_rewind_progress);
+
+    m_handler_rewind_progress = m_node.handleRewindProgress(
+        [this](double progress) {
+            if (isRewinding()) {
+                setRewindProgress(1.0 - progress);
+            } else {
+                setRewindProgress(progress);
+            }
+        });
+}
+
+void NodeModel::snapshotLoadThread(QString path_file) {
+    m_snapshot_loading = true;
+    Q_EMIT snapshotLoadingChanged();
+
+    path_file = QUrl(path_file).toLocalFile();
+
+    QThread* snapshot_thread = QThread::create([this, path_file]() {
+        SnapshotQml loader(m_node, path_file);
+        bool result = loader.processPath();
+        if (!result) {
+            m_snapshot_loading = false;
+            Q_EMIT snapshotLoadingChanged();
+        } else {
+            m_snapshot_loaded = true;
+            Q_EMIT snapshotLoaded(result);
+            Q_EMIT snapshotLoadingChanged();
+        }
+    });
+
+    connect(snapshot_thread, &QThread::finished, snapshot_thread, &QThread::deleteLater);
+
+    snapshot_thread->start();
+}
+
+void NodeModel::setSnapshotProgress(double new_progress) {
+    if (new_progress != m_snapshot_progress) {
+        m_snapshot_progress = new_progress;
+        Q_EMIT snapshotProgressChanged();
+    }
+}
+
+void NodeModel::setHeadersSynced(bool new_synced) {
+    if (new_synced != m_headers_synced) {
+        m_headers_synced = new_synced;
+        Q_EMIT headersSyncedChanged();
+    }
+}
+
+void NodeModel::cancelSnapshotGeneration() {
+    m_snapshot_cancel = true;
+    m_snapshot_generating = false;
+    Q_EMIT snapshotGeneratingChanged();
+}
+
+void NodeModel::generateSnapshotThread() {
+    QString path_file = "";
+    m_snapshot_generating = true;
+    Q_EMIT snapshotGeneratingChanged();
+
+    QThread* generate_snapshot_thread = QThread::create([this, path_file]() {
+        SnapshotQml generator(m_node, path_file);
+        generator.setSnapshotCancel(&m_snapshot_cancel);
+        connect(&generator, &SnapshotQml::isRewindingChanged, this, [this, &generator]() {
+            setIsRewinding(generator.isRewinding());
+        });
+        generator.SnapshotGen();
+        m_snapshot_generating = false;
+        Q_EMIT snapshotGeneratingChanged();
+        setIsSnapshotGenerated(true);
+    });
+
+    connect(generate_snapshot_thread, &QThread::finished, generate_snapshot_thread, &QThread::deleteLater);
+
+    generate_snapshot_thread->start();
+}
+
+QUrl NodeModel::getSnapshotDirectory() {
+    return QUrl::fromLocalFile(SnapshotQml(m_node, "").getSnapshotDirectory());
+}
+
+bool NodeModel::isSnapshotFileExists() {
+    bool result = SnapshotQml(m_node, "").isSnapshotFileExists();
+    if (result) {
+        setIsSnapshotGenerated(true);
+    }
+    return result;
+}
+
+void NodeModel::setIBDCompleted(bool completed) {
+    if (completed != m_is_ibd_completed) {
+        m_is_ibd_completed = completed;
+        Q_EMIT isIBDCompletedChanged();
+    }
+}
+
+void NodeModel::setIsRewinding(bool is_rewinding) {
+    if (is_rewinding != m_is_rewinding) {
+        m_is_rewinding = is_rewinding;
+        Q_EMIT isRewindingChanged();
+    }
+}
+
+void NodeModel::setRewindProgress(double progress) {
+    if (progress != m_rewind_progress) {
+        m_rewind_progress = progress;
+        Q_EMIT rewindProgressChanged();
+    }
+}
+
+void NodeModel::setIsSnapshotGenerated(bool generated) {
+    if (generated != m_is_snapshot_generated) {
+        m_is_snapshot_generated = generated;
+        Q_EMIT isSnapshotGeneratedChanged();
+    }
 }

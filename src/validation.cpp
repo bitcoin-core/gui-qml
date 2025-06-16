@@ -2661,6 +2661,7 @@ void Chainstate::UpdateTip(const CBlockIndex* pindexNew)
             }
         }
     }
+    m_chainman.GetNotifications().rewindProgress(GuessVerificationProgress(params.TxData(), pindexNew));
     UpdateTipLog(coins_tip, pindexNew, params, __func__, "", warning_messages.original);
 }
 
@@ -5260,6 +5261,10 @@ bool ChainstateManager::PopulateAndValidateSnapshot(
 
         --coins_left;
         ++coins_processed;
+
+        // Show Snapshot Loading progress
+        double progress = static_cast<double>(coins_processed) / static_cast<double>(coins_count);
+        GetNotifications().snapshotLoadProgress(progress);
 
         if (coins_processed % 1000000 == 0) {
             LogPrintf("[snapshot] %d coins loaded (%.2f%%, %.2f MB)\n",
