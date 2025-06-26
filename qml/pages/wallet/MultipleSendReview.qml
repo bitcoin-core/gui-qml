@@ -141,7 +141,7 @@ Page {
             }
 
             ContinueButton {
-                id: confimationButton
+                id: confirmationButton
                 Layout.fillWidth: true
                 Layout.topMargin: 30
                 text: qsTr("Send")
