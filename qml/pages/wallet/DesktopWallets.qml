@@ -20,7 +20,7 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
-    signal sendTransaction()
+    signal sendTransaction(bool multipleRecipientsEnabled)
 
     header: NavigationBar2 {
         id: navBar
@@ -141,7 +141,7 @@ Page {
         Activity {
         }
         Send {
-            onTransactionPrepared: root.sendTransaction()
+            onTransactionPrepared: root.sendTransaction(multipleRecipientsEnabled)
         }
         RequestPayment {
         }

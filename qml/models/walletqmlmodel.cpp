@@ -1,3 +1,4 @@
+
 // Copyright (c) 2024 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -6,6 +7,7 @@
 
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
@@ -24,7 +26,7 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, QObje
     m_wallet = std::move(wallet);
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
-    m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::WalletQmlModel(QObject* parent)
@@ -32,14 +34,14 @@ WalletQmlModel::WalletQmlModel(QObject* parent)
 {
     m_activity_list_model = new ActivityListModel(this);
     m_coins_list_model = new CoinsListModel(this);
-    m_current_recipient = new SendRecipient(this);
+    m_send_recipients = new SendRecipientsListModel(this);
 }
 
 WalletQmlModel::~WalletQmlModel()
 {
     delete m_activity_list_model;
     delete m_coins_list_model;
-    delete m_current_recipient;
+    delete m_send_recipients;
     if (m_current_transaction) {
         delete m_current_transaction;
     }
@@ -98,20 +100,25 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(Tr
 
 bool WalletQmlModel::prepareTransaction()
 {
-    if (!m_wallet || !m_current_recipient) {
+    if (!m_wallet || !m_send_recipients || m_send_recipients->recipients().empty()) {
         return false;
     }
 
-    CScript scriptPubKey = GetScriptForDestination(DecodeDestination(m_current_recipient->address().toStdString()));
-    wallet::CRecipient recipient = {scriptPubKey, m_current_recipient->cAmount(), m_current_recipient->subtractFeeFromAmount()};
-    m_coin_control.m_feerate = CFeeRate(1000);
+    std::vector<wallet::CRecipient> vecSend;
+    CAmount total = 0;
+    for (auto* recipient : m_send_recipients->recipients()) {
+        CScript scriptPubKey = GetScriptForDestination(DecodeDestination(recipient->address().toStdString()));
+        wallet::CRecipient c_recipient = {scriptPubKey, recipient->cAmount(), recipient->subtractFeeFromAmount()};
+        m_coin_control.m_feerate = CFeeRate(1000);
+        vecSend.push_back(c_recipient);
+        total += recipient->cAmount();
+    }
 
     CAmount balance = m_wallet->getBalance();
-    if (balance < recipient.nAmount) {
+    if (balance < total) {
         return false;
     }
 
-    std::vector<wallet::CRecipient> vecSend{recipient};
     int nChangePosRet = -1;
     CAmount nFeeRequired = 0;
     const auto& res = m_wallet->createTransaction(vecSend, m_coin_control, true, nChangePosRet, nFeeRequired);
@@ -120,7 +127,7 @@ bool WalletQmlModel::prepareTransaction()
             delete m_current_transaction;
         }
         CTransactionRef newTx = *res;
-        m_current_transaction = new WalletQmlModelTransaction(m_current_recipient, this);
+        m_current_transaction = new WalletQmlModelTransaction(m_send_recipients, this);
         m_current_transaction->setWtx(newTx);
         m_current_transaction->setTransactionFee(nFeeRequired);
         Q_EMIT currentTransactionChanged();

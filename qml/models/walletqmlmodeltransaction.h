@@ -5,12 +5,10 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODELTRANSACTION_H
 
-#include <primitives/transaction.h>
-#include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
 
 #include <consensus/amount.h>
-
-#include <QObject>
+#include <primitives/transaction.h>
 
 
 class WalletQmlModelTransaction : public QObject
@@ -22,15 +20,13 @@ class WalletQmlModelTransaction : public QObject
     Q_PROPERTY(QString fee READ fee NOTIFY feeChanged)
     Q_PROPERTY(QString total READ total NOTIFY totalChanged)
 public:
-    explicit WalletQmlModelTransaction(const SendRecipient* recipient, QObject* parent = nullptr);
+    explicit WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent = nullptr);
 
     QString address() const;
     QString amount() const;
     QString fee() const;
     QString label() const;
     QString total() const;
-
-    QList<SendRecipient> getRecipients() const;
 
     CTransactionRef& getWtx();
     void setWtx(const CTransactionRef&);
