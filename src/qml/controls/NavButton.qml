@@ -53,6 +53,7 @@ AbstractButton {
     }
     contentItem: RowLayout {
         spacing: 0
+        anchors.fill: parent
         Loader {
            id: button_background
            active: root.iconSource.toString().length > 0

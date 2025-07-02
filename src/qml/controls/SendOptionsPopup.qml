@@ -13,14 +13,36 @@ OptionPopup {
     id: root
 
     property alias coinControlEnabled: coinControlToggle.checked
+    property alias multipleRecipientsEnabled: multipleRecipientsToggle.checked
+
+    implicitWidth: 300
+    implicitHeight: 100
 
     clip: true
     modal: true
     dim: false
 
-    EllipsisMenuToggleItem {
-        id: coinControlToggle
+    ColumnLayout {
+        id: columnLayout
         anchors.centerIn: parent
-        text: qsTr("Enable Coin control")
+        anchors.margins: 10
+        spacing: 0
+
+        EllipsisMenuToggleItem {
+            id: coinControlToggle
+            Layout.fillWidth: true
+            text: qsTr("Enable Coin control")
+        }
+
+        Separator {
+            id: separator
+            Layout.fillWidth: true
+        }
+
+        EllipsisMenuToggleItem {
+            id: multipleRecipientsToggle
+            Layout.fillWidth: true
+            text: qsTr("Multiple Recipients")
+        }
     }
 }
