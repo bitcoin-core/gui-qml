@@ -4,6 +4,9 @@
 
 #include <qml/models/walletqmlmodeltransaction.h>
 
+#include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
+
 #include <policy/policy.h>
 
 WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent)
