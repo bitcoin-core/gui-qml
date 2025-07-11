@@ -169,10 +169,24 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
 
 bool NodeModel::validateProxyAddress(QString address_port)
 {
-    return m_node.validateProxyAddress(address_port.toStdString());
+    uint16_t port{0};
+    std::string addr_port{address_port.toStdString()};
+    std::string hostname;
+    // First, attempt to split the input address into hostname and port components.
+    // We call SplitHostPort to validate that a port is provided in addr_port.
+    // If either splitting fails or port is zero (not specified), return false.
+    if (!SplitHostPort(addr_port, port, hostname) || !port) return false;
+
+    // Create a service endpoint (CService) from the address and port.
+    // If port is missing in addr_port, DEFAULT_PROXY_PORT is used as the fallback.
+    CService serv(LookupNumeric(addr_port, DEFAULT_PROXY_PORT));
+
+    // Construct the Proxy with the service endpoint and return if it's valid
+    Proxy addrProxy = Proxy(serv, true);
+    return addrProxy.IsValid();
 }
 
 QString NodeModel::defaultProxyAddress()
 {
-    return QString::fromStdString(m_node.defaultProxyAddress());
+    return QString::fromStdString(std::string(DEFAULT_PROXY_HOST) + ":" + util::ToString(DEFAULT_PROXY_PORT));
 }
