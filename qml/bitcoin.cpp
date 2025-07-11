@@ -204,19 +204,19 @@ int QmlGuiMain(int argc, char* argv[])
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
+        InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error)));
         return EXIT_FAILURE;
     }
 
     /// Determine availability of data directory.
     if (!CheckDataDirOption(gArgs)) {
-        InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));
+        InitError(Untranslated(strprintf("Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", ""))));
         return EXIT_FAILURE;
     }
 
     /// Read and parse bitcoin.conf file.
     if (!gArgs.ReadConfigFiles(error, true)) {
-        InitError(strprintf(Untranslated("Cannot parse configuration file: %s\n"), error));
+        InitError(Untranslated(strprintf("Cannot parse configuration file: %s\n", error)));
         return EXIT_FAILURE;
     }
 
