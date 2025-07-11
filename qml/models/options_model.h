@@ -7,6 +7,8 @@
 
 #include <txdb.h>
 #include <common/settings.h>
+#include <node/caches.h>
+#include <kernel/caches.h>
 #include <common/system.h>
 #include <validation.h>
 
@@ -92,8 +94,8 @@ private:
 
     // Properties that are exposed to QML.
     int m_dbcache_size_mib;
-    const int m_min_dbcache_size_mib{nMinDbCache};
-    const int m_max_dbcache_size_mib{nMaxDbCache};
+    const int m_min_dbcache_size_mib{MIN_DB_CACHE >> 20};
+    const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE >> 20};
     bool m_listen;
     const int m_max_script_threads{MAX_SCRIPTCHECK_THREADS};
     const int m_min_script_threads{-GetNumCores()};

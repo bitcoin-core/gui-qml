@@ -8,6 +8,7 @@
 #include <common/settings.h>
 #include <common/system.h>
 #include <interfaces/node.h>
+#include <node/caches.h>
 #include <mapport.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -28,7 +29,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     : m_node{node}
     , m_onboarded{is_onboarded}
 {
-    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
+    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), DEFAULT_DB_CACHE >> 20);
 
     m_listen = SettingToBool(m_node.getPersistentSetting("listen"), DEFAULT_LISTEN);
 
@@ -204,7 +205,7 @@ void OptionsQmlModel::setDataDir(QString new_data_dir)
 void OptionsQmlModel::onboard()
 {
     m_node.resetSettings();
-    if (m_dbcache_size_mib != nDefaultDbCache) {
+    if (m_dbcache_size_mib != DEFAULT_DB_CACHE >> 20) {
         m_node.updateRwSetting("dbcache", m_dbcache_size_mib);
     }
     if (m_listen) {
