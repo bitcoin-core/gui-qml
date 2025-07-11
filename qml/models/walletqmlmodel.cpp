@@ -107,8 +107,8 @@ bool WalletQmlModel::prepareTransaction()
     std::vector<wallet::CRecipient> vecSend;
     CAmount total = 0;
     for (auto* recipient : m_send_recipients->recipients()) {
-        CScript scriptPubKey = GetScriptForDestination(DecodeDestination(recipient->address().toStdString()));
-        wallet::CRecipient c_recipient = {scriptPubKey, recipient->cAmount(), recipient->subtractFeeFromAmount()};
+        CTxDestination destination = DecodeDestination(recipient->address().toStdString());
+        wallet::CRecipient c_recipient = {destination, recipient->cAmount(), recipient->subtractFeeFromAmount()};
         m_coin_control.m_feerate = CFeeRate(1000);
         vecSend.push_back(c_recipient);
         total += recipient->cAmount();
