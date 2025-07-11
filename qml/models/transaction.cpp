@@ -12,7 +12,6 @@
 
 using wallet::ISMINE_SPENDABLE;
 using wallet::ISMINE_NO;
-using wallet::ISMINE_WATCH_ONLY;
 using wallet::isminetype;
 
 namespace {
@@ -150,18 +149,12 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
     } else {
         for (const isminetype mine : wtx.txin_is_mine)
         {
-            if(mine & ISMINE_WATCH_ONLY) involvesWatchAddress = true;
             if(fAllFromMe > mine) fAllFromMe = mine;
             if (mine) any_from_me = true;
         }
     }
 
     if (fAllFromMe || !any_from_me) {
-        for (const isminetype mine : wtx.txout_is_mine)
-        {
-            if(mine & ISMINE_WATCH_ONLY) involvesWatchAddress = true;
-        }
-
         CAmount nTxFee = nDebit - wtx.tx->GetValueOut();
 
 
@@ -219,7 +212,7 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
                 QSharedPointer<Transaction> sub = QSharedPointer<Transaction>::create(hash, nTime);
                 sub->idx = i; // vout index
                 sub->credit = txout.nValue;
-                sub->involvesWatchAddress = mine & ISMINE_WATCH_ONLY;
+                sub->involvesWatchAddress = false;
                 if (wtx.txout_address_is_mine[i])
                 {
                     // Received by Bitcoin Address
