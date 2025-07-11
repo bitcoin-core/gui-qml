@@ -1,0 +1,8 @@
+# Build subdirectories.
+/*build*
+!/build-aux
+!/build_msvc
+
+*.pyc
+
+/CMakeUserPresets.json
