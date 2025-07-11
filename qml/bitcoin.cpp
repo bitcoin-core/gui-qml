@@ -4,6 +4,9 @@
 
 #include <qml/bitcoin.h>
 
+#include <common/args.h>
+#include <common/init.h>
+#include <common/system.h>
 #include <chainparams.h>
 #include <common/args.h>
 #include <common/system.h>
@@ -12,6 +15,7 @@
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
+#include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/appmode.h>
@@ -130,7 +134,7 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 {
     Q_UNUSED(context);
     if (type == QtDebugMsg) {
-        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
+        LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
         LogPrintf("GUI: %s\n", msg.toStdString());
     }
@@ -181,60 +185,48 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
-    QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     QGuiApplication app(argc, argv);
 
-    auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
-
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+    auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
 
     SetupEnvironment();
     util::ThreadSetInternalName("main");
 
     // must be set before parsing command-line options; otherwise,
     // if invalid parameters were passed, QSetting initialization would fail
-    // and the error will be displayed on terminal
+    // and the error will be displayed on terminal.
+    // must be set before OptionsModel is initialized or translations are loaded,
+    // as it is used to locate QSettings
     app.setOrganizationName(QAPP_ORG_NAME);
     app.setOrganizationDomain(QAPP_ORG_DOMAIN);
     app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
-    /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-    SetupServerArgs(gArgs);
+    // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
+    SetupServerArgs(gArgs, init->canListenIpc());
+
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
+        InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error)));
         return EXIT_FAILURE;
     }
 
-    /// Determine availability of data directory.
-    if (!CheckDataDirOption(gArgs)) {
-        InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));
+    if (auto error = common::InitConfig(
+            gArgs,
+            [](const bilingual_str& msg, const std::vector<std::string>& details) {
+                return InitError(msg, details);
+            })) {
         return EXIT_FAILURE;
     }
 
-    /// Read and parse bitcoin.conf file.
-    if (!gArgs.ReadConfigFiles(error, true)) {
-        InitError(strprintf(Untranslated("Cannot parse configuration file: %s\n"), error));
-        return EXIT_FAILURE;
-    }
-
-    /// Check for chain settings (Params() calls are only valid after this clause).
-    try {
-        SelectParams(gArgs.GetChainType());
-    } catch(std::exception &e) {
-        InitError(Untranslated(strprintf("%s\n", e.what())));
-        return EXIT_FAILURE;
-    }
-
-    /// Read and parse settings.json file.
-    std::vector<std::string> errors;
-    if (!gArgs.ReadSettingsFile(&errors)) {
-        error = strprintf("Failed loading settings file:\n%s\n", MakeUnorderedList(errors));
-        InitError(Untranslated(error));
-        return EXIT_FAILURE;
-    }
+    // legacy GUI: parameterSetup()
+    // Default printtoconsole to false for the GUI. GUI programs should not
+    // print to the console unnecessarily.
+    gArgs.SoftSetBoolArg("-printtoconsole", false);
+    InitLogging(gArgs);
+    InitParameterInteraction(gArgs);
 
     QVariant need_onboarding(true);
     if (gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) {
@@ -247,16 +239,11 @@ int QmlGuiMain(int argc, char* argv[])
         need_onboarding.setValue(true);
     }
 
-    // Default printtoconsole to false for the GUI. GUI programs should not
-    // print to the console unnecessarily.
-    gArgs.SoftSetBoolArg("-printtoconsole", false);
-    InitLogging(gArgs);
-    InitParameterInteraction(gArgs);
-
-    GUIUtil::LogQtInfo();
-
+    // legacy GUI: createNode()
     std::unique_ptr<interfaces::Node> node = init->makeNode();
     std::unique_ptr<interfaces::Chain> chain = init->makeChain();
+
+    // legacy GUI: baseInitialize()
     if (!node->baseInitialize()) {
         // A dialog with detailed error will have been shown by InitError().
         return EXIT_FAILURE;
@@ -287,7 +274,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     ChainModel chain_model{*chain};
-    chain_model.setCurrentNetworkName(QString::fromStdString(ChainTypeToString(gArgs.GetChainType())));
+    chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
     setupChainQSettings(&app, chain_model.currentNetworkName());
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);

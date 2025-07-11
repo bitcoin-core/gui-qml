@@ -14,6 +14,9 @@
 #include <QObject>
 #include <QString>
 
+const char DEFAULT_PROXY_HOST[] = "127.0.0.1";
+constexpr uint16_t DEFAULT_PROXY_PORT = 9050;
+
 QT_BEGIN_NAMESPACE
 class QTimerEvent;
 QT_END_NAMESPACE

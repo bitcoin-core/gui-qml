@@ -4,7 +4,7 @@
 
 #include <qml/bitcoinamount.h>
 
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QStringList>
 
 BitcoinAmount::BitcoinAmount(QObject* parent)
@@ -17,7 +17,7 @@ QString BitcoinAmount::sanitize(const QString &text)
     QString result = text;
 
     // Remove any invalid characters
-    result.remove(QRegExp("[^0-9.]"));
+    result.remove(QRegularExpression("[^0-9.]"));
 
     // Ensure only one decimal point
     QStringList parts = result.split('.');
@@ -147,7 +147,7 @@ void BitcoinAmount::fromDisplay(const QString& text)
         newSat = btcToSats(sanitized);
     } else {
         QString digitsOnly = text;
-        digitsOnly.remove(QRegExp("[^0-9]"));
+        digitsOnly.remove(QRegularExpression("[^0-9]"));
         newSat = digitsOnly.trimmed().isEmpty() ? 0 : digitsOnly.toLongLong();
     }
     setSatoshi(newSat);

@@ -94,7 +94,7 @@ void LineGraph::paintMarkerLines(QPainter * painter)
 
 void LineGraph::paintPath(QPainterPath * painter_path)
 {
-    int item_count = std::min(m_max_samples, m_value_list.size());
+    int item_count = std::min(m_max_samples, static_cast<int>(m_value_list.size()));
     qreal h = height();
     qreal w = width();
 

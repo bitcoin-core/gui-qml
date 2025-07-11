@@ -5,7 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtQuick.Dialogs 1.2
+import QtQuick.Dialogs
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
