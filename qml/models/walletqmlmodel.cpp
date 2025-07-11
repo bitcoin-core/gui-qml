@@ -76,7 +76,7 @@ interfaces::WalletTx WalletQmlModel::getWalletTx(const uint256& hash) const
     if (!m_wallet) {
         return {};
     }
-    return m_wallet->getWalletTx(hash);
+    return m_wallet->getWalletTx(Txid::FromUint256(hash));
 }
 
 bool WalletQmlModel::tryGetTxStatus(const uint256& txid,
@@ -87,7 +87,7 @@ bool WalletQmlModel::tryGetTxStatus(const uint256& txid,
     if (!m_wallet) {
         return false;
     }
-    return m_wallet->tryGetTxStatus(txid, tx_status, num_blocks, block_time);
+    return m_wallet->tryGetTxStatus(Txid::FromUint256(txid), tx_status, num_blocks, block_time);
 }
 
 std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(TransactionChangedFn fn)
