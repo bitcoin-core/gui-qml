@@ -43,8 +43,6 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
 
     m_server = SettingToBool(m_node.getPersistentSetting("server"), false);
 
-    m_upnp = SettingToBool(m_node.getPersistentSetting("upnp"), DEFAULT_UPNP);
-
     m_dataDir = getDefaultDataDirString();
 }
 
@@ -122,17 +120,6 @@ void OptionsQmlModel::setServer(bool new_server)
             m_node.updateRwSetting("server", new_server);
         }
         Q_EMIT serverChanged(new_server);
-    }
-}
-
-void OptionsQmlModel::setUpnp(bool new_upnp)
-{
-    if (new_upnp != m_upnp) {
-        m_upnp = new_upnp;
-        if (m_onboarded) {
-            m_node.updateRwSetting("upnp", new_upnp);
-        }
-        Q_EMIT upnpChanged(new_upnp);
     }
 }
 
@@ -222,9 +209,6 @@ void OptionsQmlModel::onboard()
     }
     if (m_server) {
         m_node.updateRwSetting("server", m_server);
-    }
-    if (m_upnp) {
-        m_node.updateRwSetting("upnp", m_upnp);
     }
     m_onboarded = true;
 }

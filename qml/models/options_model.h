@@ -35,7 +35,6 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
-    Q_PROPERTY(bool upnp READ upnp WRITE setUpnp NOTIFY upnpChanged)
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
@@ -61,8 +60,6 @@ public:
     void setScriptThreads(int new_script_threads);
     bool server() const { return m_server; }
     void setServer(bool new_server);
-    bool upnp() const { return m_upnp; }
-    void setUpnp(bool new_upnp);
     QString dataDir() const { return m_dataDir; }
     void setDataDir(QString new_data_dir);
     QString getDefaultDataDirString();
@@ -84,7 +81,6 @@ Q_SIGNALS:
     void pruneSizeGBChanged(int new_prune_size_gb);
     void scriptThreadsChanged(int new_script_threads);
     void serverChanged(bool new_server);
-    void upnpChanged(bool new_upnp);
     void customDataDirStringChanged(QString new_custom_datadir_string);
     void dataDirChanged(QString new_data_dir);
 
@@ -104,7 +100,6 @@ private:
     int m_prune_size_gb;
     int m_script_threads;
     bool m_server;
-    bool m_upnp;
     QString m_custom_datadir_string;
     QString m_dataDir;
 
