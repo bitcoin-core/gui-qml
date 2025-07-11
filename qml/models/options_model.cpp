@@ -9,6 +9,7 @@
 #include <common/system.h>
 #include <interfaces/node.h>
 #include <node/caches.h>
+#include <node/chainstatemanager_args.h>
 #include <mapport.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
