@@ -27,19 +27,6 @@ ColumnLayout {
     Separator { Layout.fillWidth: true }
     Setting {
         Layout.fillWidth: true
-        header: qsTr("Map port using UPnP")
-        actionItem: OptionSwitch {
-            checked: optionsModel.upnp
-            onToggled: optionsModel.upnp = checked
-        }
-        onClicked: {
-          loadedItem.toggle()
-          loadedItem.toggled()
-        }
-    }
-    Separator { Layout.fillWidth: true }
-    Setting {
-        Layout.fillWidth: true
         header: qsTr("Map port using NAT-PMP")
         actionItem: OptionSwitch {
             checked: optionsModel.natpmp

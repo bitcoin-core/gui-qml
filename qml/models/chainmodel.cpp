@@ -10,6 +10,8 @@
 #include <QTime>
 #include <interfaces/chain.h>
 
+using interfaces::FoundBlock;
+
 ChainModel::ChainModel(interfaces::Chain& chain)
     : m_chain{chain}
 {
@@ -77,7 +79,10 @@ void ChainModel::setTimeRatioListInitial()
     }
 
     for (int height = first_block_height; height < active_chain_height + 1; height++) {
-        m_time_ratio_list.push_back(double(m_chain.getBlockTime(height) - time_at_meridian) / SECS_IN_12_HOURS);
+        uint256 block_hash{m_chain.getBlockHash(height)};
+        int64_t block_time;
+        m_chain.findBlock(block_hash, FoundBlock().time(block_time));
+        m_time_ratio_list.push_back(double(block_time - time_at_meridian) / SECS_IN_12_HOURS);
     }
 
     Q_EMIT timeRatioListChanged();

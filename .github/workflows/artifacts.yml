@@ -1,0 +1,73 @@
+# Copyright (c) 2025 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+name: Artifacts
+on:
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request.
+  pull_request:
+  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#push.
+  push:
+    branches:
+      - '**'
+    tags-ignore:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-22.04]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: MacOS Install Deps
+        if: contains(matrix.os, 'macos')
+        run: |
+          brew install cmake ccache boost pkgconf libevent qt@6 qrencode coreutils
+          echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> "$GITHUB_ENV"
+
+      - name: Ubuntu Install Deps
+        if: contains(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential ccache cmake pkgconf \
+            libevent-dev libboost-dev libsqlite3-dev libgl-dev libqrencode-dev \
+            qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-tools-dev-tools \
+            qt6-declarative-dev qml6-module-qtquick qml6-module-qtqml
+          echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> "$GITHUB_ENV"
+
+      - name: Restore Ccache cache
+        uses: actions/cache/restore@v4
+        id: ccache-cache
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ matrix.os }}-ccache-${{ github.run_id }}
+          restore-keys: ${{ matrix.os }}-ccache-
+
+      - name: Build
+        run: |
+          git submodule update --init
+          if [[ "${{ matrix.os }}" == macos* ]]; then
+            export CPLUS_INCLUDE_PATH="$(brew --prefix boost)/include"
+            export LIBRARY_PATH="$(brew --prefix boost)/lib"
+          fi
+          cmake -B build
+          cmake --build build -j$(nproc)
+
+      - name: Save Ccache cache
+        uses: actions/cache/save@v4
+        if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ matrix.os }}-ccache-${{ github.run_id }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsecure_${{ matrix.os }}_gui
+          path: build/bin/bitcoin-core-app
+

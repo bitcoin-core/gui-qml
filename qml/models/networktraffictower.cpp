@@ -73,7 +73,7 @@ void NetworkTrafficTower::updateFilterWindowSize(int new_size)
 
 float NetworkTrafficTower::applyMovingAverageFilter(QQueue<float> * rate_list)
 {
-    int filter_window_size = std::min(rate_list->size(), m_filter_window_size);
+    int filter_window_size = std::min(static_cast<int>(rate_list->size()), m_filter_window_size);
     float sum = 0.0f;
     for (int i = 0; i < filter_window_size; ++i) {
         sum += rate_list->at(i);
@@ -85,7 +85,7 @@ float NetworkTrafficTower::applyMovingAverageFilter(QQueue<float> * rate_list)
 float NetworkTrafficTower::calculateMaxRateBps(QQueue<float> * smoothed_rate_list)
 {
     float max_rate_bps = 0.0f;
-    int lookback = std::min(smoothed_rate_list->size() - 1, m_filter_window_size * 10);
+    int lookback = std::min(static_cast<int>(smoothed_rate_list->size()) - 1, m_filter_window_size * 10);
     for (int i = lookback; i > 0; --i) {
         if (smoothed_rate_list->at(i) > max_rate_bps) {
             max_rate_bps = smoothed_rate_list->at(i);
