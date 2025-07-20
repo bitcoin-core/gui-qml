@@ -10,7 +10,7 @@ follow-up PR.
 
 Translator comments only apply to strings that are marked for translation.
 For more information, see:
-[Internationalization and Localization with Qt Quick](https://doc.qt.io/qt-5/qtquick-internationalization.html)
+[Internationalization and Localization with Qt Quick](https://doc.qt.io/qt-6/i18n-source-translation.html)
 
 Below, the values for the `text` and `description` properties are examples of
 new user-facing strings marked for translation without translator comments:

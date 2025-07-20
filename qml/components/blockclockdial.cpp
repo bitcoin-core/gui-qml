@@ -20,9 +20,9 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
     m_delay_timer.setSingleShot(true);
     m_delay_timer.setInterval(5000);
     connect(&m_delay_timer, &QTimer::timeout,
-            this, [=]() { this->m_animation_timer.start(); });
+            this, [this]() { this->m_animation_timer.start(); });
     connect(&m_animation_timer, &QTimer::timeout,
-            this, [=]() {
+            this, [=, this]() {
                 if (m_is_connected
                     && getTargetAnimationAngle() - m_animating_max_angle < 1) {
                     m_animation_timer.stop();

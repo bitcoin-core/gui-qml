@@ -49,7 +49,7 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             placeholderText: qsTr("Eg. My bitcoin wallet...")
-            validator: RegExpValidator { regExp: /^[a-zA-Z0-9_]{1,20}$/ }
+            validator: RegularExpressionValidator { regularExpression: /^[a-zA-Z0-9_]{1,20}$/ }
             onTextChanged: {
                 continueButton.enabled = walletNameInput.text.length > 0
             }

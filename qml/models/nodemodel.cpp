@@ -148,7 +148,7 @@ void NodeModel::ConnectToBlockTipSignal()
 
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this](SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            QMetaObject::invokeMethod(this, [=] {
+            QMetaObject::invokeMethod(this, [&, this] {
                 setBlockTipHeight(tip.block_height);
                 setVerificationProgress(verification_progress);
 
@@ -162,17 +162,31 @@ void NodeModel::ConnectToNumConnectionsChangedSignal()
     assert(!m_handler_notify_num_peers_changed);
 
     m_handler_notify_num_peers_changed = m_node.handleNotifyNumConnectionsChanged(
-        [this](PeersNumByType new_num_peers) {
-            setNumOutboundPeers(new_num_peers.outbound_full_relay + new_num_peers.block_relay);
+        [this](int new_num_connections) {
+            setNumOutboundPeers(new_num_connections);
         });
 }
 
 bool NodeModel::validateProxyAddress(QString address_port)
 {
-    return m_node.validateProxyAddress(address_port.toStdString());
+    uint16_t port{0};
+    std::string addr_port{address_port.toStdString()};
+    std::string hostname;
+    // First, attempt to split the input address into hostname and port components.
+    // We call SplitHostPort to validate that a port is provided in addr_port.
+    // If either splitting fails or port is zero (not specified), return false.
+    if (!SplitHostPort(addr_port, port, hostname) || !port) return false;
+
+    // Create a service endpoint (CService) from the address and port.
+    // If port is missing in addr_port, DEFAULT_PROXY_PORT is used as the fallback.
+    CService serv(LookupNumeric(addr_port, DEFAULT_PROXY_PORT));
+
+    // Construct the Proxy with the service endpoint and return if it's valid
+    Proxy addrProxy = Proxy(serv, true);
+    return addrProxy.IsValid();
 }
 
 QString NodeModel::defaultProxyAddress()
 {
-    return QString::fromStdString(m_node.defaultProxyAddress());
+    return QString::fromStdString(std::string(DEFAULT_PROXY_HOST) + ":" + util::ToString(DEFAULT_PROXY_PORT));
 }

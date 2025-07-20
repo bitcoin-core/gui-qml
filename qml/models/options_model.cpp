@@ -8,6 +8,8 @@
 #include <common/settings.h>
 #include <common/system.h>
 #include <interfaces/node.h>
+#include <node/caches.h>
+#include <node/chainstatemanager_args.h>
 #include <mapport.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
@@ -28,7 +30,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     : m_node{node}
     , m_onboarded{is_onboarded}
 {
-    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), nDefaultDbCache);
+    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), DEFAULT_DB_CACHE >> 20);
 
     m_listen = SettingToBool(m_node.getPersistentSetting("listen"), DEFAULT_LISTEN);
 
@@ -41,8 +43,6 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     m_script_threads = SettingToInt(m_node.getPersistentSetting("par"), DEFAULT_SCRIPTCHECK_THREADS);
 
     m_server = SettingToBool(m_node.getPersistentSetting("server"), false);
-
-    m_upnp = SettingToBool(m_node.getPersistentSetting("upnp"), DEFAULT_UPNP);
 
     m_dataDir = getDefaultDataDirString();
 }
@@ -124,17 +124,6 @@ void OptionsQmlModel::setServer(bool new_server)
     }
 }
 
-void OptionsQmlModel::setUpnp(bool new_upnp)
-{
-    if (new_upnp != m_upnp) {
-        m_upnp = new_upnp;
-        if (m_onboarded) {
-            m_node.updateRwSetting("upnp", new_upnp);
-        }
-        Q_EMIT upnpChanged(new_upnp);
-    }
-}
-
 common::SettingsValue OptionsQmlModel::pruneSetting() const
 {
     assert(!m_prune || m_prune_size_gb >= 1);
@@ -143,7 +132,7 @@ common::SettingsValue OptionsQmlModel::pruneSetting() const
 
 QString PathToQString(const fs::path &path)
 {
-    return QString::fromStdString(path.u8string());
+    return QString::fromStdString(path.utf8string());
 }
 
 QString OptionsQmlModel::getDefaultDataDirString()
@@ -204,7 +193,7 @@ void OptionsQmlModel::setDataDir(QString new_data_dir)
 void OptionsQmlModel::onboard()
 {
     m_node.resetSettings();
-    if (m_dbcache_size_mib != nDefaultDbCache) {
+    if (m_dbcache_size_mib != DEFAULT_DB_CACHE >> 20) {
         m_node.updateRwSetting("dbcache", m_dbcache_size_mib);
     }
     if (m_listen) {
@@ -221,9 +210,6 @@ void OptionsQmlModel::onboard()
     }
     if (m_server) {
         m_node.updateRwSetting("server", m_server);
-    }
-    if (m_upnp) {
-        m_node.updateRwSetting("upnp", m_upnp);
     }
     m_onboarded = true;
 }

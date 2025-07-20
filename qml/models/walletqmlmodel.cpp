@@ -76,7 +76,7 @@ interfaces::WalletTx WalletQmlModel::getWalletTx(const uint256& hash) const
     if (!m_wallet) {
         return {};
     }
-    return m_wallet->getWalletTx(hash);
+    return m_wallet->getWalletTx(Txid::FromUint256(hash));
 }
 
 bool WalletQmlModel::tryGetTxStatus(const uint256& txid,
@@ -87,7 +87,7 @@ bool WalletQmlModel::tryGetTxStatus(const uint256& txid,
     if (!m_wallet) {
         return false;
     }
-    return m_wallet->tryGetTxStatus(txid, tx_status, num_blocks, block_time);
+    return m_wallet->tryGetTxStatus(Txid::FromUint256(txid), tx_status, num_blocks, block_time);
 }
 
 std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(TransactionChangedFn fn)
@@ -107,8 +107,8 @@ bool WalletQmlModel::prepareTransaction()
     std::vector<wallet::CRecipient> vecSend;
     CAmount total = 0;
     for (auto* recipient : m_send_recipients->recipients()) {
-        CScript scriptPubKey = GetScriptForDestination(DecodeDestination(recipient->address().toStdString()));
-        wallet::CRecipient c_recipient = {scriptPubKey, recipient->cAmount(), recipient->subtractFeeFromAmount()};
+        CTxDestination destination = DecodeDestination(recipient->address().toStdString());
+        wallet::CRecipient c_recipient = {destination, recipient->cAmount(), recipient->subtractFeeFromAmount()};
         m_coin_control.m_feerate = CFeeRate(1000);
         vecSend.push_back(c_recipient);
         total += recipient->cAmount();

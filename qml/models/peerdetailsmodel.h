@@ -64,7 +64,7 @@ public:
     QString pingTime() const { return GUIUtil::formatPingTime(m_combinedStats->nodeStats.m_last_ping_time); }
     QString pingMin() const { return GUIUtil::formatPingTime(m_combinedStats->nodeStats.m_min_ping_time); }
     QString pingWait() const { return GUIUtil::formatPingTime(m_combinedStats->nodeStateStats.m_ping_wait); }
-    QString timeOffset() const { return GUIUtil::formatTimeOffset(m_combinedStats->nodeStats.nTimeOffset); }
+    QString timeOffset() const { return GUIUtil::formatTimeOffset(Ticks<std::chrono::seconds>(m_combinedStats->nodeStateStats.time_offset)); }
     QString mappedAS() const { return m_combinedStats->nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats->nodeStats.m_mapped_as) : tr("N/A"); }
     QString permission() const {
         if (m_combinedStats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
