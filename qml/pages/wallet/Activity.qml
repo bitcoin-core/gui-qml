@@ -16,7 +16,7 @@ PageStack {
     Connections {
         target: walletController
         function onSelectedWalletChanged() {
-            root.StackView.view.pop()
+            stackView.pop()
         }
     }
 
@@ -87,6 +87,7 @@ PageStack {
 
                 ListView {
                     id: listView
+                    anchors.fill: parent
                     clip: true
                     model: walletController.selectedWallet.activityListModel
                     delegate: ItemDelegate {
