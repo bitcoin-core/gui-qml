@@ -16,7 +16,7 @@ PageStack {
     Connections {
         target: walletController
         function onSelectedWalletChanged() {
-            root.StackView.view.pop()
+            stackView.pop()
         }
     }
 
