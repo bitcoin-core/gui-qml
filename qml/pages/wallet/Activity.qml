@@ -87,6 +87,7 @@ PageStack {
 
                 ListView {
                     id: listView
+                    anchors.fill: parent
                     clip: true
                     model: walletController.selectedWallet.activityListModel
                     delegate: ItemDelegate {
