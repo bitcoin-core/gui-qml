@@ -5,8 +5,10 @@
 #ifndef BITCOIN_QML_MODELS_CHAINMODEL_H
 #define BITCOIN_QML_MODELS_CHAINMODEL_H
 
+#ifndef Q_MOC_RUN
 #include <chainparams.h>
 #include <interfaces/chain.h>
+#endif
 
 #include <QObject>
 #include <QString>

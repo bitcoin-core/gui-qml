@@ -50,7 +50,9 @@ public:
     MOCK_METHOD(void, forceSetting, (const std::string&, const common::SettingsValue&), (override));
     MOCK_METHOD(void, resetSettings, (), (override));
     MOCK_METHOD(void, mapPort, (bool), (override));
-    MOCK_METHOD(bool, getProxy, (Network, Proxy&), (override));
+    MOCK_METHOD(std::optional<Proxy>, getProxy, (Network), (override));
+    MOCK_METHOD((std::unique_ptr<interfaces::Snapshot>), snapshot, (const fs::path&), (override));
+    MOCK_METHOD((std::unique_ptr<interfaces::Handler>), handleSnapshotLoadProgress, (SnapshotLoadProgressFn), (override));
     MOCK_METHOD(size_t, getNodeCount, (ConnectionDirection), (override));
     MOCK_METHOD(bool, getNodesStats, (NodesStats&), (override));
     MOCK_METHOD(bool, getBanned, (banmap_t&), (override));

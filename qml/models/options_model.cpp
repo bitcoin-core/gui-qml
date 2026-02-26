@@ -40,6 +40,32 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     : m_node{node}
     , m_onboarded{is_onboarded}
 {
+    auto SettingToInt = [](const common::SettingsValue& val, int64_t def) -> int64_t {
+        if (val.isNull()) return def;
+        const common::SettingsValue* v = &val;
+        if (v->isArray() && !v->empty()) {
+            v = &v->getValues()[0];
+        }
+        if (v->isNum()) return v->getInt<int64_t>();
+        if (v->isStr()) {
+            try { return std::stoll(v->get_str()); } catch (...) { return def; }
+        }
+        return def;
+    };
+    auto SettingToBool = [](const common::SettingsValue& val, bool def) -> bool {
+        if (val.isNull()) return def;
+        const common::SettingsValue* v = &val;
+        if (v->isArray() && !v->empty()) {
+            v = &v->getValues()[0];
+        }
+        if (v->isBool()) return v->get_bool();
+        if (v->isNum()) return v->getInt<int64_t>() != 0;
+        if (v->isStr()) {
+            std::string s = v->get_str();
+            return s == "1" || s == "true" || s == "yes";
+        }
+        return def;
+    };
     m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), DEFAULT_DB_CACHE >> 20);
 
     m_listen = SettingToBool(m_node.getPersistentSetting("listen"), DEFAULT_LISTEN);

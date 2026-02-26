@@ -396,7 +396,8 @@ void WalletQmlController::startWalletImport(const QString& path)
         auto wallet = m_node.walletLoader().restoreWallet(
             fs::PathFromString(normalized_path.toStdString()),
             restore_wallet_name.toStdString(),
-            warning_messages);
+            warning_messages,
+            true);
         const QString warnings = JoinWarnings(warning_messages);
 
         if (!wallet) {
