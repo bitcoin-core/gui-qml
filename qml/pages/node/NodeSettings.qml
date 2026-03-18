@@ -218,6 +218,23 @@ PageStack {
                         root.push(about_page)
                     }
                 }
+                Separator {
+                    Layout.fillWidth: true
+                    visible: AppMode.isDesktop
+                }
+                Setting {
+                    id: gotoWindowBehavior
+                    objectName: "settingsWindowBehavior"
+                    visible: AppMode.isDesktop
+                    Layout.fillWidth: true
+                    header: qsTr("Window Behavior")
+                    actionItem: CaretRightIcon {
+                        color: gotoWindowBehavior.stateColor
+                    }
+                    onClicked: {
+                        root.push(window_behavior_page)
+                    }
+                }
                 Item {
                     Layout.fillHeight: true
                 }
@@ -339,6 +356,12 @@ PageStack {
         WalletPasswordSettings {
             onBack: root.pop()
             onSaved: root.pop()
+        }
+    }
+    Component {
+        id: window_behavior_page
+        SettingsWindowBehavior {
+            onBack: root.pop()
         }
     }
 }
