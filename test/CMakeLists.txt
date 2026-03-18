@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 
 # Tests for the QML/Qt6 app
 
-find_package(Qt 6.2 MODULE REQUIRED COMPONENTS Core Gui Test Qml Quick QuickTest)
+find_package(Qt 6.2 MODULE REQUIRED COMPONENTS Core Gui Test Qml Quick QuickTest Widgets)
 find_package(GTest REQUIRED)
 
 if(NOT TARGET GTest::gmock)
@@ -14,6 +14,8 @@ add_executable(bitcoinqml_unit_tests
   gmocktestfixture.h
   test_bitcoinaddress.cpp
   test_bitcoinamount.cpp
+  test_desktoptrayiconcontroller.cpp
+  test_desktopwindowbehaviormodel.cpp
   test_peerlistmodel.cpp
   test_peerstatsutil.cpp
   test_walletqmlmodel.cpp
@@ -58,6 +60,7 @@ target_link_libraries(bitcoinqml_unit_tests
     Qt6::Gui
     Qt6::Quick
     Qt6::Test
+    Qt6::Widgets
 )
 
 add_test(NAME bitcoinqml_unit_tests COMMAND bitcoinqml_unit_tests -platform offscreen)

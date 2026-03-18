@@ -2,7 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <QGuiApplication>
+#include <QApplication>
 
 #include <chainparams.h>
 #include <test/gmocktestfixture.h>
@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
 {
     testing::InitGoogleMock(&argc, argv);
     testing::UnitTest::GetInstance()->listeners().Append(new QtestGmockListener());
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     SelectParams(ChainType::REGTEST);
 
     int status = 0;
