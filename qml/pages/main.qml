@@ -32,6 +32,83 @@ ApplicationWindow {
         ColorAnimation { duration: 150 }
     }
 
+    // Tracks the previous visibility state to distinguish a user-initiated minimize
+    // (Windowed → Minimized) from a WM restore transition (Hidden → Minimized).
+    // The latter occurs when showNormal() calls setVisible(true) before
+    // setWindowState(NoState); without this guard the onVisibilityChanged handler
+    // would immediately re-hide the window, making tray-icon restore a no-op.
+    property int m_prevVisibility: Window.AutomaticVisibility
+
+    onClosing: (close) => {
+        close.accepted = false
+        if (desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
+            hide()
+        } else {
+            nodeModel.requestShutdown()
+        }
+    }
+
+    onVisibilityChanged: function(visibility) {
+        const prev = m_prevVisibility
+        m_prevVisibility = visibility
+        if (visibility === Window.Minimized &&
+                prev !== Window.Hidden &&
+                desktopWindowBehaviorModel.shouldHideToTrayOnMinimize()) {
+            hide()
+        }
+    }
+
+    Connections {
+        target: desktopWindowBehaviorModel
+        function onShowTrayIconChanged(show) {
+            desktopTrayIconController.visible = AppMode.isDesktop && show
+        }
+    }
+
+    // Keeps the tray icon in sync with the app theme on Linux/Windows.
+    // On macOS, updateIcon() uses setIsMask(true) so isDark has no effect.
+    Binding {
+        target: desktopTrayIconController
+        property: "isDark"
+        value: Theme.dark
+    }
+
+    Connections {
+        target: desktopTrayIconController
+        function onRestoreRequested() {
+            appWindow.showNormal()
+            appWindow.raise()
+            appWindow.requestActivate()
+        }
+        function onQuitRequested() {
+            nodeModel.requestShutdown()
+        }
+        function onContextMenuRequested() {
+            trayContextMenu.popup()
+        }
+    }
+
+    Menu {
+        id: trayContextMenu
+        MenuItem {
+            text: appWindow.visibility !== Window.Hidden ? qsTr("&Hide") : qsTr("S&how")
+            onTriggered: {
+                if (appWindow.visibility !== Window.Hidden) {
+                    appWindow.hide()
+                } else {
+                    appWindow.showNormal()
+                    appWindow.raise()
+                    appWindow.requestActivate()
+                }
+            }
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("&Quit")
+            onTriggered: nodeModel.requestShutdown()
+        }
+    }
+
     PageStack {
         id: main
         objectName: "mainPageStack"
