@@ -23,8 +23,11 @@ AbstractButton {
     property color hoverStateColor: Theme.color.orangeLight1
     property color activeStateColor: Theme.color.orange
     property color disabledStateColor: Theme.color.neutral4
+    property color stateDescriptionColor
+    property bool disabled: false
     hoverEnabled: AppMode.isDesktop
     state: "FILLED"
+    onDisabledChanged: state = disabled ? "DISABLED" : "FILLED"
 
     states: [
         State {
@@ -33,15 +36,16 @@ AbstractButton {
                 target: root
                 enabled: true
                 stateColor: root.filledStateColor
+                stateDescriptionColor: Theme.color.neutral8
             }
         },
         State {
             name: "HOVER"
-            PropertyChanges { target: root; stateColor: root.hoverStateColor }
+            PropertyChanges { target: root; stateColor: root.hoverStateColor; stateDescriptionColor: Theme.color.neutral8 }
         },
         State {
             name: "ACTIVE"
-            PropertyChanges { target: root; stateColor: root.activeStateColor }
+            PropertyChanges { target: root; stateColor: root.activeStateColor; stateDescriptionColor: Theme.color.neutral8 }
         },
         State {
             name: "DISABLED"
@@ -49,6 +53,7 @@ AbstractButton {
                 target: root
                 enabled: false
                 stateColor: root.disabledStateColor
+                stateDescriptionColor: Theme.dark ? Theme.color.neutral4 : Theme.color.neutral6
             }
         }
     ]
@@ -74,14 +79,16 @@ AbstractButton {
             if (root.state !== "DISABLED") root.state = "FILLED"
         }
         onPressed: {
-            root.state = "ACTIVE"
+            if (!root.disabled) root.state = "ACTIVE"
         }
         onReleased: {
-            if (mouseArea.containsMouse) {
-                root.state = "HOVER"
-                root.clicked()
-            } else {
-                root.state = "FILLED"
+            if (!root.disabled) {
+                if (mouseArea.containsMouse) {
+                    root.state = "HOVER"
+                    root.clicked()
+                } else {
+                    root.state = "FILLED"
+                }
             }
         }
     }
@@ -95,6 +102,7 @@ AbstractButton {
             header: root.header
             headerSize: 18
             headerColor: root.stateColor
+            descriptionColor: root.stateDescriptionColor
             description: root.description
             descriptionSize: root.descriptionSize
             descriptionColor: root.descriptionColor
