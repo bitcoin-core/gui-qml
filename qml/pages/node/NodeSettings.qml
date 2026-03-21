@@ -204,6 +204,19 @@ PageStack {
                 }
                 Separator { Layout.fillWidth: true }
                 Setting {
+                    id: gotoConsole
+                    objectName: "settingsConsole"
+                    Layout.fillWidth: true
+                    header: qsTr("Console")
+                    actionItem: CaretRightIcon {
+                        color: gotoConsole.stateColor
+                    }
+                    onClicked: {
+                        root.push(console_page)
+                    }
+                }
+                Separator { Layout.fillWidth: true }
+                Setting {
                     id: gotoAbout
                     objectName: "gotoAboutSetting"
                     Layout.fillWidth: true
@@ -315,6 +328,12 @@ PageStack {
         WalletPasswordSettings {
             onBack: root.pop()
             onSaved: root.pop()
+        }
+    }
+    Component {
+        id: console_page
+        CommandConsole {
+            onBack: root.pop()
         }
     }
 }
