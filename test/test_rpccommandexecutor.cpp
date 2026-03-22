@@ -26,7 +26,7 @@ private Q_SLOTS:
     void parseQuotedArguments();
     void parseSubscriptSyntax();
     void parseUnbalancedQuoteFails();
-    void parseUnbalancedParenFails();
+    void parseImplicitlyClosedParenSucceeds();
     void sensitiveCmdWalletPassphrase();
     void sensitiveCmdNestedWalletPassphrase();
     void sensitiveCmdSignMessage();
@@ -75,7 +75,7 @@ void RpcCommandExecutorTests::parseUnbalancedQuoteFails()
     QVERIFY(!RpcCommandExecutor::RPCParseCommandLine(nullptr, result, "getblockhash \"0", false));
 }
 
-void RpcCommandExecutorTests::parseUnbalancedParenFails()
+void RpcCommandExecutorTests::parseImplicitlyClosedParenSucceeds()
 {
     std::string result;
     // An unbalanced open paren is implicitly closed by the trailing newline the

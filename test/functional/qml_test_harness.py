@@ -132,7 +132,6 @@ class QmlTestHarness:
             f"-datadir={self.datadir}",
             f"-test-automation={self.socket_path}",
         ] + (["-resetguisettings"] if self.reset_settings else []) + [
-            "-disablewallet",
             "-logtimemicros",
             "-debug",
             "-debugexclude=libevent",
