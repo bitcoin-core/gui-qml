@@ -17,22 +17,6 @@
 
 static constexpr int HISTORY_MAX = 50;
 
-// The help text returned for the special "help-console" built-in command.
-static const QString HELP_CONSOLE_TEXT =
-    "\n"
-    "This console accepts RPC commands using the standard syntax.\n"
-    "   example:    getblockhash 0\n\n"
-    "This console can also accept RPC commands using the parenthesized syntax.\n"
-    "   example:    getblockhash(0)\n\n"
-    "Commands may be nested when specified with the parenthesized syntax.\n"
-    "   example:    getblock(getblockhash(0) 1)\n\n"
-    "A space or a comma can be used to delimit arguments for either syntax.\n"
-    "   example:    getblockhash 0\n"
-    "               getblockhash,0\n\n"
-    "Named results can be queried with a non-quoted key string in brackets.\n"
-    "   example:    getblock(getblockhash(0) 1)[tx]\n\n"
-    "Results without keys can be queried with an integer in brackets.\n"
-    "   example:    getblock(getblockhash(0),1)[tx][0]\n\n";
 
 /**
  * Worker object that lives on a background QThread and executes RPC commands
@@ -54,14 +38,27 @@ public Q_SLOTS:
 
             if (executableCommand == "help-console\n") {
                 Q_EMIT resultReady(time, RpcConsoleModel::CMD_REPLY,
-                                   HELP_CONSOLE_TEXT.toHtmlEscaped());
+                                   tr("\n"
+                                      "This console accepts RPC commands using the standard syntax.\n"
+                                      "   example:    getblockhash 0\n\n"
+                                      "This console can also accept RPC commands using the parenthesized syntax.\n"
+                                      "   example:    getblockhash(0)\n\n"
+                                      "Commands may be nested when specified with the parenthesized syntax.\n"
+                                      "   example:    getblock(getblockhash(0) 1)\n\n"
+                                      "A space or a comma can be used to delimit arguments for either syntax.\n"
+                                      "   example:    getblockhash 0\n"
+                                      "               getblockhash,0\n\n"
+                                      "Named results can be queried with a non-quoted key string in brackets.\n"
+                                      "   example:    getblock(getblockhash(0) 1)[tx]\n\n"
+                                      "Results without keys can be queried with an integer in brackets.\n"
+                                      "   example:    getblock(getblockhash(0),1)[tx][0]\n\n").toHtmlEscaped());
                 return;
             }
 
             std::string result;
             if (!RpcCommandExecutor::RPCExecuteCommandLine(m_node, result, executableCommand)) {
                 Q_EMIT resultReady(time, RpcConsoleModel::CMD_ERROR,
-                                   QString("Parse error: unbalanced ' or \""));
+                                   tr("Parse error: unbalanced ' or \""));
                 return;
             }
             Q_EMIT resultReady(time, RpcConsoleModel::CMD_REPLY,
@@ -79,7 +76,7 @@ public Q_SLOTS:
             }
         } catch (const std::exception& e) {
             Q_EMIT resultReady(time, RpcConsoleModel::CMD_ERROR,
-                               QString("Error: %1").arg(QString::fromStdString(e.what())).toHtmlEscaped());
+                               tr("Error: %1").arg(QString::fromStdString(e.what())).toHtmlEscaped());
         }
     }
 
@@ -131,12 +128,12 @@ void RpcConsoleModel::submitCommand(const QString& command)
         if (!RpcCommandExecutor::RPCParseCommandLine(nullptr, dummy, command.toStdString() + "\n",
                                                      false, &filtered)) {
             Q_EMIT commandResultReceived(time, CMD_ERROR,
-                                         QString("Parse error: unbalanced ' or \""));
+                                         tr("Parse error: unbalanced ' or \""));
             return;
         }
     } catch (const std::runtime_error& e) {
         Q_EMIT commandResultReceived(time, CMD_ERROR,
-                                     QString("Error: %1").arg(
+                                     tr("Error: %1").arg(
                                          QString::fromStdString(e.what())).toHtmlEscaped());
         return;
     }
