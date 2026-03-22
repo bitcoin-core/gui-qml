@@ -82,12 +82,9 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
     auto close_out_params = [&]() {
         if (nDepthInsideSensitive) {
             if (!--nDepthInsideSensitive) {
-                // filter_begin_pos must be non-zero whenever we are inside a
-                // sensitive command scope; guard defensively instead of asserting.
-                if (filter_begin_pos) {
-                    filter_ranges.emplace_back(filter_begin_pos, chpos);
-                    filter_begin_pos = 0;
-                }
+                assert(filter_begin_pos);
+                filter_ranges.emplace_back(filter_begin_pos, chpos);
+                filter_begin_pos = 0;
             }
         }
         stack.pop_back();
