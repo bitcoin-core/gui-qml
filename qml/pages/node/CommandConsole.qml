@@ -118,7 +118,7 @@ Page {
                         Layout.alignment: Qt.AlignTop
                     }
 
-                    Text {
+                    TextEdit {
                         text: content
                         font.family: "monospace"
                         font.pixelSize: 12
@@ -127,6 +127,8 @@ Page {
                         Layout.alignment: Qt.AlignTop
                         wrapMode: Text.WrapAnywhere
                         textFormat: Text.RichText
+                        readOnly: true
+                        selectByMouse: true
                     }
                 }
             }
