@@ -12,6 +12,7 @@
 // therefore sufficient.
 
 #include <QtTest/QtTest>
+#include <QSignalSpy>
 
 #include <qml/models/rpcconsolemodel.h>
 
@@ -146,6 +147,18 @@ private:
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+// MockNode subclass that returns a large result from executeRpc, used to test
+// the output-truncation logic in RpcConsoleWorker::execute().
+class LargeResultNode : public MockNode
+{
+public:
+    UniValue executeRpc(const std::string&, const UniValue&, const std::string&) override
+    {
+        // Return a 100,000-character string — well above the 50,000-char cap.
+        return UniValue(std::string(100'000, 'x'));
+    }
+};
+
 class RpcConsoleModelTests : public QObject
 {
     Q_OBJECT
@@ -156,6 +169,7 @@ private Q_SLOTS:
     void historyDeduplicatesConsecutiveDuplicates();
     void historyTruncatesAtMax();
     void resetHistoryNavigationClearsState();
+    void outputTruncatedWhenResultTooLong();
 };
 
 void RpcConsoleModelTests::historyNavigationOldestToNewest()
@@ -252,6 +266,35 @@ void RpcConsoleModelTests::resetHistoryNavigationClearsState()
     // Reset — next browseHistory should restart from the top
     model.resetHistoryNavigation();
     QCOMPARE(model.browseHistory(1, ""), QString("help"));
+}
+
+void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
+{
+    LargeResultNode mock;
+    RpcConsoleModel model{mock};
+
+    QSignalSpy spy{&model, &RpcConsoleModel::commandResultReceived};
+
+    // submitCommand emits CMD_REQUEST synchronously, then dispatches the
+    // execute() slot to the worker thread via QueuedConnection.
+    model.submitCommand("getblockcount");
+    QCOMPARE(spy.count(), 1); // CMD_REQUEST arrived synchronously
+
+    // Process events until the worker thread emits its CMD_REPLY back to the
+    // main thread (or until the 5-second safety timeout expires).
+    QVERIFY(spy.wait(5000));
+    QCOMPARE(spy.count(), 2);
+
+    QList<QVariant> reply = spy.at(1);
+    QCOMPARE(reply.at(1).toInt(), static_cast<int>(RpcConsoleModel::CMD_REPLY));
+    QString escaped = reply.at(2).toString();
+
+    // Result must be truncated well below 100,000 characters.
+    QVERIFY2(escaped.size() < 100'000,
+             qPrintable(QString("escaped size was %1").arg(escaped.size())));
+    // The truncation notice must appear in the output.
+    QVERIFY2(escaped.contains("truncated"),
+             "Expected truncation notice in output");
 }
 
 QTEST_MAIN(RpcConsoleModelTests)

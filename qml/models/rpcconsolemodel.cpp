@@ -64,8 +64,17 @@ public Q_SLOTS:
                                    tr("Parse error: unbalanced ' or \""));
                 return;
             }
-            Q_EMIT resultReady(time, RpcConsoleModel::CMD_REPLY,
-                               QString::fromStdString(result).toHtmlEscaped());
+            static constexpr int MAX_RESULT_CHARS = 50'000;
+            QString resultStr = QString::fromStdString(result);
+            const bool truncated = resultStr.size() > MAX_RESULT_CHARS;
+            if (truncated) resultStr = resultStr.left(MAX_RESULT_CHARS);
+            QString escaped = resultStr.toHtmlEscaped();
+            if (truncated) {
+                escaped += "\n" + tr("[Output truncated at %1 characters. "
+                                      "Use bitcoin-cli for the full result.]")
+                                      .arg(MAX_RESULT_CHARS);
+            }
+            Q_EMIT resultReady(time, RpcConsoleModel::CMD_REPLY, escaped);
         } catch (UniValue& objError) {
             try {
                 int code = objError.find_value("code").getInt<int>();
