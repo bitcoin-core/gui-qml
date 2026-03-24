@@ -47,11 +47,24 @@ Page {
             headerSize: 18
             header: qsTr("Console")
         }
+        TapHandler {
+            grabPermissions: PointerHandler.TakeOverForbidden
+            onTapped: inputField.focus = false
+        }
     }
 
-    // Output area
-    ScrollView {
-        id: outputScroll
+    // Measure the timestamp column width once for all output delegates.
+    TextMetrics {
+        id: timestampMetrics
+        font.family: "monospace"
+        font.pixelSize: 12
+        text: "[00:00:00]"
+    }
+
+    // Output area — ListView virtualizes delegates so only visible rows are
+    // instantiated, preventing layout churn during long console sessions.
+    ListView {
+        id: outputList
         objectName: "consoleOutputArea"
         anchors {
             top: parent.top
@@ -321,11 +334,13 @@ Page {
                 }
             }
 
-            NavButton {
+            ContinueButton {
                 id: submitButton
                 objectName: "consoleSubmitButton"
                 text: qsTr("Run")
-                enabled: !rpcConsoleModel.executing
+                leftPadding: 16
+                rightPadding: 16
+                enabled: !rpcConsoleModel.executing && inputField.text.trim().length > 0
                 onClicked: submitCommand()
             }
         }
@@ -354,6 +369,20 @@ Page {
             autocompletePopup.open()
         } else {
             autocompletePopup.close()
+        }
+    }
+
+    // Unfocus inputField when the user taps anywhere outside it.
+    // TakeOverForbidden gives a passive grab on every tap in the page —
+    // interactive children (TextField, Button, TextEdit, Flickable) keep their
+    // exclusive grabs and work normally; we just observe and react.
+    TapHandler {
+        grabPermissions: PointerHandler.TakeOverForbidden
+        onTapped: {
+            var pos = inputField.mapFromItem(root, point.position.x, point.position.y)
+            if (!inputField.contains(pos)) {
+                inputField.focus = false
+            }
         }
     }
 
