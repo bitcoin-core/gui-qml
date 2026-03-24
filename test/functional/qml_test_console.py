@@ -68,21 +68,24 @@ def navigate_to_console(gui):
 # ── Test cases ────────────────────────────────────────────────────────────────
 
 def test_execute_getblockcount(gui):
-    """Execute getblockcount and verify output rows appear."""
+    """Execute getblockcount and verify a request + reply pair appears (no error row)."""
     print("\n── test_execute_getblockcount ──────────────────────────────────")
 
     count_before = gui.get_property("commandConsole", "outputCount")
     gui.set_text("consoleInput", "getblockcount")
     gui.click("consoleSubmitButton")
 
-    # Wait for the submit button to become enabled again (execution complete).
-    gui.wait_for_property("consoleSubmitButton", "enabled", True, timeout_ms=10000)
+    # Wait for execution to complete.
+    gui.wait_for_property("commandConsole", "executing", False, timeout_ms=10000)
 
     count_after = gui.get_property("commandConsole", "outputCount")
-    assert count_after > count_before, (
-        f"Expected output rows after getblockcount (before={count_before}, after={count_after})"
+    # Expect exactly 2 new rows: one CMD_REQUEST (command echo) and one
+    # CMD_REPLY (the numeric block count).  An error would add a third row.
+    assert count_after == count_before + 2, (
+        f"Expected exactly 2 new output rows after getblockcount "
+        f"(before={count_before}, after={count_after})"
     )
-    print("  PASSED: getblockcount produced output without hanging the UI")
+    print("  PASSED: getblockcount produced a request+reply pair without hanging the UI")
 
 
 def test_execute_help(gui):
@@ -93,7 +96,7 @@ def test_execute_help(gui):
     gui.set_text("consoleInput", "help")
     gui.click("consoleSubmitButton")
 
-    gui.wait_for_property("consoleSubmitButton", "enabled", True, timeout_ms=10000)
+    gui.wait_for_property("commandConsole", "executing", False, timeout_ms=10000)
 
     count_after = gui.get_property("commandConsole", "outputCount")
     assert count_after > count_before, (
@@ -110,8 +113,8 @@ def test_execute_invalid_command(gui):
     gui.set_text("consoleInput", "thiscommanddoesnotexist")
     gui.click("consoleSubmitButton")
 
-    # The submit button should re-enable after the error reply is received.
-    gui.wait_for_property("consoleSubmitButton", "enabled", True, timeout_ms=10000)
+    # Wait for execution to complete (button stays disabled since input was cleared).
+    gui.wait_for_property("commandConsole", "executing", False, timeout_ms=10000)
 
     count_after = gui.get_property("commandConsole", "outputCount")
     assert count_after > count_before, (

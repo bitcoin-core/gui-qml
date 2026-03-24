@@ -24,9 +24,16 @@ Page {
     // Exposed for E2E output-content verification.
     property int outputCount: outputModel.count
 
+    // Exposed for E2E execution-complete detection.
+    property bool executing: rpcConsoleModel.executing
+
     // Guard flag: true while Up/Down navigation is setting inputField.text
     // programmatically, so onTextChanged does not reset the history cursor.
-    property bool _navigatingHistory: false
+    // Kept in a QtObject to avoid leaking this internal flag into the public API.
+    QtObject {
+        id: internal
+        property bool navigatingHistory: false
+    }
 
     header: NavigationBar2 {
         leftItem: NavButton {
@@ -275,18 +282,18 @@ Page {
 
                 // History navigation with Up/Down arrows.
                 Keys.onUpPressed: {
-                    root._navigatingHistory = true
+                    internal.navigatingHistory = true
                     var result = rpcConsoleModel.browseHistory(1, inputField.text)
                     inputField.text = result
                     inputField.cursorPosition = result.length
-                    root._navigatingHistory = false
+                    internal.navigatingHistory = false
                 }
                 Keys.onDownPressed: {
-                    root._navigatingHistory = true
+                    internal.navigatingHistory = true
                     var result = rpcConsoleModel.browseHistory(-1, inputField.text)
                     inputField.text = result
                     inputField.cursorPosition = result.length
-                    root._navigatingHistory = false
+                    internal.navigatingHistory = false
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
@@ -301,7 +308,7 @@ Page {
                 }
 
                 onTextChanged: {
-                    if (!root._navigatingHistory) {
+                    if (!internal.navigatingHistory) {
                         rpcConsoleModel.resetHistoryNavigation()
                     }
                     updateFilteredCommands()
