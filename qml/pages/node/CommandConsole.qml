@@ -53,23 +53,26 @@ Page {
             bottom: inputArea.top
             bottomMargin: 4
         }
-        contentWidth: availableWidth
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-        ScrollBar.vertical.policy: ScrollBar.AsNeeded
+        clip: true
+        spacing: 2
+        // 16 px left/right padding mirrors the old Column { padding: 16 } layout.
+        leftMargin: 16
+        rightMargin: 16
+        topMargin: 16
+        bottomMargin: 0
 
-        TapHandler {
-            onTapped: inputField.focus = false
-        }
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        Column {
-            id: outputColumn
-            width: outputScroll.availableWidth
-            padding: 16
-            spacing: 2
+        // Static header: hint + security warning — scrolls with content so it
+        // naturally disappears as the output grows.
+        header: Column {
+            // Width = ListView width minus its left+right margins (16+16 = 32).
+            width: outputList.width - 32
+            spacing: 4
 
             // Welcome / hint text
             Text {
-                width: parent.width - 32
+                width: parent.width
                 text: qsTr("Use ↑↓ arrows to navigate history. Type <b>help</b> for an overview of available commands. Type <b>help-console</b> for console syntax help.")
                 font.family: "Inter"
                 font.pixelSize: 12
@@ -81,7 +84,7 @@ Page {
 
             // Security warning
             Text {
-                width: parent.width - 32
+                width: parent.width
                 text: qsTr("<b>WARNING:</b> Scammers and thieves will request that you type commands here to steal your coins. Do not type any commands unless you fully understand them.")
                 font.family: "Inter"
                 font.pixelSize: 12
@@ -90,49 +93,47 @@ Page {
                 textFormat: Text.RichText
                 bottomPadding: 8
             }
+        }
 
-            // Measure the timestamp column width once for all delegates.
-            TextMetrics {
-                id: timestampMetrics
+        model: ListModel { id: outputModel }
+
+        delegate: RowLayout {
+            required property string timestamp
+            required property string content
+            // Same effective content width as old outputColumn.width - 32.
+            width: outputList.width - 32
+            spacing: 16
+
+            Text {
+                text: timestamp
                 font.family: "monospace"
                 font.pixelSize: 12
-                text: "[00:00:00]"
+                color: Theme.color.neutral5
+                Layout.preferredWidth: timestampMetrics.width
+                Layout.alignment: Qt.AlignTop
             }
 
-            // Dynamic output lines
-            Repeater {
-                id: outputRepeater
-                model: ListModel { id: outputModel }
-                delegate: RowLayout {
-                    required property string timestamp
-                    required property string content
-                    width: outputColumn.width - 32
-                    spacing: 16
-
-                    Text {
-                        text: timestamp
-                        font.family: "monospace"
-                        font.pixelSize: 12
-                        color: Theme.color.neutral5
-                        Layout.preferredWidth: timestampMetrics.width
-                        Layout.alignment: Qt.AlignTop
-                    }
-
-                    TextEdit {
-                        text: content
-                        font.family: "monospace"
-                        font.pixelSize: 12
-                        color: Theme.color.neutral9
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignTop
-                        wrapMode: Text.WrapAnywhere
-                        textFormat: Text.RichText
-                        readOnly: true
-                        selectByMouse: true
-                    }
-                }
+            TextEdit {
+                text: content
+                font.family: "monospace"
+                font.pixelSize: 12
+                // color applies to unstyled text only; styled content is
+                // colored via <span style='color:...'> HTML from onCommandResultReceived.
+                color: Theme.color.neutral9
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+                wrapMode: Text.WrapAnywhere
+                textFormat: Text.RichText
+                readOnly: true
+                selectByMouse: true
+                activeFocusOnPress: true
             }
         }
+
+        // Scroll to bottom after each new row is appended. Qt.callLater defers
+        // the call until after the layout pass so positionViewAtEnd() sees the
+        // updated content height.
+        onCountChanged: Qt.callLater(positionViewAtEnd)
     }
 
     // Format a CMD_REPLY result: convert \n to <br>, preserve indentation
@@ -172,16 +173,6 @@ Page {
         }
         function onClearRequested() {
             outputModel.clear()
-        }
-    }
-
-    // Scroll to bottom whenever the content height increases (fires after layout
-    // is complete, which is more reliable than Qt.callLater for large outputs).
-    Connections {
-        target: outputScroll.contentItem
-        function onContentHeightChanged() {
-            outputScroll.contentItem.contentY = Math.max(0,
-                outputScroll.contentItem.contentHeight - outputScroll.contentItem.height)
         }
     }
 
