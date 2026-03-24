@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
@@ -23,6 +23,10 @@
 namespace {
 
 // Commands whose arguments must be redacted in history / display output.
+// Covers passphrase and signing-key inputs. Note: importprivkey, dumpprivkey,
+// dumpwallet, and importwallet are intentionally omitted — their sensitive data
+// is a file path or key blob, not a passphrase, and redacting them obscures
+// useful history context without a meaningful security benefit.
 const QStringList HISTORY_FILTER = QStringList()
     << "signmessagewithprivkey"
     << "signrawtransactionwithkey"
@@ -82,6 +86,9 @@ bool RpcCommandExecutor::RPCParseCommandLine(interfaces::Node* node,
     auto close_out_params = [&]() {
         if (nDepthInsideSensitive) {
             if (!--nDepthInsideSensitive) {
+                // filter_begin_pos is set to chpos at the delimiter *after* the
+                // sensitive command name, which is always > 0 (at minimum the
+                // opening paren or space character follows the name).
                 assert(filter_begin_pos);
                 filter_ranges.emplace_back(filter_begin_pos, chpos);
                 filter_begin_pos = 0;
