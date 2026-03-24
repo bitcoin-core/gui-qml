@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,9 +34,12 @@ public Q_SLOTS:
     {
         QString time = QDateTime::currentDateTime().toString("hh:mm:ss");
         try {
+            // Append "\n" as the parser requires a line terminator to finalize
+            // the last token. submitCommand() passes the raw command without it;
+            // the worker appends it here.
             std::string executableCommand = command.toStdString() + "\n";
 
-            if (executableCommand == "help-console\n") {
+            if (command.trimmed().compare("help-console", Qt::CaseInsensitive) == 0) {
                 Q_EMIT resultReady(time, RpcConsoleModel::CMD_REPLY,
                                    tr("\n"
                                       "This console accepts RPC commands using the standard syntax.\n"
@@ -211,8 +214,11 @@ void RpcConsoleModel::onNodeInitialized()
 
 void RpcConsoleModel::onResultReady(const QString& time, int category, const QString& escapedHtml)
 {
-    setExecuting(false);
+    // Emit the result first so the output line appears before the submit button
+    // is re-enabled, avoiding a single-frame window where the user could submit
+    // again before seeing the reply.
     Q_EMIT commandResultReceived(time, category, escapedHtml);
+    setExecuting(false);
 }
 
 void RpcConsoleModel::setExecuting(bool executing)
