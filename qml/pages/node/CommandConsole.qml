@@ -156,6 +156,25 @@ Page {
         onCountChanged: Qt.callLater(positionViewAtEnd)
     }
 
+    // Unfocus inputField on any click in the output area. Placed outside the
+    // ListView so Flickable's childMouseEventFilter does not interfere.
+    // z:1 puts it above the ListView (z:0); mouse.accepted = false passes the
+    // press through to the ListView so scrolling still works.
+    MouseArea {
+        z: 1
+        anchors {
+            top: parent.top
+            left: parent.left
+            right: parent.right
+            bottom: inputArea.top
+            bottomMargin: 4
+        }
+        onPressed: {
+            inputField.focus = false
+            mouse.accepted = false
+        }
+    }
+
     // Format a CMD_REPLY result: convert \n to <br>, preserve indentation
     // with &nbsp;, and colorize JSON object keys.
     function formatResult(html) {
