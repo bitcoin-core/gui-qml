@@ -4,6 +4,9 @@
 
 #include <qml/test/testbridge.h>
 
+#include <QClipboard>
+#include <QCoreApplication>
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -404,6 +407,8 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
         return cmdListObjects();
     } else if (cmd == QLatin1String("close_window")) {
         return cmdCloseWindow();
+    } else if (cmd == QLatin1String("set_clipboard_text")) {
+        return cmdSetClipboardText(obj.value(QStringLiteral("text")).toString());
     }
 
     return errorResponse(QStringLiteral("Unknown command: %1").arg(cmd));
@@ -875,6 +880,14 @@ QByteArray TestBridge::cmdCloseWindow()
     QCloseEvent close_event;
     QCoreApplication::sendEvent(window, &close_event);
 
+    QJsonObject resp;
+    resp[QStringLiteral("ok")] = true;
+    return QJsonDocument(resp).toJson(QJsonDocument::Compact);
+}
+
+QByteArray TestBridge::cmdSetClipboardText(const QString& text)
+{
+    QGuiApplication::clipboard()->setText(text);
     QJsonObject resp;
     resp[QStringLiteral("ok")] = true;
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);

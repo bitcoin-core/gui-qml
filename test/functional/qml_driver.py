@@ -190,6 +190,8 @@ class QmlDriver:
                 f"wait_for_page({page_name!r}) failed: {resp['error']}"
             )
 
+
+
     def list_objects(self):
         """Return a list of dicts with objectName and className for all
         named objects in the QML tree.  Useful for debugging."""
@@ -215,6 +217,27 @@ class QmlDriver:
                 f"save_screenshot({path!r}) failed: {resp['error']}"
             )
         return resp
+
+    def set_clipboard_text(self, text):
+        """Set the system clipboard to the given text string."""
+        resp = self._send({"cmd": "set_clipboard_text", "text": text})
+        if "error" in resp:
+            raise QmlDriverError(f"set_clipboard_text failed: {resp['error']}")
+
+    def simulate_drop(self, object_name, text=None, urls=None):
+        """Simulate a drag-drop onto a named QML DropArea.
+
+        Pass text= for a text/plain drop or urls= (list of URL strings) for a
+        text/uri-list drop (e.g. file:// URLs).
+        """
+        cmd = {"cmd": "simulate_drop", "objectName": object_name}
+        if urls is not None:
+            cmd["urls"] = urls
+        else:
+            cmd["text"] = text or ""
+        resp = self._send(cmd)
+        if "error" in resp:
+            raise QmlDriverError(f"simulate_drop({object_name!r}) failed: {resp['error']}")
 
     def settle(
         self,

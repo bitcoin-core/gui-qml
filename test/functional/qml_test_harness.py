@@ -12,6 +12,7 @@ import argparse
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,14 @@ from qml_driver import QmlDriver, QmlDriverError
 
 # How long to wait for the GUI process to start (seconds).
 GUI_STARTUP_TIMEOUT = 30
+
+
+def pick_unused_port():
+    """Return an available TCP port on 127.0.0.1."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
 
 
 def find_gui_binary():
@@ -46,7 +55,7 @@ def find_gui_binary():
     )
 
 
-def setup_datadir(tmpdir):
+def setup_datadir(tmpdir, rpc_port=None):
     """Create a minimal regtest data directory with bitcoin.conf."""
     datadir = os.path.join(tmpdir, "node0")
     os.makedirs(datadir, exist_ok=True)
@@ -54,6 +63,11 @@ def setup_datadir(tmpdir):
     with open(conf_path, "w", encoding="utf8") as f:
         f.write("regtest=1\n")
         f.write("[regtest]\n")
+        f.write("server=1\n")
+        if rpc_port is not None:
+            f.write(f"rpcport={rpc_port}\n")
+        f.write("rpcbind=127.0.0.1\n")
+        f.write("rpcallowip=127.0.0.1\n")
         f.write("discover=0\n")
         f.write("dnsseed=0\n")
         f.write("fixedseeds=0\n")
@@ -99,6 +113,7 @@ class QmlTestHarness:
             self.socket_path = socket_path
             self.tmpdir = None
             self.datadir = None
+            self.rpc_port = None
         else:
             self.gui_binary = find_gui_binary()
             if datadir is not None:
@@ -107,9 +122,11 @@ class QmlTestHarness:
                 self.datadir = datadir
                 self.socket_path = os.path.join(datadir, "test_bridge.sock")
                 self.config_home = os.path.join(os.path.dirname(datadir), "config")
+                self.rpc_port = None
             else:
                 self.tmpdir = tempfile.mkdtemp(prefix="qml_test_bridge_")
-                self.datadir = setup_datadir(self.tmpdir)
+                self.rpc_port = pick_unused_port()
+                self.datadir = setup_datadir(self.tmpdir, rpc_port=self.rpc_port)
                 self.socket_path = os.path.join(self.tmpdir, "test_bridge.sock")
                 self.config_home = os.path.join(self.tmpdir, "config")
 
@@ -154,6 +171,25 @@ class QmlTestHarness:
             self._dump_startup_failure_context()
             raise
         print("QmlDriver connected to test bridge.")
+
+    def process_output(self):
+        """Return captured stdout+stderr from the GUI process as a string."""
+        if not self.process:
+            return ""
+        stdout = (
+            self.process.stdout.read().decode("utf-8", errors="replace")
+            if self.process.stdout else ""
+        )
+        stderr = (
+            self.process.stderr.read().decode("utf-8", errors="replace")
+            if self.process.stderr else ""
+        )
+        parts = []
+        if stdout:
+            parts.append(f"stdout:\n{stdout}")
+        if stderr:
+            parts.append(f"stderr:\n{stderr}")
+        return "\n\n".join(parts)
 
     def stop(self, cleanup=True):
         """Shut down the GUI process (only if we launched it).
