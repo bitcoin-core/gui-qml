@@ -111,3 +111,4 @@ jobs:
           python3 test/functional/qml_test_wallet_migration.py
           python3 test/functional/qml_test_wallet_rbf.py
           python3 test/functional/qml_test_wallet_restore.py
+          python3 test/functional/qml_test_uri_import.py
