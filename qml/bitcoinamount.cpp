@@ -49,6 +49,7 @@ void BitcoinAmount::setSatoshi(qint64 new_amount)
         m_satoshi = new_amount;
         if (label_changes) Q_EMIT unitChanged();
         Q_EMIT amountChanged();
+        Q_EMIT displayChanged();
     }
 }
 
