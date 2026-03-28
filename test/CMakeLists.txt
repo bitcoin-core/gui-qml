@@ -13,6 +13,7 @@ add_executable(bitcoinqml_unit_tests
   test_unit_tests_main.cpp
   gmocktestfixture.h
   test_bitcoinaddress.cpp
+  test_bitcoinuri.cpp
   test_bitcoinamount.cpp
   test_peerlistmodel.cpp
   test_peerstatsutil.cpp
@@ -31,6 +32,7 @@ add_executable(bitcoinqml_unit_tests
   test_display_settings.cpp
   test_addresslistmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src/util/chaintype.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/bitcoinuri.cpp
 )
 
 target_compile_definitions(bitcoinqml_unit_tests
