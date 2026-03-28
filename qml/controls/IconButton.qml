@@ -11,7 +11,7 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
 
-    property color iconColor: Theme.color.orange
+    property color iconColor: Theme.color.neutral5
     property color hoverColor: Theme.color.orange
     property color activeColor: Theme.color.orange
     property int size: 35
@@ -22,10 +22,7 @@ Button {
     width: root.size
     padding: 0
 
-    MouseArea {
-        anchors.fill: parent
-        enabled: false
-        hoverEnabled: true
+    HoverHandler {
         cursorShape: Qt.PointingHandCursor
     }
 
@@ -47,6 +44,7 @@ Button {
         source: "image://images/ellipsis"
         size: root.size
         color: iconColor
+        hoverEnabled: false
 
         Behavior on color {
             ColorAnimation { duration: 150 }
@@ -57,10 +55,15 @@ Button {
         State {
             name: "CHECKED"; when: root.checked
             PropertyChanges { target: icon; color: activeColor }
+            PropertyChanges { target: bg; color: Theme.color.neutral2 }
+        },
+        State {
+            name: "PRESSED"; when: root.pressed
+            PropertyChanges { target: icon; color: activeColor }
+            PropertyChanges { target: bg; color: Theme.color.neutral2 }
         },
         State {
             name: "HOVER"; when: root.hovered
-            PropertyChanges { target: icon; color: hoverColor }
             PropertyChanges { target: bg; color: Theme.color.neutral2 }
         },
         State {
