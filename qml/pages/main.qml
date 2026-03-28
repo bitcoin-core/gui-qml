@@ -71,6 +71,12 @@ ApplicationWindow {
                 optionsModel.onboard()
                 nodeModel.startNodeInitializionThread()
                 if (AppMode.walletEnabled && AppMode.isDesktop) {
+                    // Start the node initialization before the wallet wizard is shown.
+                    // DesktopWallets is pushed behind the wizard (lazy-loaded by StackView),
+                    // so its Component.onCompleted does not fire until the wizard is dismissed.
+                    // Starting early here ensures the wallet loader is ready by the time
+                    // the user reaches the wallet creation step.
+                    nodeModel.startNodeInitializionThread()
                     main.push([
                         desktopWallets, {},
                         createWalletWizard, { "launchContext": CreateWalletWizard.Context.Onboarding }
