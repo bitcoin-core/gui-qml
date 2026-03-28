@@ -29,7 +29,7 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
 {
     const QString raw = uri_text.trimmed();
     if (raw.isEmpty()) {
-        return BuildError(Tr::tr("Enter a bitcoin: payment URI."));
+        return BuildError(Tr::tr("Enter a Bitcoin payment URI."));
     }
 
     if (raw.startsWith(QStringLiteral("bitcoin://"), Qt::CaseInsensitive)) {
@@ -40,7 +40,7 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
     // QUrl normalises the scheme to lowercase (RFC 3986 §3.1), so a plain
     // equality check is sufficient and correctly accepts BITCOIN:, Bitcoin:, etc.
     if (!uri.isValid() || uri.scheme() != QStringLiteral("bitcoin")) {
-        return BuildError(Tr::tr("URI cannot be parsed. Use a valid bitcoin: payment URI."));
+        return BuildError(Tr::tr("Not a valid Bitcoin payment URI."));
     }
 
     BitcoinUriParseResult result;
@@ -83,7 +83,7 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
             if (!value.trimmed().isEmpty()) {
                 const auto amount_sats = ParseMoney(value.toStdString());
                 if (!amount_sats.has_value()) {
-                    return BuildError(Tr::tr("URI cannot be parsed. Invalid bitcoin amount."));
+                    return BuildError(Tr::tr("Invalid Bitcoin amount."));
                 }
                 result.amount_sats = *amount_sats;
                 result.has_amount = true;
@@ -92,7 +92,7 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
         }
 
         if (required && !handled) {
-            return BuildError(Tr::tr("URI cannot be parsed. Unsupported required parameter: %1").arg(key));
+            return BuildError(Tr::tr("Unsupported required parameter: %1").arg(key));
         }
     }
 

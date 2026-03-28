@@ -110,7 +110,7 @@ void BitcoinUriTests::parse_rejects_invalid_amount()
 
     const BitcoinUriParseResult result = BitcoinUri::Parse(uri);
     QVERIFY(!result.success);
-    QVERIFY(result.error.contains(QStringLiteral("Invalid bitcoin amount")));
+    QVERIFY(result.error.contains(QStringLiteral("Invalid Bitcoin amount")));
 }
 
 void BitcoinUriTests::parse_rejects_unknown_required_parameter()
@@ -183,7 +183,7 @@ void BitcoinUriTests::parse_rejects_comma_in_amount()
     const QString uri = QStringLiteral("bitcoin:%1?amount=1,000").arg(TEST_ADDRESS);
     const BitcoinUriParseResult result = BitcoinUri::Parse(uri);
     QVERIFY(!result.success);
-    QVERIFY(result.error.contains(QStringLiteral("Invalid bitcoin amount")));
+    QVERIFY(result.error.contains(QStringLiteral("Invalid Bitcoin amount")));
 }
 
 void BitcoinUriTests::parse_duplicate_amount_last_wins()
@@ -204,7 +204,7 @@ void BitcoinUriTests::parse_rejects_invalid_duplicate_amount()
     const QString uri = QStringLiteral("bitcoin:%1?amount=1&amount=bad").arg(TEST_ADDRESS);
     const BitcoinUriParseResult result = BitcoinUri::Parse(uri);
     QVERIFY(!result.success);
-    QVERIFY(result.error.contains(QStringLiteral("Invalid bitcoin amount")));
+    QVERIFY(result.error.contains(QStringLiteral("Invalid Bitcoin amount")));
 }
 
 // ---------------------------------------------------------------------------
