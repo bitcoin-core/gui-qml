@@ -39,6 +39,7 @@ private:
     interfaces::Node& m_node;
     QObject m_context;
     QThread m_thread;
+    bool m_initialized{false};
 };
 
 #endif // BITCOIN_QML_INITEXECUTOR_H

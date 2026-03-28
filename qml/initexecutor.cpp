@@ -37,6 +37,9 @@ void QmlInitExecutor::handleRunawayException(const std::exception* e)
 
 void QmlInitExecutor::initialize()
 {
+    // Called only from the GUI thread; m_initialized requires no atomic protection.
+    if (m_initialized) return;
+    m_initialized = true;
     QMetaObject::invokeMethod(&m_context, [this] {
         try {
             util::ThreadRename("qml-init");
