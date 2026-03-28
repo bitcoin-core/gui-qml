@@ -7,6 +7,7 @@
 
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/addresslistmodel.h>
+#include <qml/models/bitcoinuri.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
 #include <qml/models/paymentrequest.h>
@@ -112,6 +113,8 @@ public:
     Q_INVOKABLE void clearSettingsError();
     Q_INVOKABLE void setDefaultReceiveAddressType(const QString& address_type);
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& address_type) const;
+    Q_INVOKABLE QVariantMap parseBitcoinUri(const QString& uri_text);
+    Q_INVOKABLE QVariantMap parseBitcoinUriFromFile(const QString& source_path);
     void removeWallet();
 
     std::set<interfaces::WalletTx> getWalletTxs() const;
