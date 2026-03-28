@@ -391,6 +391,11 @@ int QmlGuiMain(int argc, char* argv[])
     OptionsQmlModel options_model(*node, !need_onboarding.toBool());
     engine.rootContext()->setContextProperty("optionsModel", &options_model);
     engine.rootContext()->setContextProperty("needOnboarding", need_onboarding);
+#ifdef ENABLE_TEST_AUTOMATION
+    engine.rootContext()->setContextProperty("testAutomationEnabled", true);
+#else
+    engine.rootContext()->setContextProperty("testAutomationEnabled", false);
+#endif
 
     // -lang CLI flag overrides the persisted setting (bitcoin-qt compatibility).
     // Must be after gArgs.ParseParameters() and after setupChainQSettings() so
