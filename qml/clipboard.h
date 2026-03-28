@@ -13,8 +13,15 @@ class Clipboard : public QObject
 {
     Q_OBJECT
 public:
-    explicit Clipboard(QObject *parent = nullptr) : QObject(parent) {}
+    explicit Clipboard(QObject *parent = nullptr) : QObject(parent) {
+        connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+                this, &Clipboard::dataChanged);
+    }
 
+Q_SIGNALS:
+    void dataChanged();
+
+public:
     Q_INVOKABLE void setText(const QString &text) {
         QGuiApplication::clipboard()->setText(text);
     }
