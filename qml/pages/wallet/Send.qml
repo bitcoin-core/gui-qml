@@ -156,20 +156,16 @@ PageStack {
         Popup {
             id: sendUriImportPopup
             objectName: "sendUriImportPopup"
-            anchors.centerIn: Overlay.overlay
+            anchors.centerIn: parent
             width: Math.min(sendPage.width - 40, 420)
             modal: true
             padding: 20
 
-            background: Item {
-                anchors.fill: parent
-                Rectangle {
-                    color: Theme.color.neutral0
-                    border.color: Theme.color.neutral4
-                    radius: 5
-                    border.width: 1
-                    anchors.fill: parent
-                }
+            background: Rectangle {
+                color: Theme.color.background
+                border.color: Theme.color.neutral3
+                border.width: 1
+                radius: 8
             }
 
             contentItem: ColumnLayout {

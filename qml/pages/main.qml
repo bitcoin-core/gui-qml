@@ -20,6 +20,14 @@ ApplicationWindow {
     minimumHeight: 665
     color: Theme.color.background
     visible: true
+    Overlay.modal: Rectangle {
+        color: Qt.rgba(
+            Theme.color.neutral9.r,
+            Theme.color.neutral9.g,
+            Theme.color.neutral9.b,
+            0.15
+        )
+    }
 
     Settings {
         property alias x: appWindow.x
