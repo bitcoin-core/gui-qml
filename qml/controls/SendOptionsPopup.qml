@@ -45,10 +45,6 @@ OptionPopup {
             }
         }
 
-        Separator {
-            Layout.fillWidth: true
-        }
-
         EllipsisMenuToggleItem {
             id: coinControlToggle
             objectName: "sendOptionsCoinControlToggle"

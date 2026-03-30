@@ -10,6 +10,7 @@ import "../controls"
 
 Popup {
     id: root
+    padding: 0
 
     background: Item {
         anchors.fill: parent
