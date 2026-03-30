@@ -170,12 +170,11 @@ PageStack {
                 border.width: 1
                 radius: 8
             }
-
             contentItem: ColumnLayout {
                 spacing: 12
 
                 CoreText {
-                    text: qsTr("Open payment request")
+                    text: qsTr("Payment request")
                     font.pixelSize: 16
                     bold: true
                     color: Theme.color.neutral9
@@ -336,7 +335,7 @@ PageStack {
                             spacing: 12
 
                             CoreText {
-                                text: qsTr("You have a Bitcoin invoice in your clipboard.")
+                                text: qsTr("There's a payment request on your clipboard.")
                                 font.pixelSize: 14
                                 color: Theme.color.neutral9
                                 horizontalAlignment: Text.AlignLeft
@@ -357,13 +356,12 @@ PageStack {
                                 }
                             }
 
-                            OutlineButton {
+                            IconButton {
                                 objectName: "clipboardUriDismissButton"
-                                text: qsTr("Dismiss")
-                                bold: false
-                                fontSize: 14
-                                implicitHeight: 38
-                                Layout.preferredWidth: 90
+                                iconSource: "image://images/cross"
+                                iconColor: Theme.color.neutral9
+                                size: 28
+                                background: null
                                 onClicked: sendPage.showClipboardUriBanner = false
                             }
                         }
@@ -371,59 +369,83 @@ PageStack {
                 }
 
                 // Payment request message (from URI "message=" field)
-                RowLayout {
+                Rectangle {
                     Layout.fillWidth: true
                     visible: sendPage.paymentRequestMessage.length > 0
-                    spacing: 8
+                    color: Theme.color.neutral1
+                    radius: 5
+                    implicitHeight: paymentRequestMessageContent.implicitHeight + 20
 
-                    Icon {
-                        source: "image://images/check"
-                        size: 18
-                        color: Theme.color.neutral7
-                    }
+                    RowLayout {
+                        id: paymentRequestMessageContent
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 10
+                        spacing: 8
 
-                    CoreText {
-                        objectName: "sendPaymentRequestMessageText"
-                        text: sendPage.paymentRequestMessage
-                        font.pixelSize: 14
-                        color: Theme.color.neutral7
-                        horizontalAlignment: Text.AlignLeft
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
+                        Icon {
+                            source: "image://images/check"
+                            size: 18
+                            color: Theme.color.neutral7
+                        }
+
+                        CoreText {
+                            objectName: "sendPaymentRequestMessageText"
+                            text: sendPage.paymentRequestMessage
+                            font.pixelSize: 14
+                            color: Theme.color.neutral7
+                            horizontalAlignment: Text.AlignLeft
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
                     }
                 }
 
                 // Payment request import status (success or error)
-                RowLayout {
+                Rectangle {
                     Layout.fillWidth: true
                     visible: sendPage.paymentRequestStatus.length > 0
-                    spacing: 8
+                    color: Theme.color.neutral1
+                    radius: 5
+                    implicitHeight: paymentRequestStatusContent.implicitHeight + 20
 
-                    Icon {
-                        source: sendPage.paymentRequestIsError
-                            ? "image://images/alert-filled"
-                            : "image://images/circle-green-check"
-                        size: 18
-                        color: sendPage.paymentRequestIsError ? Theme.color.red : Theme.color.green
-                    }
+                    RowLayout {
+                        id: paymentRequestStatusContent
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.margins: 10
+                        spacing: 8
 
-                    CoreText {
-                        objectName: "sendPaymentRequestStatusText"
-                        text: sendPage.paymentRequestStatus
-                        font.pixelSize: 14
-                        color: sendPage.paymentRequestIsError ? Theme.color.red : Theme.color.neutral7
-                        horizontalAlignment: Text.AlignLeft
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                    }
+                        Icon {
+                            source: sendPage.paymentRequestIsError
+                                ? "image://images/alert-filled"
+                                : "image://images/circle-green-check"
+                            size: 18
+                            color: sendPage.paymentRequestIsError ? Theme.color.red : Theme.color.green
+                        }
 
-                    IconButton {
-                        objectName: "clearPaymentRequestStatusButton"
-                        size: 22
-                        iconSource: "image://images/cross"
-                        onClicked: {
-                            sendPage.paymentRequestStatus = ""
-                            sendPage.paymentRequestIsError = false
+                        CoreText {
+                            objectName: "sendPaymentRequestStatusText"
+                            text: sendPage.paymentRequestStatus
+                            font.pixelSize: 14
+                            color: sendPage.paymentRequestIsError ? Theme.color.red : Theme.color.neutral7
+                            horizontalAlignment: Text.AlignLeft
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                        }
+
+                        IconButton {
+                            objectName: "clearPaymentRequestStatusButton"
+                            size: 28
+                            iconSource: "image://images/cross"
+                            iconColor: Theme.color.neutral9
+                            background: null
+                            onClicked: {
+                                sendPage.paymentRequestStatus = ""
+                                sendPage.paymentRequestIsError = false
+                            }
                         }
                     }
                 }
