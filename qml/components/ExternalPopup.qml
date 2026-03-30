@@ -15,6 +15,9 @@ Popup {
     modal: true
     padding: 0
     anchors.centerIn: parent
+    Overlay.modal: Rectangle {
+        color: Qt.rgba(0.25, 0.25, 0.25, 0.9)
+    }
 
     background: Rectangle {
         color: Theme.color.background

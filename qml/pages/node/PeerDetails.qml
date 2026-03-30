@@ -261,6 +261,9 @@ Page {
         id: banPopup
         anchors.centerIn: parent
         modal: true
+        Overlay.modal: Rectangle {
+            color: Qt.rgba(0.25, 0.25, 0.25, 0.9)
+        }
         padding: 20
         width: Math.min(root.width - 40, 350)
         background: Rectangle {

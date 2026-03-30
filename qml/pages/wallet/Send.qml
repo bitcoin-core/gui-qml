@@ -156,10 +156,13 @@ PageStack {
         Popup {
             id: sendUriImportPopup
             objectName: "sendUriImportPopup"
-            anchors.centerIn: parent
+            anchors.centerIn: Overlay.overlay
             width: Math.min(sendPage.width - 40, 420)
             modal: true
             padding: 20
+            Overlay.modal: Rectangle {
+                color: Qt.rgba(0.25, 0.25, 0.25, 0.9)
+            }
 
             background: Rectangle {
                 color: Theme.color.background
