@@ -552,6 +552,8 @@ PageStack {
                             iconSource: "image://images/cross"
                             iconColor: Theme.color.neutral9
                             background: null
+                            Accessible.name: qsTr("Clear status")
+                            Accessible.role: Accessible.Button
                             onClicked: {
                                 sendPage.paymentRequestStatus = ""
                                 sendPage.paymentRequestIsError = false
