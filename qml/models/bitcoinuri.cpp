@@ -49,13 +49,9 @@ BitcoinUriParseResult BitcoinUri::Parse(const QString& uri_text)
         result.address.chop(1);
     }
 
-    std::string decode_error;
-    const CTxDestination destination = DecodeDestination(result.address.toStdString(), decode_error);
+    const CTxDestination destination = DecodeDestination(result.address.toStdString());
     if (!IsValidDestination(destination)) {
-        const QString message = decode_error.empty()
-            ? Tr::tr("URI cannot be parsed. Use a valid bitcoin: payment URI.")
-            : QString::fromStdString(decode_error);
-        return BuildError(message);
+        return BuildError(Tr::tr("Not a valid Bitcoin address."));
     }
 
     const QUrlQuery query(uri);
