@@ -64,6 +64,8 @@ Button {
         },
         State {
             name: "HOVER"; when: root.hovered
+            // Background subtly highlights on hover; icon colour stays at
+            // iconColor (neutral5). Only CHECKED/PRESSED animate it to orange.
             PropertyChanges { target: bg; color: Theme.color.neutral2 }
         },
         State {
