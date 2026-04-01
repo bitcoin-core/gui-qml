@@ -9,7 +9,6 @@
 #include <qml/bitcoinamount.h>
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/addresslistmodel.h>
-#include <qml/models/bitcoinuri.h>
 #include <qml/models/paymentrequest.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
@@ -36,13 +35,10 @@
 #include <wallet/wallet.h>
 
 #include <QDateTime>
-#include <QFile>
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSettings>
-#include <QUrl>
 #include <QVariantList>
-#include <QVariantMap>
 
 #include <array>
 #include <functional>
@@ -1157,60 +1153,6 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleUnload(UnloadFn fn)
         return nullptr;
     }
     return m_wallet->handleUnload(fn);
-}
-
-static QVariantMap BuildBitcoinUriResultMap(const BitcoinUriParseResult& r)
-{
-    return {
-        {QStringLiteral("success"),    r.success},
-        {QStringLiteral("error"),      r.error},
-        {QStringLiteral("address"),    r.address},
-        {QStringLiteral("amountSats"), (qlonglong)r.amount_sats},
-        {QStringLiteral("hasAmount"),  r.has_amount},
-        {QStringLiteral("label"),      r.label},
-        {QStringLiteral("hasLabel"),   r.has_label},
-        // Key is "uriMessage" (not "message") to avoid shadowing the JavaScript
-        // built-in Error.message property when this map is used in QML.
-        {QStringLiteral("uriMessage"), r.message},
-        {QStringLiteral("hasMessage"), r.has_message},
-    };
-}
-
-QVariantMap WalletQmlModel::parseBitcoinUri(const QString& uri_text)
-{
-    return BuildBitcoinUriResultMap(BitcoinUri::Parse(uri_text));
-}
-
-QVariantMap WalletQmlModel::parseBitcoinUriFromFile(const QString& source_path)
-{
-    constexpr qint64 MAX_FILE_SIZE = 1024 * 1024; // 1 MiB
-
-    // Accept either a local file path or a file:// URL (e.g. from a DropArea).
-    // QUrl::toLocalFile() handles the platform-specific conversion correctly,
-    // including the extra leading slash in file:///C:/path on Windows.
-    QString local_path = source_path;
-    const QUrl url(source_path);
-    if (url.isLocalFile()) {
-        local_path = url.toLocalFile();
-    }
-
-    // File is read synchronously on the GUI thread. For local storage the
-    // 1 MiB guard makes this acceptable. For network-mounted paths (NFS, SMB)
-    // this could stall the UI — see issue #541 for the async fix using
-    // QtConcurrent::run.
-    QFile file(local_path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        BitcoinUriParseResult err;
-        err.error = tr("Cannot open file: %1").arg(file.errorString());
-        return BuildBitcoinUriResultMap(err);
-    }
-    if (file.size() > MAX_FILE_SIZE) {
-        BitcoinUriParseResult err;
-        err.error = tr("File is too large to be a payment URI.");
-        return BuildBitcoinUriResultMap(err);
-    }
-    const QString content = QString::fromUtf8(file.readAll()).trimmed();
-    return BuildBitcoinUriResultMap(BitcoinUri::Parse(content));
 }
 
 bool WalletQmlModel::prepareTransaction()

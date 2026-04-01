@@ -32,6 +32,7 @@
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
+#include <qml/models/bitcoinurimodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
@@ -421,10 +422,12 @@ int QmlGuiMain(int argc, char* argv[])
     AppMode app_mode = SetupAppMode();
     BuildInfo build_info;
     Clipboard clipboard;
+    BitcoinUriModel bitcoin_uri_model;
 
     qmlRegisterSingletonInstance<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
     qmlRegisterSingletonInstance<BuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
     qmlRegisterSingletonInstance<Clipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", &clipboard);
+    qmlRegisterSingletonInstance<BitcoinUriModel>("org.bitcoincore.qt", 1, 0, "BitcoinUri", &bitcoin_uri_model);
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
