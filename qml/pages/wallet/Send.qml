@@ -35,10 +35,24 @@ PageStack {
         }
     }
 
+    // Re-check the clipboard whenever the Send tab becomes visible so the
+    // banner appears even if the URI was copied before navigating here.
+    onVisibleChanged: if (visible) sendPage.checkClipboard()
+
     Connections {
         target: walletController
         function onSelectedWalletChanged() {
             root.pop()
+            // Clear URI import state so stale results from the previous wallet
+            // are not shown when the user switches wallets and returns to Send.
+            sendPage.paymentRequestStatus = ""
+            sendPage.paymentRequestIsError = false
+            sendPage.paymentRequestMessage = ""
+            sendPage.showClipboardUriBanner = false
+            sendPage.m_pendingClipboardUri = ""
+            sendPage.m_filledUri = ""
+            sendPage.m_dismissedUri = ""
+            sendPage.m_applyingUri = false
         }
     }
 
@@ -98,12 +112,63 @@ PageStack {
 
         // Clipboard URI detection
         property bool showClipboardUriBanner: false
+        // Cache the clipboard text at detection time to avoid a TOCTOU race:
+        // the "Fill" button applies this value rather than re-reading the
+        // clipboard, which may have changed since the banner appeared.
+        property string m_pendingClipboardUri: ""
+        // Soft suppress (Fill): URI that was most recently applied to the form.
+        // The banner stays hidden while all URI-specified fields still match the
+        // form; as soon as any field diverges the banner re-appears.
+        property string m_filledUri: ""
+        // Hard suppress (Dismiss): URI the user explicitly dismissed.
+        // The banner only re-appears when the clipboard contains a different URI.
+        property string m_dismissedUri: ""
+        // Guard that prevents field-change Connections from triggering a
+        // re-check while a programmatic URI fill is writing to the form.
+        property bool m_applyingUri: false
 
         function checkClipboard() {
-            // Use the parser rather than a hand-rolled scheme check so the banner
-            // only appears for genuinely valid URIs (e.g. bitcoin:// won't show it).
-            showClipboardUriBanner = root.wallet !== null &&
-                root.wallet.parseBitcoinUri(Clipboard.text()).success
+            // Skip parsing when the Send tab is not visible or no wallet is
+            // loaded (recipient fields depend on the wallet being present).
+            if (!root.visible || root.wallet === null) {
+                showClipboardUriBanner = false
+                return
+            }
+
+            const text = Clipboard.text()
+            const parsed = BitcoinUri.parseBitcoinUri(text)
+            if (!parsed.success) {
+                showClipboardUriBanner = false
+                m_pendingClipboardUri = ""
+                return
+            }
+
+            // Hard suppress: user dismissed this exact URI.
+            // Only lifts when the clipboard changes to a different URI.
+            if (text === m_dismissedUri) {
+                showClipboardUriBanner = false
+                return
+            }
+
+            // Soft suppress: user filled this URI. Hide the banner while every
+            // field the URI specified still matches its current form value.
+            // As soon as any field diverges the banner re-appears automatically.
+            if (text === m_filledUri) {
+                const filled = BitcoinUri.parseBitcoinUri(m_filledUri)
+                const formMatches =
+                    root.recipient.address.address === filled.address
+                    && (!filled.hasAmount || root.recipient.amount.satoshi === filled.amountSats)
+                    && (!filled.hasLabel  || root.recipient.label === filled.label)
+                if (formMatches) {
+                    showClipboardUriBanner = false
+                    return
+                }
+                // Form diverged — lift fill suppression.
+                m_filledUri = ""
+            }
+
+            m_pendingClipboardUri = text
+            showClipboardUriBanner = true
         }
 
         // Apply a pre-parsed URI result to the current recipient form fields.
@@ -113,13 +178,21 @@ PageStack {
                 paymentRequestIsError = true
                 return
             }
+            m_applyingUri = true
             root.recipient.address.setAddress(result.address, 0)
+            // Only fields present in the URI are applied. Amount is intentionally
+            // not cleared when the URI omits 'amount='. This matches Bitcoin Core
+            // Qt's URI import behaviour: only populate what the URI specifies.
             if (result.hasAmount) {
                 root.recipient.amount.satoshi = result.amountSats
             }
             if (result.hasLabel) {
                 root.recipient.label = result.label
             }
+            // Lower the guard only after all writes are done. Field-change
+            // Connections must not fire checkClipboard() before the Fill
+            // handler has had a chance to set m_filledUri.
+            m_applyingUri = false
             paymentRequestMessage = result.hasMessage ? result.uriMessage : ""
             paymentRequestStatus = qsTr("Payment request imported from %1.").arg(source)
             paymentRequestIsError = false
@@ -127,19 +200,43 @@ PageStack {
 
         // Parse a URI from text and apply to form.
         function applyPaymentRequestFromText(text, source) {
-            const result = root.wallet.parseBitcoinUri(text)
+            const result = BitcoinUri.parseBitcoinUri(text)
             applyParsedPaymentRequest(result, source)
         }
 
         // Parse a URI from a file path and apply to form.
         function applyPaymentRequestFromFile(path) {
-            const result = root.wallet.parseBitcoinUriFromFile(path)
+            const result = BitcoinUri.parseBitcoinUriFromFile(path)
             applyParsedPaymentRequest(result, qsTr("file"))
         }
 
         Connections {
             target: Clipboard
             function onDataChanged() { sendPage.checkClipboard() }
+        }
+
+        // Re-check the clipboard whenever any form field changes due to user
+        // input. checkClipboard() compares current values against the filled URI
+        // and re-shows the banner if any specified field has diverged.
+        // The m_applyingUri guard prevents these from firing during a programmatic
+        // fill, which would trigger a re-check before m_filledUri is set.
+        Connections {
+            target: root.recipient.address
+            function onAddressChanged() {
+                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
+            }
+        }
+        Connections {
+            target: root.recipient.amount
+            function onAmountChanged() {
+                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
+            }
+        }
+        Connections {
+            target: root.recipient
+            function onLabelChanged() {
+                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
+            }
         }
 
         Component.onCompleted: sendPage.checkClipboard()
@@ -352,7 +449,13 @@ PageStack {
                                 Layout.preferredWidth: 90
                                 onClicked: {
                                     sendPage.showClipboardUriBanner = false
-                                    sendPage.applyPaymentRequestFromText(Clipboard.text(), qsTr("clipboard"))
+                                    // Use the cached URI captured when the banner appeared,
+                                    // not Clipboard.text(), to avoid applying a different URI
+                                    // if the clipboard changed before the user clicked Fill.
+                                    sendPage.applyPaymentRequestFromText(sendPage.m_pendingClipboardUri, qsTr("clipboard"))
+                                    // Soft-suppress: banner stays hidden while the form
+                                    // still reflects what the URI specified.
+                                    sendPage.m_filledUri = sendPage.m_pendingClipboardUri
                                 }
                             }
 
@@ -362,7 +465,14 @@ PageStack {
                                 iconColor: Theme.color.neutral9
                                 size: 28
                                 background: null
-                                onClicked: sendPage.showClipboardUriBanner = false
+                                Accessible.name: qsTr("Dismiss")
+                                Accessible.role: Accessible.Button
+                                onClicked: {
+                                    // Hard-suppress: banner only re-appears if the
+                                    // clipboard changes to a different URI.
+                                    sendPage.m_dismissedUri = sendPage.m_pendingClipboardUri
+                                    sendPage.showClipboardUriBanner = false
+                                }
                             }
                         }
                     }
