@@ -202,6 +202,13 @@ PageStack {
         function applyPaymentRequestFromText(text, source) {
             const result = BitcoinUri.parseBitcoinUri(text)
             applyParsedPaymentRequest(result, source)
+            // If the applied URI matches what's on the clipboard, treat it like
+            // the Fill button: soft-suppress the banner so it stays hidden while
+            // the form still reflects what the URI specified.
+            if (result.success && Clipboard.text() === text) {
+                m_filledUri = text
+                showClipboardUriBanner = false
+            }
         }
 
         // Parse a URI from a file path and apply to form.
