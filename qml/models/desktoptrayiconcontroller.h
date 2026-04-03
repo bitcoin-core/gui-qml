@@ -23,9 +23,7 @@ public:
     bool supported() const;
     bool visible() const;
     void setVisible(bool visible);
-    void setIcon(const QIcon& icon);
     void setBasePixmap(const QPixmap& pixmap);
-    QString iconName() const;
     bool isDark() const;
     void setIsDark(bool dark);
 
@@ -38,16 +36,9 @@ Q_SIGNALS:
     void isDarkChanged(bool dark);
 
 private:
-    void attemptShow();
     void updateIcon();
 
     QSystemTrayIcon* m_tray_icon{nullptr};
-    bool m_visible{false};
-    // True while a deferred show() is in flight; cleared on success, failure,
-    // or when setVisible(false) cancels the attempt.
-    bool m_show_requested{false};
-    int m_show_attempts{0};
-    static constexpr int kMaxShowAttempts{5};
     bool m_is_dark{true};
     QPixmap m_base_pixmap;
 };
