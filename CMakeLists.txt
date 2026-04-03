@@ -35,13 +35,6 @@ find_package(QRencode MODULE REQUIRED)
 
 option(ENABLE_TEST_AUTOMATION "Enable test automation bridge for QML UI testing" OFF)
 
-include(CMakeDependentOption)
-cmake_dependent_option(WITH_DBUS
-  "Enable DBus support for system tray icon on Linux."
-  ON "NOT CMAKE_SYSTEM_NAME MATCHES \"(Windows|Darwin|Android)\""
-  OFF
-)
-
 # Do not build any executable targets from bitcoin submodule
 set(BUILD_BENCH OFF)
 set(BUILD_BITCOIN_BIN OFF)
@@ -99,10 +92,6 @@ if(ENABLE_TEST_AUTOMATION)
   find_package(Qt6 REQUIRED COMPONENTS Network)
   target_compile_definitions(bitcoinqml PUBLIC ENABLE_TEST_AUTOMATION)
   target_link_libraries(bitcoinqml PUBLIC Qt6::Network)
-endif()
-if(WITH_DBUS)
-  find_package(Qt6 REQUIRED COMPONENTS DBus)
-  target_link_libraries(bitcoinqml PUBLIC Qt6::DBus)
 endif()
 target_include_directories(bitcoinqml
   PRIVATE
