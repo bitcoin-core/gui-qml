@@ -528,6 +528,8 @@ PageStack {
                             horizontalAlignment: Text.AlignLeft
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
+                            maximumLineCount: 3
+                            elide: Text.ElideRight
                         }
                     }
                 }
