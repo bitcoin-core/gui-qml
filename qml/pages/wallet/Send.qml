@@ -73,6 +73,11 @@ PageStack {
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
         }
+        function onCurrentRecipientChanged() {
+            sendPage.paymentRequestStatus = ""
+            sendPage.paymentRequestIsError = false
+            sendPage.paymentRequestMessage = ""
+        }
     }
 
     Connections {
@@ -230,7 +235,14 @@ PageStack {
         Connections {
             target: root.recipient.address
             function onAddressChanged() {
-                if (!sendPage.m_applyingUri) sendPage.checkClipboard()
+                if (!sendPage.m_applyingUri) {
+                    if (root.recipient.address.address === "") {
+                        sendPage.paymentRequestStatus = ""
+                        sendPage.paymentRequestIsError = false
+                        sendPage.paymentRequestMessage = ""
+                    }
+                    sendPage.checkClipboard()
+                }
             }
         }
         Connections {
