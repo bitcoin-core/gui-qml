@@ -5,9 +5,13 @@
 #ifndef BITCOIN_QML_MODELS_RPCCONSOLEMODEL_H
 #define BITCOIN_QML_MODELS_RPCCONSOLEMODEL_H
 
+#include <QAbstractListModel>
+#include <QColor>
 #include <QObject>
+#include <QString>
 #include <QStringList>
 #include <QThread>
+#include <QVector>
 
 namespace interfaces {
 class Node;
@@ -16,15 +20,57 @@ class Node;
 class RpcConsoleWorker;
 
 /**
+ * List model exposing the console output rows.
+ *
+ * Owned by RpcConsoleModel and exposed to QML via the outputModel property;
+ * the MonospaceOutputView in CommandConsole.qml binds to it directly. Rows
+ * are capped at kMaxRows — the oldest rows are dropped when the cap is hit,
+ * protecting against runaway output from chatty RPCs.
+ */
+class RpcOutputListModel : public QAbstractListModel
+{
+    Q_OBJECT
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+
+public:
+    enum Role {
+        TimestampRole = Qt::UserRole + 1,
+        ContentRole,
+    };
+
+    static constexpr int kMaxRows = 5000;
+
+    explicit RpcOutputListModel(QObject* parent = nullptr);
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
+    QHash<int, QByteArray> roleNames() const override;
+
+    void appendRow(const QString& timestamp, const QString& contentHtml);
+    void resetAll();
+
+Q_SIGNALS:
+    void countChanged();
+
+private:
+    struct Row {
+        QString timestamp;
+        QString contentHtml;
+    };
+    QVector<Row> m_rows;
+};
+
+/**
  * Model for the RPC command console page.
  *
  * Exposes:
  *  - availableCommands  – sorted list of all RPC commands for autocomplete
  *  - executing          – true while an RPC call is in flight
- *
- * Signals to QML:
- *  - commandResultReceived(time, category, escapedHtml) – new output line ready
- *  - clearRequested()                                   – QML should empty the list
+ *  - outputModel        – list of output rows (timestamp + pre-formatted HTML)
+ *  - requestColor / replyColor / errorColor / keyColor –
+ *        palette used to render rows; QML writes these from Theme so the
+ *        colours update when the user toggles dark/light mode (already-
+ *        emitted rows keep their baked-in colours, which is intentional).
  *
  * Invokable from QML:
  *  - submitCommand(command)
@@ -38,6 +84,11 @@ class RpcConsoleModel : public QObject
 
     Q_PROPERTY(bool executing READ executing NOTIFY executingChanged)
     Q_PROPERTY(QStringList availableCommands READ availableCommands NOTIFY availableCommandsChanged)
+    Q_PROPERTY(QAbstractListModel* outputModel READ outputModel CONSTANT)
+    Q_PROPERTY(QColor requestColor MEMBER m_request_color)
+    Q_PROPERTY(QColor replyColor   MEMBER m_reply_color)
+    Q_PROPERTY(QColor errorColor   MEMBER m_error_color)
+    Q_PROPERTY(QColor keyColor     MEMBER m_key_color)
 
 public:
     enum MessageCategory {
@@ -52,6 +103,7 @@ public:
 
     bool executing() const { return m_executing; }
     QStringList availableCommands() const { return m_available_commands; }
+    QAbstractListModel* outputModel() { return &m_output_model; }
 
     Q_INVOKABLE void submitCommand(const QString& command);
 
@@ -76,21 +128,24 @@ Q_SIGNALS:
     void executingChanged();
     void availableCommandsChanged();
 
-    /** Emitted (on the main thread) when a new console line is ready to display. */
-    void commandResultReceived(const QString& time, int category, const QString& escapedHtml);
-
-    /** Emitted when the console should be cleared. */
-    void clearRequested();
-
 private Q_SLOTS:
-    void onResultReady(const QString& time, int category, const QString& escapedHtml);
+    void onResultReady(const QString& time, int category, const QString& rawText);
 
 private:
     void setExecuting(bool executing);
+    void appendFormattedRow(const QString& time, int category, const QString& rawText);
 
     interfaces::Node& m_node;
     bool m_executing{false};
     QStringList m_available_commands;
+    RpcOutputListModel m_output_model;
+
+    // Palette — populated from QML via the Q_PROPERTY MEMBERs. Sensible
+    // fall-back values so the console is legible before QML binds them.
+    QColor m_request_color{"#888888"};
+    QColor m_reply_color{"#CCCCCC"};
+    QColor m_error_color{"#EC6363"};
+    QColor m_key_color{"#98C379"};
 
     // History (stores redacted/filtered versions only)
     QStringList m_history;

@@ -16,13 +16,27 @@ Page {
     background: null
     clip: true
 
-    // Named color properties — theme-aware, single source of truth.
+    // Theme-aware palette — pushed into RpcConsoleModel so it renders rows in
+    // the currently-active colours. Already-rendered rows keep their baked-in
+    // colours when the theme toggles, which matches the Qt GUI console.
     readonly property color consoleRequestColor: Theme.dark ? "#888888" : "#666666"
     readonly property color consoleReplyColor:   Theme.dark ? "#CCCCCC" : "#333333"
     readonly property color consoleKeyColor:     Theme.dark ? "#98C379" : "#3A7D2C"
 
+    function _pushPalette() {
+        rpcConsoleModel.requestColor = consoleRequestColor
+        rpcConsoleModel.replyColor   = consoleReplyColor
+        rpcConsoleModel.errorColor   = Theme.color.red
+        rpcConsoleModel.keyColor     = consoleKeyColor
+    }
+    Component.onCompleted: _pushPalette()
+    Connections {
+        target: Theme
+        function onDarkChanged() { root._pushPalette() }
+    }
+
     // Exposed for E2E output-content verification.
-    property int outputCount: outputModel.count
+    property int outputCount: rpcConsoleModel.outputModel.count
 
     // Exposed for E2E execution-complete detection.
     property bool executing: rpcConsoleModel.executing
@@ -53,44 +67,12 @@ Page {
         }
     }
 
-    // Measure the timestamp column width once for all output delegates.
-    TextMetrics {
-        id: timestampMetrics
-        font.family: "monospace"
-        font.pixelSize: 12
-        text: "[00:00:00]"
-    }
-
-    // Output area — ListView virtualizes delegates so only visible rows are
-    // instantiated, preventing layout churn during long console sessions.
-    ListView {
-        id: outputList
-        objectName: "consoleOutputArea"
-        anchors {
-            top: parent.top
-            left: parent.left
-            right: parent.right
-            bottom: inputArea.top
-            bottomMargin: 4
-        }
-        clip: true
-        spacing: 2
-        // 16 px left/right padding mirrors the old Column { padding: 16 } layout.
-        leftMargin: 16
-        rightMargin: 16
-        topMargin: 16
-        bottomMargin: 0
-
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-
-        // Static header: hint + security warning — scrolls with content so it
-        // naturally disappears as the output grows.
-        header: Column {
-            // Width = ListView width minus its left+right margins (16+16 = 32).
-            width: outputList.width - 32
+    // Header scrolls with content (hint + security warning).
+    Component {
+        id: consoleHeaderComponent
+        Column {
             spacing: 4
 
-            // Welcome / hint text
             Text {
                 width: parent.width
                 text: qsTr("Use ↑↓ arrows to navigate history. Type <b>help</b> for an overview of available commands. Type <b>help-console</b> for console syntax help.")
@@ -102,7 +84,6 @@ Page {
                 bottomPadding: 4
             }
 
-            // Security warning
             Text {
                 width: parent.width
                 text: qsTr("<b>WARNING:</b> Scammers and thieves will request that you type commands here to steal your coins. Do not type any commands unless you fully understand them.")
@@ -114,54 +95,14 @@ Page {
                 bottomPadding: 8
             }
         }
-
-        model: ListModel { id: outputModel }
-
-        delegate: RowLayout {
-            required property string timestamp
-            required property string content
-            // Same effective content width as old outputColumn.width - 32.
-            width: outputList.width - 32
-            spacing: 16
-
-            Text {
-                text: timestamp
-                font.family: "monospace"
-                font.pixelSize: 12
-                color: Theme.color.neutral5
-                Layout.preferredWidth: timestampMetrics.width
-                Layout.alignment: Qt.AlignTop
-            }
-
-            TextEdit {
-                text: content
-                font.family: "monospace"
-                font.pixelSize: 12
-                // color applies to unstyled text only; styled content is
-                // colored via <span style='color:...'> HTML from onCommandResultReceived.
-                color: Theme.color.neutral9
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                wrapMode: Text.WrapAnywhere
-                textFormat: Text.RichText
-                readOnly: true
-                selectByMouse: true
-                activeFocusOnPress: true
-            }
-        }
-
-        // Scroll to bottom after each new row is appended. Qt.callLater defers
-        // the call until after the layout pass so positionViewAtEnd() sees the
-        // updated content height.
-        onCountChanged: Qt.callLater(positionViewAtEnd)
     }
 
-    // Unfocus inputField on any click in the output area. Placed outside the
-    // ListView so Flickable's childMouseEventFilter does not interfere.
-    // z:1 puts it above the ListView (z:0); mouse.accepted = false passes the
-    // press through to the ListView so scrolling still works.
-    MouseArea {
-        z: 1
+    // Output area — MonospaceOutputView (Flickable + Column + Repeater)
+    // keeps contentHeight exact (no ListView estimation) and gives each
+    // row a TextEdit for single-row select + copy.
+    MonospaceOutputView {
+        id: outputView
+        objectName: "consoleOutputArea"
         anchors {
             top: parent.top
             left: parent.left
@@ -169,59 +110,34 @@ Page {
             bottom: inputArea.top
             bottomMargin: 4
         }
-        onPressed: {
-            inputField.focus = false
-            mouse.accepted = false
-        }
+
+        listModel: rpcConsoleModel.outputModel
+        contentRole: "content"
+        contentTextFormat: Text.RichText
+        leftColumnRole: "timestamp"
+        leftColumnSample: "[00:00:00]"
+        rightColumnRole: ""
+        fontPixelSize: 12
+        contentColor: Theme.color.neutral9
+        leftColumnColor: Theme.color.neutral5
+        selectionColor: Theme.color.orange
+        accessibleName: qsTr("Console output")
+        autoScrollToBottom: true
+        header: consoleHeaderComponent
     }
 
-    // Format a CMD_REPLY result: convert \n to <br>, preserve indentation
-    // with &nbsp;, and colorize JSON object keys.
-    function formatResult(html) {
-        var result = html.replace(/\n/g, "<br>")
-                         .replace(/(^|<br>)([ ]+)/g, function(_, br, spaces) {
-                             return br + spaces.replace(/ /g, "&nbsp;")
-                         })
-        result = result.replace(/(&quot;)([^&]*)(&quot;)(\s*:)/g,
-                     "$1<span style='color:" + root.consoleKeyColor + "'>$2</span>$3$4")
-        return result
-    }
-
-    // Scroll to bottom whenever a new output line is appended.
-    Connections {
-        target: rpcConsoleModel
-        function onCommandResultReceived(time, category, escapedHtml) {
-            var prefix, colorHex
-            if (category === RpcConsoleModel.CMD_REQUEST) {
-                prefix = "&gt;&gt; "
-                colorHex = root.consoleRequestColor
-            } else if (category === RpcConsoleModel.CMD_ERROR) {
-                prefix = "!! "
-                colorHex = Theme.color.red
-            } else {
-                prefix = ""
-                colorHex = root.consoleReplyColor
-            }
-            var content = (category === RpcConsoleModel.CMD_REPLY)
-                ? formatResult(escapedHtml)
-                : escapedHtml
-            outputModel.append({
-                "timestamp": "[" + time + "]",
-                "content": "<span style='color:" + colorHex + "'>" + prefix + content + "</span>"
-            })
-        }
-        function onClearRequested() {
-            outputModel.clear()
-        }
-    }
-
-    // Autocomplete popup (anchored above the input area)
+    // Autocomplete popup (anchored above the input area).
+    // Sizing: width matches the input field; height hugs the suggestion
+    // ListView's contentHeight so the opaque background cannot spill over
+    // the output area (fixes the "display disappears on typing" regression).
+    // z is raised so the popup reliably renders above neighbours.
     Popup {
         id: autocompletePopup
         objectName: "consoleAutocompletePopup"
         parent: inputArea
         x: 0
         y: -height - 4
+        z: 10
         width: Math.min(inputField.width, 300)
         height: Math.min(autocompleteList.contentHeight + 8, 200)
         padding: 4
@@ -258,13 +174,20 @@ Page {
                     color: Theme.color.neutral9
                     elide: Text.ElideRight
                 }
-                onClicked: {
-                    inputField.text = modelData + " "
-                    inputField.forceActiveFocus()
-                    inputField.cursorPosition = inputField.text.length
-                }
+                // Apply the suggestion without stealing focus from the
+                // input field — per MarnixCroes PR #540 feedback.
+                onClicked: applySuggestion(modelData)
             }
         }
+    }
+
+    // Apply an autocomplete suggestion without disturbing the input field's
+    // focus / selection state.
+    function applySuggestion(cmd) {
+        inputField.text = cmd + " "
+        inputField.cursorPosition = inputField.text.length
+        autocompletePopup.close()
+        inputField.forceActiveFocus()
     }
 
     // Command input area
@@ -331,10 +254,7 @@ Page {
                 // Tab key: accept the top autocomplete suggestion.
                 Keys.onTabPressed: {
                     if (autocompletePopup.visible && filteredCommands.length > 0) {
-                        inputField.text = filteredCommands[0] + " "
-                        inputField.cursorPosition = inputField.text.length
-                        autocompletePopup.close()
-                        filteredCommands = []
+                        applySuggestion(filteredCommands[0])
                         event.accepted = true
                     }
                 }
@@ -346,8 +266,12 @@ Page {
                     updateFilteredCommands()
                 }
 
+                // Auto-select existing text when the field gains focus
+                // (MarnixCroes PR #540 feedback). Close the popup on blur.
                 onActiveFocusChanged: {
-                    if (!activeFocus) {
+                    if (activeFocus) {
+                        selectAll()
+                    } else {
                         autocompletePopup.close()
                     }
                 }
@@ -370,13 +294,22 @@ Page {
     property var filteredCommands: []
 
     function updateFilteredCommands() {
+        // Guard: availableCommands is empty until the node is initialised.
+        // Calling this before init used to throw and abort the textChanged
+        // handler, which (combined with the oversized popup) made the
+        // whole console appear blank on first keystroke.
+        var cmds = rpcConsoleModel ? rpcConsoleModel.availableCommands : null
+        if (!cmds || cmds.length === 0) {
+            filteredCommands = []
+            autocompletePopup.close()
+            return
+        }
         var t = inputField.text.toLowerCase()
         if (t.length === 0) {
             filteredCommands = []
             autocompletePopup.close()
             return
         }
-        var cmds = rpcConsoleModel.availableCommands
         var matches = []
         for (var i = 0; i < cmds.length && matches.length < 10; ++i) {
             if (cmds[i].toLowerCase().startsWith(t)) {

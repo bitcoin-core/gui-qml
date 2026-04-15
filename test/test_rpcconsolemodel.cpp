@@ -159,6 +159,21 @@ public:
     }
 };
 
+// MockNode that returns a JSON object with a string value containing ": ",
+// used to exercise the JSON reply formatter's structural key detection.
+class JsonReplyNode : public MockNode
+{
+public:
+    UniValue executeRpc(const std::string&, const UniValue&, const std::string&) override
+    {
+        UniValue obj(UniValue::VOBJ);
+        obj.pushKV("key1", "value1");
+        obj.pushKV("note", "see section:");
+        obj.pushKV("key3", "value3");
+        return obj;
+    }
+};
+
 class RpcConsoleModelTests : public QObject
 {
     Q_OBJECT
@@ -170,6 +185,7 @@ private Q_SLOTS:
     void historyTruncatesAtMax();
     void resetHistoryNavigationClearsState();
     void outputTruncatedWhenResultTooLong();
+    void jsonReplyKeyColoringSkipsStringsContainingColons();
 };
 
 void RpcConsoleModelTests::historyNavigationOldestToNewest()
@@ -273,28 +289,76 @@ void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
     LargeResultNode mock;
     RpcConsoleModel model{mock};
 
-    QSignalSpy spy{&model, &RpcConsoleModel::commandResultReceived};
+    auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
+    QVERIFY(out != nullptr);
+    QSignalSpy spy{out, &QAbstractItemModel::rowsInserted};
 
-    // submitCommand emits CMD_REQUEST synchronously, then dispatches the
-    // execute() slot to the worker thread via QueuedConnection.
+    // submitCommand inserts the CMD_REQUEST row synchronously, then dispatches
+    // the execute() slot to the worker thread via QueuedConnection.
     model.submitCommand("getblockcount");
-    QCOMPARE(spy.count(), 1); // CMD_REQUEST arrived synchronously
+    QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
 
-    // Process events until the worker thread emits its CMD_REPLY back to the
-    // main thread (or until the 5-second safety timeout expires).
+    // Process events until the worker thread's CMD_REPLY row is inserted
+    // (or until the 5-second safety timeout expires).
     QVERIFY(spy.wait(5000));
-    QCOMPARE(spy.count(), 2);
+    QCOMPARE(out->rowCount(), 2);
 
-    QList<QVariant> reply = spy.at(1);
-    QCOMPARE(reply.at(1).toInt(), static_cast<int>(RpcConsoleModel::CMD_REPLY));
-    QString escaped = reply.at(2).toString();
+    // Look up the content role dynamically — the model's roleNames map
+    // "content" to the ContentRole integer.
+    const auto roles = out->roleNames();
+    int content_role = -1;
+    for (auto it = roles.constBegin(); it != roles.constEnd(); ++it) {
+        if (it.value() == "content") { content_role = it.key(); break; }
+    }
+    QVERIFY(content_role != -1);
 
-    // Result must be truncated well below 100,000 characters.
-    QVERIFY2(escaped.size() < 100'000,
-             qPrintable(QString("escaped size was %1").arg(escaped.size())));
+    const QString reply_html = out->data(out->index(1, 0), content_role).toString();
+
+    // Formatted reply must be well below the raw 100,000-character input.
+    QVERIFY2(reply_html.size() < 100'000,
+             qPrintable(QString("reply_html size was %1").arg(reply_html.size())));
     // The truncation notice must appear in the output.
-    QVERIFY2(escaped.contains("truncated"),
+    QVERIFY2(reply_html.contains("truncated"),
              "Expected truncation notice in output");
+}
+
+void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
+{
+    JsonReplyNode mock;
+    RpcConsoleModel model{mock};
+
+    auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
+    QVERIFY(out != nullptr);
+    QSignalSpy spy{out, &QAbstractItemModel::rowsInserted};
+
+    model.submitCommand("getsomething");
+    QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
+    QVERIFY(spy.wait(5000));
+    QCOMPARE(out->rowCount(), 2);
+
+    const auto roles = out->roleNames();
+    int content_role = -1;
+    for (auto it = roles.constBegin(); it != roles.constEnd(); ++it) {
+        if (it.value() == "content") { content_role = it.key(); break; }
+    }
+    QVERIFY(content_role != -1);
+
+    const QString html = out->data(out->index(1, 0), content_role).toString();
+
+    // Real keys are wrapped in a key-colour span that closes immediately
+    // after the quoted key — the structural formatter produces literally
+    // `"key1"</span>` at the boundary.
+    QVERIFY2(html.contains(QStringLiteral("\"key1\"</span>")),
+             qPrintable("Missing coloured wrap for key1 in:\n" + html));
+    QVERIFY2(html.contains(QStringLiteral("\"note\"</span>")),
+             qPrintable("Missing coloured wrap for note in:\n" + html));
+    QVERIFY2(html.contains(QStringLiteral("\"key3\"</span>")),
+             qPrintable("Missing coloured wrap for key3 in:\n" + html));
+
+    // The string value `"see section:"` must NOT close a key-colour span.
+    // The old regex-based formatter incorrectly treated this as a key.
+    QVERIFY2(!html.contains(QStringLiteral("\"see section\"</span>")),
+             qPrintable("String value was mis-coloured as a key in:\n" + html));
 }
 
 QTEST_MAIN(RpcConsoleModelTests)
