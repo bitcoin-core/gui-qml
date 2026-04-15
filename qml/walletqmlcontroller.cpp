@@ -17,6 +17,7 @@
 #include <wallet/wallet.h>
 #include <util/threadnames.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 #include <QDir>
@@ -116,6 +117,80 @@ void WalletQmlController::setSelectedWallet(QString path, QString wallet_format)
     startWalletLoad(path, wallet_format);
 }
 
+bool WalletQmlController::isWalletOpen(const QString& path)
+{
+    if (path.trimmed().isEmpty()) {
+        return false;
+    }
+
+    QMutexLocker locker(&m_wallets_mutex);
+    for (WalletQmlModel* wallet : m_wallets) {
+        if (wallet->name() == path) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QStringList WalletQmlController::openWalletNames() const
+{
+    QStringList wallet_names;
+    QMutexLocker locker(&m_wallets_mutex);
+    wallet_names.reserve(static_cast<qsizetype>(m_wallets.size()));
+    for (WalletQmlModel* wallet : m_wallets) {
+        wallet_names.append(wallet->name());
+    }
+    return wallet_names;
+}
+
+void WalletQmlController::closeWallet(const QString& path)
+{
+    if (!m_initialized) {
+        setWalletLoadError(tr("Wallets are still loading. Try again in a moment."));
+        return;
+    }
+
+    if (path.trimmed().isEmpty()) {
+        return;
+    }
+
+    clearWalletLoadStatus();
+    clearWalletMigrationStatus();
+
+    WalletQmlModel* wallet_to_close{nullptr};
+    WalletQmlModel* next_selected_wallet{nullptr};
+
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        const auto wallet_it = std::find_if(m_wallets.begin(), m_wallets.end(), [&](WalletQmlModel* wallet) {
+            return wallet->name() == path;
+        });
+        if (wallet_it == m_wallets.end()) {
+            return;
+        }
+
+        wallet_to_close = *wallet_it;
+        for (WalletQmlModel* wallet : m_wallets) {
+            if (wallet != wallet_to_close) {
+                next_selected_wallet = wallet;
+                break;
+            }
+        }
+        m_wallets.erase(wallet_it);
+    }
+
+    wallet_to_close->removeWallet();
+    delete wallet_to_close;
+    notifyOpenWalletsChanged();
+
+    if (m_selected_wallet == wallet_to_close) {
+        m_selected_wallet = next_selected_wallet ? next_selected_wallet : m_empty_wallet;
+        Q_EMIT selectedWalletChanged();
+    }
+
+    setWalletLoaded(next_selected_wallet != nullptr);
+}
+
 WalletQmlModel* WalletQmlController::selectedWallet() const
 {
     return m_selected_wallet;
@@ -128,11 +203,14 @@ void WalletQmlController::unloadWallets()
     }
     m_selected_wallet = m_empty_wallet;
     Q_EMIT selectedWalletChanged();
-    QMutexLocker locker(&m_wallets_mutex);
-    for (WalletQmlModel* wallet : m_wallets) {
-        delete wallet;
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        for (WalletQmlModel* wallet : m_wallets) {
+            delete wallet;
+        }
+        m_wallets.clear();
     }
-    m_wallets.clear();
+    notifyOpenWalletsChanged();
 }
 
 bool WalletQmlController::createSingleSigWallet(const QString &name, const QString &passphrase)
@@ -149,10 +227,13 @@ bool WalletQmlController::createSingleSigWallet(const QString &name, const QStri
     const std::string wallet_name{name.toStdString()};
     auto wallet{m_node.walletLoader().createWallet(wallet_name, secure_passphrase, wallet::WALLET_FLAG_DESCRIPTORS, m_warning_messages)};
     setWalletLoadWarnings(JoinWarnings(m_warning_messages));
-    QMutexLocker locker(&m_wallets_mutex);
     if (wallet) {
-        m_selected_wallet = new WalletQmlModel(std::move(*wallet));
-        m_wallets.push_back(m_selected_wallet);
+        {
+            QMutexLocker locker(&m_wallets_mutex);
+            m_selected_wallet = new WalletQmlModel(std::move(*wallet));
+            m_wallets.push_back(m_selected_wallet);
+        }
+        notifyOpenWalletsChanged();
         setWalletLoaded(true);
         setNoWalletsFound(false);
         Q_EMIT selectedWalletChanged();
@@ -584,29 +665,36 @@ void WalletQmlController::handleLoadWallet(std::unique_ptr<interfaces::Wallet> w
         }
     };
 
-    QMutexLocker locker(&m_wallets_mutex);
-    if (!m_wallets.empty()) {
-        QString name = QString::fromStdString(wallet->getWalletName());
-        for (WalletQmlModel* wallet_model : m_wallets) {
-            if (wallet_model->name() == name) {
-                m_selected_wallet = wallet_model;
-                Q_EMIT selectedWalletChanged();
-                setWalletLoaded(true);
-                setNoWalletsFound(false);
-                if (m_wallet_load_requested) {
-                    m_wallet_load_requested = false;
-                    setWalletLoadInProgress(false);
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        if (!m_wallets.empty()) {
+            QString name = QString::fromStdString(wallet->getWalletName());
+            for (WalletQmlModel* wallet_model : m_wallets) {
+                if (wallet_model->name() == name) {
+                    m_selected_wallet = wallet_model;
+                    Q_EMIT selectedWalletChanged();
+                    setWalletLoaded(true);
+                    setNoWalletsFound(false);
+                    if (m_wallet_load_requested) {
+                        m_wallet_load_requested = false;
+                        setWalletLoadInProgress(false);
+                    }
+                    notifyOpenWalletsChanged();
                     emit_load_completion();
+                    return;
                 }
-                return;
             }
         }
     }
 
     auto wallet_model = new WalletQmlModel(std::move(wallet));
     wallet_model->moveToThread(this->thread());
-    m_selected_wallet = wallet_model;
-    m_wallets.push_back(m_selected_wallet);
+    {
+        QMutexLocker locker(&m_wallets_mutex);
+        m_selected_wallet = wallet_model;
+        m_wallets.push_back(m_selected_wallet);
+    }
+    notifyOpenWalletsChanged();
     Q_EMIT selectedWalletChanged();
     setWalletLoaded(true);
     setNoWalletsFound(false);
@@ -631,6 +719,7 @@ void WalletQmlController::initialize()
     for (auto& wallet : wallets) {
         m_wallets.push_back(new WalletQmlModel(std::move(wallet)));
     }
+    notifyOpenWalletsChanged();
     if (!m_wallets.empty()) {
         m_selected_wallet = m_wallets.front();
         setWalletLoaded(true);
@@ -662,6 +751,11 @@ void WalletQmlController::setNoWalletsFound(bool no_wallets_found)
         m_no_wallets_found = no_wallets_found;
         Q_EMIT noWalletsFoundChanged();
     }
+}
+
+void WalletQmlController::notifyOpenWalletsChanged()
+{
+    Q_EMIT openWalletsChanged(openWalletNames());
 }
 
 void WalletQmlController::startWalletLoad(const QString& path, const QString& wallet_format)

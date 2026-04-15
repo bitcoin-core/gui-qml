@@ -84,6 +84,7 @@ public:
     Q_INVOKABLE QString estimatedFeeForTarget(unsigned int target_blocks) const;
     Q_INVOKABLE int feeTargetIndex(unsigned int target_blocks) const;
     Q_INVOKABLE void scheduleFeeEstimates();
+    void removeWallet();
 
     std::set<interfaces::WalletTx> getWalletTxs() const;
     interfaces::WalletTx getWalletTx(const uint256& hash) const;

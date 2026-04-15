@@ -756,6 +756,8 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool isWalletLoaded MEMBER m_is_wallet_loaded NOTIFY isWalletLoadedChanged)
     Q_PROPERTY(bool noWalletsFound MEMBER m_no_wallets_found NOTIFY noWalletsFoundChanged)
     Q_PROPERTY(QString lastSelectedWalletName READ lastSelectedWalletName NOTIFY lastSelectedWalletNameChanged)
+    Q_PROPERTY(QString lastClosedWalletName READ lastClosedWalletName NOTIFY lastClosedWalletNameChanged)
+    Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
     Q_PROPERTY(QObject* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
 
 public:
@@ -764,9 +766,13 @@ public:
     bool m_no_wallets_found{false};
     QObject* m_selected_wallet{nullptr};
     QString m_last_selected_wallet_name;
+    QString m_last_closed_wallet_name;
+    int m_close_wallet_calls{0};
 
     QObject* selectedWallet() const { return m_selected_wallet; }
     QString lastSelectedWalletName() const { return m_last_selected_wallet_name; }
+    QString lastClosedWalletName() const { return m_last_closed_wallet_name; }
+    int closeWalletCalls() const { return m_close_wallet_calls; }
     void setSelectedWalletObject(QObject* wallet)
     {
         if (m_selected_wallet == wallet) return;
@@ -781,12 +787,30 @@ public:
         Q_EMIT lastSelectedWalletNameChanged();
         Q_EMIT selectedWalletChanged();
     }
+    Q_INVOKABLE void closeWallet(const QString& name)
+    {
+        m_last_closed_wallet_name = name;
+        ++m_close_wallet_calls;
+        Q_EMIT lastClosedWalletNameChanged();
+        Q_EMIT closeWalletCallsChanged();
+    }
+    Q_INVOKABLE void reset()
+    {
+        m_last_selected_wallet_name.clear();
+        m_last_closed_wallet_name.clear();
+        m_close_wallet_calls = 0;
+        Q_EMIT lastSelectedWalletNameChanged();
+        Q_EMIT lastClosedWalletNameChanged();
+        Q_EMIT closeWalletCallsChanged();
+    }
 
 Q_SIGNALS:
     void initializedChanged();
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
     void lastSelectedWalletNameChanged();
+    void lastClosedWalletNameChanged();
+    void closeWalletCallsChanged();
     void selectedWalletChanged();
 };
 
@@ -1002,7 +1026,8 @@ class MockWalletListModel : public QAbstractListModel
 public:
     enum Roles {
         NameRole = Qt::UserRole + 1,
-        FormatRole
+        FormatRole,
+        LoadStateRole
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -1016,6 +1041,7 @@ public:
         if (!index.isValid() || index.row() < 0 || index.row() >= m_wallet_names.size()) return {};
         if (role == NameRole) return m_wallet_names.at(index.row());
         if (role == FormatRole) return QStringLiteral("sqlite");
+        if (role == LoadStateRole) return m_wallet_load_states.at(index.row());
         return {};
     }
 
@@ -1024,13 +1050,28 @@ public:
         return {
             {NameRole, "name"},
             {FormatRole, "format"},
+            {LoadStateRole, "loadState"},
         };
     }
 
     Q_INVOKABLE void listWalletDir() {}
+    Q_INVOKABLE void reset()
+    {
+        setWalletLoadState(QStringLiteral("testwallet"), 1);
+        setWalletLoadState(QStringLiteral("secondarywallet"), 0);
+    }
+    Q_INVOKABLE void setWalletLoadState(const QString& name, int state)
+    {
+        const int row = m_wallet_names.indexOf(name);
+        if (row < 0 || m_wallet_load_states.at(row) == state) return;
+        m_wallet_load_states[row] = state;
+        const QModelIndex changed_index = index(row, 0);
+        Q_EMIT dataChanged(changed_index, changed_index, {LoadStateRole});
+    }
 
 private:
     QStringList m_wallet_names{QStringLiteral("testwallet"), QStringLiteral("secondarywallet")};
+    QVector<int> m_wallet_load_states{1, 0};
 };
 
 class MockBumpTransactionModel : public QObject

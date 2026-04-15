@@ -367,6 +367,8 @@ int QmlGuiMain(int argc, char* argv[])
 
 #ifdef ENABLE_WALLET
     WalletListModel wallet_list_model{*node, nullptr};
+    QObject::connect(&wallet_controller, &WalletQmlController::openWalletsChanged,
+                     &wallet_list_model, &WalletListModel::setOpenWalletNames);
     engine.rootContext()->setContextProperty("walletController", &wallet_controller);
     engine.rootContext()->setContextProperty("walletListModel", &wallet_list_model);
 #endif

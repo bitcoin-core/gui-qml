@@ -38,6 +38,17 @@ void WalletListModel::listWalletDir()
     }
 }
 
+void WalletListModel::setOpenWalletNames(const QStringList& wallet_names)
+{
+    const QSet<QString> updated_names{wallet_names.begin(), wallet_names.end()};
+    if (m_open_wallet_names == updated_names) {
+        return;
+    }
+
+    m_open_wallet_names = updated_names;
+    updateLoadStateForAllRows();
+}
+
 int WalletListModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
@@ -56,6 +67,10 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
         return item.name;
     case FormatRole:
         return item.format;
+    case LoadStateRole:
+        return m_open_wallet_names.contains(item.name)
+            ? static_cast<int>(LoadState::Open)
+            : static_cast<int>(LoadState::Closed);
     default:
         return QVariant();
     }
@@ -66,6 +81,7 @@ QHash<int, QByteArray> WalletListModel::roleNames() const
     QHash<int, QByteArray> roles;
     roles[NameRole] = "name";
     roles[FormatRole] = "format";
+    roles[LoadStateRole] = "loadState";
     return roles;
 }
 
@@ -74,4 +90,15 @@ void WalletListModel::addItem(const Item &item)
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
     m_items.append(item);
     endInsertRows();
+}
+
+void WalletListModel::updateLoadStateForAllRows()
+{
+    if (m_items.isEmpty()) {
+        return;
+    }
+
+    const QModelIndex first = index(0, 0);
+    const QModelIndex last = index(rowCount() - 1, 0);
+    Q_EMIT dataChanged(first, last, {LoadStateRole});
 }

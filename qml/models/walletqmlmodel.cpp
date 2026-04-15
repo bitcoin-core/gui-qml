@@ -388,6 +388,14 @@ QString WalletQmlModel::newAddress(QString label)
     return QString::fromStdString(EncodeDestination(dest.value()));
 }
 
+void WalletQmlModel::removeWallet()
+{
+    if (!m_wallet) {
+        return;
+    }
+    m_wallet->remove();
+}
+
 void WalletQmlModel::commitPaymentRequest()
 {
     if (!m_wallet || !m_current_payment_request) {

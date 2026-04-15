@@ -170,6 +170,8 @@ def assert_wallet_locked(gui_rpc_port, wallet_name):
 
 def open_wallet_selector(gui):
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    if gui.get_property("walletSelectPopup", "opened") is True:
+        return
     gui.click("walletBadge")
     gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
 
@@ -179,6 +181,24 @@ def select_wallet(gui, wallet_name):
     wallet_selector_object_name = f"walletSelectItem_{sanitize_object_suffix(wallet_name)}"
     gui.wait_for_object(wallet_selector_object_name, timeout_ms=5000)
     gui.click(wallet_selector_object_name)
+
+
+def close_wallet_from_selector(gui, wallet_name):
+    if gui.get_property("walletSelectPopup", "opened") is not True:
+        open_wallet_selector(gui)
+    gui.settle()
+    deadline = time.time() + 5
+    object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
+    while True:
+        try:
+            if gui.get_property(object_name, "visible") is True:
+                break
+        except QmlDriverError:
+            pass
+        if time.time() >= deadline:
+            raise AssertionError(f"Close button did not appear for wallet {wallet_name!r}")
+        time.sleep(0.05)
+    gui.click(object_name)
 
 
 def open_import_wallet_page(gui):
@@ -453,6 +473,68 @@ def case_managed_legacy_migration(harness, checkpoints):
     checkpoints.checkpoint("legacy wallet migrated and loaded", gui)
 
 
+def case_close_loaded_wallet_from_selector(harness, checkpoints):
+    wallet_names = ["closeable_alpha_wallet", "closeable_beta_wallet"]
+
+    process = start_node(harness.bitcoind_binary, harness.gui_datadir, harness.gui_rpc_port)
+    try:
+        for wallet_name in wallet_names:
+            rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": wallet_name})
+    finally:
+        stop_node(process, harness.gui_rpc_port)
+    checkpoints.checkpoint("two managed wallets prepared")
+
+    harness.start_gui(reset_gui_settings=True)
+    gui = harness.driver
+    checkpoints.checkpoint("GUI launched", gui)
+    harness.finish_onboarding()
+    dismiss_create_wallet_wizard(gui)
+    wait_for_wallet_ready(harness, gui)
+    checkpoints.checkpoint("wallet overview displayed", gui)
+
+    for wallet_name in wallet_names:
+        rpc_call(harness.gui_rpc_port, "loadwallet", [wallet_name])
+    gui.wait_for_property("walletBadge", "text", wallet_names[-1], timeout_ms=20000)
+
+    loaded_wallets = rpc_call(harness.gui_rpc_port, "listwallets")
+    assert set(loaded_wallets) == set(wallet_names), f"Expected both wallets loaded, got {loaded_wallets}"
+
+    selected_wallet = gui.get_property("walletBadge", "text")
+    assert selected_wallet in wallet_names, f"Unexpected initially selected wallet: {selected_wallet!r}"
+    remaining_wallet = next(name for name in wallet_names if name != selected_wallet)
+
+    open_wallet_selector(gui)
+    gui.settle()
+    for wallet_name in (selected_wallet, remaining_wallet):
+        deadline = time.time() + 5
+        object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
+        while True:
+            try:
+                if gui.get_property(object_name, "visible") is True:
+                    break
+            except QmlDriverError:
+                pass
+            if time.time() >= deadline:
+                raise AssertionError(f"Close button did not appear for wallet {wallet_name!r}")
+            time.sleep(0.05)
+    checkpoints.checkpoint("wallet selector open before closing selected wallet", gui)
+
+    close_wallet_from_selector(gui, selected_wallet)
+    gui.wait_for_property("walletBadge", "text", remaining_wallet, timeout_ms=20000)
+
+    open_wallet_selector(gui)
+    gui.settle()
+    checkpoints.checkpoint("wallet selector after closing selected wallet", gui)
+    gui.click(f"walletSelectItem_{sanitize_object_suffix(remaining_wallet)}")
+
+    loaded_wallets_after = rpc_call(harness.gui_rpc_port, "listwallets")
+    assert loaded_wallets_after == [remaining_wallet], (
+        f"Expected only remaining wallet to stay loaded, got {loaded_wallets_after}"
+    )
+    assert gui.get_property("walletBadge", "noWalletLoaded") is False, "Expected one wallet to remain loaded"
+    checkpoints.checkpoint("selected wallet closed from selector", gui)
+
+
 def run_test(args):
     screenshot_root = None
     if args.save_screenshots:
@@ -464,6 +546,7 @@ def run_test(args):
         ("qml_password_wallet_review_fallback", 310, case_locked_review_fallback),
         ("qml_password_wallet_import_encrypted", 320, case_import_encrypted_wallet),
         ("qml_password_wallet_managed_legacy_migration", 330, case_managed_legacy_migration),
+        ("qml_password_wallet_close_loaded_wallet", 340, case_close_loaded_wallet_from_selector),
     ]
 
     exit_code = 0

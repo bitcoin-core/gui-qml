@@ -19,6 +19,10 @@ Popup {
 
     signal addWallet()
 
+    function closeLoadedWallet(name) {
+        walletController.closeWallet(name)
+    }
+
     background: Item {
         anchors.fill: parent
         Rectangle {
@@ -76,17 +80,62 @@ Popup {
             ScrollBar.vertical: ScrollBar { }
             model: walletListModel
 
-            delegate: WalletBadge {
-                required property string name
-                required property string format
+            delegate: ItemDelegate {
+                id: delegate
+                required property string name;
+                required property string format;
+                required property int loadState;
+
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: 220
                 height: 32
-                text: name
                 checked: walletController.selectedWallet.name == name
                 ButtonGroup.group: buttonGroup
-                showBalance: false
-                showIcon: false
+                leftPadding: 10
+                rightPadding: 6
+                topPadding: 0
+                bottomPadding: 0
+
+                background: Rectangle {
+                    radius: 5
+                    color: delegate.hovered ? Theme.color.neutral2 : "transparent"
+                }
+
+                HoverHandler {
+                    cursorShape: Qt.PointingHandCursor
+                }
+
+                contentItem: RowLayout {
+                    spacing: 6
+
+                    CoreText {
+                        Layout.fillWidth: true
+                        text: delegate.name
+                        horizontalAlignment: Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                        font.pixelSize: 14
+                        color: delegate.checked || delegate.hovered ? Theme.color.orange : Theme.color.neutral9
+                        elide: Text.ElideRight
+                    }
+
+                    IconButton {
+                        id: closeButton
+                        objectName: "walletSelectClose_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                        visible: delegate.loadState === 1
+                        enabled: visible
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        Layout.preferredWidth: 20
+                        Layout.preferredHeight: 20
+                        size: 20
+                        iconSource: "image://images/cross"
+                        iconColor: delegate.hovered ? Theme.color.orange : Theme.color.neutral7
+                        hoverColor: Theme.color.orange
+                        activeColor: iconColor
+
+                        onClicked: root.closeLoadedWallet(delegate.name)
+                    }
+                }
+
                 onClicked: {
                     walletController.setSelectedWallet(name, format)
                     root.close()
