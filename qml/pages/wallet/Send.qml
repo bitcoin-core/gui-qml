@@ -127,6 +127,7 @@ PageStack {
 
                     CoreText {
                         id: title
+                        objectName: "walletSendTitle"
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
                         text: qsTr("Send bitcoin")
@@ -291,7 +292,9 @@ PageStack {
                             text: root.recipient.amount.display
                             onTextChanged: {
                                 root.clearPrepareTransactionError()
-                                root.recipient.amount.display = text
+                                if (text !== root.recipient.amount.display) {
+                                    root.recipient.amount.display = text
+                                }
                                 root.scheduleFeeEstimates()
                             }
                             onTextEdited: root.recipient.amount.display = text
@@ -506,6 +509,11 @@ PageStack {
         id: reviewPassphrasePopup
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
+        popupObjectName: "reviewPassphrasePopup"
+        passphraseFieldObjectName: "reviewPassphraseField"
+        errorTextObjectName: "reviewPassphraseErrorText"
+        cancelButtonObjectName: "reviewPassphraseCancelButton"
+        confirmButtonObjectName: "reviewPassphraseConfirmButton"
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to prepare this transaction for review.")
         confirmText: qsTr("Unlock and continue")

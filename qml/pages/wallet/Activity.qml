@@ -51,6 +51,7 @@ PageStack {
 
             header: CoreText {
                 id: title
+                objectName: "walletActivityTitle"
                 horizontalAlignment: Text.AlignLeft
                 text: qsTr("Activity")
                 font.pixelSize: 21

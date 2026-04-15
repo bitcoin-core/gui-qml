@@ -91,6 +91,7 @@ Page {
 
         Setting {
             id: confirmToggle
+            objectName: "createWalletPasswordConfirmToggle"
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
@@ -124,6 +125,7 @@ Page {
         }
 
         CoreText {
+            objectName: "createWalletPasswordErrorText"
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20

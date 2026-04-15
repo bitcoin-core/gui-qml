@@ -136,7 +136,7 @@ Page {
 
             ContinueButton {
                 id: confirmationButton
-                objectName: "sendReviewSendButton"
+                objectName: "sendTransactionButton"
                 visible: !root.wallet || !root.wallet.hasExternalSigner
                 enabled: !root.sending
                 Layout.fillWidth: true
@@ -154,6 +154,7 @@ Page {
             }
 
             CoreText {
+                objectName: "sendTransactionErrorText"
                 Layout.fillWidth: true
                 visible: text.length > 0
                 text: root.wallet.transactionError

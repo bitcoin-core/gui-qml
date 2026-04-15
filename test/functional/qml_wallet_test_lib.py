@@ -72,7 +72,7 @@ def rpc_call(port, method, params=None, wallet=None):
     if wallet:
         path = f"/wallet/{wallet}"
 
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
     credentials = base64.b64encode(f"{RPC_USER}:{RPC_PASS}".encode("utf-8")).decode("ascii")
     conn.request(
         "POST",

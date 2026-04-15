@@ -11,15 +11,20 @@ import "../controls"
 Popup {
     id: root
 
+    property string popupObjectName: ""
     property string titleText: qsTr("Wallet update required")
     property string descriptionText: ""
     property string confirmText: qsTr("Update wallet")
     property string busyConfirmText: qsTr("Updating...")
     property string errorText: ""
+    property string errorTextObjectName: ""
+    property string cancelButtonObjectName: ""
+    property string confirmButtonObjectName: ""
     property bool busy: false
 
     signal confirmed()
 
+    objectName: popupObjectName
     modal: true
     padding: 0
     implicitWidth: 420
@@ -62,6 +67,7 @@ Popup {
         }
 
         CoreText {
+            objectName: root.errorTextObjectName
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
@@ -80,6 +86,7 @@ Popup {
             spacing: 15
 
             OutlineButton {
+                objectName: root.cancelButtonObjectName
                 Layout.fillWidth: true
                 Layout.minimumWidth: 120
                 enabled: !root.busy
@@ -88,6 +95,7 @@ Popup {
             }
 
             ContinueButton {
+                objectName: root.confirmButtonObjectName
                 Layout.fillWidth: true
                 Layout.minimumWidth: 120
                 enabled: !root.busy

@@ -226,6 +226,10 @@ Page {
         id: migrationRequiredPopup
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
+        popupObjectName: "walletMigrationPopup"
+        errorTextObjectName: "walletMigrationErrorText"
+        cancelButtonObjectName: "walletMigrationCancelButton"
+        confirmButtonObjectName: "walletMigrationConfirmButton"
         descriptionText: qsTr("This wallet uses a legacy format and needs to be updated before it can be opened.")
         busy: walletController.walletMigrationInProgress
         onConfirmed: {
@@ -239,6 +243,11 @@ Page {
         id: migrationPassphrasePopup
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
+        popupObjectName: "walletMigrationPassphrasePopup"
+        passphraseFieldObjectName: "walletMigrationPassphraseField"
+        errorTextObjectName: "walletMigrationPassphraseErrorText"
+        cancelButtonObjectName: "walletMigrationPassphraseCancelButton"
+        confirmButtonObjectName: "walletMigrationPassphraseConfirmButton"
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
         confirmText: qsTr("Unlock and update")
