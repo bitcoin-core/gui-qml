@@ -30,6 +30,7 @@
         <file>components/Tooltip.qml</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/WalletSettings.qml</file>
+        <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AddWalletButton.qml</file>
         <file>controls/CaretRightIcon.qml</file>

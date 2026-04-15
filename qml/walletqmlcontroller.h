@@ -50,7 +50,7 @@ public:
     Q_INVOKABLE void importWallet(const QString& path);
     Q_INVOKABLE void clearWalletCreateStatus();
     Q_INVOKABLE void clearWalletLoadStatus();
-    Q_INVOKABLE void migrateWallet(const QString& path);
+    Q_INVOKABLE void migrateWallet(const QString& path, const QString& passphrase = QString());
     Q_INVOKABLE void clearWalletMigrationStatus();
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const;
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
@@ -113,7 +113,7 @@ private:
     void handleLoadWallet(std::unique_ptr<interfaces::Wallet> wallet);
     void startWalletImport(const QString& path);
     void startWalletLoad(const QString& path, const QString& wallet_format = QString());
-    void startWalletMigration(const QString& path);
+    void startWalletMigration(const QString& path, const QString& passphrase);
     QString resolveManagedWalletReference(const QString& path, QString* wallet_format = nullptr) const;
     QString inferWalletLoadTarget(const QString& normalized_path) const;
     QString inferRestoreWalletName(const QString& normalized_path) const;

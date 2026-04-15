@@ -17,6 +17,8 @@ Page {
     id: root
     background: null
 
+    property string pendingMigrationPath: ""
+
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
@@ -59,8 +61,30 @@ Page {
             settingsTabButton.checked = true
             nodeSettings.openWalletSettings()
         }
-        function onWalletMigrationRequired(walletPath) {
-            root.handleWalletMigrationRequired(walletPath)
+        function onWalletMigrationRequired(path) {
+            root.pendingMigrationPath = path
+            migrationRequiredPopup.errorText = ""
+            migrationRequiredPopup.open()
+        }
+        function onWalletMigrationSucceeded() {
+            root.pendingMigrationPath = ""
+            migrationRequiredPopup.close()
+            migrationPassphrasePopup.close()
+        }
+        function onWalletMigrationFailed() {
+            if (root.pendingMigrationPath.length === 0) {
+                return
+            }
+            if (walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
+                migrationRequiredPopup.close()
+                migrationPassphrasePopup.busy = false
+                migrationPassphrasePopup.errorText = walletController.walletMigrationError
+                migrationPassphrasePopup.open()
+            } else {
+                migrationRequiredPopup.busy = false
+                migrationRequiredPopup.errorText = walletController.walletMigrationError
+                migrationRequiredPopup.open()
+            }
         }
     }
 
@@ -198,5 +222,30 @@ Page {
         }
     }
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+    WalletMigrationPopup {
+        id: migrationRequiredPopup
+        parent: Overlay.overlay
+        width: Math.min(420, root.width - 40)
+        descriptionText: qsTr("This wallet uses a legacy format and needs to be updated before it can be opened.")
+        busy: walletController.walletMigrationInProgress
+        onConfirmed: {
+            migrationRequiredPopup.errorText = ""
+            migrationRequiredPopup.close()
+            walletController.migrateWallet(root.pendingMigrationPath, "")
+        }
+    }
+
+    WalletPassphrasePopup {
+        id: migrationPassphrasePopup
+        parent: Overlay.overlay
+        width: Math.min(420, root.width - 40)
+        titleText: qsTr("Enter wallet password")
+        descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
+        confirmText: qsTr("Unlock and update")
+        busyConfirmText: qsTr("Updating...")
+        onSubmitted: (passphrase) => {
+            migrationPassphrasePopup.busy = true
+            walletController.migrateWallet(root.pendingMigrationPath, passphrase)
+        }
+    }
 }
