@@ -53,7 +53,6 @@ Page {
 
         CoreTextField {
             id: walletNameInput
-<<<<<<< HEAD
             objectName: "createWalletNameInput"
             focus: true
             Layout.fillWidth: true

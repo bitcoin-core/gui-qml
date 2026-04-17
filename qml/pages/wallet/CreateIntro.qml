@@ -96,7 +96,6 @@ Page {
         }
 
         ContinueButton {
-<<<<<<< HEAD
             objectName: "createWalletIntroStartButton"
             Layout.preferredWidth: Math.min(300, parent.width - 2 * Layout.leftMargin)
             Layout.topMargin: 30

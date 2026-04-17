@@ -72,8 +72,6 @@ PageStack {
         function onCurrentRecipientChanged() {
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
-        }
-        function onCurrentRecipientChanged() {
             sendPage.paymentRequestStatus = ""
             sendPage.paymentRequestIsError = false
             sendPage.paymentRequestMessage = ""
@@ -249,6 +247,13 @@ PageStack {
             target: root.recipient.amount
             function onAmountChanged() {
                 if (!sendPage.m_applyingUri) sendPage.checkClipboard()
+            }
+        }
+        // Re-sync amount text after unit flip (declarative binding breaks on edit).
+        Connections {
+            target: root.recipient.amount
+            function onDisplayChanged() {
+                amountInput.text = root.recipient.amount.display
             }
         }
         Connections {
