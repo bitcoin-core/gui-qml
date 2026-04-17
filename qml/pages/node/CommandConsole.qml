@@ -135,7 +135,7 @@ Page {
         id: autocompletePopup
         objectName: "consoleAutocompletePopup"
         parent: inputArea
-        x: 0
+        x: inputField.x
         y: -height - 4
         z: 10
         width: Math.min(inputField.width, 300)
@@ -154,6 +154,8 @@ Page {
             objectName: "consoleAutocompleteList"
             anchors.fill: parent
             clip: true
+            currentIndex: autocompleteIndex
+            highlightFollowsCurrentItem: true
             model: filteredCommands
             delegate: ItemDelegate {
                 required property string modelData
@@ -171,7 +173,7 @@ Page {
                     text: modelData
                     font.family: "monospace"
                     font.pixelSize: 13
-                    color: Theme.color.neutral9
+                    color: index === autocompleteIndex ? Theme.color.orange : Theme.color.neutral9
                     elide: Text.ElideRight
                 }
                 // Apply the suggestion without stealing focus from the
@@ -247,26 +249,35 @@ Page {
                 Keys.onReturnPressed: submitCommand()
                 Keys.onEnterPressed: submitCommand()
 
-                // History navigation with Up/Down arrows.
+                // Up/Down: navigate autocomplete when popup is open,
+                // otherwise browse command history.
                 Keys.onUpPressed: {
-                    internal.navigatingHistory = true
-                    var result = rpcConsoleModel.browseHistory(1, inputField.text)
-                    inputField.text = result
-                    inputField.cursorPosition = result.length
-                    internal.navigatingHistory = false
+                    if (autocompletePopup.visible && filteredCommands.length > 0) {
+                        autocompleteIndex = Math.max(0, autocompleteIndex - 1)
+                    } else {
+                        internal.navigatingHistory = true
+                        var result = rpcConsoleModel.browseHistory(1, inputField.text)
+                        inputField.text = result
+                        inputField.cursorPosition = result.length
+                        internal.navigatingHistory = false
+                    }
                 }
                 Keys.onDownPressed: {
-                    internal.navigatingHistory = true
-                    var result = rpcConsoleModel.browseHistory(-1, inputField.text)
-                    inputField.text = result
-                    inputField.cursorPosition = result.length
-                    internal.navigatingHistory = false
+                    if (autocompletePopup.visible && filteredCommands.length > 0) {
+                        autocompleteIndex = Math.min(filteredCommands.length - 1, autocompleteIndex + 1)
+                    } else {
+                        internal.navigatingHistory = true
+                        var result = rpcConsoleModel.browseHistory(-1, inputField.text)
+                        inputField.text = result
+                        inputField.cursorPosition = result.length
+                        internal.navigatingHistory = false
+                    }
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
                 Keys.onTabPressed: {
                     if (autocompletePopup.visible && filteredCommands.length > 0) {
-                        applySuggestion(filteredCommands[0])
+                        applySuggestion(filteredCommands[autocompleteIndex])
                         event.accepted = true
                     }
                 }
@@ -335,6 +346,7 @@ Page {
     // Filtered autocomplete model. Note: list<string> requires Qt 6.5+;
     // use var for compatibility with Qt 6.2.
     property var filteredCommands: []
+    property int autocompleteIndex: 0
 
     function updateFilteredCommands() {
         // Guard: availableCommands is empty until the node is initialised.
@@ -360,7 +372,8 @@ Page {
             }
         }
         filteredCommands = matches
-        if (matches.length > 0 && inputField.activeFocus) {
+        autocompleteIndex = 0
+        if (matches.length > 0 && inputField.activeFocus && !internal.navigatingHistory) {
             autocompletePopup.open()
         } else {
             autocompletePopup.close()
