@@ -174,6 +174,16 @@ public:
     }
 };
 
+// MockNode that provides a known command list for autocomplete tests.
+class CommandListNode : public MockNode
+{
+public:
+    std::vector<std::string> listRpcCommands() override
+    {
+        return {"getblockcount", "getblock", "help"};
+    }
+};
+
 class RpcConsoleModelTests : public QObject
 {
     Q_OBJECT
@@ -186,6 +196,7 @@ private Q_SLOTS:
     void resetHistoryNavigationClearsState();
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
+    void availableCommandsIncludesHelpVariants();
 };
 
 void RpcConsoleModelTests::historyNavigationOldestToNewest()
@@ -359,6 +370,41 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     // The old regex-based formatter incorrectly treated this as a key.
     QVERIFY2(!html.contains(QStringLiteral("\"see section\"</span>")),
              qPrintable("String value was mis-coloured as a key in:\n" + html));
+}
+
+void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
+{
+    CommandListNode mock;
+    RpcConsoleModel model{mock};
+
+    // Populate availableCommands via the public slot.
+    model.onNodeInitialized();
+
+    QStringList cmds = model.availableCommands();
+
+    // Original commands present
+    QVERIFY(cmds.contains("getblockcount"));
+    QVERIFY(cmds.contains("getblock"));
+    QVERIFY(cmds.contains("help"));
+
+    // "help <cmd>" variants present
+    QVERIFY(cmds.contains("help getblockcount"));
+    QVERIFY(cmds.contains("help getblock"));
+    QVERIFY(cmds.contains("help help"));
+
+    // "help-console" present
+    QVERIFY(cmds.contains("help-console"));
+
+    // List is sorted (case-insensitive)
+    for (int i = 1; i < cmds.size(); ++i) {
+        QVERIFY2(cmds[i - 1].compare(cmds[i], Qt::CaseInsensitive) <= 0,
+                 qPrintable(QString("Not sorted: '%1' > '%2'").arg(cmds[i - 1], cmds[i])));
+    }
+
+    // No duplicates
+    QStringList deduped = cmds;
+    deduped.removeDuplicates();
+    QCOMPARE(cmds.size(), deduped.size());
 }
 
 QTEST_MAIN(RpcConsoleModelTests)
