@@ -300,26 +300,25 @@ Page {
                 }
             }
 
-            Item {
+            AbstractButton {
                 id: submitButton
                 objectName: "consoleSubmitButton"
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
                 Layout.alignment: Qt.AlignVCenter
+                hoverEnabled: true
+                enabled: !rpcConsoleModel.executing && inputField.text.trim().length > 0
+                onClicked: submitCommand()
 
-                property bool enabled: !rpcConsoleModel.executing && inputField.text.trim().length > 0
-
-                Rectangle {
+                background: Rectangle {
                     id: submitBg
-                    anchors.fill: parent
                     radius: 5
                     color: "transparent"
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
 
-                Icon {
+                contentItem: Icon {
                     id: submitIcon
-                    anchors.centerIn: parent
                     source: "image://images/caret-right"
                     size: 20
                     color: submitButton.enabled ? Theme.color.neutral9 : Theme.color.neutral4
@@ -330,15 +329,20 @@ Page {
                     id: submitHoverArea
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.NoButton
                     cursorShape: submitButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onEntered: if (submitButton.enabled) submitBg.color = Theme.color.neutral2
-                    onExited: submitBg.color = "transparent"
-                    onPressed: if (submitButton.enabled) submitBg.color = Theme.color.neutral3
-                    onReleased: {
-                        submitBg.color = "transparent"
-                        if (submitButton.enabled) submitCommand()
-                    }
                 }
+
+                states: [
+                    State {
+                        name: "HOVER"; when: submitButton.hovered && submitButton.enabled
+                        PropertyChanges { target: submitBg; color: Theme.color.neutral2 }
+                    },
+                    State {
+                        name: "PRESSED"; when: submitButton.pressed
+                        PropertyChanges { target: submitBg; color: Theme.color.neutral3 }
+                    }
+                ]
             }
         }
     }
