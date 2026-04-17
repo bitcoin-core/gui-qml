@@ -412,7 +412,9 @@ void RpcConsoleModel::onNodeInitialized()
     list.reserve(static_cast<int>(cmds.size()));
     for (const auto& c : cmds) {
         list.append(QString::fromStdString(c));
+        list.append(QStringLiteral("help ") + QString::fromStdString(c));
     }
+    list.append(QStringLiteral("help-console"));
     list.sort(Qt::CaseInsensitive);
     list.removeDuplicates();
     m_available_commands = list;
