@@ -147,6 +147,7 @@
         <file alias="circle-green-check">res/icons/circle-green-check.png</file>
         <file alias="circle-red-cross">res/icons/circle-red-cross.png</file>
         <file alias="coinbase">res/icons/coinbase.png</file>
+        <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="ellipsis">res/icons/ellipsis.png</file>
         <file alias="edit">res/icons/edit.png</file>
