@@ -199,18 +199,35 @@ Page {
             right: parent.right
             bottom: parent.bottom
         }
-        height: 56
-        color: Theme.color.neutral1
+        height: 48
+        color: "transparent"
+
+        Rectangle {
+            anchors {
+                top: parent.top
+                left: parent.left
+                right: parent.right
+                leftMargin: 12
+                rightMargin: 12
+            }
+            height: 1
+            color: Theme.color.neutral4
+        }
 
         RowLayout {
             anchors {
                 fill: parent
                 leftMargin: 12
                 rightMargin: 12
-                topMargin: 8
-                bottomMargin: 8
             }
             spacing: 8
+
+            Icon {
+                source: "image://images/console"
+                color: Theme.color.neutral5
+                size: 20
+                Layout.alignment: Qt.AlignVCenter
+            }
 
             TextField {
                 id: inputField
@@ -222,14 +239,9 @@ Page {
                 color: Theme.color.neutral9
                 placeholderText: qsTr("Enter command...")
                 placeholderTextColor: Theme.color.neutral5
-                leftPadding: 10
-                rightPadding: 10
-                background: Rectangle {
-                    color: Theme.color.neutral2
-                    border.color: inputField.activeFocus ? Theme.color.orange : Theme.color.neutral4
-                    border.width: 1
-                    radius: 4
-                }
+                leftPadding: 0
+                rightPadding: 0
+                background: Item {}
 
                 // Accept Enter key to submit.
                 Keys.onReturnPressed: submitCommand()
@@ -277,14 +289,45 @@ Page {
                 }
             }
 
-            ContinueButton {
+            Item {
                 id: submitButton
                 objectName: "consoleSubmitButton"
-                text: qsTr("Run")
-                leftPadding: 16
-                rightPadding: 16
-                enabled: !rpcConsoleModel.executing && inputField.text.trim().length > 0
-                onClicked: submitCommand()
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+                Layout.alignment: Qt.AlignVCenter
+
+                property bool enabled: !rpcConsoleModel.executing && inputField.text.trim().length > 0
+
+                Rectangle {
+                    id: submitBg
+                    anchors.fill: parent
+                    radius: 5
+                    color: "transparent"
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                Icon {
+                    id: submitIcon
+                    anchors.centerIn: parent
+                    source: "image://images/caret-right"
+                    size: 20
+                    color: submitButton.enabled ? Theme.color.neutral9 : Theme.color.neutral4
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                }
+
+                MouseArea {
+                    id: submitHoverArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: submitButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onEntered: if (submitButton.enabled) submitBg.color = Theme.color.neutral2
+                    onExited: submitBg.color = "transparent"
+                    onPressed: if (submitButton.enabled) submitBg.color = Theme.color.neutral3
+                    onReleased: {
+                        submitBg.color = "transparent"
+                        if (submitButton.enabled) submitCommand()
+                    }
+                }
             }
         }
     }
