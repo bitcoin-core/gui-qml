@@ -123,6 +123,55 @@ def test_execute_invalid_command(gui):
     print("  PASSED: invalid command handled; UI not blocked; error output appeared")
 
 
+def test_autocomplete_popup_appears(gui):
+    """Typing a partial command should open the autocomplete popup."""
+    print("\n── test_autocomplete_popup_appears ─────────────────────────────")
+
+    gui.set_text("consoleInput", "getblock")
+    # Popup should become visible since "getblock" matches commands like getblockcount
+    gui.wait_for_property("consoleAutocompletePopup", "visible", True, timeout_ms=3000)
+    print("  PASSED: autocomplete popup appeared for partial command")
+    # Clear for next test
+    gui.set_text("consoleInput", "")
+
+
+def test_autocomplete_popup_hidden_no_match(gui):
+    """Typing text with no command matches should not show the popup."""
+    print("\n── test_autocomplete_popup_hidden_no_match ─────────────────────")
+
+    gui.set_text("consoleInput", "zzzznotacommand")
+    visible = gui.get_property("consoleAutocompletePopup", "visible")
+    assert visible == False, f"Expected popup hidden for no-match input, got {visible}"
+    print("  PASSED: autocomplete popup hidden for non-matching input")
+    gui.set_text("consoleInput", "")
+
+
+def test_autocomplete_click_applies_suggestion(gui):
+    """Clicking an autocomplete suggestion should fill the input field."""
+    print("\n── test_autocomplete_click_applies_suggestion ───────────────────")
+
+    gui.set_text("consoleInput", "getblockcou")
+    # Wait for popup to appear
+    gui.wait_for_property("consoleAutocompletePopup", "visible", True, timeout_ms=3000)
+    # Click first suggestion
+    gui.click("consoleAutocomplete_0")
+    # Input should now contain the completed command + trailing space
+    text = gui.get_text("consoleInput")
+    assert text.strip() == "getblockcount", f"Expected 'getblockcount', got '{text.strip()}'"
+    print("  PASSED: clicking autocomplete suggestion filled input field")
+    gui.set_text("consoleInput", "")
+
+
+def test_autocomplete_help_variants(gui):
+    """Typing 'help get' should show help variants in autocomplete."""
+    print("\n── test_autocomplete_help_variants ─────────────────────────────")
+
+    gui.set_text("consoleInput", "help get")
+    gui.wait_for_property("consoleAutocompletePopup", "visible", True, timeout_ms=3000)
+    print("  PASSED: autocomplete popup appeared for 'help get' prefix")
+    gui.set_text("consoleInput", "")
+
+
 def test_back_navigation(gui):
     """Navigate back from the Console page and verify we return to Settings."""
     print("\n── test_back_navigation ────────────────────────────────────────")
@@ -153,6 +202,10 @@ def main():
         test_execute_getblockcount(gui)
         test_execute_help(gui)
         test_execute_invalid_command(gui)
+        test_autocomplete_popup_appears(gui)
+        test_autocomplete_popup_hidden_no_match(gui)
+        test_autocomplete_click_applies_suggestion(gui)
+        test_autocomplete_help_variants(gui)
         test_back_navigation(gui)
 
         print("\nAll console tests passed.")

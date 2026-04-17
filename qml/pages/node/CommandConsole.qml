@@ -377,7 +377,7 @@ Page {
         }
         filteredCommands = matches
         autocompleteIndex = 0
-        if (matches.length > 0 && inputField.activeFocus && !internal.navigatingHistory) {
+        if (matches.length > 0 && !internal.navigatingHistory) {
             autocompletePopup.open()
         } else {
             autocompletePopup.close()
