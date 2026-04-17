@@ -138,4 +138,4 @@ target_link_libraries(rpc_console_model_tests
     Qt6::Test
 )
 
-add_test(NAME rpc_console_model_tests COMMAND rpc_console_model_tests)
+add_test(NAME rpc_console_model_tests COMMAND rpc_console_model_tests -platform offscreen)
