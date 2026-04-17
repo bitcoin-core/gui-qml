@@ -202,23 +202,15 @@ Item {
         }
     }
 
-    // Auto-scroll to bottom when rows are added. A bulk append of N rows
-    // fires onItemAdded N times; _scrollQueued coalesces that to one call.
-    property bool _scrollQueued: false
-    function _queueScrollToBottom() {
-        if (_scrollQueued) return
-        _scrollQueued = true
-        Qt.callLater(function() {
-            _scrollQueued = false
-            root.scrollToBottom()
-        })
-    }
-
+    // Auto-scroll to bottom when content grows. Listening to
+    // onContentHeightChanged (rather than Repeater.onItemAdded) ensures the
+    // Column has already laid out the new delegate, so contentHeight is
+    // accurate and the scroll reaches the true bottom.
     Connections {
-        target: rowRepeater
+        target: flick
         enabled: root.autoScrollToBottom
-        function onItemAdded(index, item) {
-            root._queueScrollToBottom()
+        function onContentHeightChanged() {
+            root.scrollToBottom()
         }
     }
 }
