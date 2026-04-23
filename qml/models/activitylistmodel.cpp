@@ -4,6 +4,7 @@
 
 #include <qml/models/activitylistmodel.h>
 
+#include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/walletqmlmodel.h>
 
 ActivityListModel::ActivityListModel(WalletQmlModel *parent)
@@ -29,7 +30,7 @@ int ActivityListModel::rowCount(const QModelIndex &parent) const
 
 void ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) const
 {
-    if (m_wallet_model == nullptr) {
+    if (m_wallet_model == nullptr || tx->isPendingRequest) {
         return;
     }
     interfaces::WalletTxStatus wtx;
@@ -162,6 +163,67 @@ void ActivityListModel::refreshWallet()
               [](const QSharedPointer<Transaction> &a, const QSharedPointer<Transaction> &b) {
                   return a->depth < b->depth;
               });
+
+    addPendingReceiveRequests();
+}
+
+void ActivityListModel::addPendingReceiveRequests()
+{
+    if (m_wallet_model == nullptr) return;
+
+    ReceiveRequestHistoryModel* history = m_wallet_model->receiveRequests();
+    if (!history) return;
+
+    QSet<QString> existing_addresses;
+    for (const auto& tx : m_transactions) {
+        if (!tx->address.isEmpty()) {
+            existing_addresses.insert(tx->address);
+        }
+    }
+
+    for (int i = 0; i < history->rowCount(); ++i) {
+        QModelIndex idx = history->index(i);
+        QString address = history->data(idx, ReceiveRequestHistoryModel::AddressRole).toString();
+        if (address.isEmpty() || existing_addresses.contains(address)) continue;
+
+        QString label = history->data(idx, ReceiveRequestHistoryModel::LabelRole).toString();
+        CAmount amount = history->data(idx, ReceiveRequestHistoryModel::AmountSatRole).toLongLong();
+        QString dateIso = history->data(idx, ReceiveRequestHistoryModel::DateIsoRole).toString();
+        qint64 timestamp = QDateTime::fromString(dateIso, Qt::ISODate).toSecsSinceEpoch();
+
+        addReceiveRequest(address, label, amount, timestamp);
+    }
+}
+
+void ActivityListModel::addReceiveRequest(const QString& address, const QString& label,
+                                          CAmount amount, qint64 timestamp)
+{
+    uint256 zero_hash;
+    auto tx = QSharedPointer<Transaction>::create(zero_hash, timestamp,
+        Transaction::RecvWithAddress, address, CAmount{0}, amount);
+    tx->label = label.isEmpty() ? QStringLiteral("Payment request") : label;
+    tx->status = Transaction::Unconfirmed;
+    tx->isPendingRequest = true;
+
+    beginInsertRows(QModelIndex(), 0, 0);
+    m_transactions.push_front(tx);
+    m_pending_request_addresses.insert(address);
+    endInsertRows();
+}
+
+void ActivityListModel::removePendingRequestForAddress(const QString& address)
+{
+    if (!m_pending_request_addresses.contains(address)) return;
+
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (m_transactions[i]->isPendingRequest && m_transactions[i]->address == address) {
+            beginRemoveRows(QModelIndex(), i, i);
+            m_transactions.removeAt(i);
+            endRemoveRows();
+            break;
+        }
+    }
+    m_pending_request_addresses.remove(address);
 }
 
 void ActivityListModel::updateTransaction(const uint256& hash, const interfaces::WalletTxStatus& tx_status, int num_blocks, int64_t block_time)
@@ -181,6 +243,7 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
         }
         for (const auto& tx : transactions) {
             tx->updateStatus(tx_status, num_blocks, block_time);
+            removePendingRequestForAddress(tx->address);
         }
         beginInsertRows(QModelIndex(), 0, transactions.size() - 1);
         for (auto it = transactions.crbegin(); it != transactions.crend(); ++it) {

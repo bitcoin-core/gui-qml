@@ -12,6 +12,7 @@
 #include <memory>
 #include <QAbstractListModel>
 #include <QList>
+#include <QSet>
 #include <QSharedPointer>
 #include <QString>
 
@@ -46,9 +47,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void setDisplayUnit(int unit);
+    void addReceiveRequest(const QString& address, const QString& label,
+                           CAmount amount, qint64 timestamp);
 
 private:
     void refreshWallet();
+    void addPendingReceiveRequests();
     void updateTransactionStatus(QSharedPointer<Transaction> tx) const;
     void updateTransactionLabel(QSharedPointer<Transaction> tx) const;
     void subscribeToCoreSignals();
@@ -56,9 +60,11 @@ private:
     void updateTransaction(const uint256& hash, const interfaces::WalletTxStatus& wtx,
                            int num_blocks, int64_t block_time);
     int findTransactionIndex(const uint256& hash) const;
+    void removePendingRequestForAddress(const QString& address);
 
     int m_display_unit{0};
     QList<QSharedPointer<Transaction>> m_transactions;
+    QSet<QString> m_pending_request_addresses;
     WalletQmlModel* m_wallet_model;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;
