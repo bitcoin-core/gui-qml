@@ -69,6 +69,7 @@ public:
     QString replacedByTxid;
     bool countsForBalance;
     bool involvesWatchAddress;
+    bool isPendingRequest{false};
 
     static QList<QSharedPointer<Transaction>> fromWalletTx(const interfaces::WalletTx& tx);
 };
