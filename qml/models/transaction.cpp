@@ -58,6 +58,10 @@ QString Transaction::prettyAmount(int display_unit) const
 
 QString Transaction::dateTimeString() const
 {
+    if (isPendingRequest) {
+        return QStringLiteral("Pending receive");
+    }
+
     QDateTime dateTime = QDateTime::fromSecsSinceEpoch(time);
     QDateTime now = QDateTime::currentDateTimeUtc();
 
