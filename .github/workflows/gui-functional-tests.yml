@@ -59,3 +59,4 @@ jobs:
           python3 test/functional/qml_test_peers.py
           python3 test/functional/qml_test_proxy.py
           python3 test/functional/qml_test_debug_log.py
+          python3 test/functional/qml_test_receive.py
