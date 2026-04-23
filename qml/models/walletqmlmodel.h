@@ -9,6 +9,8 @@
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
 #include <qml/models/paymentrequest.h>
+#include <qml/models/receiverequesthistorymodel.h>
+#include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
@@ -35,6 +37,7 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
+    Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
     Q_PROPERTY(QString estimatedFee READ estimatedFee NOTIFY estimatedFeeChanged)
@@ -55,13 +58,17 @@ public:
     QString balance() const;
     CAmount balanceSatoshi() const;
     bool hasExternalSigner() const { return m_wallet && m_wallet->hasExternalSigner(); }
-    Q_INVOKABLE void commitPaymentRequest();
+    Q_INVOKABLE bool commitPaymentRequest();
+    Q_INVOKABLE void reloadReceiveRequests();
+    Q_INVOKABLE bool removeReceiveRequest(const QString& request_id);
+    Q_INVOKABLE bool loadPaymentRequest(const QString& request_id);
 
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
     BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
     SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
     PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
+    ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
     QString estimatedFee() const;
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
@@ -140,6 +147,7 @@ private:
     CoinsListModel* m_coins_list_model{nullptr};
     SendRecipientsListModel* m_send_recipients{nullptr};
     PaymentRequest* m_current_payment_request{nullptr};
+    ReceiveRequestHistoryModel* m_receive_requests{nullptr};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
     QObject* m_fee_estimation_worker{nullptr};
