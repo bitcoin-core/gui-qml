@@ -182,6 +182,7 @@ Page {
             }
         }
         RequestPayment {
+            onViewPreviousRequests: activityTabButton.checked = true
         }
         Item {
             id: blockClockTab
