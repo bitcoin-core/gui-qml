@@ -81,7 +81,7 @@ Page {
                 ButtonGroup.group: navigationTabs
             }
             NavigationTab {
-                objectName: "desktopWalletsReceiveTab"
+                objectName: "receiveTabButton"
                 text: qsTr("Receive")
                 property int index: 2
                 ButtonGroup.group: navigationTabs
@@ -157,6 +157,7 @@ Page {
             }
         }
         RequestPayment {
+            onViewPreviousRequests: activityTabButton.checked = true
         }
         Item {
             id: blockClockTab

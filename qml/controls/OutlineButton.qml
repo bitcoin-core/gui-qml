@@ -11,12 +11,37 @@ Button {
     hoverEnabled: AppMode.isDesktop
 
     property bool bold: true
+    property url iconSource: ""
 
-    contentItem: CoreText {
-        text: parent.text
-        bold: root.bold
-        font.pixelSize: 18
-        color: Theme.color.neutral9
+    leftPadding: 20
+    rightPadding: 20
+
+    HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+    contentItem: Item {
+        implicitWidth: row.implicitWidth
+        implicitHeight: row.implicitHeight
+        Row {
+            id: row
+            anchors.centerIn: parent
+            spacing: 4
+            Icon {
+                id: icon
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.iconSource.toString().length > 0
+                source: root.iconSource
+                color: Theme.color.neutral9
+                size: 20
+            }
+            CoreText {
+                id: label
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.text
+                bold: root.bold
+                font.pixelSize: 18
+                color: Theme.color.neutral9
+            }
+        }
     }
     background: Rectangle {
         id: bg
@@ -34,6 +59,12 @@ Button {
     }
 
     states: [
+        State {
+            name: "DISABLED"; when: !root.enabled
+            PropertyChanges { target: bg; border.color: Theme.color.neutral4 }
+            PropertyChanges { target: icon; color: Theme.color.neutral4 }
+            PropertyChanges { target: label; color: Theme.color.neutral4 }
+        },
         State {
             name: "PRESSED"; when: root.pressed
             PropertyChanges { target: bg; border.color: Theme.color.orangeLight2 }

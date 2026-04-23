@@ -22,6 +22,9 @@
         <file>components/PeersIndicator.qml</file>
         <file>components/ProxySettings.qml</file>
         <file>components/StorageLocations.qml</file>
+        <file>components/CopiedToast.qml</file>
+        <file>components/PaymentDetailOptionsPopup.qml</file>
+        <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
@@ -46,6 +49,7 @@
         <file>controls/KeyValueRow.qml</file>
         <file>controls/LabeledTextInput.qml</file>
         <file>controls/LabeledCoinControlButton.qml</file>
+        <file>controls/EllipsisMenuButtonItem.qml</file>
         <file>controls/EllipsisMenuToggleItem.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/NavigationBar.qml</file>
@@ -108,6 +112,7 @@
         <file>pages/wallet/CreateWalletWizard.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/MultipleSendReview.qml</file>
+        <file>pages/wallet/PaymentRequestDetail.qml</file>
         <file>pages/wallet/RequestPayment.qml</file>
         <file>pages/wallet/Send.qml</file>
         <file>pages/wallet/SendResult.qml</file>
@@ -160,6 +165,7 @@
         <file alias="plus-big-filled">res/icons/plus-big-filled.png</file>
         <file alias="pending">res/icons/pending.png</file>
         <file alias="search">res/icons/search.png</file>
+        <file alias="share">res/icons/share.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
         <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
