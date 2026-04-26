@@ -687,6 +687,7 @@ PageStack {
 
             Popup {
                 id: datePopup
+                objectName: "activityDateFilterPopup"
                 parent: dateFilterButton
                 x: datePopup.parent.width - datePopup.width
                 y: datePopup.parent.height + 2
@@ -756,6 +757,7 @@ PageStack {
 
             Popup {
                 id: typePopup
+                objectName: "activityTypeFilterPopup"
                 parent: typeFilterButton
                 x: typePopup.parent.width - typePopup.width
                 y: typePopup.parent.height + 2
