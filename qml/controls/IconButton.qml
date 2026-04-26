@@ -14,6 +14,7 @@ Button {
     property color iconColor: Theme.color.neutral5
     property color activeColor: Theme.color.orange
     property int size: 35
+    property int iconSize: size
     property alias iconSource: icon.source
 
     hoverEnabled: AppMode.isDesktop
@@ -40,7 +41,7 @@ Button {
         id: icon
         anchors.fill: parent
         source: ""
-        size: root.size
+        size: root.iconSize
         color: iconColor
         hoverEnabled: false
 

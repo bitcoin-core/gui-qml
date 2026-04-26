@@ -223,6 +223,7 @@ void ActivityListModel::addReceiveRequest(const QString& address, const QString&
     m_transactions.push_front(tx);
     m_pending_request_addresses.insert(address);
     endInsertRows();
+    Q_EMIT countChanged();
 }
 
 void ActivityListModel::removePendingRequestForAddress(const QString& address)
@@ -234,6 +235,7 @@ void ActivityListModel::removePendingRequestForAddress(const QString& address)
             beginRemoveRows(QModelIndex(), i, i);
             m_transactions.removeAt(i);
             endRemoveRows();
+            Q_EMIT countChanged();
             break;
         }
     }

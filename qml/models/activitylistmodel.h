@@ -21,6 +21,7 @@ class WalletQmlModel;
 class ActivityListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     explicit ActivityListModel(WalletQmlModel * parent = nullptr);
@@ -47,12 +48,16 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid) const;
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
+    int count() const { return rowCount(); }
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
     void setDisplayUnit(int unit);
     void addReceiveRequest(const QString& address, const QString& label,
                            CAmount amount, qint64 timestamp);
+
+Q_SIGNALS:
+    void countChanged();
 
 private:
     void refreshWallet();

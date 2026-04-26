@@ -13,13 +13,17 @@ Rectangle {
 
     property bool shown: false
     property int visibleDurationMs: 1500
+    property string text: qsTr("Copied")
+    property color toastColor: Theme.color.green
+    property color contentColor: Theme.color.neutral0
+    property url iconSource: "image://images/check"
 
     function show() {
         shown = true
         hideTimer.restart()
     }
 
-    color: Theme.color.green
+    color: toastColor
     radius: 4
     opacity: shown ? 1 : 0
     visible: opacity > 0
@@ -42,15 +46,15 @@ Rectangle {
         spacing: 4
 
         Icon {
-            source: "image://images/check"
-            color: Theme.color.neutral0
+            source: root.iconSource
+            color: root.contentColor
             size: 14
         }
 
         CoreText {
-            text: qsTr("Copied")
+            text: root.text
             font.pixelSize: 13
-            color: Theme.color.neutral0
+            color: root.contentColor
         }
     }
 }
