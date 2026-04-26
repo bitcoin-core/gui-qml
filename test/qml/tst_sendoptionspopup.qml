@@ -75,8 +75,8 @@ TestCase {
 
     function test_clicking_toggles_updates_aliases() {
         const popup = createPopup()
-        const coinToggle = findObject(popup, "sendCoinControlToggle")
-        const multipleToggle = findObject(popup, "sendMultipleRecipientsToggle")
+        const coinToggle = findObject(popup, "sendOptionsCoinControlToggle")
+        const multipleToggle = findObject(popup, "sendOptionsMultipleRecipientsToggle")
 
         verify(coinToggle !== null)
         verify(multipleToggle !== null)

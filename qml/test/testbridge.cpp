@@ -11,6 +11,7 @@
 #include <QMetaObject>
 #include <QEventLoop>
 #include <QFont>
+#include <QKeyEvent>
 #include <QImage>
 #include <QPointer>
 #include <QQuickItem>
@@ -91,6 +92,34 @@ QByteArray clickObject(QObject* obj)
     QJsonObject resp;
     resp[QStringLiteral("error")] = QStringLiteral("Cannot click object");
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);
+}
+
+struct KeyStroke {
+    int key{Qt::Key_unknown};
+    Qt::KeyboardModifiers modifiers{Qt::NoModifier};
+};
+
+std::optional<KeyStroke> ToKeyStroke(const QChar ch)
+{
+    if (ch.isLetter()) {
+        const QChar upper = ch.toUpper();
+        return KeyStroke{Qt::Key_A + upper.unicode() - QChar(u'A').unicode(),
+                         ch.isUpper() ? Qt::ShiftModifier : Qt::NoModifier};
+    }
+    if (ch.isDigit()) {
+        return KeyStroke{Qt::Key_0 + ch.unicode() - QChar(u'0').unicode(), Qt::NoModifier};
+    }
+
+    switch (ch.unicode()) {
+    case u' ': return KeyStroke{Qt::Key_Space, Qt::NoModifier};
+    case u'.': return KeyStroke{Qt::Key_Period, Qt::NoModifier};
+    case u'-': return KeyStroke{Qt::Key_Minus, Qt::NoModifier};
+    case u'_': return KeyStroke{Qt::Key_Minus, Qt::ShiftModifier};
+    case u'/': return KeyStroke{Qt::Key_Slash, Qt::NoModifier};
+    case u'\\': return KeyStroke{Qt::Key_Backslash, Qt::NoModifier};
+    case u':': return KeyStroke{Qt::Key_Semicolon, Qt::ShiftModifier};
+    default: return std::nullopt;
+    }
 }
 } // namespace
 
@@ -376,6 +405,10 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
         return cmdSetText(
             obj.value(QStringLiteral("objectName")).toString(),
             obj.value(QStringLiteral("text")).toString());
+    } else if (cmd == QLatin1String("type_text")) {
+        return cmdTypeText(
+            obj.value(QStringLiteral("objectName")).toString(),
+            obj.value(QStringLiteral("text")).toString());
     } else if (cmd == QLatin1String("wait_for_page")) {
         return cmdWaitForPage(
             obj.value(QStringLiteral("page")).toString(),
@@ -601,6 +634,43 @@ QByteArray TestBridge::cmdSetText(const QString& object_name, const QString& tex
     }
 
     return errorResponse(QStringLiteral("Object %1 has no 'text' property").arg(object_name));
+}
+
+QByteArray TestBridge::cmdTypeText(const QString& object_name, const QString& text)
+{
+    if (object_name.isEmpty()) {
+        return errorResponse(QStringLiteral("objectName is required"));
+    }
+
+    QObject* obj = findObjectByName(object_name);
+    if (!obj) {
+        return errorResponse(QStringLiteral("Object not found: %1").arg(object_name));
+    }
+
+    auto* item = qobject_cast<QQuickItem*>(obj);
+    if (!item) {
+        return errorResponse(QStringLiteral("Object %1 is not a QQuickItem").arg(object_name));
+    }
+
+    item->forceActiveFocus(Qt::OtherFocusReason);
+    QCoreApplication::processEvents();
+
+    for (const QChar ch : text) {
+        const std::optional<KeyStroke> stroke = ToKeyStroke(ch);
+        if (!stroke) {
+            return errorResponse(QStringLiteral("Unsupported character for type_text: %1").arg(ch));
+        }
+
+        const QString key_text{ch};
+        QKeyEvent press(QEvent::KeyPress, stroke->key, stroke->modifiers, key_text);
+        QKeyEvent release(QEvent::KeyRelease, stroke->key, stroke->modifiers, key_text);
+        QCoreApplication::sendEvent(item, &press);
+        QCoreApplication::sendEvent(item, &release);
+    }
+
+    QJsonObject resp;
+    resp[QStringLiteral("ok")] = true;
+    return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
 
 QByteArray TestBridge::cmdWaitForPage(const QString& page_name, int timeout_ms)

@@ -32,7 +32,7 @@ TestCase {
         verify(item !== null)
 
         compare(item.implicitWidth, 280)
-        compare(item.implicitHeight, 33)
+        compare(item.implicitHeight, 48)
         compare(item.checked, false)
     }
 
@@ -54,6 +54,6 @@ TestCase {
         verify(item.enabled)
         verify(item.hoverEnabled)
         verify(item.checkable)
-        compare(item.padding, 0)
+        compare(item.padding, 10)
     }
 }

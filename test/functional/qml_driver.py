@@ -85,6 +85,14 @@ class QmlDriver:
                 f"set_text({object_name!r}) failed: {resp['error']}"
             )
 
+    def type_text(self, object_name, text):
+        """Type text into the named QML object using key events."""
+        resp = self._send({"cmd": "type_text", "objectName": object_name, "text": text})
+        if "error" in resp:
+            raise QmlDriverError(
+                f"type_text({object_name!r}) failed: {resp['error']}"
+            )
+
     def get_text(self, object_name):
         """Return the text property of the named QML object."""
         resp = self._send({"cmd": "get_text", "objectName": object_name})

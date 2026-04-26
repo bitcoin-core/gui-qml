@@ -27,6 +27,7 @@
 ///   {"cmd": "get_property", "objectName": "<name>", "prop": "<property>"}
 ///   {"cmd": "click", "objectName": "<name>"}
 ///   {"cmd": "set_text", "objectName": "<name>", "text": "<value>"}
+///   {"cmd": "type_text", "objectName": "<name>", "text": "<value>"}
 ///   {"cmd": "wait_for_page", "page": "<objectName>", "timeout": <ms>}
 ///   {"cmd": "wait_for_property", "objectName": "<name>", "prop": "<property>", ...}
 ///   {"cmd": "get_text", "objectName": "<name>"}
@@ -78,6 +79,7 @@ private:
     QByteArray cmdGetProperty(const QString& object_name, const QString& prop);
     QByteArray cmdClick(const QString& object_name);
     QByteArray cmdSetText(const QString& object_name, const QString& text);
+    QByteArray cmdTypeText(const QString& object_name, const QString& text);
     QByteArray cmdWaitForPage(const QString& page_name, int timeout_ms);
     QByteArray cmdWaitForProperty(const QString& object_name, const QString& prop, int timeout_ms, const QJsonValue& expected, bool has_expected, const QString& contains, bool non_empty);
     QByteArray cmdGetText(const QString& object_name);

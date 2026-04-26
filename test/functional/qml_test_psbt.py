@@ -146,7 +146,12 @@ def build_fixtures(harness):
         [{recipient_address_1: 0.75}],
         os.path.join(harness.tmpdir, "unsupported.psbt"),
     )
-    return source_wallet, single_review_path, multiple_review_path, unsupported_path
+    return {
+        "source_wallet": source_wallet,
+        "single_review_path": single_review_path,
+        "multiple_review_path": multiple_review_path,
+        "unsupported_path": unsupported_path,
+    }
 
 
 def run_test():
@@ -167,15 +172,15 @@ def run_test():
         wait_for_rpc(harness.gui_rpc_port)
         checkpoints.checkpoint("GUI RPC ready", gui)
 
-        source_wallet, single_review_path, multiple_review_path, unsupported_path = build_fixtures(harness)
+        fixtures = build_fixtures(harness)
         checkpoints.checkpoint("PSBT fixtures created")
-        wait_for_wallet(gui, source_wallet)
-        checkpoints.checkpoint(f"wallet selected: {source_wallet}", gui)
+        wait_for_wallet(gui, fixtures["source_wallet"])
+        checkpoints.checkpoint(f"wallet selected: {fixtures['source_wallet']}", gui)
 
         navigate_to_send(gui)
         checkpoints.checkpoint("send page opened", gui)
 
-        import_psbt(gui, single_review_path)
+        import_psbt(gui, fixtures["single_review_path"])
         checkpoints.checkpoint("single-recipient PSBT submitted", gui)
         gui.wait_for_page("sendReviewPage", timeout_ms=20000)
         assert gui.get_current_page() == "sendReviewPage", "Expected single-recipient PSBT to open SendReview"
@@ -184,7 +189,7 @@ def run_test():
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("returned from single review to send page", gui)
 
-        import_psbt(gui, multiple_review_path)
+        import_psbt(gui, fixtures["multiple_review_path"])
         checkpoints.checkpoint("multi-recipient PSBT submitted", gui)
         gui.wait_for_page("multipleSendReviewPage", timeout_ms=20000)
         assert gui.get_current_page() == "multipleSendReviewPage", (
@@ -195,7 +200,7 @@ def run_test():
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("returned from multiple review to send page", gui)
 
-        import_psbt(gui, unsupported_path)
+        import_psbt(gui, fixtures["unsupported_path"])
         checkpoints.checkpoint("unsupported PSBT submitted", gui)
         gui.wait_for_property("unsupportedPsbtPopup", "visible", True, timeout_ms=20000)
         checkpoints.checkpoint("unsupported PSBT modal displayed", gui)
