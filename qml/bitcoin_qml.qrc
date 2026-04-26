@@ -66,6 +66,7 @@
         <file>controls/LabeledTextInput.qml</file>
         <file>controls/LabeledCoinControlButton.qml</file>
         <file>controls/EllipsisMenuButtonItem.qml</file>
+        <file>controls/EllipsisMenuActionItem.qml</file>
         <file>controls/EllipsisMenuToggleItem.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/NavigationBar.qml</file>

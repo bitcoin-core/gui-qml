@@ -240,6 +240,10 @@ PageStack {
                         id: sendOptionsPopup
                         x: menuButton.x - width + menuButton.width
                         y: menuButton.y + menuButton.height
+                        onClearFormRequested: {
+                            sendOptionsPopup.close()
+                            root.wallet.recipients.clear()
+                        }
                         onImportPsbtFromFileRequested: {
                             if (psbtAutomationPathField.text.length > 0) {
                                 const automatedPath = psbtAutomationPathField.text
@@ -266,6 +270,7 @@ PageStack {
 
                 RowLayout {
                     id: selectAndAddRecipients
+                    objectName: "sendMultipleRecipientsRow"
                     Layout.fillWidth: true
                     Layout.topMargin: 10
                     Layout.bottomMargin: 10
