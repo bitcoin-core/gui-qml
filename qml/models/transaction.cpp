@@ -33,6 +33,7 @@ Transaction::Transaction(
     , status(Unconfirmed)
     , time(time)
     , type(type)
+    , txid(QString::fromStdString(hash.GetHex()))
     , involvesWatchAddress(false)
 {
 }
@@ -42,6 +43,7 @@ Transaction::Transaction(uint256 hash, qint64 time)
     , hash(hash)
     , time(time)
     , type(Type::Other)
+    , txid(QString::fromStdString(hash.GetHex()))
     , involvesWatchAddress(false)
 {
 }
