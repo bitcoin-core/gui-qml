@@ -14,24 +14,27 @@ import "../controls/utils.js" as Utils
 
 Item {
     id: root
+    objectName: "blockClock"
     property real parentWidth: 600
     property real parentHeight: 600
     property bool showNetworkIndicator: true
+    property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
+    property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
 
     width: dial.width
-    height: dial.height + networkIndicator.height + networkIndicator.anchors.topMargin
+    height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
 
     property alias header: mainText.text
     property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
-    property bool connected: nodeModel.numOutboundPeers > 0
-    property bool synced: nodeModel.verificationProgress > 0.999
-    property string syncProgress: formatProgressPercentage(nodeModel.verificationProgress * 100)
-    property bool paused: false
-    property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
+    property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numOutboundPeers > 0
+    property bool synced: root.nodeModelRef !== null && root.nodeModelRef.verificationProgress > 0.999
+    property string syncProgress: formatProgressPercentage((root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0) * 100)
+    property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
+    property var syncState: Utils.formatRemainingSyncTime(root.nodeModelRef !== null ? root.nodeModelRef.remainingSyncTime : 0)
     property string syncTime: syncState.text
     property bool estimating: syncState.estimating
-    property bool faulted: nodeModel.faulted
+    property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
 
     activeFocusOnTab: true
 
@@ -48,11 +51,11 @@ Item {
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width
         penWidth: dial.width / 50
-        timeRatioList: chainModel.timeRatioList
-        verificationProgress: nodeModel.verificationProgress
+        timeRatioList: root.chainModelRef !== null ? root.chainModelRef.timeRatioList : []
+        verificationProgress: root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0
         paused: root.paused || root.faulted
         connected: root.connected
-        synced: nodeModel.verificationProgress > 0.999
+        synced: root.synced
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
@@ -139,8 +142,8 @@ Item {
         anchors.top: subText.bottom
         anchors.topMargin: dial.width / 10
         anchors.horizontalCenter: root.horizontalCenter
-        numOutboundPeers: nodeModel.numOutboundPeers
-        maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
+        numOutboundPeers: root.nodeModelRef !== null ? root.nodeModelRef.numOutboundPeers : 0
+        maxNumOutboundPeers: root.nodeModelRef !== null ? Math.max(root.nodeModelRef.maxNumOutboundPeers, 1) : 1
         indicatorDimensions: dial.width * (3/200)
         indicatorSpacing: dial.width / 40
         paused: root.paused || root.faulted
@@ -148,22 +151,23 @@ Item {
 
     NetworkIndicator {
         id: networkIndicator
+        objectName: "blockClockNetworkIndicator"
         show: root.showNetworkIndicator
+        chainModelRef: root.chainModelRef
         anchors.top: dial.bottom
         anchors.topMargin: networkIndicator.visible ? 30 : 0
         anchors.horizontalCenter: root.horizontalCenter
     }
 
     MouseArea {
+        objectName: "blockClockToggleArea"
         anchors.fill: dial
         cursorShape: root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
         enabled: !root.faulted
-        onClicked: {
-            if (!root.faulted) {
-                root.paused = !root.paused
-                nodeModel.pause = root.paused
-            }
+        function click() {
+            root.togglePause()
         }
+        onClicked: click()
         FocusBorder {
             visible: root.activeFocus
         }
@@ -171,7 +175,7 @@ Item {
 
     states: [
         State {
-            name: "IBD"; when: !synced && !paused && connected
+            name: "IBD"; when: !faulted && !synced && !paused && connected
             PropertyChanges {
                 target: root
                 header: root.syncProgress
@@ -180,10 +184,10 @@ Item {
         },
 
         State {
-            name: "BLOCKCLOCK"; when: synced && !paused && connected
+            name: "BLOCKCLOCK"; when: !faulted && synced && !paused && connected
             PropertyChanges {
                 target: root
-                header: Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0)
+                header: Number(root.nodeModelRef !== null ? root.nodeModelRef.blockTipHeight : 0).toLocaleString(Qt.locale(), 'f', 0)
                 subText: "Blocktime"
                 estimating: false
             }
@@ -223,7 +227,7 @@ Item {
         },
 
         State {
-            name: "CONNECTING"; when: !paused && !connected
+            name: "CONNECTING"; when: !faulted && !paused && !connected
             PropertyChanges {
                 target: root
                 header: qsTr("Connecting")
@@ -252,6 +256,12 @@ Item {
             return progress.toFixed(2) + "%"
         } else {
             return "0%"
+        }
+    }
+
+    function togglePause() {
+        if (!root.faulted && root.nodeModelRef !== null) {
+            root.nodeModelRef.pause = !root.paused
         }
     }
 }

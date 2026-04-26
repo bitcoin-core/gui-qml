@@ -14,12 +14,13 @@ Button {
     property color bgColor
     property bool shorten: false
     property bool show: true
+    property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property int textSize: 15
     topPadding: 2
     bottomPadding: 2
     leftPadding: 7
     rightPadding: 7
-    state: show ? chainModel.currentNetworkName : "MAIN"
+    state: show && root.chainModelRef !== null ? root.chainModelRef.currentNetworkName : "MAIN"
     contentItem: CoreText {
         text: root.text
         font.pixelSize: root.textSize

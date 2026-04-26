@@ -13,6 +13,7 @@ add_executable(bitcoinqml_unit_tests
   test_unit_tests_main.cpp
   gmocktestfixture.h
   test_bitcoinaddress.cpp
+  test_blockclockdial.cpp
   test_bitcoinamount.cpp
   test_peerlistmodel.cpp
   test_peerstatsutil.cpp
