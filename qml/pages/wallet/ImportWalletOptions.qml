@@ -40,7 +40,6 @@ Page {
 
     FileDialog {
         id: fileDialog
-        currentFolder: shortcuts.home
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
         onAccepted: {
             if (fileDialog.selectedFile.toString().length === 0) {

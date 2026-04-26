@@ -41,7 +41,6 @@ ColumnLayout {
     }
     FileDialog {
         id: fileDialog
-        currentFolder: shortcuts.home
         onAccepted: {
             optionsModel.setCustomDataDirString(fileDialog.selectedFile.toString())
             var customDataDir = fileDialog.selectedFile.toString();
