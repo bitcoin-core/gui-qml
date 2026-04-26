@@ -102,13 +102,17 @@ Page {
                 Layout.rightMargin: 10
                 property int index: 3
                 ButtonGroup.group: navigationTabs
+                customContent: MiniBlockClock {
+                    pageSelected: blockClockTabButton.checked
+                }
 
                 Tooltip {
                     id: blockClockTooltip
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.verificationProgress > 0.9999
+                    property bool synced: nodeModel.verificationProgress > 0.999
                     property bool paused: nodeModel.pause
                     property bool connected: nodeModel.numOutboundPeers > 0
+                    property bool faulted: nodeModel.faulted
 
                     anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: -5
@@ -116,11 +120,13 @@ Page {
 
                     visible: blockClockTabButton.hovered
                     text: {
-                        if (paused) {
+                        if (faulted) {
+                            qsTr("Error")
+                        } else if (paused) {
                             qsTr("Paused")
                         } else if (connected && synced) {
                             qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
-                        } else if (connected){
+                        } else if (connected) {
                             qsTr("Downloading blocks\n" +  syncState.text)
                         } else {
                             qsTr("Connecting")

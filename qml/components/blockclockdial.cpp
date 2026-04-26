@@ -18,7 +18,7 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
     m_animation_timer.setTimerType(Qt::PreciseTimer);
     m_animation_timer.setInterval(16);
     m_delay_timer.setSingleShot(true);
-    m_delay_timer.setInterval(5000);
+    m_delay_timer.setInterval(m_connecting_animation_delay_ms);
     connect(&m_delay_timer, &QTimer::timeout,
             this, [this]() { this->m_animation_timer.start(); });
     connect(&m_animation_timer, &QTimer::timeout,
@@ -29,7 +29,11 @@ BlockClockDial::BlockClockDial(QQuickItem *parent)
                 }
                 this->update();
             });
-    m_delay_timer.start();
+    if (m_connecting_animation_delay_ms == 0) {
+        m_animation_timer.start();
+    } else {
+        m_delay_timer.start();
+    }
 }
 
 void BlockClockDial::setupConnectingGradient(const QPen & pen)
@@ -43,6 +47,19 @@ void BlockClockDial::setupConnectingGradient(const QPen & pen)
     m_connecting_gradient.setColorAt(1, "transparent");
 }
 
+void BlockClockDial::setupSyncedGradient(const QRectF& bounds)
+{
+    m_synced_gradient.setCenter(bounds.center());
+    m_synced_gradient.setAngle(90);
+    m_synced_gradient.setColorAt(0, m_confirmation_colors[5]);
+    m_synced_gradient.setColorAt(0.16, m_confirmation_colors[5]);
+    m_synced_gradient.setColorAt(0.32, m_confirmation_colors[4]);
+    m_synced_gradient.setColorAt(0.48, m_confirmation_colors[3]);
+    m_synced_gradient.setColorAt(0.64, m_confirmation_colors[2]);
+    m_synced_gradient.setColorAt(0.8, m_confirmation_colors[1]);
+    m_synced_gradient.setColorAt(1, m_confirmation_colors[0]);
+}
+
 qreal BlockClockDial::decrementGradientAngle(qreal angle)
 {
     if (angle == -360) {
@@ -54,6 +71,10 @@ qreal BlockClockDial::decrementGradientAngle(qreal angle)
 
 qreal BlockClockDial::getTargetAnimationAngle()
 {
+    if (m_time_ratio_list.isEmpty()) {
+        return connected() ? verificationProgress() * 360 : 360;
+    }
+
     if (connected() && synced()) {
         return m_time_ratio_list[0].toDouble() * 360;
     } else if (connected()) {
@@ -80,12 +101,18 @@ qreal BlockClockDial::incrementAnimatingMaxAngle(qreal angle)
 void BlockClockDial::setTimeRatioList(QVariantList new_list)
 {
     m_time_ratio_list = new_list;
+    if (!m_animate_dial) {
+        m_animating_max_angle = getTargetAnimationAngle();
+    }
     update();
 }
 
 void BlockClockDial::setVerificationProgress(double progress)
 {
     m_verification_progress = progress;
+    if (!m_animate_dial) {
+        m_animating_max_angle = getTargetAnimationAngle();
+    }
     update();
 }
 
@@ -94,11 +121,21 @@ void BlockClockDial::setConnected(bool connected)
     if (m_is_connected != connected) {
         m_is_connected = connected;
         m_animating_max_angle = 0;
-        if (m_is_connected) {
+        if (!m_animate_dial) {
+            m_animation_timer.stop();
+            m_delay_timer.stop();
+            m_animating_max_angle = getTargetAnimationAngle();
+        } else if (m_is_connected) {
+            m_delay_timer.stop();
             m_animation_timer.start();
         } else {
             m_animation_timer.stop();
-            m_delay_timer.start();
+            if (m_connecting_animation_delay_ms == 0) {
+                m_delay_timer.stop();
+                m_animation_timer.start();
+            } else {
+                m_delay_timer.start();
+            }
         }
         update();
     }
@@ -109,7 +146,11 @@ void BlockClockDial::setSynced(bool is_synced)
     if (m_is_synced != is_synced) {
         m_is_synced = is_synced;
         m_animating_max_angle = 0;
-        if (m_is_synced && connected()) {
+        if (!m_animate_dial) {
+            m_animation_timer.stop();
+            m_delay_timer.stop();
+            m_animating_max_angle = getTargetAnimationAngle();
+        } else if (m_is_synced && connected()) {
             m_animation_timer.start();
         }
         update();
@@ -124,6 +165,68 @@ void BlockClockDial::setPaused(bool paused)
             m_animation_timer.stop();
         }
         m_animating_max_angle = 0;
+        update();
+    }
+}
+
+void BlockClockDial::setAnimateDial(bool animate_dial)
+{
+    if (m_animate_dial != animate_dial) {
+        m_animate_dial = animate_dial;
+        if (m_animate_dial) {
+            m_animating_max_angle = 0;
+            if (m_is_connected) {
+                m_animation_timer.start();
+            } else {
+                m_animation_timer.stop();
+                m_delay_timer.start();
+            }
+        } else {
+            m_animation_timer.stop();
+            m_delay_timer.stop();
+            m_animating_max_angle = getTargetAnimationAngle();
+        }
+        update();
+    }
+}
+
+void BlockClockDial::setConnectingAnimationDelayMs(int connecting_animation_delay_ms)
+{
+    connecting_animation_delay_ms = qMax(connecting_animation_delay_ms, 0);
+    if (m_connecting_animation_delay_ms != connecting_animation_delay_ms) {
+        m_connecting_animation_delay_ms = connecting_animation_delay_ms;
+        m_delay_timer.setInterval(m_connecting_animation_delay_ms);
+        if (!m_is_connected && m_animate_dial) {
+            if (m_connecting_animation_delay_ms == 0) {
+                m_delay_timer.stop();
+                m_animation_timer.start();
+            } else if (!m_animation_timer.isActive()) {
+                m_delay_timer.start();
+            }
+        }
+    }
+}
+
+void BlockClockDial::setShowTimeTicks(bool show_time_ticks)
+{
+    if (m_show_time_ticks != show_time_ticks) {
+        m_show_time_ticks = show_time_ticks;
+        update();
+    }
+}
+
+void BlockClockDial::setShowBlockSegments(bool show_block_segments)
+{
+    if (m_show_block_segments != show_block_segments) {
+        m_show_block_segments = show_block_segments;
+        update();
+    }
+}
+
+void BlockClockDial::setUseGradientArcWhenSynced(bool use_gradient_arc_when_synced)
+{
+    if (m_use_gradient_arc_when_synced != use_gradient_arc_when_synced) {
+        m_use_gradient_arc_when_synced = use_gradient_arc_when_synced;
         update();
     }
 }
@@ -257,6 +360,45 @@ void BlockClockDial::paintProgress(QPainter * painter)
     painter->drawArc(bounds, startAngle * 16, spanAngle * 16);
 }
 
+void BlockClockDial::paintCurrentTimeArc(QPainter* painter)
+{
+    if (m_time_ratio_list.isEmpty()) {
+        return;
+    }
+
+    QPen pen(m_confirmation_colors[5]);
+    pen.setWidthF(m_pen_width);
+    pen.setCapStyle(Qt::RoundCap);
+    const QRectF bounds = getBoundsForPen(pen);
+    painter->setPen(pen);
+
+    const qreal start_angle = 90;
+    const qreal time_angle = m_time_ratio_list[0].toDouble() * 360;
+    const qreal span_angle = -1 * qMin(time_angle, m_animating_max_angle);
+    painter->drawArc(bounds, start_angle * 16, span_angle * 16);
+}
+
+void BlockClockDial::paintSyncedGradientArc(QPainter* painter)
+{
+    if (m_confirmation_colors.size() < 6 || m_time_ratio_list.isEmpty()) {
+        paintCurrentTimeArc(painter);
+        return;
+    }
+
+    QPen pen;
+    pen.setWidthF(m_pen_width);
+    pen.setCapStyle(Qt::RoundCap);
+    const QRectF bounds = getBoundsForPen(pen);
+    setupSyncedGradient(bounds);
+    pen.setBrush(QBrush(m_synced_gradient));
+    painter->setPen(pen);
+
+    const qreal start_angle = 90;
+    const qreal time_angle = m_time_ratio_list[0].toDouble() * 360;
+    const qreal span_angle = -1 * qMin(time_angle, m_animating_max_angle);
+    painter->drawArc(bounds, start_angle * 16, span_angle * 16);
+}
+
 void BlockClockDial::paintConnectingAnimation(QPainter * painter)
 {
     QPen pen;
@@ -317,16 +459,26 @@ void BlockClockDial::paint(QPainter * painter)
     painter->setRenderHint(QPainter::Antialiasing);
 
     paintBackground(painter);
-    paintTimeTicks(painter);
+    if (showTimeTicks()) {
+        paintTimeTicks(painter);
+    }
 
     if (paused()) return;
 
     if (connected() && synced()) {
-        paintBlocks(painter);
+        if (showBlockSegments()) {
+            paintBlocks(painter);
+        } else if (useGradientArcWhenSynced()) {
+            paintSyncedGradientArc(painter);
+        } else {
+            paintCurrentTimeArc(painter);
+        }
     } else if (connected()) {
         paintProgress(painter);
     } else if (m_animation_timer.isActive()) {
         paintConnectingAnimation(painter);
     }
-    m_animating_max_angle = incrementAnimatingMaxAngle(m_animating_max_angle);
+    if (m_animate_dial) {
+        m_animating_max_angle = incrementAnimatingMaxAngle(m_animating_max_angle);
+    }
 }

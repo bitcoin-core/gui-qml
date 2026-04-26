@@ -19,6 +19,11 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(bool connected READ connected WRITE setConnected)
     Q_PROPERTY(bool synced READ synced WRITE setSynced)
     Q_PROPERTY(bool paused READ paused WRITE setPaused)
+    Q_PROPERTY(bool animateDial READ animateDial WRITE setAnimateDial)
+    Q_PROPERTY(int connectingAnimationDelayMs READ connectingAnimationDelayMs WRITE setConnectingAnimationDelayMs)
+    Q_PROPERTY(bool showTimeTicks READ showTimeTicks WRITE setShowTimeTicks)
+    Q_PROPERTY(bool showBlockSegments READ showBlockSegments WRITE setShowBlockSegments)
+    Q_PROPERTY(bool useGradientArcWhenSynced READ useGradientArcWhenSynced WRITE setUseGradientArcWhenSynced)
     Q_PROPERTY(qreal penWidth READ penWidth WRITE setPenWidth)
     Q_PROPERTY(qreal scale READ scale WRITE setScale NOTIFY scaleChanged)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
@@ -34,6 +39,11 @@ public:
     bool connected() const { return m_is_connected; };
     bool synced() const { return m_is_synced; };
     bool paused() const { return m_is_paused; };
+    bool animateDial() const { return m_animate_dial; };
+    int connectingAnimationDelayMs() const { return m_connecting_animation_delay_ms; };
+    bool showTimeTicks() const { return m_show_time_ticks; };
+    bool showBlockSegments() const { return m_show_block_segments; };
+    bool useGradientArcWhenSynced() const { return m_use_gradient_arc_when_synced; };
     qreal penWidth() const { return m_pen_width; };
     qreal scale() const { return m_scale; };
     QColor backgroundColor() const { return m_background_color; };
@@ -46,6 +56,11 @@ public Q_SLOTS:
     void setConnected(bool connected);
     void setSynced(bool synced);
     void setPaused(bool paused);
+    void setAnimateDial(bool animate_dial);
+    void setConnectingAnimationDelayMs(int connecting_animation_delay_ms);
+    void setShowTimeTicks(bool show_time_ticks);
+    void setShowBlockSegments(bool show_block_segments);
+    void setUseGradientArcWhenSynced(bool use_gradient_arc_when_synced);
     void setPenWidth(qreal width);
     void setScale(qreal scale);
     void setBackgroundColor(QColor color);
@@ -58,25 +73,34 @@ Q_SIGNALS:
 private:
     void paintConnectingAnimation(QPainter * painter);
     void paintProgress(QPainter * painter);
+    void paintCurrentTimeArc(QPainter* painter);
+    void paintSyncedGradientArc(QPainter* painter);
     void paintBlocks(QPainter * painter);
     void paintBackground(QPainter * painter);
     void paintTimeTicks(QPainter * painter);
     QRectF getBoundsForPen(const QPen & pen);
     double degreesPerPixel();
     void setupConnectingGradient(const QPen & pen);
+    void setupSyncedGradient(const QRectF& bounds);
     qreal decrementGradientAngle(qreal angle);
     qreal incrementAnimatingMaxAngle(qreal angle);
     qreal getTargetAnimationAngle();
 
     QVariantList m_time_ratio_list{0.0};
-    double m_verification_progress;
-    bool m_is_connected;
-    bool m_is_synced;
-    bool m_is_paused;
+    double m_verification_progress{0.0};
+    bool m_is_connected{false};
+    bool m_is_synced{false};
+    bool m_is_paused{false};
+    bool m_animate_dial{true};
+    int m_connecting_animation_delay_ms{5000};
+    bool m_show_time_ticks{true};
+    bool m_show_block_segments{true};
+    bool m_use_gradient_arc_when_synced{false};
     qreal m_pen_width{4};
     qreal m_scale{5/12};
     QColor m_background_color{"#2D2D2D"};
     QConicalGradient m_connecting_gradient;
+    QConicalGradient m_synced_gradient;
     qreal m_connecting_start_angle = 90;
     const qreal m_connecting_end_angle = -180;
     QList<QColor> m_confirmation_colors{};

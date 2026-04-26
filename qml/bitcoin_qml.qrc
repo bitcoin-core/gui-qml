@@ -14,6 +14,7 @@
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/FeeSelection.qml</file>
+        <file>components/MiniBlockClock.qml</file>
         <file>components/MonospaceOutputView.qml</file>
         <file>components/InfoBanner.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>

@@ -13,6 +13,7 @@ Button {
     property color textActiveColor: Theme.color.orange
     property color iconColor: "transparent"
     property string iconSource: ""
+    property Component customContent: null
 
     id: root
     checkable: true
@@ -22,23 +23,34 @@ Button {
     bottomPadding: 0
     topPadding: 0
 
+    HoverHandler {
+        cursorShape: root.enabled && root.hoverEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+    }
+
     contentItem: Item {
         width: parent.width
         height: parent.height
+        Loader {
+            id: customContentLoader
+            active: root.customContent !== null
+            visible: active
+            sourceComponent: root.customContent
+            anchors.centerIn: parent
+        }
         CoreText {
             id: buttonText
             font.pixelSize: 15
             text: root.text
             color: root.textColor
             bold: true
-            visible: root.text !== ""
+            visible: !customContentLoader.active && root.text !== ""
             anchors.centerIn: parent
         }
         Icon {
             id: icon
             source: root.iconSource
             color: iconColor
-            visible: root.iconSource !== ""
+            visible: !customContentLoader.active && root.iconSource !== ""
             anchors.centerIn: parent
         }
     }
