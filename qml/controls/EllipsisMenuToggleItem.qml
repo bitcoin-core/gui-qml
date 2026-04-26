@@ -55,11 +55,7 @@ Button {
             Layout.preferredWidth: 40
             Layout.preferredHeight: 24
             checked: root.checked
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: root.toggle()
-            }
+            enabled: false
         }
     }
 
