@@ -37,7 +37,8 @@ public:
         TxidRole,
         CanBumpRole,
         ReplacesTxidRole,
-        ReplacedByTxidRole
+        ReplacedByTxidRole,
+        IsPendingRequestRole
     };
 
     Q_INVOKABLE void reload();
@@ -59,6 +60,8 @@ private:
     void updateTransaction(const uint256& hash, const interfaces::WalletTxStatus& wtx,
                            int num_blocks, int64_t block_time);
     int findTransactionIndex(const uint256& hash) const;
+    int findPendingRequestIndex(const QString& address) const;
+    void fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx);
     void removePendingRequestForAddress(const QString& address);
 
     QList<QSharedPointer<Transaction>> m_transactions;

@@ -84,6 +84,8 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return tx->replacesTxid;
     case ReplacedByTxidRole:
         return tx->replacedByTxid;
+    case IsPendingRequestRole:
+        return tx->isPendingRequest;
     default:
         return QVariant();
     }
@@ -103,6 +105,7 @@ QHash<int, QByteArray> ActivityListModel::roleNames() const
     roles[CanBumpRole] = "canBump";
     roles[ReplacesTxidRole] = "replacesTxid";
     roles[ReplacedByTxidRole] = "replacedByTxid";
+    roles[IsPendingRequestRole] = "isPendingRequest";
     return roles;
 }
 
@@ -233,13 +236,15 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
         }
         for (const auto& tx : transactions) {
             tx->updateStatus(tx_status, num_blocks, block_time);
-            removePendingRequestForAddress(tx->address);
+            int pendingIdx = findPendingRequestIndex(tx->address);
+            if (pendingIdx != -1) {
+                fulfillPendingRequest(pendingIdx, tx);
+            } else {
+                beginInsertRows(QModelIndex(), 0, 0);
+                m_transactions.push_front(tx);
+                endInsertRows();
+            }
         }
-        beginInsertRows(QModelIndex(), 0, transactions.size() - 1);
-        for (auto it = transactions.crbegin(); it != transactions.crend(); ++it) {
-            m_transactions.push_front(*it);
-        }
-        endInsertRows();
     }
 }
 
@@ -254,6 +259,43 @@ int ActivityListModel::findTransactionIndex(const uint256& hash) const
         return std::distance(m_transactions.begin(), it);
     }
     return -1;
+}
+
+int ActivityListModel::findPendingRequestIndex(const QString& address) const
+{
+    if (!m_pending_request_addresses.contains(address)) return -1;
+
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (m_transactions[i]->isPendingRequest && m_transactions[i]->address == address) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx)
+{
+    QSharedPointer<Transaction> pending = m_transactions.at(index);
+
+    pending->hash = real_tx->hash;
+    pending->status = real_tx->status;
+    pending->depth = real_tx->depth;
+    pending->time = real_tx->time;
+    pending->credit = real_tx->credit;
+    pending->debit = real_tx->debit;
+    pending->type = real_tx->type;
+    pending->idx = real_tx->idx;
+    pending->txid = real_tx->txid;
+    pending->countsForBalance = real_tx->countsForBalance;
+    pending->involvesWatchAddress = real_tx->involvesWatchAddress;
+    pending->isPendingRequest = false;
+    if (!real_tx->label.isEmpty()) {
+        pending->label = real_tx->label;
+    }
+
+    m_pending_request_addresses.remove(pending->address);
+
+    Q_EMIT dataChanged(this->index(index), this->index(index));
 }
 
 void ActivityListModel::subsctribeToCoreSignals()

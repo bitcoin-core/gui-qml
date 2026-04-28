@@ -26,9 +26,12 @@ Page {
     property int depth: 0
     property int type: 0
     property int status: 0
+    property bool isPendingRequest: false
 
     property color iconColor: {
-        if (root.status == Transaction.Confirmed) {
+        if (root.isPendingRequest) {
+            Theme.color.purple
+        } else if (root.status == Transaction.Confirmed) {
             if (root.type == Transaction.RecvWithAddress ||
                 root.type == Transaction.RecvFromOther ||
                 root.type == Transaction.Generated) {
