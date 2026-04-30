@@ -10,7 +10,7 @@
 #include <test/mocks/mocknode.h>
 #include <qml/models/options_model.h>
 #include <net_processing.h>
-#include <common/settings.h>
+#include <common/args.h>
 #include <util/translation.h>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
@@ -26,6 +26,7 @@ private Q_SLOTS:
     void torDisabledRemovesKey();
     void proxyEnabledWritesAddress();
     void onboardWritesProxy();
+    void onboardWritesOnboardedFlag();
     void proxyDirtySetWhenOnboarded();
     void proxyDirtyNotSetDuringOnboarding();
     void proxyDirtyResetWhenReverted();
@@ -50,6 +51,19 @@ private Q_SLOTS:
 static common::SettingsValue MakeAddress(const std::string& addr)
 {
     return common::SettingsValue{addr};
+}
+
+static bool IsOnboardUpdateKey(const std::string& key)
+{
+    return key == "dbcache" ||
+           key == "listen" ||
+           key == "natpmp" ||
+           key == "prune" ||
+           key == "par" ||
+           key == "server" ||
+           key == "proxy" ||
+           key == "onion" ||
+           key == "qml_onboarded";
 }
 
 void OptionsModelTests::proxyDisabledRemovesKey()
@@ -143,11 +157,37 @@ void OptionsModelTests::onboardWritesProxy()
     model.setProxyEnabled(true);
     model.setProxyAddress("10.0.0.1:9050");
 
-    EXPECT_CALL(node, updateRwSetting(_, _)).Times(::testing::AnyNumber());
+    EXPECT_CALL(node, updateRwSetting(Truly(IsOnboardUpdateKey), _)).Times(::testing::AnyNumber());
     // onboard() must write the proxy address to disk.
     EXPECT_CALL(node, updateRwSetting(std::string{"proxy"},
         Truly([](const common::SettingsValue& v) {
             return v.isStr() && v.get_str() == "10.0.0.1:9050";
+        })));
+    EXPECT_CALL(node, updateRwSetting(std::string{"qml_onboarded"},
+        Truly([](const common::SettingsValue& v) {
+            return SettingToBool(v, false);
+        })));
+
+    model.onboard();
+}
+
+void OptionsModelTests::onboardWritesOnboardedFlag()
+{
+    using ::testing::_;
+    using ::testing::NiceMock;
+    using ::testing::Return;
+    using ::testing::Truly;
+
+    NiceMock<MockNode> node;
+    ON_CALL(node, getPersistentSetting(_)).WillByDefault(Return(common::SettingsValue{}));
+    ON_CALL(node, resetSettings()).WillByDefault(Return());
+
+    OptionsQmlModel model(node, /*is_onboarded=*/false);
+
+    EXPECT_CALL(node, updateRwSetting(Truly(IsOnboardUpdateKey), _)).Times(::testing::AnyNumber());
+    EXPECT_CALL(node, updateRwSetting(std::string{"qml_onboarded"},
+        Truly([](const common::SettingsValue& v) {
+            return SettingToBool(v, false);
         })));
 
     model.onboard();

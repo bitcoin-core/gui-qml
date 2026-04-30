@@ -6,6 +6,7 @@
 
 #include <common/args.h>
 #include <common/init.h>
+#include <common/settings.h>
 #include <common/system.h>
 #include <chainparams.h>
 #include <init.h>
@@ -54,11 +55,15 @@
 #endif
 #include <util/threadnames.h>
 #include <util/translation.h>
+#include <univalue.h>
 
 #include <boost/signals2/connection.hpp>
 #include <cassert>
+#include <map>
 #include <memory>
+#include <string_view>
 #include <tuple>
+#include <vector>
 
 #include <QDebug>
 #include <QFontDatabase>
@@ -154,24 +159,32 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
     }
 }
 
-bool ConfigurationFileExists(ArgsManager& argsman)
+constexpr std::string_view QML_ONBOARDED_SETTING{"qml_onboarded"};
+
+bool BitcoinConfigFileExists(ArgsManager& argsman)
+{
+    const fs::path rel_config_path = argsman.GetPathArg("-conf", BITCOIN_CONF_FILENAME);
+    const fs::path abs_config_path = AbsPathForConfigVal(argsman, rel_config_path, true);
+    return fs::exists(abs_config_path);
+}
+
+bool PersistentSettingsExist(ArgsManager& argsman)
 {
     fs::path settings_path;
     if (!argsman.GetSettingsPath(&settings_path)) {
-        // settings file is disabled
-        return true;
-    }
-    if (fs::exists(settings_path)) {
-        return true;
+        return false;
     }
 
-    const fs::path rel_config_path = argsman.GetPathArg("-conf", BITCOIN_CONF_FILENAME);
-    const fs::path abs_config_path = AbsPathForConfigVal(argsman, rel_config_path, true);
-    if (fs::exists(abs_config_path)) {
-        return true;
-    }
+    std::map<std::string, common::SettingsValue> values;
+    std::vector<std::string> errors;
+    return common::ReadSettings(settings_path, values, errors) && !values.empty();
+}
 
-    return false;
+bool OnboardingCompleted(ArgsManager& argsman)
+{
+    return SettingToBool(argsman.GetPersistentSetting(std::string{QML_ONBOARDED_SETTING}), false) ||
+           PersistentSettingsExist(argsman) ||
+           BitcoinConfigFileExists(argsman);
 }
 
 void setupChainQSettings(QGuiApplication* app, QString chain)
@@ -274,7 +287,7 @@ int QmlGuiMain(int argc, char* argv[])
     QVariant need_onboarding(true);
     if (gArgs.IsArgSet("-datadir") && !gArgs.GetPathArg("-datadir").empty()) {
         need_onboarding.setValue(false);
-    } else if (ConfigurationFileExists(gArgs)) {
+    } else if (OnboardingCompleted(gArgs)) {
         need_onboarding.setValue(false);
     }
 

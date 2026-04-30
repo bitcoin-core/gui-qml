@@ -19,6 +19,7 @@
 #include <validation.h>
 
 #include <cassert>
+#include <string_view>
 
 #include <QDebug>
 #include <QDir>
@@ -87,6 +88,8 @@ bool TokenLooksLikePath(const QString& token)
            token.contains(QLatin1Char('\\')) ||
            QDir::isAbsolutePath(token);
 }
+
+constexpr std::string_view QML_ONBOARDED_SETTING{"qml_onboarded"};
 } // namespace
 
 OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
@@ -512,6 +515,7 @@ void OptionsQmlModel::onboard()
     if (!m_external_signer_path.isEmpty()) {
         m_node.updateRwSetting("signer", m_external_signer_path.toStdString());
     }
+    m_node.updateRwSetting(std::string{QML_ONBOARDED_SETTING}, true);
     m_onboarded = true;
     m_initial_proxy_enabled = m_proxy_enabled;
     m_initial_proxy_address = m_proxy_address;
