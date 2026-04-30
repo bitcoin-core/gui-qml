@@ -18,7 +18,6 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
-#include <qt/guiutil.h>
 #include <qml/appmode.h>
 #include <qml/bitcoinamount.h>
 #include <qml/clipboard.h>
