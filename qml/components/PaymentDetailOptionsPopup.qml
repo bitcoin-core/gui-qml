@@ -11,11 +11,15 @@ import "../controls"
 OptionPopup {
     id: root
 
-    property bool hasPaymentInfo: false
-    property alias showAddressType: addressTypeToggle.checked
-    property alias showPaymentRequest: paymentRequestToggle.checked
+    property bool hasLabel: false
+    property bool hasMessage: false
+    property bool hasNoteSelf: false
 
-    signal copyAddress()
+    signal addName()
+    signal addMessage()
+    signal addNoteSelf()
+    signal useAsTemplate()
+    signal deleteFromHistory()
 
     implicitWidth: 300
     implicitHeight: column.implicitHeight + 2 * column.anchors.topMargin
@@ -37,24 +41,57 @@ OptionPopup {
 
         EllipsisMenuButtonItem {
             Layout.fillWidth: true
-            text: qsTr("Copy address")
+            text: qsTr("Add name")
+            visible: !root.hasLabel
             onClicked: {
-                root.copyAddress()
+                root.addName()
                 root.close()
             }
         }
 
-        EllipsisMenuToggleItem {
-            id: addressTypeToggle
+        EllipsisMenuButtonItem {
             Layout.fillWidth: true
-            text: qsTr("Show Address Type")
+            text: qsTr("Add message")
+            visible: !root.hasMessage
+            onClicked: {
+                root.addMessage()
+                root.close()
+            }
         }
 
-        EllipsisMenuToggleItem {
-            id: paymentRequestToggle
+        EllipsisMenuButtonItem {
             Layout.fillWidth: true
-            text: qsTr("Show Payment Request")
-            visible: root.hasPaymentInfo
+            text: qsTr("Add note to self")
+            visible: !root.hasNoteSelf
+            onClicked: {
+                root.addNoteSelf()
+                root.close()
+            }
+        }
+
+        EllipsisMenuButtonItem {
+            Layout.fillWidth: true
+            text: qsTr("Save as file")
+            enabled: false
+            onClicked: root.close()
+        }
+
+        EllipsisMenuButtonItem {
+            Layout.fillWidth: true
+            text: qsTr("Use as template")
+            onClicked: {
+                root.close()
+                root.useAsTemplate()
+            }
+        }
+
+        EllipsisMenuButtonItem {
+            Layout.fillWidth: true
+            text: qsTr("Delete from history")
+            onClicked: {
+                root.close()
+                root.deleteFromHistory()
+            }
         }
     }
 }

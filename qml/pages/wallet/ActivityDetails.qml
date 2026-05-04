@@ -26,15 +26,12 @@ Page {
     property int depth: 0
     property int type: 0
     property int status: 0
-    property bool isPendingRequest: false
 
     property color iconColor: {
-        if (root.isPendingRequest) {
-            Theme.color.purple
-        } else if (root.status == Transaction.Confirmed) {
-            if (root.type == Transaction.RecvWithAddress ||
-                root.type == Transaction.RecvFromOther ||
-                root.type == Transaction.Generated) {
+        if (delegate.status == Transaction.Confirmed) {
+            if (delegate.type == Transaction.RecvWithAddress ||
+                delegate.type == Transaction.RecvFromOther ||
+                delegate.type == Transaction.Generated) {
                 Theme.color.green
             } else {
                 Theme.color.orange
@@ -44,9 +41,9 @@ Page {
         }
     }
     property color amountColor: {
-        if (root.type == Transaction.RecvWithAddress
-            || root.type == Transaction.RecvFromOther
-            || root.type == Transaction.Generated) {
+        if (delegate.type == Transaction.RecvWithAddress
+            || delegate.type == Transaction.RecvFromOther
+            || delegate.type == Transaction.Generated) {
             Theme.color.green
         } else {
             Theme.color.neutral9

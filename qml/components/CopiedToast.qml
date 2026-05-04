@@ -19,6 +19,9 @@ Rectangle {
         hideTimer.restart()
     }
 
+    Accessible.role: Accessible.StaticText
+    Accessible.name: qsTr("Copied")
+
     color: Theme.color.green
     radius: 4
     opacity: shown ? 1 : 0

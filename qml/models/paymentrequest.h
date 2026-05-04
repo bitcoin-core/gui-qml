@@ -28,6 +28,7 @@ class PaymentRequest : public QObject
     Q_PROPERTY(QString qrPayload READ qrPayload NOTIFY qrPayloadChanged)
     Q_PROPERTY(QString createdIso READ createdIso NOTIFY createdIsoChanged)
     Q_PROPERTY(bool hasPaymentInfo READ hasPaymentInfo NOTIFY qrPayloadChanged)
+    Q_PROPERTY(bool isEditing READ isEditing WRITE setIsEditing NOTIFY isEditingChanged)
 
 public:
     explicit PaymentRequest(QObject* parent = nullptr);
@@ -58,10 +59,15 @@ public:
     QString qrPayload() const;
 
     QString createdIso() const;
+    QDateTime created() const;
     void setCreated(const QDateTime& dt);
     bool hasPaymentInfo() const;
 
+    bool isEditing() const;
+    void setIsEditing(bool editing);
+
     Q_INVOKABLE void clear();
+    Q_INVOKABLE void edit();
 
 Q_SIGNALS:
     void addressChanged();
@@ -72,6 +78,7 @@ Q_SIGNALS:
     void idChanged();
     void qrPayloadChanged();
     void createdIsoChanged();
+    void isEditingChanged();
 
 private:
     static QString FormatAddress(const QString& address);
@@ -84,6 +91,7 @@ private:
     BitcoinAmount* m_amount;
     QString m_id;
     QDateTime m_created;
+    bool m_is_editing{true};
 };
 
 #endif // BITCOIN_QML_MODELS_PAYMENTREQUEST_H

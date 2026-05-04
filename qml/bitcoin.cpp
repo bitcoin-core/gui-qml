@@ -43,7 +43,6 @@
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/models/peerlistmodel.h>
-#include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
@@ -378,8 +377,6 @@ int QmlGuiMain(int argc, char* argv[])
                                                "WalletQmlModel cannot be instantiated from QML");
     qmlRegisterUncreatableType<WalletQmlModelTransaction>("org.bitcoincore.qt", 1, 0, "WalletQmlModelTransaction",
                                                           "WalletQmlModelTransaction cannot be instantiated from QML");
-    qmlRegisterUncreatableType<ReceiveRequestHistoryModel>("org.bitcoincore.qt", 1, 0, "ReceiveRequestHistoryModel",
-                                                           "ReceiveRequestHistoryModel cannot be instantiated from QML");
 #endif
 
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/main.qml")));

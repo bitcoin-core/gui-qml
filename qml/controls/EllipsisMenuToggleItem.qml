@@ -10,25 +10,28 @@ import org.bitcoincore.qt 1.0
 Button {
     property int bgRadius: 5
     property color bgDefaultColor: "transparent"
+    property color bgHoverColor: Theme.color.neutral2
+    property color textColor: Theme.color.neutral7
+    property color textHoverColor: Theme.color.neutral9
+    property color textActiveColor: Theme.color.neutral7
 
     id: root
     checkable: true
-    checked: optionSwitch.checked
+    Accessible.role: Accessible.MenuItem
     hoverEnabled: AppMode.isDesktop
+    padding: 10
 
     implicitWidth: 280
-    implicitHeight: 44
 
-    HoverHandler { cursorShape: Qt.PointingHandCursor }
-
-    onClicked: {
-        optionSwitch.checked = !optionSwitch.checked
+    MouseArea {
+        anchors.fill: parent
+        enabled: false
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
     }
 
     contentItem: RowLayout {
         spacing: 7
-        anchors.fill: parent
-        anchors.margins: 10
         CoreText {
             id: buttonText
             Layout.fillWidth: true
@@ -43,6 +46,10 @@ Button {
             Layout.preferredWidth: 40
             Layout.preferredHeight: 24
             checked: root.checked
+            MouseArea {
+                anchors.fill: parent
+                onClicked: root.toggle()
+            }
         }
     }
 
@@ -59,7 +66,8 @@ Button {
     states: [
         State {
             name: "HOVER"; when: root.hovered
-            PropertyChanges { target: buttonText; color: Theme.color.orange }
+            PropertyChanges { target: bg; color: root.bgHoverColor }
+            PropertyChanges { target: buttonText; color: root.textHoverColor }
         }
     ]
 }

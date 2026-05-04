@@ -22,14 +22,16 @@
         <file>components/PeersIndicator.qml</file>
         <file>components/ProxySettings.qml</file>
         <file>components/StorageLocations.qml</file>
-        <file>components/CopiedToast.qml</file>
-        <file>components/PaymentDetailOptionsPopup.qml</file>
-        <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
+        <file>components/CopiedToast.qml</file>
+        <file>components/DetailEditRow.qml</file>
+        <file>components/PaymentDetailOptionsPopup.qml</file>
+        <file>components/QRCodePopup.qml</file>
+        <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/WalletSettings.qml</file>
@@ -143,6 +145,7 @@
         <file alias="circle-red-cross">res/icons/circle-red-cross.png</file>
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="edit">res/icons/edit.png</file>
         <file alias="ellipsis">res/icons/ellipsis.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
@@ -162,6 +165,7 @@
         <file alias="pending-light">res/icons/pending-light.png</file>
         <file alias="plus">res/icons/plus.png</file>
         <file alias="refresh">res/icons/refresh.png</file>
+        <file alias="qr-code">res/icons/qr-code.png</file>
         <file alias="plus-big-filled">res/icons/plus-big-filled.png</file>
         <file alias="pending">res/icons/pending.png</file>
         <file alias="search">res/icons/search.png</file>

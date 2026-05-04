@@ -4,6 +4,20 @@
 
 // utils.js
 
+function formatRelativeTime(isoString) {
+    if (!isoString) return ""
+    var then = new Date(isoString)
+    var now = new Date()
+    var diffSec = Math.floor((now - then) / 1000)
+    if (diffSec < 60) return qsTr("just now")
+    var m = Math.floor(diffSec / 60)
+    if (diffSec < 3600) return m === 1 ? qsTr("1 minute ago") : qsTr("%1 minutes ago").arg(m)
+    var h = Math.floor(diffSec / 3600)
+    if (diffSec < 86400) return h === 1 ? qsTr("1 hour ago") : qsTr("%1 hours ago").arg(h)
+    var d = Math.floor(diffSec / 86400)
+    return d === 1 ? qsTr("1 day ago") : qsTr("%1 days ago").arg(d)
+}
+
 function formatRemainingSyncTime(milliseconds) {
     var minutes = Math.floor(milliseconds / 60000);
     var seconds = Math.floor((milliseconds % 60000) / 1000);

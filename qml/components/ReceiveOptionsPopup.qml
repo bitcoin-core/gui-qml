@@ -11,6 +11,11 @@ import "../controls"
 OptionPopup {
     id: root
 
+    property alias showName: nameToggle.checked
+    property alias showMessage: messageToggle.checked
+    property alias showNoteSelf: noteSelfToggle.checked
+    property alias showAddressType: addressTypeToggle.checked
+
     implicitWidth: 300
     implicitHeight: columnLayout.implicitHeight + 20
 
@@ -20,18 +25,35 @@ OptionPopup {
 
     ColumnLayout {
         id: columnLayout
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.topMargin: 5
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        spacing: 0
+        anchors.centerIn: parent
+        anchors.margins: 10
+        spacing: 5
 
-        EllipsisMenuButtonItem {
+        EllipsisMenuToggleItem {
+            id: nameToggle
             Layout.fillWidth: true
-            text: qsTr("Show address type")
-            enabled: false
+            text: qsTr("Name")
+            checked: true
+        }
+
+        EllipsisMenuToggleItem {
+            id: messageToggle
+            Layout.fillWidth: true
+            text: qsTr("Message")
+            checked: true
+        }
+
+        EllipsisMenuToggleItem {
+            id: noteSelfToggle
+            Layout.fillWidth: true
+            text: qsTr("Note to self")
+            checked: true
+        }
+
+        EllipsisMenuToggleItem {
+            id: addressTypeToggle
+            Layout.fillWidth: true
+            text: qsTr("Address type")
         }
 
         EllipsisMenuButtonItem {

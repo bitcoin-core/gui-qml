@@ -28,6 +28,9 @@ Page {
             settingsTabButton.checked = true
             nodeSettings.openWalletSettings()
         }
+        function onOpenReceiveRequested() {
+            receiveTabButton.checked = true
+        }
     }
 
     header: NavigationBar2 {
@@ -69,18 +72,19 @@ Page {
             visible: walletController.isWalletLoaded
             NavigationTab {
                 id: activityTabButton
-                objectName: "desktopWalletsActivityTab"
+                objectName: "activityTabButton"
                 text: qsTr("Activity")
                 property int index: 0
                 ButtonGroup.group: navigationTabs
             }
             NavigationTab {
-                objectName: "desktopWalletsSendTab"
+                objectName: "sendTabButton"
                 text: qsTr("Send")
                 property int index: 1
                 ButtonGroup.group: navigationTabs
             }
             NavigationTab {
+                id: receiveTabButton
                 objectName: "receiveTabButton"
                 text: qsTr("Receive")
                 property int index: 2
@@ -157,7 +161,6 @@ Page {
             }
         }
         RequestPayment {
-            onViewPreviousRequests: activityTabButton.checked = true
         }
         Item {
             id: blockClockTab

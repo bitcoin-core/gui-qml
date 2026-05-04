@@ -147,6 +147,11 @@ QString PaymentRequest::createdIso() const
     return m_created.isValid() ? m_created.toString(Qt::ISODate) : QString();
 }
 
+QDateTime PaymentRequest::created() const
+{
+    return m_created;
+}
+
 void PaymentRequest::setCreated(const QDateTime& dt)
 {
     if (m_created == dt) return;
@@ -159,6 +164,18 @@ bool PaymentRequest::hasPaymentInfo() const
     return !m_label.isEmpty() || !m_message.isEmpty() || m_amount->satoshi() > 0;
 }
 
+bool PaymentRequest::isEditing() const
+{
+    return m_is_editing;
+}
+
+void PaymentRequest::setIsEditing(bool editing)
+{
+    if (m_is_editing == editing) return;
+    m_is_editing = editing;
+    Q_EMIT isEditingChanged();
+}
+
 void PaymentRequest::clear()
 {
     m_destination = CNoDestination();
@@ -169,6 +186,7 @@ void PaymentRequest::clear()
     m_amountError.clear();
     m_id.clear();
     m_created = QDateTime();
+    m_is_editing = true;
     Q_EMIT addressChanged();
     Q_EMIT labelChanged();
     Q_EMIT messageChanged();
@@ -176,6 +194,12 @@ void PaymentRequest::clear()
     Q_EMIT amountErrorChanged();
     Q_EMIT idChanged();
     Q_EMIT createdIsoChanged();
+    Q_EMIT isEditingChanged();
+}
+
+void PaymentRequest::edit()
+{
+    setIsEditing(true);
 }
 
 QString PaymentRequest::FormatAddress(const QString& address)

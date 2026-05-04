@@ -10,6 +10,7 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
 
+    Accessible.role: Accessible.MenuItem
     hoverEnabled: AppMode.isDesktop
 
     implicitWidth: 280
