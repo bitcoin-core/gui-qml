@@ -121,7 +121,6 @@ AppMode SetupAppMode()
 
 bool InitErrorMessageBox(
     const bilingual_str& message,
-    [[maybe_unused]] const std::string& caption,
     [[maybe_unused]] unsigned int style)
 {
     QQmlApplicationEngine engine;
@@ -145,7 +144,7 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
     if (type == QtDebugMsg) {
         LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
-        LogPrintf("GUI: %s\n", msg.toStdString());
+        LogInfo("GUI: %s\n", msg.toStdString());
     }
 }
 

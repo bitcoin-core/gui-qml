@@ -9,6 +9,9 @@
 #include <QThread>
 #include <QTime>
 #include <interfaces/chain.h>
+#include <node/utxo_snapshot.h>
+#include <kernel/chainparams.h>
+#include <validation.h>
 
 using interfaces::FoundBlock;
 
@@ -105,4 +108,43 @@ void ChainModel::setCurrentTimeRatio()
     }
 
     Q_EMIT timeRatioListChanged();
+}
+
+// TODO: Change this once a better solution has been found.
+// Using hardcoded snapshot info to display in SnapshotSettings.qml
+QVariantMap ChainModel::getSnapshotInfo() {
+    QVariantMap snapshot_info;
+
+    std::vector<int> available_heights = Params().GetAvailableSnapshotHeights();
+    if (!available_heights.empty()) {
+        // Get the highest height snapshot (last element in the vector)
+        const int height = available_heights.back();
+        std::optional<AssumeutxoData> maybe_snapshot = Params().AssumeutxoForHeight(height);
+
+        if (maybe_snapshot.has_value()) {
+            const auto& latest_snapshot = maybe_snapshot.value();
+            const auto& hash_serialized = latest_snapshot.hash_serialized;
+
+            // Get block time using the interfaces pattern if we already know the header
+            int64_t block_time = 0;
+            bool found_block = m_chain.findBlock(latest_snapshot.blockhash, FoundBlock().time(block_time));
+
+            QString fullHash = QString::fromStdString(hash_serialized.ToString());
+
+            int midPoint = fullHash.length() / 2;
+            QString firstHalf = fullHash.left(midPoint);
+            QString secondHalf = fullHash.mid(midPoint);
+
+            snapshot_info["height"] = height;
+            snapshot_info["hashSerializedFirstHalf"] = firstHalf;
+            snapshot_info["hashSerializedSecondHalf"] = secondHalf;
+            if (found_block && block_time > 0) {
+                snapshot_info["date"] = QDateTime::fromSecsSinceEpoch(block_time).toString("MMMM d yyyy");
+            } else {
+                snapshot_info["date"] = "Unknown";
+            }
+        }
+    }
+
+    return snapshot_info;
 }

@@ -54,7 +54,7 @@ public:
     QString services() const { return PeerStatsUtil::FormatServicesStr(m_combinedStats->nodeStateStats.their_services); }
     bool transactionRelay() const { return m_combinedStats->nodeStateStats.m_relay_txs; }
     bool addressRelay() const { return m_combinedStats->nodeStateStats.m_addr_relay_enabled; }
-    QString startingHeight() const { return QString::number(m_combinedStats->nodeStateStats.m_starting_height); }
+    QString startingHeight() const { return QString::number(m_combinedStats->nodeStateStats.presync_height); }
     QString syncedHeaders() const { return QString::number(m_combinedStats->nodeStateStats.nSyncHeight); }
     QString syncedBlocks() const { return QString::number(m_combinedStats->nodeStateStats.nCommonHeight); }
     QString direction() const { return QString::fromStdString(m_combinedStats->nodeStats.fInbound ? "Inbound" : "Outbound"); }

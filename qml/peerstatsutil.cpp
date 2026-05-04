@@ -32,6 +32,7 @@ QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction
     case ConnectionType::MANUAL: return prefix + QObject::tr("Manual");
     case ConnectionType::FEELER: return prefix + QObject::tr("Feeler");
     case ConnectionType::ADDR_FETCH: return prefix + QObject::tr("Address Fetch");
+    case ConnectionType::PRIVATE_BROADCAST: return prefix + QObject::tr("Private Broadcast");
     }
     assert(false);
 }

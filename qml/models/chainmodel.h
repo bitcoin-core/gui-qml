@@ -5,8 +5,10 @@
 #ifndef BITCOIN_QML_MODELS_CHAINMODEL_H
 #define BITCOIN_QML_MODELS_CHAINMODEL_H
 
+#ifndef Q_MOC_RUN
 #include <chainparams.h>
 #include <interfaces/chain.h>
+#endif
 
 #include <QObject>
 #include <QString>
@@ -27,6 +29,7 @@ class ChainModel : public QObject
     Q_PROPERTY(quint64 assumedBlockchainSize READ assumedBlockchainSize CONSTANT)
     Q_PROPERTY(quint64 assumedChainstateSize READ assumedChainstateSize CONSTANT)
     Q_PROPERTY(QVariantList timeRatioList READ timeRatioList NOTIFY timeRatioListChanged)
+    Q_PROPERTY(bool isSnapshotActive READ isSnapshotActive NOTIFY isSnapshotActiveChanged)
 
 public:
     explicit ChainModel(interfaces::Chain& chain);
@@ -36,10 +39,12 @@ public:
     quint64 assumedBlockchainSize() const { return m_assumed_blockchain_size; };
     quint64 assumedChainstateSize() const { return m_assumed_chainstate_size; };
     QVariantList timeRatioList() const { return m_time_ratio_list; };
-
+    bool isSnapshotActive() const { return m_chain.hasAssumedValidChain(); };
     int timestampAtMeridian();
 
     void setCurrentTimeRatio();
+
+    Q_INVOKABLE QVariantMap getSnapshotInfo();
 
 public Q_SLOTS:
     void setTimeRatioList(int new_time);
@@ -48,6 +53,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     void timeRatioListChanged();
     void currentNetworkNameChanged();
+    void isSnapshotActiveChanged();
 
 private:
     QString m_current_network_name;

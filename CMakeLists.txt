@@ -54,6 +54,7 @@ set(USE_QRCODE TRUE)
 # We need this libraries, can ignore the executable bitcoin-qt
 set(BUILD_GUI ON)
 set(ENABLE_WALLET ON)
+set(ENABLE_IPC OFF)
 
 # Bitcoin Core codebase
 # Builds libraries: univalue, core_interface, bitcoin_node, bitcoin_wallet

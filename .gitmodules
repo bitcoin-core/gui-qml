@@ -1,3 +1,4 @@
 [submodule "bitcoin"]
 	path = bitcoin
-	url = https://github.com/bitcoin/bitcoin
+	url = https://github.com/D33r-Gee/bitcoin
+	branch = interface-load-snapshot

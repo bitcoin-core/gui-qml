@@ -16,8 +16,12 @@
 
 #include <QDateTime>
 #include <QMetaObject>
+#include <QObject>
 #include <QTimerEvent>
 #include <QString>
+#include <QUrl>
+#include <QThread>
+#include <QDebug>
 
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
@@ -25,6 +29,7 @@ NodeModel::NodeModel(interfaces::Node& node)
     ConnectToBlockTipSignal();
     ConnectToNumConnectionsChangedSignal();
     ConnectToBannedListChangedSignal();
+    ConnectToSnapshotLoadProgressSignal();
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
@@ -82,6 +87,14 @@ void NodeModel::setVerificationProgress(double new_progress)
 {
     if (new_progress != m_verification_progress) {
         setRemainingSyncTime(new_progress);
+
+        if (new_progress >= 0.00014) {
+            setHeadersSynced(true);
+        }
+
+        if (new_progress >= 0.999) {
+            setIsIBDCompleted(true);
+        }
 
         m_verification_progress = new_progress;
         Q_EMIT verificationProgressChanged();
@@ -219,4 +232,90 @@ void NodeModel::ConnectToBannedListChangedSignal()
             Q_EMIT bannedListChanged();
         });
     });
+}
+
+void NodeModel::ConnectToSnapshotLoadProgressSignal()
+{
+    assert(!m_handler_snapshot_load_progress);
+
+    m_handler_snapshot_load_progress = m_node.handleSnapshotLoadProgress(
+        [this](double progress) {
+            setSnapshotProgress(progress);
+        });
+}
+
+void NodeModel::snapshotLoadThread(QString path_file) {
+    m_snapshot_loading = true;
+    Q_EMIT snapshotLoadingChanged();
+
+    path_file = QUrl(path_file).toLocalFile();
+
+    QThread* snapshot_thread = QThread::create([this, path_file]() {
+        const fs::path path_file_fs = fs::u8path(path_file.toStdString());
+        auto snapshot = m_node.snapshot(path_file_fs);
+
+        bool result = snapshot ? snapshot->activate() : false;
+
+        if (!result) {
+            QMetaObject::invokeMethod(this, [this]() {
+                m_snapshot_loading = false;
+                Q_EMIT snapshotLoadingChanged();
+                m_snapshot_error = true;
+                Q_EMIT snapshotErrorChanged();
+            }, Qt::QueuedConnection);
+        } else {
+            QMetaObject::invokeMethod(this, [this, result]() {
+                m_snapshot_loaded = true;
+                Q_EMIT snapshotLoaded(result);
+                Q_EMIT snapshotLoadingChanged();
+            }, Qt::QueuedConnection);
+        }
+    });
+
+    connect(snapshot_thread, &QThread::finished, snapshot_thread, &QThread::deleteLater);
+
+    snapshot_thread->start();
+}
+
+void NodeModel::setSnapshotProgress(double new_progress) {
+    if (new_progress != m_snapshot_progress) {
+        m_snapshot_progress = new_progress;
+        Q_EMIT snapshotProgressChanged();
+    }
+}
+
+void NodeModel::setHeadersSynced(bool new_synced) {
+    if (new_synced != m_headers_synced) {
+        m_headers_synced = new_synced;
+        Q_EMIT headersSyncedChanged();
+        checkAndLoadSnapshot();
+    }
+}
+
+void NodeModel::setIsIBDCompleted(bool new_completed) {
+    if (new_completed != m_is_ibd_completed) {
+        m_is_ibd_completed = new_completed;
+        Q_EMIT isIBDCompletedChanged();
+    }
+}
+
+void NodeModel::setSnapshotFilePath(const QString& new_path) {
+    if (new_path != m_snapshot_file_path) {
+        m_snapshot_file_path = new_path;
+        Q_EMIT snapshotFilePathChanged();
+    }
+}
+
+void NodeModel::checkAndLoadSnapshot()
+{
+    if (m_headers_synced && !m_snapshot_file_path.isEmpty()) {
+        snapshotLoadThread(m_snapshot_file_path);
+    }
+}
+
+void NodeModel::setSnapshotError(bool new_error) {
+    if (new_error != m_snapshot_error) {
+        m_snapshot_error = new_error;
+        Q_EMIT snapshotErrorChanged();
+    }
 }

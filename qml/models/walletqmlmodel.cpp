@@ -233,7 +233,7 @@ QString WalletQmlModel::getAddressLabel(const QString& address) const
     }
 
     std::string label;
-    if (!m_wallet->getAddress(destination, &label, nullptr, nullptr)) {
+    if (!m_wallet->getAddress(destination, &label, nullptr)) {
         return {};
     }
 
@@ -245,7 +245,11 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(Tr
     if (!m_wallet) {
         return nullptr;
     }
-    return m_wallet->handleTransactionChanged(fn);
+    // Convert the function to match the expected signature
+    auto converted_fn = [fn](const Txid& txid, ChangeType change_type) {
+        fn(txid.ToUint256(), change_type);
+    };
+    return m_wallet->handleTransactionChanged(converted_fn);
 }
 
 bool WalletQmlModel::prepareTransaction()
@@ -269,17 +273,15 @@ bool WalletQmlModel::prepareTransaction()
         return false;
     }
 
-    int nChangePosRet = -1;
-    CAmount nFeeRequired = 0;
-    const auto& res = m_wallet->createTransaction(vecSend, m_coin_control, true, nChangePosRet, nFeeRequired);
+    const auto& res = m_wallet->createTransaction(vecSend, m_coin_control, true, std::nullopt);
     if (res) {
         if (m_current_transaction) {
             delete m_current_transaction;
         }
-        CTransactionRef newTx = *res;
+        CTransactionRef newTx = res->tx;
         m_current_transaction = new WalletQmlModelTransaction(m_send_recipients, this);
         m_current_transaction->setWtx(newTx);
-        m_current_transaction->setTransactionFee(nFeeRequired);
+        m_current_transaction->setTransactionFee(res->fee);
         Q_EMIT currentTransactionChanged();
         return true;
     } else {
