@@ -78,8 +78,12 @@ def case_watchonly_creation_flow(harness, test_xpub):
     gui.set_text("createWalletNameInput", "watchonly_test")
     gui.wait_for_property("createWalletNameContinueButton", "enabled", True, timeout_ms=5000)
     gui.click("createWalletNameContinueButton")
+    gui.wait_for_page("createWalletConfirmPage", timeout_ms=15000)
+    print("  Wallet created, confirm page shown")
+
+    gui.click("createWalletConfirmNextButton")
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=15000)
-    print("  Name entered, wallet created (no password page for watch-only)")
+    print("  Confirm page dismissed")
 
     badge_text = gui.get_text("walletBadge")
     print(f"  Wallet badge: {badge_text}")

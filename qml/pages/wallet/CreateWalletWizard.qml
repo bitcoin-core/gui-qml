@@ -38,7 +38,7 @@ PageStack {
                 root.waitingForInit = false
                 walletController.createWatchOnlyWallet(root.walletName, root.xpub)
                 if (walletController.isWalletLoaded) {
-                    root.finished()
+                    root.push(watchOnlyConfirm)
                 }
             }
         }
@@ -218,6 +218,15 @@ PageStack {
         }
     }
     Component {
+        id: watchOnlyConfirm
+        CreateConfirm {
+            headerText: qsTr("Your watch-only wallet has been created")
+            descriptionText: qsTr("You can view transactions and balances. Spending requires an external signer. No backup is needed — your wallet can be recreated from the same extended public key.")
+            onBack: root.pop()
+            onNext: root.finished()
+        }
+    }
+    Component {
         id: import_options
         ImportWalletOptions {
             onBack: root.goBack()
@@ -253,7 +262,7 @@ PageStack {
                     if (walletController.initialized) {
                         walletController.createWatchOnlyWallet(root.walletName, root.xpub)
                         if (walletController.isWalletLoaded) {
-                            root.finished()
+                            root.push(watchOnlyConfirm)
                         }
                     } else {
                         root.waitingForInit = true
