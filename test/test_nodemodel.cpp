@@ -80,6 +80,8 @@ private Q_SLOTS:
     void refreshMempoolInfoUpdatesProperties();
     void activatingMempoolPollingEmitsSignalsAndRefreshesImmediately();
     void nodeNotificationHandlersUpdateModelThroughQueuedSignals();
+    void initEmitsRequestedInitialize();
+    void initGuardBlocksSecondEmission();
 };
 
 void NodeModelTests::refreshMempoolInfoUpdatesProperties()
@@ -188,6 +190,27 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
     QCOMPARE(model.verificationProgress(), 0.42);
     QCOMPARE(time_ratio_spy.takeFirst().at(0).toInt(), 1'700'000'000);
     QCOMPARE(model.numOutboundPeers(), 7);
+}
+
+void NodeModelTests::initEmitsRequestedInitialize()
+{
+    NiceMock<MockNode> node;
+    NodeModel model(node);
+
+    QSignalSpy spy(&model, &NodeModel::requestedInitialize);
+    model.startNodeInitializionThread();
+    QCOMPARE(spy.count(), 1);
+}
+
+void NodeModelTests::initGuardBlocksSecondEmission()
+{
+    NiceMock<MockNode> node;
+    NodeModel model(node);
+
+    QSignalSpy spy(&model, &NodeModel::requestedInitialize);
+    model.startNodeInitializionThread();
+    model.startNodeInitializionThread();
+    QCOMPARE(spy.count(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

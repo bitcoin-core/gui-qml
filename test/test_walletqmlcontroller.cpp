@@ -4,6 +4,7 @@
 
 #include <QtTest/QtTest>
 
+#include <chainparams.h>
 #include <common/settings.h>
 #include <interfaces/handler.h>
 #include <interfaces/wallet.h>
@@ -47,6 +48,9 @@ std::vector<std::unique_ptr<interfaces::ExternalSigner>> MakeSigners(std::initia
     }
     return signers;
 }
+
+const QString VALID_XPUB{
+    "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"};
 
 class FakeWalletLoader : public interfaces::WalletLoader
 {
@@ -269,6 +273,12 @@ class WalletQmlControllerTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase();
+    void validateXpubAcceptsValidKey();
+    void validateXpubRejectsGarbage();
+    void validateXpubRejectsEmpty();
+    void validateXpubTrimsWhitespace();
+    void createWatchOnlyInvalidXpubSetsError();
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
@@ -288,6 +298,61 @@ private Q_SLOTS:
     void initializedControllerHandlesExternalWalletUnload();
     void initializedControllerUnloadWalletsClearsSelectionAndOpenWallets();
 };
+
+void WalletQmlControllerTests::initTestCase()
+{
+    SelectParams(ChainType::MAIN);
+}
+
+void WalletQmlControllerTests::validateXpubAcceptsValidKey()
+{
+    using ::testing::NiceMock;
+    NiceMock<MockNode> node;
+    WalletQmlController controller(node);
+
+    QVERIFY(controller.validateXpub(VALID_XPUB));
+}
+
+void WalletQmlControllerTests::validateXpubRejectsGarbage()
+{
+    using ::testing::NiceMock;
+    NiceMock<MockNode> node;
+    WalletQmlController controller(node);
+
+    QVERIFY(!controller.validateXpub("not-an-xpub"));
+}
+
+void WalletQmlControllerTests::validateXpubRejectsEmpty()
+{
+    using ::testing::NiceMock;
+    NiceMock<MockNode> node;
+    WalletQmlController controller(node);
+
+    QVERIFY(!controller.validateXpub(""));
+}
+
+void WalletQmlControllerTests::validateXpubTrimsWhitespace()
+{
+    using ::testing::NiceMock;
+    NiceMock<MockNode> node;
+    WalletQmlController controller(node);
+
+    QVERIFY(controller.validateXpub("  " + VALID_XPUB + "  "));
+}
+
+void WalletQmlControllerTests::createWatchOnlyInvalidXpubSetsError()
+{
+    using ::testing::NiceMock;
+    NiceMock<MockNode> node;
+    WalletQmlController controller(node);
+
+    QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
+    controller.createWatchOnlyWallet("test_wallet", "garbage");
+
+    QVERIFY(!controller.walletLoadError().isEmpty());
+    QVERIFY(!controller.isWalletLoaded());
+    QCOMPARE(error_spy.count(), 1);
+}
 
 void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()
 {
