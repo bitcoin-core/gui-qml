@@ -6,8 +6,9 @@
 
 #include <QAbstractListModel>
 #include <QDateTime>
-#include <QQmlEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
+#include <QQmlEngine>
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
@@ -1079,6 +1080,7 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool initialized MEMBER m_initialized NOTIFY initializedChanged)
     Q_PROPERTY(bool isWalletLoaded MEMBER m_is_wallet_loaded NOTIFY isWalletLoadedChanged)
     Q_PROPERTY(bool noWalletsFound MEMBER m_no_wallets_found NOTIFY noWalletsFoundChanged)
+    Q_PROPERTY(QString walletLoadError MEMBER m_wallet_load_error NOTIFY walletLoadErrorChanged)
     Q_PROPERTY(QString lastSelectedWalletName READ lastSelectedWalletName NOTIFY lastSelectedWalletNameChanged)
     Q_PROPERTY(QString lastClosedWalletName READ lastClosedWalletName NOTIFY lastClosedWalletNameChanged)
     Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
@@ -1090,6 +1092,7 @@ public:
     bool m_initialized{true};
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
+    QString m_wallet_load_error;
     QObject* m_selected_wallet{nullptr};
     QString m_last_selected_wallet_name;
     QString m_last_closed_wallet_name;
@@ -1150,11 +1153,20 @@ public:
         Q_EMIT openReceiveRequestsChanged();
         Q_EMIT openReceiveRequested();
     }
+    Q_INVOKABLE bool validateXpub(const QString& xpub)
+    {
+        QString t = xpub.trimmed();
+        return t.length() >= 100 && (t.startsWith("xpub") || t.startsWith("tpub"));
+    }
+    Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& /*xpub*/) {}
+    Q_INVOKABLE bool createSingleSigWallet(const QString& /*name*/, const QString& /*passphrase*/) { return true; }
+    Q_INVOKABLE void clearWalletLoadStatus() { m_wallet_load_error.clear(); Q_EMIT walletLoadErrorChanged(); }
 
 Q_SIGNALS:
     void initializedChanged();
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
+    void walletLoadErrorChanged();
     void lastSelectedWalletNameChanged();
     void lastClosedWalletNameChanged();
     void closeWalletCallsChanged();
