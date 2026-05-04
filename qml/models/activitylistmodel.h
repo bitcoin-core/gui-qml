@@ -38,7 +38,8 @@ public:
         CanBumpRole,
         ReplacesTxidRole,
         ReplacedByTxidRole,
-        IsPendingRequestRole
+        IsPendingRequestRole,
+        RequestIdRole
     };
 
     Q_INVOKABLE void reload();
@@ -48,7 +49,8 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void addReceiveRequest(const QString& address, const QString& label,
-                           CAmount amount, qint64 timestamp);
+                           CAmount amount, qint64 timestamp, const QString& requestId);
+    void updateReceiveRequest(const QString& requestId, const QString& label, CAmount amount);
 
 private:
     void refreshWallet();

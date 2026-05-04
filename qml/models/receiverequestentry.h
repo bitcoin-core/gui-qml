@@ -36,7 +36,7 @@ struct QmlReceiveRequestRecipient
 
 struct QmlRecentRequestEntry
 {
-    static constexpr int CURRENT_VERSION{1};
+    static constexpr int CURRENT_VERSION{2};
     int nVersion{CURRENT_VERSION};
     int64_t id{0};
     QDateTime date;

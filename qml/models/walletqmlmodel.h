@@ -37,6 +37,7 @@ class WalletQmlModel : public QObject
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
+    Q_PROPERTY(PaymentRequest* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
@@ -62,12 +63,15 @@ public:
     Q_INVOKABLE void reloadReceiveRequests();
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id);
     Q_INVOKABLE bool loadPaymentRequest(const QString& request_id);
+    Q_INVOKABLE bool loadPaymentRequestDetail(const QString& request_id);
+    Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
 
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
     BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
     SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
     PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
+    PaymentRequest* detailPaymentRequest() const { return m_detail_payment_request; }
     ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
     QString estimatedFee() const;
@@ -147,6 +151,7 @@ private:
     CoinsListModel* m_coins_list_model{nullptr};
     SendRecipientsListModel* m_send_recipients{nullptr};
     PaymentRequest* m_current_payment_request{nullptr};
+    PaymentRequest* m_detail_payment_request{nullptr};
     ReceiveRequestHistoryModel* m_receive_requests{nullptr};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;

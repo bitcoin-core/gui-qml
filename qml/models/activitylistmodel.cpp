@@ -86,6 +86,8 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return tx->replacedByTxid;
     case IsPendingRequestRole:
         return tx->isPendingRequest;
+    case RequestIdRole:
+        return tx->requestId;
     default:
         return QVariant();
     }
@@ -106,6 +108,7 @@ QHash<int, QByteArray> ActivityListModel::roleNames() const
     roles[ReplacesTxidRole] = "replacesTxid";
     roles[ReplacedByTxidRole] = "replacedByTxid";
     roles[IsPendingRequestRole] = "isPendingRequest";
+    roles[RequestIdRole] = "requestId";
     return roles;
 }
 
@@ -183,25 +186,39 @@ void ActivityListModel::addPendingReceiveRequests()
         CAmount amount = history->data(idx, ReceiveRequestHistoryModel::AmountSatRole).toLongLong();
         QString dateIso = history->data(idx, ReceiveRequestHistoryModel::DateIsoRole).toString();
         qint64 timestamp = QDateTime::fromString(dateIso, Qt::ISODate).toSecsSinceEpoch();
+        QString reqId = history->data(idx, ReceiveRequestHistoryModel::IdRole).toString();
 
-        addReceiveRequest(address, label, amount, timestamp);
+        addReceiveRequest(address, label, amount, timestamp, reqId);
     }
 }
 
 void ActivityListModel::addReceiveRequest(const QString& address, const QString& label,
-                                          CAmount amount, qint64 timestamp)
+                                          CAmount amount, qint64 timestamp, const QString& requestId)
 {
     uint256 zero_hash;
     auto tx = QSharedPointer<Transaction>::create(zero_hash, timestamp,
         Transaction::RecvWithAddress, address, CAmount{0}, amount);
-    tx->label = label.isEmpty() ? QStringLiteral("Payment request") : label;
+    tx->label = label.isEmpty() ? tr("Payment request") : label;
     tx->status = Transaction::Unconfirmed;
     tx->isPendingRequest = true;
+    tx->requestId = requestId;
 
     beginInsertRows(QModelIndex(), 0, 0);
     m_transactions.push_front(tx);
     m_pending_request_addresses.insert(address);
     endInsertRows();
+}
+
+void ActivityListModel::updateReceiveRequest(const QString& requestId, const QString& label, CAmount amount)
+{
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (m_transactions[i]->isPendingRequest && m_transactions[i]->requestId == requestId) {
+            m_transactions[i]->label = label.isEmpty() ? tr("Payment request") : label;
+            m_transactions[i]->credit = amount;
+            Q_EMIT dataChanged(index(i), index(i));
+            return;
+        }
+    }
 }
 
 void ActivityListModel::removePendingRequestForAddress(const QString& address)
@@ -247,7 +264,6 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
         }
     }
 }
-
 
 int ActivityListModel::findTransactionIndex(const uint256& hash) const
 {

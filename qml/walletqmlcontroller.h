@@ -54,6 +54,7 @@ public:
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE void requestOpenWalletSettings();
     Q_INVOKABLE void refreshExternalSignerStatus();
+    Q_INVOKABLE void requestOpenReceive();
 
     WalletQmlModel* selectedWallet() const;
     void unloadWallets();
@@ -95,6 +96,7 @@ Q_SIGNALS:
     void lastImportedWalletInfoChanged();
     void openWalletSettingsRequested();
     void externalSignerStatusChanged();
+    void openReceiveRequested();
 
 public Q_SLOTS:
     void initialize();

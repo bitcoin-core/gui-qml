@@ -289,6 +289,11 @@ void WalletQmlController::refreshExternalSignerStatus()
     setExternalSignerStatus(path_configured, signer_count, signer_name, error);
 }
 
+void WalletQmlController::requestOpenReceive()
+{
+    Q_EMIT openReceiveRequested();
+}
+
 QString WalletQmlController::normalizeWalletPath(const QString& path) const
 {
     if (path.isEmpty()) {

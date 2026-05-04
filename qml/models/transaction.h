@@ -70,6 +70,7 @@ public:
     bool countsForBalance;
     bool involvesWatchAddress;
     bool isPendingRequest{false};
+    QString requestId;
 
     static QList<QSharedPointer<Transaction>> fromWalletTx(const interfaces::WalletTx& tx);
 };
