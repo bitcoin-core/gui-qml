@@ -10,6 +10,7 @@
 #include <chainparams.h>
 #include <chainparamsbase.h>
 #include <consensus/amount.h>
+#include <streams.h>
 #include <util/chaintype.h>
 
 #include <string>
@@ -54,6 +55,7 @@ private Q_SLOTS:
     void maxIdReturnsHighest();
     void deserializeTruncatedBlob();
     void formatAmountBtcEdgeCases();
+    void deserializeV1RecipientBlob();
 };
 
 void ReceiveRequestHistoryModelTests::initTestCase()
@@ -148,7 +150,6 @@ void ReceiveRequestHistoryModelTests::prependInsertsNewRow()
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0), ReceiveRequestHistoryModel::IdRole).toString(), QString{"2"});
 
-    // Replacing the same id updates in place, does not grow.
     model.prependOrReplace(MakeEntry(2, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", 3000));
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0), ReceiveRequestHistoryModel::AmountSatRole).toLongLong(), qlonglong{3000});
@@ -206,6 +207,32 @@ void ReceiveRequestHistoryModelTests::formatAmountBtcEdgeCases()
     QVERIFY(!ReceiveRequestHistoryModel::FormatAmountBtc(2100000000000000).isEmpty());
     QCOMPARE(ReceiveRequestHistoryModel::FormatAmountBtc(1), QStringLiteral("0.00000001"));
     QCOMPARE(ReceiveRequestHistoryModel::FormatAmountBtc(100000000), QStringLiteral("1.00000000"));
+}
+
+void ReceiveRequestHistoryModelTests::deserializeV1RecipientBlob()
+{
+    QmlRecentRequestEntry entry;
+    entry.id = 5;
+    entry.date = QDateTime::fromSecsSinceEpoch(1'700'000'005);
+    entry.recipient.nVersion = 1;
+    entry.recipient.address = "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2";
+    entry.recipient.amount = 25000;
+    entry.recipient.label = "v1label";
+    entry.recipient.message = "v1msg";
+
+    DataStream ss{};
+    ss << entry;
+    const std::string blob = ss.str();
+
+    const auto entries = ReceiveRequestHistoryModel::DeserializeEntries({blob});
+    QCOMPARE(entries.size(), std::size_t{1});
+    QCOMPARE(entries[0].id, int64_t{5});
+    QCOMPARE(entries[0].recipient.address, std::string{"1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"});
+    QCOMPARE(entries[0].recipient.amount, CAmount{25000});
+    QCOMPARE(entries[0].recipient.label, std::string{"v1label"});
+    QCOMPARE(entries[0].recipient.message, std::string{"v1msg"});
+    QCOMPARE(entries[0].recipient.noteSelf, std::string{});
+    QCOMPARE(entries[0].date.toSecsSinceEpoch(), qint64{1'700'000'005});
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

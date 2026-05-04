@@ -5,8 +5,14 @@
 """End-to-end GUI test for the Receive Requests flow.
 
 Covers issue #518 acceptance criteria: creating a receive request stores
-real address + metadata, exposes a BIP21 payload via the QR, the history
-survives a GUI restart, and entries can be removed.
+a real address + metadata, shows the QR inline (lock-on-generate), the
+request appears as a pending entry in the Activity list, clicking it
+opens the PaymentRequestDetail page, and history survives a GUI restart.
+
+This test requires:
+  - bitcoin-core-app built with -DENABLE_TEST_AUTOMATION=ON
+  - bitcoind binary (searched alongside bitcoin-core-app, in build/bin/,
+    or set BITCOIND env var)
 """
 
 import os
@@ -92,13 +98,18 @@ def _open_receive(gui):
     gui.wait_for_page("requestPaymentPage", timeout_ms=10000)
 
 
-def _create_request(gui, amount, name, message):
+def _open_activity(gui):
+    gui.click("activityTabButton")
+    time.sleep(0.5)
+
+
+def _create_request(gui, amount, label, message):
+    """Fill the form and click Generate QR. Stays on the same page (lock-on-generate)."""
     gui.set_text("requestPaymentAmountInput", amount)
-    gui.set_text("requestPaymentYourNameInput", name)
+    gui.set_text("requestPaymentYourNameInput", label)
     gui.set_text("requestPaymentMessageInput", message)
     before = gui.get_property("requestHistoryCount", "count")
-    gui.click("requestPaymentCreateButton")
-    gui.wait_for_page("paymentRequestDetailPage", timeout_ms=20000)
+    gui.click("requestPaymentGenerateButton")
     gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
 
 
@@ -109,14 +120,33 @@ def run_test():
         gui = _import_wallet(harness)
         _open_receive(gui)
 
+        # Create first request — verify QR appears inline (lock-on-generate)
         _create_request(gui, "0.0001", "Alice", "pizza")
-        qr_code = gui.get_property("paymentRequestDetailQRCode", "code")
+        qr_code = gui.get_property("requestPaymentQRCode", "code")
         assert qr_code.startswith("bitcoin:"), f"QR payload missing BIP21 prefix: {qr_code!r}"
         assert "amount=0.00010000" in qr_code, f"QR payload missing amount: {qr_code!r}"
         assert "label=Alice" in qr_code, f"QR payload missing label: {qr_code!r}"
         assert "message=pizza" in qr_code, f"QR payload missing message: {qr_code!r}"
-        print(f"[qml_receive_requests] created request with QR: {qr_code}")
+        print(f"[qml_receive_requests] created request with inline QR: {qr_code}")
 
+        # Verify the "Generate QR" button now says "New request"
+        button_text = gui.get_text("requestPaymentGenerateButton")
+        assert "New request" in button_text, f"Expected 'New request' button, got: {button_text!r}"
+        print("[qml_receive_requests] button text correctly shows 'New request'")
+
+        # Click "New request" to reset to editing state
+        gui.click("requestPaymentGenerateButton")
+        time.sleep(0.5)
+        button_text = gui.get_text("requestPaymentGenerateButton")
+        assert "Generate payment request" in button_text, f"Expected 'Generate payment request' after clear, got: {button_text!r}"
+        print("[qml_receive_requests] form reset to editing state")
+
+        # Switch to Activity and verify pending request appears
+        _open_activity(gui)
+        time.sleep(1)
+        print("[qml_receive_requests] switched to Activity tab")
+
+        # Restart and verify persistence
         _stop_gui(harness)
         time.sleep(0.5)
         _relaunch_gui(harness)
@@ -126,29 +156,29 @@ def run_test():
         gui.wait_for_property("requestHistoryCount", "count", 1, timeout_ms=20000)
         print("[qml_receive_requests] history persisted across restart")
 
-        # Create a second request and verify history grows
+        # Create a second request
         _create_request(gui, "0.005", "Bob", "coffee")
-        qr_code2 = gui.get_property("paymentRequestDetailQRCode", "code")
+        qr_code2 = gui.get_property("requestPaymentQRCode", "code")
         assert "amount=0.00500000" in qr_code2, f"Second QR missing amount: {qr_code2!r}"
         assert "label=Bob" in qr_code2, f"Second QR missing label: {qr_code2!r}"
-        gui.click("paymentRequestDetailDone")
-        gui.wait_for_page("requestPaymentPage", timeout_ms=10000)
         gui.wait_for_property("requestHistoryCount", "count", 2, timeout_ms=20000)
         print("[qml_receive_requests] second request created, history count is 2")
 
-        print("[qml_receive_requests] completed")
+        print("[qml_receive_requests] PASSED")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context
         print(f"\nFAILED [qml_receive_requests]: {err}", file=sys.stderr)
         import traceback
         traceback.print_exc()
         gui = harness.driver
-        gui_output = harness.process_output(harness.gui_process)
+        if gui is not None:
+            dump_qml_tree(gui)
+        proc = harness.gui_process
+        _stop_gui(harness)
+        gui_output = harness.process_output(proc)
         if gui_output:
             print("\n--- GUI process output ---", file=sys.stderr)
             print(gui_output, file=sys.stderr)
-        if gui is not None:
-            dump_qml_tree(gui)
         return 1
     finally:
         harness.stop()
