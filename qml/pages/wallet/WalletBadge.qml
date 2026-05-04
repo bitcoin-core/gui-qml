@@ -31,7 +31,6 @@ Button {
     checkable: true
     hoverEnabled: AppMode.isDesktop
     implicitHeight: 60
-    implicitWidth: contentItem.width
     bottomPadding: 0
     topPadding: 0
     clip: true
@@ -43,9 +42,11 @@ Button {
     contentItem: Item {
         RowLayout {
             visible: root.loading
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 5
             anchors.rightMargin: 5
-            anchors.centerIn: parent
             spacing: 5
 
             Skeleton {
@@ -81,9 +82,11 @@ Button {
                 NumberAnimation { duration: 400 }
             }
 
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 5
             anchors.rightMargin: 5
-            anchors.centerIn: parent
             clip: true
             spacing: 5
             Icon {
@@ -114,9 +117,11 @@ Button {
                 NumberAnimation { duration: 400 }
             }
 
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 5
             anchors.rightMargin: 5
-            anchors.centerIn: parent
             clip: true
             spacing: 5
             Icon {
@@ -135,6 +140,7 @@ Button {
                     horizontalAlignment: Text.AlignLeft
                     Layout.fillWidth: true
                     wrap: false
+                    elide: Text.ElideRight
                     id: buttonText
                     font.pixelSize: 13
                     text: root.text
