@@ -20,6 +20,7 @@ Page {
     property int walletType: CreateName.WalletType.SingleSig
     property string initialWalletName: ""
     readonly property bool externalSignerWallet: walletType === CreateName.WalletType.ExternalSigner
+    property bool loading: false
     background: null
 
     Component.onCompleted: {
@@ -86,10 +87,13 @@ Page {
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             Layout.alignment: Qt.AlignCenter
-            enabled: walletNameInput.text.length > 0
-            text: root.externalSignerWallet ? qsTr("Create wallet") : qsTr("Continue")
+            enabled: walletNameInput.text.length > 0 && !root.loading
+            text: {
+                if (root.loading) return qsTr("Initializing...")
+                if (root.externalSignerWallet) return qsTr("Create wallet")
+                return qsTr("Continue")
+            }
             onClicked: {
-                console.log("Creating wallet with name: " + walletNameInput.text)
                 root.walletName = walletNameInput.text
                 root.next()
             }

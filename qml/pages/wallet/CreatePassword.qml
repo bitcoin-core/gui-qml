@@ -17,7 +17,7 @@ Page {
     signal next
     background: null
 
-    required property string walletName;
+    required property string walletName
 
     Component.onCompleted: walletController.clearWalletCreateStatus()
 

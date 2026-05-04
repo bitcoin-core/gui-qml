@@ -10,9 +10,12 @@
 #include <common/args.h>
 #include <common/settings.h>
 #include <interfaces/node.h>
+#include <key_io.h>
+#include <script/descriptor.h>
 #include <support/allocators/secure.h>
 #include <univalue.h>
 #include <util/result.h>
+#include <util/time.h>
 #include <wallet/walletutil.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/wallet.h>
@@ -389,6 +392,83 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
     return true;
 }
 
+void WalletQmlController::createWatchOnlyWallet(const QString &name, const QString &xpub)
+{
+    clearWalletLoadStatus();
+    clearWalletMigrationStatus();
+
+    const std::string xpub_str = xpub.trimmed().toStdString();
+    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub_str);
+    if (!ext_pubkey.pubkey.IsValid()) {
+        setWalletLoadError(tr("Invalid extended public key."));
+        return;
+    }
+
+    const std::string wallet_name{name.toStdString()};
+    const uint64_t creation_flags = wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS |
+                                    wallet::WALLET_FLAG_DESCRIPTORS |
+                                    wallet::WALLET_FLAG_BLANK_WALLET;
+
+    auto wallet_result = m_node.walletLoader().createWallet(wallet_name, SecureString{}, creation_flags, m_warning_messages);
+    if (!wallet_result) {
+        setWalletLoadError(QString::fromStdString(util::ErrorString(wallet_result).translated));
+        return;
+    }
+
+    int descriptors_added = 0;
+    wallet::CWallet* raw_wallet = (*wallet_result)->wallet();
+    if (raw_wallet) {
+        LOCK(raw_wallet->cs_wallet);
+
+        struct DescriptorInfo {
+            std::string desc_str;
+            bool internal;
+        };
+        std::vector<DescriptorInfo> descriptors = {
+            {"wpkh(" + xpub_str + "/0/*)", false},
+            {"wpkh(" + xpub_str + "/1/*)", true},
+        };
+
+        for (const auto& info : descriptors) {
+            FlatSigningProvider keys;
+            std::string error;
+            auto parsed = Parse(info.desc_str, keys, error, /*require_checksum=*/false);
+            if (parsed.empty()) {
+                continue;
+            }
+
+            wallet::WalletDescriptor w_desc(
+                std::move(parsed.at(0)),
+                TicksSinceEpoch<std::chrono::seconds>(Now<NodeSeconds>()),
+                /*range_start=*/0,
+                /*range_end=*/0,
+                /*next_index=*/0);
+
+            auto spk_manager_res = raw_wallet->AddWalletDescriptor(w_desc, keys, /*label=*/"", info.internal);
+            if (spk_manager_res) {
+                raw_wallet->AddActiveScriptPubKeyMan(
+                    spk_manager_res.value().get().GetID(),
+                    OutputType::BECH32,
+                    info.internal);
+                ++descriptors_added;
+            }
+        }
+        raw_wallet->ConnectScriptPubKeyManNotifiers();
+    }
+
+    if (descriptors_added == 0) {
+        setWalletLoadError(tr("Failed to import descriptors into watch-only wallet."));
+        return;
+    }
+
+    QMutexLocker locker(&m_wallets_mutex);
+    m_selected_wallet = new WalletQmlModel(std::move(*wallet_result));
+    m_wallets.push_back(m_selected_wallet);
+    setWalletLoaded(true);
+    setNoWalletsFound(false);
+    Q_EMIT selectedWalletChanged();
+}
+
 void WalletQmlController::importWallet(const QString& path)
 {
     if (!m_initialized) {
@@ -423,6 +503,12 @@ void WalletQmlController::clearWalletMigrationStatus()
 {
     setWalletMigrationInProgress(false);
     setWalletMigrationError(QString());
+}
+
+bool WalletQmlController::validateXpub(const QString& xpub) const
+{
+    CExtPubKey ext_pubkey = DecodeExtPubKey(xpub.trimmed().toStdString());
+    return ext_pubkey.pubkey.IsValid();
 }
 
 void WalletQmlController::requestOpenWalletSettings()

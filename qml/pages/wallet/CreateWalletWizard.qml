@@ -18,9 +18,31 @@ PageStack {
 
     signal finished()
     property string walletName: ""
+    property string walletType: ""
+    property string xpub: ""
     property int launchContext: CreateWalletWizard.Context.Onboarding
+    property bool waitingForInit: false
 
-    Component.onCompleted: walletController.refreshExternalSignerStatus()
+    Component.onCompleted: {
+        if (!walletController.initialized) {
+            nodeModel.startNodeInitializionThread()
+        }
+        walletController.refreshExternalSignerStatus()
+    }
+
+    Connections {
+        target: walletController
+        enabled: root.waitingForInit
+        function onInitializedChanged() {
+            if (walletController.initialized) {
+                root.waitingForInit = false
+                walletController.createWatchOnlyWallet(root.walletName, root.xpub)
+                if (walletController.isWalletLoaded) {
+                    root.finished()
+                }
+            }
+        }
+    }
     onVisibleChanged: {
         if (visible) {
             walletController.refreshExternalSignerStatus()
@@ -76,8 +98,8 @@ PageStack {
                 header: qsTr("Add a wallet")
                 headerBold: true
                 description: walletController.canCreateExternalSignerWallet
-                    ? qsTr("Supported wallet types are external signer, view-only, single-key,\nand multi-key.")
-                    : qsTr("Supported wallet types are view-only, single-key,\nand multi-key.")
+                    ? qsTr("Supported wallet types are external signer, watch-only, single-key,\nand multi-key.")
+                    : qsTr("Supported wallet types are watch-only, single-key,\nand multi-key.")
             }
 
             ContinueButton {
@@ -91,7 +113,7 @@ PageStack {
                 enabled: walletController.initialized
                 text: qsTr("Create wallet")
                 onClicked: {
-                    root.push(intro)
+                    root.push(typeSelector)
                 }
             }
 
@@ -160,6 +182,42 @@ PageStack {
         }
     }
     Component {
+        id: typeSelector
+        CreateTypeSelector {
+            onBack: root.pop()
+            onRegularSelected: {
+                root.walletType = "singlesig"
+                root.push(intro)
+            }
+            onWatchOnlySelected: {
+                root.walletType = "watchonly"
+                root.push(watchOnlyIntro)
+            }
+            onImportSelected: {
+                walletController.clearWalletLoadStatus()
+                root.push(import_options)
+            }
+        }
+    }
+    Component {
+        id: watchOnlyIntro
+        WatchOnlyIntro {
+            onBack: root.pop()
+            onNext: root.push(watchOnlyXpub)
+        }
+    }
+    Component {
+        id: watchOnlyXpub
+        WatchOnlyXpub {
+            id: xpubPage
+            onBack: root.pop()
+            onNext: {
+                root.xpub = xpubPage.xpub
+                root.push(name)
+            }
+        }
+    }
+    Component {
         id: import_options
         ImportWalletOptions {
             onBack: root.goBack()
@@ -187,9 +245,22 @@ PageStack {
         id: name
         CreateName {
             id: createName
+            loading: root.waitingForInit
+            onBack: root.pop()
             onNext: {
                 root.walletName = createName.walletName
-                root.push(password)
+                if (root.walletType === "watchonly") {
+                    if (walletController.initialized) {
+                        walletController.createWatchOnlyWallet(root.walletName, root.xpub)
+                        if (walletController.isWalletLoaded) {
+                            root.finished()
+                        }
+                    } else {
+                        root.waitingForInit = true
+                    }
+                } else {
+                    root.push(password)
+                }
             }
         }
     }

@@ -81,6 +81,7 @@
         <file>controls/ToggleButton.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
+        <file>controls/WalletTypeListItem.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/main.qml</file>
         <file>pages/node/BannedPeers.qml</file>
@@ -126,7 +127,10 @@
         <file>pages/wallet/CreatePassword.qml</file>
         <file>pages/wallet/ImportWalletOptions.qml</file>
         <file>pages/wallet/ImportWalletSuccess.qml</file>
+        <file>pages/wallet/CreateTypeSelector.qml</file>
         <file>pages/wallet/CreateWalletWizard.qml</file>
+        <file>pages/wallet/WatchOnlyIntro.qml</file>
+        <file>pages/wallet/WatchOnlyXpub.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/MultipleSendReview.qml</file>
         <file>pages/wallet/PaymentRequestDetail.qml</file>
