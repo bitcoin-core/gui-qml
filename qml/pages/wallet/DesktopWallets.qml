@@ -76,9 +76,10 @@ Page {
                 return
             }
             if (walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
+                const showPassphraseError = migrationPassphrasePopup.opened
                 migrationRequiredPopup.close()
                 migrationPassphrasePopup.busy = false
-                migrationPassphrasePopup.errorText = walletController.walletMigrationError
+                migrationPassphrasePopup.errorText = showPassphraseError ? walletController.walletMigrationError : ""
                 migrationPassphrasePopup.open()
             } else {
                 migrationRequiredPopup.busy = false

@@ -176,7 +176,9 @@ def open_wallet_selector(gui):
 
 def select_wallet(gui, wallet_name):
     open_wallet_selector(gui)
-    gui.click(f"walletSelectItem_{sanitize_object_suffix(wallet_name)}")
+    wallet_selector_object_name = f"walletSelectItem_{sanitize_object_suffix(wallet_name)}"
+    gui.wait_for_object(wallet_selector_object_name, timeout_ms=5000)
+    gui.click(wallet_selector_object_name)
 
 
 def open_import_wallet_page(gui):
@@ -431,12 +433,17 @@ def case_managed_legacy_migration(harness, checkpoints):
 
     gui.click("walletMigrationConfirmButton")
     gui.wait_for_property("walletMigrationPassphrasePopup", "opened", True, timeout_ms=10000)
+    assert gui.get_text("walletMigrationPassphraseErrorText") == ""
     checkpoints.checkpoint("migration passphrase prompt displayed", gui)
 
     gui.set_text("walletMigrationPassphraseField", "wrong password")
     gui.click("walletMigrationPassphraseConfirmButton")
-    error_text = gui.get_text("walletMigrationPassphraseErrorText")
-    assert "passphrase" in error_text.lower(), f"Unexpected migration error text: {error_text!r}"
+    gui.wait_for_property(
+        "walletMigrationPassphraseErrorText",
+        "text",
+        lambda text: "passphrase" in text.lower(),
+        timeout_ms=10000,
+    )
     checkpoints.checkpoint("wrong migration password rejected", gui)
 
     gui.set_text("walletMigrationPassphraseField", WALLET_PASSWORD)

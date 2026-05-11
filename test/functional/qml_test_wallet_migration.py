@@ -15,6 +15,12 @@ from qml_test_harness import dump_qml_tree
 from qml_wallet_test_lib import WalletFlowHarness, find_legacy_bitcoind, rpc_call
 
 
+WALLET_PASSWORD = "correct horse battery staple"
+LEGACY_MIGRATION_WARNING = (
+    "This wallet is a legacy wallet and will need to be migrated with migratewallet before it can be loaded"
+)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Wallet migration GUI functional test",
@@ -68,6 +74,80 @@ class CheckpointRecorder:
         )
 
 
+def sanitize_object_suffix(value):
+    return re.sub(r"[^A-Za-z0-9_]+", "_", value)
+
+
+def create_legacy_wallet_fixture(harness, legacy_binary, wallet_name, *, encrypted=False):
+    harness.start_source_node(
+        binary=legacy_binary,
+        extra_args=["-deprecatedrpc=create_bdb"],
+    )
+    try:
+        rpc_call(
+            harness.source_rpc_port,
+            "createwallet",
+            {
+                "wallet_name": wallet_name,
+                "descriptors": False,
+            },
+        )
+        if encrypted:
+            rpc_call(
+                harness.source_rpc_port,
+                "encryptwallet",
+                [WALLET_PASSWORD],
+                wallet=wallet_name,
+            )
+        else:
+            rpc_call(harness.source_rpc_port, "unloadwallet", [wallet_name])
+    finally:
+        harness.stop_source_node()
+
+    source_wallet_path = os.path.join(harness.source_wallets_path, wallet_name)
+    target_wallet_path = os.path.join(harness.gui_wallets_path, wallet_name)
+    os.makedirs(os.path.dirname(target_wallet_path), exist_ok=True)
+    shutil.copytree(source_wallet_path, target_wallet_path)
+    return target_wallet_path
+
+
+def verify_legacy_wallet_warning(gui_rpc_port, wallet_name):
+    wallet_dir = rpc_call(gui_rpc_port, "listwalletdir")["wallets"]
+    legacy_entry = next((entry for entry in wallet_dir if entry["name"] == wallet_name), None)
+    assert legacy_entry is not None, f"Expected {wallet_name} to be present in listwalletdir"
+    assert legacy_entry["warnings"] == [
+        LEGACY_MIGRATION_WARNING
+    ], f"Expected migration warning for {wallet_name}, got {legacy_entry}"
+    print(f"[qml_test_wallet_migration] legacy wallet dir entry: {legacy_entry}")
+
+
+def open_wallet_selector(gui):
+    gui.click("walletBadge")
+    gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
+
+
+def select_wallet_for_migration(gui, wallet_name):
+    open_wallet_selector(gui)
+    gui.wait_for_object(f"walletSelectItem_{sanitize_object_suffix(wallet_name)}", timeout_ms=5000)
+    gui.click(f"walletSelectItem_{sanitize_object_suffix(wallet_name)}")
+    gui.wait_for_property("walletMigrationPopup", "opened", True, timeout_ms=10000)
+
+
+def verify_migrated_wallet(harness, wallet_name, target_wallet_path, *, encrypted=False):
+    wallet_dat_path = os.path.join(target_wallet_path, "wallet.dat")
+    with open(wallet_dat_path, "rb") as wallet_file:
+        assert wallet_file.read(16) == b"SQLite format 3\x00", "Migrated wallet should be SQLite"
+
+    wallet_info = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)
+    assert wallet_info["descriptors"] is True, "Migrated wallet should be descriptor based"
+    assert wallet_info["format"] == "sqlite", "Migrated wallet should be stored as sqlite"
+    if encrypted:
+        assert wallet_info["unlocked_until"] == 0, (
+            f"Expected migrated encrypted wallet to be locked, got {wallet_info}"
+        )
+    print(f"[qml_test_wallet_migration] migrated wallet info: {wallet_info}")
+
+
 def run_test(*, save_screenshots=False, screenshot_root=None):
     harness = WalletFlowHarness("qml_wallet_migration", port_offset=50)
     checkpoints = CheckpointRecorder(save_screenshots, screenshot_root)
@@ -80,33 +160,29 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
             return 77
 
         checkpoints.checkpoint(f"legacy bitcoind located: {legacy_binary}")
-        harness.start_source_node(
-            binary=legacy_binary,
-            extra_args=["-deprecatedrpc=create_bdb"],
-        )
-        checkpoints.checkpoint("legacy source node started")
-        wallet_name = "legacy_flow"
+        unencrypted_wallet_name = "legacy_flow"
+        encrypted_wallet_name = "legacy_encrypted_flow"
         try:
-            rpc_call(
-                harness.source_rpc_port,
-                "createwallet",
-                {
-                    "wallet_name": wallet_name,
-                    "descriptors": False,
-                },
+            unencrypted_wallet_path = create_legacy_wallet_fixture(
+                harness,
+                legacy_binary,
+                unencrypted_wallet_name,
+            )
+            checkpoints.checkpoint(
+                f"unencrypted legacy wallet fixture copied to GUI datadir: {unencrypted_wallet_path}"
+            )
+            encrypted_wallet_path = create_legacy_wallet_fixture(
+                harness,
+                legacy_binary,
+                encrypted_wallet_name,
+                encrypted=True,
+            )
+            checkpoints.checkpoint(
+                f"encrypted legacy wallet fixture copied to GUI datadir: {encrypted_wallet_path}"
             )
         except RuntimeError as err:
             print(f"SKIPPED: could not create a legacy wallet fixture: {err}")
             return 77
-
-        checkpoints.checkpoint("legacy wallet fixture created")
-        rpc_call(harness.source_rpc_port, "unloadwallet", [wallet_name])
-        source_wallet_path = os.path.join(harness.source_wallets_path, wallet_name)
-        target_wallet_path = os.path.join(harness.gui_wallets_path, wallet_name)
-        os.makedirs(os.path.dirname(target_wallet_path), exist_ok=True)
-        shutil.copytree(source_wallet_path, target_wallet_path)
-        harness.stop_source_node()
-        checkpoints.checkpoint(f"legacy wallet fixture copied to GUI datadir: {target_wallet_path}")
 
         harness.start_gui()
         gui = harness.driver
@@ -114,43 +190,43 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("walletBadge", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("GUI launched", gui)
 
-        wallet_dir = rpc_call(harness.gui_rpc_port, "listwalletdir")["wallets"]
-        legacy_entry = next((entry for entry in wallet_dir if entry["name"] == wallet_name), None)
-        assert legacy_entry is not None, f"Expected {wallet_name} to be present in listwalletdir"
-        assert legacy_entry["warnings"] == [
-            "This wallet is a legacy wallet and will need to be migrated with migratewallet before it can be loaded"
-        ], f"Expected migration warning for {wallet_name}"
-        print(f"[qml_test_wallet_migration] legacy wallet dir entry: {legacy_entry}")
-        checkpoints.checkpoint("legacy wallet warning verified", gui)
+        verify_legacy_wallet_warning(harness.gui_rpc_port, unencrypted_wallet_name)
+        verify_legacy_wallet_warning(harness.gui_rpc_port, encrypted_wallet_name)
+        checkpoints.checkpoint("legacy wallet warnings verified", gui)
 
-        gui.click("walletBadge")
-        gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
-        gui.wait_for_property("walletSelectList", "count", 1, timeout_ms=5000)
-        gui.wait_for_object(f"walletSelectItem_{wallet_name}", timeout_ms=5000)
-        checkpoints.checkpoint("legacy wallet visible in selector", gui)
-        gui.click(f"walletSelectItem_{wallet_name}")
+        select_wallet_for_migration(gui, unencrypted_wallet_name)
+        checkpoints.checkpoint("unencrypted migration prompt displayed", gui)
+        gui.click("walletMigrationConfirmButton")
+        gui.wait_for_property("walletBadge", "text", unencrypted_wallet_name, timeout_ms=30000)
+        gui.wait_for_property("walletMigrationPopup", "opened", False, timeout_ms=5000)
+        verify_migrated_wallet(harness, unencrypted_wallet_name, unencrypted_wallet_path)
+        checkpoints.checkpoint("unencrypted wallet migrated and loaded", gui)
 
-        gui.wait_for_page("importWalletMigration", timeout_ms=10000)
-        gui.wait_for_property("walletMigrationActionButton", "text", "Update wallet", timeout_ms=5000)
-        checkpoints.checkpoint("migration confirmation page displayed", gui)
-        gui.click("walletMigrationActionButton")
-        gui.wait_for_property("walletMigrationActionButton", "text", "Done", timeout_ms=30000)
-        checkpoints.checkpoint("wallet migration completed", gui)
-        gui.click("walletMigrationActionButton")
+        select_wallet_for_migration(gui, encrypted_wallet_name)
+        checkpoints.checkpoint("encrypted migration prompt displayed", gui)
+        gui.click("walletMigrationConfirmButton")
+        gui.wait_for_property("walletMigrationPassphrasePopup", "opened", True, timeout_ms=10000)
+        assert gui.get_text("walletMigrationPassphraseErrorText") == ""
+        checkpoints.checkpoint("encrypted migration passphrase prompt displayed", gui)
 
-        gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)
-        checkpoints.checkpoint("migrated wallet loaded", gui)
-        wallet_dat_path = os.path.join(target_wallet_path, "wallet.dat")
-        with open(wallet_dat_path, "rb") as wallet_file:
-            assert wallet_file.read(16) == b"SQLite format 3\x00", "Migrated wallet should be SQLite"
+        gui.set_text("walletMigrationPassphraseField", "wrong password")
+        gui.click("walletMigrationPassphraseConfirmButton")
+        gui.wait_for_property(
+            "walletMigrationPassphraseErrorText",
+            "text",
+            lambda text: "passphrase" in text.lower(),
+            timeout_ms=10000,
+        )
+        checkpoints.checkpoint("wrong encrypted migration password rejected", gui)
 
-        wallet_info = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)
-        assert wallet_info["descriptors"] is True, "Migrated wallet should be descriptor based"
-        assert wallet_info["format"] == "sqlite", "Migrated wallet should be stored as sqlite"
-        print(f"[qml_test_wallet_migration] migrated wallet info: {wallet_info}")
-        checkpoints.checkpoint("migration RPC verification passed", gui)
+        gui.set_text("walletMigrationPassphraseField", WALLET_PASSWORD)
+        gui.click("walletMigrationPassphraseConfirmButton")
+        gui.wait_for_property("walletBadge", "text", encrypted_wallet_name, timeout_ms=30000)
+        gui.wait_for_property("walletMigrationPassphrasePopup", "opened", False, timeout_ms=5000)
+        verify_migrated_wallet(harness, encrypted_wallet_name, encrypted_wallet_path, encrypted=True)
+        checkpoints.checkpoint("encrypted wallet migrated and loaded", gui)
 
-        print("Migration flow passed.")
+        print("Migration flows passed.")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context for functional test output
         print(f"\nFAILED: {err}", file=sys.stderr)
