@@ -104,5 +104,9 @@ jobs:
           python3 test/functional/qml_test_proxy.py
           python3 test/functional/qml_test_debug_log.py
           python3 test/functional/qml_test_settings_display.py
+          python3 test/functional/qml_test_password_wallet.py
+          python3 test/functional/qml_test_send_receive.py
+          python3 test/functional/qml_test_send_review.py
           python3 test/functional/qml_test_wallet_migration.py
+          python3 test/functional/qml_test_wallet_rbf.py
           python3 test/functional/qml_test_wallet_restore.py
