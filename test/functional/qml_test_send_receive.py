@@ -281,8 +281,9 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("feeSelectionDropdownButton")
         gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
         checkpoints.checkpoint("fee dropdown with include fee enabled", gui)
-        gui.click("sendAmountInput")
+        gui.click(f"feeSelectionOption{LOW_FEE_OPTION_INDEX}")
         gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
+        gui.wait_for_property("feeSelectionControl", "selectedIndex", LOW_FEE_OPTION_INDEX, timeout_ms=5000)
 
         estimated_fee_with_subtract_text = gui.get_text("feeSelectionEstimateLabel")
         estimated_fee_with_subtract_sats = btc_text_to_sats(estimated_fee_with_subtract_text)
