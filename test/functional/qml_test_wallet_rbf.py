@@ -88,12 +88,12 @@ def wait_for_gui_object(gui, object_name, *, timeout=20, interval=0.25):
 
 def ensure_activity_tab_selected(gui, *, timeout=10, attempts=3):
     for attempt in range(1, attempts + 1):
-        if gui.get_property("walletActivityTabButton", "checked"):
+        if gui.get_property("desktopWalletsActivityTab", "checked"):
             return
 
-        gui.click("walletActivityTabButton")
+        gui.click("desktopWalletsActivityTab")
         try:
-            gui.wait_for_property("walletActivityTabButton", "checked", True, timeout_ms=int(timeout * 1000))
+            gui.wait_for_property("desktopWalletsActivityTab", "checked", True, timeout_ms=int(timeout * 1000))
             return
         except Exception:
             if attempt == attempts:

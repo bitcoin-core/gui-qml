@@ -155,6 +155,7 @@ def prepare_single_send(gui, address, amount, amount_unit="btc"):
     gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
     gui.click("sendReviewButton")
     gui.wait_for_page("sendReviewPage", timeout_ms=10000)
+    gui.wait_for_property("sendReviewSendButton", "visible", True, timeout_ms=10000)
 
 
 def prepare_multi_send(gui, first_address, first_amount_btc, second_address, second_amount_sat):

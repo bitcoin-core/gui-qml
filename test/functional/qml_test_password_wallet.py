@@ -154,7 +154,7 @@ def mine_to_wallet(gui_rpc_port, wallet_name, blocks):
 
 
 def open_send_tab(gui):
-    gui.click("walletSendTab")
+    gui.click("desktopWalletsSendTab")
     gui.wait_for_property("walletSendTitle", "visible", True, timeout_ms=5000)
 
 
@@ -319,7 +319,7 @@ def case_created_wallet_send(harness, checkpoints):
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("wallet restarted locked", gui)
 
-    gui.click("walletActivityTab")
+    gui.click("desktopWalletsActivityTab")
     gui.wait_for_property("walletActivityTitle", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("locked wallet activity visible", gui)
 
@@ -330,12 +330,12 @@ def case_created_wallet_send(harness, checkpoints):
     checkpoints.checkpoint("review passphrase prompt displayed", gui)
     gui.set_text("reviewPassphraseField", WALLET_PASSWORD)
     gui.click("reviewPassphraseConfirmButton")
-    gui.wait_for_property("sendTransactionButton", "visible", True, timeout_ms=20000)
+    gui.wait_for_property("sendReviewSendButton", "visible", True, timeout_ms=20000)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("review built and wallet relocked", gui)
 
     before = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)["txcount"]
-    gui.click("sendTransactionButton")
+    gui.click("sendReviewSendButton")
     gui.wait_for_property("sendResultPopup", "opened", True, timeout_ms=20000)
     checkpoints.checkpoint("prepared transaction broadcast", gui)
 
@@ -369,11 +369,11 @@ def case_locked_review_fallback(harness, checkpoints):
 
     gui.set_text("reviewPassphraseField", WALLET_PASSWORD)
     gui.click("reviewPassphraseConfirmButton")
-    gui.wait_for_property("sendTransactionButton", "visible", True, timeout_ms=20000)
+    gui.wait_for_property("sendReviewSendButton", "visible", True, timeout_ms=20000)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("review rebuilt and wallet relocked", gui)
 
-    gui.click("sendTransactionButton")
+    gui.click("sendReviewSendButton")
     gui.wait_for_property("sendResultPopup", "opened", True, timeout_ms=20000)
     checkpoints.checkpoint("fallback transaction broadcast", gui)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
@@ -405,7 +405,7 @@ def case_import_encrypted_wallet(harness, checkpoints):
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("encrypted wallet imported locked", gui)
 
-    gui.click("walletActivityTab")
+    gui.click("desktopWalletsActivityTab")
     gui.wait_for_property("walletActivityTitle", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("imported locked wallet activity visible", gui)
 
