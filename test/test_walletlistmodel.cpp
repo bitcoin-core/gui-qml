@@ -71,7 +71,9 @@ class WalletListModelTests : public QObject
 
 private Q_SLOTS:
     void listWalletDirMapsNameAndLoadStateRoles();
+    void listWalletDirSortsCaseInsensitivelyAndPreservesDuplicateRows();
     void setOpenWalletNamesUpdatesLoadStateRole();
+    void setOpenWalletNamesSortsLoadedRowsFirst();
 };
 
 void WalletListModelTests::listWalletDirMapsNameAndLoadStateRoles()
@@ -101,6 +103,35 @@ void WalletListModelTests::listWalletDirMapsNameAndLoadStateRoles()
     QCOMPARE(model.data(second, WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
 }
 
+void WalletListModelTests::listWalletDirSortsCaseInsensitivelyAndPreservesDuplicateRows()
+{
+    using ::testing::StrictMock;
+
+    StrictMock<MockNode> node;
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {
+        {"zulu_wallet", "sqlite"},
+        {"alpha_wallet", "sqlite"},
+        {"Alpha_wallet", "sqlite"},
+        {"alpha_wallet", "bdb"},
+        {"bravo_wallet", "sqlite"},
+    };
+    ExpectWalletLoader(node, loader);
+
+    WalletListModel model{node, nullptr};
+    model.listWalletDir();
+
+    QCOMPARE(model.rowCount(), 5);
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"Alpha_wallet"});
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::FormatRole).toString(), QString{"sqlite"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::FormatRole).toString(), QString{"bdb"});
+    QCOMPARE(model.data(model.index(2, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+    QCOMPARE(model.data(model.index(2, 0), WalletListModel::FormatRole).toString(), QString{"sqlite"});
+    QCOMPARE(model.data(model.index(3, 0), WalletListModel::NameRole).toString(), QString{"bravo_wallet"});
+    QCOMPARE(model.data(model.index(4, 0), WalletListModel::NameRole).toString(), QString{"zulu_wallet"});
+}
+
 void WalletListModelTests::setOpenWalletNamesUpdatesLoadStateRole()
 {
     using ::testing::StrictMock;
@@ -118,16 +149,55 @@ void WalletListModelTests::setOpenWalletNamesUpdatesLoadStateRole()
 
     QSignalSpy data_changed_spy(&model, &QAbstractItemModel::dataChanged);
 
-    model.setOpenWalletNames({"beta_wallet"});
+    model.setOpenWalletNames({"alpha_wallet"});
 
     QCOMPARE(data_changed_spy.count(), 1);
-    QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
-    QCOMPARE(model.data(model.index(1, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Open));
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Open));
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::NameRole).toString(), QString{"beta_wallet"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
 
     model.setOpenWalletNames({});
 
     QCOMPARE(data_changed_spy.count(), 2);
-    QCOMPARE(model.data(model.index(1, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
+}
+
+void WalletListModelTests::setOpenWalletNamesSortsLoadedRowsFirst()
+{
+    using ::testing::StrictMock;
+
+    StrictMock<MockNode> node;
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {
+        {"zulu_wallet", "sqlite"},
+        {"alpha_wallet", "sqlite"},
+        {"bravo_wallet", "sqlite"},
+        {"charlie_wallet", "sqlite"},
+    };
+    ExpectWalletLoader(node, loader);
+
+    WalletListModel model{node, nullptr};
+    model.listWalletDir();
+
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::NameRole).toString(), QString{"bravo_wallet"});
+    QCOMPARE(model.data(model.index(2, 0), WalletListModel::NameRole).toString(), QString{"charlie_wallet"});
+    QCOMPARE(model.data(model.index(3, 0), WalletListModel::NameRole).toString(), QString{"zulu_wallet"});
+
+    QSignalSpy model_reset_spy(&model, &QAbstractItemModel::modelReset);
+
+    model.setOpenWalletNames({"zulu_wallet", "bravo_wallet"});
+
+    QCOMPARE(model_reset_spy.count(), 1);
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"bravo_wallet"});
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Open));
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::NameRole).toString(), QString{"zulu_wallet"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Open));
+    QCOMPARE(model.data(model.index(2, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+    QCOMPARE(model.data(model.index(2, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
+    QCOMPARE(model.data(model.index(3, 0), WalletListModel::NameRole).toString(), QString{"charlie_wallet"});
+    QCOMPARE(model.data(model.index(3, 0), WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Closed));
 }
 
 int RunWalletListModelTests(int argc, char* argv[])

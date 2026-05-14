@@ -109,12 +109,16 @@ Popup {
                     spacing: 6
 
                     CoreText {
+                        objectName: "walletSelectName_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                         Layout.fillWidth: true
                         text: delegate.name
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                         font.pixelSize: 14
-                        color: delegate.checked || delegate.hovered ? Theme.color.orange : Theme.color.neutral9
+                        bold: delegate.loadState === 1
+                        color: delegate.checked || delegate.hovered
+                            ? Theme.color.orange
+                            : delegate.loadState === 1 ? Theme.color.neutral9 : Theme.color.neutral7
                         elide: Text.ElideRight
                     }
 

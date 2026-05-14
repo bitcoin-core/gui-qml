@@ -43,19 +43,27 @@ TestCase {
 
         const openWalletClose = findChild(list.itemAtIndex(0), "walletSelectClose_testwallet")
         const closedWalletClose = findChild(list.itemAtIndex(1), "walletSelectClose_secondarywallet")
+        const openWalletName = findChild(list.itemAtIndex(0), "walletSelectName_testwallet")
+        const closedWalletName = findChild(list.itemAtIndex(1), "walletSelectName_secondarywallet")
         verify(openWalletClose !== null)
         verify(closedWalletClose !== null)
+        verify(openWalletName !== null)
+        verify(closedWalletName !== null)
 
+        compare(openWalletName.bold, true)
         compare(openWalletClose.visible, true)
         compare(openWalletClose.enabled, true)
+        compare(closedWalletName.bold, false)
         compare(closedWalletClose.visible, false)
         compare(closedWalletClose.enabled, false)
 
         walletListModel.setWalletLoadState("testwallet", 0)
+        tryCompare(openWalletName, "bold", false)
         tryCompare(openWalletClose, "visible", false)
         compare(openWalletClose.enabled, false)
 
         walletListModel.setWalletLoadState("secondarywallet", 1)
+        tryCompare(closedWalletName, "bold", true)
         tryCompare(closedWalletClose, "visible", true)
         compare(closedWalletClose.enabled, true)
     }

@@ -159,6 +159,7 @@ void WalletQmlController::closeWallet(const QString& path)
 
     WalletQmlModel* wallet_to_close{nullptr};
     WalletQmlModel* next_selected_wallet{nullptr};
+    bool closing_selected_wallet{false};
 
     {
         QMutexLocker locker(&m_wallets_mutex);
@@ -176,17 +177,18 @@ void WalletQmlController::closeWallet(const QString& path)
                 break;
             }
         }
+        closing_selected_wallet = m_selected_wallet == wallet_to_close;
         m_wallets.erase(wallet_it);
+    }
+
+    if (closing_selected_wallet) {
+        m_selected_wallet = next_selected_wallet ? next_selected_wallet : m_empty_wallet;
+        Q_EMIT selectedWalletChanged();
     }
 
     wallet_to_close->removeWallet();
     delete wallet_to_close;
     notifyOpenWalletsChanged();
-
-    if (m_selected_wallet == wallet_to_close) {
-        m_selected_wallet = next_selected_wallet ? next_selected_wallet : m_empty_wallet;
-        Q_EMIT selectedWalletChanged();
-    }
 
     setWalletLoaded(next_selected_wallet != nullptr);
 }

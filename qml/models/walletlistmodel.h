@@ -49,7 +49,9 @@ private:
         QString format;
     };
 
-    void addItem(const Item &item);
+    bool itemLess(const Item& a, const Item& b) const;
+    void sortItems(QList<Item>& items) const;
+    bool applyUpdatedItems(QList<Item>&& updated_items);
     void updateLoadStateForAllRows();
 
     QList<Item> m_items;

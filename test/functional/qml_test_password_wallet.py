@@ -19,6 +19,7 @@ from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
 from qml_wallet_test_lib import (
     WalletFlowHarness,
+    find_bitcoind,
     find_legacy_bitcoind,
     rpc_call,
     wait_for_rpc,
@@ -476,6 +477,7 @@ def case_managed_legacy_migration(harness, checkpoints):
 def case_close_loaded_wallet_from_selector(harness, checkpoints):
     wallet_names = ["closeable_alpha_wallet", "closeable_beta_wallet"]
 
+    harness.bitcoind_binary = harness.bitcoind_binary or find_bitcoind()
     process = start_node(harness.bitcoind_binary, harness.gui_datadir, harness.gui_rpc_port)
     try:
         for wallet_name in wallet_names:
