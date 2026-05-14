@@ -20,6 +20,7 @@ InformationPage {
         property alias trafficGraphScale: root.trafficGraphScale
     }
     navLeftDetail: NavButton {
+        objectName: "networkTrafficBackButton"
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
         onClicked: root.back()

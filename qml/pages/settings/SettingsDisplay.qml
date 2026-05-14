@@ -27,6 +27,7 @@ Item {
 
             header: NavigationBar2 {
                 leftItem: NavButton {
+                    objectName: "settingsDisplayBack"
                     iconSource: "image://images/caret-left"
                     text: qsTr("Back")
                     onClicked: root.back()

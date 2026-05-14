@@ -13,6 +13,7 @@ InformationPage {
     objectName: "settingsDeveloper"
     property bool onboarding: false
     navLeftDetail: NavButton {
+        objectName: "settingsDeveloperBack"
         iconSource: "image://images/caret-left"
         text: qsTr("Back")
         onClicked: {

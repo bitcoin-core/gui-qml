@@ -42,6 +42,7 @@ PageStack {
             }
             rightItem: NavButton {
                 id: doneButton
+                objectName: "nodeSettingsDoneButton"
                 text: qsTr("Done")
                 onClicked: root.doneClicked()
             }
@@ -82,6 +83,7 @@ PageStack {
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoStorage
+                    objectName: "gotoStorage"
                     Layout.fillWidth: true
                     header: qsTr("Storage")
                     actionItem: CaretRightIcon {
@@ -138,6 +140,7 @@ PageStack {
                 Separator { Layout.fillWidth: true }
                 Setting {
                     id: gotoNetworkTraffic
+                    objectName: "settingsNetworkTraffic"
                     Layout.fillWidth: true
                     header: qsTr("Network Traffic")
                     actionItem: CaretRightIcon {

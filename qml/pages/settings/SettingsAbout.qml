@@ -47,6 +47,7 @@ InformationPage {
     Component {
         id: backButton
         NavButton {
+            objectName: "settingsAboutBack"
             iconSource: "image://images/caret-left"
             text: qsTr("Back")
             onClicked: root.back()

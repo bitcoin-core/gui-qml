@@ -21,6 +21,7 @@ Page {
 
     header: NavigationBar2 {
         leftItem: NavButton {
+            objectName: "peersBackButton"
             iconSource: "image://images/caret-left"
             text: qsTr("Back")
             onClicked: root.back()

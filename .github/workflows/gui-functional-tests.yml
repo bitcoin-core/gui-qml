@@ -55,6 +55,7 @@ jobs:
         run: |
           python3 test/functional/qml_test_bridge_sanity.py
           python3 test/functional/qml_test_onboarding.py
+          python3 test/functional/qml_test_disablewallet_boot.py
           python3 test/functional/qml_test_external_signer.py
           python3 test/functional/qml_test_peers.py
           python3 test/functional/qml_test_proxy.py
