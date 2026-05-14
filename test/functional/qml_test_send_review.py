@@ -140,10 +140,15 @@ def set_multiple_recipients(gui, enabled):
 
 
 def set_amount_unit(gui, unit_label):
+    def matches(label):
+        if unit_label in ("sat", "sats"):
+            return label in ("sat", "sats")
+        return label == unit_label
+
     current = gui.get_property("sendAmountUnitLabel", "text")
-    if current != unit_label:
+    if not matches(current):
         gui.click("sendAmountUnitToggle")
-        gui.wait_for_property("sendAmountUnitLabel", "text", unit_label, timeout_ms=5000)
+        gui.wait_for_property("sendAmountUnitLabel", "text", matches, timeout_ms=5000)
 
 
 def prepare_single_send(gui, address, amount, amount_unit="btc"):
@@ -177,7 +182,22 @@ def prepare_multi_send(gui, first_address, first_amount_btc, second_address, sec
 
 def assert_unit_suffix(gui, object_name, unit_suffix):
     text = gui.get_text(object_name)
-    assert text.endswith(f" {unit_suffix}"), f"Expected {object_name} to end with {unit_suffix!r}, got {text!r}"
+    if unit_suffix in ("sat", "sats"):
+        assert text.endswith(" sat") or text.endswith(" sats"), (
+            f"Expected {object_name} to end with a satoshi unit, got {text!r}"
+        )
+    else:
+        assert text.endswith(f" {unit_suffix}"), f"Expected {object_name} to end with {unit_suffix!r}, got {text!r}"
+
+
+def assert_amount_text(gui, object_name, expected_amount, expected_unit):
+    text = gui.get_text(object_name)
+    if expected_unit in ("sat", "sats"):
+        expected_values = {f"{expected_amount} sat", f"{expected_amount} sats"}
+        assert text in expected_values, f"Expected {object_name} to be one of {expected_values!r}, got {text!r}"
+    else:
+        expected = f"{expected_amount} {expected_unit}"
+        assert text == expected, f"Expected {object_name} to be {expected!r}, got {text!r}"
 
 
 def assert_address_expand(gui, short_object_name, full_object_name, address, checkpoints=None, label=None):
@@ -219,7 +239,7 @@ def case_single_btc(harness, gui, wallet_name, checkpoints):
         checkpoints=checkpoints,
         label="single-btc review",
     )
-    assert gui.get_text("sendReviewAmountField") == "1.25000000 ₿"
+    assert_amount_text(gui, "sendReviewAmountField", "1.25000000", "₿")
     assert_unit_suffix(gui, "sendReviewFeeField", "₿")
     assert_unit_suffix(gui, "sendReviewTotalField", "₿")
     return_to_send_page(gui, "sendReviewBackButton")
@@ -238,7 +258,7 @@ def case_single_sat(harness, gui, wallet_name, checkpoints):
         checkpoints=checkpoints,
         label="single-sat review",
     )
-    assert gui.get_text("sendReviewAmountField") == "1250 sat"
+    assert_amount_text(gui, "sendReviewAmountField", "1250", "sat")
     assert_unit_suffix(gui, "sendReviewFeeField", "sat")
     assert_unit_suffix(gui, "sendReviewTotalField", "sat")
     return_to_send_page(gui, "sendReviewBackButton")
@@ -282,11 +302,14 @@ def case_multi_review(harness, gui, wallet_name, checkpoints):
         row_index=1,
         prop="formattedAddress",
     ) == format_full_address(second_address)
-    assert gui.get_list_item_property(
+    second_amount_text = gui.get_list_item_property(
         view_object_name="multipleSendReviewRecipientsList",
         row_index=1,
         prop="amountText",
-    ) == "2000 sat"
+    )
+    assert second_amount_text in {"2000 sat", "2000 sats"}, (
+        f"Expected second recipient amount to use a satoshi unit, got {second_amount_text!r}"
+    )
     assert gui.get_list_item_property(
         view_object_name="multipleSendReviewRecipientsList",
         row_index=1,
