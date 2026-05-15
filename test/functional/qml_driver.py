@@ -198,6 +198,15 @@ class QmlDriver:
             raise QmlDriverError(f"list_objects failed: {resp['error']}")
         return resp["objects"]
 
+    def get_context_property(self, name):
+        """Return metadata for a QQmlEngine root context property."""
+        resp = self._send({"cmd": "get_context_property", "name": name})
+        if "error" in resp:
+            raise QmlDriverError(
+                f"get_context_property({name!r}) failed: {resp['error']}"
+            )
+        return resp
+
     def save_screenshot(self, path):
         """Save a screenshot of the current QML window to a PNG file.
 

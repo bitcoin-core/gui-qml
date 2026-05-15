@@ -14,6 +14,7 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QQmlContext>
 #include <QScopedValueRollback>
 #include <QTimer>
 #include <QVariant>
@@ -375,6 +376,8 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
 
     if (cmd == QLatin1String("get_current_page")) {
         return cmdGetCurrentPage();
+    } else if (cmd == QLatin1String("get_context_property")) {
+        return cmdGetContextProperty(obj.value(QStringLiteral("name")).toString());
     } else if (cmd == QLatin1String("get_property")) {
         return cmdGetProperty(
             obj.value(QStringLiteral("objectName")).toString(),
@@ -455,6 +458,34 @@ QByteArray TestBridge::cmdGetCurrentPage()
     }
 
     return errorResponse(QStringLiteral("Could not determine current page; missing mainPageStack/current page item"));
+}
+
+QByteArray TestBridge::cmdGetContextProperty(const QString& name)
+{
+    if (name.isEmpty()) {
+        return errorResponse(QStringLiteral("name is required"));
+    }
+
+    QVariant value = m_engine->rootContext()->contextProperty(name);
+    const bool exists = value.isValid() && !value.isNull();
+
+    QJsonObject resp;
+    resp[QStringLiteral("exists")] = exists;
+    if (!exists) {
+        return QJsonDocument(resp).toJson(QJsonDocument::Compact);
+    }
+
+    if (QObject* object = value.value<QObject*>()) {
+        resp[QStringLiteral("isQObject")] = true;
+        resp[QStringLiteral("className")] = QString::fromLatin1(object->metaObject()->className());
+        resp[QStringLiteral("objectName")] = object->objectName();
+    } else {
+        resp[QStringLiteral("isQObject")] = false;
+        resp[QStringLiteral("typeName")] = QString::fromLatin1(value.typeName());
+        resp[QStringLiteral("value")] = QJsonValue::fromVariant(value);
+    }
+
+    return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
 
 QByteArray TestBridge::cmdGetProperty(const QString& object_name, const QString& prop)

@@ -23,6 +23,7 @@
 ///
 /// Supported commands (JSON over newline-delimited stream):
 ///   {"cmd": "get_current_page"}
+///   {"cmd": "get_context_property", "name": "<contextPropertyName>"}
 ///   {"cmd": "get_property", "objectName": "<name>", "prop": "<property>"}
 ///   {"cmd": "click", "objectName": "<name>"}
 ///   {"cmd": "set_text", "objectName": "<name>", "text": "<value>"}
@@ -70,6 +71,7 @@ private:
 
     /// Dispatch individual command handlers.
     QByteArray cmdGetCurrentPage();
+    QByteArray cmdGetContextProperty(const QString& name);
     QByteArray cmdGetProperty(const QString& object_name, const QString& prop);
     QByteArray cmdClick(const QString& object_name);
     QByteArray cmdSetText(const QString& object_name, const QString& text);

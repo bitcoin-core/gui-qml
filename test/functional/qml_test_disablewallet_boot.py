@@ -111,6 +111,13 @@ def open_node_settings(gui):
 
 
 def assert_wallet_ui_absent(gui):
+    for context_property in ("walletController", "walletListModel"):
+        value = gui.get_context_property(context_property)
+        assert value["exists"] is False, (
+            f"{context_property} should not be exposed in -disablewallet mode: "
+            f"{value}"
+        )
+
     objects = {entry["objectName"] for entry in gui.list_objects()}
     unexpected = {
         "createWalletWizard",
