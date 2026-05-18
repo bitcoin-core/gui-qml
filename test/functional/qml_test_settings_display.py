@@ -46,6 +46,20 @@ def navigate_to_display_settings(gui):
     print("  Navigated to Display settings page")
 
 
+def reset_display_unit_to_btc(gui):
+    """Reset the persisted display unit to BTC.
+
+    Precondition: caller is on the SettingsDisplay page with gotoDisplayUnit
+    visible. Callers should wrap invocations in `try/except QmlDriverError:
+    pass` for best-effort teardown that does not mask the original test failure.
+    """
+    gui.click("gotoDisplayUnit")
+    gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
+    gui.click("displayUnitBTC")
+    gui.click("settingsDisplayUnitBack")
+    gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
+
+
 def reset_language_to_system_default(gui):
     """Reset the persisted language to the System default (empty tag).
 
@@ -68,49 +82,55 @@ def test_display_unit_selection(gui):
     """Select SAT on the Display unit page and verify it is reflected."""
     print("\n── test_display_unit_selection ───────────────────────────────")
 
-    gui.click("gotoDisplayUnit")
-    gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
-    print("  Navigated to SettingsDisplayUnit page")
+    try:
+        gui.click("gotoDisplayUnit")
+        gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
+        print("  Navigated to SettingsDisplayUnit page")
 
-    # If SAT is selected (state persists across runs), switch to BTC first.
-    # We must navigate to a fresh page after the switch because clicking a
-    # checkable OptionButton breaks its declarative `checked:` binding.
-    if gui.get_property("displayUnitSAT", "checked"):
+        # If SAT is selected (state persists across runs), switch to BTC first.
+        # We must navigate to a fresh page after the switch because clicking a
+        # checkable OptionButton breaks its declarative `checked:` binding.
+        if gui.get_property("displayUnitSAT", "checked"):
+            gui.click("displayUnitBTC")
+            gui.click("settingsDisplayUnitBack")
+            gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
+            gui.click("gotoDisplayUnit")
+            gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
+            print("  Switched to BTC starting state")
+
+        btc_checked = gui.get_property("displayUnitBTC", "checked")
+        sat_checked = gui.get_property("displayUnitSAT", "checked")
+        assert btc_checked, (
+            f"BTC should be checked at test start, got btc={btc_checked} sat={sat_checked}"
+        )
+        assert not sat_checked, (
+            f"SAT should not be checked at test start, got sat={sat_checked}"
+        )
+        print(f"  Starting state: BTC={btc_checked}, SAT={sat_checked}  PASSED")
+
+        # Select SAT.
+        gui.click("displayUnitSAT")
+        sat_after = gui.get_property("displayUnitSAT", "checked")
+        btc_after = gui.get_property("displayUnitBTC", "checked")
+        assert sat_after, f"SAT should be checked after clicking, got sat={sat_after}"
+        assert not btc_after, f"BTC should be unchecked after selecting SAT, got btc={btc_after}"
+        print(f"  After SAT selection: SAT={sat_after}, BTC={btc_after}  PASSED")
+
+        # Go back and reset to BTC for future runs.
+        gui.click("settingsDisplayUnitBack")
+        gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
+
+        gui.click("gotoDisplayUnit")
+        gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
         gui.click("displayUnitBTC")
         gui.click("settingsDisplayUnitBack")
         gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
-        gui.click("gotoDisplayUnit")
-        gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
-        print("  Switched to BTC starting state")
-
-    btc_checked = gui.get_property("displayUnitBTC", "checked")
-    sat_checked = gui.get_property("displayUnitSAT", "checked")
-    assert btc_checked, (
-        f"BTC should be checked at test start, got btc={btc_checked} sat={sat_checked}"
-    )
-    assert not sat_checked, (
-        f"SAT should not be checked at test start, got sat={sat_checked}"
-    )
-    print(f"  Starting state: BTC={btc_checked}, SAT={sat_checked}  PASSED")
-
-    # Select SAT.
-    gui.click("displayUnitSAT")
-    sat_after = gui.get_property("displayUnitSAT", "checked")
-    btc_after = gui.get_property("displayUnitBTC", "checked")
-    assert sat_after, f"SAT should be checked after clicking, got sat={sat_after}"
-    assert not btc_after, f"BTC should be unchecked after selecting SAT, got btc={btc_after}"
-    print(f"  After SAT selection: SAT={sat_after}, BTC={btc_after}  PASSED")
-
-    # Go back and reset to BTC for future runs.
-    gui.click("settingsDisplayUnitBack")
-    gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
-
-    gui.click("gotoDisplayUnit")
-    gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
-    gui.click("displayUnitBTC")
-    gui.click("settingsDisplayUnitBack")
-    gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
-    print("  Reset display unit to BTC  PASSED")
+        print("  Reset display unit to BTC  PASSED")
+    finally:
+        try:
+            reset_display_unit_to_btc(gui)
+        except QmlDriverError:
+            pass
 
 
 def test_language_selection(gui):
@@ -230,10 +250,14 @@ def test_settings_persistence(datadir):
             )
             print(f"  Language (Español) persisted across restart  PASSED")
         finally:
-            # Best-effort: reset the persisted language to System default
-            # before the harness shuts down. The value is flushed by QSettings
-            # on app exit, so this must run before harness2.stop(). Swallow
-            # driver errors so a mid-test failure is not masked.
+            # Best-effort: reset persisted settings to defaults before the
+            # harness shuts down. Values are flushed by QSettings on app exit,
+            # so this must run before harness2.stop(). Swallow driver errors
+            # so a mid-test failure is not masked.
+            try:
+                reset_display_unit_to_btc(gui2)
+            except QmlDriverError:
+                pass
             try:
                 reset_language_to_system_default(gui2)
             except QmlDriverError:
