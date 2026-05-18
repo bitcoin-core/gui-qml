@@ -46,6 +46,22 @@ def navigate_to_display_settings(gui):
     print("  Navigated to Display settings page")
 
 
+def reset_language_to_system_default(gui):
+    """Reset the persisted language to the System default (empty tag).
+
+    Precondition: caller is on the SettingsDisplay page with gotoLanguage
+    visible. The helper navigates into SettingsLanguage, picks the empty-tag
+    delegate, and waits to return to SettingsDisplay. Callers should wrap
+    invocations in `try/except QmlDriverError: pass` for best-effort teardown
+    that does not mask the original test failure.
+    """
+    gui.click("gotoLanguage")
+    gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
+    gui.wait_for_page("language_", timeout_ms=3000)  # wait for delegate to render
+    gui.click("language_")  # objectName: "language_" + "" = "language_"
+    gui.wait_for_page("gotoLanguage", timeout_ms=5000)
+
+
 # ── Individual test cases ─────────────────────────────────────────────────────
 
 def test_display_unit_selection(gui):
@@ -101,66 +117,76 @@ def test_language_selection(gui):
     """Select Spanish and verify the summary and translated headers update."""
     print("\n── test_language_selection ───────────────────────────────────")
 
-    gui.click("gotoLanguage")
-    gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
-    print("  Navigated to SettingsLanguage page")
+    try:
+        gui.click("gotoLanguage")
+        gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
+        print("  Navigated to SettingsLanguage page")
 
-    # Filter the list to Spanish so the delegate is rendered by the ListView.
-    gui.set_text("languageSearch", "español")
-    gui.wait_for_page("language_es", timeout_ms=3000)
-    gui.click("language_es")
-    # Selecting a language navigates back to SettingsDisplay automatically.
-    gui.wait_for_page("gotoLanguage", timeout_ms=5000)
-    print("  Selected Spanish (es) and returned to Display settings")
+        # Filter the list to Spanish so the delegate is rendered by the ListView.
+        gui.set_text("languageSearch", "español")
+        gui.wait_for_page("language_es", timeout_ms=3000)
+        gui.click("language_es")
+        # Selecting a language navigates back to SettingsDisplay automatically.
+        gui.wait_for_page("gotoLanguage", timeout_ms=5000)
+        print("  Selected Spanish (es) and returned to Display settings")
 
-    # Verify the language summary description on the row has updated.
-    lang_summary = gui.get_property("gotoLanguage", "description")
-    assert "Español" in lang_summary, (
-        f"Language summary should contain 'Español' after selecting 'es', "
-        f"got: {lang_summary!r}"
-    )
-    assert "system default" not in lang_summary.lower(), (
-        f"Language summary should not show 'System default' after selecting 'es', "
-        f"got: {lang_summary!r}"
-    )
-    print(f"  Language summary updated to: {lang_summary!r}  PASSED")
+        # Verify the language summary description on the row has updated.
+        lang_summary = gui.get_property("gotoLanguage", "description")
+        assert "Español" in lang_summary, (
+            f"Language summary should contain 'Español' after selecting 'es', "
+            f"got: {lang_summary!r}"
+        )
+        assert "system default" not in lang_summary.lower(), (
+            f"Language summary should not show 'System default' after selecting 'es', "
+            f"got: {lang_summary!r}"
+        )
+        print(f"  Language summary updated to: {lang_summary!r}  PASSED")
 
-    # Verify translation propagated to other row headers on this page.
-    lang_header = gui.get_property("gotoLanguage", "header")
-    assert lang_header == "Idioma", (
-        f"'Language' row header should be 'Idioma' in Spanish, got: {lang_header!r}"
-    )
-    print(f"  Language row header translated: {lang_header!r}  PASSED")
+        # Verify translation propagated to other row headers on this page.
+        lang_header = gui.get_property("gotoLanguage", "header")
+        assert lang_header == "Idioma", (
+            f"'Language' row header should be 'Idioma' in Spanish, got: {lang_header!r}"
+        )
+        print(f"  Language row header translated: {lang_header!r}  PASSED")
 
-    unit_header = gui.get_property("gotoDisplayUnit", "header")
-    assert unit_header == "Unidad de visualización", (
-        f"'Display unit' row header should be translated in Spanish, got: {unit_header!r}"
-    )
-    print(f"  Display unit row header translated: {unit_header!r}  PASSED")
+        unit_header = gui.get_property("gotoDisplayUnit", "header")
+        assert unit_header == "Unidad de visualización", (
+            f"'Display unit' row header should be translated in Spanish, got: {unit_header!r}"
+        )
+        print(f"  Display unit row header translated: {unit_header!r}  PASSED")
 
-    # Reset to System default (empty tag).
-    gui.click("gotoLanguage")
-    gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
-    gui.wait_for_page("language_", timeout_ms=3000)  # wait for delegate to render
-    gui.click("language_")  # objectName: "language_" + "" = "language_"
-    gui.wait_for_page("gotoLanguage", timeout_ms=5000)
+        # Reset to System default (empty tag).
+        gui.click("gotoLanguage")
+        gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
+        gui.wait_for_page("language_", timeout_ms=3000)  # wait for delegate to render
+        gui.click("language_")  # objectName: "language_" + "" = "language_"
+        gui.wait_for_page("gotoLanguage", timeout_ms=5000)
 
-    default_summary = gui.get_property("gotoLanguage", "description")
-    assert "system default" in default_summary.lower(), (
-        f"Expected 'System default' summary after reset, got: {default_summary!r}"
-    )
-    print(f"  Reset to System default: {default_summary!r}  PASSED")
+        default_summary = gui.get_property("gotoLanguage", "description")
+        assert "system default" in default_summary.lower(), (
+            f"Expected 'System default' summary after reset, got: {default_summary!r}"
+        )
+        print(f"  Reset to System default: {default_summary!r}  PASSED")
 
-    # Verify English headers are restored after reset.
-    lang_header_reset = gui.get_property("gotoLanguage", "header")
-    assert lang_header_reset == "Language", (
-        f"'Language' header should be restored to English after reset, got: {lang_header_reset!r}"
-    )
-    unit_header_reset = gui.get_property("gotoDisplayUnit", "header")
-    assert unit_header_reset == "Display unit", (
-        f"'Display unit' header should be restored to English after reset, got: {unit_header_reset!r}"
-    )
-    print(f"  Headers restored to English  PASSED")
+        # Verify English headers are restored after reset.
+        lang_header_reset = gui.get_property("gotoLanguage", "header")
+        assert lang_header_reset == "Language", (
+            f"'Language' header should be restored to English after reset, got: {lang_header_reset!r}"
+        )
+        unit_header_reset = gui.get_property("gotoDisplayUnit", "header")
+        assert unit_header_reset == "Display unit", (
+            f"'Display unit' header should be restored to English after reset, got: {unit_header_reset!r}"
+        )
+        print(f"  Headers restored to English  PASSED")
+    finally:
+        # Best-effort: if the test failed mid-flow the persisted language may
+        # still be Spanish. Reset to System default so QSettings does not leak
+        # a non-default language on platforms where the harness tmpdir does
+        # not sandbox QSettings storage (macOS/Windows).
+        try:
+            reset_language_to_system_default(gui)
+        except QmlDriverError:
+            pass
 
 
 def test_settings_persistence(datadir):
@@ -179,29 +205,39 @@ def test_settings_persistence(datadir):
         harness2.start()
         gui2 = harness2.driver
 
-        # After a normal restart (no -resetguisettings) onboarding is skipped.
-        gui2.wait_for_page("nodeSettingsButton", timeout_ms=POST_ONBOARDING_TIMEOUT_MS)
-        print("  Reached NodeRunner main screen after restart")
+        try:
+            # After a normal restart (no -resetguisettings) onboarding is skipped.
+            gui2.wait_for_page("nodeSettingsButton", timeout_ms=POST_ONBOARDING_TIMEOUT_MS)
+            print("  Reached NodeRunner main screen after restart")
 
-        navigate_to_display_settings(gui2)
+            navigate_to_display_settings(gui2)
 
-        # Verify SAT is still selected.
-        gui2.click("gotoDisplayUnit")
-        gui2.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
-        sat_persisted = gui2.get_property("displayUnitSAT", "checked")
-        assert sat_persisted, (
-            f"SAT should still be selected after restart, got checked={sat_persisted}"
-        )
-        print("  Display unit (SAT) persisted across restart  PASSED")
-        gui2.click("settingsDisplayUnitBack")
-        gui2.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
+            # Verify SAT is still selected.
+            gui2.click("gotoDisplayUnit")
+            gui2.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
+            sat_persisted = gui2.get_property("displayUnitSAT", "checked")
+            assert sat_persisted, (
+                f"SAT should still be selected after restart, got checked={sat_persisted}"
+            )
+            print("  Display unit (SAT) persisted across restart  PASSED")
+            gui2.click("settingsDisplayUnitBack")
+            gui2.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
 
-        # Verify Spanish is still selected.
-        lang_summary = gui2.get_property("gotoLanguage", "description")
-        assert "Español" in lang_summary, (
-            f"Language should still be Spanish after restart, got: {lang_summary!r}"
-        )
-        print(f"  Language (Español) persisted across restart  PASSED")
+            # Verify Spanish is still selected.
+            lang_summary = gui2.get_property("gotoLanguage", "description")
+            assert "Español" in lang_summary, (
+                f"Language should still be Spanish after restart, got: {lang_summary!r}"
+            )
+            print(f"  Language (Español) persisted across restart  PASSED")
+        finally:
+            # Best-effort: reset the persisted language to System default
+            # before the harness shuts down. The value is flushed by QSettings
+            # on app exit, so this must run before harness2.stop(). Swallow
+            # driver errors so a mid-test failure is not masked.
+            try:
+                reset_language_to_system_default(gui2)
+            except QmlDriverError:
+                pass
 
     finally:
         harness2.stop()
