@@ -36,16 +36,16 @@ AbstractButton {
                 target: root
                 enabled: true
                 stateColor: root.filledStateColor
-                stateDescriptionColor: Theme.color.neutral8
+                stateDescriptionColor: root.descriptionColor
             }
         },
         State {
             name: "HOVER"
-            PropertyChanges { target: root; stateColor: root.hoverStateColor; stateDescriptionColor: Theme.color.neutral8 }
+            PropertyChanges { target: root; stateColor: root.hoverStateColor; stateDescriptionColor: root.descriptionColor }
         },
         State {
             name: "ACTIVE"
-            PropertyChanges { target: root; stateColor: root.activeStateColor; stateDescriptionColor: Theme.color.neutral8 }
+            PropertyChanges { target: root; stateColor: root.activeStateColor; stateDescriptionColor: root.descriptionColor }
         },
         State {
             name: "DISABLED"
@@ -105,7 +105,6 @@ AbstractButton {
             descriptionColor: root.stateDescriptionColor
             description: root.description
             descriptionSize: root.descriptionSize
-            descriptionColor: root.descriptionColor
             descriptionMargin: 0
             subtext: root.showErrorText ? root.errorText : ""
             subtextColor: Theme.color.blue
