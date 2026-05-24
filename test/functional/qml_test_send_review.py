@@ -97,6 +97,7 @@ def wait_until(predicate, timeout=20, interval=0.1, description="condition"):
 def create_wallet(gui, wallet_name):
     gui.wait_for_property("createWalletButton", "visible", True, timeout_ms=20000)
     gui.click("createWalletButton")
+    gui.click("walletTypeRegular")
     gui.wait_for_page("createWalletIntroPage", timeout_ms=10000)
     gui.click("createWalletIntroStartButton")
     gui.wait_for_page("createWalletNamePage", timeout_ms=10000)

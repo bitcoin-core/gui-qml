@@ -126,6 +126,8 @@ def create_password_wallet(gui, wallet_name, password):
     gui.wait_for_property("createWalletButton", "visible", True, timeout_ms=10000)
     gui.wait_for_property("createWalletButton", "enabled", True, timeout_ms=25000)
     gui.click("createWalletButton")
+    gui.click("walletTypeRegular")
+    gui.wait_for_page("createWalletIntroPage", timeout_ms=5000)
     gui.click("createWalletIntroStartButton")
     gui.set_text("createWalletNameInput", wallet_name)
     gui.click("createWalletNameContinueButton")

@@ -41,6 +41,7 @@ def create_wallet_through_gui(harness, gui):
         gui.wait_for_property("createWalletButton", "visible", True, timeout_ms=5000)
     gui.settle()
     gui.click("createWalletButton")
+    gui.click("walletTypeRegular")
     gui.wait_for_property("createWalletIntroStartButton", "visible", True, timeout_ms=5000)
     gui.click("createWalletIntroStartButton")
     gui.settle()
