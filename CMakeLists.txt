@@ -129,23 +129,14 @@ qt6_add_resources(bitcoinqml "qml_gui_translations"
 )
 
 # Embed bitcoin-qt translations built by the bitcoin submodule.
-# The submodule (BUILD_GUI=ON) compiles .ts → .qm files into
-# ${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/ at build time.
-# We mark each file as GENERATED so CMake does not require it to exist
-# at configure time, and add a dependency on the bitcoin-qt target so
-# the .qm files are built before the resource compiler runs.
-set(BITCOIN_LOCALE_TAGS
-    am ar ast_ES ay az@latin az be bg bn br bs ca cmn cs cy da
-    de_AT de_CH de el en eo es_CL es_CO es_DO es es_SV es_VE et eu
-    fa fil fi fo fr_CM fr_LU fr ga_IE ga gd gl_ES gl gu hak ha he hi
-    hr hu id is it ja ka kk@latin kk kl km kn ko ku_IQ ku ky la lb
-    lt lv mg mi mk ml mn mr_IN mr ms mt my nb ne nl no or pam pa pl
-    ps pt_BR pt ro ru sa sc sd si sk sl sm sn so sq
-    sr@ijekavianlatin sr@latin sr sv sw szl ta te th tk tl tn tr ug uk ur
-    uz@Cyrl uz@Latn uz ve vi yi yo yue zh_CN zh-Hans zh-Hant zh_HK zh zh_TW zu
-)
+# The submodule (BUILD_GUI=ON) compiles .ts -> .qm files into
+# ${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/ at build time. Derive the
+# embedded list from the submodule's current source list so Core translation
+# additions/removals do not leave stale resource inputs behind.
+include("${CMAKE_CURRENT_SOURCE_DIR}/bitcoin/src/qt/locale/ts_files.cmake")
 set(BITCOIN_QT_QM_FILES)
-foreach(tag IN LISTS BITCOIN_LOCALE_TAGS)
+foreach(ts_file IN LISTS ts_files)
+    string(REGEX REPLACE "^bitcoin_(.+)\\.ts$" "\\1" tag "${ts_file}")
     set(qm_file "${CMAKE_BINARY_DIR}/bitcoin/src/qt/locale/bitcoin_${tag}.qm")
     set_source_files_properties(${qm_file} PROPERTIES
         GENERATED TRUE
@@ -153,6 +144,7 @@ foreach(tag IN LISTS BITCOIN_LOCALE_TAGS)
     )
     list(APPEND BITCOIN_QT_QM_FILES ${qm_file})
 endforeach()
+unset(ts_files)
 qt6_add_resources(bitcoinqml "bitcoin_qt_translations"
     PREFIX "/translations"
     FILES ${BITCOIN_QT_QM_FILES}

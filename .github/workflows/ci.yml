@@ -59,7 +59,8 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_APP_TESTS=${{ env.BUILD_APP_TESTS }}
+            -DBUILD_APP_TESTS=${{ env.BUILD_APP_TESTS }} \
+            -DENABLE_IPC=OFF
 
       - name: Build
         run: cmake --build build --parallel

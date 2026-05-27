@@ -128,7 +128,8 @@ jobs:
           cmake -B build \
             -DBUILD_APP_TESTS=OFF \
             -DENABLE_TEST_AUTOMATION=ON \
-            -DBUILD_DAEMON=ON
+            -DBUILD_DAEMON=ON \
+            -DENABLE_IPC=OFF
 
       - name: Build
         run: |

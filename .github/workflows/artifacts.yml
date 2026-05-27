@@ -30,10 +30,14 @@ jobs:
       - name: MacOS Install Deps
         if: contains(matrix.os, 'macos')
         run: |
-          brew install ccache boost pkgconf libevent qt@6 qrencode coreutils
+          brew install ccache boost pkgconf libevent qt@6 qrencode coreutils llvm
           if [ "${BUILD_APP_TESTS}" = "ON" ]; then
             brew install googletest
           fi
+          llvm_prefix="$(brew --prefix llvm)"
+          echo "CC=${llvm_prefix}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${llvm_prefix}/bin/clang++" >> "$GITHUB_ENV"
+          echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> "$GITHUB_ENV"
           echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> "$GITHUB_ENV"
 
       - name: Ubuntu Install Deps
@@ -60,7 +64,9 @@ jobs:
       - name: Build
         run: |
           git submodule update --init
-          cmake -B build -DBUILD_APP_TESTS=${{ env.BUILD_APP_TESTS }}
+          cmake -B build \
+            -DBUILD_APP_TESTS=${{ env.BUILD_APP_TESTS }} \
+            -DENABLE_IPC=OFF
           cmake --build build -j$(nproc)
 
       - name: Save Ccache cache
