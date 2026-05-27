@@ -174,14 +174,12 @@ std::optional<CAmount> TryPreviewFee(interfaces::Wallet& wallet,
                                      const std::vector<wallet::CRecipient>& recipients,
                                      const wallet::CCoinControl& coin_control)
 {
-    int change_position{-1};
-    CAmount fee{0};
-    const auto result = wallet.createTransaction(recipients, coin_control, /*sign=*/false, change_position, fee);
+    const auto result = wallet.createTransaction(recipients, coin_control, /*sign=*/false, /*change_pos=*/std::nullopt);
     if (!result) {
         return std::nullopt;
     }
 
-    return fee;
+    return result->fee;
 }
 
 std::optional<std::vector<wallet::CRecipient>> WithLargestRecipientPayingFee(const std::vector<wallet::CRecipient>& recipients)
@@ -1566,20 +1564,18 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         return false;
     }
 
-    int nChangePosRet = -1;
-    CAmount nFeeRequired = 0;
     const bool sign = !m_wallet->privateKeysDisabled();
-    const auto& result = m_wallet->createTransaction(*vec_send, coin_control, sign, nChangePosRet, nFeeRequired);
+    const auto& result = m_wallet->createTransaction(*vec_send, coin_control, sign, /*change_pos=*/std::nullopt);
     if (result) {
         if (m_current_transaction) {
             delete m_current_transaction;
         }
-        const CTransactionRef& newTx = *result;
+        const CTransactionRef& newTx = result->tx;
         m_current_transaction = new WalletQmlModelTransaction(m_send_recipients, this);
         m_current_transaction->setWtx(newTx);
-        m_current_transaction->setTransactionFee(nFeeRequired);
+        m_current_transaction->setTransactionFee(result->fee);
         if (subtract_fee_from_amount) {
-            m_current_transaction->reassignAmounts(nChangePosRet);
+            m_current_transaction->reassignAmounts(static_cast<int>(result->change_pos.value_or(-1)));
         }
         m_current_transaction->setDisplayUnit(m_display_unit);
         relock_guard.relock();
