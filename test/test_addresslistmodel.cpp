@@ -58,7 +58,7 @@ public:
     util::Result<CTxDestination> getNewDestination(const OutputType, const std::string& label) override
     {
         m_labels[m_next_destination] = label;
-        m_addresses.emplace_back(m_next_destination, wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::RECEIVE, label);
+        m_addresses.emplace_back(m_next_destination, true, wallet::AddressPurpose::RECEIVE, label);
         return m_next_destination;
     }
     bool isSpendable(const CTxDestination&) override { return true; }
@@ -73,12 +73,11 @@ public:
         return true;
     }
     bool delAddressBook(const CTxDestination&) override { return false; }
-    bool getAddress(const CTxDestination& dest, std::string* name, wallet::isminetype* is_mine, wallet::AddressPurpose* purpose) override
+    bool getAddress(const CTxDestination& dest, std::string* name, wallet::AddressPurpose* purpose) override
     {
         for (const auto& address : m_addresses) {
             if (address.dest != dest) continue;
             if (name) *name = address.name;
-            if (is_mine) *is_mine = address.is_mine;
             if (purpose) *purpose = address.purpose;
             return true;
         }
@@ -98,7 +97,7 @@ interfaces::WalletTx WalletTxFor(const std::vector<CTxDestination>& destinations
     interfaces::WalletTx wallet_tx;
     wallet_tx.tx = TransactionWithOutputs(destinations, amounts);
     wallet_tx.txout_address = destinations;
-    wallet_tx.txout_address_is_mine.assign(destinations.size(), wallet::ISMINE_SPENDABLE);
+    wallet_tx.txout_address_is_mine.assign(destinations.size(), true);
     wallet_tx.txout_is_change = is_change;
     return wallet_tx;
 }
@@ -126,9 +125,9 @@ void AddressListModelTests::receiveAddressesHideUsedUntilEnabled()
     const CTxDestination unused{TestDestination(1)};
     const CTxDestination used{TestDestination(2)};
     wallet->m_addresses = {
-        {unused, wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::RECEIVE, "unused"},
-        {used, wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::RECEIVE, "used"},
-        {TestDestination(3), wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::SEND, "send"},
+        {unused, true, wallet::AddressPurpose::RECEIVE, "unused"},
+        {used, true, wallet::AddressPurpose::RECEIVE, "used"},
+        {TestDestination(3), true, wallet::AddressPurpose::SEND, "send"},
     };
 
     TestAddressWallet* wallet_ptr{wallet.get()};
@@ -151,7 +150,7 @@ void AddressListModelTests::labelsCanBeEdited()
     auto wallet{std::make_unique<TestAddressWallet>()};
     const CTxDestination dest{TestDestination(1)};
     wallet->m_addresses = {
-        {dest, wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::RECEIVE, "first label"},
+        {dest, true, wallet::AddressPurpose::RECEIVE, "first label"},
     };
     WalletQmlModel wallet_model{std::move(wallet)};
     AddressListModel* model{wallet_model.addressListModel()};
@@ -174,7 +173,7 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
     const interfaces::WalletTx change_tx{WalletTxFor({receive, change, spent_change}, {COIN, 2 * COIN, 3 * COIN}, {false, true, true})};
     const Txid txid{change_tx.tx->GetHash()};
     wallet->m_addresses = {
-        {receive, wallet::ISMINE_SPENDABLE, wallet::AddressPurpose::RECEIVE, "receive"},
+        {receive, true, wallet::AddressPurpose::RECEIVE, "receive"},
     };
     interfaces::WalletTxOut change_out;
     change_out.txout = CTxOut{2 * COIN, GetScriptForDestination(change)};

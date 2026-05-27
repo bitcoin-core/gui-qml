@@ -13,9 +13,6 @@
 
 #include <QtTest/QtTest>
 
-using wallet::ISMINE_NO;
-using wallet::ISMINE_SPENDABLE;
-
 namespace {
 constexpr CAmount COIN_VALUE{100'000'000};
 
@@ -27,9 +24,9 @@ CTxDestination Destination(unsigned char value)
 }
 
 interfaces::WalletTx MakeWalletTx(
-    const std::vector<wallet::isminetype>& txin_is_mine,
+    const std::vector<bool>& txin_is_mine,
     const std::vector<CAmount>& output_values,
-    const std::vector<wallet::isminetype>& txout_is_mine,
+    const std::vector<bool>& txout_is_mine,
     const std::vector<bool>& txout_is_change,
     CAmount debit,
     CAmount credit = 0)
@@ -38,7 +35,7 @@ interfaces::WalletTx MakeWalletTx(
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{1}), 0});
 
     std::vector<CTxDestination> addresses;
-    std::vector<wallet::isminetype> address_is_mine;
+    std::vector<bool> address_is_mine;
     for (size_t i = 0; i < output_values.size(); ++i) {
         mtx.vout.emplace_back(output_values[i], CScript{});
         addresses.push_back(Destination(static_cast<unsigned char>(i + 1)));
@@ -80,9 +77,9 @@ void TransactionTests::initTestCase()
 void TransactionTests::fromWalletTx_hidesSenderChangeOutput()
 {
     const interfaces::WalletTx wtx = MakeWalletTx(
-        /*txin_is_mine=*/{ISMINE_SPENDABLE},
+        /*txin_is_mine=*/{true},
         /*output_values=*/{70 * COIN_VALUE, 29 * COIN_VALUE},
-        /*txout_is_mine=*/{ISMINE_NO, ISMINE_SPENDABLE},
+        /*txout_is_mine=*/{false, true},
         /*txout_is_change=*/{false, true},
         /*debit=*/100 * COIN_VALUE);
 
@@ -100,9 +97,9 @@ void TransactionTests::fromWalletTx_hidesSenderChangeOutput()
 void TransactionTests::fromWalletTx_mixedDebitKeepsNegativeNetAmount()
 {
     const interfaces::WalletTx wtx = MakeWalletTx(
-        /*txin_is_mine=*/{ISMINE_SPENDABLE, ISMINE_NO},
+        /*txin_is_mine=*/{true, false},
         /*output_values=*/{80 * COIN_VALUE},
-        /*txout_is_mine=*/{ISMINE_NO},
+        /*txout_is_mine=*/{false},
         /*txout_is_change=*/{false},
         /*debit=*/100 * COIN_VALUE);
 
@@ -120,9 +117,9 @@ void TransactionTests::fromWalletTx_mixedDebitKeepsNegativeNetAmount()
 void TransactionTests::fromWalletTx_showsIncomingPaymentToChangeAddress()
 {
     const interfaces::WalletTx wtx = MakeWalletTx(
-        /*txin_is_mine=*/{ISMINE_NO},
+        /*txin_is_mine=*/{false},
         /*output_values=*/{5 * COIN_VALUE},
-        /*txout_is_mine=*/{ISMINE_SPENDABLE},
+        /*txout_is_mine=*/{true},
         /*txout_is_change=*/{true},
         /*debit=*/0,
         /*credit=*/5 * COIN_VALUE);

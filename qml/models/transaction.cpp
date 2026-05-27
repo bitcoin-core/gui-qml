@@ -11,10 +11,6 @@
 
 #include <QDateTime>
 
-using wallet::ISMINE_SPENDABLE;
-using wallet::ISMINE_NO;
-using wallet::isminetype;
-
 namespace {
     const int RecommendedNumConfirmations = 6;
 }
@@ -137,7 +133,7 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
     CAmount nCredit = wtx.credit;
     CAmount nDebit = wtx.debit;
     CAmount nNet = nCredit - nDebit;
-    uint256 hash = wtx.tx->GetHash();
+    uint256 hash = wtx.tx->GetHash().ToUint256();
     QString txidStr = QString::fromStdString(hash.GetHex());
     std::map<std::string, std::string> mapValue = wtx.value_map;
 
@@ -151,14 +147,14 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
     }
 
     bool involvesWatchAddress = false;
-    isminetype fAllFromMe = ISMINE_SPENDABLE;
+    bool fAllFromMe = true;
     bool any_from_me = false;
     if (wtx.is_coinbase) {
-        fAllFromMe = ISMINE_NO;
+        fAllFromMe = false;
     } else {
-        for (const isminetype mine : wtx.txin_is_mine)
+        for (const bool mine : wtx.txin_is_mine)
         {
-            if(fAllFromMe > mine) fAllFromMe = mine;
+            if (!mine) fAllFromMe = false;
             if (mine) any_from_me = true;
         }
     }
@@ -215,7 +211,7 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
                 parts.append(sub);
             }
 
-            isminetype mine = wtx.txout_is_mine[i];
+            bool mine = wtx.txout_is_mine[i];
             if(mine)
             {
                 //

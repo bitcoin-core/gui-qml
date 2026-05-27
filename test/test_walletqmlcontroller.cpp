@@ -176,7 +176,7 @@ public:
     bool isSpendable(const CTxDestination&) override { return false; }
     bool setAddressBook(const CTxDestination&, const std::string&, const std::optional<wallet::AddressPurpose>&) override { return true; }
     bool delAddressBook(const CTxDestination&) override { return true; }
-    bool getAddress(const CTxDestination&, std::string*, wallet::isminetype*, wallet::AddressPurpose*) override { return false; }
+    bool getAddress(const CTxDestination&, std::string*, wallet::AddressPurpose*) override { return false; }
     std::vector<interfaces::WalletAddress> getAddresses() override { return {}; }
     std::vector<std::string> getAddressReceiveRequests() override { return {}; }
     bool setAddressReceiveRequest(const CTxDestination&, const std::string&, const std::string&) override { return true; }
@@ -216,10 +216,10 @@ public:
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
     CAmount getBalance() override { return 0; }
     CAmount getAvailableBalance(const wallet::CCoinControl&) override { return 0; }
-    wallet::isminetype txinIsMine(const CTxIn&) override { return {}; }
-    wallet::isminetype txoutIsMine(const CTxOut&) override { return {}; }
-    CAmount getDebit(const CTxIn&, wallet::isminefilter) override { return 0; }
-    CAmount getCredit(const CTxOut&, wallet::isminefilter) override { return 0; }
+    bool txinIsMine(const CTxIn&) override { return false; }
+    bool txoutIsMine(const CTxOut&) override { return false; }
+    CAmount getDebit(const CTxIn&) override { return 0; }
+    CAmount getCredit(const CTxOut&) override { return 0; }
     CoinsList listCoins() override { return {}; }
     std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>&) override { return {}; }
     CAmount getRequiredFee(unsigned int) override { return 0; }

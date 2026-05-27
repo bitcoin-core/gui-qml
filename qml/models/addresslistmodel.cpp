@@ -15,7 +15,6 @@
 #include <QVariantMap>
 
 using wallet::AddressPurpose;
-using wallet::ISMINE_NO;
 
 namespace {
 QString CategoryName(AddressListModel::Category category)
@@ -212,7 +211,7 @@ std::vector<AddressListModel::AddressEntry> AddressListModel::collectEntries() c
     }
 
     for (const interfaces::WalletAddress& wallet_address : m_wallet_model->getAddresses()) {
-        if (wallet_address.purpose != AddressPurpose::RECEIVE || wallet_address.is_mine == ISMINE_NO) {
+        if (wallet_address.purpose != AddressPurpose::RECEIVE || !wallet_address.is_mine) {
             continue;
         }
 

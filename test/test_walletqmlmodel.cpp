@@ -245,7 +245,7 @@ public:
     bool isSpendable(const CTxDestination&) override { return false; }
     bool setAddressBook(const CTxDestination&, const std::string&, const std::optional<wallet::AddressPurpose>&) override { return true; }
     bool delAddressBook(const CTxDestination&) override { return true; }
-    bool getAddress(const CTxDestination&, std::string* name, wallet::isminetype*, wallet::AddressPurpose*) override
+    bool getAddress(const CTxDestination&, std::string* name, wallet::AddressPurpose*) override
     {
         if (name) {
             *name = get_address_label;
@@ -314,10 +314,10 @@ public:
     }
     CAmount getBalance() override { return balance; }
     CAmount getAvailableBalance(const wallet::CCoinControl&) override { return balance; }
-    wallet::isminetype txinIsMine(const CTxIn&) override { return wallet::ISMINE_NO; }
-    wallet::isminetype txoutIsMine(const CTxOut&) override { return wallet::ISMINE_NO; }
-    CAmount getDebit(const CTxIn&, wallet::isminefilter) override { return 0; }
-    CAmount getCredit(const CTxOut&, wallet::isminefilter) override { return 0; }
+    bool txinIsMine(const CTxIn&) override { return false; }
+    bool txoutIsMine(const CTxOut&) override { return false; }
+    CAmount getDebit(const CTxIn&) override { return 0; }
+    CAmount getCredit(const CTxOut&) override { return 0; }
     CoinsList listCoins() override { return {}; }
     std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>&) override { return {}; }
     CAmount getRequiredFee(unsigned int) override { return 0; }
@@ -1355,7 +1355,7 @@ void WalletQmlModelTests::setCurrentPaymentRequestAddressUsesAddressListLabel()
     auto model = MakeWalletModel(wallet);
     wallet->wallet_addresses.emplace_back(
         DecodeDestination(VALID_MAINNET_ADDRESS.toStdString()),
-        wallet::ISMINE_SPENDABLE,
+        true,
         wallet::AddressPurpose::RECEIVE,
         "invoice 1024");
     wallet->get_address_result = true;
