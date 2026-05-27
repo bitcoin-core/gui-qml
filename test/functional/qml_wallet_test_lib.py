@@ -242,12 +242,19 @@ class WalletFlowHarness:
 
     def stop_gui(self):
         if self.gui_process and self.gui_process.poll() is None:
-            self.gui_process.send_signal(signal.SIGTERM)
             try:
-                self.gui_process.wait(timeout=10)
+                rpc_call(self.gui_rpc_port, "stop")
+            except Exception:
+                pass
+            try:
+                self.gui_process.wait(timeout=20)
             except subprocess.TimeoutExpired:
-                self.gui_process.kill()
-                self.gui_process.wait()
+                self.gui_process.send_signal(signal.SIGTERM)
+                try:
+                    self.gui_process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self.gui_process.kill()
+                    self.gui_process.wait()
         self.gui_process = None
         if self.driver:
             self.driver.close()

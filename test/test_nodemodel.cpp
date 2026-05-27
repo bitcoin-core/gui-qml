@@ -166,6 +166,7 @@ private Q_SLOTS:
     void nodeInformationRowsExposeDiagnostics();
     void initEmitsRequestedInitialize();
     void initGuardBlocksSecondEmission();
+    void shutdownPollingStartsShutdownBeforeEmittingSignal();
 };
 
 void NodeModelTests::refreshMempoolInfoUpdatesProperties()
@@ -1382,6 +1383,32 @@ void NodeModelTests::initGuardBlocksSecondEmission()
     model.startNodeInitializionThread();
     model.startNodeInitializionThread();
     QCOMPARE(spy.count(), 1);
+}
+
+void NodeModelTests::shutdownPollingStartsShutdownBeforeEmittingSignal()
+{
+    NiceMock<MockNode> node;
+    MempoolState mempool;
+    InstallDefaultHandlers(node);
+    InstallMempoolGetters(node, mempool);
+    ON_CALL(node, shutdownRequested()).WillByDefault(Return(true));
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+
+    QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
+    bool started_before_signal{false};
+    EXPECT_CALL(node, startShutdown()).WillOnce(Invoke([&] {
+        started_before_signal = shutdown_spy.count() == 0;
+    }));
+
+    model.startShutdownPolling();
+
+    QTRY_COMPARE_WITH_TIMEOUT(shutdown_spy.count(), 1, ASYNC_TIMEOUT_MS);
+    QVERIFY(started_before_signal);
+
+    model.requestShutdown();
+    QCOMPARE(shutdown_spy.count(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
