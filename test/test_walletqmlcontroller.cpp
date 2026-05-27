@@ -110,7 +110,7 @@ public:
         return load_wallet_fn(name, warnings);
     }
     std::string getWalletDir() override { return wallet_dir; }
-    util::Result<std::unique_ptr<interfaces::Wallet>> restoreWallet(const fs::path&, const std::string&, std::vector<bilingual_str>&) override
+    util::Result<std::unique_ptr<interfaces::Wallet>> restoreWallet(const fs::path&, const std::string&, std::vector<bilingual_str>&, bool) override
     {
         return util::Error{Untranslated("Unexpected restoreWallet call")};
     }
