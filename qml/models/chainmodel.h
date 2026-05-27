@@ -5,9 +5,6 @@
 #ifndef BITCOIN_QML_MODELS_CHAINMODEL_H
 #define BITCOIN_QML_MODELS_CHAINMODEL_H
 
-#include <chainparams.h>
-#include <interfaces/chain.h>
-
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -51,8 +48,8 @@ Q_SIGNALS:
 
 private:
     QString m_current_network_name;
-    quint64 m_assumed_blockchain_size{ Params().AssumedBlockchainSize() };
-    quint64 m_assumed_chainstate_size{ Params().AssumedChainStateSize() };
+    quint64 m_assumed_blockchain_size;
+    quint64 m_assumed_chainstate_size;
     /* time_ratio: Ratio between the time at which an event
      * happened and 12 hours. So, for example, if a block is
      * found at 4 am or pm, the time_ratio would be 0.3.

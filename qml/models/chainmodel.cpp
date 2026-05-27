@@ -4,16 +4,20 @@
 
 #include <qml/models/chainmodel.h>
 
+#include <chainparams.h>
+#include <interfaces/chain.h>
+
 #include <QDateTime>
 #include <QString>
 #include <QThread>
 #include <QTime>
-#include <interfaces/chain.h>
 
 using interfaces::FoundBlock;
 
 ChainModel::ChainModel(interfaces::Chain& chain)
-    : m_chain{chain}
+    : m_assumed_blockchain_size{Params().AssumedBlockchainSize()},
+      m_assumed_chainstate_size{Params().AssumedChainStateSize()},
+      m_chain{chain}
 {
     QTimer* timer = new QTimer();
     connect(timer, &QTimer::timeout, this, &ChainModel::setCurrentTimeRatio);
