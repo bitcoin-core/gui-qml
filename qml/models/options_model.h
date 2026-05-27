@@ -161,7 +161,7 @@ private:
     bool m_listen;
     int m_max_mempool_size_mb;
     const int m_min_max_mempool_size_mb{
-        static_cast<int>((DEFAULT_DESCENDANT_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
+        static_cast<int>((DEFAULT_CLUSTER_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
     };
     const int m_max_max_mempool_size_mb{
         sizeof(void*) <= 4 ? 500 : 99999

@@ -93,19 +93,19 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, bool is_onboarded)
     : m_node{node}
     , m_onboarded{is_onboarded}
 {
-    m_dbcache_size_mib = SettingToInt(m_node.getPersistentSetting("dbcache"), DEFAULT_DB_CACHE >> 20);
+    m_dbcache_size_mib = SettingTo<int64_t>(m_node.getPersistentSetting("dbcache"), DEFAULT_DB_CACHE >> 20);
 
     m_listen = SettingToBool(m_node.getPersistentSetting("listen"), DEFAULT_LISTEN);
 
-    m_max_mempool_size_mb = SettingToInt(m_node.getPersistentSetting("maxmempool"), DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    m_max_mempool_size_mb = SettingTo<int64_t>(m_node.getPersistentSetting("maxmempool"), DEFAULT_MAX_MEMPOOL_SIZE_MB);
 
     m_natpmp = SettingToBool(m_node.getPersistentSetting("natpmp"), DEFAULT_NATPMP);
 
-    int64_t prune_value{SettingToInt(m_node.getPersistentSetting("prune"), 0)};
+    int64_t prune_value{SettingTo<int64_t>(m_node.getPersistentSetting("prune"), 0)};
     m_prune = (prune_value > 1);
     m_prune_size_gb = m_prune ? PruneMiBtoGB(prune_value) : DEFAULT_PRUNE_TARGET_GB;
 
-    m_script_threads = SettingToInt(m_node.getPersistentSetting("par"), DEFAULT_SCRIPTCHECK_THREADS);
+    m_script_threads = SettingTo<int64_t>(m_node.getPersistentSetting("par"), DEFAULT_SCRIPTCHECK_THREADS);
 
     m_server = SettingToBool(m_node.getPersistentSetting("server"), false);
 
