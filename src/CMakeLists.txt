@@ -398,6 +398,7 @@ endif()
 
 if(BUILD_GUI)
   add_subdirectory(qt)
+  add_subdirectory(qml)
 endif()
 
 

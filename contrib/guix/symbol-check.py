@@ -130,6 +130,7 @@ MACHO_ALLOWED_LIBRARIES = {
 'Metal', # 3D graphics
 'QuartzCore', # animation
 'Security', # access control and authentication
+'SystemConfiguration', # network configuration
 'UniformTypeIdentifiers', # collection of types that map to MIME and file types
 }
 
@@ -158,6 +159,7 @@ PE_ALLOWED_LIBRARIES = {
 'NETAPI32.dll', # network management
 'ole32.dll', # component object model
 'OLEAUT32.dll', # OLE Automation API
+'Secur32.dll', # SSPI (Security Support Provider Interface)
 'SHLWAPI.dll', # light weight shell API
 'USER32.dll', # user interface
 'USERENV.dll', # user management
