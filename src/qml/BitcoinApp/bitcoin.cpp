@@ -15,6 +15,7 @@
 #include <noui.h>
 #include <qml/BitcoinApp/nodemodel.h>
 #include <qt/guiconstants.h>
+#include <qt/initexecutor.h>
 #include <util/translation.h>
 #include <util/threadnames.h>
 
@@ -39,28 +40,7 @@ void SetupUIArgs(ArgsManager& argsman)
 
 int QmlGuiMain(int argc, char* argv[])
 {
-    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
-
-    SetupEnvironment();
-    util::ThreadSetInternalName("main");
-
-    // Subscribe to global signals from core
-    btcsignals::scoped_connection handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(noui_ThreadSafeMessageBox);
-    btcsignals::scoped_connection handler_question = ::uiInterface.ThreadSafeQuestion_connect(noui_ThreadSafeQuestion);
-    btcsignals::scoped_connection handler_init_message = ::uiInterface.InitMessage_connect(noui_InitMessage);
-
     QGuiApplication app(argc, argv);
-
-    NodeModel node_model;
-
-    QQmlApplicationEngine engine;
-    engine.addImportPath(QStringLiteral(":/qt/qml"));
-    engine.rootContext()->setContextProperty("nodeModel", &node_model);
-
-    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/stub.qml")));
-    if (engine.rootObjects().isEmpty()) {
-        return EXIT_FAILURE;
-    }
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs);
@@ -71,5 +51,47 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    return app.exec();
+    CheckDataDirOption(gArgs);
+
+    if (!gArgs.ReadConfigFiles(error, true)) {
+        tfm::format(std::cerr, "Error reading configuration file: %s\n", error);
+        return EXIT_FAILURE;
+    }
+
+    SelectParams(gArgs.GetChainType());
+
+    // Default printtoconsole to false for the GUI. GUI programs should not
+    // print to the console unnecessarily.
+    gArgs.SoftSetBoolArg("-printtoconsole", false);
+    InitLogging(gArgs);
+    InitParameterInteraction(gArgs);
+
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
+    std::unique_ptr<interfaces::Node> node = init->makeNode();
+    node->baseInitialize();
+
+    NodeModel node_model;
+    InitExecutor init_executor{*node};
+    QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &InitExecutor::initialize);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, &InitExecutor::shutdown);
+    // QObject::connect(&init_executor, &InitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
+    QObject::connect(&init_executor, &InitExecutor::shutdownResult, qGuiApp, &QGuiApplication::quit, Qt::QueuedConnection);
+    // QObject::connect(&init_executor, &InitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
+
+    qGuiApp->setQuitOnLastWindowClosed(false);
+    QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, [&] {
+        node->startShutdown();
+        node_model.startNodeShutdown();
+    });
+
+    QQmlApplicationEngine engine;
+    engine.addImportPath(QStringLiteral(":/qt/qml"));
+    engine.rootContext()->setContextProperty("nodeModel", &node_model);
+
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/BitcoinApp/stub.qml")));
+    if (engine.rootObjects().isEmpty()) {
+        return EXIT_FAILURE;
+    }
+
+    return qGuiApp->exec();
 }

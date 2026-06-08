@@ -1,3 +1,4 @@
+import QtQml
 import QtQuick.Controls
 
 ApplicationWindow {
@@ -6,4 +7,6 @@ ApplicationWindow {
     minimumWidth: 750
     minimumHeight: 450
     visible: true
+
+    Component.onCompleted: nodeModel.startNodeInitializionThread();
 }
