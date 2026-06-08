@@ -184,7 +184,7 @@ static void ErrorSettingsWrite(const bilingual_str& error, const std::vector<std
 }
 
 /* qDebug() message handler --> debug.log */
-void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString &msg)
+void BitcoinQtDebugMessageHandler(QtMsgType type, const QMessageLogContext& context, const QString &msg)
 {
     Q_UNUSED(context);
     if (type == QtDebugMsg) {
@@ -638,7 +638,7 @@ int GuiMain(int argc, char* argv[])
     qApp->installNativeEventFilter(new WinShutdownMonitor([&app] { app.node().startShutdown(); }));
 #endif
     // Install qDebug() message handler to route to debug.log
-    qInstallMessageHandler(DebugMessageHandler);
+    qInstallMessageHandler(BitcoinQtDebugMessageHandler);
     // Allow parameter interaction before we create the options model
     app.parameterSetup();
     GUIUtil::LogQtInfo();
