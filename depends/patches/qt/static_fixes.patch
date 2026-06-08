@@ -78,3 +78,13 @@ index e8fb442dd43..e964138115c 100644
      CODE
  "// xkb.h is using a variable called 'explicit', which is a reserved keyword in C++
  #define explicit dont_use_cxx_explicit
+--- a/qtbase/src/plugins/platforms/xcb/CMakeLists.txt
++++ b/qtbase/src/plugins/platforms/xcb/CMakeLists.txt
+@@ -65,6 +65,7 @@ qt_internal_add_module(XcbQpaPrivate
+         XCB::XFIXES
+         XCB::XKB
+         XKB::XKB
++        $<BUILD_INTERFACE:X11::Xau>
+     NO_UNITY_BUILD # X11 define clashes
+ )
+ 
