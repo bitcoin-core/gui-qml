@@ -13,6 +13,10 @@
 #include <QString>
 #include <QTimer>
 
+#include <atomic>
+
+class QThread;
+
 //! List model for the in-app debug.log viewer.
 //!
 //! Exposes log lines as list items with three roles:
@@ -27,7 +31,7 @@
 //!
 //! File watching: the model connects a QFileSystemWatcher to the log file and
 //! coalesces rapid writes with a 500 ms debounce timer before calling refresh().
-//! Reads themselves run on the Qt thread pool so a busy, noisy node cannot
+//! Reads themselves run on a dedicated worker thread so a busy, noisy node cannot
 //! stall the UI on every debug-log burst.
 class DebugLogModel : public QAbstractListModel
 {
@@ -50,6 +54,7 @@ public:
     static constexpr int kMaxLoadLimit = 50'000;
 
     explicit DebugLogModel(const fs::path& log_path, QObject* parent = nullptr);
+    ~DebugLogModel() override;
 
     // QAbstractListModel interface
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -70,6 +75,7 @@ public:
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE bool openLogFile();
     Q_INVOKABLE void updateRelativeTimes();
+    void stop();
 
 Q_SIGNALS:
     void hasMoreLinesChanged();
@@ -97,13 +103,16 @@ private:
     };
 
     //! File-reading worker. Pure function — no QObject / signal access —
-    //! so it can safely run on the thread pool.
+    //! so it can safely run on the dedicated worker thread.
     static ReadResult ReadAndFilter(const fs::path& log_path,
                                     int load_limit,
-                                    bool full_load);
+                                    bool full_load,
+                                    const std::atomic_bool& cancelled);
 
     //! Raw file read (one pass). Called from ReadAndFilter.
-    static QList<LogLine> ReadRawLines(const fs::path& log_path, int max_lines);
+    static QList<LogLine> ReadRawLines(const fs::path& log_path,
+                                       int max_lines,
+                                       const std::atomic_bool& cancelled);
 
     //! Completion handler invoked on the GUI thread after ReadAndFilter
     //! returns. Applies the result to m_all_lines and rebuilds the display.
@@ -132,12 +141,16 @@ private:
 
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
+    QObject* m_reader{nullptr};
+    QThread* m_reader_thread{nullptr};
 
     //! Single-read-in-flight guard so concurrent refresh() calls fold into
-    //! one trailing read instead of piling up on the thread pool.
+    //! one trailing read instead of piling up on the worker thread.
     bool m_read_in_flight{false};
     bool m_refresh_pending{false};
     bool m_pending_full_load{false};
+    bool m_stopping{false};
+    std::atomic_bool m_read_cancelled{false};
 };
 
 #endif // BITCOIN_QML_MODELS_DEBUGLOGMODEL_H
