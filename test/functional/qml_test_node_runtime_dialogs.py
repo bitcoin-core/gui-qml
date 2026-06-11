@@ -37,7 +37,6 @@ REAL_NODE_DIALOG_CASES = [
         "name": "database-read-error",
         "source": "bitcoin/src/init.cpp coins_error_cb",
         "message": "Error reading from database, shutting down.",
-        "caption": "",
         "style": MSG_ERROR,
         "question": False,
         "buttons": [BTN_OK],
@@ -47,7 +46,6 @@ REAL_NODE_DIALOG_CASES = [
         "name": "deprecated-checkpoints-warning",
         "source": "bitcoin/src/init.cpp -checkpoints warning",
         "message": "Option '-checkpoints' is set but checkpoints were removed. This option has no effect.",
-        "caption": "",
         "style": MSG_WARNING,
         "question": False,
         "buttons": [BTN_OK],
@@ -57,7 +55,6 @@ REAL_NODE_DIALOG_CASES = [
         "name": "reindex-question-ok-abort",
         "source": "bitcoin/src/init.cpp chainstate load failure retry question",
         "message": "Error opening block database.\n\nDo you want to rebuild the databases now?",
-        "caption": "",
         "style": MSG_ERROR | BTN_ABORT,
         "question": True,
         "buttons": [BTN_OK, BTN_ABORT],
@@ -67,7 +64,6 @@ REAL_NODE_DIALOG_CASES = [
         "name": "network-options-error",
         "source": "bitcoin/src/net.cpp outgoing connection option conflict",
         "message": "Cannot provide specific connections and have addrman find outgoing connections at the same time.",
-        "caption": "",
         "style": MSG_ERROR,
         "question": False,
         "buttons": [BTN_OK],
@@ -77,7 +73,6 @@ REAL_NODE_DIALOG_CASES = [
         "name": "abort-retry-ignore-button-mask",
         "source": "CClientUIInterface BTN_ABORT | BTN_RETRY | BTN_IGNORE contract sample using a net.cpp error message",
         "message": "Failed to listen on any port. Use -listen=0 if you want this.",
-        "caption": "",
         "style": ICON_ERROR | MODAL | BTN_ABORT | BTN_RETRY | BTN_IGNORE,
         "question": True,
         "buttons": [BTN_ABORT, BTN_RETRY, BTN_IGNORE],
@@ -115,7 +110,6 @@ def screenshot_path(root, case_name):
 def open_case(gui, case):
     gui.show_runtime_dialog(
         message=case["message"],
-        caption=case["caption"],
         style=case["style"],
         question=case["question"],
     )

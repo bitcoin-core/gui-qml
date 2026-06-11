@@ -409,7 +409,6 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
     } else if (cmd == QLatin1String("show_runtime_dialog")) {
         return cmdShowRuntimeDialog(
             obj.value(QStringLiteral("message")).toString(),
-            obj.value(QStringLiteral("caption")).toString(),
             static_cast<unsigned int>(obj.value(QStringLiteral("style")).toDouble()),
             obj.value(QStringLiteral("question")).toBool(false));
     } else if (cmd == QLatin1String("answer_runtime_dialog")) {
@@ -883,7 +882,7 @@ QByteArray TestBridge::cmdSaveScreenshot(const QString& path)
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
 
-QByteArray TestBridge::cmdShowRuntimeDialog(const QString& message, const QString& caption, unsigned int style, bool question)
+QByteArray TestBridge::cmdShowRuntimeDialog(const QString& message, unsigned int style, bool question)
 {
     QVariant node_model_value = m_engine->rootContext()->contextProperty(QStringLiteral("nodeModel"));
     QObject* node_model = node_model_value.value<QObject*>();
@@ -896,7 +895,6 @@ QByteArray TestBridge::cmdShowRuntimeDialog(const QString& message, const QStrin
         "showRuntimeDialogForTest",
         Qt::DirectConnection,
         Q_ARG(QString, message),
-        Q_ARG(QString, caption),
         Q_ARG(unsigned int, style),
         Q_ARG(bool, question));
     if (!invoked) {

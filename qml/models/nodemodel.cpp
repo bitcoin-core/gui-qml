@@ -52,11 +52,8 @@ QStringList SplitWarnings(const QString& warnings)
     return result;
 }
 
-QString RuntimeDialogTitle(const QString& caption, unsigned int style)
+QString RuntimeDialogTitle(unsigned int style)
 {
-    if (!caption.isEmpty()) {
-        return caption;
-    }
     if (style & CClientUIInterface::ICON_ERROR) {
         return QObject::tr("Error");
     }
@@ -386,7 +383,7 @@ void NodeModel::showStartupWarnings()
     const QString warnings{m_startup_warning_messages.join(QStringLiteral("\n\n"))};
     m_startup_warning_messages.clear();
     // MSG_WARNING is modal; startup notices should be shown once without blocking initialization.
-    showRuntimeDialogOnGuiThread(warnings, QString{}, CClientUIInterface::ICON_WARNING, /*question=*/false);
+    showRuntimeDialogOnGuiThread(warnings, CClientUIInterface::ICON_WARNING, /*question=*/false);
 }
 
 void NodeModel::recordStartupErrorMessage(const QString& message)
@@ -567,18 +564,16 @@ void NodeModel::ConnectToRuntimeDialogSignals()
     assert(!m_handler_question);
 
     m_handler_message_box = m_node.handleMessageBox(
-        [this](const bilingual_str& message, const std::string& caption, unsigned int style) {
+        [this](const bilingual_str& message, unsigned int style) {
             return showRuntimeDialog(
                 QString::fromStdString(message.translated),
-                QString::fromStdString(caption),
                 style,
                 /*question=*/false);
         });
     m_handler_question = m_node.handleQuestion(
-        [this](const bilingual_str& message, [[maybe_unused]] const std::string& non_interactive_message, const std::string& caption, unsigned int style) {
+        [this](const bilingual_str& message, [[maybe_unused]] const std::string& non_interactive_message, unsigned int style) {
             return showRuntimeDialog(
                 QString::fromStdString(message.translated),
-                QString::fromStdString(caption),
                 style,
                 /*question=*/true);
         });
@@ -658,7 +653,7 @@ QVariantList NodeModel::nodeInformationRows()
     rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
     rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
     rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::fromSecsSinceEpoch(GetStartupTime()).toString()));
+    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
     rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
     rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
     rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
@@ -672,27 +667,27 @@ QVariantList NodeModel::nodeInformationRows()
     return rows;
 }
 
-bool NodeModel::showRuntimeDialog(const QString& message, const QString& caption, unsigned int style, bool question)
+bool NodeModel::showRuntimeDialog(const QString& message, unsigned int style, bool question)
 {
     if (QThread::currentThread() == thread()) {
-        return showRuntimeDialogOnGuiThread(message, caption, style, question);
+        return showRuntimeDialogOnGuiThread(message, style, question);
     }
 
     if (!(style & CClientUIInterface::MODAL) && !question) {
-        QMetaObject::invokeMethod(this, [this, message, caption, style, question] {
-            showRuntimeDialogOnGuiThread(message, caption, style, question);
+        QMetaObject::invokeMethod(this, [this, message, style, question] {
+            showRuntimeDialogOnGuiThread(message, style, question);
         }, Qt::QueuedConnection);
         return false;
     }
 
     bool result{false};
-    QMetaObject::invokeMethod(this, [this, &result, message, caption, style, question] {
-        result = showRuntimeDialogOnGuiThread(message, caption, style, question);
+    QMetaObject::invokeMethod(this, [this, &result, message, style, question] {
+        result = showRuntimeDialogOnGuiThread(message, style, question);
     }, Qt::BlockingQueuedConnection);
     return result;
 }
 
-bool NodeModel::showRuntimeDialogOnGuiThread(const QString& message, const QString& caption, unsigned int style, bool question)
+bool NodeModel::showRuntimeDialogOnGuiThread(const QString& message, unsigned int style, bool question)
 {
     if (!m_runtime_dialogs_enabled && !question) {
         if (style & CClientUIInterface::ICON_WARNING) {
@@ -710,7 +705,6 @@ bool NodeModel::showRuntimeDialogOnGuiThread(const QString& message, const QStri
     const bool blocking{(style & CClientUIInterface::MODAL) || question};
     auto request{std::make_shared<RuntimeDialogRequest>()};
     request->message = message;
-    request->caption = caption;
     request->style = style;
     request->question = question;
     if (!m_runtime_dialogs_enabled && (question || (style & CClientUIInterface::ICON_ERROR))) {
@@ -743,7 +737,7 @@ bool NodeModel::showRuntimeDialogOnGuiThread(const QString& message, const QStri
 void NodeModel::showRuntimeDialogRequest(const std::shared_ptr<RuntimeDialogRequest>& request)
 {
     m_runtime_dialog_active = request;
-    m_runtime_dialog_title = RuntimeDialogTitle(request->caption, request->style);
+    m_runtime_dialog_title = RuntimeDialogTitle(request->style);
     m_runtime_dialog_message = request->message;
     m_runtime_dialog_icon = RuntimeDialogIcon(request->style);
     m_runtime_dialog_buttons = RuntimeDialogButtons(request->style);
@@ -778,11 +772,10 @@ void NodeModel::answerRuntimeDialog(unsigned int button)
 }
 
 #ifdef ENABLE_TEST_AUTOMATION
-void NodeModel::showRuntimeDialogForTest(const QString& message, const QString& caption, unsigned int style, bool question)
+void NodeModel::showRuntimeDialogForTest(const QString& message, unsigned int style, bool question)
 {
     auto request{std::make_shared<RuntimeDialogRequest>()};
     request->message = message;
-    request->caption = caption;
     request->style = style;
     request->question = question;
 

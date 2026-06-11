@@ -227,13 +227,12 @@ class QmlDriver:
             )
         return resp
 
-    def show_runtime_dialog(self, message, caption, style, question=False):
+    def show_runtime_dialog(self, message, style, question=False):
         """Open a NodeRuntimeDialog through the test automation bridge."""
         resp = self._send(
             {
                 "cmd": "show_runtime_dialog",
                 "message": message,
-                "caption": caption,
                 "style": style,
                 "question": question,
             }

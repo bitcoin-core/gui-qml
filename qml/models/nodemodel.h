@@ -127,7 +127,7 @@ public:
     Q_INVOKABLE QVariantList nodeInformationRows();
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
-    Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, const QString& caption, unsigned int style, bool question);
+    Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
 #endif
 
 public Q_SLOTS:
@@ -170,7 +170,6 @@ private:
 
     struct RuntimeDialogRequest {
         QString message;
-        QString caption;
         unsigned int style{0};
         bool question{false};
         bool answer{false};
@@ -253,8 +252,8 @@ private:
     void setWarnings(const QString& warnings);
     void setBlockSyncActive(bool active);
     void setHeaderSyncState(int height, int64_t block_time, bool presync);
-    bool showRuntimeDialog(const QString& message, const QString& caption, unsigned int style, bool question);
-    bool showRuntimeDialogOnGuiThread(const QString& message, const QString& caption, unsigned int style, bool question);
+    bool showRuntimeDialog(const QString& message, unsigned int style, bool question);
+    bool showRuntimeDialogOnGuiThread(const QString& message, unsigned int style, bool question);
     void showRuntimeDialogRequest(const std::shared_ptr<RuntimeDialogRequest>& request);
     void requestMempoolInfoRefresh();
     void fetchMempoolInfo();
