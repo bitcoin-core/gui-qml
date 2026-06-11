@@ -1,0 +1,168 @@
+# Copyright (c) 2026 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+name: Depends Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+    tags-ignore:
+      - "**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            host: x86_64-pc-linux-gnu
+            make: make
+            cache-id: linux-x86_64
+          - name: macos-native
+            os: macos-15
+            host: ""
+            make: gmake
+            cache-id: macos-15-native
+
+    env:
+      BUILD_DIR: build-depends
+      DEPENDS_PATCH: patches/depends-Add-Qt-Qml-and-Qt-Quick-modules.patch
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bison \
+            build-essential \
+            cmake \
+            curl \
+            make \
+            ninja-build \
+            patch \
+            pkgconf \
+            python3 \
+            xz-utils
+          echo "JOBS=$(nproc)" >> "$GITHUB_ENV"
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install bison cmake make ninja pkgconf python
+          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+          echo "JOBS=$(sysctl -n hw.logicalcpu)" >> "$GITHUB_ENV"
+
+      - name: Select depends host
+        run: |
+          if [ -n "${{ matrix.host }}" ]; then
+            host="${{ matrix.host }}"
+          else
+            host="$(cd bitcoin/depends && ./config.guess)"
+          fi
+          host="$(cd bitcoin/depends && ./config.sub "$host")"
+          echo "HOST=${host}" >> "$GITHUB_ENV"
+          echo "Using depends host: ${host}"
+
+      - name: Apply Bitcoin depends patch
+        run: |
+          if [ ! -f "${DEPENDS_PATCH}" ]; then
+            echo "::error::Missing ${DEPENDS_PATCH}"
+            exit 1
+          fi
+
+          patch="../${DEPENDS_PATCH}"
+          if git -C bitcoin apply --whitespace=nowarn --reverse --check "${patch}" >/dev/null 2>&1; then
+            echo "${DEPENDS_PATCH} is already applied"
+          else
+            git -C bitcoin apply --whitespace=nowarn --check "${patch}"
+            git -C bitcoin apply --whitespace=nowarn "${patch}"
+          fi
+
+      - name: Restore depends sources cache
+        uses: actions/cache/restore@v4
+        id: depends-sources-cache
+        with:
+          path: bitcoin/depends/sources
+          key: ${{ matrix.cache-id }}-depends-sources-${{ hashFiles('bitcoin/depends/packages/*.mk', 'bitcoin/depends/patches/**', 'patches/*.patch') }}
+          restore-keys: |
+            ${{ matrix.cache-id }}-depends-sources-
+
+      - name: Restore depends package cache
+        uses: actions/cache/restore@v4
+        id: depends-built-cache
+        with:
+          path: bitcoin/depends/built
+          key: ${{ matrix.cache-id }}-depends-built-${{ hashFiles('bitcoin/depends/Makefile', 'bitcoin/depends/funcs.mk', 'bitcoin/depends/builders/**', 'bitcoin/depends/hosts/**', 'bitcoin/depends/packages/*.mk', 'bitcoin/depends/patches/**', 'patches/*.patch') }}
+          restore-keys: |
+            ${{ matrix.cache-id }}-depends-built-
+
+      - name: Build depends
+        run: |
+          cd bitcoin/depends
+          ${{ matrix.make }} -j"${JOBS}" HOST="${HOST}" DEBUG= LOG=1
+
+      - name: Save depends sources cache
+        uses: actions/cache/save@v4
+        if: github.event_name != 'pull_request' && steps.depends-sources-cache.outputs.cache-hit != 'true'
+        with:
+          path: bitcoin/depends/sources
+          key: ${{ steps.depends-sources-cache.outputs.cache-primary-key }}
+
+      - name: Save depends package cache
+        uses: actions/cache/save@v4
+        if: github.event_name != 'pull_request' && steps.depends-built-cache.outputs.cache-hit != 'true'
+        with:
+          path: bitcoin/depends/built
+          key: ${{ steps.depends-built-cache.outputs.cache-primary-key }}
+
+      - name: Configure
+        run: |
+          test -f "bitcoin/depends/${HOST}/toolchain.cmake"
+          cmake -S . -B "${BUILD_DIR}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="${PWD}/bitcoin/depends/${HOST}/toolchain.cmake" \
+            -DBUILD_APP_TESTS=OFF \
+            -DBUILD_GUI=ON \
+            -DENABLE_WALLET=ON \
+            -DENABLE_IPC=OFF
+
+      - name: Build bitcoin-core-app
+        run: |
+          cmake --build "${BUILD_DIR}" --target bitcoin-core-app --parallel "${JOBS}"
+
+      - name: Upload depends logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: depends-logs-${{ matrix.cache-id }}
+          path: bitcoin/depends/*.log
+          if-no-files-found: ignore
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-core-app-${{ matrix.cache-id }}
+          path: ${{ env.BUILD_DIR }}/bin/bitcoin-core-app
+          if-no-files-found: error
