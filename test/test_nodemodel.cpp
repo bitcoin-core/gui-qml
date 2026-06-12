@@ -144,6 +144,7 @@ private Q_SLOTS:
     void requestShutdownEmitsOnlyOnce();
     void initializationFailureRequestsShutdownWhenCoreWasInterrupted();
     void initializationFailureWithoutCoreInterruptOnlySetsErrorState();
+    void initializationSuccessDuringCoreShutdownSkipsReadyState();
     void destructorUnsubscribesCoreSignalsBeforeStoppingPolling();
     void nodeNotificationHandlersUpdateModelThroughQueuedSignals();
     void blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues();
@@ -411,6 +412,27 @@ void NodeModelTests::initializationFailureWithoutCoreInterruptOnlySetsErrorState
     QVERIFY(model.errorState());
     QCOMPARE(shutdown_spy.count(), 0);
     QCOMPARE(initialized_spy.count(), 1);
+}
+
+void NodeModelTests::initializationSuccessDuringCoreShutdownSkipsReadyState()
+{
+    NiceMock<MockNode> node;
+    MempoolState mempool;
+    InstallDefaultHandlers(node);
+    InstallMempoolGetters(node, mempool);
+    ON_CALL(node, shutdownRequested()).WillByDefault(Return(true));
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+
+    QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
+    QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
+    QSignalSpy ready_state_spy{&model, &NodeModel::setTimeRatioListInitial};
+    model.initializeResult(true, {});
+
+    QCOMPARE(shutdown_spy.count(), 1);
+    QCOMPARE(initialized_spy.count(), 0);
+    QCOMPARE(ready_state_spy.count(), 0);
 }
 
 void NodeModelTests::destructorUnsubscribesCoreSignalsBeforeStoppingPolling()

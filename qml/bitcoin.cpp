@@ -340,19 +340,21 @@ int QmlGuiMain(int argc, char* argv[])
     NodeModel node_model{*node};
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
+    bool shutdown_requested{false};
 #ifdef ENABLE_WALLET
     std::unique_ptr<WalletQmlController> wallet_controller;
     if (wallet_enabled) {
         wallet_controller = std::make_unique<WalletQmlController>(*node);
-        QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(), [wallet_controller = wallet_controller.get()](bool success) {
-            if (success) {
-                wallet_controller->initialize();
-            }
-        });
+        QObject::connect(
+            &init_executor, &QmlInitExecutor::initializeResult, wallet_controller.get(),
+            [wallet_controller = wallet_controller.get(), node = node.get(), &shutdown_requested](bool success) {
+                if (success && !shutdown_requested && !node->shutdownRequested()) {
+                    wallet_controller->initialize();
+                }
+            });
     }
 #endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
-    bool shutdown_requested{false};
     QObject::connect(&node_model, &NodeModel::requestedShutdown, [&] {
         if (shutdown_requested) {
             return;

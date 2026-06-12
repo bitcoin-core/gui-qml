@@ -426,6 +426,11 @@ void NodeModel::requestShutdown()
 
 void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info)
 {
+    if (success && (m_shutdown_requested || m_node.shutdownRequested())) {
+        requestShutdown();
+        return;
+    }
+
     if (!success) {
         if (m_startup_failure_dialog_shown) {
             requestShutdown();
