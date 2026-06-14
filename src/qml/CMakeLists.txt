@@ -8,6 +8,13 @@ add_library(bitcoinqml STATIC
   staging_bootstrap.cpp
 )
 
+set(QML_QRC "${CMAKE_CURRENT_SOURCE_DIR}/bitcoin_qml.qrc")
+qt6_add_resources(QML_QRC_CPP ${QML_QRC})
+target_sources(bitcoinqml
+  PRIVATE
+    ${QML_QRC_CPP}
+)
+
 target_compile_definitions(bitcoinqml
   PUBLIC
     QT_NO_KEYWORDS
