@@ -4,11 +4,14 @@
 
 #include <qml/bitcoin.h>
 
+#include <btcsignals.h>
 #include <chainparams.h>
+#include <common/args.h>
+#include <common/init.h>
+#include <common/system.h>
 #include <init.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
-#include <logging.h>
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/imageprovider.h>
@@ -18,17 +21,16 @@
 #include <qt/guiutil.h>
 #include <qt/initexecutor.h>
 #include <qt/networkstyle.h>
-#include <util/system.h>
+#include <util/log.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 
-#include <boost/signals2/connection.hpp>
 #include <cassert>
 #include <memory>
 #include <tuple>
 
 #include <QDebug>
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -62,7 +64,6 @@ void SetupUIArgs(ArgsManager& argsman)
 
 bool InitErrorMessageBox(
     const bilingual_str& message,
-    [[maybe_unused]] const std::string& caption,
     [[maybe_unused]] unsigned int style)
 {
     QQmlApplicationEngine engine;
@@ -80,9 +81,9 @@ void DebugMessageHandler(QtMsgType type, const QMessageLogContext& context, cons
 {
     Q_UNUSED(context);
     if (type == QtDebugMsg) {
-        LogPrint(BCLog::QT, "GUI: %s\n", msg.toStdString());
+        LogDebug(BCLog::QT, "GUI: %s\n", msg.toStdString());
     } else {
-        LogPrintf("GUI: %s\n", msg.toStdString());
+        LogInfo("GUI: %s", msg.toStdString());
     }
 }
 } // namespace
@@ -98,11 +99,11 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_qml);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
-    QGuiApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
-    QGuiApplication app(argc, argv);
+    QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
+    QApplication app(argc, argv);
 
-    auto handler_message_box = ::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox);
+    btcsignals::scoped_connection handler_message_box{::uiInterface.ThreadSafeMessageBox_connect(InitErrorMessageBox)};
 
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
 
@@ -110,37 +111,17 @@ int QmlGuiMain(int argc, char* argv[])
     util::ThreadSetInternalName("main");
 
     /// Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
-    SetupServerArgs(gArgs);
+    SetupServerArgs(gArgs, init->canListenIpc());
     SetupUIArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
-        InitError(strprintf(Untranslated("Cannot parse command line arguments: %s\n"), error));
+        InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error)));
         return EXIT_FAILURE;
     }
 
-    /// Determine availability of data directory.
-    if (!CheckDataDirOption()) {
-        InitError(strprintf(Untranslated("Specified data directory \"%s\" does not exist.\n"), gArgs.GetArg("-datadir", "")));
-        return EXIT_FAILURE;
-    }
-
-    /// Read and parse bitcoin.conf file.
-    if (!gArgs.ReadConfigFiles(error, true)) {
-        InitError(strprintf(Untranslated("Cannot parse configuration file: %s\n"), error));
-        return EXIT_FAILURE;
-    }
-
-    /// Check for chain settings (Params() calls are only valid after this clause).
-    try {
-        SelectParams(gArgs.GetChainName());
-    } catch(std::exception &e) {
-        InitError(Untranslated(strprintf("%s\n", e.what())));
-        return EXIT_FAILURE;
-    }
-
-    /// Read and parse settings.json file.
-    if (!gArgs.InitSettings(error)) {
-        InitError(Untranslated(error));
+    /// Parse config, determine chain, and initialize settings.
+    if (auto config_error{common::InitConfig(gArgs)}) {
+        InitError(config_error->message, config_error->details);
         return EXIT_FAILURE;
     }
 
@@ -178,7 +159,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     QQmlApplicationEngine engine;
 
-    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().NetworkIDString())};
+    QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
     engine.addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
 

@@ -4,22 +4,32 @@
 
 set(CMAKE_AUTOMOC ON)
 
-add_library(bitcoinqml STATIC
-  staging_bootstrap.cpp
-)
+option(ENABLE_TEST_AUTOMATION "Enable test automation bridge for QML UI testing" OFF)
 
 set(QML_QRC "${CMAKE_CURRENT_SOURCE_DIR}/bitcoin_qml.qrc")
 qt6_add_resources(QML_QRC_CPP ${QML_QRC})
-target_sources(bitcoinqml
-  PRIVATE
-    ${QML_QRC_CPP}
+
+file(GLOB_RECURSE QML_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
 )
+list(FILTER QML_SOURCES EXCLUDE REGEX "/main\\.cpp$")
+list(FILTER QML_SOURCES EXCLUDE REGEX "/androidnotifier\\.(cpp|h)$")
+if(NOT ENABLE_TEST_AUTOMATION)
+  list(FILTER QML_SOURCES EXCLUDE REGEX "/test/")
+endif()
+list(APPEND QML_SOURCES ${QML_QRC_CPP})
+
+add_library(bitcoinqml STATIC ${QML_SOURCES})
 
 target_compile_definitions(bitcoinqml
   PUBLIC
     QT_NO_KEYWORDS
     QT_USE_QSTRINGBUILDER
 )
+if(ENABLE_TEST_AUTOMATION)
+  target_compile_definitions(bitcoinqml PUBLIC ENABLE_TEST_AUTOMATION)
+endif()
 
 target_include_directories(bitcoinqml
   PUBLIC
@@ -31,9 +41,14 @@ target_link_libraries(bitcoinqml
   PUBLIC
     core_interface
     bitcoin_node
+    univalue
+    Boost::headers
+    $<TARGET_NAME_IF_EXISTS:QRencode::QRencode>
     Qt6::Qml
-    Qt6::Widgets
     Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Network
+    Qt6::Widgets
 )
 
 add_executable(bitcoin-qml WIN32
