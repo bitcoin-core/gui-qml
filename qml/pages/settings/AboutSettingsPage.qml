@@ -28,6 +28,7 @@ SettingsPage {
         showGradientBorder: false
 
         LinkRow {
+            objectName: "aboutWebsiteRow"
             Layout.fillWidth: true
             dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Website")
@@ -37,6 +38,7 @@ SettingsPage {
         }
 
         LinkRow {
+            objectName: "aboutSourceCodeRow"
             Layout.fillWidth: true
             dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Source code")
