@@ -61,8 +61,6 @@ SettingsPage {
             title: qsTr("Version")
             value: BuildInfo.fullClientVersion
             link: "https://bitcoin.org/en/download"
-            linkIconSource: ""
-            showsDisclosureIndicator: true
             onActivated: function(link) { root.openExternalLink(link) }
         }
 
