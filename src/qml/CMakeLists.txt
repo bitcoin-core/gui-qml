@@ -5,7 +5,7 @@
 set(CMAKE_AUTOMOC ON)
 
 add_library(bitcoinqml STATIC
-  bitcoin.cpp
+  staging_bootstrap.cpp
 )
 
 target_compile_definitions(bitcoinqml
