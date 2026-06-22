@@ -21,6 +21,9 @@ ColumnLayout {
     property string descriptionColor: Theme.color.neutral8
     property bool descriptionBold: false
     property int descriptionTextFormat: Text.AutoText
+    // Override when the description can contain an unbreakable run, such as a
+    // URL carrying a txid, where WordWrap alone overflows the available width.
+    property int descriptionWrapMode: Text.WordWrap
     property string subtext: ""
     property int subtextMargin
     property int subtextSize: 15
@@ -61,7 +64,7 @@ ColumnLayout {
             text: root.description
             textFormat: root.descriptionTextFormat
             horizontalAlignment: root.center ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: wrap ? Text.WordWrap : Text.NoWrap
+            wrapMode: wrap ? root.descriptionWrapMode : Text.NoWrap
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,6 +18,16 @@ AbstractButton {
     property int iconSlotSize: 30
     property color iconColor: Theme.color.neutral9
     property color textColor: Theme.color.neutral9
+
+    // The confirmation dialog belongs to the link rather than to each page
+    // that hosts one. A page that forgot to wire it up would produce a link
+    // that silently does nothing, which is the failure this control exists to
+    // prevent. Derived from objectName so several links on one page stay
+    // individually addressable from tests.
+    readonly property string popupObjectName: root.objectName.length > 0
+        ? root.objectName + "_popup"
+        : "externalLinkPopup"
+
     enabled: root.parentState !== "DISABLED"
     state: root.parentState
 
@@ -76,5 +86,24 @@ AbstractButton {
             slotSize: root.iconSlotSize
         }
     }
-    onClicked: Qt.openUrlExternally(link)
+    // Opening always goes through ExternalPopup, which confirms the
+    // destination, checks whether the open succeeded, and offers a copy-URL
+    // fallback when it did not.
+    function requestOpen() {
+        popupLoader.active = true
+        popupLoader.item.link = root.link
+        popupLoader.item.open()
+    }
+
+    onClicked: root.requestOpen()
+
+    // Created on first use: most links are never clicked, and a popup per link
+    // on a page full of them is not worth instantiating up front.
+    Loader {
+        id: popupLoader
+        active: false
+        sourceComponent: ExternalPopup {
+            objectName: root.popupObjectName
+        }
+    }
 }

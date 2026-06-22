@@ -14,6 +14,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
@@ -3310,6 +3311,48 @@ private:
     int m_next_old_row{0};
 };
 
+class MockClipboard : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void setText(const QString& text) { m_text = text; }
+    Q_INVOKABLE QString text() const { return m_text; }
+
+private:
+    QString m_text;
+};
+
+//! Stands in for the real UrlOpener so the popup's success and failure paths
+//! can be driven without launching a browser. Mirrors the production scheme
+//! allowlist so a test cannot pass on a URL the real opener would reject.
+class MockUrlOpener : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE bool openUrl(const QString& url)
+    {
+        m_last_url = url;
+        const QUrl parsed(url, QUrl::StrictMode);
+        if (!parsed.isValid() || parsed.host().isEmpty()) return false;
+        const QString scheme = parsed.scheme().toLower();
+        if (scheme != QStringLiteral("http") && scheme != QStringLiteral("https")) return false;
+        return m_open_result;
+    }
+    Q_INVOKABLE void setOpenResult(bool ok) { m_open_result = ok; }
+    Q_INVOKABLE QString lastUrl() const { return m_last_url; }
+    Q_INVOKABLE void reset()
+    {
+        m_open_result = true;
+        m_last_url.clear();
+    }
+
+private:
+    bool m_open_result{true};
+    QString m_last_url;
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -3341,6 +3384,8 @@ public Q_SLOTS:
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
+        static MockClipboard clipboard;
+        static MockUrlOpener url_opener;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setActivityListModel(&activity_list_model);
         wallet_model.setBumpModel(&bump_model);
@@ -3351,6 +3396,8 @@ public Q_SLOTS:
         wallet_controller.setSelectedWalletObject(&wallet_model);
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
+        qmlRegisterSingletonInstance<MockClipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", &clipboard);
+        qmlRegisterSingletonInstance<MockUrlOpener>("org.bitcoincore.qt", 1, 0, "UrlOpener", &url_opener);
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",
             1,
@@ -3407,6 +3454,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testUrlOpener"), &url_opener);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }

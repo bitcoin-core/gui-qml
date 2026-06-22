@@ -239,6 +239,39 @@ TestCase {
         })
     }
 
+    // Third-party links must route through the confirmation popup rather than
+    // opening the URL directly, so the user sees the destination before
+    // leaving the app.
+    function test_thirdPartyTransactionLink_routes_through_confirmation_popup() {
+        optionsModel.thirdPartyTransactionUrls = "https://example.com/tx/%s"
+        const page = createTemporaryObject(detailsComponent, this, {
+            txid: "ffff",
+            canBump: false,
+            amount: "+0.01000000 BTC",
+            date: "2026-01-06",
+            depth: 1,
+            status: 2,
+            type: 1,
+            address: "bcrt1qrequestaddress"
+        })
+        verify(page !== null)
+
+        tryVerify(function() {
+            return findChild(page, "activityDetailsThirdPartyLink_0") !== null
+        })
+        const link = findChild(page, "activityDetailsThirdPartyLink_0")
+        compare(link.popupObjectName, "activityDetailsThirdPartyLink_0_popup")
+        // The link owns its dialog, so assert against the link's own subtree.
+        verify(findChild(link, link.popupObjectName) === null)
+
+        link.clicked()
+
+        const popup = findChild(link, link.popupObjectName)
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://example.com/tx/ffff")
+    }
+
     function test_no_thirdPartyTransactionLinks_hides_section() {
         const page = createTemporaryObject(detailsComponent, this, {
             txid: "gggg",

@@ -17,7 +17,6 @@
         <file>components/MempoolInformationRows.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
-        <file>components/ExternalPopup.qml</file>
         <file>components/FeeSelection.qml</file>
         <file>components/MiniBlockClock.qml</file>
         <file>components/MonospaceOutputView.qml</file>
@@ -34,7 +33,6 @@
         <file>components/ProxySettings.qml</file>
         <file>components/SettingsRestartNotice.qml</file>
         <file>components/StorageLocations.qml</file>
-        <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
@@ -66,6 +64,7 @@
         <file>controls/CoreTextField.qml</file>
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>
+        <file>controls/ExternalPopup.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Icon.qml</file>
@@ -87,6 +86,7 @@
         <file>controls/ProxyLocationInput.qml</file>
         <file>controls/QRImage.qml</file>
         <file>controls/RightContentIcon.qml</file>
+        <file>controls/Separator.qml</file>
         <file>controls/qmldir</file>
         <file>controls/SendOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>

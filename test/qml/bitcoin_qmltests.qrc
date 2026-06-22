@@ -1,5 +1,6 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/test/qml">
+        <file>tst_aboutoptions.qml</file>
         <file>tst_activitydetails.qml</file>
         <file>tst_activity.qml</file>
         <file>tst_address_components.qml</file>
@@ -18,6 +19,7 @@
         <file>tst_desktopwallets.qml</file>
         <file>tst_displaysettings.qml</file>
         <file>tst_dropdownbutton.qml</file>
+        <file>tst_externalpopup.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_feeselection.qml</file>
         <file>tst_mainrouting.qml</file>

@@ -26,6 +26,7 @@
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
+#include <qml/urlopener.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
@@ -156,7 +157,7 @@ AppMode SetupAppMode()
     return AppMode(mode, WalletEnabledFromArgs());
 }
 
-void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, BitcoinUriModel& bitcoin_uri_model);
+void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, UrlOpener& url_opener, BitcoinUriModel& bitcoin_uri_model);
 
 bool InitErrorMessageBox(
     const bilingual_str& message,
@@ -165,8 +166,9 @@ bool InitErrorMessageBox(
     static AppMode error_app_mode = SetupAppMode();
     static BuildInfo error_build_info;
     static Clipboard error_clipboard;
+    static UrlOpener error_url_opener;
     static BitcoinUriModel error_bitcoin_uri_model;
-    RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_bitcoin_uri_model);
+    RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_url_opener, error_bitcoin_uri_model);
 
     QQmlApplicationEngine engine;
 
@@ -233,17 +235,19 @@ void ApplyTestSettingsDir()
 }
 #endif
 
-void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, BitcoinUriModel& bitcoin_uri_model)
+void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, UrlOpener& url_opener, BitcoinUriModel& bitcoin_uri_model)
 {
     static bool registered{false};
     static AppMode* app_mode_instance{nullptr};
     static BuildInfo* build_info_instance{nullptr};
     static Clipboard* clipboard_instance{nullptr};
+    static UrlOpener* url_opener_instance{nullptr};
     static BitcoinUriModel* bitcoin_uri_model_instance{nullptr};
     if (registered) return;
     app_mode_instance = &app_mode;
     build_info_instance = &build_info;
     clipboard_instance = &clipboard;
+    url_opener_instance = &url_opener;
     bitcoin_uri_model_instance = &bitcoin_uri_model;
 
     qmlRegisterSingletonType<AppMode>("org.bitcoincore.qt", 1, 0, "AppMode", [](QQmlEngine*, QJSEngine*) -> QObject* {
@@ -257,6 +261,10 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterSingletonType<Clipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(clipboard_instance, QQmlEngine::CppOwnership);
         return clipboard_instance;
+    });
+    qmlRegisterSingletonType<UrlOpener>("org.bitcoincore.qt", 1, 0, "UrlOpener", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        QQmlEngine::setObjectOwnership(url_opener_instance, QQmlEngine::CppOwnership);
+        return url_opener_instance;
     });
     qmlRegisterSingletonType<BitcoinUriModel>("org.bitcoincore.qt", 1, 0, "BitcoinUri", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(bitcoin_uri_model_instance, QQmlEngine::CppOwnership);
@@ -480,8 +488,9 @@ int QmlGuiMain(int argc, char* argv[])
     AppMode app_mode = SetupAppMode();
     BuildInfo build_info;
     Clipboard clipboard;
+    UrlOpener url_opener;
     BitcoinUriModel bitcoin_uri_model;
-    RegisterQmlTypes(app_mode, build_info, clipboard, bitcoin_uri_model);
+    RegisterQmlTypes(app_mode, build_info, clipboard, url_opener, bitcoin_uri_model);
 
     const QString cli_lang = QString::fromStdString(gArgs.GetArg("-lang", ""));
     const QString startup_language = cli_lang.isEmpty()

@@ -14,50 +14,58 @@ ColumnLayout {
     spacing: 0
     Setting {
         id: websiteLink
+        objectName: "aboutWebsiteLink"
         Layout.fillWidth: true
         header: qsTr("Website")
         actionItem: ExternalLink {
+            objectName: "aboutWebsiteLinkIcon"
             parentState: websiteLink.visualState
             description: "bitcoincore.org"
             link: "https://bitcoincore.org"
         }
-        onClicked: openPopup(loadedItem.link)
+        onClicked: loadedItem.requestOpen()
     }
     Separator { Layout.fillWidth: true }
     Setting {
         id: sourceLink
+        objectName: "aboutSourceCodeLink"
         Layout.fillWidth: true
         header: qsTr("Source code")
         actionItem: ExternalLink {
+            objectName: "aboutSourceCodeLinkIcon"
             parentState: sourceLink.visualState
             description: "github.com/bitcoin/bitcoin"
             link: "https://github.com/bitcoin/bitcoin"
         }
-        onClicked: openPopup(loadedItem.link)
+        onClicked: loadedItem.requestOpen()
     }
     Separator { Layout.fillWidth: true }
     Setting {
         id: licenseLink
+        objectName: "aboutLicenseLink"
         Layout.fillWidth: true
         header: qsTr("License")
         actionItem: ExternalLink {
+            objectName: "aboutLicenseLinkIcon"
             parentState: licenseLink.visualState
             description: "MIT"
             link: "https://opensource.org/licenses/MIT"
         }
-        onClicked: openPopup(loadedItem.link)
+        onClicked: loadedItem.requestOpen()
     }
     Separator { Layout.fillWidth: true }
     Setting {
         id: versionLink
+        objectName: "aboutVersionLink"
         Layout.fillWidth: true
         header: qsTr("Version")
         actionItem: ExternalLink {
+            objectName: "aboutVersionLinkIcon"
             parentState: versionLink.visualState
             description: BuildInfo.fullClientVersion
             link: "https://bitcoin.org/en/download"
         }
-        onClicked: openPopup(loadedItem.link)
+        onClicked: loadedItem.requestOpen()
     }
     Separator { Layout.fillWidth: true }
     Setting {
@@ -74,15 +82,5 @@ ColumnLayout {
         onClicked: {
             root.next()
         }
-    }
-    ExternalPopup {
-        id: confirmPopup
-        anchors.centerIn: Overlay.overlay
-        width: parent.width
-    }
-
-    function openPopup(link) {
-        confirmPopup.link = link
-        confirmPopup.open()
     }
 }
