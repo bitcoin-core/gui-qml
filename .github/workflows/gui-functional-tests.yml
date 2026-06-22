@@ -146,6 +146,7 @@ jobs:
           python3 test/functional/qml_test_bridge_sanity.py
           python3 test/functional/qml_test_onboarding.py
           python3 test/functional/qml_test_preinit_onboarding.py
+          python3 test/functional/qml_test_external_link_confirm.py
           python3 test/functional/qml_test_disablewallet_boot.py
           python3 test/functional/qml_test_blockclock.py
           python3 test/functional/qml_test_blocksonly_settings.py
