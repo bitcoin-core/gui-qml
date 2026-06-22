@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -56,9 +56,6 @@ ColumnLayout {
             parentState: versionLink.visualState
             description: BuildInfo.fullClientVersion
             link: "https://bitcoin.org/en/download"
-            iconSource: "image://images/caret-right"
-            iconWidth: 18
-            iconHeight: 18
         }
         onClicked: openPopup(loadedItem.link)
     }
