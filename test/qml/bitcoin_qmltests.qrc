@@ -15,6 +15,7 @@
         <file>tst_createpassword.qml</file>
         <file>tst_createtypeselector.qml</file>
         <file>tst_createwalletwizard.qml</file>
+        <file>tst_debuglog.qml</file>
         <file>tst_debuglogoutputview.qml</file>
         <file>tst_desktopwallets.qml</file>
         <file>tst_displaysettings.qml</file>

@@ -58,6 +58,9 @@ Page {
             AbstractButton {
                 id: exportBtn
                 objectName: "debugLogExportButton"
+                // Nothing to hand to another application while the log cannot
+                // be read.
+                enabled: debugLogModel.logAvailable
                 implicitWidth: 52
                 implicitHeight: 52
                 hoverEnabled: true
@@ -67,8 +70,8 @@ Page {
 
                 background: Rectangle {
                     radius: 5
-                    color: exportBtn.hovered ? Theme.color.neutral2
-                                             : Theme.color.background
+                    color: exportBtn.hovered && exportBtn.enabled ? Theme.color.neutral2
+                                                                  : Theme.color.background
                     Behavior on color { ColorAnimation { duration: 150 } }
                 }
 
@@ -76,14 +79,16 @@ Page {
                     Icon {
                         anchors.centerIn: parent
                         source: "image://images/export"
-                        color: Theme.color.neutral9
+                        color: exportBtn.enabled ? Theme.color.neutral9 : Theme.color.neutral4
                         size: 28
                     }
                 }
 
                 onClicked: debugLogModel.openLogFile()
 
-                HoverHandler { cursorShape: Qt.PointingHandCursor }
+                HoverHandler {
+                    cursorShape: exportBtn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                }
             }
         }
     }
@@ -100,6 +105,20 @@ Page {
             bottomMargin: 20
         }
         spacing: 0
+
+        // Matches the Sign/Verify message result banner rather than a bare
+        // line of red text. Clears on a later successful open, or when the
+        // page is re-entered (Component.onCompleted below).
+        ToastBanner {
+            objectName: "debugLogOpenErrorBanner"
+            Layout.fillWidth: true
+            Layout.bottomMargin: visible ? 10 : 0
+            visible: debugLogModel.openError.length > 0
+            backgroundColor: Theme.color.red
+            iconSource: "image://images/info-filled"
+            text: debugLogModel.openError
+            textObjectName: "debugLogOpenErrorText"
+        }
 
         RowLayout {
             id: searchRow
@@ -122,6 +141,10 @@ Page {
             TextField {
                 id: searchField
                 objectName: "debugLogSearchField"
+                // Nothing to search while the log cannot be read. The refresh
+                // button stays enabled: it is how the user recovers once the
+                // file exists again.
+                enabled: debugLogModel.logAvailable
                 Layout.fillWidth: true
                 Layout.preferredHeight: 44
                 leftPadding: 0
@@ -129,7 +152,7 @@ Page {
                 topPadding: 0
                 bottomPadding: 0
                 font: Theme.text.description.font
-                color: Theme.color.neutral9
+                color: searchField.enabled ? Theme.color.neutral9 : Theme.color.neutral4
                 placeholderTextColor: Theme.color.neutral5
                 placeholderText: qsTr("Search...")
                 // The page is unloaded whenever another Settings section is
@@ -328,6 +351,11 @@ Page {
         }
     }
 
-    Component.onCompleted: debugLogModel.active = true
+    Component.onCompleted: {
+        // A stale open failure from a previous visit is about that visit's
+        // open attempt; start the page without it.
+        debugLogModel.clearOpenError()
+        debugLogModel.active = true
+    }
     Component.onDestruction: debugLogModel.active = false
 }

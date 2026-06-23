@@ -69,6 +69,11 @@ private Q_SLOTS:
     void filter_updatesIncrementallyAndWhileInactive();
     void rotation_fallsBackToFullSnapshot();
     void loadLimit_changesKeepRetainedCacheBounded();
+    void openErrorEmptyByDefault();
+    void openErrorPersistsAcrossSuccessfulRead();
+    void clearOpenErrorClearsOnlyWhenSet();
+    void openMissingFileIsLeftToTheReader();
+    void logAvailableTracksReadFailures();
 };
 
 void DebugLogModelTests::inactiveModel_ignoresRefreshUntilActivated()
@@ -605,6 +610,123 @@ void DebugLogModelTests::loadLimit_changesKeepRetainedCacheBounded()
     QCOMPARE(insert_spy.count(), 1);
     QCOMPARE(insert_spy.at(0).at(1).toInt(), 2);
     QCOMPARE(insert_spy.at(0).at(2).toInt(), 3);
+}
+
+void DebugLogModelTests::openErrorEmptyByDefault()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const fs::path log_path = fs::PathFromString(temp_dir.filePath("debug.log").toStdString());
+
+    DebugLogModel model(log_path);
+    QVERIFY(model.openError().isEmpty());
+}
+
+// The action error (this click failed) and the state error (the log itself
+// cannot be read) have different lifetimes, so they cannot share a field: the
+// background reader clears its own error on every successful read, which would
+// wipe the click failure on the next auto-refresh tick.
+void DebugLogModelTests::openErrorPersistsAcrossSuccessfulRead()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString path = temp_dir.filePath("debug.log");
+    const fs::path log_path = fs::PathFromString(path.toStdString());
+    QVERIFY(WriteBytes(path, NumberedRecords(0, 2)));
+
+    // The log exists and is readable; only the hand-off to another application
+    // fails, which is the one thing openLogFile() still reports itself.
+    DebugLogModel model(log_path);
+    model.setOpenLocalFileFnForTesting([](const QString&) { return false; });
+    QVERIFY(!model.openLogFile());
+    const QString action_error = model.openError();
+    QVERIFY(!action_error.isEmpty());
+
+    // Let a background read succeed.
+    model.setActive(true);
+    QTRY_COMPARE(model.rowCount(), 2);
+
+    // The read succeeded, but the click failure must still be reported.
+    QCOMPARE(model.openError(), action_error);
+}
+
+// clearOpenError() drops the action error (the page calls it when re-entered so
+// a stale click failure does not survive navigation) and is a no-op when
+// nothing is pending.
+void DebugLogModelTests::clearOpenErrorClearsOnlyWhenSet()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString path = temp_dir.filePath("debug.log");
+    QVERIFY(WriteBytes(path, NumberedRecords(0, 1)));
+
+    DebugLogModel model(fs::PathFromString(path.toStdString()));
+    model.setOpenLocalFileFnForTesting([](const QString&) { return false; });
+    QSignalSpy error_spy(&model, &DebugLogModel::openErrorChanged);
+
+    // No pending error: no change, no signal.
+    model.clearOpenError();
+    QCOMPARE(error_spy.count(), 0);
+
+    QVERIFY(!model.openLogFile());
+    QVERIFY(!model.openError().isEmpty());
+    QCOMPARE(error_spy.count(), 1);
+
+    model.clearOpenError();
+    QVERIFY(model.openError().isEmpty());
+    QCOMPARE(error_spy.count(), 2);
+}
+
+// A missing log is a state of the log, not the outcome of one click, so
+// openLogFile() must not record it as an action error: doing so would let the
+// page clear it on re-entry while the file is still missing. The reader owns
+// that message and keeps it for as long as the condition holds.
+void DebugLogModelTests::openMissingFileIsLeftToTheReader()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const fs::path missing = fs::PathFromString(temp_dir.filePath("does-not-exist.log").toStdString());
+
+    DebugLogModel model(missing);
+    QSignalSpy error_spy(&model, &DebugLogModel::openErrorChanged);
+
+    QVERIFY(!model.openLogFile());
+    QVERIFY(model.openError().isEmpty());
+    QCOMPARE(error_spy.count(), 0);
+
+    // The reader reports it instead, and clearing on page entry does not drop
+    // it, because the log is still missing.
+    model.setActive(true);
+    QTRY_VERIFY(!model.openError().isEmpty());
+    model.clearOpenError();
+    QVERIFY(!model.openError().isEmpty());
+}
+
+// logAvailable drives the controls that only make sense against readable log
+// content, so it has to follow the reader in both directions.
+void DebugLogModelTests::logAvailableTracksReadFailures()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString path = temp_dir.filePath("debug.log");
+    const fs::path log_path = fs::PathFromString(path.toStdString());
+
+    DebugLogModel model(log_path);
+    QSignalSpy available_spy(&model, &DebugLogModel::logAvailableChanged);
+
+    // Starts optimistic so the page does not flash a disabled state.
+    QVERIFY(model.logAvailable());
+
+    model.setActive(true);
+    QTRY_VERIFY(!model.logAvailable());
+    QCOMPARE(available_spy.count(), 1);
+
+    // The log appears and a refresh picks it up.
+    QVERIFY(WriteBytes(path, NumberedRecords(0, 2)));
+    model.refresh(true);
+    QTRY_VERIFY(model.logAvailable());
+    QCOMPARE(available_spy.count(), 2);
+    QVERIFY(model.openError().isEmpty());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
