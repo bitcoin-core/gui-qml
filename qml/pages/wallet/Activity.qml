@@ -111,6 +111,8 @@ PageStack {
                     return qsTr("This week")
                 case ActivityFilterProxyModel.ThisMonth:
                     return qsTr("This month")
+                case ActivityFilterProxyModel.LastMonth:
+                    return qsTr("Last month")
                 case ActivityFilterProxyModel.ThisYear:
                     return qsTr("This year")
                 default:
@@ -128,6 +130,8 @@ PageStack {
                     return qsTr("Sent to yourself")
                 case ActivityFilterProxyModel.Mined:
                     return qsTr("Mined")
+                case ActivityFilterProxyModel.Other:
+                    return qsTr("Other")
                 case ActivityFilterProxyModel.PaymentRequest:
                     return qsTr("Payment request")
                 default:
@@ -646,6 +650,7 @@ PageStack {
                         { text: qsTr("Today"),       value: ActivityFilterProxyModel.Today,     objectName: "activityDateToday" },
                         { text: qsTr("This week"),   value: ActivityFilterProxyModel.ThisWeek,  objectName: "activityDateThisWeek" },
                         { text: qsTr("This month"),  value: ActivityFilterProxyModel.ThisMonth, objectName: "activityDateThisMonth" },
+                        { text: qsTr("Last month"),  value: ActivityFilterProxyModel.LastMonth, objectName: "activityDateLastMonth" },
                         { text: qsTr("This year"),   value: ActivityFilterProxyModel.ThisYear,  objectName: "activityDateThisYear" }
                     ]
                     onActivated: function(value) {
@@ -673,6 +678,7 @@ PageStack {
                         { text: qsTr("Sent"),             value: ActivityFilterProxyModel.Sent,           objectName: "activityTypeSent" },
                         { text: qsTr("Sent to yourself"), value: ActivityFilterProxyModel.SentToSelf,     objectName: "activityTypeSentToSelf" },
                         { text: qsTr("Mined"),            value: ActivityFilterProxyModel.Mined,          objectName: "activityTypeMined" },
+                        { text: qsTr("Other"),            value: ActivityFilterProxyModel.Other,          objectName: "activityTypeOther" },
                         { text: qsTr("Payment request"),  value: ActivityFilterProxyModel.PaymentRequest, objectName: "activityTypePaymentRequest" }
                     ]
                     onActivated: function(value) {

@@ -214,9 +214,10 @@ ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::filterTypeForInde
         return Mined;
     case Transaction::SendToAddress:
     case Transaction::SendToOther:
+        return Sent;
     case Transaction::Other:
     default:
-        return Sent;
+        return Other;
     }
 }
 
@@ -263,6 +264,10 @@ bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
     case ThisMonth:
         start_date = QDate(current_date.year(), current_date.month(), 1);
         end_date = start_date.addMonths(1);
+        break;
+    case LastMonth:
+        end_date = QDate(current_date.year(), current_date.month(), 1);
+        start_date = end_date.addMonths(-1);
         break;
     case ThisYear:
         start_date = QDate(current_date.year(), 1, 1);

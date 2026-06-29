@@ -175,6 +175,7 @@ void ActivityFilterProxyModelTests::filtersByDateBuckets()
     const QDate start_of_month{today.year(), today.month(), 1};
     const QDate start_of_year{today.year(), 1, 1};
     const QDate start_of_next_week = start_of_week.addDays(7);
+    const QDate start_of_last_month = start_of_month.addMonths(-1);
     const QDate start_of_next_month = start_of_month.addMonths(1);
     const QDate start_of_next_year = start_of_year.addYears(1);
 
@@ -189,6 +190,8 @@ void ActivityFilterProxyModelTests::filtersByDateBuckets()
         MakeRow("Month start", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_month)),
         MakeRow("Before month", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_month.addDays(-1))),
         MakeRow("Next month", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_next_month)),
+        MakeRow("Last month start", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_last_month)),
+        MakeRow("Before last month", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_last_month.addDays(-1))),
         MakeRow("Year start", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_year)),
         MakeRow("Before year", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_year.addDays(-1))),
         MakeRow("Next year", Transaction::RecvWithAddress, TimestampForLocalDate(start_of_next_year)),
@@ -211,6 +214,12 @@ void ActivityFilterProxyModelTests::filtersByDateBuckets()
     QVERIFY(ContainsLabel(proxy, "Month start"));
     QVERIFY(!ContainsLabel(proxy, "Before month"));
     QVERIFY(!ContainsLabel(proxy, "Next month"));
+
+    proxy.setDateFilter(ActivityFilterProxyModel::LastMonth);
+    QVERIFY(ContainsLabel(proxy, "Last month start"));
+    QVERIFY(ContainsLabel(proxy, "Before month"));
+    QVERIFY(!ContainsLabel(proxy, "Before last month"));
+    QVERIFY(!ContainsLabel(proxy, "Month start"));
 
     proxy.setDateFilter(ActivityFilterProxyModel::ThisYear);
     QVERIFY(ContainsLabel(proxy, "Year start"));
@@ -242,11 +251,12 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
     QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Received"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Sent);
-    QCOMPARE(proxy.rowCount(), 2);
-    QVERIFY(ContainsLabel(proxy, "Sent"));
-    QVERIFY(ContainsLabel(proxy, "Other"));
-    QVERIFY(!ContainsLabel(proxy, "Self"));
-    QVERIFY(!ContainsLabel(proxy, "Request"));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Sent"});
+
+    proxy.setTypeFilter(ActivityFilterProxyModel::Other);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Other"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::SentToSelf);
     QCOMPARE(proxy.rowCount(), 1);
