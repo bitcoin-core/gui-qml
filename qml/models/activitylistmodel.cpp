@@ -50,7 +50,11 @@ void ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) 
 
 void ActivityListModel::updateTransactionLabel(QSharedPointer<Transaction> tx) const
 {
-    if (m_wallet_model == nullptr) {
+    // Pending receive requests carry their own label, set when the request is
+    // saved and refreshed when it is edited. Re-reading the address book here
+    // would overwrite an edited request label with the older stored address
+    // label, so leave pending requests untouched.
+    if (m_wallet_model == nullptr || tx->isPendingRequest) {
         return;
     }
 

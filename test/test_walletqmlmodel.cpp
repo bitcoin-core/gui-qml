@@ -550,6 +550,7 @@ private Q_SLOTS:
     void removeReceiveRequestRemovesPendingActivityRow();
     void activityDetailsSelectLowestOutputIndex();
     void activityDetailsPreferOutgoingForSelfPayment();
+    void editedReceiveRequestLabelShownInActivityRow();
     void prepareTransactionOnLockedWalletRequiresPassword();
     void prepareTransactionWithPrivateKeysDisabledDoesNotRequirePassword();
     void sendRecipientRejectsDustAmount();
@@ -1679,6 +1680,34 @@ void WalletQmlModelTests::activityDetailsPreferOutgoingForSelfPayment()
     const QVariantMap details = model->activityListModel()->firstTransactionDetails(txid);
     QCOMPARE(details.value("outputIndex").toInt(), 0);
     QVERIFY(details.value("amount").toString().startsWith('-'));
+}
+
+void WalletQmlModelTests::editedReceiveRequestLabelShownInActivityRow()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+
+    // The address book reports a different label for the request address. A
+    // pending request row must show the request's own label, not the address
+    // book label, so an edited label is not overwritten when Activity renders.
+    wallet->get_address_result = true;
+    wallet->get_address_label = "address book label";
+
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
+    QVERIFY(model->commitPaymentRequest());
+
+    ActivityListModel* activity = model->activityListModel();
+    QCOMPARE(activity->rowCount(), 1);
+    const QModelIndex row = activity->index(0);
+    QVERIFY(activity->data(row, ActivityListModel::IsPendingRequestRole).toBool());
+    QCOMPARE(activity->data(row, ActivityListModel::LabelRole).toString(), QStringLiteral("Old label"));
+
+    // Editing the label commits an update for the same request id.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("New label"));
+    QVERIFY(model->commitPaymentRequest());
+
+    QCOMPARE(activity->rowCount(), 1);
+    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+             QStringLiteral("New label"));
 }
 
 void WalletQmlModelTests::prepareTransactionOnLockedWalletRequiresPassword()
