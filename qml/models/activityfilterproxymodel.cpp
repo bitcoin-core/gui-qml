@@ -155,6 +155,80 @@ void ActivityFilterProxyModel::setDisplayUnit(int display_unit)
     Q_EMIT displayUnitChanged();
 }
 
+CAmount ActivityFilterProxyModel::minAmount() const
+{
+    return m_min_amount;
+}
+
+void ActivityFilterProxyModel::setMinAmount(CAmount min_amount)
+{
+    // Anything below zero clears the filter; amounts are always non-negative.
+    const CAmount normalized = min_amount < 0 ? -1 : min_amount;
+    if (m_min_amount == normalized) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+    m_min_amount = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+    invalidateFilter();
+#endif
+    Q_EMIT minAmountChanged();
+    Q_EMIT countChanged();
+}
+
+QDate ActivityFilterProxyModel::rangeStart() const
+{
+    return m_range_start;
+}
+
+void ActivityFilterProxyModel::setRangeStart(const QDate& range_start)
+{
+    if (m_range_start == range_start) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+    m_range_start = range_start;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+    invalidateFilter();
+#endif
+    Q_EMIT rangeChanged();
+    Q_EMIT countChanged();
+}
+
+QDate ActivityFilterProxyModel::rangeEnd() const
+{
+    return m_range_end;
+}
+
+void ActivityFilterProxyModel::setRangeEnd(const QDate& range_end)
+{
+    if (m_range_end == range_end) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+    m_range_end = range_end;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+    invalidateFilter();
+#endif
+    Q_EMIT rangeChanged();
+    Q_EMIT countChanged();
+}
+
+void ActivityFilterProxyModel::setCustomRange(const QString& start_iso, const QString& end_iso)
+{
+    setRangeStart(QDate::fromString(start_iso, Qt::ISODate));
+    setRangeEnd(QDate::fromString(end_iso, Qt::ISODate));
+}
+
 int ActivityFilterProxyModel::count() const
 {
     return rowCount();
@@ -174,6 +248,15 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     const TypeFilter row_type = filterTypeForIndex(source_index);
     if (m_type_filter != TypeAll && row_type != m_type_filter) {
         return false;
+    }
+
+    if (m_min_amount >= 0) {
+        const CAmount net_amount = source_index.data(ActivityListModel::NetAmountSatRole).toLongLong();
+        // Compare absolute value so a send and a receive of the same size both
+        // pass a threshold, matching the Qt Widgets amount filter.
+        if (qAbs(net_amount) < m_min_amount) {
+            return false;
+        }
     }
 
     const QString search = m_search_text.trimmed();
@@ -273,6 +356,17 @@ bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
         start_date = QDate(current_date.year(), 1, 1);
         end_date = start_date.addYears(1);
         break;
+    case CustomRange: {
+        const QDateTime row_time = QDateTime::fromSecsSinceEpoch(timestamp);
+        if (m_range_start.isValid() && row_time < QDateTime(m_range_start, QTime(0, 0))) {
+            return false;
+        }
+        // The end date is inclusive, so accept the whole of that day.
+        if (m_range_end.isValid() && row_time >= QDateTime(m_range_end.addDays(1), QTime(0, 0))) {
+            return false;
+        }
+        return true;
+    }
     case DateAll:
         return true;
     }

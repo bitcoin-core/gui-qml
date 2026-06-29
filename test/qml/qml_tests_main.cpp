@@ -2951,6 +2951,9 @@ class MockActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
+    Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
+    Q_PROPERTY(QDate rangeStart READ rangeStart WRITE setRangeStart NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeEnd READ rangeEnd WRITE setRangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -2960,7 +2963,8 @@ public:
         ThisWeek,
         ThisMonth,
         LastMonth,
-        ThisYear
+        ThisYear,
+        CustomRange
     };
     Q_ENUM(DateFilter)
 
@@ -3061,6 +3065,64 @@ public:
         Q_EMIT displayUnitChanged();
     }
 
+    qint64 minAmount() const { return m_min_amount; }
+    void setMinAmount(qint64 min_amount)
+    {
+        const qint64 normalized = min_amount < 0 ? -1 : min_amount;
+        if (m_min_amount == normalized) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_min_amount = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        Q_EMIT minAmountChanged();
+        Q_EMIT countChanged();
+    }
+
+    QDate rangeStart() const { return m_range_start; }
+    void setRangeStart(const QDate& range_start)
+    {
+        if (m_range_start == range_start) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_range_start = range_start;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        Q_EMIT rangeChanged();
+        Q_EMIT countChanged();
+    }
+
+    QDate rangeEnd() const { return m_range_end; }
+    void setRangeEnd(const QDate& range_end)
+    {
+        if (m_range_end == range_end) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_range_end = range_end;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        Q_EMIT rangeChanged();
+        Q_EMIT countChanged();
+    }
+
+    Q_INVOKABLE void setCustomRange(const QString& start_iso, const QString& end_iso)
+    {
+        setRangeStart(QDate::fromString(start_iso, Qt::ISODate));
+        setRangeEnd(QDate::fromString(end_iso, Qt::ISODate));
+    }
+
     int count() const { return rowCount(); }
 
     Q_INVOKABLE bool exportCsv(const QString& path) const
@@ -3084,6 +3146,8 @@ Q_SIGNALS:
     void dateFilterChanged();
     void typeFilterChanged();
     void displayUnitChanged();
+    void minAmountChanged();
+    void rangeChanged();
     void countChanged();
 
 private:
@@ -3091,6 +3155,9 @@ private:
     DateFilter m_date_filter{DateAll};
     TypeFilter m_type_filter{TypeAll};
     int m_display_unit{0};
+    qint64 m_min_amount{-1};
+    QDate m_range_start;
+    QDate m_range_end;
 };
 
 class MockDesktopWindowBehaviorModel : public QObject

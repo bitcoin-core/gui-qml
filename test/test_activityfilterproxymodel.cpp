@@ -136,7 +136,9 @@ class ActivityFilterProxyModelTests : public QObject
 private Q_SLOTS:
     void searchMatchesLabelAddressAndTxid();
     void filtersByDateBuckets();
+    void filtersByCustomDateRange();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
+    void filtersByMinimumAmount();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
@@ -379,6 +381,59 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     QVERIFY(csv.contains("\"true\""));
 
     QVERIFY(!proxy.exportCsv(temp_dir.filePath("missing/activity.csv")));
+}
+
+void ActivityFilterProxyModelTests::filtersByCustomDateRange()
+{
+    const QDate start{2025, 6, 10};
+    const QDate end{2025, 6, 20};
+
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(start.addDays(-1))),
+        MakeRow("On start", Transaction::RecvWithAddress, TimestampForLocalDate(start)),
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+        MakeRow("On end", Transaction::RecvWithAddress, TimestampForLocalDate(end)),
+        MakeRow("After", Transaction::RecvWithAddress, TimestampForLocalDate(end.addDays(1))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    proxy.setRangeStart(start);
+    proxy.setRangeEnd(end);
+    proxy.setDateFilter(ActivityFilterProxyModel::CustomRange);
+
+    QCOMPARE(proxy.rowCount(), 3);
+    QVERIFY(ContainsLabel(proxy, "On start")); // lower bound inclusive
+    QVERIFY(ContainsLabel(proxy, "Inside"));
+    QVERIFY(ContainsLabel(proxy, "On end"));   // upper bound inclusive (whole day)
+    QVERIFY(!ContainsLabel(proxy, "Before"));
+    QVERIFY(!ContainsLabel(proxy, "After"));
+}
+
+void ActivityFilterProxyModelTests::filtersByMinimumAmount()
+{
+    ActivityRow small = MakeRow("Small", Transaction::RecvWithAddress, 10);
+    small.net_amount_sat = 50'000;
+    ActivityRow big_receive = MakeRow("Big receive", Transaction::RecvWithAddress, 20);
+    big_receive.net_amount_sat = 200'000;
+    ActivityRow big_send = MakeRow("Big send", Transaction::SendToAddress, 30);
+    big_send.net_amount_sat = -200'000;
+
+    TestActivityListModel source;
+    source.setRows({small, big_receive, big_send});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    proxy.setMinAmount(100'000);
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Big receive"));
+    QVERIFY(ContainsLabel(proxy, "Big send")); // absolute value matches the threshold
+    QVERIFY(!ContainsLabel(proxy, "Small"));
+
+    proxy.setMinAmount(-1); // clearing restores every row
+    QCOMPARE(proxy.rowCount(), 3);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

@@ -5,7 +5,10 @@
 #ifndef BITCOIN_QML_MODELS_ACTIVITYFILTERPROXYMODEL_H
 #define BITCOIN_QML_MODELS_ACTIVITYFILTERPROXYMODEL_H
 
+#include <consensus/amount.h>
+
 #include <QByteArray>
+#include <QDate>
 #include <QHash>
 #include <QModelIndex>
 #include <QSortFilterProxyModel>
@@ -18,6 +21,9 @@ class ActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
+    Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
+    Q_PROPERTY(QDate rangeStart READ rangeStart WRITE setRangeStart NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeEnd READ rangeEnd WRITE setRangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -27,7 +33,8 @@ public:
         ThisWeek,
         ThisMonth,
         LastMonth,
-        ThisYear
+        ThisYear,
+        CustomRange
     };
     Q_ENUM(DateFilter)
 
@@ -59,6 +66,20 @@ public:
     int displayUnit() const;
     void setDisplayUnit(int display_unit);
 
+    CAmount minAmount() const;
+    void setMinAmount(CAmount min_amount);
+
+    QDate rangeStart() const;
+    void setRangeStart(const QDate& range_start);
+
+    QDate rangeEnd() const;
+    void setRangeEnd(const QDate& range_end);
+
+    // Set the custom range from ISO yyyy-MM-dd strings. QML passes strings
+    // rather than assigning the QDate properties directly because the
+    // JavaScript Date to QDate conversion shifts the day across time zones.
+    Q_INVOKABLE void setCustomRange(const QString& start_iso, const QString& end_iso);
+
     int count() const;
 
     Q_INVOKABLE bool exportCsv(const QString& path) const;
@@ -68,6 +89,8 @@ Q_SIGNALS:
     void dateFilterChanged();
     void typeFilterChanged();
     void displayUnitChanged();
+    void minAmountChanged();
+    void rangeChanged();
     void countChanged();
 
 protected:
@@ -84,6 +107,9 @@ private:
     DateFilter m_date_filter{DateAll};
     TypeFilter m_type_filter{TypeAll};
     int m_display_unit{0};
+    CAmount m_min_amount{-1};
+    QDate m_range_start;
+    QDate m_range_end;
 };
 
 #endif // BITCOIN_QML_MODELS_ACTIVITYFILTERPROXYMODEL_H

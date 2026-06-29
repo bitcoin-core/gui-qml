@@ -50,6 +50,7 @@ PageStack {
     initialItem: RowLayout {
         Page {
             id: root
+            objectName: "activityPage"
 
             Layout.alignment: Qt.AlignCenter
             Layout.fillHeight: true
@@ -64,14 +65,17 @@ PageStack {
             readonly property bool activityFiltersActive: activityFilterProxy.searchText.trim().length > 0
                 || activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
                 || activityFilterProxy.typeFilter !== ActivityFilterProxyModel.TypeAll
+                || activityFilterProxy.minAmount >= 0
 
             function clearFilters() {
                 activityFilterProxy.searchText = ""
                 activityFilterProxy.dateFilter = ActivityFilterProxyModel.DateAll
                 activityFilterProxy.typeFilter = ActivityFilterProxyModel.TypeAll
+                activityFilterProxy.minAmount = -1
                 searchField.text = ""
                 datePopup.close()
                 typePopup.close()
+                amountPopup.close()
             }
 
             function toggleFilters() {
@@ -112,12 +116,92 @@ PageStack {
                 case ActivityFilterProxyModel.ThisMonth:
                     return qsTr("This month")
                 case ActivityFilterProxyModel.LastMonth:
+                    //: Activity date filter option for the previous calendar month.
                     return qsTr("Last month")
                 case ActivityFilterProxyModel.ThisYear:
                     return qsTr("This year")
+                case ActivityFilterProxyModel.CustomRange:
+                    //: Activity date filter option for a user-picked start and end date.
+                    return qsTr("Custom range")
                 default:
                     return qsTr("All dates")
                 }
+            }
+
+            function amountFilterText() {
+                if (activityFilterProxy.minAmount >= 0) {
+                    //: Activity amount filter button: shows the active minimum with its unit, e.g. "≥ 0.50000000 ₿".
+                    return qsTr("≥ %1").arg(amountFormatter.displayWithUnit)
+                }
+                //: Activity amount filter button default: no minimum amount is set.
+                return qsTr("Any amount")
+            }
+
+            // Placeholder and input mask for the minimum amount field, per
+            // display unit. The integer digits keep any accepted value below
+            // MAX_MONEY (2.1e15 sat) and within the JS exact integer range for
+            // the display round trip.
+            //
+            // The unit is a BitcoinAmount.Unit value, compared by number rather
+            // than by name: QML only exposes enum values whose name begins with
+            // a capital letter, so BitcoinAmount.mBTC and BitcoinAmount.uBTC
+            // read as undefined here and every comparison against them is false.
+            function minAmountPlaceholder(unit) {
+                switch (unit) {
+                case 3: return "0"           // SAT
+                case 2: return "0.00"        // uBTC (bits)
+                case 1: return "0.00000"     // mBTC
+                default: return "0.00000000" // BTC
+                }
+            }
+
+            function minAmountPattern(unit) {
+                switch (unit) {
+                case 3: return /^[0-9]{0,15}$/                    // SAT
+                case 2: return /^[0-9]{0,13}(\.[0-9]{0,2})?$/     // uBTC (bits)
+                case 1: return /^[0-9]{0,10}(\.[0-9]{0,5})?$/     // mBTC
+                default: return /^[0-9]{0,8}(\.[0-9]{0,8})?$/     // BTC
+                }
+            }
+
+            // A filter popup right-aligns to its button, but a wide popup on a
+            // button near the left edge (the date preset menu, sized for the
+            // calendar) would spill past the page. Clamp x so the popup stays
+            // within the page horizontally instead of overflowing the list area.
+            // Callers assign this from onAboutToShow rather than binding x to
+            // it: mapToItem is not dependency-tracked, so a binding would keep
+            // a clamp computed from stale geometry.
+            function filterPopupX(button, popup) {
+                const anchorX = button.mapToItem(root, 0, 0).x
+                const rightAligned = button.width - popup.width
+                const minX = -anchorX
+                const maxX = root.width - popup.width - anchorX
+                return Math.max(minX, Math.min(rightAligned, maxX))
+            }
+
+            // A QDate read back from the model reaches QML as a JS Date at UTC
+            // midnight; rebuild it at local midnight on the same calendar day so
+            // seeding the calendar does not read it a day early west of UTC (the
+            // read-side mirror of the Apply path, which hands the model ISO
+            // strings for the same reason).
+            function modelDateToLocal(date) {
+                return (date && !isNaN(date.getTime()))
+                    ? new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+                    : null
+            }
+
+            function applyMinAmount() {
+                var trimmed = minAmountField.text.trim()
+                if (trimmed.length === 0) {
+                    activityFilterProxy.minAmount = -1
+                    amountPopup.close()
+                    return
+                }
+                amountParser.unit = optionsModel.displayUnit
+                amountParser.display = trimmed
+                var sats = amountParser.satoshi
+                activityFilterProxy.minAmount = sats > 0 ? sats : -1
+                amountPopup.close()
             }
 
             function typeFilterText() {
@@ -131,6 +215,7 @@ PageStack {
                 case ActivityFilterProxyModel.Mined:
                     return qsTr("Mined")
                 case ActivityFilterProxyModel.Other:
+                    //: Activity type filter option for transactions that are not received, sent, sent to yourself, or mined.
                     return qsTr("Other")
                 case ActivityFilterProxyModel.PaymentRequest:
                     return qsTr("Payment request")
@@ -170,7 +255,8 @@ PageStack {
                     return qsTr("Once you send or receive bitcoin, your transactions will appear here.")
                 }
                 if (activityFiltersActive) {
-                    return qsTr("Try changing your search, date, or type filters.")
+                    //: Empty state hint when the active search, date, type, or amount filters match no transactions.
+                    return qsTr("Try changing your search, date, type, or amount filters.")
                 }
                 return ""
             }
@@ -193,6 +279,15 @@ PageStack {
                 sourceModel: walletController.selectedWallet.activityListModel
                 displayUnit: optionsModel.displayUnit
             }
+
+            // Helpers for the amount filter: amountFormatter tracks the active
+            // minimum for display; amountParser parses typed input on Apply.
+            BitcoinAmount {
+                id: amountFormatter
+                unit: optionsModel.displayUnit
+                satoshi: Math.max(0, activityFilterProxy.minAmount)
+            }
+            BitcoinAmount { id: amountParser }
 
             AppSettings {
                 id: activitySettings
@@ -270,13 +365,13 @@ PageStack {
                     }
                 }
 
-                RowLayout {
+                ColumnLayout {
                     id: filterRow
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: activityHeader.bottom
                     anchors.topMargin: 10
-                    spacing: 15
+                    spacing: 10
                     visible: root.filtersVisible
                     height: visible ? implicitHeight : 0
 
@@ -284,7 +379,6 @@ PageStack {
                         id: searchField
                         objectName: "activitySearchField"
                         Layout.fillWidth: true
-                        Layout.minimumWidth: 160
                         implicitHeight: 37
                         leftPadding: 15
                         rightPadding: clearSearchButton.visible ? 36 : 10
@@ -318,24 +412,41 @@ PageStack {
                         }
                     }
 
-                    DropdownButton {
-                        id: dateFilterButton
-                        objectName: "activityDateFilterButton"
-                        text: root.dateFilterText()
-                        textColor: Theme.color.neutral7
-                        textAlignment: Text.AlignHCenter
-                        opened: datePopup.visible
-                        onClicked: datePopup.opened ? datePopup.close() : datePopup.open()
-                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 15
 
-                    DropdownButton {
-                        id: typeFilterButton
-                        objectName: "activityTypeFilterButton"
-                        text: root.typeFilterText()
-                        textColor: Theme.color.neutral7
-                        textAlignment: Text.AlignHCenter
-                        opened: typePopup.visible
-                        onClicked: typePopup.opened ? typePopup.close() : typePopup.open()
+                        DropdownButton {
+                            id: dateFilterButton
+                            objectName: "activityDateFilterButton"
+                            text: root.dateFilterText()
+                            textColor: Theme.color.neutral7
+                            textAlignment: Text.AlignHCenter
+                            opened: datePopup.visible
+                            onClicked: datePopup.opened ? datePopup.close() : datePopup.open()
+                        }
+
+                        DropdownButton {
+                            id: typeFilterButton
+                            objectName: "activityTypeFilterButton"
+                            text: root.typeFilterText()
+                            textColor: Theme.color.neutral7
+                            textAlignment: Text.AlignHCenter
+                            opened: typePopup.visible
+                            onClicked: typePopup.opened ? typePopup.close() : typePopup.open()
+                        }
+
+                        DropdownButton {
+                            id: amountFilterButton
+                            objectName: "activityAmountFilterButton"
+                            text: root.amountFilterText()
+                            textColor: Theme.color.neutral7
+                            textAlignment: Text.AlignHCenter
+                            opened: amountPopup.visible
+                            onClicked: amountPopup.opened ? amountPopup.close() : amountPopup.open()
+                        }
+
+                        Item { Layout.fillWidth: true }
                     }
                 }
             }
@@ -637,25 +748,155 @@ PageStack {
                 id: datePopup
                 objectName: "activityDateFilterPopup"
                 parent: dateFilterButton
-                x: datePopup.parent.width - datePopup.width
                 y: datePopup.parent.height + 2
+                minMenuWidth: 280
                 modal: true
                 dim: false
 
+                property bool dateCustomExpanded: false
+
+                // Seed before the popup becomes visible, not from onOpened:
+                // onOpened only fires once the enter transition finishes, so a
+                // click landing during the animation (a fast user, or the test
+                // bridge) would be undone by the late re-seed.
+                onAboutToShow: {
+                    x = root.filterPopupX(dateFilterButton, datePopup)
+                    calendar.refreshToday()
+                    var applied = activityFilterProxy.dateFilter === ActivityFilterProxyModel.CustomRange
+                    datePopup.dateCustomExpanded = applied
+                    // Only seed the draft from an applied range; otherwise start
+                    // clean, so a reset or a discarded selection does not reappear.
+                    if (applied) {
+                        calendar.seed(root.modelDateToLocal(activityFilterProxy.rangeStart),
+                                      root.modelDateToLocal(activityFilterProxy.rangeEnd))
+                    } else {
+                        calendar.seed(null, null)
+                    }
+                }
+
+                onClosed: {
+                    // Restore the pane to match the applied filter on close, so a
+                    // reopen shows the right pane from the first frame instead of
+                    // flashing the calendar before it collapses back to presets.
+                    datePopup.dateCustomExpanded =
+                        activityFilterProxy.dateFilter === ActivityFilterProxyModel.CustomRange
+                }
+
                 ContextMenuPicker {
+                    // Hidden while picking a custom range so the popup shows the
+                    // calendar instead of presets plus calendar (which overflows).
+                    visible: !datePopup.dateCustomExpanded
                     objectNameRole: "objectName"
                     currentValue: activityFilterProxy.dateFilter
                     model: [
-                        { text: qsTr("All"),         value: ActivityFilterProxyModel.DateAll,   objectName: "activityDateAll" },
-                        { text: qsTr("Today"),       value: ActivityFilterProxyModel.Today,     objectName: "activityDateToday" },
-                        { text: qsTr("This week"),   value: ActivityFilterProxyModel.ThisWeek,  objectName: "activityDateThisWeek" },
-                        { text: qsTr("This month"),  value: ActivityFilterProxyModel.ThisMonth, objectName: "activityDateThisMonth" },
-                        { text: qsTr("Last month"),  value: ActivityFilterProxyModel.LastMonth, objectName: "activityDateLastMonth" },
-                        { text: qsTr("This year"),   value: ActivityFilterProxyModel.ThisYear,  objectName: "activityDateThisYear" }
+                        { text: qsTr("All"),          value: ActivityFilterProxyModel.DateAll,     objectName: "activityDateAll" },
+                        { text: qsTr("Today"),        value: ActivityFilterProxyModel.Today,       objectName: "activityDateToday" },
+                        { text: qsTr("This week"),    value: ActivityFilterProxyModel.ThisWeek,    objectName: "activityDateThisWeek" },
+                        { text: qsTr("This month"),   value: ActivityFilterProxyModel.ThisMonth,   objectName: "activityDateThisMonth" },
+                        //: Activity date filter menu entry for the previous calendar month.
+                        { text: qsTr("Last month"),   value: ActivityFilterProxyModel.LastMonth,   objectName: "activityDateLastMonth" },
+                        { text: qsTr("This year"),    value: ActivityFilterProxyModel.ThisYear,    objectName: "activityDateThisYear" },
+                        //: Activity date filter menu entry that opens the custom start/end date calendar.
+                        { text: qsTr("Custom range"), value: ActivityFilterProxyModel.CustomRange, objectName: "activityDateCustomRange" }
                     ]
                     onActivated: function(value) {
+                        if (value === ActivityFilterProxyModel.CustomRange) {
+                            datePopup.dateCustomExpanded = true
+                            return
+                        }
                         activityFilterProxy.dateFilter = value
+                        datePopup.dateCustomExpanded = false
                         datePopup.close()
+                    }
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    Layout.bottomMargin: 6
+                    spacing: 8
+                    visible: datePopup.dateCustomExpanded
+
+                    // Return to the preset list.
+                    ItemDelegate {
+                        objectName: "activityDatePresetsBack"
+                        Layout.fillWidth: true
+                        implicitHeight: 30
+                        padding: 0
+                        //: Accessibility label for the control that leaves the custom date range calendar and returns to the date presets.
+                        Accessible.name: qsTr("Back to date presets")
+                        Accessible.role: Accessible.Button
+                        contentItem: RowLayout {
+                            spacing: 4
+                            Icon {
+                                source: "image://images/caret-left"
+                                color: Theme.color.orange
+                                size: 14
+                            }
+                            CoreText {
+                                Layout.fillWidth: true
+                                //: Activity custom date range: link back to the list of date presets.
+                                text: qsTr("Presets")
+                                color: Theme.color.orange
+                                font.pixelSize: 14
+                                horizontalAlignment: Text.AlignLeft
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        onClicked: datePopup.dateCustomExpanded = false
+                    }
+
+                    Separator { Layout.fillWidth: true }
+
+                    ActivityCalendar {
+                        id: calendar
+                        objectName: "activityCalendar"
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 2
+
+                        TextButton {
+                            objectName: "activityDateRangeReset"
+                            //: Button that clears the Activity custom date range.
+                            text: qsTr("Reset")
+                            textSize: 15
+                            // Nothing to reset until a date has been picked.
+                            enabled: calendar.hasSelection
+                            textColor: enabled ? Theme.color.neutral7 : Theme.color.neutral5
+                            // A disabled control still receives hover, which would
+                            // trigger the button's hover recolor; gate it on enabled.
+                            hoverEnabled: enabled && AppMode.isDesktop
+                            // Clear the picked dates and drop the applied filter,
+                            // but stay in the calendar so a new range can be picked.
+                            onClicked: {
+                                calendar.reset()
+                                activityFilterProxy.dateFilter = ActivityFilterProxyModel.DateAll
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        TextButton {
+                            objectName: "activityDateRangeApply"
+                            //: Button that applies the picked Activity custom date range.
+                            text: qsTr("Apply")
+                            textSize: 15
+                            enabled: calendar.valid
+                            textColor: enabled ? Theme.color.orange : Theme.color.neutral5
+                            hoverEnabled: enabled && AppMode.isDesktop
+                            // Pass ISO strings rather than the Dates: a JS Date
+                            // converted straight to QDate can shift a day across
+                            // time zones.
+                            onClicked: {
+                                activityFilterProxy.setCustomRange(calendar.startIso, calendar.endIso)
+                                activityFilterProxy.dateFilter = ActivityFilterProxyModel.CustomRange
+                                datePopup.close()
+                            }
+                        }
                     }
                 }
             }
@@ -664,10 +905,11 @@ PageStack {
                 id: typePopup
                 objectName: "activityTypeFilterPopup"
                 parent: typeFilterButton
-                x: typePopup.parent.width - typePopup.width
                 y: typePopup.parent.height + 2
                 modal: true
                 dim: false
+
+                onAboutToShow: x = root.filterPopupX(typeFilterButton, typePopup)
 
                 ContextMenuPicker {
                     objectNameRole: "objectName"
@@ -678,6 +920,7 @@ PageStack {
                         { text: qsTr("Sent"),             value: ActivityFilterProxyModel.Sent,           objectName: "activityTypeSent" },
                         { text: qsTr("Sent to yourself"), value: ActivityFilterProxyModel.SentToSelf,     objectName: "activityTypeSentToSelf" },
                         { text: qsTr("Mined"),            value: ActivityFilterProxyModel.Mined,          objectName: "activityTypeMined" },
+                        //: Activity type filter menu entry for other transaction types.
                         { text: qsTr("Other"),            value: ActivityFilterProxyModel.Other,          objectName: "activityTypeOther" },
                         { text: qsTr("Payment request"),  value: ActivityFilterProxyModel.PaymentRequest, objectName: "activityTypePaymentRequest" }
                     ]
@@ -687,6 +930,111 @@ PageStack {
                     }
                 }
             }
+
+            ContextMenu {
+                id: amountPopup
+                objectName: "activityAmountFilterPopup"
+                parent: amountFilterButton
+                y: amountFilterButton.height + 2
+                minMenuWidth: 280
+                modal: true
+                dim: false
+
+                onAboutToShow: {
+                    x = root.filterPopupX(amountFilterButton, amountPopup)
+                    minAmountField.text = activityFilterProxy.minAmount >= 0 ? amountFormatter.display : ""
+                }
+
+                onOpened: {
+                    minAmountField.forceActiveFocus()
+                }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.margins: 6
+                    spacing: 6
+
+                    CoreText {
+                        //: Heading of the Activity amount filter popup.
+                        text: qsTr("Minimum amount")
+                        color: Theme.color.neutral7
+                        font.pixelSize: 13
+                        horizontalAlignment: Text.AlignLeft
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ActivityFilterInput {
+                            id: minAmountField
+                            objectName: "activityMinAmountField"
+                            //: Accessibility label for the Activity minimum amount filter input.
+                            Accessible.name: qsTr("Minimum amount")
+                            Layout.fillWidth: true
+                            inputMethodHints: Qt.ImhFormattedNumbersOnly
+                            placeholderText: root.minAmountPlaceholder(amountFormatter.unit)
+                            validator: RegularExpressionValidator {
+                                regularExpression: root.minAmountPattern(amountFormatter.unit)
+                            }
+                            onAccepted: root.applyMinAmount()
+                        }
+
+                        CoreText {
+                            text: amountFormatter.unitLabel
+                            color: Theme.color.neutral7
+                            font.pixelSize: 15
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 2
+
+                        TextButton {
+                            objectName: "activityMinAmountReset"
+                            //: Button that clears the Activity minimum amount filter.
+                            text: qsTr("Reset")
+                            textSize: 15
+                            textColor: Theme.color.neutral7
+                            onClicked: {
+                                minAmountField.text = ""
+                                activityFilterProxy.minAmount = -1
+                                amountPopup.close()
+                            }
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        TextButton {
+                            objectName: "activityMinAmountApply"
+                            //: Button that applies the Activity minimum amount filter.
+                            text: qsTr("Apply")
+                            textSize: 15
+                            onClicked: root.applyMinAmount()
+                        }
+                    }
+                }
+            }
+
+            component ActivityFilterInput: TextField {
+                implicitHeight: 37
+                leftPadding: 12
+                rightPadding: 12
+                topPadding: 0
+                bottomPadding: 0
+                color: Theme.color.neutral9
+                placeholderTextColor: Theme.color.neutral7
+                font.family: "BitcoinCoreSans"
+                font.pixelSize: 15
+                verticalAlignment: TextInput.AlignVCenter
+                selectByMouse: true
+                background: Rectangle {
+                    color: Theme.color.neutral2
+                    radius: 5
+                }
+            }
+
         }
     }
 }
