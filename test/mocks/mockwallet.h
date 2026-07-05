@@ -146,7 +146,9 @@ public:
 
     std::function<util::Result<CTransactionRef>(const std::vector<wallet::CRecipient>&, const wallet::CCoinControl&, bool, int&, CAmount&)> create_transaction_fn;
     std::function<CTxDestination(OutputType, const std::string&)> get_new_destination_fn;
+    std::function<interfaces::WalletTx(const Txid&)> get_wallet_tx_fn;
     std::function<std::set<interfaces::WalletTx>()> get_wallet_txs_fn;
+    std::function<bool(const Txid&, interfaces::WalletTxStatus&, int&, int64_t&)> try_get_tx_status_fn;
     std::function<CAmount()> get_balance_fn;
     std::function<CAmount(const wallet::CCoinControl&)> get_available_balance_fn;
     std::function<CAmount(unsigned int)> get_required_fee_fn;
@@ -161,7 +163,9 @@ public:
     struct Calls {
         CallCounter getNewDestination{"getNewDestination"};
         CallCounter createTransaction{"createTransaction"};
+        CallCounter getWalletTx{"getWalletTx"};
         CallCounter getWalletTxs{"getWalletTxs"};
+        CallCounter tryGetTxStatus{"tryGetTxStatus"};
         CallCounter getBalance{"getBalance"};
         CallCounter getAvailableBalance{"getAvailableBalance"};
         CallCounter getRequiredFee{"getRequiredFee"};
@@ -203,10 +207,22 @@ public:
         return util::Error{Untranslated("no create_transaction_fn installed")};
     }
 
+    interfaces::WalletTx getWalletTx(const Txid& txid) override
+    {
+        ++calls.getWalletTx;
+        return get_wallet_tx_fn ? get_wallet_tx_fn(txid) : interfaces::WalletTx{};
+    }
+
     std::set<interfaces::WalletTx> getWalletTxs() override
     {
         ++calls.getWalletTxs;
         return get_wallet_txs_fn ? get_wallet_txs_fn() : std::set<interfaces::WalletTx>{};
+    }
+
+    bool tryGetTxStatus(const Txid& txid, interfaces::WalletTxStatus& tx_status, int& num_blocks, int64_t& block_time) override
+    {
+        ++calls.tryGetTxStatus;
+        return try_get_tx_status_fn ? try_get_tx_status_fn(txid, tx_status, num_blocks, block_time) : false;
     }
 
     CAmount getBalance() override

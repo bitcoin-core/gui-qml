@@ -19,6 +19,7 @@ TestCase {
         testWalletModel.lastLoadedPaymentRequestId = ""
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
         testActivityListModel.setCountForTest(2)
+        testActivityListModel.setUsedAddressRequestRowForTest(-1)
         nodeModel.setBlockSyncActiveForTest(false)
         nodeModel.verificationProgress = 1.0
         walletController.openReceiveRequests = 0
@@ -37,6 +38,12 @@ TestCase {
         id: activityCalendarComponent
 
         ActivityCalendar {}
+    }
+
+    Component {
+        id: transactionVisualsComponent
+
+        ActivityTransactionVisuals {}
     }
 
     Component {
@@ -384,6 +391,43 @@ TestCase {
         calendar.customFrom = new Date(2001, 1, 10)
         calendar.ensureCalendarFocusDate()
         compare(calendar.isoDate(calendar.calendarFocusDate), "2001-02-10")
+    }
+
+    function test_used_address_request_row_exposes_flags() {
+        testActivityListModel.setUsedAddressRequestRowForTest(0)
+
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        let row = null
+        tryVerify(function() {
+            row = findChild(page, "activityItem_pending_0")
+            return row !== null
+        })
+        compare(row.isPendingRequest, true)
+        compare(row.isUsedAddressRequest, true)
+    }
+
+    function test_transaction_visuals_keep_request_rows_purple() {
+        // Address use alone does not prove a request was paid, so a request
+        // row stays purple either way; green is reserved for real
+        // transaction rows.
+        const request = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Unconfirmed,
+            isPendingRequest: true
+        })
+        const received = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Confirmed
+        })
+        verify(request !== null)
+        verify(received !== null)
+
+        compare(request.iconSource, "qrc:/icons/triangle-down")
+        compare(request.iconColor, Theme.color.purple)
+        compare(received.iconSource, "qrc:/icons/triangle-down")
+        compare(received.iconColor, Theme.color.green)
     }
 
     function test_custom_date_range_reopen_preserves_dates() {

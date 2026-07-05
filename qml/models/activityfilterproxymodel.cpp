@@ -241,6 +241,14 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     const QModelIndex source_index = sourceModel()->index(source_row, 0, source_parent);
     if (!source_index.isValid()) return false;
 
+    // A payment request whose address already has a real transaction is only
+    // surfaced under the Payment request filter; everywhere else it is hidden so
+    // it does not duplicate that address's real transaction row.
+    if (source_index.data(ActivityListModel::IsUsedAddressRequestRole).toBool()
+        && m_type_filter != PaymentRequest) {
+        return false;
+    }
+
     if (!dateMatches(source_index.data(ActivityListModel::TimestampRole).toLongLong())) {
         return false;
     }

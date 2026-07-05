@@ -20,6 +20,10 @@ QtObject {
     readonly property bool confirmedLike: root.transactionStatus == Transaction.Confirmed
         || root.transactionStatus == Transaction.Immature
 
+    // Requests use the receive triangle like any incoming entry and stay
+    // purple whether or not their address has been used: address use alone
+    // does not prove the request was paid, so the green receive color is
+    // reserved for real transaction rows.
     readonly property url iconSource: root.transactionType == Transaction.Generated
         ? "qrc:/icons/coinbase"
         : root.incoming ? "qrc:/icons/triangle-down" : "qrc:/icons/triangle-up"

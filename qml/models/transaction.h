@@ -71,6 +71,10 @@ public:
     bool countsForBalance;
     bool involvesWatchAddress;
     bool isPendingRequest{false};
+    // A payment request whose address already has a real transaction. It is
+    // materialized so the Payment request filter can surface it, but hidden
+    // elsewhere so it does not duplicate the address's real transaction row.
+    bool isUsedAddressRequest{false};
     QString requestId;
 
     static QList<QSharedPointer<Transaction>> fromWalletTx(const interfaces::WalletTx& tx);

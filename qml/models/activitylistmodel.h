@@ -44,7 +44,8 @@ public:
         IsPendingRequestRole,
         RequestIdRole,
         NetAmountSatRole,
-        OutputIndexRole
+        OutputIndexRole,
+        IsUsedAddressRequestRole
     };
 
     Q_INVOKABLE void reload();
@@ -56,8 +57,12 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     void setDisplayUnit(int unit);
+    // A payment request row. Set used_address when the request's address
+    // already has a real transaction; the row is then only shown under the
+    // Payment request filter and is not tracked for pending-request fulfillment.
     void addReceiveRequest(const QString& address, const QString& label,
-                           CAmount amount, qint64 timestamp, const QString& requestId);
+                           CAmount amount, qint64 timestamp, const QString& requestId,
+                           bool used_address = false);
     void updateReceiveRequest(const QString& requestId, const QString& label, CAmount amount);
     void removePendingReceiveRequest(const QString& requestId);
 

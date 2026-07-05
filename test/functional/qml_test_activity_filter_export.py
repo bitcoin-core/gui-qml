@@ -342,6 +342,54 @@ def run_test(save_screenshots=False, screenshot_root=None):
         assert cleared_date_filter in (0, "DateAll"), f"Custom range reset failed: {cleared_date_filter!r}"
         checkpoints.checkpoint("custom date range cleared", gui)
 
+        # Issue #726: paying a pending request's address keeps the request under
+        # the Payment request filter as a used-address request, with no reload,
+        # and surfaces the real transaction as its own row in the default view.
+        # Toggle the controls to guarantee a clean, popup-free starting state.
+        gui.click("activitySearchToggle")
+        gui.wait_for_property("activitySearchToggle", "checked", False, timeout_ms=5000)
+        gui.click("activitySearchToggle")
+        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypePaymentRequest")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        checkpoints.checkpoint("pending request shown under Payment request filter", gui)
+
+        # Mine a block to the request address to fulfill the pending request live.
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, payment_request_address])
+
+        # The address now has its own mined transaction row; waiting on it is the
+        # synchronization point for the live fulfillment.
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypeMined")
+        gui.set_text("activitySearchField", payment_request_address)
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
+        checkpoints.checkpoint("request address gained its own mined transaction row", gui)
+
+        # The request itself is still surfaced under the Payment request filter,
+        # now as a used-address request, without a reload. Before the live
+        # fulfillment fix it dropped out of the filter until the wallet reloaded.
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypePaymentRequest")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        used_request_export_path = os.path.join(harness.tmpdir, "activity-used-request.csv")
+        used_request_csv = _export_activity_csv(gui, used_request_export_path)
+        assert '"Payment request"' in used_request_csv, f"Fulfilled request left the Payment request filter: {used_request_csv!r}"
+        assert '"Alice"' in used_request_csv, f"Used-address request missing its label: {used_request_csv!r}"
+        assert f'"{payment_request_address}"' in used_request_csv, f"Used-address request missing its address: {used_request_csv!r}"
+        gui.click("activityExportResultCloseButton")
+        checkpoints.checkpoint("fulfilled request stays a used-address request under the filter", gui)
+
+        # In the default view the request is hidden, so it does not duplicate the
+        # real transaction to its address; only the two mined rows remain.
+        gui.set_text("activitySearchField", "")
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypeAll")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        checkpoints.checkpoint("used-address request hidden from the default Activity view", gui)
+
         txid, expected_amount = _activity_transaction_row(gui)
         gui.click(f"activityItem_{txid}")
         gui.wait_for_page("activityDetailsPage", timeout_ms=10000)

@@ -58,7 +58,13 @@ QString Transaction::prettyAmount(int display_unit) const
 
 QString Transaction::dateTimeString() const
 {
-    if (isPendingRequest) return tr("Pending receive");
+    // Only a request still awaiting payment reads "Pending receive". A
+    // used-address request falls through to its creation date instead: the
+    // address having appeared in a transaction does not prove this request
+    // was paid (dust, a replaced or conflicted transaction, or a different
+    // amount all mark the address used), so no receipt is claimed, mirroring
+    // the Widgets request history, which only ever shows a request's date.
+    if (isPendingRequest && !isUsedAddressRequest) return tr("Pending receive");
 
     QDateTime dateTime = QDateTime::fromSecsSinceEpoch(time);
     QDateTime now = QDateTime::currentDateTimeUtc();

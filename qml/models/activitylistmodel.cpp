@@ -103,6 +103,8 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue<qlonglong>(tx->netAmount());
     case OutputIndexRole:
         return tx->idx;
+    case IsUsedAddressRequestRole:
+        return tx->isUsedAddressRequest;
     default:
         return QVariant();
     }
@@ -127,6 +129,7 @@ QHash<int, QByteArray> ActivityListModel::roleNames() const
     roles[RequestIdRole] = "requestId";
     roles[NetAmountSatRole] = "netAmountSat";
     roles[OutputIndexRole] = "outputIndex";
+    roles[IsUsedAddressRequestRole] = "isUsedAddressRequest";
     return roles;
 }
 
@@ -241,7 +244,7 @@ void ActivityListModel::addPendingReceiveRequests()
     for (int i = 0; i < history->rowCount(); ++i) {
         QModelIndex idx = history->index(i);
         QString address = history->data(idx, ReceiveRequestHistoryModel::AddressRole).toString();
-        if (address.isEmpty() || existing_addresses.contains(address)) continue;
+        if (address.isEmpty()) continue;
 
         QString label = history->data(idx, ReceiveRequestHistoryModel::LabelRole).toString();
         CAmount amount = history->data(idx, ReceiveRequestHistoryModel::AmountSatRole).toLongLong();
@@ -249,12 +252,17 @@ void ActivityListModel::addPendingReceiveRequests()
         qint64 timestamp = QDateTime::fromString(dateIso, Qt::ISODate).toSecsSinceEpoch();
         QString reqId = history->data(idx, ReceiveRequestHistoryModel::IdRole).toString();
 
-        addReceiveRequest(address, label, amount, timestamp, reqId);
+        // A request whose address already has a real transaction is still
+        // materialized (used_address), but the proxy shows it only under the
+        // Payment request filter so it does not duplicate the real row.
+        const bool used_address = existing_addresses.contains(address);
+        addReceiveRequest(address, label, amount, timestamp, reqId, used_address);
     }
 }
 
 void ActivityListModel::addReceiveRequest(const QString& address, const QString& label,
-                                          CAmount amount, qint64 timestamp, const QString& requestId)
+                                          CAmount amount, qint64 timestamp, const QString& requestId,
+                                          bool used_address)
 {
     uint256 zero_hash;
     auto tx = QSharedPointer<Transaction>::create(zero_hash, timestamp,
@@ -262,11 +270,17 @@ void ActivityListModel::addReceiveRequest(const QString& address, const QString&
     tx->label = label.isEmpty() ? tr("Payment request") : label;
     tx->status = Transaction::Unconfirmed;
     tx->isPendingRequest = true;
+    tx->isUsedAddressRequest = used_address;
     tx->requestId = requestId;
 
     beginInsertRows(QModelIndex(), 0, 0);
     m_transactions.push_front(tx);
-    m_pending_request_addresses.insert(address);
+    // A used-address request has no unfulfilled payment to wait for, so it is
+    // not tracked for fulfillment; only unused pending requests promote to a
+    // real row when a matching transaction arrives.
+    if (!used_address) {
+        m_pending_request_addresses.insert(address);
+    }
     endInsertRows();
     Q_EMIT countChanged();
 }
@@ -363,27 +377,29 @@ int ActivityListModel::findPendingRequestIndex(const QString& address) const
 
 void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx)
 {
-    QSharedPointer<Transaction> pending = m_transactions.at(index);
+    const QString address = m_transactions.at(index)->address;
 
-    pending->hash = real_tx->hash;
-    pending->status = real_tx->status;
-    pending->depth = real_tx->depth;
-    pending->time = real_tx->time;
-    pending->credit = real_tx->credit;
-    pending->debit = real_tx->debit;
-    pending->type = real_tx->type;
-    pending->idx = real_tx->idx;
-    pending->txid = real_tx->txid;
-    pending->countsForBalance = real_tx->countsForBalance;
-    pending->involvesWatchAddress = real_tx->involvesWatchAddress;
-    pending->isPendingRequest = false;
-    if (!real_tx->label.isEmpty()) {
-        pending->label = real_tx->label;
+    // The request's address now has a real transaction. Rather than consuming
+    // a request in place, keep it as a used-address request (surfaced only
+    // under the Payment request filter) and insert the transaction as its own
+    // row, so the live list matches the state rebuilt on reload. Core supports
+    // multiple receive requests per address, so mark every request for the
+    // address, not just the row that triggered the match: a single marked row
+    // would strand its siblings as pending for the rest of the session while
+    // a reload marks them all used.
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (m_transactions[i]->isPendingRequest && m_transactions[i]->address == address &&
+            !m_transactions[i]->isUsedAddressRequest) {
+            m_transactions[i]->isUsedAddressRequest = true;
+            Q_EMIT dataChanged(this->index(i), this->index(i));
+        }
     }
+    m_pending_request_addresses.remove(address);
 
-    m_pending_request_addresses.remove(pending->address);
-
-    Q_EMIT dataChanged(this->index(index), this->index(index));
+    beginInsertRows(QModelIndex(), 0, 0);
+    m_transactions.push_front(real_tx);
+    endInsertRows();
+    Q_EMIT countChanged();
 }
 
 void ActivityListModel::subscribeToCoreSignals()

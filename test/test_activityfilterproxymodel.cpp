@@ -26,6 +26,7 @@ struct ActivityRow {
     qint64 timestamp{0};
     QString txid;
     bool pending_request{false};
+    bool used_address_request{false};
     qlonglong net_amount_sat{0};
 };
 
@@ -63,6 +64,8 @@ public:
             return row.pending_request ? QString{} : row.txid;
         case ActivityListModel::IsPendingRequestRole:
             return row.pending_request;
+        case ActivityListModel::IsUsedAddressRequestRole:
+            return row.used_address_request;
         case ActivityListModel::NetAmountSatRole:
             return row.net_amount_sat;
         default:
@@ -83,6 +86,7 @@ public:
             {ActivityListModel::TimestampRole, "timestamp"},
             {ActivityListModel::TxIdRole, "txid"},
             {ActivityListModel::IsPendingRequestRole, "isPendingRequest"},
+            {ActivityListModel::IsUsedAddressRequestRole, "isUsedAddressRequest"},
             {ActivityListModel::NetAmountSatRole, "netAmountSat"},
         };
     }
@@ -138,6 +142,7 @@ private Q_SLOTS:
     void filtersByDateBuckets();
     void filtersByCustomDateRange();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
+    void usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter();
     void filtersByMinimumAmount();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
@@ -271,6 +276,44 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
     proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
     QCOMPARE(proxy.rowCount(), 1);
     QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Request"});
+}
+
+void ActivityFilterProxyModelTests::usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter()
+{
+    // A request whose address already has a real transaction is materialized so
+    // the Payment request filter can surface it, but it must stay hidden in the
+    // default view so it does not duplicate that address's real row.
+    ActivityRow received = MakeRow("Received", Transaction::RecvWithAddress, 30, "tx-received");
+    ActivityRow pending = MakeRow("Pending", Transaction::RecvWithAddress, 20);
+    pending.pending_request = true;
+    ActivityRow used = MakeRow("Used", Transaction::RecvWithAddress, 10);
+    used.pending_request = true;
+    used.used_address_request = true;
+
+    TestActivityListModel source;
+    source.setRows({received, pending, used});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // Default view (all types): the used-address request is hidden.
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Received"));
+    QVERIFY(ContainsLabel(proxy, "Pending"));
+    QVERIFY(!ContainsLabel(proxy, "Used"));
+
+    // Payment request filter: both requests show, the real transaction does not.
+    proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Pending"));
+    QVERIFY(ContainsLabel(proxy, "Used"));
+    QVERIFY(!ContainsLabel(proxy, "Received"));
+
+    // Any other type filter still hides the used-address request.
+    proxy.setTypeFilter(ActivityFilterProxyModel::Received);
+    QCOMPARE(proxy.rowCount(), 1);
+    QVERIFY(ContainsLabel(proxy, "Received"));
+    QVERIFY(!ContainsLabel(proxy, "Used"));
 }
 
 void ActivityFilterProxyModelTests::sortsByTimestampDescending()

@@ -67,6 +67,7 @@ private Q_SLOTS:
     void fromWalletTx_hidesSenderChangeOutput();
     void fromWalletTx_mixedDebitKeepsNegativeNetAmount();
     void fromWalletTx_showsIncomingPaymentToChangeAddress();
+    void dateTimeString_usedAddressRequestKeepsDate();
 };
 
 void TransactionTests::initTestCase()
@@ -133,6 +134,30 @@ void TransactionTests::fromWalletTx_showsIncomingPaymentToChangeAddress()
     QCOMPARE(parts.at(0)->credit, 5 * COIN_VALUE);
     QCOMPARE(parts.at(0)->netAmount(), 5 * COIN_VALUE);
     QCOMPARE(parts.at(0)->prettyAmount(), QStringLiteral("+5.00000000"));
+}
+
+// Only a request still awaiting payment reads "Pending receive". A
+// used-address request keeps its creation date: address use alone does not
+// prove the request was paid, so no receipt is claimed. Only the branch
+// selection is under test here; the date rendering itself is shared with
+// every transaction row, so the expected string is built with the same
+// formatting call.
+void TransactionTests::dateTimeString_usedAddressRequestKeepsDate()
+{
+    uint256 zero_hash;
+
+    Transaction pending{zero_hash, /*time=*/500, Transaction::RecvWithAddress,
+                        /*address=*/"addr", /*debit=*/0, /*credit=*/COIN_VALUE};
+    pending.isPendingRequest = true;
+    QCOMPARE(pending.dateTimeString(), QStringLiteral("Pending receive"));
+
+    Transaction used{zero_hash, /*time=*/500, Transaction::RecvWithAddress,
+                     /*address=*/"addr", /*debit=*/0, /*credit=*/COIN_VALUE};
+    used.isPendingRequest = true;
+    used.isUsedAddressRequest = true;
+    const QString expected_date =
+        QDateTime::fromSecsSinceEpoch(500).toString("MMMM d, yyyy");
+    QCOMPARE(used.dateTimeString(), expected_date);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

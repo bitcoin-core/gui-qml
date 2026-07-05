@@ -2796,7 +2796,8 @@ public:
         RequestIdRole,
         TimestampRole,
         NetAmountSatRole,
-        OutputIndexRole
+        OutputIndexRole,
+        IsUsedAddressRequestRole
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -2810,6 +2811,16 @@ public:
     QVariant data(const QModelIndex& index, int role) const override
     {
         if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
+        if (index.row() == m_used_request_row) {
+            switch (role) {
+            case IsPendingRequestRole: return true;
+            case IsUsedAddressRequestRole: return true;
+            case TxidRole: return QString{};
+            case RequestIdRole: return QStringLiteral("used-req-1");
+            default: break;
+            }
+        }
+        if (role == IsUsedAddressRequestRole) return false;
         if (index.row() == 0) {
             switch (role) {
             case AddressRole: return QStringLiteral("bcrt1qreceiveaddress");
@@ -2876,6 +2887,7 @@ public:
             {TimestampRole, "timestamp"},
             {NetAmountSatRole, "netAmountSat"},
             {OutputIndexRole, "outputIndex"},
+            {IsUsedAddressRequestRole, "isUsedAddressRequest"},
         };
     }
 
@@ -2917,6 +2929,17 @@ public:
         Q_EMIT countChanged();
     }
 
+    // Marks one row as a used-address payment request (-1 for none), so tests
+    // can cover the paid-request rendering path in the Activity delegate.
+    Q_INVOKABLE void setUsedAddressRequestRowForTest(int row)
+    {
+        if (m_used_request_row == row) return;
+        beginResetModel();
+        m_used_request_row = row;
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
 Q_SIGNALS:
     void countChanged();
 
@@ -2942,6 +2965,7 @@ private:
     }
 
     int m_count{2};
+    int m_used_request_row{-1};
 };
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel

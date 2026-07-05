@@ -558,6 +558,7 @@ PageStack {
                         required property bool canBump
                         required property string replacedByTxid
                         required property bool isPendingRequest
+                        required property bool isUsedAddressRequest
                         required property string requestId
                         required property int outputIndex
 
