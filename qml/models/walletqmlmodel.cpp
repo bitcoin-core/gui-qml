@@ -39,6 +39,7 @@
 #include <script/solver.h>
 #include <support/allocators/secure.h>
 #include <util/result.h>
+#include <util/strencodings.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
@@ -2004,6 +2005,8 @@ bool WalletQmlModel::tryImportPsbtToReview(const PartiallySignedTransaction& psb
         QString address;
         QString label;
         CAmount amount;
+        bool is_data_output{false};
+        QString data_hex{};
     };
     std::vector<DraftRecipient> draft_recipients;
     CAmount recipient_total{0};
@@ -2011,6 +2014,9 @@ bool WalletQmlModel::tryImportPsbtToReview(const PartiallySignedTransaction& psb
         CTxDestination destination;
         if (!ExtractDestination(output.scriptPubKey, destination)) {
             if (output.nValue == 0 && output.scriptPubKey.IsUnspendable()) {
+                draft_recipients.push_back({QString{}, QString{}, output.nValue,
+                                            /*is_data_output=*/true,
+                                            QString::fromStdString(HexStr(output.scriptPubKey))});
                 continue;
             }
             reason = tr("Only PSBTs with standard address outputs are supported right now.");
@@ -2043,8 +2049,12 @@ bool WalletQmlModel::tryImportPsbtToReview(const PartiallySignedTransaction& psb
             m_send_recipients->add();
         }
         SendRecipient* recipient{m_send_recipients->currentRecipient()};
-        recipient->setAddress(draft_recipients[i].address);
-        recipient->setLabel(draft_recipients[i].label);
+        if (draft_recipients[i].is_data_output) {
+            recipient->setDataOutput(draft_recipients[i].data_hex);
+        } else {
+            recipient->setAddress(draft_recipients[i].address);
+            recipient->setLabel(draft_recipients[i].label);
+        }
         recipient->amount()->setSatoshi(draft_recipients[i].amount);
         recipient->setMessage(QString());
     }
