@@ -268,6 +268,8 @@ public:
     std::vector<bool> fill_psbt_sign_args;
     bool get_address_result{false};
     std::string get_address_label;
+    std::string last_set_address_book_label;
+    int set_address_book_calls{0};
     int sign_message_calls{0};
     std::string last_signed_message;
     bool can_bump_transaction{true};
@@ -370,7 +372,12 @@ public:
         return sign_message_fn(message, pkhash, signature);
     }
     bool isSpendable(const CTxDestination&) override { return false; }
-    bool setAddressBook(const CTxDestination&, const std::string&, const std::optional<wallet::AddressPurpose>&) override { return true; }
+    bool setAddressBook(const CTxDestination&, const std::string& name, const std::optional<wallet::AddressPurpose>&) override
+    {
+        last_set_address_book_label = name;
+        ++set_address_book_calls;
+        return true;
+    }
     bool delAddressBook(const CTxDestination&) override { return true; }
     bool getAddress(const CTxDestination&, std::string* name, wallet::AddressPurpose*) override
     {
@@ -577,6 +584,8 @@ private Q_SLOTS:
     void activityDetailsSelectLowestOutputIndex();
     void activityDetailsPreferOutgoingForSelfPayment();
     void editedReceiveRequestLabelShownInActivityRow();
+    void editedRequestSyncsAddressBookLabel();
+    void requestSaveLeavesUneditedAddressBookLabelAlone();
     void usedAddressReceiveRequestRowIsFlaggedAndUntracked();
     void paidPendingRequestBecomesUsedAddressRequestLive();
     void paymentMarksEveryPendingRequestForAddressUsedLive();
@@ -1738,6 +1747,44 @@ void WalletQmlModelTests::editedReceiveRequestLabelShownInActivityRow()
     QCOMPARE(activity->rowCount(), 1);
     QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
              QStringLiteral("New label"));
+}
+
+void WalletQmlModelTests::editedRequestSyncsAddressBookLabel()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    // getAddress must succeed for the label sync to reach setAddressBook.
+    wallet->get_address_result = true;
+
+    // Creating the request labels its address.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->last_set_address_book_label, std::string{"Old label"});
+
+    // Editing the label writes the new label back to the address book, so the
+    // Addresses page reflects it instead of keeping the stale label.
+    const int calls_before = wallet->set_address_book_calls;
+    model->currentPaymentRequest()->setLabel(QStringLiteral("New label"));
+    QVERIFY(model->commitPaymentRequest());
+    QVERIFY(wallet->set_address_book_calls > calls_before);
+    QCOMPARE(wallet->last_set_address_book_label, std::string{"New label"});
+}
+
+void WalletQmlModelTests::requestSaveLeavesUneditedAddressBookLabelAlone()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+    // The address book already carries a label, e.g. set on the Addresses page.
+    wallet->get_address_label = "Book label";
+
+    // Saving a request whose label is empty must not clear the book label.
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->set_address_book_calls, 0);
+
+    // Saving with an unchanged label (e.g. an amount-only edit) must not
+    // rewrite the book label either.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Book label"));
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->set_address_book_calls, 0);
 }
 
 void WalletQmlModelTests::usedAddressReceiveRequestRowIsFlaggedAndUntracked()

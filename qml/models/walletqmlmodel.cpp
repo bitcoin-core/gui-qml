@@ -975,6 +975,17 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
         }
     }
 
+    // Keep the address book label in sync with the request label, so the
+    // Addresses page and any other address-book reader reflect an edited
+    // request, matching what getNewDestination writes at creation time.
+    // Only write when this save actually changes the label, and never let an
+    // empty request label clear a label the user may have set independently
+    // on the Addresses page.
+    const QString request_label = m_current_payment_request->label();
+    if (!request_label.isEmpty() && request_label != getAddressLabel(m_current_payment_request->address())) {
+        setAddressLabel(m_current_payment_request->address(), request_label);
+    }
+
     m_current_payment_request->setIsEditing(false);
 
     if (m_detail_payment_request && m_detail_payment_request->id() == m_current_payment_request->id()) {
