@@ -39,6 +39,8 @@ QVariant SendRecipientsListModel::data(const QModelIndex& index, int role) const
     case MessageRole: return r->message();
     case FormattedAddressRole: return r->address()->formattedAddress();
     case AmountUnitLabelRole: return r->amount()->unitLabel();
+    case IsDataOutputRole: return r->isDataOutput();
+    case DataHexRole: return r->dataHex();
     default: return {};
     }
     return {};
@@ -53,6 +55,8 @@ QHash<int, QByteArray> SendRecipientsListModel::roleNames() const
         {MessageRole, "message"},
         {FormattedAddressRole, "formattedAddress"},
         {AmountUnitLabelRole, "amountUnitLabel"},
+        {IsDataOutputRole, "isDataOutput"},
+        {DataHexRole, "dataHex"},
     };
 }
 
@@ -145,6 +149,12 @@ void SendRecipientsListModel::connectRecipientSignals(SendRecipient* recipient)
     });
     connect(recipient, &SendRecipient::messageChanged, this, [emit_roles_changed] {
         emit_roles_changed({MessageRole});
+    });
+    connect(recipient, &SendRecipient::isDataOutputChanged, this, [emit_roles_changed] {
+        emit_roles_changed({IsDataOutputRole});
+    });
+    connect(recipient, &SendRecipient::dataHexChanged, this, [emit_roles_changed] {
+        emit_roles_changed({DataHexRole});
     });
     connect(recipient->address(), &BitcoinAddress::formattedAddressChanged, this, [emit_roles_changed] {
         emit_roles_changed({AddressRole, FormattedAddressRole});
