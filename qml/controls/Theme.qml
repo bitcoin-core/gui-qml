@@ -1,7 +1,7 @@
 pragma Singleton
+import QtCore
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import Qt.labs.settings 1.0
 
 Control {
     id: root
