@@ -9,7 +9,9 @@
 #include <QImage>
 #include <QPainter>
 #include <QPoint>
+#include <QQuickWindow>
 
+#include <atomic>
 #include <cmath>
 
 namespace {
@@ -22,6 +24,19 @@ const QList<QColor> CONFIRMATION_COLORS{
     QColor{QStringLiteral("#EFA148")},
     QColor{QStringLiteral("#F0BB49")},
     QColor{QStringLiteral("#F1D54A")},
+};
+
+class TestableBlockClockDial : public BlockClockDial
+{
+public:
+    using BlockClockDial::BlockClockDial;
+    void complete() { componentComplete(); }
+    void paint(QPainter* painter) override
+    {
+        BlockClockDial::paint(painter);
+        ++paint_count;
+    }
+    std::atomic<int> paint_count{0};
 };
 
 int ColorDistance(const QColor& a, const QColor& b)
@@ -80,6 +95,11 @@ private Q_SLOTS:
     void syncedGradientToggleChangesRenderedColors();
     void syncedGradientUpdatesWhenConfirmationColorsChange();
     void connectingDelayControlsInitialAnimation();
+    void inactiveDialStopsAnimationAndRetainsLatestState();
+    void reactivatedStaticDialRequestsRepaint_data();
+    void reactivatedStaticDialRequestsRepaint();
+    void paintDoesNotAdvanceAnimationState();
+    void equalBlockTimestampsPreserveConfirmationDepth();
 };
 
 void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
@@ -109,7 +129,7 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
     dial.setConnected(true);
     dial.setSynced(true);
     dial.setShowBlockSegments(false);
-    dial.setTimeRatioList({1.0, 0.0});
+    dial.setCurrentTimeFraction(1.0);
 
     dial.setUseGradientArcWhenSynced(false);
     const QImage uniform_image{RenderDial(dial)};
@@ -138,7 +158,7 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
     dial.setSynced(true);
     dial.setShowBlockSegments(false);
     dial.setUseGradientArcWhenSynced(true);
-    dial.setTimeRatioList({1.0, 0.0});
+    dial.setCurrentTimeFraction(1.0);
 
     const QColor initial_color{RenderDial(dial).pixelColor(QPoint{DIAL_SIZE - 7, DIAL_SIZE / 2})};
 
@@ -160,21 +180,113 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
 
 void BlockClockDialTests::connectingDelayControlsInitialAnimation()
 {
-    BlockClockDial delayed_dial;
+    TestableBlockClockDial delayed_dial;
     ConfigureDial(delayed_dial);
     delayed_dial.setConnected(false);
     delayed_dial.setAnimateDial(true);
     delayed_dial.setConnectingAnimationDelayMs(5000);
+    delayed_dial.complete();
     QCOMPARE(CountConfirmationPixels(RenderDial(delayed_dial)), 0);
 
-    BlockClockDial immediate_dial;
+    TestableBlockClockDial immediate_dial;
     ConfigureDial(immediate_dial);
     immediate_dial.setConnected(false);
     immediate_dial.setAnimateDial(true);
     immediate_dial.setConnectingAnimationDelayMs(0);
+    immediate_dial.complete();
 
-    RenderDial(immediate_dial);
-    QVERIFY(CountConfirmationPixels(RenderDial(immediate_dial)) > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(CountConfirmationPixels(RenderDial(immediate_dial)) > 0, 250);
+}
+
+void BlockClockDialTests::inactiveDialStopsAnimationAndRetainsLatestState()
+{
+    TestableBlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setConnectingAnimationDelayMs(0);
+    dial.complete();
+    QTest::qWait(20);
+
+    QTimer* animation_timer{nullptr};
+    for (QTimer* timer : dial.findChildren<QTimer*>()) {
+        if (timer->interval() == 16) animation_timer = timer;
+    }
+    QVERIFY(animation_timer);
+    QVERIFY(animation_timer->isActive());
+
+    dial.setRenderingActive(false);
+    QVERIFY(!animation_timer->isActive());
+
+    dial.setCurrentTimeFraction(0.75);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    QCOMPARE(dial.currentTimeFraction(), 0.75);
+
+    dial.setRenderingActive(true);
+    QVERIFY(!animation_timer->isActive());
+    const QImage image{RenderDial(dial)};
+    QVERIFY(CountConfirmationPixels(image) > 0);
+}
+
+void BlockClockDialTests::reactivatedStaticDialRequestsRepaint_data()
+{
+    QTest::addColumn<bool>("paused");
+    QTest::newRow("non-animated") << false;
+    QTest::newRow("paused") << true;
+}
+
+void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
+{
+    QFETCH(bool, paused);
+    QQuickWindow window;
+    window.resize(DIAL_SIZE, DIAL_SIZE);
+    TestableBlockClockDial dial{window.contentItem()};
+    ConfigureDial(dial);
+    dial.setAnimateDial(paused);
+    dial.setPaused(paused);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setShowBlockSegments(false);
+    dial.setCurrentTimeFraction(0.25);
+    dial.complete();
+    window.show();
+    QTRY_VERIFY(dial.paint_count.load() > 0);
+    QTest::qWait(50);
+
+    dial.setRenderingActive(false);
+    const int paints_before{dial.paint_count.load()};
+    dial.setCurrentTimeFraction(0.75);
+    QTest::qWait(50);
+    QCOMPARE(dial.paint_count.load(), paints_before);
+
+    dial.setRenderingActive(true);
+    QTRY_VERIFY(dial.paint_count.load() > paints_before);
+    for (const QTimer* timer : dial.findChildren<QTimer*>()) {
+        QVERIFY(!timer->isActive());
+    }
+}
+
+void BlockClockDialTests::equalBlockTimestampsPreserveConfirmationDepth()
+{
+    BlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+    dial.setBlockTimeFractions({0.25, 0.50, 0.50});
+    QCOMPARE(dial.blockTimeFractions().size(), 3);
+}
+
+void BlockClockDialTests::paintDoesNotAdvanceAnimationState()
+{
+    TestableBlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setRenderingActive(false);
+    dial.complete();
+
+    const QImage first{RenderDial(dial)};
+    const QImage second{RenderDial(dial)};
+    QCOMPARE(first, second);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

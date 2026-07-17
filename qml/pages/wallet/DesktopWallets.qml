@@ -256,6 +256,7 @@ Page {
                 ButtonGroup.group: navigationTabs
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
+                    renderingActive: root.visible
                 }
 
                 Tooltip {
@@ -382,6 +383,7 @@ Page {
                 parentHeight: blockClockTab.height
                 anchors.centerIn: blockClockTab
                 showNetworkIndicator: false
+                renderingActive: root.visible && blockClockTabButton.checked
             }
         }
         PeersView {

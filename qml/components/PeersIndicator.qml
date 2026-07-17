@@ -10,6 +10,7 @@ Row {
     required property int numOutboundPeers
     required property int maxNumOutboundPeers
     required property bool paused
+    required property bool active
     property int size: 5
     property real indicatorDimensions: 3
     property real indicatorSpacing: 5
@@ -28,7 +29,7 @@ Row {
             Behavior on opacity { OpacityAnimator { duration: 150 } }
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
-                running: numOutboundPeers === 0 && index === 0 && !root.paused
+                running: root.active && numOutboundPeers === 0 && index === 0 && !root.paused
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
             }

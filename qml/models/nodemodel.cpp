@@ -97,6 +97,7 @@ QVariant InformationRow(const QString& label, const QString& value)
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_sync_progress_clock.start();
     m_mempool_information_available = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
     initializeMempoolInfoPolling();
     refreshPeerCounts();
@@ -251,38 +252,21 @@ void NodeModel::applyMempoolInfo(const MempoolInfo& info)
 
 void NodeModel::setRemainingSyncTime(double new_progress)
 {
-    int currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
-
-    // keep a vector of samples of verification progress at height
-    m_block_process_time.push_front(qMakePair(currentTime, new_progress));
-
-    // show progress speed if we have more than one sample
-    if (m_block_process_time.size() >= 2) {
-        double progressDelta = 0;
-        int timeDelta = 0;
-        int remainingMSecs = 0;
-        double remainingProgress = 1.0 - new_progress;
-        for (int i = 1; i < m_block_process_time.size(); i++) {
-            QPair<int, double> sample = m_block_process_time[i];
-
-            // take first sample after 500 seconds or last available one
-            if (sample.first < (currentTime - 500 * 1000) || i == m_block_process_time.size() - 1) {
-                progressDelta = m_block_process_time[0].second - sample.second;
-                timeDelta = m_block_process_time[0].first - sample.first;
-                remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
-                break;
-            }
-        }
-        if (remainingMSecs > 0 && m_block_process_time.count() % 1000 == 0) {
-            m_remaining_sync_time = remainingMSecs;
-
+    if (new_progress >= 1.0) {
+        m_sync_progress_tracker.reset();
+        if (m_remaining_sync_time != 0) {
+            m_remaining_sync_time = 0;
             Q_EMIT remainingSyncTimeChanged();
         }
-        static const int MAX_SAMPLES = 5000;
-        if (m_block_process_time.count() > MAX_SAMPLES) {
-            m_block_process_time.remove(1, m_block_process_time.count() - 1);
-        }
+        return;
     }
+
+    const std::optional<int64_t> estimate{
+        m_sync_progress_tracker.addSample(m_sync_progress_clock.elapsed(), new_progress)};
+    if (!estimate || *estimate == m_remaining_sync_time) return;
+
+    m_remaining_sync_time = *estimate;
+    Q_EMIT remainingSyncTimeChanged();
 }
 void NodeModel::setVerificationProgress(double new_progress)
 {
@@ -459,7 +443,7 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         setBlockSyncActive(tip_info.block_height > 0 && m_node.isInitialBlockDownload());
         setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
         refreshMempoolInfo();
-        Q_EMIT setTimeRatioListInitial();
+        Q_EMIT chainStateReady();
     }
     Q_EMIT nodeInitialized();
 }
@@ -508,7 +492,7 @@ void NodeModel::ConnectToBlockTipSignal()
                 setVerificationProgress(verification_progress);
                 setBlockSyncActive(block_height > 0 && state != SynchronizationState::POST_INIT);
 
-                Q_EMIT setTimeRatioList(block_time);
+                Q_EMIT blockTipTimeChanged(block_time);
             }, Qt::QueuedConnection);
         });
 }
