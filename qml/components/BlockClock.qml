@@ -17,8 +17,11 @@ Item {
     property real parentWidth: 600
     property real parentHeight: 600
     property bool showNetworkIndicator: true
+    // Backing models remain current while false; only presentation work stops.
+    property bool renderingActive: true
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
 
     width: dial.width
@@ -47,13 +50,15 @@ Item {
 
     BlockClockDial {
         id: dial
+        objectName: "blockClockDial"
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
         width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width
         penWidth: dial.width / 50
-        timeRatioList: root.chainModelRef !== null ? root.chainModelRef.timeRatioList : []
+        currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
+        blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
         verificationProgress: root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
@@ -61,6 +66,7 @@ Item {
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
+        renderingActive: root.renderingActive
 
         Behavior on backgroundColor {
             ColorAnimation { duration: 150 }
@@ -107,40 +113,24 @@ Item {
         font.pixelSize: dial.width * (9/100)
         color: Theme.color.neutral4
 
-        Component.onCompleted: {
-            colorChanged.connect(function() {
-                if (!subText.estimating) {
-                    themeChange.restart();
-                }
-            });
-
-            estimatingChanged.connect(function() {
-                if (subText.estimating) {
-                    estimatingTime.start();
-                } else {
-                    estimatingTime.stop();
-                }
-            });
-
-            subText.estimatingChanged();
-        }
-
-        ColorAnimation on color{
-            id: themeChange
-            target: subText
-            duration: 150
+        Behavior on color {
+            enabled: !subText.estimating
+            ColorAnimation { duration: 150 }
         }
 
         SequentialAnimation {
             id: estimatingTime
+            objectName: "blockClockEstimatingAnimation"
+            running: root.renderingActive && subText.estimating
             loops: Animation.Infinite
-            ColorAnimation { target: subText; property: "color"; from: subText.color; to: Theme.color.neutral6; duration: 1000 }
-            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: subText.color; duration: 1000 }
+            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
+            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }
         }
 
     }
 
     PeersIndicator {
+        objectName: "blockClockPeersIndicator"
         anchors.top: subText.bottom
         anchors.topMargin: dial.width / 10
         anchors.horizontalCenter: root.horizontalCenter
@@ -149,6 +139,7 @@ Item {
         indicatorDimensions: dial.width * (3/200)
         indicatorSpacing: dial.width / 40
         paused: root.paused || root.faulted
+        active: root.renderingActive
     }
 
     NetworkIndicator {

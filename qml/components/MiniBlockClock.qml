@@ -14,11 +14,13 @@ Item {
 
     property real iconSize: 18
     property bool pageSelected: false
+    property bool renderingActive: true
     property bool connected: nodeModel.numPeers > 0
     property bool synced: nodeModel.verificationProgress > 0.999
     property bool paused: nodeModel.pause
     property bool faulted: nodeModel.faulted
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property bool offline: networkStatusModelRef !== null && networkStatusModelRef.networkOffline
 
     readonly property bool showOfflineState: !root.faulted && root.offline
@@ -40,15 +42,14 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    readonly property var fullDialTimeRatioList: [1.0, 0.0]
-
     BlockClockDial {
         id: dial
         visible: root.showConnectingState || root.showIbdState || root.showClockState
         anchors.fill: parent
         penWidth: root.strokeWidth
         connectingAnimationDelayMs: 0
-        timeRatioList: root.pageSelected ? root.fullDialTimeRatioList : chainModel.timeRatioList
+        currentTimeFraction: root.pageSelected ? 1.0 : (root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0)
+        blockTimeFractions: []
         verificationProgress: root.pageSelected ? 1.0 : nodeModel.verificationProgress
         connected: root.pageSelected || root.connected
         synced: root.pageSelected || root.synced
@@ -60,6 +61,7 @@ Item {
         backgroundColor: Theme.color.neutral3
         timeTickColor: "transparent"
         confirmationColors: Theme.color.confirmationColors
+        renderingActive: root.renderingActive
     }
 
     Item {

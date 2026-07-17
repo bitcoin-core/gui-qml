@@ -2134,12 +2134,27 @@ class MockChainModel : public QObject
     Q_OBJECT
     Q_PROPERTY(int assumedChainstateSize MEMBER m_assumed_chainstate_size CONSTANT)
     Q_PROPERTY(int assumedBlockchainSize MEMBER m_assumed_blockchain_size CONSTANT)
-    Q_PROPERTY(QVariantList timeRatioList MEMBER m_time_ratio_list CONSTANT)
+    Q_PROPERTY(QString networkName MEMBER m_network_name CONSTANT)
 
 public:
     int m_assumed_chainstate_size{12};
     int m_assumed_blockchain_size{610};
-    QVariantList m_time_ratio_list{0.1, 0.2, 0.4, 0.8};
+    QString m_network_name{QStringLiteral("REGTEST")};
+};
+
+class MockBlockClockModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal currentTimeFraction MEMBER m_current_time_fraction NOTIFY currentTimeFractionChanged)
+    Q_PROPERTY(QList<qreal> blockTimeFractions MEMBER m_block_time_fractions NOTIFY blockTimeFractionsChanged)
+
+public:
+    qreal m_current_time_fraction{0.25};
+    QList<qreal> m_block_time_fractions{0.1, 0.2};
+
+Q_SIGNALS:
+    void currentTimeFractionChanged();
+    void blockTimeFractionsChanged();
 };
 
 class MockNodeModel : public QObject
@@ -3389,6 +3404,7 @@ public Q_SLOTS:
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
+        static MockBlockClockModel block_clock_model;
         static MockNodeModel node_model;
         static MockPeerTableModel peer_table_model;
         static MockNetworkTrafficTower network_traffic_tower;
@@ -3453,6 +3469,7 @@ public Q_SLOTS:
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);
         engine->rootContext()->setContextProperty(QStringLiteral("nodeModel"), &node_model);
         engine->rootContext()->setContextProperty(QStringLiteral("peerTableModel"), &peer_table_model);
         engine->rootContext()->setContextProperty(QStringLiteral("networkTrafficTower"), &network_traffic_tower);

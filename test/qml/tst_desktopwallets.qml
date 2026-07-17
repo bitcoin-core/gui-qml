@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/pages/wallet"
 
@@ -11,6 +12,13 @@ TestCase {
     when: windowShown
     width: 900
     height: 600
+
+    Window {
+        id: testWindow
+        width: 900
+        height: 600
+        visible: true
+    }
 
     Component {
         id: desktopWalletsComponent
@@ -115,6 +123,29 @@ TestCase {
         activityTab.checked = true
         tryCompare(activityTab, "checked", true)
         tryCompare(popup, "visible", false)
+    }
+
+    function test_full_block_clock_is_active_only_on_its_tab() {
+        const page = createTemporaryObject(desktopWalletsComponent, testWindow.contentItem)
+        verify(page !== null)
+        const clock = findChild(page, "blockClock")
+        const sendTab = findChild(page, "sendTabButton")
+        const blockClockTab = findChild(page, "blockClockTabButton")
+        verify(clock !== null)
+        verify(sendTab !== null)
+        verify(blockClockTab !== null)
+
+        tryCompare(page, "visible", true)
+        compare(blockClockTab.checked, true)
+        tryCompare(clock, "renderingActive", true)
+
+        sendTab.checked = true
+        tryCompare(sendTab, "checked", true)
+        tryCompare(clock, "renderingActive", false)
+
+        blockClockTab.checked = true
+        tryCompare(blockClockTab, "checked", true)
+        tryCompare(clock, "renderingActive", true)
     }
 
     function test_receive_options_view_address_history_opens_settings_address_stack() {

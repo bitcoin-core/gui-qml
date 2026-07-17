@@ -7,6 +7,7 @@
 
 #include <QQuickPaintedItem>
 #include <QConicalGradient>
+#include <QMetaObject>
 #include <QPainter>
 #include <QTimer>
 #include <QtGlobal>
@@ -14,12 +15,16 @@
 class BlockClockDial : public QQuickPaintedItem
 {
     Q_OBJECT
-    Q_PROPERTY(QVariantList timeRatioList READ timeRatioList WRITE setTimeRatioList)
+    /** Current position through the local twelve-hour period, in [0, 1]. */
+    Q_PROPERTY(qreal currentTimeFraction READ currentTimeFraction WRITE setCurrentTimeFraction)
+    /** Sorted block positions through the same period, each in [0, 1]. */
+    Q_PROPERTY(QList<qreal> blockTimeFractions READ blockTimeFractions WRITE setBlockTimeFractions)
     Q_PROPERTY(double verificationProgress READ verificationProgress WRITE setVerificationProgress)
     Q_PROPERTY(bool connected READ connected WRITE setConnected)
     Q_PROPERTY(bool synced READ synced WRITE setSynced)
     Q_PROPERTY(bool paused READ paused WRITE setPaused)
     Q_PROPERTY(bool animateDial READ animateDial WRITE setAnimateDial)
+    Q_PROPERTY(bool renderingActive READ renderingActive WRITE setRenderingActive NOTIFY renderingActiveChanged)
     Q_PROPERTY(int connectingAnimationDelayMs READ connectingAnimationDelayMs WRITE setConnectingAnimationDelayMs)
     Q_PROPERTY(bool showTimeTicks READ showTimeTicks WRITE setShowTimeTicks)
     Q_PROPERTY(bool showBlockSegments READ showBlockSegments WRITE setShowBlockSegments)
@@ -34,12 +39,14 @@ public:
     explicit BlockClockDial(QQuickItem * parent = nullptr);
     void paint(QPainter * painter) override;
 
-    QVariantList timeRatioList() const { return m_time_ratio_list; };
+    qreal currentTimeFraction() const { return m_current_time_fraction; }
+    QList<qreal> blockTimeFractions() const { return m_block_time_fractions; }
     double verificationProgress() const { return m_verification_progress; };
     bool connected() const { return m_is_connected; };
     bool synced() const { return m_is_synced; };
     bool paused() const { return m_is_paused; };
     bool animateDial() const { return m_animate_dial; };
+    bool renderingActive() const { return m_rendering_active; }
     int connectingAnimationDelayMs() const { return m_connecting_animation_delay_ms; };
     bool showTimeTicks() const { return m_show_time_ticks; };
     bool showBlockSegments() const { return m_show_block_segments; };
@@ -51,12 +58,14 @@ public:
     QColor timeTickColor() const { return m_time_tick_color; };
 
 public Q_SLOTS:
-    void setTimeRatioList(QVariantList new_time);
+    void setCurrentTimeFraction(qreal fraction);
+    void setBlockTimeFractions(QList<qreal> fractions);
     void setVerificationProgress(double progress);
     void setConnected(bool connected);
     void setSynced(bool synced);
     void setPaused(bool paused);
     void setAnimateDial(bool animate_dial);
+    void setRenderingActive(bool active);
     void setConnectingAnimationDelayMs(int connecting_animation_delay_ms);
     void setShowTimeTicks(bool show_time_ticks);
     void setShowBlockSegments(bool show_block_segments);
@@ -69,6 +78,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void scaleChanged();
+    void renderingActiveChanged();
+
+protected:
+    void componentComplete() override;
 
 private:
     void paintConnectingAnimation(QPainter * painter);
@@ -83,16 +96,24 @@ private:
     void setupConnectingGradient(const QPen & pen);
     void setupSyncedGradient(const QRectF& bounds);
     void invalidateSyncedGradient();
-    qreal decrementGradientAngle(qreal angle);
-    qreal incrementAnimatingMaxAngle(qreal angle);
-    qreal getTargetAnimationAngle();
+    qreal decrementGradientAngle(qreal angle) const;
+    qreal getTargetAnimationAngle() const;
+    bool presentationActive() const;
+    void requestRepaint();
+    void advanceAnimation();
+    void syncAnimationState();
+    void connectWindowVisibility();
 
-    QVariantList m_time_ratio_list{0.0};
+    qreal m_current_time_fraction{0.0};
+    QList<qreal> m_block_time_fractions;
     double m_verification_progress{0.0};
     bool m_is_connected{false};
     bool m_is_synced{false};
     bool m_is_paused{false};
     bool m_animate_dial{true};
+    bool m_rendering_active{true};
+    bool m_component_complete{false};
+    bool m_presentation_was_active{false};
     int m_connecting_animation_delay_ms{5000};
     bool m_show_time_ticks{true};
     bool m_show_block_segments{true};
@@ -108,8 +129,9 @@ private:
     const qreal m_connecting_end_angle = -180;
     QList<QColor> m_confirmation_colors{};
     QColor m_time_tick_color{"#000000"};
-    QTimer m_animation_timer{this};
+    QTimer m_animation_timer;
     QTimer m_delay_timer;
+    QMetaObject::Connection m_window_visibility_connection;
     qreal m_animating_max_angle = 0;
 };
 

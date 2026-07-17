@@ -8,11 +8,13 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <clientversion.h>
+#include <qml/models/syncprogresstracker.h>
 
 #include <deque>
 #include <memory>
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QStringList>
 #include <QString>
 #include <QVariantList>
@@ -46,7 +48,7 @@ class NodeModel : public QObject
     Q_PROPERTY(double mempoolMaxUsageMB READ mempoolMaxUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
     Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable CONSTANT)
-    Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
+    Q_PROPERTY(qint64 remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
     Q_PROPERTY(bool blockSyncActive READ blockSyncActive NOTIFY blockSyncActiveChanged)
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
@@ -85,7 +87,7 @@ public:
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
     void setMempoolInfoPollingActive(bool active);
     bool mempoolInformationAvailable() const { return m_mempool_information_available; }
-    int remainingSyncTime() const { return m_remaining_sync_time; }
+    qint64 remainingSyncTime() const { return m_remaining_sync_time; }
     void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
@@ -153,8 +155,10 @@ Q_SIGNALS:
     void warningsChanged();
     void runtimeDialogChanged();
 
-    void setTimeRatioList(int new_time);
-    void setTimeRatioListInitial();
+    /** Active-chain block timestamp changed; consumers may update timelines. */
+    void blockTipTimeChanged(qint64 block_time);
+    /** Chain initialization succeeded and history-dependent models may load. */
+    void chainStateReady();
     void nodeInitialized();
     void bannedListChanged();
 
@@ -189,7 +193,7 @@ private:
     double m_mempool_max_usage_mb{0.0};
     bool m_mempool_info_polling_active{false};
     bool m_mempool_information_available{true};
-    int m_remaining_sync_time{0};
+    qint64 m_remaining_sync_time{0};
     double m_verification_progress{0.0};
     bool m_block_sync_active{false};
     bool m_pause{false};
@@ -220,7 +224,8 @@ private:
 
     int m_shutdown_polling_timer_id{0};
 
-    QVector<QPair<int, double>> m_block_process_time;
+    SyncProgressTracker m_sync_progress_tracker;
+    QElapsedTimer m_sync_progress_clock;
 
     interfaces::Node& m_node;
     QObject* m_mempool_info_worker{nullptr};

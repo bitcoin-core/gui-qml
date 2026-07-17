@@ -20,7 +20,7 @@ Button {
     bottomPadding: 2
     leftPadding: 7
     rightPadding: 7
-    state: show && root.chainModelRef !== null ? root.chainModelRef.currentNetworkName : "MAIN"
+    state: show && root.chainModelRef !== null ? root.chainModelRef.networkName : "MAIN"
     contentItem: CoreText {
         text: root.text
         font.pixelSize: root.textSize

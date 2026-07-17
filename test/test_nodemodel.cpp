@@ -419,7 +419,7 @@ void NodeModelTests::initializationSuccessDuringCoreShutdownSkipsReadyState()
 
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
     QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
-    QSignalSpy ready_state_spy{&model, &NodeModel::setTimeRatioListInitial};
+    QSignalSpy ready_state_spy{&model, &NodeModel::chainStateReady};
     model.initializeResult(true, {});
 
     QCOMPARE(shutdown_spy.count(), 1);
@@ -516,7 +516,7 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
 
     QSignalSpy block_tip_height_spy{&model, &NodeModel::blockTipHeightChanged};
     QSignalSpy verification_progress_spy{&model, &NodeModel::verificationProgressChanged};
-    QSignalSpy time_ratio_spy{&model, &NodeModel::setTimeRatioList};
+    QSignalSpy time_ratio_spy{&model, &NodeModel::blockTipTimeChanged};
     QSignalSpy peers_spy{&model, &NodeModel::numPeersChanged};
     QSignalSpy inbound_peers_spy{&model, &NodeModel::numInboundPeersChanged};
     QSignalSpy outbound_peers_spy{&model, &NodeModel::numOutboundPeersChanged};
@@ -598,7 +598,7 @@ void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()
 
     std::vector<double> seen_progress;
     std::vector<int> seen_heights;
-    std::vector<int> seen_times;
+    std::vector<qint64> seen_times;
 
     QObject::connect(&model, &NodeModel::verificationProgressChanged, &model, [&] {
         seen_progress.push_back(model.verificationProgress());
@@ -606,7 +606,7 @@ void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()
     QObject::connect(&model, &NodeModel::blockTipHeightChanged, &model, [&] {
         seen_heights.push_back(model.blockTipHeight());
     });
-    QObject::connect(&model, &NodeModel::setTimeRatioList, &model, [&](int block_time) {
+    QObject::connect(&model, &NodeModel::blockTipTimeChanged, &model, [&](qint64 block_time) {
         seen_times.push_back(block_time);
     });
 

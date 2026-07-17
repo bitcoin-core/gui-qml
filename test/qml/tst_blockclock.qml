@@ -35,8 +35,13 @@ TestCase {
 
     QtObject {
         id: chainModelMock
-        property var timeRatioList: [0.25, 0.0]
-        property string currentNetworkName: "REGTEST"
+        property string networkName: "REGTEST"
+    }
+
+    QtObject {
+        id: blockClockModelMock
+        property real currentTimeFraction: 0.25
+        property var blockTimeFractions: []
     }
 
     Component {
@@ -46,6 +51,7 @@ TestCase {
             parentHeight: 600
             nodeModelRef: nodeModelMock
             chainModelRef: chainModelMock
+            blockClockModelRef: blockClockModelMock
             networkStatusModelRef: networkStatusModelMock
         }
     }
@@ -58,6 +64,7 @@ TestCase {
             paused: true
             faulted: false
             networkStatusModelRef: networkStatusModelMock
+            blockClockModelRef: blockClockModelMock
         }
     }
 
@@ -75,8 +82,9 @@ TestCase {
         nodeModelMock.pause = false
         nodeModelMock.faulted = false
         networkStatusModelMock.networkOffline = false
-        chainModelMock.timeRatioList = [0.25, 0.0]
-        chainModelMock.currentNetworkName = "REGTEST"
+        chainModelMock.networkName = "REGTEST"
+        blockClockModelMock.currentTimeFraction = 0.25
+        blockClockModelMock.blockTimeFractions = []
     }
 
     function createClock(properties) {
@@ -336,5 +344,35 @@ TestCase {
         verify(indicator !== null)
         verify(!indicator.visible)
         compare(clock.height, clock.width)
+    }
+
+    function test_inactive_clock_retains_latest_model_snapshot_without_animations() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 0.5
+        nodeModelMock.remainingSyncTime = 0
+        const clock = createClock()
+        const dial = findChild(clock, "blockClockDial")
+        const estimatingAnimation = findChild(clock, "blockClockEstimatingAnimation")
+        const peers = findChild(clock, "blockClockPeersIndicator")
+        verify(dial !== null)
+        verify(estimatingAnimation !== null)
+        verify(peers !== null)
+        tryCompare(estimatingAnimation, "running", true)
+
+        clock.renderingActive = false
+        compare(dial.renderingActive, false)
+        compare(peers.active, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        blockClockModelMock.currentTimeFraction = 0.75
+        blockClockModelMock.blockTimeFractions = [0.1, 0.2, 0.4]
+        compare(dial.currentTimeFraction, 0.75)
+        compare(dial.blockTimeFractions.length, 3)
+
+        clock.renderingActive = true
+        compare(dial.renderingActive, true)
+        compare(dial.currentTimeFraction, 0.75)
+        compare(dial.blockTimeFractions.length, 3)
     }
 }

@@ -168,6 +168,7 @@ Page {
                             spacing: 20
                             PeersIndicator {
                                 paused: false
+                                active: root.visible
                                 numOutboundPeers: nodeModel.numOutboundPeers
                                 maxNumOutboundPeers: nodeModel.maxNumOutboundPeers
                             }

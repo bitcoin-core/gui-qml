@@ -5,7 +5,9 @@
 import QtQuick 2.15
 
 Item {
-    property var timeRatioList: []
+    property real currentTimeFraction: 0
+    property var blockTimeFractions: []
+    property bool renderingActive: true
     property real verificationProgress: 0
     property bool connected: false
     property bool synced: false
