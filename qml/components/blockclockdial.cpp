@@ -77,13 +77,21 @@ void BlockClockDial::setupSyncedGradient(const QRectF& bounds)
     m_synced_gradient_bounds = bounds;
     m_synced_gradient.setCenter(bounds.center());
     m_synced_gradient.setAngle(90);
-    m_synced_gradient.setColorAt(0, m_confirmation_colors[5]);
-    m_synced_gradient.setColorAt(0.16, m_confirmation_colors[5]);
-    m_synced_gradient.setColorAt(0.32, m_confirmation_colors[4]);
-    m_synced_gradient.setColorAt(0.48, m_confirmation_colors[3]);
-    m_synced_gradient.setColorAt(0.64, m_confirmation_colors[2]);
-    m_synced_gradient.setColorAt(0.8, m_confirmation_colors[1]);
-    m_synced_gradient.setColorAt(1, m_confirmation_colors[0]);
+    // The dial advances clockwise while conical gradients advance
+    // counter-clockwise. Mirror the stops so older time is more confirmed and
+    // the color moves toward zero confirmations as the dial advances. Scale
+    // the stops to the elapsed arc so its newest end is always red, and clear
+    // the old stops when the time span changes.
+    const qreal span{m_current_time_fraction};
+    m_synced_gradient.setStops({});
+    m_synced_gradient.setColorAt(0, m_confirmation_colors[0]);
+    m_synced_gradient.setColorAt(1.0 - span, m_confirmation_colors[0]);
+    m_synced_gradient.setColorAt(1.0 - 0.80 * span, m_confirmation_colors[1]);
+    m_synced_gradient.setColorAt(1.0 - 0.64 * span, m_confirmation_colors[2]);
+    m_synced_gradient.setColorAt(1.0 - 0.48 * span, m_confirmation_colors[3]);
+    m_synced_gradient.setColorAt(1.0 - 0.32 * span, m_confirmation_colors[4]);
+    m_synced_gradient.setColorAt(1.0 - 0.16 * span, m_confirmation_colors[5]);
+    m_synced_gradient.setColorAt(1, m_confirmation_colors[5]);
     m_synced_gradient_needs_update = false;
 }
 
@@ -210,6 +218,7 @@ void BlockClockDial::setCurrentTimeFraction(qreal fraction)
     fraction = qBound<qreal>(0.0, fraction, 1.0);
     if (qFuzzyCompare(m_current_time_fraction + 1.0, fraction + 1.0)) return;
     m_current_time_fraction = fraction;
+    invalidateSyncedGradient();
     syncAnimationState();
     requestRepaint();
 }

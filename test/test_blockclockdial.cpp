@@ -123,6 +123,8 @@ class BlockClockDialTests : public QObject
 private Q_SLOTS:
     void ibdProgressRendersImmediateHalfArc();
     void syncedGradientToggleChangesRenderedColors();
+    void syncedGradientRunsFromOlderToNewerConfirmationColors();
+    void syncedGradientSpansCurrentPeriodAndUpdatesWithTime();
     void syncedGradientUpdatesWhenConfirmationColorsChange();
     void connectingDelayControlsInitialAnimation();
     void inactiveDialStopsAnimationAndRetainsLatestState();
@@ -186,6 +188,32 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
                             .arg(gradient_right.name(QColor::HexArgb), gradient_bottom.name(QColor::HexArgb))));
 }
 
+void BlockClockDialTests::syncedGradientRunsFromOlderToNewerConfirmationColors()
+{
+    BlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setShowBlockSegments(false);
+    dial.setUseGradientArcWhenSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+
+    const QImage image{RenderDial(dial)};
+    const QColor older_color{image.pixelColor(DialPoint(0.05))};
+    const QColor middle_color{image.pixelColor(DialPoint(0.375))};
+    const QColor newer_color{image.pixelColor(DialPoint(0.70))};
+
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(newer_color, CONFIRMATION_COLORS[0]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(newer_color, CONFIRMATION_COLORS[5]));
+    QVERIFY(older_color.green() > middle_color.green());
+    QVERIFY(middle_color.green() > newer_color.green());
+}
+
 void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
 {
     BlockClockDial dial;
@@ -213,6 +241,28 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
     QVERIFY2(ColorDistance(initial_color, updated_color) > 50,
              qPrintable(QStringLiteral("expected gradient color to update, got %1 and %2")
                             .arg(initial_color.name(QColor::HexArgb), updated_color.name(QColor::HexArgb))));
+}
+
+void BlockClockDialTests::syncedGradientSpansCurrentPeriodAndUpdatesWithTime()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 1.0, {});
+    dial.setShowBlockSegments(false);
+    dial.setUseGradientArcWhenSynced(true);
+
+    // Reuse the dial across time changes, including a period rollover, so stale
+    // cached gradients or stops from a previous span cannot pass this test.
+    for (const qreal current : {0.25, 0.50, 0.75, 1.0, 0.25}) {
+        dial.setCurrentTimeFraction(current);
+        const QImage image{RenderDial(dial)};
+        VerifyDialColor(image, current * 0.08, CONFIRMATION_COLORS[5]);
+        VerifyDialColor(image, current * 0.32, CONFIRMATION_COLORS[4]);
+        VerifyDialColor(image, current * 0.48, CONFIRMATION_COLORS[3]);
+        VerifyDialColor(image, current * 0.64, CONFIRMATION_COLORS[2]);
+        VerifyDialColor(image, current * 0.80, CONFIRMATION_COLORS[1]);
+        VerifyDialColor(image, current * 0.995, CONFIRMATION_COLORS[0]);
+        if (current < 1.0) VerifyDialColor(image, current + 0.10, BACKGROUND_COLOR);
+    }
 }
 
 void BlockClockDialTests::connectingDelayControlsInitialAnimation()
