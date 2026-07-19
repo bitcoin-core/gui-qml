@@ -115,6 +115,7 @@ class BlockClockDialTests : public QObject
 private Q_SLOTS:
     void ibdProgressRendersImmediateHalfArc();
     void syncedGradientToggleChangesRenderedColors();
+    void syncedGradientRunsFromOlderToNewerConfirmationColors();
     void syncedGradientUpdatesWhenConfirmationColorsChange();
     void connectingDelayControlsInitialAnimation();
     void inactiveDialStopsAnimationAndRetainsLatestState();
@@ -171,6 +172,32 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
     QVERIFY2(ColorDistance(gradient_right, gradient_bottom) > 25,
              qPrintable(QStringLiteral("expected gradient samples to differ, got %1 and %2")
                             .arg(gradient_right.name(QColor::HexArgb), gradient_bottom.name(QColor::HexArgb))));
+}
+
+void BlockClockDialTests::syncedGradientRunsFromOlderToNewerConfirmationColors()
+{
+    BlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setShowBlockSegments(false);
+    dial.setUseGradientArcWhenSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+
+    const QImage image{RenderDial(dial)};
+    const QColor older_color{image.pixelColor(DialPoint(0.05))};
+    const QColor middle_color{image.pixelColor(DialPoint(0.375))};
+    const QColor newer_color{image.pixelColor(DialPoint(0.70))};
+
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(newer_color, CONFIRMATION_COLORS[0]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(newer_color, CONFIRMATION_COLORS[5]));
+    QVERIFY(older_color.green() > middle_color.green());
+    QVERIFY(middle_color.green() > newer_color.green());
 }
 
 void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()

@@ -69,13 +69,16 @@ void BlockClockDial::setupSyncedGradient(const QRectF& bounds)
     m_synced_gradient_bounds = bounds;
     m_synced_gradient.setCenter(bounds.center());
     m_synced_gradient.setAngle(90);
-    m_synced_gradient.setColorAt(0, m_confirmation_colors[5]);
-    m_synced_gradient.setColorAt(0.16, m_confirmation_colors[5]);
-    m_synced_gradient.setColorAt(0.32, m_confirmation_colors[4]);
-    m_synced_gradient.setColorAt(0.48, m_confirmation_colors[3]);
-    m_synced_gradient.setColorAt(0.64, m_confirmation_colors[2]);
-    m_synced_gradient.setColorAt(0.8, m_confirmation_colors[1]);
-    m_synced_gradient.setColorAt(1, m_confirmation_colors[0]);
+    // The dial advances clockwise while conical gradients advance
+    // counter-clockwise. Mirror the stops so older time is more confirmed and
+    // the color moves toward zero confirmations as the dial advances.
+    m_synced_gradient.setColorAt(0, m_confirmation_colors[0]);
+    m_synced_gradient.setColorAt(0.2, m_confirmation_colors[1]);
+    m_synced_gradient.setColorAt(0.36, m_confirmation_colors[2]);
+    m_synced_gradient.setColorAt(0.52, m_confirmation_colors[3]);
+    m_synced_gradient.setColorAt(0.68, m_confirmation_colors[4]);
+    m_synced_gradient.setColorAt(0.84, m_confirmation_colors[5]);
+    m_synced_gradient.setColorAt(1, m_confirmation_colors[5]);
     m_synced_gradient_needs_update = false;
 }
 
