@@ -49,7 +49,11 @@ class NodeModel : public QObject
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
     Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable CONSTANT)
     Q_PROPERTY(qint64 remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
+    /** Estimated chain-verification progress used only for progress presentation. */
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
+    /** True once startup synchronization completes; remains true for this node session. */
+    Q_PROPERTY(bool initialSyncComplete READ initialSyncComplete NOTIFY initialSyncCompleteChanged)
+    /** True while Core reports initial block download through initialization or tip notifications. */
     Q_PROPERTY(bool blockSyncActive READ blockSyncActive NOTIFY blockSyncActiveChanged)
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
@@ -91,6 +95,7 @@ public:
     void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
+    bool initialSyncComplete() const { return m_initial_sync_complete; }
     bool blockSyncActive() const { return m_block_sync_active; }
     bool headerSyncActive() const { return m_header_sync_active; }
     bool headerPresync() const { return m_header_presync; }
@@ -147,6 +152,7 @@ Q_SIGNALS:
     void requestedInitialize();
     void requestedShutdown();
     void verificationProgressChanged();
+    void initialSyncCompleteChanged();
     void blockSyncActiveChanged();
     void headerSyncChanged();
     void pauseChanged(bool new_pause);
@@ -209,6 +215,7 @@ private:
     int m_header_tip_height{0};
     int64_t m_header_tip_time{0};
     bool m_node_ready{false};
+    bool m_initial_sync_complete{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
     bool m_runtime_dialogs_enabled{false};
@@ -255,8 +262,10 @@ private:
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();
     void setWarnings(const QString& warnings);
+    void setNodeReady(bool ready);
     void setBlockSyncActive(bool active);
     void setHeaderSyncState(int height, int64_t block_time, bool presync);
+    void maybeCompleteInitialSync();
     void showRuntimeMessageBox(const QString& message, unsigned int style);
     bool showRuntimeQuestion(const QString& message, unsigned int style);
     bool showRuntimeDialogOnGuiThread(const QString& message, unsigned int style, bool question);

@@ -35,7 +35,10 @@ struct BlockClockTimeline
  * This model remains current while the dial is hidden. The once-per-second
  * currentTimeFraction signal is separate from blockTimeFractions so a clock
  * tick never republishes the full block history. Fractions are normalized to
- * the current twelve-hour period and are always in the range [0, 1].
+ * the current twelve-hour period and are always in the range [0, 1]. An empty
+ * blockTimeFractions list is valid: it means the active chain contains no
+ * blocks timestamped in the displayed period, not that synchronization is
+ * incomplete. Initial-sync state belongs to NodeModel.
  *
  * All methods and the owned timer run on this object's thread (the GUI thread
  * in production). History loading is infrequent: once after node

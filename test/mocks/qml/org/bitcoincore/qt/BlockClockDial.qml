@@ -8,7 +8,7 @@ Item {
     property real currentTimeFraction: 0
     property var blockTimeFractions: []
     property bool renderingActive: true
-    property real verificationProgress: 0
+    property real syncProgress: 0
     property bool connected: false
     property bool synced: false
     property bool paused: false

@@ -2166,6 +2166,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(int numOutboundPeers MEMBER m_num_outbound_peers NOTIFY numOutboundPeersChanged)
     Q_PROPERTY(int maxNumOutboundPeers MEMBER m_max_num_outbound_peers NOTIFY maxNumOutboundPeersChanged)
     Q_PROPERTY(double verificationProgress MEMBER m_verification_progress NOTIFY verificationProgressChanged)
+    Q_PROPERTY(bool initialSyncComplete MEMBER m_initial_sync_complete NOTIFY initialSyncCompleteChanged)
     Q_PROPERTY(int remainingSyncTime MEMBER m_remaining_sync_time NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(bool headerSyncActive MEMBER m_header_sync_active NOTIFY headerSyncChanged)
     Q_PROPERTY(bool blockSyncActive MEMBER m_block_sync_active NOTIFY blockSyncActiveChanged)
@@ -2200,6 +2201,7 @@ public:
     int m_num_outbound_peers{0};
     int m_max_num_outbound_peers{8};
     double m_verification_progress{0.0};
+    bool m_initial_sync_complete{false};
     int m_remaining_sync_time{0};
     bool m_header_sync_active{false};
     bool m_block_sync_active{false};
@@ -2345,6 +2347,7 @@ Q_SIGNALS:
     void numOutboundPeersChanged();
     void maxNumOutboundPeersChanged();
     void verificationProgressChanged();
+    void initialSyncCompleteChanged();
     void remainingSyncTimeChanged();
     void headerSyncChanged();
     void blockSyncActiveChanged();

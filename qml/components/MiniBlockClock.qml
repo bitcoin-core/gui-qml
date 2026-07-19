@@ -15,10 +15,11 @@ Item {
     property real iconSize: 18
     property bool pageSelected: false
     property bool renderingActive: true
-    property bool connected: nodeModel.numPeers > 0
-    property bool synced: nodeModel.verificationProgress > 0.999
-    property bool paused: nodeModel.pause
-    property bool faulted: nodeModel.faulted
+    property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
+    readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
+    readonly property bool synced: root.nodeModelRef !== null && root.nodeModelRef.initialSyncComplete
+    property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
+    property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property bool offline: networkStatusModelRef !== null && networkStatusModelRef.networkOffline
@@ -44,13 +45,14 @@ Item {
 
     BlockClockDial {
         id: dial
+        objectName: "miniBlockClockDial"
         visible: root.showConnectingState || root.showIbdState || root.showClockState
         anchors.fill: parent
         penWidth: root.strokeWidth
         connectingAnimationDelayMs: 0
         currentTimeFraction: root.pageSelected ? 1.0 : (root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0)
         blockTimeFractions: []
-        verificationProgress: root.pageSelected ? 1.0 : nodeModel.verificationProgress
+        syncProgress: root.pageSelected ? 1.0 : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
         connected: root.pageSelected || root.connected
         synced: root.pageSelected || root.synced
         paused: false

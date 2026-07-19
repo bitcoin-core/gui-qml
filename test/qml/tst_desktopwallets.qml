@@ -35,6 +35,15 @@ TestCase {
         walletController.isWalletLoaded = true
         walletController.noWalletsFound = false
         walletListModel.reset()
+        nodeModel.numPeers = 0
+        nodeModel.initialSyncComplete = false
+        nodeModel.verificationProgress = 0
+        nodeModel.remainingSyncTime = 0
+        nodeModel.headerSyncActive = false
+        nodeModel.headerPresync = false
+        nodeModel.pause = false
+        nodeModel.faulted = false
+        nodeModel.blockTipHeight = 0
     }
 
     function createDesktopWallets() {
@@ -146,6 +155,23 @@ TestCase {
         blockClockTab.checked = true
         tryCompare(blockClockTab, "checked", true)
         tryCompare(clock, "renderingActive", true)
+    }
+
+    function test_block_clock_tooltip_uses_latched_sync_completion() {
+        nodeModel.numPeers = 1
+        nodeModel.verificationProgress = 0.9999
+        nodeModel.blockTipHeight = 313899
+
+        const page = createDesktopWallets()
+        const tooltip = findChild(page, "blockClockTooltip")
+        verify(tooltip !== null)
+
+        compare(tooltip.text, "Downloading blocks\nEstimating")
+
+        nodeModel.initialSyncComplete = true
+        wait(0)
+
+        compare(tooltip.text, "Blocktime\n" + Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), "f", 0))
     }
 
     function test_receive_options_view_address_history_opens_settings_address_stack() {

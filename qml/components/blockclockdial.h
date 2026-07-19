@@ -19,7 +19,8 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(qreal currentTimeFraction READ currentTimeFraction WRITE setCurrentTimeFraction)
     /** Sorted block positions through the same period, each in [0, 1]. */
     Q_PROPERTY(QList<qreal> blockTimeFractions READ blockTimeFractions WRITE setBlockTimeFractions)
-    Q_PROPERTY(double verificationProgress READ verificationProgress WRITE setVerificationProgress)
+    /** Progress of the synchronization phase currently presented by the dial. */
+    Q_PROPERTY(double syncProgress READ syncProgress WRITE setSyncProgress)
     Q_PROPERTY(bool connected READ connected WRITE setConnected)
     Q_PROPERTY(bool synced READ synced WRITE setSynced)
     Q_PROPERTY(bool paused READ paused WRITE setPaused)
@@ -41,7 +42,7 @@ public:
 
     qreal currentTimeFraction() const { return m_current_time_fraction; }
     QList<qreal> blockTimeFractions() const { return m_block_time_fractions; }
-    double verificationProgress() const { return m_verification_progress; };
+    double syncProgress() const { return m_sync_progress; };
     bool connected() const { return m_is_connected; };
     bool synced() const { return m_is_synced; };
     bool paused() const { return m_is_paused; };
@@ -60,7 +61,7 @@ public:
 public Q_SLOTS:
     void setCurrentTimeFraction(qreal fraction);
     void setBlockTimeFractions(QList<qreal> fractions);
-    void setVerificationProgress(double progress);
+    void setSyncProgress(double progress);
     void setConnected(bool connected);
     void setSynced(bool synced);
     void setPaused(bool paused);
@@ -106,7 +107,7 @@ private:
 
     qreal m_current_time_fraction{0.0};
     QList<qreal> m_block_time_fractions;
-    double m_verification_progress{0.0};
+    double m_sync_progress{0.0};
     bool m_is_connected{false};
     bool m_is_synced{false};
     bool m_is_paused{false};

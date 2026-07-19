@@ -97,7 +97,7 @@ qreal BlockClockDial::getTargetAnimationAngle() const
     if (connected() && synced()) {
         return m_current_time_fraction * 360;
     } else if (connected()) {
-        return verificationProgress() * 360;
+        return syncProgress() * 360;
     } else {
         return 360;
     }
@@ -212,10 +212,11 @@ void BlockClockDial::setBlockTimeFractions(QList<qreal> fractions)
     requestRepaint();
 }
 
-void BlockClockDial::setVerificationProgress(double progress)
+void BlockClockDial::setSyncProgress(double progress)
 {
-    if (qFuzzyCompare(m_verification_progress + 1.0, progress + 1.0)) return;
-    m_verification_progress = progress;
+    progress = qBound(0.0, progress, 1.0);
+    if (qFuzzyCompare(m_sync_progress + 1.0, progress + 1.0)) return;
+    m_sync_progress = progress;
     syncAnimationState();
     requestRepaint();
 }
@@ -430,10 +431,10 @@ void BlockClockDial::paintProgress(QPainter * painter)
     // QPainter's is 3 o'clock, hence - 90.
     const qreal startAngle = 90;
     qreal spanAngle;
-    if (verificationProgress() * 360 > m_animating_max_angle) {
+    if (syncProgress() * 360 > m_animating_max_angle) {
         spanAngle = m_animating_max_angle * -1;
     } else {
-        spanAngle = verificationProgress() * -360;
+        spanAngle = syncProgress() * -360;
     }
 
     // QPainter::drawArc parameters are 1/16 of a degree

@@ -98,7 +98,7 @@ void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
     dial.setAnimateDial(false);
     dial.setConnected(true);
     dial.setSynced(false);
-    dial.setVerificationProgress(0.5);
+    dial.setSyncProgress(0.5);
 
     const QImage image{RenderDial(dial)};
     const QColor active_pixel{image.pixelColor(QPoint{DIAL_SIZE - 7, DIAL_SIZE / 2})};

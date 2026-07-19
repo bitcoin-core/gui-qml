@@ -30,10 +30,15 @@ Item {
     property alias header: mainText.text
     property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
-    property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
-    property bool synced: root.nodeModelRef !== null && root.nodeModelRef.verificationProgress > 0.999
-    property bool headerSyncActive: root.nodeModelRef !== null && root.nodeModelRef.headerSyncActive
-    property string syncProgress: formatProgressPercentage((root.headerSyncActive ? root.nodeModelRef.headerSyncProgress : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)) * 100)
+    readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
+    // Completion is latched after Core leaves IBD and the active chain catches
+    // the best known header. verificationProgress only renders ongoing sync.
+    readonly property bool synced: root.nodeModelRef !== null && root.nodeModelRef.initialSyncComplete
+    readonly property bool headerSyncActive: root.nodeModelRef !== null && root.nodeModelRef.headerSyncActive
+    readonly property real syncProgressFraction: root.headerSyncActive
+        ? root.nodeModelRef.headerSyncProgress
+        : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
+    readonly property string syncProgress: formatProgressPercentage(root.syncProgressFraction * 100, root.synced)
     property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
     property var syncState: Utils.formatRemainingSyncTime(root.nodeModelRef !== null ? root.nodeModelRef.remainingSyncTime : 0)
     property string syncTime: syncState.text
@@ -59,7 +64,7 @@ Item {
         penWidth: dial.width / 50
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
         blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
-        verificationProgress: root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0
+        syncProgress: root.syncProgressFraction
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
         synced: root.synced
@@ -105,12 +110,17 @@ Item {
 
     Label {
         id: subText
+        objectName: "blockClockSubText"
         anchors.top: mainText.bottom
         property bool estimating: root.estimating
         anchors.horizontalCenter: root.horizontalCenter
+        width: dial.width * (4/5)
+        horizontalAlignment: Text.AlignHCenter
         font.family: "BitcoinCoreSans"
         font.styleName: "Semi Bold"
         font.pixelSize: dial.width * (9/100)
+        fontSizeMode: Text.HorizontalFit
+        minimumPixelSize: dial.width * (3/50)
         color: Theme.color.neutral4
 
         Behavior on color {
@@ -262,7 +272,14 @@ Item {
     ]
 
 
-    function formatProgressPercentage(progress) {
+    function formatProgressPercentage(progress, complete) {
+        if (complete === true) {
+            return "100%"
+        }
+        // Never present an estimate as complete while initial sync is pending.
+        if (progress >= 99.9) {
+            return "99.9%"
+        }
         if (progress >= 1) {
             return Math.round(progress) + "%"
         } else if (progress >= 0.1) {
