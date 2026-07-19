@@ -12,6 +12,16 @@
 #include <QTimer>
 #include <QtGlobal>
 
+/**
+ * Paints the current twelve-hour block timeline clockwise from midnight or noon.
+ *
+ * A point on the dial has one confirmation for each later block boundary. The
+ * newest interval therefore has zero confirmations, while older intervals move
+ * through the confirmation color palette. Boundaries too close to render as
+ * separate rounded segments are coalesced without losing their block count;
+ * the resulting segment records both confirmation depths and paints the skipped
+ * transitions as a continuous gradient.
+ */
 class BlockClockDial : public QQuickPaintedItem
 {
     Q_OBJECT
@@ -85,6 +95,15 @@ protected:
     void componentComplete() override;
 
 private:
+    /** Drawable interval and confirmation depths around its ending block cluster. */
+    struct BlockSegment
+    {
+        qreal start_fraction;
+        qreal end_fraction;
+        qsizetype start_confirmations;
+        qsizetype end_confirmations;
+    };
+
     void paintConnectingAnimation(QPainter * painter);
     void paintProgress(QPainter * painter);
     void paintCurrentTimeArc(QPainter* painter);
@@ -94,6 +113,9 @@ private:
     void paintTimeTicks(QPainter * painter);
     QRectF getBoundsForPen(const QPen & pen);
     double degreesPerPixel();
+    qreal degreesForArcPixels(qreal pixels, const QRectF& bounds) const;
+    qreal blockSegmentGapPixels() const;
+    QList<BlockSegment> coalescedBlockSegments(const QRectF& bounds) const;
     void setupConnectingGradient(const QPen & pen);
     void setupSyncedGradient(const QRectF& bounds);
     void invalidateSyncedGradient();

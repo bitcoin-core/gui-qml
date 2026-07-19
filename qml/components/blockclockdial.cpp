@@ -5,6 +5,7 @@
 #include <qml/components/blockclockdial.h>
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include <QBrush>
@@ -381,39 +382,61 @@ void BlockClockDial::paintBlocks(QPainter * painter)
 
     QPen pen(m_confirmation_colors.constLast());
     pen.setWidthF(m_pen_width);
-    pen.setCapStyle(Qt::FlatCap);
+    pen.setCapStyle(Qt::RoundCap);
     const QRectF bounds = getBoundsForPen(pen);
     painter->setPen(pen);
 
-    // Boundaries are explicit: the period starts at zero, each block closes
-    // one confirmation segment, and the current time closes the newest one.
-    QList<qreal> boundaries;
-    boundaries.reserve(m_block_time_fractions.size() + 2);
-    boundaries.push_back(0.0);
-    boundaries.append(m_block_time_fractions);
-    boundaries.push_back(m_current_time_fraction);
-
-    const qreal gap{degreesPerPixel()};
-    const qsizetype segment_count{boundaries.size() - 1};
-    for (qsizetype segment{0}; segment < segment_count; ++segment) {
-        const qsizetype color_index{qMin<qsizetype>(5, segment_count - segment - 1)};
-        pen.setColor(m_confirmation_colors.at(color_index));
-        painter->setPen(pen);
-
-        const qreal startAngle{90 - 360 * boundaries.at(segment)};
-        qreal nextAngle{90 - 360 * boundaries.at(segment + 1)};
-
-        QPainterPath path;
-        path.arcMoveTo(bounds, startAngle);
-
-        if (-1 * nextAngle + 90 > m_animating_max_angle) {
-            nextAngle = -1 * m_animating_max_angle + 90;
-            segment = segment_count;
+    // Rounded caps extend half a stroke beyond each path endpoint. Separate
+    // their center lines by one stroke plus a small visible gap so neighboring
+    // confirmation segments retain the pill-shaped spacing from the design.
+    const QList<BlockSegment> segments{coalescedBlockSegments(bounds)};
+    const qreal boundary_gap_degrees{
+        degreesForArcPixels(m_pen_width + blockSegmentGapPixels(), bounds)};
+    const qreal half_boundary_gap{boundary_gap_degrees / 2.0};
+    const qreal animated_fraction{qBound<qreal>(0.0, m_animating_max_angle / 360.0, 1.0)};
+    for (const BlockSegment& segment : segments) {
+        const qreal painted_end{qMin(segment.end_fraction, animated_fraction)};
+        const qreal available_degrees{(painted_end - segment.start_fraction) * 360.0};
+        if (available_degrees <= boundary_gap_degrees) {
+            if (segment.end_fraction > animated_fraction) break;
+            continue;
         }
 
-        const qreal spanAngle = -1 * (startAngle - nextAngle) + gap;
-        path.arcTo(bounds, startAngle, spanAngle);
+        const qsizetype confirmation_steps{segment.start_confirmations - segment.end_confirmations};
+        const qsizetype start_color_index{qMin<qsizetype>(5, segment.start_confirmations)};
+        const qsizetype end_color_index{qMin<qsizetype>(5, segment.end_confirmations)};
+        if (confirmation_steps > 1 && start_color_index != end_color_index) {
+            // Conical gradients run counter-clockwise, so anchor the first stop
+            // at the newer end and interpolate back toward the segment start.
+            const qreal gradient_angle{
+                std::fmod(450.0 - 360.0 * segment.end_fraction, 360.0)};
+            const qreal gradient_span{segment.end_fraction - segment.start_fraction};
+            QConicalGradient gradient{bounds.center(), gradient_angle};
+            gradient.setColorAt(0.0, m_confirmation_colors.at(end_color_index));
+            for (qsizetype confirmations{segment.end_confirmations + 1};
+                 confirmations <= start_color_index;
+                 ++confirmations) {
+                const qreal stop{
+                    gradient_span * (confirmations - segment.end_confirmations) /
+                    confirmation_steps};
+                gradient.setColorAt(stop, m_confirmation_colors.at(confirmations));
+            }
+            gradient.setColorAt(gradient_span, m_confirmation_colors.at(start_color_index));
+            pen.setBrush(QBrush{gradient});
+        } else {
+            pen.setColor(m_confirmation_colors.at(start_color_index));
+        }
+        painter->setPen(pen);
+
+        const qreal start_angle{90 - 360 * segment.start_fraction - half_boundary_gap};
+        const qreal end_angle{90 - 360 * painted_end + half_boundary_gap};
+
+        QPainterPath path;
+        path.arcMoveTo(bounds, start_angle);
+        path.arcTo(bounds, start_angle, end_angle - start_angle);
         painter->drawPath(path);
+
+        if (segment.end_fraction > animated_fraction) break;
     }
 }
 
@@ -510,6 +533,77 @@ double BlockClockDial::degreesPerPixel()
 {
     double circumference = width() * 3.1415926;
     return 360 / circumference;
+}
+
+qreal BlockClockDial::degreesForArcPixels(qreal pixels, const QRectF& bounds) const
+{
+    const qreal radius{qMin(bounds.width(), bounds.height()) / 2.0};
+    if (radius <= 0.0) return 360.0;
+    return qRadiansToDegrees(pixels / radius);
+}
+
+qreal BlockClockDial::blockSegmentGapPixels() const
+{
+    // The Figma dial uses a gap around half the stroke width, with one device
+    // pixel as the lower bound for small miniatures.
+    return qMax<qreal>(1.0, m_pen_width / 2.0);
+}
+
+QList<BlockClockDial::BlockSegment> BlockClockDial::coalescedBlockSegments(
+    const QRectF& bounds) const
+{
+    const qreal current_fraction{qBound<qreal>(0.0, m_current_time_fraction, 1.0)};
+    if (current_fraction <= 0.0) return {};
+
+    // A rounded segment needs room for both half-caps, the visual gap, and at
+    // least one pixel of center line. Each visual boundary retains the number
+    // of blocks in its cluster so painting can preserve confirmation depth.
+    const qreal minimum_interval_fraction{
+        degreesForArcPixels(m_pen_width + blockSegmentGapPixels() + 1.0, bounds) / 360.0};
+
+    struct Boundary
+    {
+        qreal fraction;
+        qsizetype block_count;
+    };
+    QList<Boundary> descending_boundaries{{current_fraction, 0}};
+    qreal next_boundary{current_fraction};
+    // Walk backward so an unrenderable block joins the newer visual boundary.
+    // The current-time boundary can therefore carry recently mined blocks too.
+    for (auto it{m_block_time_fractions.crbegin()}; it != m_block_time_fractions.crend(); ++it) {
+        const qreal boundary{*it};
+        if (boundary <= 0.0 || boundary >= current_fraction) continue;
+        if (next_boundary - boundary < minimum_interval_fraction) {
+            ++descending_boundaries.last().block_count;
+            continue;
+        }
+
+        descending_boundaries.push_back({boundary, 1});
+        next_boundary = boundary;
+    }
+
+    // Do not leave an undersized first segment against the period boundary.
+    if (descending_boundaries.size() > 1 &&
+        descending_boundaries.constLast().fraction < minimum_interval_fraction) {
+        descending_boundaries.removeLast();
+    }
+    std::reverse(descending_boundaries.begin(), descending_boundaries.end());
+
+    // Convert weighted visual boundaries into chronological paint segments.
+    // Crossing a boundary removes every confirmation represented by its cluster.
+    qsizetype confirmations{0};
+    for (const Boundary& boundary : descending_boundaries) confirmations += boundary.block_count;
+
+    QList<BlockSegment> segments;
+    segments.reserve(descending_boundaries.size());
+    qreal segment_start{0.0};
+    for (const Boundary& boundary : descending_boundaries) {
+        const qsizetype next_confirmations{confirmations - boundary.block_count};
+        segments.push_back({segment_start, boundary.fraction, confirmations, next_confirmations});
+        segment_start = boundary.fraction;
+        confirmations = next_confirmations;
+    }
+    return segments;
 }
 
 void BlockClockDial::paintTimeTicks(QPainter * painter)
