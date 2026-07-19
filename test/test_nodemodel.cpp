@@ -119,6 +119,10 @@ private Q_SLOTS:
     void nodeNotificationHandlersUpdateModelThroughQueuedSignals();
     void bannedListNotificationFromGuiThreadIsNotDeliveredReentrantly();
     void blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues();
+    void initialSyncCompletionIgnoresVerificationEstimateForGenesis();
+    void initialSyncCompletionWaitsForStartupCatchUpAndLatches();
+    void syncCompletionResetsForLargeHeaderGap_data();
+    void syncCompletionResetsForLargeHeaderGap();
     void blockSyncActiveFollowsInitializationAndBlockTipState();
     void alertNotificationsRefreshWarningList();
     void headerTipNotificationsExposeHeaderSyncProgress();
@@ -649,8 +653,10 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
     QVERIFY(!model.blockSyncActive());
+    QVERIFY(!model.initialSyncComplete());
 
     QSignalSpy block_sync_spy{&model, &NodeModel::blockSyncActiveChanged};
+    QSignalSpy sync_complete_spy{&model, &NodeModel::initialSyncCompleteChanged};
     model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
         .block_height = 0,
         .block_time = 1'700'000'000,
@@ -659,27 +665,191 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
         .verification_progress = 0.25,
     });
 
-    QCOMPARE(block_sync_spy.count(), 0);
-    QVERIFY(!model.blockSyncActive());
-
-    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
-        .block_height = 100,
-        .block_time = 1'700'000'000,
-        .header_height = 100,
-        .header_time = GetTime(),
-        .verification_progress = 0.25,
-    });
-
     QCOMPARE(block_sync_spy.count(), 1);
     QVERIFY(model.blockSyncActive());
+    QVERIFY(!model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 0);
 
     block_tip_fn(SynchronizationState::POST_INIT, interfaces::BlockTip{101, 1'700'000'001, uint256{}}, 0.25);
     QTRY_COMPARE_WITH_TIMEOUT(block_sync_spy.count(), 2, ASYNC_TIMEOUT_MS);
     QVERIFY(!model.blockSyncActive());
+    QVERIFY(model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 1);
 
     block_tip_fn(SynchronizationState::INIT_DOWNLOAD, interfaces::BlockTip{102, 1'700'000'002, uint256{}}, 0.26);
     QTRY_COMPARE_WITH_TIMEOUT(block_sync_spy.count(), 3, ASYNC_TIMEOUT_MS);
     QVERIFY(model.blockSyncActive());
+    QVERIFY(model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 1);
+}
+
+void NodeModelTests::initialSyncCompletionIgnoresVerificationEstimateForGenesis()
+{
+    MockNode node;
+    MempoolState mempool;
+
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.is_initial_block_download_fn = [] { return false; };
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+    QSignalSpy sync_complete_spy{&model, &NodeModel::initialSyncCompleteChanged};
+
+    // A valid genesis-only chain can be complete (for example, regtest), and
+    // the verification estimate is not a completion predicate.
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 0,
+        .block_time = 1'700'000'000,
+        .header_height = 0,
+        .header_time = GetTime(),
+        .verification_progress = 0.25,
+    });
+
+    QVERIFY(!model.blockSyncActive());
+    QVERIFY(model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 1);
+}
+
+void NodeModelTests::initialSyncCompletionWaitsForStartupCatchUpAndLatches()
+{
+    MockNode node;
+    MempoolState mempool;
+    interfaces::Node::NotifyBlockTipFn block_tip_fn;
+    interfaces::Node::NotifyHeaderTipFn header_tip_fn;
+
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.is_initial_block_download_fn = [] { return false; };
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn fn) {
+        block_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_header_tip_fn = [&](interfaces::Node::NotifyHeaderTipFn fn) {
+        header_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+    QVERIFY(block_tip_fn);
+    QVERIFY(header_tip_fn);
+    QSignalSpy sync_complete_spy{&model, &NodeModel::initialSyncCompleteChanged};
+
+    const int64_t stale_header_time{
+        GetTime() - 25 * Params().GetConsensus().nPowTargetSpacing};
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 313'768,
+        .block_time = stale_header_time,
+        .header_height = 313'768,
+        .header_time = stale_header_time,
+        .verification_progress = 0.90,
+    });
+
+    // Core can latch out of IBD before connecting to a peer when the saved tip
+    // is recent by Core's standard. The stale header still keeps the startup
+    // transition pending.
+    QVERIFY(!model.blockSyncActive());
+    QVERIFY(model.headerSyncActive());
+    QVERIFY(!model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 0);
+
+    header_tip_fn(SynchronizationState::POST_INIT,
+                  interfaces::BlockTip{313'900, GetTime(), uint256{}},
+                  /*presync=*/false);
+    QTRY_VERIFY_WITH_TIMEOUT(!model.headerSyncActive(), ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.initialSyncComplete());
+
+    block_tip_fn(SynchronizationState::POST_INIT,
+                 interfaces::BlockTip{313'899, GetTime(), uint256{}},
+                 0.9999);
+    QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 313'899, ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 0);
+
+    block_tip_fn(SynchronizationState::POST_INIT,
+                 interfaces::BlockTip{313'900, GetTime(), uint256{}},
+                 1.0);
+    QTRY_VERIFY_WITH_TIMEOUT(model.initialSyncComplete(), ASYNC_TIMEOUT_MS);
+    QCOMPARE(sync_complete_spy.count(), 1);
+
+    // A header is normally announced before its block. Once startup sync has
+    // completed, that ordinary one-block gap must not regress the clock.
+    header_tip_fn(SynchronizationState::POST_INIT,
+                  interfaces::BlockTip{313'901, GetTime(), uint256{}},
+                  /*presync=*/false);
+    block_tip_fn(SynchronizationState::POST_INIT,
+                 interfaces::BlockTip{313'901, GetTime(), uint256{}},
+                 1.0);
+    QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 313'901, ASYNC_TIMEOUT_MS);
+    QVERIFY(model.initialSyncComplete());
+    QCOMPARE(sync_complete_spy.count(), 1);
+}
+
+void NodeModelTests::syncCompletionResetsForLargeHeaderGap_data()
+{
+    QTest::addColumn<bool>("rewind_blocks");
+    QTest::newRow("headers-after-sleep") << false;
+    QTest::newRow("active-chain-rewind") << true;
+}
+
+void NodeModelTests::syncCompletionResetsForLargeHeaderGap()
+{
+    QFETCH(bool, rewind_blocks);
+    MockNode node;
+    MempoolState mempool;
+    interfaces::Node::NotifyBlockTipFn block_tip_fn;
+    interfaces::Node::NotifyHeaderTipFn header_tip_fn;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.is_initial_block_download_fn = [] { return false; };
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn fn) {
+        block_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_header_tip_fn = [&](interfaces::Node::NotifyHeaderTipFn fn) {
+        header_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+    QVERIFY(block_tip_fn);
+    QVERIFY(header_tip_fn);
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 10'000,
+        .block_time = GetTime(),
+        .header_height = 10'000,
+        .header_time = GetTime(),
+        .verification_progress = 1.0,
+    });
+    QVERIFY(model.initialSyncComplete());
+    QSignalSpy sync_complete_spy{&model, &NodeModel::initialSyncCompleteChanged};
+
+    for (const int gap : {1, 24, 25, 200}) {
+        if (rewind_blocks) {
+            block_tip_fn(SynchronizationState::POST_INIT,
+                         interfaces::BlockTip{10'000 - gap, GetTime(), uint256{}}, 0.9999);
+        } else {
+            header_tip_fn(SynchronizationState::POST_INIT,
+                          interfaces::BlockTip{10'000 + gap, GetTime(), uint256{}}, /*presync=*/false);
+        }
+        QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+        QVERIFY(!model.blockSyncActive());
+        QCOMPARE(model.initialSyncComplete(), gap <= 24);
+        QCOMPARE(sync_complete_spy.count(), gap <= 24 ? 0 : 1);
+    }
+
+    // After resuming sync, stay there even inside the hysteresis threshold.
+    // Completion requires reaching the best known header again.
+    const int header_height{rewind_blocks ? 10'000 : 10'200};
+    for (const int gap : {24, 1, 0}) {
+        block_tip_fn(SynchronizationState::POST_INIT,
+                     interfaces::BlockTip{header_height - gap, GetTime(), uint256{}}, 0.9999);
+        QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+        QCOMPARE(model.initialSyncComplete(), gap == 0);
+        QCOMPARE(sync_complete_spy.count(), gap == 0 ? 2 : 1);
+    }
 }
 
 void NodeModelTests::alertNotificationsRefreshWarningList()
