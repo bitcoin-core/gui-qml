@@ -32,13 +32,14 @@ struct BlockClockTimeline
 /**
  * Maintains block-clock time and history independently of its presentation.
  *
- * This model remains current while the dial is hidden. The once-per-second
- * currentTimeFraction signal is separate from blockTimeFractions so a clock
- * tick never republishes the full block history. Fractions are normalized to
- * the current twelve-hour period and are always in the range [0, 1]. An empty
- * blockTimeFractions list is valid: it means the active chain contains no
- * blocks timestamped in the displayed period, not that synchronization is
- * incomplete. Initial-sync state belongs to NodeModel.
+ * This model remains current while the dial is hidden. currentTimeFraction is
+ * refreshed at minute boundaries and when a block arrives. It is separate
+ * from blockTimeFractions so a clock tick never republishes the full block
+ * history. Fractions are normalized to the current twelve-hour period and are
+ * always in the range [0, 1]. An empty blockTimeFractions list is valid: it
+ * means the active chain contains no blocks timestamped in the displayed
+ * period, not that synchronization is incomplete. Initial-sync state belongs
+ * to NodeModel.
  *
  * All methods and the owned timer run on this object's thread (the GUI thread
  * in production). History loading is infrequent: once after node
@@ -53,9 +54,12 @@ class BlockClockModel : public QObject
 
 public:
     static constexpr qint64 PERIOD_SECONDS{12 * 60 * 60};
+    static constexpr int CLOCK_UPDATE_INTERVAL_MS{60 * 1000};
     using HistoryLoader = std::function<QList<qint64>(qint64 period_start, qint64 period_end)>;
+    using CurrentTimeProvider = std::function<QDateTime()>;
 
-    explicit BlockClockModel(HistoryLoader history_loader = {}, bool start_timer = true, QObject* parent = nullptr);
+    explicit BlockClockModel(HistoryLoader history_loader = {}, bool start_timer = true,
+                             CurrentTimeProvider current_time_provider = {}, QObject* parent = nullptr);
 
     qint64 periodStart() const { return m_timeline.period_start; }
     qreal currentTimeFraction() const { return m_current_time_fraction; }
@@ -81,12 +85,14 @@ Q_SIGNALS:
     void blockTimeFractionsChanged();
 
 private:
+    void scheduleNextClockUpdate(const QDateTime& current_time);
     void loadHistory();
     void replaceBlockHistory(QList<qint64> block_timestamps);
     void rebuildBlockTimeFractions();
     qreal fractionForTimestamp(qint64 timestamp) const;
 
     HistoryLoader m_history_loader;
+    CurrentTimeProvider m_current_time_provider;
     QTimer m_clock_timer;
     BlockClockTimeline m_timeline;
     qreal m_current_time_fraction{0.0};

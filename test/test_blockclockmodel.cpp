@@ -23,10 +23,12 @@ class BlockClockModelTests : public QObject
 private Q_SLOTS:
     void currentTimeUsesNamedTwelveHourFraction();
     void unchangedSecondDoesNotRepublishCurrentTime();
+    void blockArrivalRefreshesCurrentTime();
     void blockHistoryIsSortedUniqueAndPeriodBounded();
     void historyLoadsOnInitializationAndPeriodRollover();
     void emptyHistoryDoesNotEmitRedundantChanges();
     void timerHasModelOwnershipAndCanBeDisabledForTests();
+    void timerAlignsToNextMinute();
 };
 
 void BlockClockModelTests::currentTimeUsesNamedTwelveHourFraction()
@@ -51,9 +53,26 @@ void BlockClockModelTests::unchangedSecondDoesNotRepublishCurrentTime()
     QCOMPARE(current_time_spy.count(), 1);
 }
 
+void BlockClockModelTests::blockArrivalRefreshesCurrentTime()
+{
+    QDateTime current_time{UtcTime(15)};
+    BlockClockModel model{{}, false, [&] { return current_time; }};
+    QSignalSpy current_time_spy{&model, &BlockClockModel::currentTimeFractionChanged};
+
+    current_time = UtcTime(15, 1);
+    model.recordBlockTime(UtcTime(15, 0, 30).toSecsSinceEpoch());
+
+    QCOMPARE(current_time_spy.count(), 1);
+    QVERIFY(qAbs(model.currentTimeFraction() - (181.0 / 720.0)) < 0.000001);
+    QCOMPARE(model.blockTimeFractions().size(), 1);
+    QVERIFY(qAbs(model.blockTimeFractions().constFirst() -
+                 (10830.0 / BlockClockModel::PERIOD_SECONDS)) < 0.000001);
+}
+
 void BlockClockModelTests::blockHistoryIsSortedUniqueAndPeriodBounded()
 {
-    BlockClockModel model{{}, false};
+    const QDateTime current_time{UtcTime(15)};
+    BlockClockModel model{{}, false, [current_time] { return current_time; }};
     model.updateCurrentTime(UtcTime(15));
     const qint64 start{model.periodStart()};
     QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
@@ -106,13 +125,25 @@ void BlockClockModelTests::emptyHistoryDoesNotEmitRedundantChanges()
 
 void BlockClockModelTests::timerHasModelOwnershipAndCanBeDisabledForTests()
 {
-    BlockClockModel stopped_model{{}, false};
+    const QDateTime current_time{UtcTime(15)};
+    const auto current_time_provider{[current_time] { return current_time; }};
+    BlockClockModel stopped_model{{}, false, current_time_provider};
     QCOMPARE(stopped_model.timerActive(), false);
     QCOMPARE(stopped_model.findChildren<QTimer*>().size(), 1);
     QCOMPARE(stopped_model.findChildren<QTimer*>().constFirst()->parent(), &stopped_model);
 
-    BlockClockModel running_model{{}, true};
+    BlockClockModel running_model{{}, true, current_time_provider};
     QCOMPARE(running_model.timerActive(), true);
+}
+
+void BlockClockModelTests::timerAlignsToNextMinute()
+{
+    const QDateTime current_time{UtcTime(15, 0, 45).addMSecs(250)};
+    BlockClockModel model{{}, true, [current_time] { return current_time; }};
+    QTimer* timer{model.findChildren<QTimer*>().constFirst()};
+
+    QCOMPARE(timer->timerType(), Qt::PreciseTimer);
+    QCOMPARE(timer->interval(), BlockClockModel::CLOCK_UPDATE_INTERVAL_MS - 45250);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

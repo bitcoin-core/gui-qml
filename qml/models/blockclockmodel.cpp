@@ -12,18 +12,28 @@
 
 #include <QTime>
 
-BlockClockModel::BlockClockModel(HistoryLoader history_loader, bool start_timer, QObject* parent)
+BlockClockModel::BlockClockModel(HistoryLoader history_loader, bool start_timer,
+                                 CurrentTimeProvider current_time_provider, QObject* parent)
     : QObject{parent},
       m_history_loader{std::move(history_loader)},
+      m_current_time_provider{std::move(current_time_provider)},
       m_clock_timer{this}
 {
-    m_clock_timer.setInterval(1000);
+    if (!m_current_time_provider) {
+        m_current_time_provider = [] { return QDateTime::currentDateTime(); };
+    }
+
+    m_clock_timer.setSingleShot(true);
+    m_clock_timer.setTimerType(Qt::PreciseTimer);
     connect(&m_clock_timer, &QTimer::timeout, this, [this] {
-        updateCurrentTime(QDateTime::currentDateTime());
+        const QDateTime current_time{m_current_time_provider()};
+        updateCurrentTime(current_time);
+        scheduleNextClockUpdate(current_time);
     });
 
-    updateCurrentTime(QDateTime::currentDateTime());
-    if (start_timer) m_clock_timer.start();
+    const QDateTime current_time{m_current_time_provider()};
+    updateCurrentTime(current_time);
+    if (start_timer) scheduleNextClockUpdate(current_time);
 }
 
 qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
@@ -53,6 +63,13 @@ void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
     }
 }
 
+void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
+{
+    const QTime time{current_time.time()};
+    const int milliseconds_into_minute{time.second() * 1000 + time.msec()};
+    m_clock_timer.start(CLOCK_UPDATE_INTERVAL_MS - milliseconds_into_minute);
+}
+
 void BlockClockModel::initializeHistory()
 {
     m_history_initialized = true;
@@ -61,6 +78,8 @@ void BlockClockModel::initializeHistory()
 
 void BlockClockModel::recordBlockTime(qint64 block_timestamp)
 {
+    updateCurrentTime(m_current_time_provider());
+
     const qint64 period_end{m_timeline.period_start + PERIOD_SECONDS};
     if (block_timestamp < m_timeline.period_start || block_timestamp >= period_end) return;
 
