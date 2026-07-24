@@ -99,6 +99,10 @@ Popup {
 
                 ContinueButton {
                     id: alertButton
+                    // Qt 6.2: does not inject `index` into this delegate; declare
+                    // it explicitly so `visibleActions[index]` resolves.
+                    required property int index
+
                     readonly property AlertAction alertAction: root.visibleActions[index]
 
                     objectName: alertAction.buttonObjectName

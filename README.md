@@ -78,6 +78,7 @@ sudo apt install \
   qt6-l10n-tools \
   qt6-tools-dev-tools \
   qt6-declarative-dev \
+  qml6-module-qt-labs-platform \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick \
   qml6-module-qtquick-controls \

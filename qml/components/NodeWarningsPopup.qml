@@ -65,10 +65,15 @@ Popup {
                     id: warningRepeater
                     model: nodeModel.warningList
                     delegate: RowLayout {
+                        // Qt 6.2 does not inject `modelData`/`index` into this
+                        // delegate; declare them explicitly.
+                        required property var modelData
+                        required property int index
+
                         readonly property int warningLineCount: warningText.lineCount
                         readonly property int warningWrapMode: warningText.wrapMode
 
-                        width: parent.width
+                        Layout.fillWidth: true
                         spacing: 10
 
                         Icon {

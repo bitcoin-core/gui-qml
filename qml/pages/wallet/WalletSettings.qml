@@ -113,7 +113,7 @@ Page {
         id: backupDialog
         fileMode: FileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
-        selectedFile: root.backupDefaultFileUrl()
+        currentFile: root.backupDefaultFileUrl()
         defaultSuffix: "bak"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
         onAccepted: {

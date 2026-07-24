@@ -86,7 +86,7 @@ Page {
             return
         }
 
-        savePsbtDialog.selectedFile = root.defaultSavePsbtFileUrl()
+        savePsbtDialog.currentFile = root.defaultSavePsbtFileUrl()
         savePsbtDialog.open()
     }
 
@@ -124,7 +124,7 @@ Page {
         title: qsTr("Save transaction as PSBT")
         fileMode: FileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
-        selectedFile: root.defaultSavePsbtFileUrl()
+        currentFile: root.defaultSavePsbtFileUrl()
         defaultSuffix: "psbt"
         nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
         onAccepted: root.savePsbt(savePsbtDialog.selectedFile.toString())
