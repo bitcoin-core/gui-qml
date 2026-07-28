@@ -225,48 +225,6 @@ void PersistDefaultDataDirSelection()
     QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
 }
 
-bool ResetGuiSettings(ArgsManager& args, QString* error)
-{
-    if (error) error->clear();
-
-    QSettings settings;
-    settings.clear();
-    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
-
-    try {
-        SelectParams(args.GetChainType());
-        args.SelectConfigNetwork(args.GetChainTypeString());
-        QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(args.GetChainTypeString()));
-    } catch (const std::exception& e) {
-        if (error) *error = QString::fromStdString(e.what());
-        return false;
-    }
-
-    fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path) || !fs::exists(settings_path)) {
-        return true;
-    }
-
-    std::vector<std::string> settings_errors;
-    if (!args.ReadSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
-        return false;
-    }
-    if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
-        return false;
-    }
-    args.LockSettings([](common::Settings& settings) {
-        settings.rw_settings.clear();
-    });
-    settings_errors.clear();
-    if (!args.WriteSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
-        return false;
-    }
-    return true;
-}
-
 bool HasExplicitDataDirArg(const ArgsManager& args)
 {
     return args.IsArgSet("-datadir") && !args.GetPathArg("-datadir").empty();
