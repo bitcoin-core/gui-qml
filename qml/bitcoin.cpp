@@ -69,6 +69,7 @@
 #endif
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/string.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 #ifdef ENABLE_WALLET
@@ -77,6 +78,7 @@
 
 #include <cassert>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -89,6 +91,7 @@
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QJSEngine>
+#include <QMessageBox>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -300,8 +303,35 @@ enum class PreInitOnboardingStatus {
     FAILED,
 };
 
+bool ErrorSettingsRead(const bilingual_str& error, const std::vector<std::string>& details)
+{
+    if (gArgs.GetBoolArg("-resetguisettings", false)) {
+        return false;
+    }
+
+    QMessageBox message_box{
+        QMessageBox::Critical,
+        CLIENT_NAME,
+        QString::fromStdString(strprintf("%s.", error.translated)),
+        QMessageBox::Reset | QMessageBox::Abort,
+    };
+    message_box.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
+    message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
+    message_box.setTextFormat(Qt::PlainText);
+    message_box.setDefaultButton(QMessageBox::Reset);
+    switch (message_box.exec()) {
+    case QMessageBox::Reset:
+        return false;
+    case QMessageBox::Abort:
+        return true;
+    default:
+        assert(false);
+    }
+}
+
 struct PreInitOnboardingContext {
     std::unique_ptr<OnboardingOptionsModel> onboarding_options_model;
+    std::optional<QmlOnboardingSettings::PendingApply> pending_apply;
     QScopedPointer<const NetworkStyle> network_style;
     std::unique_ptr<QQmlApplicationEngine> engine;
 #ifdef ENABLE_TEST_AUTOMATION
@@ -328,6 +358,9 @@ bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_
     const QmlOnboardingSettings::OnboardingStartupStatus status{
         QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc)
     };
+    if (status.settings_file_unreadable) {
+        return false;
+    }
     return !status.ok || status.should_show_onboarding;
 }
 
@@ -384,11 +417,13 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     }
 
     QString error;
-    if (!context.onboarding_options_model->applyToArgs(gArgs, &error)) {
+    QmlOnboardingSettings::PendingApply pending_apply;
+    if (!context.onboarding_options_model->prepareApplyToArgs(gArgs, pending_apply, &error)) {
         InitError(Untranslated(error.toStdString()));
         context.close();
         return PreInitOnboardingStatus::FAILED;
     }
+    context.pending_apply = std::move(pending_apply);
     return PreInitOnboardingStatus::COMPLETED;
 }
 } // namespace
@@ -469,13 +504,9 @@ int QmlGuiMain(int argc, char* argv[])
 
     app.setQuitOnLastWindowClosed(false);
     setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        QString reset_error;
-        if (!QmlDataDir::ResetGuiSettings(gArgs, &reset_error)) {
-            InitError(Untranslated(reset_error.toStdString()));
-            return EXIT_FAILURE;
-        }
-    }
+    const QmlOnboardingSettings::GuiSettingsStore bootstrap_gui_settings{
+        QmlOnboardingSettings::CurrentGuiSettingsStore()
+    };
 
     LoadFontResource(":/fonts/bitcoincoresans/regular");
     LoadFontResource(":/fonts/bitcoincoresans/semibold");
@@ -516,25 +547,20 @@ int QmlGuiMain(int argc, char* argv[])
 
     if (auto error = common::InitConfig(
             gArgs,
-            [](const bilingual_str& msg, const std::vector<std::string>& details) {
-                return InitError(msg, details);
-            })) {
+            ErrorSettingsRead)) {
         return EXIT_FAILURE;
     }
 
-    const QmlLegacySettings::MigrationResult legacy_migration{
-        QmlLegacySettings::MigrateCoreSettings(gArgs, QmlLegacySettings::MigrationMode::Persist)
-    };
-    if (!legacy_migration.error.isEmpty()) {
-        InitError(Untranslated(legacy_migration.error.toStdString()));
+    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
+    QString finalize_settings_error;
+    if (!QmlOnboardingSettings::FinalizeStartupSettings(
+            gArgs,
+            bootstrap_gui_settings,
+            pre_init_onboarding_context.pending_apply ? &*pre_init_onboarding_context.pending_apply : nullptr,
+            /*result=*/nullptr,
+            &finalize_settings_error)) {
+        InitError(Untranslated(finalize_settings_error.toStdString()));
         return EXIT_FAILURE;
-    }
-    if (legacy_migration.settings_changed) {
-        std::vector<std::string> settings_errors;
-        if (!gArgs.WriteSettingsFile(&settings_errors)) {
-            InitError(_("Settings file could not be written"), settings_errors);
-            return EXIT_FAILURE;
-        }
     }
 
     // legacy GUI: parameterSetup()
@@ -604,15 +630,6 @@ int QmlGuiMain(int argc, char* argv[])
 
     ChainModel chain_model{*chain};
     chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
-    setupChainQSettings(&app, chain_model.currentNetworkName());
-    // Settings reset must happen before model instantiation so the models
-    // read clean defaults from QSettings.
-    if (gArgs.IsArgSet("-resetguisettings")) {
-        QSettings settings;
-        settings.remove(QStringLiteral("fHideTrayIcon"));
-        settings.remove(QStringLiteral("fMinimizeToTray"));
-        settings.remove(QStringLiteral("fMinimizeOnClose"));
-    }
 
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
