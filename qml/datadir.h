@@ -49,7 +49,6 @@ StorageSpaceResult CheckStorageSpace(const QString& path);
 bool EnsureDataDir(const QString& path, QString* error = nullptr);
 bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr);
 void PersistDefaultDataDirSelection();
-bool ResetGuiSettings(ArgsManager& args, QString* error = nullptr);
 
 bool HasExplicitDataDirArg(const ArgsManager& args);
 bool ShouldShowDataDirChooser(const ArgsManager& args);
