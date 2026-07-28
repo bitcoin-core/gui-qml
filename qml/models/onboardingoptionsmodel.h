@@ -73,7 +73,7 @@ public:
     ~OnboardingOptionsModel() override;
 
     // Keep args and the preparation callback's dependencies alive until nodePrepared.
-    void prepareNode(ArgsManager& args, std::function<bool()> prepare_node);
+    void prepareNode(ArgsManager& args, std::function<bool(const QmlOnboardingSettings::PendingApply&)> prepare_node);
 
     QString dataDir() const { return m_data_dir; }
     QString getDefaultDataDirString() const;
@@ -131,7 +131,7 @@ public:
     Q_INVOKABLE bool commitTorLocation(const QString& location);
     Q_INVOKABLE QString defaultProxyAddress() const;
 
-    bool applyToArgs(ArgsManager& args, QString* error = nullptr) const;
+    bool prepareApplyToArgs(ArgsManager& args, QmlOnboardingSettings::PendingApply& pending, QString* error = nullptr) const;
     QmlOnboardingSettings::ApplyRequest applyRequest() const;
 
 Q_SIGNALS:
@@ -173,6 +173,10 @@ private:
     std::vector<std::string> m_argv;
     bool m_can_listen_ipc;
     QString m_data_dir;
+    QString m_resolved_data_dir;
+    QString m_resolved_chain;
+    QString m_resolved_settings_path;
+    bool m_effective_reset{false};
     QmlOnboardingSettings::DataDirSource m_data_dir_source{QmlOnboardingSettings::DataDirSource::Default};
     QString m_custom_datadir_string;
     CoreSettingsModel m_core_settings;
