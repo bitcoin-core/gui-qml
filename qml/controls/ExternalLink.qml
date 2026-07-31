@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 AbstractButton {
     id: root
@@ -29,7 +30,13 @@ AbstractButton {
         : "externalLinkPopup"
 
     enabled: root.parentState !== "DISABLED"
-    state: root.parentState
+    hoverEnabled: AppMode.isDesktop
+    state: root.enabled && root.hovered ? "HOVER" : root.parentState
+
+    HoverHandler {
+        cursorShape: AppMode.isDesktop && root.enabled ? Qt.PointingHandCursor
+                                                       : Qt.ArrowCursor
+    }
 
     states: [
         State {

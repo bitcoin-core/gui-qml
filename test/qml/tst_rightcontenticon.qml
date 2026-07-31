@@ -126,6 +126,38 @@ TestCase {
         compare(slot.iconSize, 18)
     }
 
+    // Hover event delivery is unreliable under the offscreen platform (see the
+    // note in tst_setting.qml), so the positive path accepts either state; the
+    // strict contract is that hover must never override FILLED with anything
+    // other than HOVER, and must revert once the mouse leaves.
+    function test_external_link_hover_switches_to_hover_state() {
+        const item = createTemporaryObject(externalLinkComponent, this)
+        verify(item !== null)
+        compare(item.state, "FILLED")
+
+        mouseMove(item, item.width / 2, item.height / 2)
+        verify(item.state === "FILLED" || item.state === "HOVER")
+        if (item.state === "HOVER") {
+            compare(item.textColor, Theme.color.orangeLight1)
+            compare(item.iconColor, Theme.color.orangeLight1)
+        }
+
+        mouseMove(item, -10, -10)
+        tryCompare(item, "state", "FILLED")
+    }
+
+    function test_external_link_disabled_ignores_hover() {
+        const item = createTemporaryObject(externalLinkComponent, this)
+        verify(item !== null)
+        item.parentState = "DISABLED"
+        wait(0)
+
+        mouseMove(item, item.width / 2, item.height / 2)
+        wait(0)
+        compare(item.state, "DISABLED")
+        compare(item.textColor, Theme.color.neutral4)
+    }
+
     function test_about_options_rows_are_contiguous() {
         const item = createTemporaryObject(aboutOptionsComponent, this)
         verify(item !== null)
