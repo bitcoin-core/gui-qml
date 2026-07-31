@@ -177,6 +177,14 @@ public:
                         int64_t& block_time) const;
     QString getAddressLabel(const QString& address) const;
     bool setAddressLabel(const QString& address, const QString& label);
+    // Write a label to the address book only, without touching any payment
+    // request saved for the address. This is the request-save direction: a
+    // request's label is its own, so saving one request must not rewrite the
+    // labels of sibling requests on the same address.
+    bool writeAddressBookLabel(const QString& address, const QString& label);
+    // Propagate an edited address book label to any payment request saved for
+    // that address (the reverse of the request-save address book sync).
+    void syncPaymentRequestLabelToAddress(const QString& address, const QString& label);
     std::vector<interfaces::WalletAddress> getAddresses() const;
     std::map<QString, CAmount> addressBalances() const;
     std::set<QString> usedAddresses() const;

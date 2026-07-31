@@ -28,8 +28,6 @@
 #include <wallet/coincontrol.h>
 #include <wallet/types.h>
 
-#include <map>
-
 #include <QFile>
 #include <QSemaphore>
 #include <QSettings>
@@ -43,6 +41,7 @@
 #include <array>
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -392,8 +391,9 @@ public:
     {
         ++set_address_receive_request_calls;
         receive_request_ids.push_back(id);
-        return true;
+        return set_address_receive_request_result;
     }
+    bool set_address_receive_request_result{true};
     util::Result<void> displayAddress(const CTxDestination&) override { return {}; }
     bool lockCoin(const COutPoint&, const bool) override { return true; }
     bool unlockCoin(const COutPoint&) override { return true; }
@@ -586,6 +586,9 @@ private Q_SLOTS:
     void editedReceiveRequestLabelShownInActivityRow();
     void editedRequestSyncsAddressBookLabel();
     void requestSaveLeavesUneditedAddressBookLabelAlone();
+    void editedAddressBookLabelSyncsRequestLabel();
+    void requestSaveLeavesSiblingRequestLabelsAlone();
+    void labelSyncSkipsInMemoryUpdateWhenPersistFails();
     void usedAddressReceiveRequestRowIsFlaggedAndUntracked();
     void paidPendingRequestBecomesUsedAddressRequestLive();
     void paymentMarksEveryPendingRequestForAddressUsedLive();
@@ -1785,6 +1788,100 @@ void WalletQmlModelTests::requestSaveLeavesUneditedAddressBookLabelAlone()
     model->currentPaymentRequest()->setLabel(QStringLiteral("Book label"));
     QVERIFY(model->commitPaymentRequest());
     QCOMPARE(wallet->set_address_book_calls, 0);
+}
+
+void WalletQmlModelTests::editedAddressBookLabelSyncsRequestLabel()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+
+    // Create a request; its address carries the request label.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
+    QVERIFY(model->commitPaymentRequest());
+    const QString address = model->currentPaymentRequest()->address();
+    QVERIFY(!address.isEmpty());
+
+    ActivityListModel* activity = model->activityListModel();
+    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+             QStringLiteral("Old label"));
+
+    // Editing the label on the Addresses page must propagate to the matching
+    // request, so the request record and its Activity row do not diverge from
+    // the address book (the reverse of editedRequestSyncsAddressBookLabel).
+    QVERIFY(model->setAddressLabel(address, QStringLiteral("New label")));
+
+    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+             QStringLiteral("New label"));
+    const QVariantList matches = model->receiveRequests()->matchingEntriesForAddress(address);
+    QCOMPARE(matches.size(), 1);
+    QCOMPARE(matches.at(0).toMap().value(QStringLiteral("label")).toString(),
+             QStringLiteral("New label"));
+}
+
+// Core supports multiple receive requests for one address, each with its own
+// label. Saving one request writes its label to the address book but must not
+// fan it out to the sibling requests; only an Addresses page edit
+// (setAddressLabel) deliberately rewrites every request for the address.
+void WalletQmlModelTests::requestSaveLeavesSiblingRequestLabelsAlone()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+
+    // Two requests on the same address (the fake wallet hands out one
+    // destination), with their own labels.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Request A"));
+    QVERIFY(model->commitPaymentRequest());
+    const QString request_a_id = model->currentPaymentRequest()->id();
+    const QString address = model->currentPaymentRequest()->address();
+
+    model->currentPaymentRequest()->clear();
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Request B"));
+    QVERIFY(model->commitPaymentRequest());
+    const QString request_b_id = model->currentPaymentRequest()->id();
+    QVERIFY(request_a_id != request_b_id);
+    QCOMPARE(model->currentPaymentRequest()->address(), address);
+
+    // Editing request A's label updates the address book but leaves request
+    // B's persisted label alone.
+    QVERIFY(model->loadPaymentRequest(request_a_id));
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Edited A"));
+    const int b_writes_before = static_cast<int>(
+        std::count(wallet->receive_request_ids.begin(), wallet->receive_request_ids.end(),
+                   request_b_id.toStdString()));
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->last_set_address_book_label, std::string{"Edited A"});
+
+    const int b_writes_after = static_cast<int>(
+        std::count(wallet->receive_request_ids.begin(), wallet->receive_request_ids.end(),
+                   request_b_id.toStdString()));
+    QCOMPARE(b_writes_after, b_writes_before);
+    const auto sibling = model->receiveRequests()->entryById(request_b_id);
+    QVERIFY(sibling.has_value());
+    QCOMPARE(QString::fromStdString(sibling->recipient.label), QStringLiteral("Request B"));
+}
+
+// A label sync write that fails to persist must not update the in-memory
+// request models: they would show a label the wallet does not hold, and a
+// reload would silently revert it.
+void WalletQmlModelTests::labelSyncSkipsInMemoryUpdateWhenPersistFails()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
+    QVERIFY(model->commitPaymentRequest());
+    const QString request_id = model->currentPaymentRequest()->id();
+    const QString address = model->currentPaymentRequest()->address();
+
+    wallet->set_address_receive_request_result = false;
+    QVERIFY(model->setAddressLabel(address, QStringLiteral("New label")));
+
+    const auto entry = model->receiveRequests()->entryById(request_id);
+    QVERIFY(entry.has_value());
+    QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("Old label"));
+    ActivityListModel* activity = model->activityListModel();
+    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+             QStringLiteral("Old label"));
 }
 
 void WalletQmlModelTests::usedAddressReceiveRequestRowIsFlaggedAndUntracked()

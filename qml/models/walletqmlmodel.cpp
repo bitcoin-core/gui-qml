@@ -980,10 +980,13 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     // request, matching what getNewDestination writes at creation time.
     // Only write when this save actually changes the label, and never let an
     // empty request label clear a label the user may have set independently
-    // on the Addresses page.
+    // on the Addresses page. Write the address book alone: Core supports
+    // multiple requests per address with their own labels, so saving this
+    // request must not fan its label out to sibling requests the way an
+    // Addresses page edit deliberately does.
     const QString request_label = m_current_payment_request->label();
     if (!request_label.isEmpty() && request_label != getAddressLabel(m_current_payment_request->address())) {
-        setAddressLabel(m_current_payment_request->address(), request_label);
+        writeAddressBookLabel(m_current_payment_request->address(), request_label);
     }
 
     m_current_payment_request->setIsEditing(false);
@@ -1200,6 +1203,22 @@ QString WalletQmlModel::getAddressLabel(const QString& address) const
 
 bool WalletQmlModel::setAddressLabel(const QString& address, const QString& label)
 {
+    if (!writeAddressBookLabel(address, label)) {
+        return false;
+    }
+
+    // Keep any payment request for this address in step with the edited label,
+    // so editing it on the Addresses page also updates the request and its
+    // Activity row instead of letting them diverge. This is the reverse of
+    // saveCurrentPaymentRequest, which writes an edited request label back to
+    // the address book (through writeAddressBookLabel alone: that direction
+    // must not rewrite sibling requests on the same address).
+    syncPaymentRequestLabelToAddress(address, label);
+    return true;
+}
+
+bool WalletQmlModel::writeAddressBookLabel(const QString& address, const QString& label)
+{
     if (!m_wallet || address.isEmpty()) {
         return false;
     }
@@ -1215,6 +1234,38 @@ bool WalletQmlModel::setAddressLabel(const QString& address, const QString& labe
     }
 
     return m_wallet->setAddressBook(destination, label.toStdString(), purpose);
+}
+
+void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, const QString& label)
+{
+    if (!m_wallet || !m_receive_requests) {
+        return;
+    }
+
+    const CTxDestination destination{DecodeDestination(address.toStdString())};
+    if (!IsValidDestination(destination)) {
+        return;
+    }
+
+    for (QmlRecentRequestEntry entry : m_receive_requests->entriesForAddress(address)) {
+        // Already in step: nothing to re-store.
+        if (QString::fromStdString(entry.recipient.label) == label) {
+            continue;
+        }
+        entry.recipient.label = label.toStdString();
+        const QString request_id{QString::number(entry.id)};
+        // Only mirror the new label into the in-memory models once it is
+        // persisted; a failed write must not leave them showing a label the
+        // wallet does not hold.
+        if (!m_wallet->setAddressReceiveRequest(destination, request_id.toStdString(),
+                                                ReceiveRequestHistoryModel::SerializeEntry(entry))) {
+            continue;
+        }
+        m_receive_requests->prependOrReplace(entry);
+        if (m_activity_list_model) {
+            m_activity_list_model->updateReceiveRequest(request_id, label, entry.recipient.amount);
+        }
+    }
 }
 
 std::vector<interfaces::WalletAddress> WalletQmlModel::getAddresses() const

@@ -162,6 +162,18 @@ QVariantList ReceiveRequestHistoryModel::matchingEntriesForAddress(const QString
     return matches;
 }
 
+std::vector<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entriesForAddress(const QString& address) const
+{
+    std::vector<QmlRecentRequestEntry> matches;
+    if (address.isEmpty()) return matches;
+    for (const auto& entry : m_entries) {
+        if (QString::fromStdString(entry.recipient.address) == address) {
+            matches.push_back(entry);
+        }
+    }
+    return matches;
+}
+
 std::optional<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entryById(const QString& request_id) const
 {
     bool ok{false};
