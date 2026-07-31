@@ -110,6 +110,11 @@ Rectangle {
             objectName: root.textObjectName
             Layout.fillWidth: true
             text: root.text
+            // Banner text is a message, never markup. Without this the Text
+            // default of AutoText would silently upgrade markup-looking
+            // strings (an error can interpolate a filesystem path) to rich
+            // text.
+            textFormat: Text.PlainText
             color: root.textColor
             font: Theme.text.description.font
             horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
