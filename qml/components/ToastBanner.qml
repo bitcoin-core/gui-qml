@@ -131,6 +131,11 @@ Rectangle {
                 ? 24
                 : 0
             text: root.text
+            // Banner text is a message, never markup. Without this the Text
+            // default of AutoText would silently upgrade markup-looking
+            // strings (an error can interpolate a filesystem path) to rich
+            // text.
+            textFormat: Text.PlainText
             color: root.textColor
             font.pixelSize: 15
             lineHeightMode: Text.FixedHeight
