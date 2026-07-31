@@ -589,6 +589,7 @@ private Q_SLOTS:
     void editedAddressBookLabelSyncsRequestLabel();
     void requestSaveLeavesSiblingRequestLabelsAlone();
     void labelSyncSkipsInMemoryUpdateWhenPersistFails();
+    void editedAddressBookLabelUpdatesHeldRequestObjects();
     void usedAddressReceiveRequestRowIsFlaggedAndUntracked();
     void paidPendingRequestBecomesUsedAddressRequestLive();
     void paymentMarksEveryPendingRequestForAddressUsedLive();
@@ -1882,6 +1883,34 @@ void WalletQmlModelTests::labelSyncSkipsInMemoryUpdateWhenPersistFails()
     ActivityListModel* activity = model->activityListModel();
     QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
              QStringLiteral("Old label"));
+}
+
+void WalletQmlModelTests::editedAddressBookLabelUpdatesHeldRequestObjects()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
+    QVERIFY(model->commitPaymentRequest());
+    const QString address = model->currentPaymentRequest()->address();
+    const QString request_id = model->currentPaymentRequest()->id();
+    QVERIFY(!address.isEmpty());
+    QVERIFY(model->loadPaymentRequestDetail(request_id));
+
+    // A held-open detail page or locked editor keeps reading these objects,
+    // so an Addresses page label edit must refresh them too, not only the
+    // stored request and its Activity row.
+    QVERIFY(model->setAddressLabel(address, QStringLiteral("New label")));
+    QCOMPARE(model->detailPaymentRequest()->label(), QStringLiteral("New label"));
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("New label"));
+
+    // While the editor is mid-edit its unsaved draft must survive the sync;
+    // the detail object still follows.
+    model->currentPaymentRequest()->edit();
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Unsaved draft"));
+    QVERIFY(model->setAddressLabel(address, QStringLiteral("Renamed again")));
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("Unsaved draft"));
+    QCOMPARE(model->detailPaymentRequest()->label(), QStringLiteral("Renamed again"));
 }
 
 void WalletQmlModelTests::usedAddressReceiveRequestRowIsFlaggedAndUntracked()

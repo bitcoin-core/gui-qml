@@ -413,6 +413,33 @@ TestCase {
         compare(testPaymentRequest.amount.display, "0.00200000")
     }
 
+    function test_lockedEditorNameFollowsExternalLabelChange() {
+        const page = createTemporaryObject(requestPaymentComponent, this)
+        verify(page !== null)
+        page.wallet = testWalletModel
+        page.request = testPaymentRequest
+
+        const nameField = findChild(page, "requestPaymentYourNameInput")
+        verify(nameField !== null)
+
+        // Typing replaces the field's declarative binding, like a real session.
+        nameField.text = "Alice"
+        testPaymentRequest.label = "Alice"
+        testWalletModel.commitPaymentRequest()
+        compare(nameField.text, "Alice")
+
+        // An Addresses page edit reverse-syncs the held request's label while
+        // the form is locked; the field must follow.
+        testPaymentRequest.label = "Bob"
+        compare(nameField.text, "Bob")
+
+        // Mid-edit, an external label change must not clobber the draft.
+        testPaymentRequest.edit()
+        nameField.text = "Unsaved draft"
+        testPaymentRequest.label = "Carol"
+        compare(nameField.text, "Unsaved draft")
+    }
+
     function test_editingRequestDeleteAction_removes_and_clears_request() {
         const page = createTemporaryObject(requestPaymentComponent, this)
         verify(page !== null)

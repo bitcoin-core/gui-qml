@@ -1265,6 +1265,16 @@ void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, co
         if (m_activity_list_model) {
             m_activity_list_model->updateReceiveRequest(request_id, label, entry.recipient.amount);
         }
+        // A detail page or editor holding this request would otherwise keep
+        // showing its stale copy until reloaded. Skip the editor mid-edit so
+        // an unsaved draft is not clobbered.
+        if (m_detail_payment_request && m_detail_payment_request->id() == request_id) {
+            m_detail_payment_request->setLabel(label);
+        }
+        if (m_current_payment_request && m_current_payment_request->id() == request_id &&
+            !m_current_payment_request->isEditing()) {
+            m_current_payment_request->setLabel(label);
+        }
     }
 }
 

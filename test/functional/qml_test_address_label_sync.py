@@ -83,6 +83,16 @@ def run_test():
             f"expected {NEW_LABEL!r}, got {actual!r}"
         )
 
+        # Surface 3: the Receive tab kept the request open in its locked editor
+        # the whole time; switching back must show the edited label, not the
+        # stale text the form held when the label was edited elsewhere.
+        _open_receive(gui)
+        editor_label = gui.get_text("requestPaymentYourNameInput")
+        assert editor_label == NEW_LABEL, (
+            "Held-open request editor did not follow the Addresses-page label edit: "
+            f"expected {NEW_LABEL!r}, got {editor_label!r}"
+        )
+
         print("Address label reverse-sync flow passed.")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve GUI context on failures

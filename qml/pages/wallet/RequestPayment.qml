@@ -628,6 +628,15 @@ Page {
                         noteSelfInput.text = root.requestValue("noteSelf")
                     }
                 }
+                function onLabelChanged() {
+                    // The field's declarative binding is gone once anything
+                    // assigns its text, so follow an external label change
+                    // (the Addresses page reverse sync) by hand. Only while
+                    // locked: an in-progress edit must not be clobbered.
+                    if (!root.requestIsEditing()) {
+                        nameInput.text = root.requestValue("label")
+                    }
+                }
             }
 
             Connections {
