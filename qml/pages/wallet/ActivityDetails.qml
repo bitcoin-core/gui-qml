@@ -158,7 +158,11 @@ Page {
                         required property int index
                         required property var modelData
                         objectName: "activityDetailsThirdPartyLink_" + index
-                        width: thirdPartyLinks.width
+                        // Sized to its own content and centred, so the icon
+                        // sits next to the label instead of being pushed to
+                        // the far edge, and the clickable area is the link
+                        // rather than the full column width.
+                        anchors.horizontalCenter: parent.horizontalCenter
                         parentState: "FILLED"
                         description: qsTr("Show in %1").arg(modelData.host)
                         link: modelData.url
