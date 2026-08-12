@@ -310,23 +310,31 @@ PageStack {
 
             header: Item {
                 id: pageHeader
-                implicitHeight: 50 + (root.filtersVisible ? filterRow.implicitHeight + 10 : 0)
+                // Mirror the Send/Receive title block: 36 above the title and
+                // 36 below it, with the ListView's own top margin counted
+                // toward the lower gap.
+                implicitHeight: 36 + activityHeader.height + 36 - root.activityListTopMargin
+                    + (root.filtersVisible ? filterRow.implicitHeight + 10 : 0)
 
                 RowLayout {
                     id: activityHeader
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.topMargin: 15
-                    height: 30
+                    anchors.topMargin: 36
+                    height: activityTitle.implicitHeight
                     spacing: 10
 
                     CoreText {
+                        id: activityTitle
+                        objectName: "activityTitle"
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignLeft
                         text: qsTr("Activity")
-                        font.pixelSize: 21
-                        bold: true
+                        font: Theme.text.subtitle.font
+                        lineHeight: Theme.text.subtitle.lineHeight
+                        lineHeightMode: Text.FixedHeight
+                        color: Theme.color.neutral9
                     }
 
                     IconButton {
