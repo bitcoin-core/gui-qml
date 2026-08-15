@@ -48,5 +48,27 @@ def run_testshell_doc_example(functional_tests_dir):
         assert test.num_nodes is None
 
 
+def run_testshell_qml_example(functional_tests_dir):
+    import sys
+    sys.path.insert(0, functional_tests_dir)
+    from test_framework.test_shell import TestShell
+    from test_framework.util import assert_equal
+
+    test = TestShell().setup(num_nodes=0, setup_clean_chain=True)
+    qml = None
+    try:
+        if not test.is_qml_compiled():
+            return
+        qml = test.start_qml()
+        assert_equal(qml.driver.get_property("mainWindow", "visible"), True)
+    finally:
+        test.shutdown()
+        if qml is not None:
+            assert_equal(qml.process.poll(), 0)
+        test.reset()
+        assert test.num_nodes is None
+
+
 if __name__ == "__main__":
     run_testshell_doc_example(str(Path(__file__).parent))
+    run_testshell_qml_example(str(Path(__file__).parent))
