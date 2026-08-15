@@ -26,6 +26,12 @@ target_compile_definitions(bitcoinqml
     QT_USE_QSTRINGBUILDER
 )
 
+target_sources(bitcoinqml
+  PRIVATE
+    test/testbridge.cpp
+    test/testbridge.h
+)
+
 target_link_libraries(bitcoinqml
   PRIVATE
     core_interface
@@ -33,6 +39,7 @@ target_link_libraries(bitcoinqml
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Network
 )
 
 add_executable(bitcoin-qt WIN32
