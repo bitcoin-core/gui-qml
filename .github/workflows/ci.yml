@@ -459,13 +459,13 @@ jobs:
           - name: 'macOS-cross to arm64'
             warp-runner: 'warp-ubuntu-latest-x64-4x'
             fallback-runner: 'ubuntu-latest'
-            timeout-minutes: 120
+            timeout-minutes: 180
             file-env: './ci/test/00_setup_env_mac_cross.sh'
 
           - name: 'macOS-cross to x86_64'
             warp-runner: 'warp-ubuntu-latest-x64-4x'
             fallback-runner: 'ubuntu-latest'
-            timeout-minutes: 120
+            timeout-minutes: 180
             file-env: './ci/test/00_setup_env_mac_cross_intel.sh'
 
           - name: 'NetBSD Cross'
@@ -477,7 +477,7 @@ jobs:
           - name: 'FreeBSD Cross'
             warp-runner: 'warp-ubuntu-latest-x64-8x'
             fallback-runner: 'ubuntu-latest'
-            timeout-minutes: 120
+            timeout-minutes: 180
             file-env: './ci/test/00_setup_env_freebsd_cross.sh'
 
           - name: 'OpenBSD Cross'
@@ -495,7 +495,7 @@ jobs:
           - name: 'i686, no IPC'
             warp-runner: 'warp-ubuntu-latest-x64-8x'
             fallback-runner: 'ubuntu-latest'
-            timeout-minutes: 120
+            timeout-minutes: 180
             file-env: './ci/test/00_setup_env_i686_no_ipc.sh'
 
           - name: 'fuzzer,address,undefined,integer'
@@ -513,7 +513,7 @@ jobs:
           - name: 'Alpine (musl)'
             warp-runner: 'warp-ubuntu-latest-x64-8x'
             fallback-runner: 'ubuntu-latest'
-            timeout-minutes: 120
+            timeout-minutes: 180
             file-env: './ci/test/00_setup_env_native_alpine_musl.sh'
 
           - name: 'tidy'

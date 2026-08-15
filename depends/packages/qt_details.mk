@@ -5,6 +5,12 @@ qt_details_suffix := everywhere-opensource-src-$(qt_details_version).tar.xz
 qt_details_qtbase_file_name := qtbase-$(qt_details_suffix)
 qt_details_qtbase_sha256_hash := 532dfbf3fa3cbc68fa37441ea9e81c5009da044eaecda78ffaeafd8bd125532f
 
+qt_details_qtshadertools_file_name := qtshadertools-$(qt_details_suffix)
+qt_details_qtshadertools_sha256_hash := 379a70692b52903b82897869112c4759f7f6f4e76abc4987700e9cdd87c87ebd
+
+qt_details_qtdeclarative_file_name := qtdeclarative-$(qt_details_suffix)
+qt_details_qtdeclarative_sha256_hash := e4e68aad4c07fbb9da670ecd621fabe51b56a2bfcce8da775653bdf8dcd768fc
+
 qt_details_qttranslations_file_name := qttranslations-$(qt_details_suffix)
 qt_details_qttranslations_sha256_hash := 33b1fd1d75598cbf54da12263957f18292c9fb01e42fcc3ab9bd2f8ac79763b7
 
