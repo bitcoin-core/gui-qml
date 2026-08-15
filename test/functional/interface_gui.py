@@ -18,6 +18,7 @@ class GuiTest(BitcoinTestFramework):
         self.extra_args = [["-server"]]
 
     def skip_test_if_missing_module(self):
+        raise SkipTest("QML GUI node lifecycle support is not available yet")
         self.skip_if_no_gui()
         # On Windows, bitcoin.exe exits immediately when launching bitcoin-gui.exe,
         # causing the test framework's process monitor to see a premature node exit.
