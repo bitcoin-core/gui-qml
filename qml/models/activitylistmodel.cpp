@@ -219,10 +219,7 @@ void ActivityListModel::refreshWallet()
             updateTransactionStatus(transaction);
         }
     }
-    std::sort(m_transactions.begin(), m_transactions.end(),
-              [](const QSharedPointer<Transaction> &a, const QSharedPointer<Transaction> &b) {
-                  return a->depth < b->depth;
-              });
+    std::sort(m_transactions.begin(), m_transactions.end(), transactionSortsBefore);
 
     addPendingReceiveRequests();
 }
@@ -273,8 +270,9 @@ void ActivityListModel::addReceiveRequest(const QString& address, const QString&
     tx->isUsedAddressRequest = used_address;
     tx->requestId = requestId;
 
-    beginInsertRows(QModelIndex(), 0, 0);
-    m_transactions.push_front(tx);
+    const int row = sortedInsertPosition(tx);
+    beginInsertRows(QModelIndex(), row, row);
+    m_transactions.insert(row, tx);
     // A used-address request has no unfulfilled payment to wait for, so it is
     // not tracked for fulfillment; only unused pending requests promote to a
     // real row when a matching transaction arrives.
@@ -343,8 +341,9 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
             if (pendingIdx != -1) {
                 fulfillPendingRequest(pendingIdx, tx);
             } else {
-                beginInsertRows(QModelIndex(), 0, 0);
-                m_transactions.push_front(tx);
+                const int row = sortedInsertPosition(tx);
+                beginInsertRows(QModelIndex(), row, row);
+                m_transactions.insert(row, tx);
                 endInsertRows();
             }
         }
@@ -396,10 +395,30 @@ void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Tr
     }
     m_pending_request_addresses.remove(address);
 
-    beginInsertRows(QModelIndex(), 0, 0);
-    m_transactions.push_front(real_tx);
+    const int row = sortedInsertPosition(real_tx);
+    beginInsertRows(QModelIndex(), row, row);
+    m_transactions.insert(row, real_tx);
     endInsertRows();
     Q_EMIT countChanged();
+}
+
+bool ActivityListModel::transactionSortsBefore(const QSharedPointer<Transaction>& a,
+                                               const QSharedPointer<Transaction>& b)
+{
+    // Newest first. Ties are broken deterministically so that a live insert
+    // and a full refresh produce the same row order (#848).
+    if (a->time != b->time) return a->time > b->time;
+    if (a->isPendingRequest != b->isPendingRequest) return a->isPendingRequest;
+    if (a->txid != b->txid) return a->txid < b->txid;
+    if (a->idx != b->idx) return a->idx < b->idx;
+    return a->requestId < b->requestId;
+}
+
+int ActivityListModel::sortedInsertPosition(const QSharedPointer<Transaction>& tx) const
+{
+    const auto it = std::lower_bound(m_transactions.cbegin(), m_transactions.cend(),
+                                     tx, transactionSortsBefore);
+    return std::distance(m_transactions.cbegin(), it);
 }
 
 void ActivityListModel::subscribeToCoreSignals()
