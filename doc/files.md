@@ -100,7 +100,7 @@ Subdirectory | File                 | Description
 
 ## GUI settings
 
-`bitcoin-qt` uses [`QSettings`](https://doc.qt.io/qt-6/qsettings.html) class; this implies platform-specific [locations where application settings are stored](https://doc.qt.io/qt-6/qsettings.html#locations-where-application-settings-are-stored).
+`bitcoin-qt-legacy` uses [`QSettings`](https://doc.qt.io/qt-6/qsettings.html) class; this implies platform-specific [locations where application settings are stored](https://doc.qt.io/qt-6/qsettings.html#locations-where-application-settings-are-stored).
 
 ## Legacy subdirectories and files
 
@@ -142,6 +142,7 @@ This table describes the files installed by Bitcoin Core across different platfo
 | bin/bitcoin                                                | Command-line tool for interacting with Bitcoin. Calls other binaries below. |
 | bin/bitcoin-cli                                            | Tool for making node and wallet RPC calls.                                  |
 | bin/bitcoin-qt                                             | Bitcoin node and wallet GUI                                                 |
+| bin/bitcoin-qt-legacy                                      | Legacy Bitcoin node and wallet GUI                                          |
 | bin/bitcoin-tx                                             | Tool for creating and modifying transactions                                |
 | bin/bitcoin-util                                           | Miscellaneous utilities                                                     |
 | bin/bitcoin-wallet                                         | Bitcoin wallet tool                                                         |
@@ -150,10 +151,10 @@ This table describes the files installed by Bitcoin Core across different platfo
 | *lib/pkgconfig/libbitcoinkernel.pc*                        | Pkg-config metadata for linking to `libbitcoinkernel`                       |
 | *libexec/bench_bitcoin*                                    | Benchmarking tool for measuring node performance                            |
 | *libexec/bitcoin-chainstate*                               | Tool to validate and connect blocks                                         |
-| libexec/bitcoin-gui                                        | IPC-enabled alternative to `bitcoin-qt`                                     |
+| libexec/bitcoin-gui-legacy                                 | IPC-enabled legacy alternative to `bitcoin-qt-legacy`                       |
 | libexec/bitcoin-node                                       | IPC-enabled alternative to `bitcoind`                                       |
 | libexec/test_bitcoin                                       | Unit test binary                                                            |
-| *libexec/test_bitcoin-qt*                                  | GUI-specific unit tests                                                     |
+| *libexec/test_bitcoin-qt-legacy*                           | Legacy Widgets GUI unit tests                                               |
 | share/man/man1/                                            | Man pages for command-line tools like `bitcoin-cli`, `bitcoind`, and others |
 | share/rpcauth/                                             | Documentation and scripts for RPC authentication setup                      |
 

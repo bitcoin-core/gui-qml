@@ -22,7 +22,7 @@ export RUN_IWYU=true
 # and https://github.com/bitcoin-core/libmultiprocess/issues/284.
 export GOAL="codegen mp_headers mptest_headers bitcoin_ipc_headers bitcoin_ipc_test_headers bitcoin_ipc_fuzz_headers"
 export BITCOIN_CONFIG="\
- --preset dev-mode -DBUILD_GUI=OFF \
+ --preset dev-mode -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DCMAKE_C_COMPILER=clang-${IWYU_LLVM_V} \
  -DCMAKE_CXX_COMPILER=clang++-${IWYU_LLVM_V} \
 "
