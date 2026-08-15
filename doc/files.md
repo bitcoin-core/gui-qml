@@ -154,6 +154,7 @@ This table describes the files installed by Bitcoin Core across different platfo
 | libexec/bitcoin-gui-legacy                                 | IPC-enabled legacy alternative to `bitcoin-qt-legacy`                       |
 | libexec/bitcoin-node                                       | IPC-enabled alternative to `bitcoind`                                       |
 | libexec/test_bitcoin                                       | Unit test binary                                                            |
+| *libexec/test_bitcoin-qt*                                  | QML GUI tests                                                               |
 | *libexec/test_bitcoin-qt-legacy*                           | Legacy Widgets GUI unit tests                                               |
 | share/man/man1/                                            | Man pages for command-line tools like `bitcoin-cli`, `bitcoind`, and others |
 | share/rpcauth/                                             | Documentation and scripts for RPC authentication setup                      |
