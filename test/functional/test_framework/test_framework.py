@@ -26,6 +26,7 @@ from .address import create_deterministic_address_bcrt1_p2tr_op_true
 from . import coverage
 from .messages import CAddress
 from .p2p import NetworkThread
+from .qml_test_harness import QmlTestHarness
 from .test_node import TestNode
 from .util import (
     Binaries,
@@ -106,6 +107,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.setup_clean_chain: bool = False
         self.noban_tx_relay: bool = False
         self.nodes: list[TestNode] = []
+        self.qml_test_harnesses: list[QmlTestHarness] = []
         self.extra_args = None
         self.extra_init = None
         self.network_thread = None
@@ -226,6 +228,26 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
     def get_binaries(self, bin_dir=None):
         return Binaries(self.binary_paths, bin_dir, use_valgrind=self.options.valgrind)
 
+    def start_qml(self, *, extra_args=None):
+        """Start the QML bitcoin-qt with its test automation bridge."""
+        harness = QmlTestHarness(
+            qml_argv=self.get_binaries().qml_argv(),
+            tmpdir=self.options.tmpdir,
+        )
+        self.qml_test_harnesses.append(harness)
+        try:
+            harness.start(extra_args=extra_args)
+        except Exception:
+            self.stop_qml(harness)
+            raise
+        return harness
+
+    def stop_qml(self, harness):
+        """Stop a QML bitcoin-qt process started by this test."""
+        harness.stop()
+        if harness in self.qml_test_harnesses:
+            self.qml_test_harnesses.remove(harness)
+
     def setup(self):
         """Call this method to start up the test framework object with options set."""
 
@@ -279,6 +301,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         if self.success == TestStatus.FAILED and self.options.pdbonfailure:
             print("Testcase failed. Attaching python debugger. Enter ? for help")
             pdb.set_trace()
+
+        self.log.debug('Stopping QML processes')
+        for harness in self.qml_test_harnesses[:]:
+            self.stop_qml(harness)
 
         self.log.debug('Closing down network thread')
         self.network_thread.close(timeout=self.options.timeout_factor * 10)
@@ -1088,6 +1114,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         if not self.is_gui_compiled():
             raise SkipTest("GUI has not been compiled.")
 
+    def skip_if_no_qml(self):
+        """Skip the running test if the QML bitcoin-qt has not been compiled."""
+        if not self.is_qml_compiled():
+            raise SkipTest("The QML bitcoin-qt has not been compiled.")
+
     def skip_if_no_previous_releases(self):
         """Skip the running test if previous releases are not available."""
         if not self.has_previous_releases():
@@ -1172,6 +1203,10 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
 
     def is_gui_compiled(self):
         """Checks whether the GUI was compiled."""
+        return self.config.getboolean("components", "BUILD_GUI")
+
+    def is_qml_compiled(self):
+        """Checks whether the QML bitcoin-qt was compiled."""
         return self.config.getboolean("components", "BUILD_GUI")
 
     def has_blockfile(self, node, filenum: str):
