@@ -16,7 +16,6 @@ class GuiTest(BitcoinTestFramework):
         self.extra_args = [["-server"]]
 
     def skip_test_if_missing_module(self):
-        raise SkipTest("QML GUI node lifecycle support is not available yet")
         self.skip_if_no_gui()
         if self.is_qt_vcpkg():
             # vcpkg builds Qt with -opengl dynamic, making the "minimal"

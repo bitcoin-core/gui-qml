@@ -28,5 +28,6 @@ TestCase {
     function test_defaults() {
         compare(mainWindow.objectName, "mainWindow")
         compare(mainWindow.title, "Bitcoin Core")
+        compare(mainWindow.nodeStatus, "Not connected")
     }
 }
