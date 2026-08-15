@@ -150,7 +150,15 @@ def run_functional_tests():
 def run_unit_tests():
     workspace = Path.cwd()
     os.environ["DIR_UNIT_TEST_DATA"] = str(workspace / "unit_test_data")
+    qml_test_env = dict(os.environ, QT_FATAL_WARNINGS="1")
     # Can't use ctest here like other jobs as we don't have a CMake build tree.
+    qml_commands = [
+        ["./bin/test_bitcoin-qt.exe", "--suite=unit"],
+        ["./bin/test_bitcoin-qt.exe", "--suite=qml", "-platform", "minimal"],
+    ]
+    for cmd in qml_commands:
+        run(cmd, env=qml_test_env)
+
     commands = [
         # Intentionally run sequentially here, to catch test case failures caused by dirty global state from prior test cases:
         ["./bin/test_bitcoin.exe", "-l", "test_suite"],

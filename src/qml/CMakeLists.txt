@@ -66,3 +66,7 @@ if(WIN32 AND VCPKG_TARGET_TRIPLET AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.27)
   endif()
   unset(qt_core_type)
 endif()
+
+if(BUILD_GUI_TESTS)
+  add_subdirectory(test)
+endif()
