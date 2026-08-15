@@ -168,6 +168,7 @@ def run_tests(ci_type):
         os.environ["DIR_UNIT_TEST_DATA"] = str(workspace / "unit_test_data")
         test_envs = {
             "BITCOIN_BIN": "bitcoin.exe",
+            "BITCOINQT": "bitcoin-qt.exe",
             "BITCOIND": "bitcoind.exe",
             "BITCOINCLI": "bitcoin-cli.exe",
             "BITCOIN_BENCH": "bench_bitcoin.exe",

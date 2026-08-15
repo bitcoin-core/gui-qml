@@ -11,7 +11,7 @@ class TestShell:
     """Wrapper Class for BitcoinTestFramework.
 
     The TestShell class extends the BitcoinTestFramework
-    rpc & daemon process management functionality to external
+    RPC, daemon, and QML process management functionality to external
     python environments.
 
     It is a singleton class, which ensures that users only
@@ -23,6 +23,10 @@ class TestShell:
 
         def run_test(self):
             pass
+
+        def setup_network(self):
+            if self.num_nodes > 0:
+                super().setup_network()
 
         def setup(self, **kwargs):
             if self.running:
