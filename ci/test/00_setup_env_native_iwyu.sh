@@ -19,7 +19,7 @@ export RUN_CHECK_DEPS=false
 export RUN_IWYU=true
 export GOAL="codegen"
 export BITCOIN_CONFIG="\
- --preset dev-mode -DBUILD_GUI=OFF \
+ --preset dev-mode -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DCMAKE_C_COMPILER=clang-${IWYU_LLVM_V} \
  -DCMAKE_CXX_COMPILER=clang++-${IWYU_LLVM_V} \
 "

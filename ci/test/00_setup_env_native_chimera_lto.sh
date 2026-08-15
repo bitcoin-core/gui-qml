@@ -18,7 +18,7 @@ export DEP_OPTS="build_CC=clang build_CXX=clang++ build_TAR=gtar AR=llvm-ar CC=c
 export GOAL="install"
 export BITCOIN_CONFIG="\
  --preset=dev-mode \
- -DBUILD_GUI=OFF \
+ -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
  -DREDUCE_EXPORTS=ON \
  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
 "

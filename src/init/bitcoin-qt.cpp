@@ -16,7 +16,10 @@
 
 namespace init {
 namespace {
-const char* EXE_NAME = "bitcoin-qt";
+#ifndef BITCOIN_GUI_EXECUTABLE_NAME
+#define BITCOIN_GUI_EXECUTABLE_NAME "bitcoin-qt"
+#endif
+const char* EXE_NAME = BITCOIN_GUI_EXECUTABLE_NAME;
 
 class BitcoinQtInit : public interfaces::Init
 {

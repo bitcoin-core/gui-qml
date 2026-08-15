@@ -1,3 +1,6 @@
 # Suppress warnings triggered in dependencies
 leak:test_bitcoin-qt
+leak:test_bitcoin-qt-legacy
 leak:bitcoin-qt
+leak:bitcoin-qt-legacy
+leak:bitcoin-gui-legacy

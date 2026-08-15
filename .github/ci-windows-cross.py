@@ -152,7 +152,6 @@ def run_unit_tests():
     os.environ["DIR_UNIT_TEST_DATA"] = str(workspace / "unit_test_data")
     # Can't use ctest here like other jobs as we don't have a CMake build tree.
     commands = [
-        ["./bin/test_bitcoin-qt.exe"],
         # Intentionally run sequentially here, to catch test case failures caused by dirty global state from prior test cases:
         ["./bin/test_bitcoin.exe", "-l", "test_suite"],
         ["./src/secp256k1/bin/exhaustive_tests.exe"],
