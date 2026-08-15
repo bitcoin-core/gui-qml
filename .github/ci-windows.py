@@ -120,7 +120,6 @@ def check_manifests(ci_type):
     skips = {  # Skip as they currently do not have manifests
         "fuzz.exe",
         "bench_bitcoin.exe",
-        "test_bitcoin-qt.exe",
         "bitcoin-chainstate.exe",
     }
     for entry in release_dir.iterdir():

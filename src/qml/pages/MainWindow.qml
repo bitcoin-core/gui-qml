@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 
 ApplicationWindow {
+    objectName: "mainWindow"
     title: qsTr("Bitcoin Core")
     minimumWidth: 750
     minimumHeight: 450
