@@ -69,9 +69,10 @@ mkdir -p "$DISTSRC"
           -Werror=dev
 
     # Build Bitcoin Core
-    cmake --build build -j "$JOBS" --target bitcoin-qt
+    cmake --build build -j "$JOBS" --target bitcoin-gui bitcoin-qt
 
     # Install built Bitcoin Core
+    cmake --install build --component bitcoin-gui
     cmake --install build --component bitcoin-qt
 )  # $DISTSRC
 

@@ -4,58 +4,28 @@
 
 #include <qml/bitcoin.h>
 
-#include <qml/test/testbridge.h>
+#include <clientversion.h>
+#include <common/args.h>
+#include <common/init.h>
+#include <common/license_info.h>
+#include <common/system.h>
+#include <init.h>
+#include <interfaces/init.h>
+#include <node/interface_ui.h>
+#include <noui.h>
+#include <qml/bitcoinqmlapplication.h>
+#include <util/strencodings.h>
+#include <util/threadnames.h>
+#include <util/translation.h>
 
-#include <QGuiApplication>
-#include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QString>
 #include <QStringLiteral>
-#include <QUrl>
 
 #include <cstdlib>
 #include <iostream>
 #include <memory>
-#include <optional>
-
-namespace {
-std::optional<QString> CommandLineOption(int argc, char* argv[], const QString& option)
-{
-    const QString prefix{option + QStringLiteral("=")};
-    std::optional<QString> value;
-    for (int i = 1; i < argc; ++i) {
-        const QString argument{QString::fromLocal8Bit(argv[i])};
-        if (argument == option) {
-            value = QString{};
-        } else if (argument.startsWith(prefix)) {
-            value = argument.sliced(prefix.size());
-        }
-    }
-    return value;
-}
-
-bool HasCommandLineOption(int argc, char* argv[], const QString& option)
-{
-    for (int i = 1; i < argc; ++i) {
-        if (QString::fromLocal8Bit(argv[i]) == option) return true;
-    }
-    return false;
-}
-
-std::optional<QString> GetTestAutomationSocket(int argc, char* argv[], QString& error)
-{
-    const auto socket_path{CommandLineOption(argc, argv, QStringLiteral("-test-automation"))};
-    if (!socket_path) return std::nullopt;
-    if (socket_path->isEmpty()) {
-        error = QStringLiteral("The -test-automation option requires a socket path.");
-        return std::nullopt;
-    }
-    if (!HasCommandLineOption(argc, argv, QStringLiteral("-regtest"))) {
-        error = QStringLiteral("The -test-automation option is only available on regtest.");
-        return std::nullopt;
-    }
-    return socket_path;
-}
-} // namespace
+#include <string>
 
 int QmlGuiMain(int argc, char* argv[])
 {
@@ -63,28 +33,73 @@ int QmlGuiMain(int argc, char* argv[])
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    QGuiApplication app(argc, argv);
-    QGuiApplication::setApplicationDisplayName(QGuiApplication::translate("bitcoin-core", "Bitcoin Core"));
+    BitcoinQmlApplication app{argc, argv};
 
-    QString automation_error;
-    const std::optional<QString> test_automation_socket{
-        GetTestAutomationSocket(argc, argv, automation_error)};
-    if (!automation_error.isEmpty()) {
-        std::cerr << "Error: " << automation_error.toStdString() << '\n';
+    SetupEnvironment();
+    util::ThreadSetInternalName("main");
+    noui_connect();
+
+    std::unique_ptr<interfaces::Init> init{interfaces::MakeGuiInit(argc, argv)};
+
+    SetupServerArgs(gArgs, init->canListenIpc());
+    gArgs.AddArg("-test-automation=<path>",
+        "Enable the GUI test automation bridge at the given local socket path",
+        ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION |
+            ArgsManager::DISALLOW_ELISION | ArgsManager::DEBUG_ONLY,
+        OptionsCategory::GUI);
+    std::string error;
+    if (!gArgs.ParseParameters(argc, argv, error)) {
+        InitError(Untranslated(strprintf("Error parsing command line arguments: %s", error)));
         return EXIT_FAILURE;
     }
 
-    QQmlApplicationEngine engine;
-    engine.load(QUrl{QStringLiteral("qrc:///qml/pages/MainWindow.qml")});
-    if (engine.rootObjects().isEmpty()) {
+    // Capture before InitConfig so configuration and settings files cannot enable the bridge.
+    const auto test_automation_socket{gArgs.GetArg("-test-automation")};
+    if (test_automation_socket && test_automation_socket->empty()) {
+        InitError(Untranslated("The -test-automation option requires a socket path."));
         return EXIT_FAILURE;
     }
 
-    std::unique_ptr<TestBridge> test_bridge;
-    if (test_automation_socket) {
-        test_bridge = std::make_unique<TestBridge>(engine, *test_automation_socket);
-        if (!test_bridge->isListening()) return EXIT_FAILURE;
+    if (HelpRequested(gArgs) || gArgs.GetBoolArg("-version", false)) {
+        std::cout << init->exeName() << " " << FormatFullVersion() << "\n";
+        if (gArgs.GetBoolArg("-version", false)) {
+            std::cout << FormatParagraph(LicenseInfo());
+        } else {
+            std::cout << "\n" << gArgs.GetHelpMessage();
+        }
+        return EXIT_SUCCESS;
     }
 
+    for (int i = 1; i < argc; ++i) {
+        if (!IsSwitchChar(argv[i][0])) {
+            InitError(Untranslated(strprintf("Command line contains unexpected token '%s', see %s -h for a list of options.", argv[i], init->exeName())));
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (auto config_error{common::InitConfig(gArgs)}) {
+        InitError(config_error->message, config_error->details);
+        return EXIT_FAILURE;
+    }
+    if (test_automation_socket && gArgs.GetChainTypeString() != "regtest") {
+        InitError(Untranslated("The -test-automation option is only available on regtest."));
+        return EXIT_FAILURE;
+    }
+
+    app.parameterSetup();
+    app.createNode(*init);
+    if (!app.baseInitialize()) {
+        return EXIT_FAILURE;
+    }
+
+    if (!app.createWindow()) {
+        return EXIT_FAILURE;
+    }
+
+    if (test_automation_socket && !app.createTestBridge(QString::fromStdString(*test_automation_socket))) {
+        return EXIT_FAILURE;
+    }
+
+    app.requestInitialize();
     return app.exec();
 }
