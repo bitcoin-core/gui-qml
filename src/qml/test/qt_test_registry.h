@@ -21,8 +21,8 @@ struct Entry
 
 inline std::vector<Entry>& Registry()
 {
-    static auto* registry = new std::vector<Entry>();
-    return *registry;
+    static std::vector<Entry> registry;
+    return registry;
 }
 
 struct Registration

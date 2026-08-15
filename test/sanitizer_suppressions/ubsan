@@ -14,6 +14,7 @@ unsigned-integer-overflow:leveldb/
 unsigned-integer-overflow:minisketch/
 unsigned-integer-overflow:secp256k1/
 unsigned-integer-overflow:test/fuzz/crypto_diff_fuzz_chacha20.cpp
+unsigned-integer-overflow:*/QtCore/qhashfunctions.h
 implicit-integer-sign-change:*/include/boost/
 implicit-integer-sign-change:*/include/c++/
 implicit-integer-sign-change:*/new_allocator.h
