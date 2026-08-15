@@ -212,10 +212,7 @@ void ActivityListModel::refreshWallet()
             updateTransactionStatus(transaction);
         }
     }
-    std::sort(m_transactions.begin(), m_transactions.end(),
-              [](const QSharedPointer<Transaction> &a, const QSharedPointer<Transaction> &b) {
-                  return a->depth < b->depth;
-              });
+    std::sort(m_transactions.begin(), m_transactions.end(), transactionSortsBefore);
 
     addPendingReceiveRequests();
 }
@@ -260,8 +257,9 @@ void ActivityListModel::addReceiveRequest(const QString& address, const QString&
     tx->isPendingRequest = true;
     tx->requestId = requestId;
 
-    beginInsertRows(QModelIndex(), 0, 0);
-    m_transactions.push_front(tx);
+    const int row = sortedInsertPosition(tx);
+    beginInsertRows(QModelIndex(), row, row);
+    m_transactions.insert(row, tx);
     m_pending_request_addresses.insert(address);
     endInsertRows();
     Q_EMIT countChanged();
@@ -325,8 +323,9 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
             if (pendingIdx != -1) {
                 fulfillPendingRequest(pendingIdx, tx);
             } else {
-                beginInsertRows(QModelIndex(), 0, 0);
-                m_transactions.push_front(tx);
+                const int row = sortedInsertPosition(tx);
+                beginInsertRows(QModelIndex(), row, row);
+                m_transactions.insert(row, tx);
                 endInsertRows();
             }
         }
@@ -380,6 +379,41 @@ void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Tr
     m_pending_request_addresses.remove(pending->address);
 
     Q_EMIT dataChanged(this->index(index), this->index(index));
+    repositionTransaction(index);
+}
+
+bool ActivityListModel::transactionSortsBefore(const QSharedPointer<Transaction>& a,
+                                               const QSharedPointer<Transaction>& b)
+{
+    // Newest first. Ties are broken deterministically so that a live insert
+    // and a full refresh produce the same row order (#848).
+    if (a->time != b->time) return a->time > b->time;
+    if (a->isPendingRequest != b->isPendingRequest) return a->isPendingRequest;
+    if (a->txid != b->txid) return a->txid < b->txid;
+    if (a->idx != b->idx) return a->idx < b->idx;
+    return a->requestId < b->requestId;
+}
+
+int ActivityListModel::sortedInsertPosition(const QSharedPointer<Transaction>& tx) const
+{
+    const auto it = std::lower_bound(m_transactions.cbegin(), m_transactions.cend(),
+                                     tx, transactionSortsBefore);
+    return std::distance(m_transactions.cbegin(), it);
+}
+
+void ActivityListModel::repositionTransaction(int index)
+{
+    const QSharedPointer<Transaction> tx = m_transactions.at(index);
+    int target = 0;
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (i == index) continue;
+        if (transactionSortsBefore(m_transactions.at(i), tx)) ++target;
+    }
+    const int destination = target > index ? target + 1 : target;
+    if (destination == index || destination == index + 1) return;
+    beginMoveRows(QModelIndex(), index, index, QModelIndex(), destination);
+    m_transactions.move(index, target);
+    endMoveRows();
 }
 
 void ActivityListModel::subscribeToCoreSignals()
