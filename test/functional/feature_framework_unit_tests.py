@@ -29,6 +29,7 @@ TEST_FRAMEWORK_MODULES = [
     "crypto.ripemd160",
     "crypto.secp256k1",
     "crypto.siphash",
+    "qml_test_harness",
     "script",
     "script_util",
     "segwit_addr",

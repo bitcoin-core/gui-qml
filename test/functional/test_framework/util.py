@@ -305,6 +305,12 @@ class Binaries:
         "Return argv array that should be used to invoke bitcoin-chainstate"
         return self._argv("chainstate", self.paths.bitcoinchainstate)
 
+    def qml_argv(self):
+        "Return argv array that should be used to invoke the QML bitcoin-qt"
+        if self.bin_dir is not None:
+            return [os.path.join(self.bin_dir, os.path.basename(self.paths.bitcoinqt))]
+        return self.valgrind_cmd + [self.paths.bitcoinqt]
+
     def _argv(self, command, bin_path, *, need_ipc=False, use_gui=False):
         """Return argv array that should be used to invoke the command.
 
@@ -342,6 +348,7 @@ def get_binary_paths(config):
         "bitcoin-tx": "BITCOINTX",
         "bitcoin-chainstate": "BITCOINCHAINSTATE",
         "bitcoin-wallet": "BITCOINWALLET",
+        "bitcoin-qt": "BITCOINQT",
     }
     # Set paths to bitcoin core binaries allowing overrides with environment
     # variables.
