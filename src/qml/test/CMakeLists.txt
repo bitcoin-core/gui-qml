@@ -4,6 +4,7 @@
 
 add_executable(test_bitcoin-qt
   qml/qml_tests_main.cpp
+  test_testbridge.cpp
   test_unit_tests_main.cpp
 )
 add_windows_application_manifest(test_bitcoin-qt)
