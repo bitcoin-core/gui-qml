@@ -4,6 +4,8 @@
 
 #include <QtQuickTest/quicktest.h>
 
+#include <QQmlEngine>
+#include <QQmlContext>
 #include <QQuickStyle>
 #include <QStringLiteral>
 
@@ -16,6 +18,11 @@ public Q_SLOTS:
     {
         Q_INIT_RESOURCE(bitcoin_qml);
         QQuickStyle::setStyle(QStringLiteral("Basic"));
+    }
+
+    void qmlEngineAvailable(QQmlEngine* engine)
+    {
+        engine->rootContext()->setContextProperty(QStringLiteral("nodeModel"), static_cast<QObject*>(nullptr));
     }
 };
 
