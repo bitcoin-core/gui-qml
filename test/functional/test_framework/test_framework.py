@@ -228,11 +228,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
     def get_binaries(self, bin_dir=None):
         return Binaries(self.binary_paths, bin_dir, use_valgrind=self.options.valgrind)
 
-    def start_qml(self, *, extra_args=None):
-        """Start the QML bitcoin-qt with its test automation bridge."""
+    def start_qml(self, *, multiprocess=False, extra_args=None):
+        """Start a QML GUI executable with its test automation bridge."""
         harness = QmlTestHarness(
-            qml_argv=self.get_binaries().qml_argv(),
-            tmpdir=self.options.tmpdir,
+            qml_argv=self.get_binaries().qml_argv(multiprocess=multiprocess),
+            tmpdir=os.path.join(self.options.tmpdir, "bitcoin-gui" if multiprocess else "bitcoin-qt"),
         )
         self.qml_test_harnesses.append(harness)
         try:
@@ -243,7 +243,7 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         return harness
 
     def stop_qml(self, harness):
-        """Stop a QML bitcoin-qt process started by this test."""
+        """Stop a QML GUI process started by this test."""
         harness.stop()
         if harness in self.qml_test_harnesses:
             self.qml_test_harnesses.remove(harness)

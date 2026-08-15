@@ -7,9 +7,9 @@
 | *libbitcoin_consensus*   | Consensus functionality used by *libbitcoin_node* and *libbitcoin_wallet*. |
 | *libbitcoin_crypto*      | Hardware-optimized functions for data encryption, hashing, message authentication, and key derivation. |
 | *libbitcoin_kernel*      | Consensus engine and support library used for validation by *libbitcoin_node*. |
-| *libbitcoinqml*          | QML GUI functionality used by the *bitcoin-qt* executable. |
+| *libbitcoinqml*          | QML GUI functionality used by the *bitcoin-qt* and *bitcoin-gui* executables. |
 | *libbitcoinqt*           | Legacy GUI functionality used by the *bitcoin-qt-legacy* and *bitcoin-gui-legacy* executables. |
-| *libbitcoin_ipc*         | IPC functionality used by *bitcoin-node* and *bitcoin-gui-legacy* executables to communicate when [`-DENABLE_IPC=ON`](multiprocess.md) is used. |
+| *libbitcoin_ipc*         | IPC functionality used by *bitcoin-node*, *bitcoin-gui*, and *bitcoin-gui-legacy* executables to communicate when [`-DENABLE_IPC=ON`](multiprocess.md) is used. |
 | *libbitcoin_node*        | P2P and RPC server functionality used by *bitcoind* and *bitcoin-qt* executables. |
 | *libbitcoin_util*        | Home for common functionality shared by different executables and libraries. Similar to *libbitcoin_common*, but lower-level (see [Dependencies](#dependencies)). |
 | *libbitcoin_wallet*      | Wallet functionality used by *bitcoind* and *bitcoin-wallet* executables. |
@@ -48,6 +48,11 @@ bitcoind[bitcoind]-->libbitcoin_wallet;
 bitcoin-qt[bitcoin-qt]-->libbitcoin_node;
 bitcoin-qt[bitcoin-qt]-->libbitcoinqml;
 bitcoin-qt[bitcoin-qt]-->libbitcoin_wallet;
+
+bitcoin-gui[bitcoin-gui]-->libbitcoin_ipc;
+bitcoin-gui[bitcoin-gui]-->libbitcoin_node;
+bitcoin-gui[bitcoin-gui]-->libbitcoinqml;
+bitcoin-gui[bitcoin-gui]-->libbitcoin_wallet;
 
 bitcoin-qt-legacy[bitcoin-qt-legacy]-->libbitcoin_node;
 bitcoin-qt-legacy[bitcoin-qt-legacy]-->libbitcoinqt;
@@ -95,7 +100,7 @@ libbitcoin_wallet_tool-->libbitcoin_wallet;
 libbitcoin_wallet_tool-->libbitcoin_util;
 
 classDef bold stroke-width:2px, font-weight:bold, font-size: smaller;
-class bitcoin-qt,bitcoin-qt-legacy,bitcoin-gui-legacy,bitcoind,bitcoin-cli,bitcoin-wallet bold
+class bitcoin-qt,bitcoin-gui,bitcoin-qt-legacy,bitcoin-gui-legacy,bitcoind,bitcoin-cli,bitcoin-wallet bold
 ```
 </td></tr><tr><td>
 

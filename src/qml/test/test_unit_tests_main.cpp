@@ -3,13 +3,21 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/test/qt_test_registry.h>
+#include <util/translation.h>
 
 #include <QCoreApplication>
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <functional>
 #include <iostream>
+#include <string>
 #include <string_view>
+#include <vector>
+
+extern const std::function<std::vector<const char*>()> G_TEST_COMMAND_LINE_ARGUMENTS{};
+extern const std::function<std::string()> G_TEST_GET_FULL_NAME{};
+const TranslateFn G_TRANSLATION_FUN{nullptr};
 
 int RunQmlTests(int argc, char* argv[]);
 
