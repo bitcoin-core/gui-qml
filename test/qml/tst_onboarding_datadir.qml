@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 import "../../qml/pages/onboarding"
 
 TestCase {
@@ -84,6 +85,16 @@ TestCase {
             width: 640
             height: 665
         }
+    }
+
+    Component {
+        id: appFolderDialog
+        AppFolderDialog { }
+    }
+
+    Component {
+        id: signalSpy
+        SignalSpy { }
     }
 
     function init() {
@@ -191,6 +202,22 @@ TestCase {
         const dialog = findChild(page, "customDataDirFolderDialog")
         verify(dialog !== null)
         verify(dialog.selectedFolder !== undefined)
+    }
+
+    function test_app_folder_dialog_compatibility_contract() {
+        const dialog = createTemporaryObject(appFolderDialog, this)
+        verify(dialog !== null)
+        verify(dialog.selectedFolder !== undefined)
+        compare(typeof dialog.open, "function")
+        compare(typeof dialog.close, "function")
+
+        const acceptedSpy = createTemporaryObject(signalSpy, this, {
+            target: dialog,
+            signalName: "accepted"
+        })
+        verify(acceptedSpy.valid)
+        dialog.accepted()
+        compare(acceptedSpy.count, 1)
     }
 
     function test_storage_location_option_bindings_survive_selection_clicks() {
