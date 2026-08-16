@@ -51,6 +51,7 @@ bool EnsureDataDir(const QString& path, QString* error = nullptr);
 [[nodiscard]] bool PersistDefaultDataDirSelection(QString* error = nullptr);
 
 bool HasExplicitDataDirArg(const ArgsManager& args);
+QString ValidateExplicitDataDir(const ArgsManager& args);
 // The caller handles explicit -datadir precedence before checking the resolved directory.
 bool ShouldShowDataDirChooser(const ArgsManager& args, const QString& data_dir);
 bool ApplyGuiDataDirSetting(ArgsManager& args);
