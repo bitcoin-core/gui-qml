@@ -134,6 +134,24 @@ TestCase {
         }
     }
 
+    function test_addressDetails_request_button_edits_existing_request() {
+        const details = createTemporaryObject(detailsComponent, host)
+        verify(details !== null)
+        const button = findChild(details, "addressDetailsRequestButton")
+        verify(button !== null)
+        compare(button.text, "Create payment request")
+
+        details.hasPaymentRequest = true
+        compare(button.text, "Edit payment request")
+
+        // A used address with a saved request keeps the edit action, while
+        // a used address without one keeps the button hidden.
+        details.used = true
+        tryCompare(button, "visible", true)
+        details.hasPaymentRequest = false
+        tryCompare(button, "visible", false)
+    }
+
     function test_addressLabel_alternates_color_every_four_characters() {
         const label = createTemporaryObject(addressLabelComponent, host)
         verify(label !== null)

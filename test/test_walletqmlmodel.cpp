@@ -542,6 +542,7 @@ private Q_SLOTS:
     void setCurrentPaymentRequestAddressUsesAddressListLabel();
     void commitPaymentRequestUsesSelectedAddressType();
     void updateKeepsStoredPaymentRequestAmount();
+    void setCurrentPaymentRequestAddressEditsExistingRequest();
     void usePaymentRequestAsTemplatePreservesAddressType();
     void commitPaymentRequestOnLockedWalletSignalsNeedsUnlock();
     void commitPaymentRequestWithPassphraseUnlocksRetriesAndRelocks();
@@ -1537,6 +1538,36 @@ void WalletQmlModelTests::updateKeepsStoredPaymentRequestAmount()
     QCOMPARE(entry->recipient.amount, CAmount{1000});
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("second"));
     QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{1000});
+}
+
+void WalletQmlModelTests::setCurrentPaymentRequestAddressEditsExistingRequest()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+
+    model->currentPaymentRequest()->setLabel(QStringLiteral("original"));
+    model->currentPaymentRequest()->amount()->setSatoshi(1000);
+    QVERIFY(model->commitPaymentRequest());
+    const QString request_id{model->currentPaymentRequest()->id()};
+    const QString address{model->currentPaymentRequest()->address()};
+    QVERIFY(!request_id.isEmpty());
+    QVERIFY(!address.isEmpty());
+    QCOMPARE(model->receiveRequests()->rowCount(), 1);
+
+    // Selecting the same address again must load the saved request for
+    // editing instead of starting a fresh draft.
+    QVERIFY(model->setCurrentPaymentRequestAddress(address));
+    QCOMPARE(model->currentPaymentRequest()->id(), request_id);
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("original"));
+    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{1000});
+    QVERIFY(model->currentPaymentRequest()->isEditing());
+
+    // Committing from that state updates in place rather than duplicating.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("renamed"));
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(model->receiveRequests()->rowCount(), 1);
+    const auto entry = model->receiveRequests()->entryById(request_id);
+    QVERIFY(entry.has_value());
+    QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("renamed"));
 }
 
 void WalletQmlModelTests::setCurrentPaymentRequestAddressUsesAddressListLabel()
