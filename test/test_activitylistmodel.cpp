@@ -236,6 +236,7 @@ private Q_SLOTS:
     void selfPaymentFulfillsOnlyWithItsCreditPart();
     void sameSecondRequestsFulfillOldestFirst();
     void paymentPredatingTheRequestDoesNotFulfillIt();
+    void statusAndTypeRolesAreInts();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -515,6 +516,24 @@ void ActivityListModelTests::paymentPredatingTheRequestDoesNotFulfillIt()
     // the request stays pending.
     QCOMPARE(model->rowCount(), 2);
     QCOMPARE(PendingRequestIds(*model), QStringList{"1"});
+}
+
+void ActivityListModelTests::statusAndTypeRolesAreInts()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    wallet->addConfirmedTx(ReceiveTx(1, COIN, 100));
+
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // QML delegates compare these roles against Transaction enum values;
+    // handing out plain ints keeps that an explicit contract instead of
+    // relying on QVariant enum coercion.
+    const QModelIndex row{model->index(0, 0)};
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).typeId(), int{QMetaType::Int});
+    QCOMPARE(model->data(row, ActivityListModel::TypeRole).typeId(), int{QMetaType::Int});
+    QCOMPARE(model->data(row, ActivityListModel::TypeRole).toInt(), int{Transaction::RecvWithAddress});
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

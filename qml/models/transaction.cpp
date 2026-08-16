@@ -10,6 +10,7 @@
 #include <wallet/types.h>
 
 #include <QDateTime>
+#include <QLocale>
 
 namespace {
     const int RecommendedNumConfirmations = 6;
@@ -76,9 +77,11 @@ QString Transaction::dateTimeString() const
 
     int currentYear = QDate::currentDate().year();
     if (dateTime.date().year() == currentYear) {
-        return dateTime.toString("MMMM d");
+        //: Qt date format pattern for a current-year date; translators may reorder the fields for their locale
+        return QLocale().toString(dateTime, tr("MMMM d"));
     } else {
-        return dateTime.toString("MMMM d, yyyy");
+        //: Qt date format pattern for a date in an earlier year; translators may reorder the fields for their locale
+        return QLocale().toString(dateTime, tr("MMMM d, yyyy"));
     }
 }
 

@@ -81,9 +81,9 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
     case LabelRole:
         return tx->label;
     case StatusRole:
-        return tx->status;
+        return static_cast<int>(tx->status);
     case TypeRole:
-        return tx->type;
+        return static_cast<int>(tx->type);
     case TxidRole:
         return tx->isPendingRequest ? QString{} : tx->txid;
     case CanBumpRole:
@@ -188,8 +188,8 @@ QVariantMap ActivityListModel::transactionDetails(const QSharedPointer<Transacti
         {"amount", tx->prettyAmount(m_display_unit)},
         {"date", tx->dateTimeString()},
         {"depth", tx->depth},
-        {"type", tx->type},
-        {"status", tx->status},
+        {"type", static_cast<int>(tx->type)},
+        {"status", static_cast<int>(tx->status)},
         {"countsForBalance", tx->countsForBalance},
         {"address", tx->address},
         {"label", tx->label},
