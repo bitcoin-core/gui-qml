@@ -12,7 +12,6 @@
 #include <memory>
 #include <QAbstractListModel>
 #include <QList>
-#include <QSet>
 #include <QSharedPointer>
 #include <QString>
 
@@ -86,7 +85,6 @@ private:
 
     int m_display_unit{0};
     QList<QSharedPointer<Transaction>> m_transactions;
-    QSet<QString> m_pending_request_addresses;
     WalletQmlModel* m_wallet_model;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_show_progress;

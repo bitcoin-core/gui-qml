@@ -8,6 +8,7 @@
 #include <qml/models/walletqmlmodel.h>
 
 #include <QDateTime>
+#include <QHash>
 #include <QVariantList>
 
 #include <algorithm>
@@ -259,23 +260,46 @@ void ActivityListModel::addPendingReceiveRequests()
     ReceiveRequestHistoryModel* history = m_wallet_model->receiveRequests();
     if (!history) return;
 
-    QSet<QString> existing_addresses;
+    // Replay the address's payments against its requests in time order,
+    // the pairing fulfillPendingRequest produces live: a payment only
+    // fulfills a request that already existed when it arrived, so an old
+    // payment cannot consume a request created after it. Within that
+    // constraint the oldest request is fulfilled first, so a reload
+    // reproduces the same set of still-pending rows.
+    QHash<QString, QList<qint64>> received;
     for (const auto& tx : m_transactions) {
-        if (!tx->address.isEmpty()) {
-            existing_addresses.insert(tx->address);
+        if (tx->isPendingRequest || tx->address.isEmpty()) continue;
+        if (tx->type == Transaction::RecvWithAddress || tx->type == Transaction::RecvFromOther ||
+            tx->type == Transaction::Generated) {
+            received[tx->address].append(tx->time);
         }
     }
+    for (auto& times : received) {
+        std::sort(times.begin(), times.end());
+    }
 
-    for (int i = 0; i < history->rowCount(); ++i) {
+    // History rows are newest first; walk oldest first so past payments
+    // are matched against the oldest requests.
+    for (int i = history->rowCount() - 1; i >= 0; --i) {
         QModelIndex idx = history->index(i);
         QString address = history->data(idx, ReceiveRequestHistoryModel::AddressRole).toString();
-        if (address.isEmpty() || existing_addresses.contains(address)) continue;
+        if (address.isEmpty()) continue;
 
         QString label = history->data(idx, ReceiveRequestHistoryModel::LabelRole).toString();
         CAmount amount = history->data(idx, ReceiveRequestHistoryModel::AmountSatRole).toLongLong();
         QString dateIso = history->data(idx, ReceiveRequestHistoryModel::DateIsoRole).toString();
         qint64 timestamp = QDateTime::fromString(dateIso, Qt::ISODate).toSecsSinceEpoch();
         QString reqId = history->data(idx, ReceiveRequestHistoryModel::IdRole).toString();
+
+        // The earliest payment made at or after this request's creation
+        // fulfills it; payments that predate every request stay ordinary
+        // received rows.
+        auto& times = received[address];
+        const auto payment = std::lower_bound(times.begin(), times.end(), timestamp);
+        if (payment != times.end()) {
+            times.erase(payment);
+            continue;
+        }
 
         addReceiveRequest(address, label, amount, timestamp, reqId);
     }
@@ -295,7 +319,6 @@ void ActivityListModel::addReceiveRequest(const QString& address, const QString&
     const int row = sortedInsertPosition(tx);
     beginInsertRows(QModelIndex(), row, row);
     m_transactions.insert(row, tx);
-    m_pending_request_addresses.insert(address);
     endInsertRows();
     Q_EMIT countChanged();
 }
@@ -319,18 +342,9 @@ void ActivityListModel::removePendingReceiveRequest(const QString& requestId)
             continue;
         }
 
-        const QString address = m_transactions[i]->address;
         beginRemoveRows(QModelIndex(), i, i);
         m_transactions.removeAt(i);
         endRemoveRows();
-
-        const bool address_still_pending = std::any_of(m_transactions.cbegin(), m_transactions.cend(),
-            [&address](const QSharedPointer<Transaction>& tx) {
-                return tx->isPendingRequest && tx->address == address;
-            });
-        if (!address_still_pending) {
-            m_pending_request_addresses.remove(address);
-        }
 
         Q_EMIT countChanged();
         return;
@@ -359,7 +373,13 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
         }
         for (const auto& tx : transactions) {
             tx->updateStatus(tx_status, num_blocks, block_time);
-            int pendingIdx = findPendingRequestIndex(tx->address);
+            // Only incoming parts can fulfill a receive request, the same
+            // types the reload path counts; the debit part of a payment to
+            // one of our own requested addresses must not consume the row.
+            const bool incoming = tx->type == Transaction::RecvWithAddress
+                || tx->type == Transaction::RecvFromOther
+                || tx->type == Transaction::Generated;
+            int pendingIdx = incoming ? findPendingRequestIndex(tx->address) : -1;
             if (pendingIdx != -1) {
                 fulfillPendingRequest(pendingIdx, tx);
             } else {
@@ -375,9 +395,12 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
 
 int ActivityListModel::findPendingRequestIndex(const QString& address) const
 {
-    if (!m_pending_request_addresses.contains(address)) return -1;
+    if (address.isEmpty()) return -1;
 
-    for (int i = 0; i < m_transactions.size(); ++i) {
+    // Rows are newest first; a payment fulfills the oldest still-pending
+    // request for its address, so requests are consumed in the order they
+    // were made and the others stay available for later payments.
+    for (int i = m_transactions.size() - 1; i >= 0; --i) {
         if (m_transactions[i]->isPendingRequest && m_transactions[i]->address == address) {
             return i;
         }
@@ -405,8 +428,6 @@ void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Tr
         pending->label = real_tx->label;
     }
 
-    m_pending_request_addresses.remove(pending->address);
-
     Q_EMIT dataChanged(this->index(index), this->index(index));
     repositionTransaction(index);
 }
@@ -420,7 +441,11 @@ bool ActivityListModel::transactionSortsBefore(const QSharedPointer<Transaction>
     if (a->isPendingRequest != b->isPendingRequest) return a->isPendingRequest;
     if (a->txid != b->txid) return a->txid < b->txid;
     if (a->idx != b->idx) return a->idx < b->idx;
-    return a->requestId < b->requestId;
+    if (a->type != b->type) return a->type < b->type;
+    // Request ids are numeric; compare them as numbers (so id 9 stays older
+    // than id 10) and newest first, matching the time ordering, so the
+    // bottom-most row keeps being the oldest still-pending request.
+    return a->requestId.toLongLong() > b->requestId.toLongLong();
 }
 
 int ActivityListModel::sortedInsertPosition(const QSharedPointer<Transaction>& tx) const
