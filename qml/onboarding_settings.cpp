@@ -176,12 +176,12 @@ void SetPreviewDataDirs(
 
 bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
 {
-    std::string config_error;
-    if (!args.ReadConfigFiles(config_error, true)) {
-        if (error) *error = QString::fromStdString(config_error);
-        return false;
-    }
     try {
+        std::string config_error;
+        if (!args.ReadConfigFiles(config_error, true)) {
+            if (error) *error = QString::fromStdString(config_error);
+            return false;
+        }
         SelectParams(args.GetChainType());
         args.SelectConfigNetwork(args.GetChainTypeString());
     } catch (const std::exception& e) {
@@ -812,6 +812,11 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         status.error = QString::fromStdString(parse_error);
         return status;
     }
+    if (const QString datadir_error{QmlDataDir::ValidateExplicitDataDir(preview_args)};
+        !datadir_error.isEmpty()) {
+        status.error = datadir_error;
+        return status;
+    }
 
     try {
         SelectParams(preview_args.GetChainType());
@@ -844,8 +849,9 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
 
     const bool apply_datadir_before_config = ShouldApplyDataDirBeforeConfig(selected_data_dir_source, explicit_datadir, selected_data_dir);
     const bool custom_datadir_exists = apply_datadir_before_config && QFileInfo::exists(selected_data_dir);
-    const bool can_read_profile = !apply_datadir_before_config || custom_datadir_exists;
-    if (custom_datadir_exists) {
+    const bool custom_datadir_usable = custom_datadir_exists && QmlDataDir::ValidateCustomDataDir(selected_data_dir).isEmpty();
+    const bool can_read_profile = !apply_datadir_before_config || custom_datadir_usable;
+    if (custom_datadir_usable) {
         QmlDataDir::ApplyDataDirArg(preview_args, selected_data_dir);
     }
 
@@ -913,6 +919,11 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     std::string parse_error;
     if (!PrepareArgs(preview_args, argv, can_listen_ipc, parse_error)) {
         result.error = QString::fromStdString(parse_error);
+        return result;
+    }
+    if (const QString datadir_error{QmlDataDir::ValidateExplicitDataDir(preview_args)};
+        !datadir_error.isEmpty()) {
+        result.error = datadir_error;
         return result;
     }
 
