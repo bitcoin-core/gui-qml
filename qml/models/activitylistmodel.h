@@ -51,6 +51,8 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE QVariantMap firstTransactionDetails(const QString& txid) const;
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const;
+    void refreshStatuses();
+    void refreshLabels();
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int count() const { return rowCount(); }
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
@@ -82,7 +84,6 @@ private:
     static bool transactionSortsBefore(const QSharedPointer<Transaction>& a,
                                        const QSharedPointer<Transaction>& b);
     int sortedInsertPosition(const QSharedPointer<Transaction>& tx) const;
-    int findTransactionIndex(const uint256& hash) const;
     int findPendingRequestIndex(const QString& address) const;
     void fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx);
 
