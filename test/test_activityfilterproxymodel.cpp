@@ -141,6 +141,7 @@ private Q_SLOTS:
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
     void exportsCsvEscapesSignedRowsAndHandlesFailures();
+    void exportsCsvNeutralizesFormulaInjection();
 };
 
 void ActivityFilterProxyModelTests::searchMatchesLabelAddressAndTxid()
@@ -369,6 +370,46 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     QVERIFY(csv.contains("\"true\""));
 
     QVERIFY(!proxy.exportCsv(temp_dir.filePath("missing/activity.csv")));
+}
+
+void ActivityFilterProxyModelTests::exportsCsvNeutralizesFormulaInjection()
+{
+    const qint64 timestamp = TimestampForLocalDate(QDate::currentDate());
+    ActivityRow hostile = MakeRow("=HYPERLINK(\"http://evil.test\",\"click\")",
+                                  Transaction::RecvWithAddress, timestamp,
+                                  "txid-hostile", "@bc1qhostile");
+    ActivityRow negative = MakeRow("-2+3+cmd", Transaction::SendToAddress, timestamp - 1,
+                                   "txid-negative", "bc1qplain");
+    negative.net_amount_sat = -123'456'789;
+    ActivityRow linefeed = MakeRow("\n=1+2", Transaction::RecvWithAddress, timestamp - 2,
+                                   "txid-linefeed", "bc1qlinefeed");
+
+    TestActivityListModel source;
+    source.setRows({hostile, negative, linefeed});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString path = temp_dir.filePath("activity.csv");
+    QVERIFY(proxy.exportCsv(QUrl::fromLocalFile(path).toString()));
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString csv = QString::fromUtf8(file.readAll());
+
+    // Text cells with a dangerous leading character are neutralized...
+    QVERIFY(csv.contains("\"'=HYPERLINK(\"\"http://evil.test\"\",\"\"click\"\")\""));
+    QVERIFY(csv.contains("\"'@bc1qhostile\""));
+    QVERIFY(csv.contains("\"'-2+3+cmd\""));
+    QVERIFY(csv.contains("\"'\n=1+2\""));
+    QVERIFY(!csv.contains("\"=HYPERLINK"));
+    QVERIFY(!csv.contains("\"\n=1+2"));
+
+    // ...while the numeric amount column keeps its minus sign untouched.
+    QVERIFY(csv.contains("\"-1.23456789\""));
+    QVERIFY(csv.contains("\"bc1qplain\""));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

@@ -23,6 +23,19 @@ void WriteCsvValue(QTextStream& stream, QString value)
     stream << '"' << value << '"';
 }
 
+// Sender- and address-book-controlled text cells must not execute as
+// formulas when the exported file is opened in a spreadsheet: neutralize
+// a leading =, +, -, @, tab, CR or LF with a single-quote prefix. Only
+// text columns go through this, so numeric cells keep their minus sign.
+QString GuardedCsvText(QString value)
+{
+    static const QString dangerous_leads{QStringLiteral("=+-@\t\r\n")};
+    if (!value.isEmpty() && dangerous_leads.contains(value.at(0))) {
+        value.prepend(QLatin1Char('\''));
+    }
+    return value;
+}
+
 void WriteCsvRow(QTextStream& stream, const QStringList& values)
 {
     for (int i = 0; i < values.size(); ++i) {
@@ -320,8 +333,8 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
             confirmed ? QStringLiteral("true") : QStringLiteral("false"),
             QDateTime::fromSecsSinceEpoch(timestamp).toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")),
             exportTypeLabelForIndex(proxy_index),
-            proxy_index.data(ActivityListModel::LabelRole).toString(),
-            proxy_index.data(ActivityListModel::AddressRole).toString(),
+            GuardedCsvText(proxy_index.data(ActivityListModel::LabelRole).toString()),
+            GuardedCsvText(proxy_index.data(ActivityListModel::AddressRole).toString()),
             QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
             pending_request ? QString{} : proxy_index.data(ActivityListModel::TxIdRole).toString(),
         });
