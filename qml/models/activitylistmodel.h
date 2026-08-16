@@ -44,7 +44,8 @@ public:
         IsPendingRequestRole,
         RequestIdRole,
         NetAmountSatRole,
-        OutputIndexRole
+        OutputIndexRole,
+        CountsForBalanceRole
     };
 
     Q_INVOKABLE void reload();

@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtTest 1.2
+import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -141,6 +142,56 @@ TestCase {
         compare(page.currentItem.txid, "bbbb")
         compare(page.currentItem.outputIndex, 2)
         compare(page.currentItem.address, "bcrt1qsecondsendaddress")
+    }
+
+    function test_zero_conf_row_shows_pending_cue() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        let pendingDate = null
+        tryVerify(function() {
+            pendingDate = findChild(page, "activityItemDate_bbbb")
+            return pendingDate !== null
+        })
+        compare(pendingDate.text, "Pending")
+        const pendingIcon = findChild(page, "activityItemIcon_bbbb")
+        verify(pendingIcon !== null)
+        compare(String(pendingIcon.source), "qrc:/icons/pending")
+
+        // An amount that does not count for the balance yet loses the
+        // settled-money color.
+        const pendingAmount = findChild(page, "activityItemAmount_bbbb")
+        verify(pendingAmount !== null)
+        compare(pendingAmount.color, Theme.color.neutral7)
+
+        const confirmedDate = findChild(page, "activityItemDate_aaaa")
+        verify(confirmedDate !== null)
+        compare(confirmedDate.text, "2026-01-01 00:00")
+        const confirmedIcon = findChild(page, "activityItemIcon_aaaa")
+        verify(confirmedIcon !== null)
+        compare(String(confirmedIcon.source), "qrc:/icons/triangle-down")
+        const confirmedAmount = findChild(page, "activityItemAmount_aaaa")
+        verify(confirmedAmount !== null)
+        compare(confirmedAmount.color, Theme.color.green)
+    }
+
+    function test_zero_conf_details_show_pending_confirmation() {
+        const props = detailsProperties("bbbb")
+        props.depth = 0
+        props.status = 0 // MockTransaction.Unconfirmed
+        const page = createTemporaryObject(activityDetailsComponent, this, props)
+        verify(page !== null)
+        const confirmations = findChild(page, "activityDetailsConfirmations")
+        verify(confirmations !== null)
+        compare(confirmations.text, "Pending confirmation")
+    }
+
+    function test_confirmed_details_show_confirmation_count() {
+        const page = createTemporaryObject(activityDetailsComponent, this, detailsProperties("aaaa"))
+        verify(page !== null)
+        const confirmations = findChild(page, "activityDetailsConfirmations")
+        verify(confirmations !== null)
+        compare(confirmations.text, "3 confirmation(s)")
     }
 
     function test_selectedWalletChanged_pops_to_root() {

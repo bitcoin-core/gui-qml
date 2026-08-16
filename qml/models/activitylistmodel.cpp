@@ -101,6 +101,8 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return QVariant::fromValue<qlonglong>(tx->netAmount());
     case OutputIndexRole:
         return tx->idx;
+    case CountsForBalanceRole:
+        return tx->countsForBalance;
     default:
         return QVariant();
     }
@@ -125,6 +127,7 @@ QHash<int, QByteArray> ActivityListModel::roleNames() const
     roles[RequestIdRole] = "requestId";
     roles[NetAmountSatRole] = "netAmountSat";
     roles[OutputIndexRole] = "outputIndex";
+    roles[CountsForBalanceRole] = "countsForBalance";
     return roles;
 }
 
@@ -186,6 +189,7 @@ QVariantMap ActivityListModel::transactionDetails(const QSharedPointer<Transacti
         {"depth", tx->depth},
         {"type", tx->type},
         {"status", tx->status},
+        {"countsForBalance", tx->countsForBalance},
         {"address", tx->address},
         {"label", tx->label},
         {"paymentRequests", payment_requests}
@@ -211,7 +215,7 @@ void ActivityListModel::refreshStatuses()
         updateTransactionStatus(tx);
     }
     Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1),
-                       {StatusRole, DepthRole, DateTimeRole, CanBumpRole});
+                       {StatusRole, DepthRole, DateTimeRole, CanBumpRole, CountsForBalanceRole});
 }
 
 void ActivityListModel::refreshLabels()
