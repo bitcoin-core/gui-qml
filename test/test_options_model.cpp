@@ -91,6 +91,10 @@ private Q_SLOTS:
     void legacyQtDataDirFallbackReadsOldQtSetting();
     void guiDataDirChooserShowsForMissingConfiguredDir();
     void guiDataDirChooserShowsForUnwritableConfiguredDir();
+    void guiDataDirChooserShowsForUnreadableConfiguredDir();
+    void unreadableConfigDoesNotEscapeStartupResolution();
+    void invalidExplicitDataDirReturnsErrorWithoutReadingProfile();
+    void validRelativeExplicitDataDirResolvesAgainstWorkingDirectory();
     void resetGuiSettingsClearsAndBacksUpQSettings();
     void resetGuiSettingsClearsLegacyQtSettings();
     void resetGuiSettingsClearsAndBacksUpSettingsJson();
@@ -1201,6 +1205,162 @@ void OptionsModelTests::guiDataDirChooserShowsForUnwritableConfiguredDir()
     QVERIFY(QFile(data_dir).setPermissions(original_permissions));
     QVERIFY(should_show);
     QVERIFY(!explicit_datadir_should_show);
+}
+
+void OptionsModelTests::guiDataDirChooserShowsForUnreadableConfiguredDir()
+{
+#ifdef Q_OS_WIN
+    QSKIP("This test relies on POSIX directory permissions.");
+#else
+    SavedGuiDataDirSettings saved_settings;
+    QSettings settings;
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString data_dir = QDir(temp_dir.path()).filePath("unreadable-data-dir");
+    QVERIFY(QDir().mkpath(data_dir));
+
+    QFile config_file{QDir(data_dir).filePath(QStringLiteral("bitcoin.conf"))};
+    QVERIFY(config_file.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(config_file.write("regtest=1\n") > 0);
+    config_file.close();
+    settings.setValue(SettingsKeys::DATA_DIR, data_dir);
+
+    const QFileDevice::Permissions original_permissions = QFileInfo(data_dir).permissions();
+    [[maybe_unused]] const auto restore_permissions = qScopeGuard([&] {
+        QFile(data_dir).setPermissions(original_permissions);
+    });
+    QVERIFY(QFile(data_dir).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    const QFileInfo inaccessible_info{data_dir};
+    if (inaccessible_info.isExecutable()) {
+        QSKIP("Cannot make temporary data directory untraversable on this platform.");
+    }
+
+    QVERIFY(!QmlDataDir::ValidateCustomDataDir(data_dir).isEmpty());
+    const QmlOnboardingSettings::OnboardingStartupStatus status{
+        QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+            TestArgv(),
+            /*can_listen_ipc=*/false)
+    };
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QVERIFY(status.should_show_onboarding);
+    QCOMPARE(status.selected_data_dir, data_dir);
+    QCOMPARE(status.resolved_data_dir, data_dir);
+#endif
+}
+
+void OptionsModelTests::unreadableConfigDoesNotEscapeStartupResolution()
+{
+#ifdef Q_OS_WIN
+    QSKIP("This test relies on POSIX directory permissions.");
+#else
+    SavedGuiDataDirSettings saved_settings;
+    QSettings settings;
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString data_dir = QDir(temp_dir.path()).filePath("data-dir");
+    const QString protected_dir = QDir(temp_dir.path()).filePath("protected");
+    QVERIFY(QDir().mkpath(data_dir));
+    QVERIFY(QDir().mkpath(protected_dir));
+
+    const QString protected_config = QDir(protected_dir).filePath(QStringLiteral("bitcoin.conf"));
+    QFile config_file{protected_config};
+    QVERIFY(config_file.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(config_file.write("regtest=1\n") > 0);
+    config_file.close();
+    QVERIFY(QFile::link(protected_config, QDir(data_dir).filePath(QStringLiteral("bitcoin.conf"))));
+    settings.setValue(SettingsKeys::DATA_DIR, data_dir);
+
+    const QFileDevice::Permissions original_permissions = QFileInfo(protected_dir).permissions();
+    [[maybe_unused]] const auto restore_permissions = qScopeGuard([&] {
+        QFile(protected_dir).setPermissions(original_permissions);
+    });
+    QVERIFY(QFile(protected_dir).setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    if (QFileInfo(protected_config).exists()) {
+        QSKIP("Cannot make the linked configuration file inaccessible on this platform.");
+    }
+
+    QVERIFY(QmlDataDir::ValidateCustomDataDir(data_dir).isEmpty());
+    const QmlOnboardingSettings::OnboardingStartupStatus status{
+        QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+            TestArgv(),
+            /*can_listen_ipc=*/false)
+    };
+    QVERIFY(!status.ok);
+    QVERIFY(!status.error.isEmpty());
+#endif
+}
+
+void OptionsModelTests::invalidExplicitDataDirReturnsErrorWithoutReadingProfile()
+{
+    CurrentDirectoryRestorer restore_current_dir;
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    QVERIFY(QDir::setCurrent(temp_dir.path()));
+
+    for (const std::string& data_dir : {
+             std::string{"relative-missing"},
+             std::string{"~/altdatadir"},
+         }) {
+        std::vector<std::string> argv{TestArgv()};
+        argv.emplace_back("-datadir=" + data_dir);
+
+        const QmlOnboardingSettings::OnboardingStartupStatus status{
+            QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+                argv,
+                /*can_listen_ipc=*/false)
+        };
+        QVERIFY(!status.ok);
+        QVERIFY2(status.error.contains(QStringLiteral("does not exist")), qPrintable(status.error));
+
+        const QmlOnboardingSettings::PreviewResult preview{
+            QmlOnboardingSettings::Preview(
+                argv,
+                /*can_listen_ipc=*/false,
+                temp_dir.path())
+        };
+        QVERIFY(!preview.ok);
+        QVERIFY2(preview.error.contains(QStringLiteral("does not exist")), qPrintable(preview.error));
+    }
+}
+
+void OptionsModelTests::validRelativeExplicitDataDirResolvesAgainstWorkingDirectory()
+{
+    CurrentDirectoryRestorer restore_current_dir;
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    QVERIFY(QDir::setCurrent(temp_dir.path()));
+
+    const QString relative_data_dir{QStringLiteral("relative-data-dir")};
+    const QString absolute_data_dir{QDir(temp_dir.path()).filePath(relative_data_dir)};
+    QVERIFY(QDir().mkpath(relative_data_dir));
+
+    std::vector<std::string> argv{TestArgv()};
+    argv.emplace_back("-datadir=" + relative_data_dir.toStdString());
+
+    const QmlOnboardingSettings::OnboardingStartupStatus status{
+        QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+            argv,
+            /*can_listen_ipc=*/false)
+    };
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QCOMPARE(status.selected_data_dir, absolute_data_dir);
+    QCOMPARE(status.selected_data_dir_source, QmlOnboardingSettings::DataDirSource::ExplicitArg);
+    QCOMPARE(status.resolved_data_dir, absolute_data_dir);
+    QCOMPARE(status.resolved_data_dir_source, QmlOnboardingSettings::DataDirSource::ExplicitArg);
+    QVERIFY(!status.config_redirected_data_dir);
+
+    const QmlOnboardingSettings::PreviewResult preview{
+        QmlOnboardingSettings::Preview(
+            argv,
+            /*can_listen_ipc=*/false,
+            temp_dir.path())
+    };
+    QVERIFY2(preview.ok, qPrintable(preview.error));
+    QCOMPARE(preview.selected_data_dir, absolute_data_dir);
+    QCOMPARE(preview.selected_data_dir_source, QmlOnboardingSettings::DataDirSource::ExplicitArg);
+    QCOMPARE(preview.resolved_data_dir, absolute_data_dir);
+    QCOMPARE(preview.resolved_data_dir_source, QmlOnboardingSettings::DataDirSource::ExplicitArg);
+    QVERIFY(!preview.config_redirected_data_dir);
 }
 
 void OptionsModelTests::resetGuiSettingsClearsAndBacksUpQSettings()

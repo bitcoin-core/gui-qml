@@ -366,6 +366,12 @@ bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_
 
 PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc)
 {
+    // Let InitConfig report invalid explicit datadirs with Core's standard
+    // error instead of entering an onboarding preview that cannot override
+    // the command line.
+    if (!QmlDataDir::ValidateExplicitDataDir(gArgs).isEmpty()) {
+        return PreInitOnboardingStatus::NOT_SHOWN;
+    }
     if (!ShouldShowPreInitOnboarding(argv, can_listen_ipc)) {
         QmlDataDir::ApplyGuiDataDirSetting(gArgs);
         return PreInitOnboardingStatus::NOT_SHOWN;
@@ -548,6 +554,9 @@ int QmlGuiMain(int argc, char* argv[])
     if (auto error = common::InitConfig(
             gArgs,
             ErrorSettingsRead)) {
+        if (error->status != common::ConfigStatus::ABORTED) {
+            InitError(error->message, error->details);
+        }
         return EXIT_FAILURE;
     }
 
