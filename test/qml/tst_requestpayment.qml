@@ -166,6 +166,24 @@ TestCase {
         compare(field.acceptableInput, false)
     }
 
+    function test_amount_locked_when_updating_saved_request() {
+        const page = createTemporaryObject(requestPaymentComponent, this)
+        verify(page !== null)
+        page.request = testPaymentRequest
+
+        const amountInput = findChild(page, "requestPaymentAmountInput")
+        verify(amountInput !== null)
+        verify(amountInput.enabled)
+
+        testPaymentRequest.id = "7"
+        testPaymentRequest.isEditing = true
+        compare(amountInput.enabled, false)
+
+        const nameInput = findChild(page, "requestPaymentYourNameInput")
+        verify(nameInput !== null)
+        verify(nameInput.enabled)
+    }
+
     function test_amountInput_keeps_user_draft_while_model_display_updates() {
         const page = createTemporaryObject(requestPaymentComponent, this)
         verify(page !== null)

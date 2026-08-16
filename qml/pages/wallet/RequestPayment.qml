@@ -228,8 +228,11 @@ Page {
                 accessibleName: qsTr("Payment amount")
                 amount: root.request ? root.request.amount : null
                 errorText: root.request ? root.request.amountError : ""
-                enabled: root.requestIsEditing()
-                placeholderText: root.requestIsEditing()
+                // The expected amount of a saved request cannot be changed,
+                // only a fresh request accepts one (the model enforces this
+                // on commit as well).
+                enabled: root.requestIsEditing() && !root.hasSavedRequest
+                placeholderText: root.requestIsEditing() && !root.hasSavedRequest
                     ? (amountInput.amount ? amountInput.amountInputPlaceholder(amountInput.amount.unit) : "0.00000000")
                     : "—"
                 onInputTextChanged: {

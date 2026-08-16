@@ -541,6 +541,7 @@ private Q_SLOTS:
     void transactionChangedEmitsBalanceChanged();
     void setCurrentPaymentRequestAddressUsesAddressListLabel();
     void commitPaymentRequestUsesSelectedAddressType();
+    void updateKeepsStoredPaymentRequestAmount();
     void usePaymentRequestAsTemplatePreservesAddressType();
     void commitPaymentRequestOnLockedWalletSignalsNeedsUnlock();
     void commitPaymentRequestWithPassphraseUnlocksRetriesAndRelocks();
@@ -1513,6 +1514,29 @@ void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()
     QCOMPARE(wallet->new_destination_types.front(), OutputType::BECH32M);
     QCOMPARE(wallet->new_destination_labels.size(), size_t{1});
     QCOMPARE(wallet->new_destination_labels.front(), std::string{"typed receive"});
+}
+
+void WalletQmlModelTests::updateKeepsStoredPaymentRequestAmount()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+
+    model->currentPaymentRequest()->setLabel(QStringLiteral("first"));
+    model->currentPaymentRequest()->amount()->setSatoshi(1000);
+    QVERIFY(model->commitPaymentRequest());
+    const QString request_id{model->currentPaymentRequest()->id()};
+    QVERIFY(!request_id.isEmpty());
+
+    // Even if the in-memory request is tampered with, an update must keep
+    // the stored amount; only the other fields follow the editor.
+    model->currentPaymentRequest()->amount()->setSatoshi(999999);
+    model->currentPaymentRequest()->setLabel(QStringLiteral("second"));
+    QVERIFY(model->commitPaymentRequest());
+
+    const auto entry = model->receiveRequests()->entryById(request_id);
+    QVERIFY(entry.has_value());
+    QCOMPARE(entry->recipient.amount, CAmount{1000});
+    QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("second"));
+    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{1000});
 }
 
 void WalletQmlModelTests::setCurrentPaymentRequestAddressUsesAddressListLabel()

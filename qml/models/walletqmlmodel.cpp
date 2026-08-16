@@ -937,9 +937,20 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     if (!is_update) {
         m_current_payment_request->setCreated(request_entry.date);
     }
+    // A saved request's expected amount is immutable (#847). The editor
+    // disables the field, but the model is the guard: an update keeps the
+    // stored amount no matter what the in-memory request holds.
+    CAmount request_amount{m_current_payment_request->amount()->satoshi()};
+    if (is_update && m_receive_requests) {
+        if (const auto existing = m_receive_requests->entryById(request_id_text)) {
+            request_amount = existing->recipient.amount;
+            m_current_payment_request->amount()->setSatoshi(request_amount);
+        }
+    }
+
     request_entry.recipient.address = m_current_payment_request->address().toStdString();
     request_entry.recipient.label = m_current_payment_request->label().toStdString();
-    request_entry.recipient.amount = m_current_payment_request->amount()->satoshi();
+    request_entry.recipient.amount = request_amount;
     request_entry.recipient.message = m_current_payment_request->message().toStdString();
     request_entry.recipient.noteSelf = m_current_payment_request->noteSelf().toStdString();
 
