@@ -19,6 +19,7 @@
 #include <QSettings>
 #include <QUrl>
 
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -108,11 +109,20 @@ QString ValidateCustomDataDir(const QString& path)
     }
 
     QFileInfo target_info(local_path);
-    if (target_info.exists() && !target_info.isDir()) {
-        return DataDirTr("The selected path exists and is not a directory.");
-    }
-    if (target_info.exists() && !target_info.isWritable()) {
-        return DataDirTr("The selected directory is not writable.");
+    if (target_info.exists()) {
+        if (!target_info.isDir()) {
+            return DataDirTr("The selected path exists and is not a directory.");
+        }
+        bool accessible{target_info.isReadable()};
+#ifndef Q_OS_WIN
+        accessible = accessible && target_info.isExecutable();
+#endif
+        if (!accessible) {
+            return DataDirTr("The selected directory is not accessible.");
+        }
+        if (!target_info.isWritable()) {
+            return DataDirTr("The selected directory is not writable.");
+        }
     }
 
     QString parent_path = target_info.absoluteDir().absolutePath();
@@ -228,6 +238,19 @@ void PersistDefaultDataDirSelection()
 bool HasExplicitDataDirArg(const ArgsManager& args)
 {
     return args.IsArgSet("-datadir") && !args.GetPathArg("-datadir").empty();
+}
+
+QString ValidateExplicitDataDir(const ArgsManager& args)
+{
+    if (!HasExplicitDataDirArg(args)) return {};
+    try {
+        if (CheckDataDirOption(args)) return {};
+    } catch (const std::exception& e) {
+        return QString::fromStdString(e.what());
+    }
+
+    return DataDirTr("Specified data directory \"%1\" does not exist.")
+        .arg(QString::fromStdString(args.GetArg("-datadir", "")));
 }
 
 bool ShouldShowDataDirChooser(const ArgsManager& args)
