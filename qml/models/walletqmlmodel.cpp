@@ -878,6 +878,22 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         return false;
     }
 
+    // A request already saved for this address is loaded for editing, not
+    // duplicated: reopening the action on such an address means changing
+    // the saved request, and silently minting a second request for the
+    // same address multiplies rows that all describe one ask.
+    if (m_receive_requests) {
+        const QVariantList existing = m_receive_requests->matchingEntriesForAddress(address);
+        if (!existing.isEmpty()) {
+            const QString request_id = existing.first().toMap().value(QStringLiteral("requestId")).toString();
+            if (!loadPaymentRequest(request_id)) {
+                return false;
+            }
+            m_current_payment_request->setIsEditing(true);
+            return true;
+        }
+    }
+
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
     m_current_payment_request->setLabel(getAddressLabel(address));

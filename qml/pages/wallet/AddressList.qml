@@ -27,6 +27,7 @@ SettingsPage {
     property string selectedCategory: ""
     property string selectedScriptType: ""
     property bool selectedUsed: false
+    property bool selectedHasPaymentRequest: false
     property string errorText: ""
     property var pendingNotesByAddress: ({})
 
@@ -186,6 +187,7 @@ SettingsPage {
             category: root.selectedCategory
             scriptType: root.selectedScriptType
             used: root.selectedUsed
+            hasPaymentRequest: root.selectedHasPaymentRequest
             onCloseRequested: detailsPopup.close()
             onCreatePaymentRequestRequested: {
                 root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
@@ -277,6 +279,12 @@ SettingsPage {
                     root.selectedCategory = category;
                     root.selectedScriptType = scriptType;
                     root.selectedUsed = used;
+                    // Resolved when the popup opens: a binding over the
+                    // request model would go stale, since it cannot see
+                    // requests added while the same address stays selected.
+                    root.selectedHasPaymentRequest = root.wallet && root.wallet.receiveRequests
+                        ? root.wallet.receiveRequests.matchingEntriesForAddress(address).length > 0
+                        : false;
                     addressDetails.resetNoteEditor();
                     detailsPopup.open();
                 }
