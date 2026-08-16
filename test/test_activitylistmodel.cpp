@@ -4,6 +4,8 @@
 
 #include <QtTest/QtTest>
 
+#include <QSignalSpy>
+
 #include <test/mocks/mockwallet.h>
 
 #include <qml/models/activitylistmodel.h>
@@ -52,14 +54,49 @@ interfaces::WalletTx ReceiveTx(uint8_t seed, CAmount amount, int64_t time)
     return wtx;
 }
 
+interfaces::WalletTx TwoOutputReceiveTx(uint8_t seed, CAmount amount, int64_t time)
+{
+    const CTxDestination first{TestDestination(seed)};
+    const CTxDestination second{TestDestination(static_cast<uint8_t>(seed + 1))};
+
+    CMutableTransaction mtx;
+    mtx.version = 2;
+    mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{seed}), 0});
+    mtx.vout.emplace_back(amount, GetScriptForDestination(first));
+    mtx.vout.emplace_back(amount, GetScriptForDestination(second));
+
+    interfaces::WalletTx wtx;
+    wtx.tx = MakeTransactionRef(std::move(mtx));
+    wtx.txin_is_mine = {false};
+    wtx.txout_is_mine = {true, true};
+    wtx.txout_is_change = {false, false};
+    wtx.txout_address = {first, second};
+    wtx.txout_address_is_mine = {true, true};
+    wtx.credit = 2 * amount;
+    wtx.debit = 0;
+    wtx.change = 0;
+    wtx.time = time;
+    wtx.is_coinbase = false;
+    return wtx;
+}
+
 class TestActivityWallet final : public StubWallet
 {
 public:
     std::set<interfaces::WalletTx> m_txs;
     std::map<Txid, interfaces::WalletTxStatus> m_statuses;
+    bool m_fail_status_reads{false};
+    std::map<CTxDestination, std::string> m_labels;
     std::vector<interfaces::Wallet::TransactionChangedFn> m_transaction_changed;
 
     std::set<interfaces::WalletTx> getWalletTxs() override { return m_txs; }
+    bool getAddress(const CTxDestination& dest, std::string* name, wallet::AddressPurpose*) override
+    {
+        const auto it = m_labels.find(dest);
+        if (it == m_labels.end()) return false;
+        if (name) *name = it->second;
+        return true;
+    }
     interfaces::WalletTx getWalletTx(const Txid& txid) override
     {
         for (const auto& wtx : m_txs) {
@@ -70,6 +107,7 @@ public:
     bool tryGetTxStatus(const Txid& txid, interfaces::WalletTxStatus& tx_status,
                         int& num_blocks, int64_t& block_time) override
     {
+        if (m_fail_status_reads) return false;
         const auto it = m_statuses.find(txid);
         if (it == m_statuses.end()) return false;
         tx_status = it->second;
@@ -86,6 +124,11 @@ public:
     void addConfirmedTx(const interfaces::WalletTx& wtx, int depth = 1)
     {
         m_txs.insert(wtx);
+        setDepth(wtx, depth);
+    }
+
+    void setDepth(const interfaces::WalletTx& wtx, int depth)
+    {
         interfaces::WalletTxStatus status{};
         status.depth_in_main_chain = depth;
         status.is_in_main_chain = depth > 0;
@@ -127,6 +170,10 @@ private Q_SLOTS:
     void initTestCase();
     void refreshOrdersRowsNewestFirst();
     void liveInsertMatchesRefreshOrder();
+    void dataIsAPureRead();
+    void changeRefreshesEveryRowOfTheTransaction();
+    void statusRefreshKeepsCachedStatusOnFailedRead();
+    void refreshLabelsFollowsAddressBook();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -177,6 +224,114 @@ void ActivityListModelTests::liveInsertMatchesRefreshOrder()
     model->reload();
     QCOMPARE(model->rowCount(), 4);
     QCOMPARE(RowTxids(*model), live_order);
+}
+
+void ActivityListModelTests::dataIsAPureRead()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx wtx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(wtx, /*depth=*/0);
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    const QModelIndex row{model->index(0, 0)};
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Unconfirmed});
+
+    // The wallet's view of the transaction advances, but reading the model
+    // must not pick that up: status only moves on an explicit refresh.
+    wallet_ptr->setDepth(wtx, 6);
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Unconfirmed});
+    QCOMPARE(model->data(row, ActivityListModel::DepthRole).toInt(), 0);
+
+    QSignalSpy changed_spy{model, &QAbstractItemModel::dataChanged};
+    QSignalSpy reset_spy{model, &QAbstractItemModel::modelAboutToBeReset};
+    model->refreshStatuses();
+    QCOMPARE(model->rowCount(), 1);
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Confirmed});
+    QCOMPARE(model->data(row, ActivityListModel::DepthRole).toInt(), 6);
+    QCOMPARE(changed_spy.count(), 1);
+    QCOMPARE(reset_spy.count(), 0);
+}
+
+void ActivityListModelTests::changeRefreshesEveryRowOfTheTransaction()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx wtx{TwoOutputReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(wtx, /*depth=*/0);
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 2);
+
+    // Abandoning the transaction fires one change notification for its
+    // hash. Both of its rows have to pick the new status up: no row
+    // re-reads the wallet on its own, so a row skipped here would show
+    // the stale status until an unrelated refresh.
+    interfaces::WalletTxStatus abandoned{};
+    abandoned.is_abandoned = true;
+    wallet_ptr->m_statuses[wtx.tx->GetHash()] = abandoned;
+    wallet_ptr->notifyTransactionChanged(wtx);
+    for (int row = 0; row < model->rowCount(); ++row) {
+        QCOMPARE(model->data(model->index(row, 0), ActivityListModel::StatusRole).toInt(),
+                 int{Transaction::Abandoned});
+    }
+}
+
+void ActivityListModelTests::statusRefreshKeepsCachedStatusOnFailedRead()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx wtx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(wtx, /*depth=*/6);
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    const QModelIndex row{model->index(0, 0)};
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Confirmed});
+
+    // A failed status read (the wallet interface also fails on plain lock
+    // contention) must not downgrade the row; the cached status stays until
+    // a read succeeds again.
+    wallet_ptr->m_fail_status_reads = true;
+    model->refreshStatuses();
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Confirmed});
+    QCOMPARE(model->data(row, ActivityListModel::DepthRole).toInt(), 6);
+
+    wallet_ptr->m_fail_status_reads = false;
+    wallet_ptr->setDepth(wtx, 0);
+    model->refreshStatuses();
+    QCOMPARE(model->data(row, ActivityListModel::StatusRole).toInt(), int{Transaction::Unconfirmed});
+}
+
+void ActivityListModelTests::refreshLabelsFollowsAddressBook()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx wtx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(wtx);
+    wallet->m_labels[TestDestination(1)] = "alice";
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // The label is resolved when the row is created, not on every read.
+    const QModelIndex row{model->index(0, 0)};
+    QCOMPARE(model->data(row, ActivityListModel::LabelRole).toString(), QStringLiteral("alice"));
+
+    wallet_ptr->m_labels[TestDestination(1)] = "bob";
+    QCOMPARE(model->data(row, ActivityListModel::LabelRole).toString(), QStringLiteral("alice"));
+
+    QSignalSpy changed_spy{model, &QAbstractItemModel::dataChanged};
+    model->refreshLabels();
+    QCOMPARE(model->data(row, ActivityListModel::LabelRole).toString(), QStringLiteral("bob"));
+    QCOMPARE(changed_spy.count(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

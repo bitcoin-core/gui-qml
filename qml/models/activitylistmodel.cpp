@@ -19,6 +19,8 @@ ActivityListModel::ActivityListModel(WalletQmlModel *parent)
     if (m_wallet_model != nullptr) {
         refreshWallet();
         subscribeToCoreSignals();
+        connect(m_wallet_model, &WalletQmlModel::addressListChanged,
+                this, &ActivityListModel::refreshLabels);
     }
 }
 
@@ -41,10 +43,12 @@ void ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) 
     interfaces::WalletTxStatus wtx;
     int num_blocks;
     int64_t block_time;
+    // tryGetTxStatus fails on wallet lock contention as well as for a
+    // missing transaction, so keep the cached status rather than
+    // downgrading the row; the next refresh picks up the real state
+    // (the Widgets TransactionTablePriv does the same).
     if (m_wallet_model->tryGetTxStatus(tx->hash, wtx, num_blocks, block_time)) {
         tx->updateStatus(wtx, num_blocks, block_time);
-    } else {
-        tx->status = Transaction::Status::NotAccepted;
     }
 }
 
@@ -63,7 +67,6 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return QVariant();
 
     QSharedPointer<Transaction> tx = m_transactions.at(index.row());
-    updateTransactionStatus(tx);
 
     switch (role) {
     case AddressRole:
@@ -75,7 +78,6 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
     case DepthRole:
         return tx->depth;
     case LabelRole:
-        updateTransactionLabel(tx);
         return tx->label;
     case StatusRole:
         return tx->status;
@@ -200,6 +202,34 @@ void ActivityListModel::setDisplayUnit(int unit)
     }
 }
 
+void ActivityListModel::refreshStatuses()
+{
+    if (m_transactions.isEmpty()) {
+        return;
+    }
+    for (const auto& tx : m_transactions) {
+        updateTransactionStatus(tx);
+    }
+    Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1),
+                       {StatusRole, DepthRole, DateTimeRole, CanBumpRole});
+}
+
+void ActivityListModel::refreshLabels()
+{
+    if (m_transactions.isEmpty()) {
+        return;
+    }
+    for (const auto& tx : m_transactions) {
+        // Pending request rows carry the request's label, kept in sync by
+        // updateReceiveRequest; only wallet transactions follow the address book.
+        if (tx->isPendingRequest) {
+            continue;
+        }
+        updateTransactionLabel(tx);
+    }
+    Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1), {LabelRole});
+}
+
 void ActivityListModel::refreshWallet()
 {
     if (m_wallet_model == nullptr) {
@@ -210,6 +240,7 @@ void ActivityListModel::refreshWallet()
         m_transactions.append(transactions);
         for (const auto &transaction : transactions) {
             updateTransactionStatus(transaction);
+            updateTransactionLabel(transaction);
         }
     }
     std::sort(m_transactions.begin(), m_transactions.end(), transactionSortsBefore);
@@ -304,13 +335,18 @@ void ActivityListModel::removePendingReceiveRequest(const QString& requestId)
 
 void ActivityListModel::updateTransaction(const uint256& hash, const interfaces::WalletTxStatus& tx_status, int num_blocks, int64_t block_time)
 {
-    int index = findTransactionIndex(hash);
+    // One wallet transaction can back several rows (a multi-recipient
+    // send, a self-payment's send and receive parts), and no row re-reads
+    // the wallet on its own, so a change has to refresh every one of them.
+    bool found{false};
+    for (int i = 0; i < m_transactions.size(); ++i) {
+        if (m_transactions.at(i)->hash != hash) continue;
+        found = true;
+        m_transactions.at(i)->updateStatus(tx_status, num_blocks, block_time);
+        Q_EMIT dataChanged(index(i), index(i));
+    }
 
-    if (index != -1) {
-        QSharedPointer<Transaction> tx = m_transactions.at(index);
-        tx->updateStatus(tx_status, num_blocks, block_time);
-        Q_EMIT dataChanged(this->index(index), this->index(index));
-    } else {
+    if (!found) {
         // new transaction
         interfaces::WalletTx wtx = m_wallet_model->getWalletTx(hash);
         auto transactions = Transaction::fromWalletTx(wtx);
@@ -323,6 +359,7 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
             if (pendingIdx != -1) {
                 fulfillPendingRequest(pendingIdx, tx);
             } else {
+                updateTransactionLabel(tx);
                 const int row = sortedInsertPosition(tx);
                 beginInsertRows(QModelIndex(), row, row);
                 m_transactions.insert(row, tx);
@@ -330,18 +367,6 @@ void ActivityListModel::updateTransaction(const uint256& hash, const interfaces:
             }
         }
     }
-}
-
-int ActivityListModel::findTransactionIndex(const uint256& hash) const
-{
-    auto it = std::find_if(m_transactions.begin(), m_transactions.end(),
-                           [&hash](const QSharedPointer<Transaction>& tx) {
-                               return tx->hash == hash;
-                           });
-    if (it != m_transactions.end()) {
-        return std::distance(m_transactions.begin(), it);
-    }
-    return -1;
 }
 
 int ActivityListModel::findPendingRequestIndex(const QString& address) const

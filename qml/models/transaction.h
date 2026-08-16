@@ -60,7 +60,7 @@ public:
     uint256 hash{0};
     int idx{0};
     QString label{""};
-    Status status;
+    Status status{Unconfirmed};
     qint64 time;
     QString timestamp;
     Type type;
@@ -68,7 +68,7 @@ public:
     CAmount fee{0};
     QString replacesTxid;
     QString replacedByTxid;
-    bool countsForBalance;
+    bool countsForBalance{false};
     bool involvesWatchAddress;
     bool isPendingRequest{false};
     QString requestId;

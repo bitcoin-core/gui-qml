@@ -84,6 +84,7 @@ QString Transaction::dateTimeString() const
 
 void Transaction::updateStatus(const interfaces::WalletTxStatus& wtx, int num_blocks, int64_t block_time)
 {
+    countsForBalance = wtx.is_trusted && !(wtx.blocks_to_maturity > 0);
     depth = wtx.depth_in_main_chain;
     if (type == Generated) {
         if (wtx.blocks_to_maturity > 0)
