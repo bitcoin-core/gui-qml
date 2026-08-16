@@ -30,6 +30,7 @@ Page {
     property int depth: 0
     property int type: 0
     property int status: 0
+    property bool countsForBalance: true
     property var paymentRequests: []
     readonly property int paymentRequestCount: root.paymentRequests ? root.paymentRequests.length : 0
 
@@ -37,6 +38,7 @@ Page {
         id: transactionVisuals
         transactionType: root.type
         transactionStatus: root.status
+        countsForBalance: root.countsForBalance
     }
 
     background: null
@@ -138,9 +140,13 @@ Page {
             }
 
             CoreText {
+                objectName: "activityDetailsConfirmations"
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: 10
-                text: qsTr("%1 confirmations").arg(root.depth)
+                //: Confirmation state of a transaction that is not yet included in a block
+                text: transactionVisuals.zeroConf ? qsTr("Pending confirmation")
+                                                  //: Number of blocks confirming the transaction
+                                                  : qsTr("%n confirmation(s)", "", root.depth)
                 color: Theme.color.neutral7
                 font.pixelSize: 18
             }

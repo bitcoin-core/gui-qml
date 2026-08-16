@@ -45,7 +45,8 @@ public:
         RequestIdRole,
         NetAmountSatRole,
         OutputIndexRole,
-        IsUsedAddressRequestRole
+        IsUsedAddressRequestRole,
+        CountsForBalanceRole
     };
 
     Q_INVOKABLE void reload();
