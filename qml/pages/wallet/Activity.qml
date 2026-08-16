@@ -574,6 +574,7 @@ PageStack {
                         required property string requestId
                         required property int outputIndex
                         required property bool countsForBalance
+                        required property double netAmountSat
 
                         HoverHandler {
                             cursorShape: Qt.PointingHandCursor
@@ -649,7 +650,13 @@ PageStack {
                                 Layout.preferredWidth: 140
                                 Layout.margins: 6
                                 wrap: false
-                                text: delegate.amount
+                                // A request created without an amount has no number to
+                                // show; a zero would assert an amount that was never
+                                // requested, so use the same dash the editor shows for
+                                // its empty locked fields.
+                                text: delegate.isPendingRequest && delegate.netAmountSat === 0
+                                    ? "—"
+                                    : delegate.amount
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                                 color: transactionVisuals.amountColor

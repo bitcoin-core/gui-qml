@@ -53,7 +53,8 @@ Page {
     function paymentRequestSubtitle(request) {
         var amount = request && request.amountDisplay && request.amountDisplay.length > 0
             ? request.amountDisplay
-            : qsTr("No amount")
+            //: Shown in place of the amount for a payment request created without one: the payer chooses how much to send.
+            : qsTr("Any amount")
         if (request && request.date && request.date.length > 0) {
             return qsTr("%1 - %2").arg(amount).arg(request.date)
         }

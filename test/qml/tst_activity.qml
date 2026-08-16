@@ -482,6 +482,22 @@ TestCase {
         compare(row.isUsedAddressRequest, true)
     }
 
+    function test_zero_amount_request_row_shows_dash_not_zero() {
+        testActivityListModel.setUsedAddressRequestRowForTest(0)
+
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        // A request without an amount must not read as a zero amount; the
+        // row shows the same dash the editor uses for empty locked fields.
+        let amount = null
+        tryVerify(function() {
+            amount = findChild(page, "activityItemAmount_pending_0")
+            return amount !== null
+        })
+        compare(amount.text, "—")
+    }
+
     function test_transaction_visuals_keep_request_rows_purple() {
         // Address use alone does not prove a request was paid, so a request
         // row stays purple either way; green is reserved for real

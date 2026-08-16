@@ -2957,6 +2957,7 @@ public:
             case IsUsedAddressRequestRole: return true;
             case TxidRole: return QString{};
             case RequestIdRole: return QStringLiteral("used-req-1");
+            case NetAmountSatRole: return 0; // a request created without an amount
             default: break;
             }
         }

@@ -106,27 +106,17 @@ Page {
                 horizontalAlignment: Text.AlignHCenter
             }
 
-            Item {
+            CoreText {
+                objectName: "paymentRequestDetailAnyAmount"
                 Layout.fillWidth: true
                 Layout.topMargin: 15
                 visible: root.request !== null && root.request.amount.satoshi <= 0
-                implicitHeight: addAmountText.implicitHeight
-
-                CoreText {
-                    id: addAmountText
-                    anchors.centerIn: parent
-                    text: qsTr("Add amount")
-                    font.pixelSize: 24
-                    bold: true
-                    color: Theme.color.neutral7
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.editRequest()
-                }
+                //: Shown in place of the amount on a payment request created without one: the payer chooses how much to send. The amount of a saved request is fixed; a different amount needs a new request.
+                text: qsTr("Any amount")
+                font.pixelSize: 24
+                bold: true
+                color: Theme.color.neutral7
+                horizontalAlignment: Text.AlignHCenter
             }
 
             CoreText {

@@ -166,6 +166,44 @@ TestCase {
         compare(field.acceptableInput, false)
     }
 
+    function test_amount_locked_when_updating_saved_request() {
+        const page = createTemporaryObject(requestPaymentComponent, this)
+        verify(page !== null)
+        page.request = testPaymentRequest
+
+        const amountInput = findChild(page, "requestPaymentAmountInput")
+        verify(amountInput !== null)
+        verify(amountInput.enabled)
+
+        testPaymentRequest.id = "7"
+        testPaymentRequest.isEditing = true
+        compare(amountInput.enabled, false)
+
+        const nameInput = findChild(page, "requestPaymentYourNameInput")
+        verify(nameInput !== null)
+        verify(nameInput.enabled)
+    }
+
+    Component {
+        id: paymentRequestDetailComponent
+
+        PaymentRequestDetail {}
+    }
+
+    function test_saved_request_without_amount_shows_plain_any_amount_text() {
+        // A saved request's amount is fixed, so the detail page must not
+        // offer an "Add amount" path into an editor whose amount field is
+        // locked; a request without an amount states that the payer picks it.
+        testPaymentRequest.clear()
+        testPaymentRequest.id = "7"
+        const page = createTemporaryObject(paymentRequestDetailComponent, this,
+                                           { request: testPaymentRequest })
+        verify(page !== null)
+        const anyAmount = findChild(page, "paymentRequestDetailAnyAmount")
+        verify(anyAmount !== null)
+        compare(anyAmount.text, "Any amount")
+    }
+
     function test_amountInput_keeps_user_draft_while_model_display_updates() {
         const page = createTemporaryObject(requestPaymentComponent, this)
         verify(page !== null)
