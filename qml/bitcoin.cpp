@@ -420,6 +420,12 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     const std::function<void(QQmlApplicationEngine&)>& engine_created,
     const std::function<void(QQmlApplicationEngine&)>& window_created)
 {
+    // Let InitConfig report invalid explicit datadirs with Core's standard
+    // error instead of entering an onboarding preview that cannot override
+    // the command line.
+    if (!QmlDataDir::ValidateExplicitDataDir(gArgs).isEmpty()) {
+        return PreInitOnboardingStatus::NOT_SHOWN;
+    }
     const bool show_onboarding = ShouldShowPreInitOnboarding(argv, can_listen_ipc);
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
     if (!show_onboarding) {
@@ -654,8 +660,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             else QMetaObject::invokeMethod(&app, show_error, Qt::BlockingQueuedConnection);
             return abort;
         };
-        if (common::InitConfig(gArgs, read_error)) {
+        if (auto error = common::InitConfig(gArgs, read_error)) {
             if (!settings_file_backup_error.isEmpty()) InitError(Untranslated(settings_file_backup_error.toStdString()));
+            else if (error->status != common::ConfigStatus::ABORTED) InitError(error->message, error->details);
             return false;
         }
         const auto setup_settings = [&] {
