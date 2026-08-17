@@ -152,11 +152,12 @@ AbstractButton {
             }
 
             CoreText {
+                objectName: root.objectName + "CopiedStatusText"
                 Layout.alignment: Qt.AlignVCenter
                 text: qsTr("Copied")
                 color: Theme.color.neutral9
-                font: Theme.text.body.font
-                lineHeight: Theme.text.body.lineHeight
+                font: root.textStyle.font
+                lineHeight: root.textStyle.lineHeight
                 lineHeightMode: Text.FixedHeight
             }
         }
