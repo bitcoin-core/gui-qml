@@ -122,8 +122,12 @@ SettingsPage {
     Popup {
         id: detailsPopup
         objectName: "addressDetailsPopup"
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(560, root.width - 40)
+        readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
+        property real verticalOffset: 0
+        parent: Overlay.overlay
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
+        width: Math.min(640, root.width - 40)
         modal: true
         focus: true
         leftPadding: 40
@@ -131,12 +135,52 @@ SettingsPage {
         topPadding: 30
         bottomPadding: 30
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                property: "verticalOffset"
+                from: -30
+                to: 0
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 250
+                easing.type: Easing.InCubic
+            }
+            NumberAnimation {
+                property: "verticalOffset"
+                from: 0
+                to: -30
+                duration: 250
+                easing.type: Easing.InCubic
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: detailsPopup.modalOverlayColor
+            opacity: detailsPopup.opacity
+        }
         background: Rectangle {
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
+            color: Theme.color.neutral1
+            border.color: Theme.color.neutral3
             radius: 10
         }
         contentItem: AddressDetails {
+            id: addressDetails
             address: root.selectedAddress
             label: root.selectedLabel
             amount: root.selectedAmount
@@ -145,9 +189,16 @@ SettingsPage {
             scriptType: root.selectedScriptType
             used: root.selectedUsed
             onCloseRequested: detailsPopup.close()
-            onCopyAddressRequested: Clipboard.setText(root.selectedAddress)
             onCreatePaymentRequestRequested: {
                 root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
+            }
+            onEditLabelRequested: (address, label) => {
+                if (root.updateAddressLabel(address, label)) {
+                    root.selectedLabel = label;
+                    noteErrorText = "";
+                } else {
+                    noteErrorText = qsTr("This address is no longer available.");
+                }
             }
         }
     }
@@ -219,6 +270,7 @@ SettingsPage {
                     root.selectedCategory = category;
                     root.selectedScriptType = scriptType;
                     root.selectedUsed = used;
+                    addressDetails.resetNoteEditor();
                     detailsPopup.open();
                 }
             }

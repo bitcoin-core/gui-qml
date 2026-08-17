@@ -76,7 +76,7 @@ TestCase {
         id: detailsComponent
         AddressDetails {
             width: 480
-            address: "bcrt1qexampleaddress"
+            address: "bcrt1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv"
             label: "Pizza"
             amount: "₿ 1.25"
             hasAmount: true
@@ -222,6 +222,16 @@ TestCase {
 
         compare(label.displayAddress, label.address)
         compare(label.isTruncated, false)
+        compare(label.embedded, false)
+        compare(label.textAlignment, Text.AlignLeft)
+        const valueText = findObject(label, "referenceAddressLabelValue")
+        verify(valueText !== null)
+        label.address = "bc1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv"
+        tryVerify(function() { return valueText.paintedHeight > label.textStyle.lineHeight })
+        compare(valueText.wrapMode, Text.WordWrap)
+        label.textAlignment = Text.AlignRight
+        compare(valueText.horizontalAlignment, Text.AlignRight)
+        label.address = "abcdefghijklmnopqrst"
         label.truncateWhenNeeded = true
         tryCompare(label, "isTruncated", true)
         compare(label.displayAddress, "abcdefgh…mnopqrst")
@@ -233,6 +243,14 @@ TestCase {
         label.width = 1000
         tryCompare(label, "isTruncated", false)
         compare(label.displayAddress, label.address)
+
+        const background = findObject(label, "referenceAddressLabelBackground")
+        verify(background !== null)
+        label.embedded = true
+        compare(background.opacity, 0)
+        mouseMove(label, label.width / 2, label.height / 2)
+        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(background, "opacity", 1)
     }
 
     function test_row_uses_display_amount_and_emits_actions() {
@@ -241,26 +259,36 @@ TestCase {
 
         const addressLabel = findObject(row, "addressRowAddressText")
         const noteField = findObject(row, "addressRowNoteField")
+        const noteFocusBorder = findObject(row, "addressRowNoteFocusBorder")
         const amountText = findObject(row, "addressRowAmountText")
+        const divider = findObject(row, "addressRowDivider")
         verify(addressLabel !== null)
         verify(noteField !== null)
+        verify(noteFocusBorder !== null)
         verify(amountText !== null)
+        verify(divider !== null)
         compare(noteField.text, "")
         compare(noteField.placeholderText, "Add a note to self")
         compare(noteField.readOnly, false)
+        compare(noteFocusBorder.border.color, Theme.color.orange)
         compare(noteField.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(addressLabel.address, "bcrt1qexampleaddress")
         compare(addressLabel.truncated, false)
         compare(addressLabel.truncateWhenNeeded, true)
         compare(addressLabel.isTruncated, false)
         compare(addressLabel.textStyle.font.pixelSize, Theme.text.monoCaption.font.pixelSize)
+        verify(addressLabel.y < noteField.y)
         compare(amountText.text, "₿ 0")
         compare(amountText.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(divider.color, Theme.color.neutral3)
         const disclosureIndicator = findObject(row, "addressRowDisclosureIndicator")
         verify(disclosureIndicator !== null)
         compare(disclosureIndicator.size, 14)
         compare(disclosureIndicator.width, 14)
         compare(disclosureIndicator.height, 14)
+
+        mouseMove(row, row.width / 2, row.height / 2)
+        tryCompare(row.background, "color", Qt.rgba(0, 0, 0, 0))
 
         let editRequestCount = 0
         let requestedLabel = ""
@@ -343,6 +371,69 @@ TestCase {
         const details = createTemporaryObject(detailsComponent, this)
         verify(details !== null)
 
+        const section = findObject(details, "addressDetailsSection")
+        const sectionCard = findObject(details, "addressDetailsSectionCard")
+        const addressRow = findObject(details, "addressDetailsAddressRow")
+        const addressLabel = findObject(details, "addressDetailsAddressLabel")
+        const amountRow = findObject(details, "addressDetailsAmountRow")
+        const noteRow = findObject(details, "addressDetailsNoteRow")
+        const noteField = findObject(details, "addressDetailsNoteField")
+        const typeRow = findObject(details, "addressDetailsTypeRow")
+        const addressTypeRow = findObject(details, "addressDetailsAddressTypeRow")
+        verify(section !== null)
+        verify(sectionCard !== null)
+        verify(addressRow !== null)
+        verify(addressLabel !== null)
+        verify(amountRow !== null)
+        verify(noteRow !== null)
+        verify(noteField !== null)
+        verify(typeRow !== null)
+        verify(addressTypeRow !== null)
+        compare(sectionCard.color, Theme.color.neutral2)
+        compare(addressRow.title, "Address")
+        compare(addressRow.minimumRowHeight, 76)
+        compare(addressRow.dividerColor, Theme.color.neutral3)
+        compare(addressLabel.address, "bcrt1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv")
+        compare(addressLabel.embedded, true)
+        compare(addressLabel.truncateWhenNeeded, false)
+        compare(addressLabel.textAlignment, Text.AlignRight)
+        compare(addressLabel.isTruncated, false)
+        const addressValueText = findObject(details, "addressDetailsAddressLabelValue")
+        verify(addressValueText !== null)
+        tryVerify(function() { return addressValueText.paintedHeight > addressLabel.textStyle.lineHeight })
+        compare(amountRow.title, "Amount")
+        compare(amountRow.value, "₿ 1.25")
+        compare(amountRow.dividerColor, Theme.color.neutral3)
+        compare(noteRow.text, "Pizza")
+        compare(noteRow.placeholderText, "Add a note to self")
+        compare(noteField.text, "Pizza")
+        compare(noteField.readOnly, false)
+        compare(noteField.background.border.color, Theme.color.orange)
+        compare(noteRow.dividerColor, Theme.color.neutral3)
+        compare(typeRow.value, "Single-use (Receive)")
+        compare(typeRow.dividerColor, Theme.color.neutral3)
+        compare(addressTypeRow.value, "P2WPKH")
+        compare(addressTypeRow.showDivider, false)
+        verify(findObject(details, "addressDetailsCopyAddressButton") === null)
+
+        let editedAddress = ""
+        let editedLabel = ""
+        details.editLabelRequested.connect(function(address, label) {
+            editedAddress = address
+            editedLabel = label
+        })
+        noteField.forceActiveFocus()
+        verify(noteField.activeFocus)
+        noteField.text = "Updated note"
+        keyClick(Qt.Key_Return)
+        tryCompare(noteField, "activeFocus", false)
+        compare(editedAddress, details.address)
+        compare(editedLabel, "Updated note")
+        details.resetNoteEditor()
+        compare(noteField.text, "Pizza")
+        details.label = "Current note"
+        compare(noteField.text, "Current note")
+
         let sawAmount = false
         let sawStatus = false
         function scanText(root) {
@@ -376,5 +467,24 @@ TestCase {
             closeButton.clicked()
             verify(closed)
         }
+    }
+
+    function test_details_disables_note_for_change_addresses() {
+        const details = createTemporaryObject(detailsComponent, this, {
+            category: "change"
+        })
+        verify(details !== null)
+
+        const noteRow = findObject(details, "addressDetailsNoteRow")
+        const noteField = findObject(details, "addressDetailsNoteField")
+        verify(noteRow !== null)
+        verify(noteField !== null)
+        compare(details.canEditLabel, false)
+        compare(noteRow.enabled, false)
+        compare(noteField.enabled, false)
+        compare(noteField.readOnly, true)
+
+        noteField.forceActiveFocus(Qt.TabFocusReason)
+        verify(!noteField.activeFocus)
     }
 }

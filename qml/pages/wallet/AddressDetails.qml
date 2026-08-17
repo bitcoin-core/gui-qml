@@ -20,10 +20,25 @@ ColumnLayout {
     property string category
     property string scriptType
     property bool used
+    property bool canEditLabel: category !== "change"
+    property string noteErrorText: ""
 
     signal closeRequested
-    signal copyAddressRequested
     signal createPaymentRequestRequested
+    signal editLabelRequested(string address, string label)
+
+    function resetNoteEditor() {
+        noteRow.text = root.label
+        if (noteRow.field) noteRow.field.text = root.label
+        root.noteErrorText = ""
+    }
+
+    onLabelChanged: {
+        if (noteRow.field && !noteRow.field.activeFocus) {
+            noteRow.text = root.label
+            noteRow.field.text = root.label
+        }
+    }
 
     spacing: 0
 
@@ -52,125 +67,88 @@ ColumnLayout {
         }
     }
 
-    DetailRow {
+    FormSection {
+        objectName: "addressDetailsSection"
         Layout.fillWidth: true
-        label: qsTr("Address")
-        value: root.address
-        actionIcon: "image://images/copy"
-        onActionClicked: root.copyAddressRequested()
+        backgroundColor: Theme.color.neutral2
+
+        ValueRow {
+            objectName: "addressDetailsAddressRow"
+            Layout.fillWidth: true
+            title: qsTr("Address")
+            minimumRowHeight: 76
+            dividerColor: Theme.color.neutral3
+
+            trailingItem: AddressLabel {
+                objectName: "addressDetailsAddressLabel"
+                width: Math.min(380, Math.max(200, root.width * 0.68))
+                address: root.address
+                embedded: true
+                textStyle: Theme.text.monoCaption
+                textAlignment: Text.AlignRight
+                leftPadding: 0
+                rightPadding: 0
+                topPadding: 2
+                bottomPadding: 2
+            }
+        }
+
+        ValueRow {
+            objectName: "addressDetailsAmountRow"
+            Layout.fillWidth: true
+            title: qsTr("Amount")
+            value: root.amount
+            valueColor: root.hasAmount ? Theme.color.green : Theme.color.neutral6
+            dividerColor: Theme.color.neutral3
+        }
+
+        TextFieldRow {
+            id: noteRow
+            objectName: "addressDetailsNoteRow"
+            Layout.fillWidth: true
+            title: qsTr("Note")
+            fieldObjectName: "addressDetailsNoteField"
+            fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
+            text: root.label
+            placeholderText: qsTr("Add a note to self")
+            enabled: root.canEditLabel
+            readOnly: !root.canEditLabel
+            errorText: root.noteErrorText
+            dividerColor: Theme.color.neutral3
+            onEditingFinished: {
+                if (text !== root.label) {
+                    root.editLabelRequested(root.address, text)
+                }
+            }
+        }
+
+        ValueRow {
+            objectName: "addressDetailsTypeRow"
+            Layout.fillWidth: true
+            title: qsTr("Type")
+            value: root.category === "change" ? qsTr("Change") : qsTr("Single-use (Receive)")
+            dividerColor: Theme.color.neutral3
+        }
+
+        ValueRow {
+            objectName: "addressDetailsAddressTypeRow"
+            Layout.fillWidth: true
+            title: qsTr("Address type")
+            value: root.scriptType === "" ? qsTr("Unknown") : root.scriptType
+            showDivider: false
+        }
     }
 
-    DetailRow {
-        Layout.fillWidth: true
-        label: qsTr("Amount")
-        value: root.amount
-        valueColor: root.hasAmount ? Theme.color.green : Theme.color.neutral6
-    }
-
-    DetailRow {
-        Layout.fillWidth: true
-        label: qsTr("Label")
-        value: root.label === "" ? qsTr("No note") : root.label
-    }
-
-    DetailRow {
-        Layout.fillWidth: true
-        label: qsTr("Type")
-        value: root.category === "change" ? qsTr("Change") : qsTr("Single-use (Receive)")
-    }
-
-    DetailRow {
-        Layout.fillWidth: true
-        label: qsTr("Address type")
-        value: root.scriptType === "" ? qsTr("Unknown") : root.scriptType
-    }
-
-    RowLayout {
+    ContinueButton {
+        objectName: "addressDetailsCreatePaymentRequestButton"
         Layout.fillWidth: true
         Layout.topMargin: 24
-        spacing: 12
-
-        ContinueButton {
-            objectName: "addressDetailsCopyAddressButton"
-            Layout.fillWidth: true
-            text: qsTr("Copy address")
-            backgroundColor: "transparent"
-            backgroundHoverColor: Theme.color.neutral2
-            backgroundPressedColor: Theme.color.neutral3
-            borderColor: Theme.color.neutral4
-            textColor: Theme.color.neutral9
-            onClicked: root.copyAddressRequested()
-        }
-
-        ContinueButton {
-            objectName: "addressDetailsCreatePaymentRequestButton"
-            Layout.fillWidth: true
-            text: qsTr("Create payment request")
-            visible: root.category === "single-use" && !root.used
-            backgroundColor: Theme.color.orange
-            backgroundHoverColor: Theme.color.orangeLight1
-            backgroundPressedColor: Theme.color.orangeLight2
-            textColor: Theme.color.white
-            onClicked: root.createPaymentRequestRequested()
-        }
-    }
-
-    component DetailRow: Item {
-        id: detailSectionRoot
-
-        property string label
-        property string value
-        property color valueColor: Theme.color.neutral7
-        property string actionIcon: ""
-        signal actionClicked
-
-        Layout.minimumHeight: sectionContent.height + separator.height + 20
-        implicitHeight: sectionContent.height + separator.height + 20
-
-        Column {
-            id: sectionContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.topMargin: 12
-            spacing: 6
-
-            CoreText {
-                width: parent.width
-                text: detailSectionRoot.label
-                color: Theme.color.neutral9
-                font: Theme.text.body.font
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            CoreText {
-                width: parent.width - (detailAction.visible ? detailAction.width + 12 : 0)
-                text: detailSectionRoot.value
-                color: detailSectionRoot.valueColor
-                font: Theme.text.body.font
-                wrapMode: Text.WrapAnywhere
-                horizontalAlignment: Text.AlignLeft
-            }
-        }
-
-        IconButton {
-            id: detailAction
-            anchors.right: parent.right
-            anchors.top: sectionContent.top
-            anchors.topMargin: 24
-            visible: detailSectionRoot.actionIcon !== ""
-            iconSource: detailSectionRoot.actionIcon
-            iconColor: Theme.color.neutral7
-            hoverColor: Theme.color.neutral9
-            size: 30
-            onClicked: detailSectionRoot.actionClicked()
-        }
-
-        Separator {
-            id: separator
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-        }
+        text: qsTr("Create payment request")
+        visible: root.category === "single-use" && !root.used
+        backgroundColor: Theme.color.orange
+        backgroundHoverColor: Theme.color.orangeLight1
+        backgroundPressedColor: Theme.color.orangeLight2
+        textColor: Theme.color.white
+        onClicked: root.createPaymentRequestRequested()
     }
 }

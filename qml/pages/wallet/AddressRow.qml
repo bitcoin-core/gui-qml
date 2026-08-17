@@ -107,7 +107,9 @@ AbstractButton {
                     color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
 
                     FocusBorder {
+                        objectName: "addressRowNoteFocusBorder"
                         visible: noteField.activeFocus
+                        border.color: Theme.color.orange
                         borderRadius: 10
                         topMargin: -2
                         bottomMargin: -2
@@ -194,12 +196,14 @@ AbstractButton {
         }
 
         Separator {
+            objectName: "addressRowDivider"
             visible: root.showDivider
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.leftMargin: 16
             anchors.rightMargin: 16
+            color: Theme.color.neutral3
         }
     }
 

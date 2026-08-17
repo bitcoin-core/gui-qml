@@ -15,11 +15,13 @@ AbstractButton {
     property string address: ""
     property bool truncated: false
     property bool truncateWhenNeeded: false
+    property bool embedded: false
     property int leadingCharacterCount: 8
     property int trailingCharacterCount: 8
     property color primaryColor: Theme.color.neutral9
     property color secondaryColor: Theme.color.neutral7
     property var textStyle: Theme.text.monoBody
+    property int textAlignment: Text.AlignLeft
     property var clipboard: Clipboard
     readonly property bool isTruncated: truncated
         || (truncateWhenNeeded && fullAddressMetrics.advanceWidth > availableWidth)
@@ -108,7 +110,7 @@ AbstractButton {
             anchors.right: parent.right
             anchors.top: parent.top
             height: paintedHeight
-            horizontalAlignment: Text.AlignLeft
+            horizontalAlignment: root.textAlignment
             verticalAlignment: Text.AlignTop
             font: root.textStyle.font
             lineHeight: root.textStyle.lineHeight
@@ -167,11 +169,13 @@ AbstractButton {
     }
 
     background: Rectangle {
+        objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         radius: 5
-        color: root.hovered || root.down ? Theme.color.neutral2 : "transparent"
+        color: root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
+        opacity: root.hovered || root.down ? 1 : 0
 
-        Behavior on color {
-            ColorAnimation { duration: 150 }
+        Behavior on opacity {
+            NumberAnimation { duration: 150 }
         }
     }
 

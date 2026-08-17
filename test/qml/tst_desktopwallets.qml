@@ -3,7 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtTest 1.2
+import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -153,5 +155,24 @@ TestCase {
         tryCompare(settingsContainer, "depth", 2)
         compare(settingsContainer.currentItem.objectName, "addressListPage")
         verify(findChild(page, "walletSettingsPage") !== null)
+
+        const detailsPopup = findChild(page, "addressDetailsPopup")
+        verify(detailsPopup !== null)
+        compare(detailsPopup.background.color, Theme.color.neutral1)
+        compare(detailsPopup.background.border.color, Theme.color.neutral3)
+        compare(detailsPopup.modalOverlayColor, Qt.rgba(0, 0, 0, 0.4))
+        verify(detailsPopup.enter !== null)
+        verify(detailsPopup.exit !== null)
+
+        detailsPopup.open()
+        tryCompare(detailsPopup, "opened", true)
+        tryCompare(detailsPopup, "opacity", 1)
+        compare(detailsPopup.verticalOffset, 0)
+        compare(detailsPopup.parent, Overlay.overlay)
+        compare(detailsPopup.x, Math.round((Overlay.overlay.width - detailsPopup.width) / 2))
+        compare(detailsPopup.y, Math.round((Overlay.overlay.height - detailsPopup.height) / 2))
+
+        detailsPopup.close()
+        tryCompare(detailsPopup, "visible", false)
     }
 }
