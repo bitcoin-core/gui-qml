@@ -71,11 +71,13 @@ In addition the following dependencies are required for the GUI and tests:
 ```
 sudo apt install \
   qt6-base-dev \
+  qt6-base-private-dev \
   qt6-base-dev-tools \
   qt6-tools-dev \
   qt6-l10n-tools \
   qt6-tools-dev-tools \
   qt6-declarative-dev \
+  qt6-declarative-private-dev \
   qml6-module-qt-labs-platform \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick \

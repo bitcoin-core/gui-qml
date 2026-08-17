@@ -81,12 +81,34 @@ if(APPLE)
   list(APPEND QML_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/qml/models/macdockiconhandler.mm")
 endif()
 
-set(QML_QRC ${CMAKE_CURRENT_SOURCE_DIR}/qml/bitcoin_qml.qrc)
+file(GLOB_RECURSE BITCOIN_QML_FILES CONFIGURE_DEPENDS
+  RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/*.qml"
+  "${CMAKE_CURRENT_SOURCE_DIR}/qml/*.js"
+)
+list(FILTER BITCOIN_QML_FILES EXCLUDE REGEX "^qml/compat/")
 if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
-  list(APPEND QML_QRC ${CMAKE_CURRENT_SOURCE_DIR}/qml/compat/qt65/bitcoin_compat.qrc)
+  set(BITCOIN_QML_COMPAT_DIR "qml/compat/qt65")
 else()
-  list(APPEND QML_QRC ${CMAKE_CURRENT_SOURCE_DIR}/qml/compat/qt62/bitcoin_compat.qrc)
+  set(BITCOIN_QML_COMPAT_DIR "qml/compat/qt62")
 endif()
+set(BITCOIN_QML_COMPAT_FILES
+  "${BITCOIN_QML_COMPAT_DIR}/AppFolderDialog.qml"
+  "${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml"
+)
+set_source_files_properties("${BITCOIN_QML_COMPAT_DIR}/AppFolderDialog.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/AppFolderDialog.qml"
+)
+set_source_files_properties("${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/AppSettings.qml"
+)
+list(APPEND BITCOIN_QML_FILES ${BITCOIN_QML_COMPAT_FILES})
+set(BITCOIN_QML_FILES_ABSOLUTE)
+foreach(qml_file IN LISTS BITCOIN_QML_FILES)
+  list(APPEND BITCOIN_QML_FILES_ABSOLUTE "${CMAKE_CURRENT_SOURCE_DIR}/${qml_file}")
+endforeach()
+
+set(QML_QRC ${CMAKE_CURRENT_SOURCE_DIR}/qml/bitcoin_qml.qrc)
 qt6_add_resources(QML_QRC_CPP ${QML_QRC})
 # See: https://bugreports.qt.io/browse/QTBUG-141858.
 get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
@@ -193,6 +215,30 @@ target_link_libraries(bitcoin-core-app
     bitcoin_node
     bitcoinqml
     bitcoinqt
+)
+set(BITCOIN_QML_MODULE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/BitcoinCore/Gui")
+# Cachegen still consumes a module descriptor when qmldir generation is
+# disabled. Keep this build-only descriptor out of the runtime resources.
+file(GENERATE
+  OUTPUT "${BITCOIN_QML_MODULE_OUTPUT_DIRECTORY}/qmldir"
+  CONTENT "module BitcoinCore.Gui\n"
+)
+set(BITCOIN_QML_MODULE_OPTIONS)
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.3)
+  list(APPEND BITCOIN_QML_MODULE_OPTIONS NO_IMPORT_SCAN)
+endif()
+qt6_add_qml_module(bitcoin-core-app
+  URI BitcoinCore.Gui
+  VERSION 1.0
+  OUTPUT_DIRECTORY "${BITCOIN_QML_MODULE_OUTPUT_DIRECTORY}"
+  RESOURCE_PREFIX /
+  NO_RESOURCE_TARGET_PATH
+  NO_GENERATE_QMLDIR
+  NO_GENERATE_QMLTYPES
+  ${BITCOIN_QML_MODULE_OPTIONS}
+  NO_LINT
+  QML_FILES
+    ${BITCOIN_QML_FILES}
 )
 qt6_import_qml_plugins(bitcoin-core-app)
 
