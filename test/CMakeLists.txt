@@ -37,6 +37,7 @@ add_executable(bitcoinqml_unit_tests
   test_receiverequesthistorymodel.cpp
   test_transaction.cpp
   test_activityfilterproxymodel.cpp
+  test_qmlcachepolicy.cpp
   test_qtmessagefilter.cpp
   test_rpccommandexecutor.cpp
   test_rpcconsolemodel.cpp
@@ -82,6 +83,18 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${QMLTESTS_QRC_CPP}
+)
+
+set_source_files_properties("${PROJECT_SOURCE_DIR}/${BITCOIN_QML_COMPAT_DIR}/AppFolderDialog.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/AppFolderDialog.qml"
+)
+set_source_files_properties("${PROJECT_SOURCE_DIR}/${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/AppSettings.qml"
+)
+qt6_add_resources(bitcoinqml_qmltests "bitcoin_qml_test_sources"
+  PREFIX "/"
+  BASE "${PROJECT_SOURCE_DIR}"
+  FILES ${BITCOIN_QML_FILES_ABSOLUTE}
 )
 
 target_compile_definitions(bitcoinqml_qmltests
