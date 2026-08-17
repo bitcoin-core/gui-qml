@@ -191,6 +191,7 @@ TestCase {
         tryVerify(function() { return row.loadedTrailingItem !== null })
         compare(row.loadedTrailingItem.objectName, "exampleSwitch")
         compare(row.loadedTrailingItem.enabled, true)
+        compare(row.dividerColor, Theme.color.neutral2)
 
         row.enabled = false
         compare(row.loadedTrailingItem.enabled, false)

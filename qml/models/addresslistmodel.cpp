@@ -39,10 +39,20 @@ QString ScriptTypeName(const CTxDestination& destination)
     return {};
 }
 
-QString DisplayAmount(CAmount amount)
+QString DisplayAmount(CAmount amount, int display_unit)
 {
-    if (amount == 0) return QStringLiteral("₿ 0.0");
-    return QStringLiteral("₿ ") + QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, amount);
+    const QmlBitcoinUnits::Unit unit{QmlBitcoinUnits::fromDisplayUnit(display_unit)};
+    QString value{QmlBitcoinUnits::format(unit, amount)};
+    if (value.contains(QLatin1Char('.'))) {
+        while (value.endsWith(QLatin1Char('0'))) value.chop(1);
+        if (value.endsWith(QLatin1Char('.'))) value.chop(1);
+    }
+
+    const QString label{QmlBitcoinUnits::displayLabel(unit, amount)};
+    if (unit == QmlBitcoinUnits::Unit::BTC) {
+        return label + QStringLiteral(" ") + value;
+    }
+    return value + QStringLiteral(" ") + label;
 }
 } // namespace
 
@@ -89,9 +99,9 @@ QVariant AddressListModel::data(const QModelIndex& index, int role) const
     case UsedRole:
         return entry.used;
     case CurrentBalanceRole:
-        return QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, entry.current_balance);
+        return QmlBitcoinUnits::format(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), entry.current_balance);
     case DisplayAmountRole:
-        return DisplayAmount(entry.current_balance);
+        return DisplayAmount(entry.current_balance, m_display_unit);
     case HasAmountRole:
         return entry.current_balance != 0;
     case ScriptTypeRole:
@@ -138,7 +148,7 @@ void AddressListModel::setCategory(Category category)
 QVariantList AddressListModel::categoryOptions() const
 {
     return {
-        QVariantMap{{QStringLiteral("value"), static_cast<int>(SingleUse)}, {QStringLiteral("text"), tr("Single-use")}},
+        QVariantMap{{QStringLiteral("value"), static_cast<int>(SingleUse)}, {QStringLiteral("text"), tr("Receive")}},
         QVariantMap{{QStringLiteral("value"), static_cast<int>(Change)}, {QStringLiteral("text"), tr("Change")}},
     };
 }
@@ -159,6 +169,15 @@ void AddressListModel::setShowUsed(bool show_used)
 void AddressListModel::refresh()
 {
     rebuild();
+}
+
+void AddressListModel::setDisplayUnit(int unit)
+{
+    if (unit == m_display_unit) return;
+    m_display_unit = unit;
+    if (!m_entries.empty()) {
+        Q_EMIT dataChanged(index(0), index(rowCount() - 1), {CurrentBalanceRole, DisplayAmountRole});
+    }
 }
 
 bool AddressListModel::setAddressLabel(const QString& address, const QString& label)

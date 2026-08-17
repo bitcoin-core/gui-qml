@@ -102,13 +102,14 @@ def create_payment_request_from_first_unused_address(gui, expected_address):
     row_count = gui.get_property("addressListView", "count")
     for row in range(row_count):
         if gui.get_list_item_property("addressListView", row, "address") == expected_address:
-            gui.click_list_item("addressListView", row, "addressRowMenuButton")
+            gui.click_list_item("addressListView", row, "addressRowDetailsButton")
             break
     else:
         raise AssertionError(f"Expected address {expected_address!r} in address list")
 
-    gui.wait_for_property("addressRowCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
-    gui.click("addressRowCreatePaymentRequestButton")
+    gui.wait_for_property("addressDetailsPopup", "opened", True, timeout_ms=5000)
+    gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
+    gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
     wait_for_text(gui, "requestPaymentLabelInput", ADDRESS_LABEL)
     address = gui.get_property("requestPaymentAddressText", "address")

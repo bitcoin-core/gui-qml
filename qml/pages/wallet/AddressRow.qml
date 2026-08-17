@@ -4,144 +4,216 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
 import "../../components"
 
-Item {
+AbstractButton {
     id: root
     objectName: "addressRow"
 
     required property string address
-    required property string ellipsesAddress
     required property string label
     required property string category
-    required property string currentBalance
     required property string displayAmount
     required property bool hasAmount
     required property string scriptType
     required property bool isUsed
     required property bool canEditLabel
-    required property bool canCreatePaymentRequest
+    required property int index
 
-    property alias menu: rowMenu
+    property bool showDivider: true
+    property string pendingLabel: root.label
 
+    signal noteDraftEdited(string address, string label)
+    signal noteDraftDiscarded(string address)
     signal editLabelRequested(string address, string label)
-    signal createPaymentRequestRequested(string address)
     signal detailsRequested(string address, string label, string amount, bool hasAmount, string category, string scriptType, bool used)
 
-    height: 100
-
-    Column {
-        id: addressColumn
-        anchors.left: parent.left
-        anchors.right: noteButton.visible ? noteButton.left : menuButton.left
-        anchors.rightMargin: noteButton.visible ? 16 : 12
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: 8
-
-        CoreText {
-            objectName: "addressRowAddressText"
-            width: parent.width
-            text: root.ellipsesAddress
-            color: Theme.color.neutral9
-            font: Theme.text.body.font
-            horizontalAlignment: Text.AlignLeft
-            elide: Text.ElideMiddle
-            wrap: false
-        }
-        CoreText {
-            objectName: "addressRowAmountText"
-            width: parent.width
-            text: root.displayAmount
-            color: root.hasAmount ? Theme.color.green : Theme.color.neutral6
-            font: Theme.text.body.font
-            horizontalAlignment: Text.AlignLeft
-            elide: Text.ElideRight
-            wrap: false
-        }
+    function openDetails() {
+        root.detailsRequested(root.address, noteField.text, root.displayAmount, root.hasAmount,
+            root.category, root.scriptType, root.isUsed)
     }
 
-    Button {
-        id: noteButton
-        objectName: "addressRowNoteButton"
-        anchors.right: menuButton.left
-        anchors.rightMargin: 24
-        anchors.verticalCenter: parent.verticalCenter
-        visible: root.canEditLabel
-        width: Math.min(noteLabel.implicitWidth + 28, 150)
-        height: 36
-        padding: 0
-        text: root.label === "" ? qsTr("Add note to self") : root.label
-        onClicked: root.editLabelRequested(root.address, root.label)
+    hoverEnabled: AppMode.isDesktop
+    focusPolicy: Qt.TabFocus
+    padding: 0
+    implicitHeight: 76
+    height: implicitHeight
+    Accessible.name: root.label.length > 0 ? root.label : qsTr("Address details")
+    Accessible.description: root.address
+    Accessible.role: Accessible.ListItem
 
-        contentItem: CoreText {
-            id: noteLabel
-            anchors.fill: parent
-            anchors.leftMargin: 14
-            anchors.rightMargin: 14
-            text: noteButton.text
-            font: Theme.text.description.font
-            color: Theme.color.neutral6
-            horizontalAlignment: Text.AlignHCenter
-            elide: Text.ElideRight
-            wrap: false
-        }
-
-        background: Rectangle {
-            color: noteButton.hovered ? Theme.color.neutral3 : Theme.color.neutral2
-            radius: 18
-        }
+    onClicked: root.openDetails()
+    onPendingLabelChanged: {
+        if (!noteField.activeFocus) noteField.text = root.pendingLabel
     }
 
-    IconButton {
-        id: menuButton
-        objectName: "addressRowMenuButton"
-        anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        iconSource: "image://images/ellipsis"
-        iconColor: Theme.color.neutral9
-        enabled: root.canCreatePaymentRequest || root.address !== ""
-        onClicked: {
-            const pos = menuButton.mapToItem(Overlay.overlay, menuButton.width, menuButton.height)
-            rowMenu.x = Math.max(12, Math.min(pos.x - rowMenu.width, Overlay.overlay.width - rowMenu.width - 12))
-            rowMenu.y = Math.max(12, Math.min(pos.y, Overlay.overlay.height - rowMenu.height - 12))
-            rowMenu.open()
-        }
+    HoverHandler {
+        cursorShape: Qt.PointingHandCursor
     }
 
-    ContextMenu {
-        id: rowMenu
-        parent: Overlay.overlay
-        modal: true
-        dim: false
-        focus: true
+    contentItem: Item {
+        id: rowContent
 
-        ContextMenuButton {
-            objectName: "addressRowCreatePaymentRequestButton"
-            text: qsTr("Create payment request")
-            visible: root.category === "single-use" && !root.isUsed
-            enabled: root.address !== ""
-            onTriggered: root.createPaymentRequestRequested(root.address)
+        Column {
+            id: addressColumn
+            anchors.left: parent.left
+            anchors.leftMargin: 8
+            anchors.right: detailsButton.left
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 2
+
+            AddressLabel {
+                objectName: "addressRowAddressText"
+                width: parent.width
+                address: root.address
+                truncateWhenNeeded: true
+                textStyle: Theme.text.monoCaption
+                leftPadding: 8
+                rightPadding: 8
+                topPadding: 0
+                bottomPadding: 0
+            }
+
+            CoreTextField {
+                id: noteField
+                objectName: "addressRowNoteField"
+                property string submittedText: root.label
+                width: parent.width
+                implicitHeight: 30
+                text: root.pendingLabel
+                placeholderText: root.canEditLabel
+                    ? qsTr("Add a note to self")
+                    : qsTr("Change address")
+                placeholderTextColor: Theme.color.neutral6
+                color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
+                font: Theme.text.description.font
+                readOnly: !root.canEditLabel
+                activeFocusOnPress: root.canEditLabel
+                focusPolicy: root.canEditLabel ? Qt.StrongFocus : Qt.NoFocus
+                selectByMouse: root.canEditLabel
+                hoverEnabled: root.canEditLabel && AppMode.isDesktop
+                leftPadding: 8
+                rightPadding: 8
+                topPadding: 4
+                bottomPadding: 4
+
+                background: Rectangle {
+                    radius: 8
+                    color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
+
+                    FocusBorder {
+                        visible: noteField.activeFocus
+                        borderRadius: 10
+                        topMargin: -2
+                        bottomMargin: -2
+                        leftMargin: -2
+                        rightMargin: -2
+                    }
+                }
+
+                onActiveFocusChanged: {
+                    if (noteField.activeFocus) noteField.submittedText = root.label
+                }
+                onTextEdited: root.noteDraftEdited(root.address, noteField.text)
+                onAccepted: noteField.focus = false
+                onEditingFinished: {
+                    if (noteField.text !== root.label
+                            && noteField.text !== noteField.submittedText) {
+                        noteField.submittedText = noteField.text
+                        root.editLabelRequested(root.address, noteField.text)
+                    }
+                }
+                Keys.onEscapePressed: function(event) {
+                    root.noteDraftDiscarded(root.address)
+                    noteField.text = root.label
+                    noteField.focus = false
+                    event.accepted = true
+                }
+            }
         }
-        ContextMenuButton {
-            objectName: "addressRowCopyAddressButton"
-            text: qsTr("Copy address")
-            enabled: root.address !== ""
-            onTriggered: Clipboard.setText(root.address)
-        }
-        ContextMenuButton {
+
+        AbstractButton {
+            id: detailsButton
             objectName: "addressRowDetailsButton"
-            text: qsTr("Address details")
-            enabled: root.address !== ""
-            onTriggered: root.detailsRequested(root.address, root.label, root.displayAmount, root.hasAmount, root.category, root.scriptType, root.isUsed)
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            width: Math.min(parent.width * 0.5, Math.max(80, Math.ceil(amountMetrics.advanceWidth) + 30))
+            hoverEnabled: AppMode.isDesktop
+            focusPolicy: Qt.TabFocus
+            padding: 0
+            Accessible.name: qsTr("Address details")
+            onClicked: root.openDetails()
+
+            HoverHandler {
+                cursorShape: Qt.PointingHandCursor
+            }
+
+            background: null
+
+            contentItem: RowLayout {
+                spacing: 8
+
+                CoreText {
+                    id: amountText
+                    objectName: "addressRowAmountText"
+                    Layout.fillWidth: true
+                    text: root.displayAmount
+                    color: root.hasAmount ? Theme.color.green : Theme.color.neutral7
+                    font.family: optionsModel.moneyFont.family
+                    font.weight: optionsModel.moneyFont.weight
+                    font.pixelSize: Theme.text.description.font.pixelSize
+                    lineHeight: Theme.text.description.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    horizontalAlignment: Text.AlignRight
+                    elide: Text.ElideRight
+                    wrap: false
+                }
+
+                CaretRightIcon {
+                    objectName: "addressRowDisclosureIndicator"
+                    size: 14
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    Layout.alignment: Qt.AlignVCenter
+                    color: Theme.color.neutral7
+                }
+            }
+        }
+
+        TextMetrics {
+            id: amountMetrics
+            font: amountText.font
+            text: root.displayAmount
+        }
+
+        Separator {
+            visible: root.showDivider
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
         }
     }
 
-    Separator {
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+    background: Rectangle {
+        radius: 16
+        color: "transparent"
+
+        FocusBorder {
+            visible: root.visualFocus
+            borderRadius: 18
+            topMargin: -2
+            bottomMargin: -2
+            leftMargin: -2
+            rightMargin: -2
+        }
     }
 }

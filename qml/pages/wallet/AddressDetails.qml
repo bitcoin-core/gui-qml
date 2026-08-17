@@ -76,7 +76,7 @@ ColumnLayout {
     DetailRow {
         Layout.fillWidth: true
         label: qsTr("Type")
-        value: root.category === "change" ? qsTr("Change") : qsTr("Single-use (Receive)")
+        value: root.category === "change" ? qsTr("Change") : qsTr("Receive")
     }
 
     DetailRow {
@@ -91,6 +91,7 @@ ColumnLayout {
         spacing: 12
 
         ContinueButton {
+            objectName: "addressDetailsCopyAddressButton"
             Layout.fillWidth: true
             text: qsTr("Copy address")
             backgroundColor: "transparent"
@@ -102,6 +103,7 @@ ColumnLayout {
         }
 
         ContinueButton {
+            objectName: "addressDetailsCreatePaymentRequestButton"
             Layout.fillWidth: true
             text: qsTr("Create payment request")
             visible: root.category === "single-use" && !root.used

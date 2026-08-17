@@ -291,13 +291,14 @@ private:
     QString m_address{QStringLiteral("bcrt1qsendtoaddress")};
 };
 
-class MockAddressListModel : public QObject
+class MockAddressListModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(Category category READ category WRITE setCategory NOTIFY categoryChanged)
     Q_PROPERTY(QVariantList categoryOptions READ categoryOptions CONSTANT)
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
 
 public:
     enum Category {
@@ -306,16 +307,86 @@ public:
     };
     Q_ENUM(Category)
 
+    enum AddressRoles {
+        AddressRole = Qt::UserRole + 1,
+        FormattedAddressRole,
+        EllipsesAddressRole,
+        LabelRole,
+        CategoryRole,
+        UsedRole,
+        CurrentBalanceRole,
+        DisplayAmountRole,
+        HasAmountRole,
+        ScriptTypeRole,
+        CanEditLabelRole,
+        CanCreatePaymentRequestRole,
+    };
+
+    MockAddressListModel()
+    {
+        populateRows();
+    }
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override
+    {
+        return parent.isValid() ? 0 : static_cast<int>(m_rows.size());
+    }
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override
+    {
+        if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
+        const Entry& entry{m_rows.at(index.row())};
+        switch (role) {
+        case AddressRole:
+        case FormattedAddressRole:
+        case EllipsesAddressRole:
+            return entry.address;
+        case LabelRole:
+            return entry.label;
+        case CategoryRole:
+            return QStringLiteral("single-use");
+        case UsedRole:
+        case HasAmountRole:
+            return false;
+        case CurrentBalanceRole:
+            return QStringLiteral("0");
+        case DisplayAmountRole:
+            return QStringLiteral("₿ 0");
+        case ScriptTypeRole:
+            return QStringLiteral("P2WPKH");
+        case CanEditLabelRole:
+        case CanCreatePaymentRequestRole:
+            return true;
+        }
+        return {};
+    }
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {
+            {AddressRole, "address"},
+            {FormattedAddressRole, "formattedAddress"},
+            {EllipsesAddressRole, "ellipsesAddress"},
+            {LabelRole, "label"},
+            {CategoryRole, "category"},
+            {UsedRole, "isUsed"},
+            {CurrentBalanceRole, "currentBalance"},
+            {DisplayAmountRole, "displayAmount"},
+            {HasAmountRole, "hasAmount"},
+            {ScriptTypeRole, "scriptType"},
+            {CanEditLabelRole, "canEditLabel"},
+            {CanCreatePaymentRequestRole, "canCreatePaymentRequest"},
+        };
+    }
+
     Category category() const { return m_category; }
     QVariantList categoryOptions() const
     {
         return {
-            QVariantMap{{QStringLiteral("value"), static_cast<int>(SingleUse)}, {QStringLiteral("text"), QStringLiteral("Single-use")}},
+            QVariantMap{{QStringLiteral("value"), static_cast<int>(SingleUse)}, {QStringLiteral("text"), QStringLiteral("Receive")}},
             QVariantMap{{QStringLiteral("value"), static_cast<int>(Change)}, {QStringLiteral("text"), QStringLiteral("Change")}},
         };
     }
     bool showUsed() const { return m_show_used; }
-    int count() const { return 0; }
+    int count() const { return rowCount(); }
 
     void setCategory(const Category category)
     {
@@ -332,8 +403,34 @@ public:
     }
 
     Q_INVOKABLE void refresh() {}
-    Q_INVOKABLE bool setAddressLabel(const QString&, const QString&) { return false; }
-    Q_INVOKABLE QString addressAt(int) const { return {}; }
+    Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label)
+    {
+        if (!m_set_address_label_succeeds) return false;
+        for (int row = 0; row < rowCount(); ++row) {
+            Entry& entry{m_rows.at(row)};
+            if (entry.address != address) continue;
+            entry.label = label;
+            Q_EMIT dataChanged(index(row), index(row), {LabelRole});
+            break;
+        }
+        return true;
+    }
+    Q_INVOKABLE QString addressAt(int row) const
+    {
+        return row >= 0 && row < rowCount() ? m_rows.at(row).address : QString{};
+    }
+    Q_INVOKABLE QString labelAt(int row) const
+    {
+        return row >= 0 && row < rowCount() ? m_rows.at(row).label : QString{};
+    }
+    Q_INVOKABLE void resetForTest()
+    {
+        beginResetModel();
+        m_rows.clear();
+        populateRows();
+        endResetModel();
+        Q_EMIT countChanged();
+    }
 
 Q_SIGNALS:
     void categoryChanged();
@@ -341,8 +438,25 @@ Q_SIGNALS:
     void countChanged();
 
 private:
+    struct Entry {
+        QString address;
+        QString label;
+    };
+
+    void populateRows()
+    {
+        for (int row = 0; row < 20; ++row) {
+            m_rows.push_back({
+                QStringLiteral("bcrt1qtestaddress%1").arg(row, 2, 10, QLatin1Char('0')),
+                QStringLiteral("Original note %1").arg(row),
+            });
+        }
+    }
+
+    std::vector<Entry> m_rows;
     Category m_category{SingleUse};
     bool m_show_used{false};
+    bool m_set_address_label_succeeds{false};
 };
 
 class MockPaymentRequest : public QObject
