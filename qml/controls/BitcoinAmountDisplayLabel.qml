@@ -233,8 +233,8 @@ BitcoinAmountDisplayLabelBase {
         visible: false
         layer.enabled: root.animating
         readonly property real phase: root.elapsed / root.rollDuration
-        readonly property real veil: root.bleed / height
-            * (1 + 0.9 * Math.max(0, phase < 0.32 ? phase / 0.32 : (1 - phase) / 0.68))
+        readonly property real veil: height > 0 ? root.bleed / height
+            * (1 + 0.9 * Math.max(0, phase < 0.32 ? phase / 0.32 : (1 - phase) / 0.68)) : 0
         gradient: Gradient {
             GradientStop { position: 0; color: "transparent" }
             GradientStop { position: edgeMask.veil * 0.2; color: Qt.rgba(1, 1, 1, 0.0343) }
