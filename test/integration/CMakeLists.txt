@@ -15,6 +15,18 @@ add_executable(bitcoinqml_integration_tests
   test_node.cpp
 )
 target_link_libraries(bitcoinqml_integration_tests PRIVATE bitcoinqml_test_application)
+
+set_source_files_properties("${PROJECT_SOURCE_DIR}/${BITCOIN_QML_COMPAT_DIR}/AppSettings.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/AppSettings.qml"
+)
+set_source_files_properties("${PROJECT_SOURCE_DIR}/${BITCOIN_QML_COMPAT_DIR}/BitcoinAmountDigit.qml" PROPERTIES
+  QT_RESOURCE_ALIAS "qml/controls/BitcoinAmountDigit.qml"
+)
+qt6_add_resources(bitcoinqml_integration_tests "bitcoin_qml_integration_sources"
+  PREFIX "/"
+  BASE "${PROJECT_SOURCE_DIR}"
+  FILES ${BITCOIN_QML_FILES_ABSOLUTE}
+)
 add_test(NAME bitcoinqml_integration_tests COMMAND bitcoinqml_integration_tests
   --profile-dir=${PROJECT_BINARY_DIR}/test-profiles
   -o ${PROJECT_BINARY_DIR}/test-reports/integration.xml,junitxml -o -,txt

@@ -94,6 +94,27 @@ TestCase {
         }
     }
 
+    function test_amountDisplayLabel_mask_handles_zero_height() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        verify(label !== null)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        const column = findObject(label, "amountColumn_d0")
+        verify(column !== null)
+        const mask = column.mask
+        const initialHeight = mask.height
+        verify(initialHeight > 0)
+        for (const height of [0, initialHeight]) {
+            mask.height = height
+            for (let i = 0; i < mask.gradient.stops.length; ++i) {
+                verify(isFinite(mask.gradient.stops[i].position))
+            }
+        }
+        label.finishAnimation()
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
     function test_amountDisplayLabel_unit_keeps_alignment_data() {
         return [
             {tag: "left", alignment: Text.AlignLeft, intrinsic: false},
