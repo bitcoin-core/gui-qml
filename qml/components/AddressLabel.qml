@@ -13,17 +13,34 @@ AbstractButton {
     id: root
 
     property string address: ""
+    property bool truncated: false
+    property bool truncateWhenNeeded: false
+    property int leadingCharacterCount: 8
+    property int trailingCharacterCount: 8
     property color primaryColor: Theme.color.neutral9
     property color secondaryColor: Theme.color.neutral7
+    property var textStyle: Theme.text.monoBody
     property var clipboard: Clipboard
-    readonly property string formattedText: formatAddressRichText(address)
+    readonly property bool isTruncated: truncated
+        || (truncateWhenNeeded && fullAddressMetrics.advanceWidth > availableWidth)
+    readonly property string displayAddress: isTruncated ? truncatedAddress(address) : address
+    readonly property string formattedText: formatAddressRichText(displayAddress)
     readonly property bool showCopiedStatus: copiedResetTimer.running
 
     signal copied()
 
-    function formatAddressRichText(value) {
-        if (!value) return ""
+    function truncatedAddress(value) {
+        if (!value) return value
 
+        const retainedCharacters = root.leadingCharacterCount + root.trailingCharacterCount
+        if (value.length <= retainedCharacters + 1) return value
+
+        return value.substring(0, root.leadingCharacterCount)
+            + "…"
+            + value.substring(value.length - root.trailingCharacterCount)
+    }
+
+    function formatChunks(value) {
         var html = ""
         for (var i = 0; i < value.length; i += 4) {
             var chunk = value.substring(i, Math.min(i + 4, value.length))
@@ -34,6 +51,28 @@ AbstractButton {
             html += "<nobr><font color=\"" + color + "\">" + chunk + "</font></nobr>"
         }
         return html
+    }
+
+    function chunkedPlainText(value) {
+        var text = ""
+        for (var i = 0; i < value.length; i += 4) {
+            if (i > 0) text += " "
+            text += value.substring(i, Math.min(i + 4, value.length))
+        }
+        return text
+    }
+
+    function formatAddressRichText(value) {
+        if (!value) return ""
+
+        const ellipsisIndex = value.indexOf("…")
+        if (ellipsisIndex < 0) return root.formatChunks(value)
+
+        const leading = value.substring(0, ellipsisIndex)
+        const trailing = value.substring(ellipsisIndex + 1)
+        return root.formatChunks(leading)
+            + " <font color=\"" + root.secondaryColor + "\">…</font> "
+            + root.formatChunks(trailing)
     }
 
     function copy() {
@@ -71,12 +110,12 @@ AbstractButton {
             height: paintedHeight
             horizontalAlignment: Text.AlignLeft
             verticalAlignment: Text.AlignTop
-            font: Theme.text.monoBody.font
-            lineHeight: Theme.text.monoBody.lineHeight
+            font: root.textStyle.font
+            lineHeight: root.textStyle.lineHeight
             lineHeightMode: Text.FixedHeight
             textFormat: Text.RichText
             text: root.formattedText
-            wrapMode: Text.WordWrap
+            wrapMode: root.isTruncated ? Text.NoWrap : Text.WordWrap
             opacity: root.showCopiedStatus ? 0 : 1
 
             Behavior on opacity {
@@ -119,6 +158,12 @@ AbstractButton {
                 lineHeightMode: Text.FixedHeight
             }
         }
+    }
+
+    TextMetrics {
+        id: fullAddressMetrics
+        font: root.textStyle.font
+        text: root.chunkedPlainText(root.address)
     }
 
     background: Rectangle {

@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -58,18 +59,16 @@ TestCase {
     Component {
         id: rowComponent
         AddressRow {
+            index: 0
             width: 520
             address: "bcrt1qexampleaddress"
-            ellipsesAddress: "bcrt1qexa ... dress"
             label: ""
             category: "single-use"
-            currentBalance: "0.00000000"
-            displayAmount: "₿ 0.0"
+            displayAmount: "₿ 0"
             hasAmount: false
             scriptType: "P2WPKH"
             isUsed: false
             canEditLabel: true
-            canCreatePaymentRequest: true
         }
     }
 
@@ -79,11 +78,21 @@ TestCase {
             width: 480
             address: "bcrt1qexampleaddress"
             label: "Pizza"
-            amount: "₿ 1.25000000"
+            amount: "₿ 1.25"
             hasAmount: true
             category: "single-use"
             scriptType: "P2WPKH"
             used: false
+        }
+    }
+
+    Component {
+        id: addressListComponent
+
+        AddressList {
+            width: 720
+            height: 480
+            wallet: testWalletModel
         }
     }
 
@@ -207,43 +216,127 @@ TestCase {
         compare(secondAddress.text, "2345 6789 ... uvwx yz12")
     }
 
+    function test_addressLabel_truncatesVisuallyButRetainsFullAddress() {
+        const label = createTemporaryObject(addressLabelComponent, host)
+        verify(label !== null)
+
+        compare(label.displayAddress, label.address)
+        compare(label.isTruncated, false)
+        label.truncateWhenNeeded = true
+        tryCompare(label, "isTruncated", true)
+        compare(label.displayAddress, "abcdefgh…mnopqrst")
+        compare(label.address, "abcdefghijklmnopqrst")
+        verify(label.formattedText.indexOf(">…</font>") !== -1)
+        verify(label.formattedText.indexOf(">mnop</font>") !== -1)
+        verify(label.formattedText.indexOf(">qrst</font>") !== -1)
+
+        label.width = 1000
+        tryCompare(label, "isTruncated", false)
+        compare(label.displayAddress, label.address)
+    }
+
     function test_row_uses_display_amount_and_emits_actions() {
         const row = createTemporaryObject(rowComponent, host)
         verify(row !== null)
 
+        const addressLabel = findObject(row, "addressRowAddressText")
+        const noteField = findObject(row, "addressRowNoteField")
         const amountText = findObject(row, "addressRowAmountText")
+        verify(addressLabel !== null)
+        verify(noteField !== null)
         verify(amountText !== null)
-        compare(amountText.text, "₿ 0.0")
+        compare(noteField.text, "")
+        compare(noteField.placeholderText, "Add a note to self")
+        compare(noteField.readOnly, false)
+        compare(noteField.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(addressLabel.address, "bcrt1qexampleaddress")
+        compare(addressLabel.truncated, false)
+        compare(addressLabel.truncateWhenNeeded, true)
+        compare(addressLabel.isTruncated, false)
+        compare(addressLabel.textStyle.font.pixelSize, Theme.text.monoCaption.font.pixelSize)
+        compare(amountText.text, "₿ 0")
+        compare(amountText.font.pixelSize, Theme.text.description.font.pixelSize)
+        const disclosureIndicator = findObject(row, "addressRowDisclosureIndicator")
+        verify(disclosureIndicator !== null)
+        compare(disclosureIndicator.size, 14)
+        compare(disclosureIndicator.width, 14)
+        compare(disclosureIndicator.height, 14)
 
-        let editRequested = false
-        row.editLabelRequested.connect(function(address, label) {
-            editRequested = address === "bcrt1qexampleaddress" && label === ""
+        let editRequestCount = 0
+        let requestedLabel = ""
+        let draftLabel = ""
+        let discardedDraft = false
+        row.noteDraftEdited.connect(function(address, label) {
+            compare(address, "bcrt1qexampleaddress")
+            draftLabel = label
         })
-        const noteButton = findObject(row, "addressRowNoteButton")
-        verify(noteButton !== null)
-        mouseClick(noteButton, noteButton.width / 2, noteButton.height / 2)
-        verify(editRequested)
+        row.noteDraftDiscarded.connect(function(address) {
+            compare(address, "bcrt1qexampleaddress")
+            discardedDraft = true
+        })
+        row.editLabelRequested.connect(function(address, label) {
+            compare(address, "bcrt1qexampleaddress")
+            editRequestCount += 1
+            requestedLabel = label
+        })
+        noteField.forceActiveFocus()
+        verify(noteField.activeFocus)
+        noteField.text = "Pizza"
+        noteField.textEdited()
+        compare(draftLabel, "Pizza")
+        keyClick(Qt.Key_Return)
+        tryCompare(noteField, "activeFocus", false)
+        compare(editRequestCount, 1)
+        compare(requestedLabel, "Pizza")
 
         let detailsRequested = false
+        let detailsLabel = ""
         row.detailsRequested.connect(function(address, label, amount, hasAmount, category, scriptType, used) {
             detailsRequested = address === "bcrt1qexampleaddress"
-                && amount === "₿ 0.0"
+                && amount === "₿ 0"
                 && hasAmount === false
                 && category === "single-use"
                 && scriptType === "P2WPKH"
                 && used === false
+            detailsLabel = label
         })
 
-        const menuButton = findObject(row, "addressRowMenuButton")
-        verify(menuButton !== null)
-        mouseClick(menuButton, menuButton.width / 2, menuButton.height / 2)
-        tryCompare(row.menu, "opened", true)
-
-        const detailsButton = findObject(row.menu, "addressRowDetailsButton")
+        const detailsButton = findObject(row, "addressRowDetailsButton")
         verify(detailsButton !== null)
         mouseClick(detailsButton, detailsButton.width / 2, detailsButton.height / 2)
         verify(detailsRequested)
-        tryCompare(row.menu, "opened", false)
+        compare(detailsLabel, "Pizza")
+
+        noteField.forceActiveFocus()
+        noteField.text = "Discard this"
+        keyClick(Qt.Key_Escape)
+        tryCompare(noteField, "activeFocus", false)
+        compare(noteField.text, row.label)
+        compare(editRequestCount, 1)
+        verify(discardedDraft)
+        verify(findObject(row, "addressRowMenuButton") === null)
+    }
+
+    function test_addressList_preservesPendingNotesAcrossRefresh() {
+        const page = createTemporaryObject(addressListComponent, host)
+        verify(page !== null)
+
+        const list = findObject(page, "addressListView")
+        verify(list !== null)
+        compare(list.clip, true)
+
+        page.updatePendingNote("bcrt1qdraftaddress", "Draft note")
+        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Draft note")
+        page.addressModel.refresh()
+        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Draft note")
+
+        page.selectedAddress = "bcrt1qdraftaddress"
+        page.selectedLabel = "Saved note"
+        page.addressModel.setAddressLabelSucceeds = true
+        verify(page.updateAddressLabel("bcrt1qdraftaddress", "Draft note"))
+        compare(page.selectedLabel, "Draft note")
+        compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Saved note")
+        page.addressModel.setAddressLabelSucceeds = false
     }
 
     function test_details_has_no_status_row_and_emits_actions() {
@@ -257,7 +350,7 @@ TestCase {
                 return
             }
             if (root.text !== undefined) {
-                sawAmount = sawAmount || root.text === "₿ 1.25000000"
+                sawAmount = sawAmount || root.text === "₿ 1.25"
                 sawStatus = sawStatus || root.text === "Status"
             }
             const objectChildren = root.children || []
@@ -272,6 +365,9 @@ TestCase {
         scanText(details)
         verify(sawAmount)
         verify(!sawStatus)
+        const paymentRequestButton = findObject(details, "addressDetailsCreatePaymentRequestButton")
+        verify(paymentRequestButton !== null)
+        compare(paymentRequestButton.visible, true)
 
         let closed = false
         details.closeRequested.connect(function() { closed = true })

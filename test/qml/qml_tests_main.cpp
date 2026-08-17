@@ -298,6 +298,7 @@ class MockAddressListModel : public QObject
     Q_PROPERTY(QVariantList categoryOptions READ categoryOptions CONSTANT)
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
 
 public:
     enum Category {
@@ -332,7 +333,7 @@ public:
     }
 
     Q_INVOKABLE void refresh() {}
-    Q_INVOKABLE bool setAddressLabel(const QString&, const QString&) { return false; }
+    Q_INVOKABLE bool setAddressLabel(const QString&, const QString&) { return m_set_address_label_succeeds; }
     Q_INVOKABLE QString addressAt(int) const { return {}; }
 
 Q_SIGNALS:
@@ -343,6 +344,7 @@ Q_SIGNALS:
 private:
     Category m_category{SingleUse};
     bool m_show_used{false};
+    bool m_set_address_label_succeeds{false};
 };
 
 class MockPaymentRequest : public QObject

@@ -20,6 +20,7 @@ Control {
     property alias bodyItem: bodyContainer.data
     readonly property Item loadedBodyItem: bodyContainer.children.length > 0 ? bodyContainer.children[0] : null
     property bool showDivider: true
+    property color dividerColor: Theme.color.neutral2
     property int minimumRowHeight: description.length > 0 || supportingText.length > 0 || errorText.length > 0 ? 62 : 48
     property int dividerLeftInset: leftPadding
     property int dividerRightInset: rightPadding
@@ -57,7 +58,7 @@ Control {
             anchors.leftMargin: root.dividerLeftInset
             anchors.rightMargin: root.dividerRightInset
             height: 1
-            color: Theme.color.neutral2
+            color: root.dividerColor
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
