@@ -68,12 +68,15 @@
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
+        <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
         <file>controls/InformationPage.qml</file>
         <file>controls/KeyValueRow.qml</file>
+        <file>controls/LinkRow.qml</file>
+        <file>controls/ListRow.qml</file>
         <file>controls/LabeledTextInput.qml</file>
         <file>controls/LabeledCoinControlButton.qml</file>
         <file>controls/NavButton.qml</file>
@@ -99,10 +102,12 @@
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/TextButton.qml</file>
+        <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
+        <file>controls/ValueRow.qml</file>
         <file>controls/WalletTypeListItem.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
