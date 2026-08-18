@@ -55,10 +55,15 @@ TestCase {
             width: 190
             height: 300
             currentSectionId: "display"
+            groupTitles: ({
+                "wallet": "Wallet",
+                "general": "General",
+                "network": "Network"
+            })
             model: [
                 { id: "wallet", label: "Wallet", group: "wallet" },
-                { id: "display", label: "Display", group: "display" },
-                { id: "hidden", label: "Hidden", group: "display", visible: false },
+                { id: "display", label: "Display", group: "general" },
+                { id: "hidden", label: "Hidden", group: "general", visible: false },
                 { id: "connection", label: "Connection", group: "network" }
             ]
         }
@@ -138,6 +143,16 @@ TestCase {
         verify(findChild(sidebar, "settingsSidebar_wallet") !== null)
         verify(findChild(sidebar, "settingsSidebar_display") !== null)
         verify(findChild(sidebar, "settingsSidebar_hidden") === null)
+        const walletGroup = findChild(sidebar, "settingsSidebarGroup_wallet")
+        const generalGroup = findChild(sidebar, "settingsSidebarGroup_general")
+        const networkGroup = findChild(sidebar, "settingsSidebarGroup_network")
+        verify(walletGroup !== null)
+        verify(generalGroup !== null)
+        verify(networkGroup !== null)
+        compare(walletGroup.text, "Wallet")
+        compare(generalGroup.text, "General")
+        compare(networkGroup.text, "Network")
+        compare(walletGroup.font.styleName, "Semi Bold")
 
         let activatedSection = ""
         sidebar.sectionActivated.connect(function(sectionId) {
@@ -310,13 +325,18 @@ TestCase {
         verify(view !== null)
 
         const sidebarSurface = findChild(view, "settingsv2SettingsSidebarSurface")
+        const sidebarHeading = findChild(view, "settingsv2SettingsSidebarHeading")
         const displayPage = findChild(view, "settingsv2DisplaySettingsPage")
         verify(sidebarSurface !== null)
+        verify(sidebarHeading !== null)
         verify(displayPage !== null)
 
         tryCompare(sidebarSurface, "x", 0)
         tryCompare(sidebarSurface, "width", view.sidebarWidth)
         compare(sidebarSurface.color, Theme.color.neutral1)
+        compare(sidebarHeading.text, "Settings")
+        compare(sidebarHeading.font.pixelSize, Theme.text.display.font.pixelSize)
+        compare(sidebarHeading.horizontalAlignment, Text.AlignLeft)
         tryCompare(view.pageContainer, "x", view.sidebarWidth)
         tryCompare(view.pageContainer, "width", view.width - view.sidebarWidth)
 
@@ -348,6 +368,22 @@ TestCase {
         tryCompare(debugLogContent, "width",
             debugLogPage.width - debugLogPage.contentHorizontalPadding * 2)
         verify(debugLogContent.width > 840)
+    }
+
+    function test_settingsViewGroupsRelatedDestinations() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+
+        compare(view.sectionForId("wallet").label, "Wallet settings")
+        compare(view.sectionForId("wallet").group, "wallet")
+        compare(view.sectionForId("storage").group, "general")
+        compare(view.sectionForId("network-traffic").group, "network")
+        compare(view.sectionForId("mempool").group, "advanced")
+        compare(view.sectionForId("debug-log").group, "advanced")
+        compare(view.groupTitles.wallet, "Wallet")
+        compare(view.groupTitles.general, "General")
+        compare(view.groupTitles.network, "Network")
+        compare(view.groupTitles.advanced, "Advanced")
     }
 
     function test_displayPageUsesInlineGenericPickers() {

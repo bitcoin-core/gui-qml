@@ -28,10 +28,16 @@ Page {
     property int sidebarWidth: 286
     readonly property alias sidebar: sidebar
     readonly property alias pageContainer: pageContainer
+    readonly property var groupTitles: ({
+        "wallet": qsTr("Wallet"),
+        "general": qsTr("General"),
+        "network": qsTr("Network"),
+        "advanced": qsTr("Advanced")
+    })
     readonly property var sections: [
         {
             id: "wallet",
-            label: qsTr("Wallet"),
+            label: qsTr("Wallet settings"),
             group: "wallet",
             visible: AppMode.walletEnabled,
             pageComponent: walletPage
@@ -46,20 +52,20 @@ Page {
         {
             id: "display",
             label: qsTr("Display"),
-            group: "display",
+            group: "general",
             pageComponent: displayPage
         },
         {
             id: "window-behavior",
             label: qsTr("Window behavior"),
-            group: "display",
+            group: "general",
             visible: AppMode.isDesktop,
             pageComponent: windowBehaviorPage
         },
         {
             id: "storage",
             label: qsTr("Storage"),
-            group: "display",
+            group: "general",
             pageComponent: storagePage
         },
         {
@@ -77,14 +83,14 @@ Page {
         {
             id: "mempool",
             label: qsTr("Mempool information"),
-            group: "network",
+            group: "advanced",
             visible: nodeModel.mempoolInformationAvailable,
             pageComponent: mempoolPage
         },
         {
             id: "debug-log",
             label: qsTr("Debug log"),
-            group: "developer",
+            group: "advanced",
             pageComponent: debugLogPage
         },
         {
@@ -196,12 +202,27 @@ Page {
                 anchors.bottomMargin: 16
                 spacing: 0
 
+                CoreText {
+                    objectName: "settingsv2SettingsSidebarHeading"
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 10
+                    Layout.rightMargin: 10
+                    Layout.bottomMargin: 24
+                    text: qsTr("Settings")
+                    color: Theme.color.neutral9
+                    font: Theme.text.display.font
+                    lineHeight: Theme.text.display.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    horizontalAlignment: Text.AlignLeft
+                }
+
                 SettingsSidebar {
                     id: sidebar
                     objectName: "settingsv2SettingsSidebar"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: root.sections
+                    groupTitles: root.groupTitles
                     currentSectionId: root.selectedSectionId
                     onSectionActivated: function(sectionId) { root.selectSection(sectionId) }
                 }

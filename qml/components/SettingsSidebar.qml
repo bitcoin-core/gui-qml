@@ -15,9 +15,11 @@ Control {
     id: root
 
     property var model: []
+    property var groupTitles: ({})
     property string currentSectionId: ""
     property int rowHeight: 36
     property int groupSpacing: 16
+    property int groupTitleHeight: 25
     property int cornerRadius: 8
     property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
     property color hoverBackgroundColor: Theme.color.neutral2
@@ -45,6 +47,12 @@ Control {
         return result
     }
 
+    function titleForGroup(groupId) {
+        if (!root.groupTitles) return ""
+        const title = root.groupTitles[groupId]
+        return title === undefined || title === null ? "" : String(title)
+    }
+
     background: null
     padding: 0
     implicitWidth: 190
@@ -63,11 +71,44 @@ Control {
             required property var modelData
             required property int index
 
-            readonly property bool startsGroup: delegate.index > 0
-                && root.visibleSections[delegate.index - 1].group !== delegate.modelData.group
+            readonly property bool startsGroup: delegate.index === 0
+                || root.visibleSections[delegate.index - 1].group !== delegate.modelData.group
+            readonly property string groupTitle: delegate.startsGroup
+                ? root.titleForGroup(delegate.modelData.group)
+                : ""
+            readonly property bool showsGroupTitle: delegate.groupTitle.length > 0
+            readonly property int groupOffset: (delegate.showsGroupTitle ? root.groupTitleHeight : 0)
+                + (delegate.startsGroup && delegate.index > 0 ? root.groupSpacing : 0)
 
             width: sectionList.width
-            height: root.rowHeight + (delegate.startsGroup ? root.groupSpacing : 0)
+            height: root.rowHeight + delegate.groupOffset
+
+            CoreText {
+                objectName: delegate.showsGroupTitle
+                    ? "settingsSidebarGroup_" + delegate.modelData.group
+                    : ""
+                visible: delegate.showsGroupTitle
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                    topMargin: delegate.index > 0 ? root.groupSpacing : 0
+                    leftMargin: 10
+                    rightMargin: 10
+                }
+                height: Theme.text.caption.lineHeight
+                text: delegate.groupTitle
+                color: Theme.color.neutral6
+                font.family: Theme.text.caption.family
+                font.pixelSize: Theme.text.caption.pixelSize
+                fontStyleName: "Semi Bold"
+                lineHeight: Theme.text.caption.lineHeight
+                lineHeightMode: Text.FixedHeight
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                Accessible.ignored: true
+            }
 
             AbstractButton {
                 id: button
