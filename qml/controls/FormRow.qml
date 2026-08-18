@@ -57,7 +57,7 @@ Control {
             anchors.leftMargin: root.dividerLeftInset
             anchors.rightMargin: root.dividerRightInset
             height: 1
-            color: Theme.color.neutral3
+            color: Theme.color.neutral2
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

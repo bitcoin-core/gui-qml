@@ -7,5 +7,5 @@ import QtQuick.Controls 2.15
 
 Icon {
     source: "image://images/caret-right"
-    size: 18
+    size: 14
 }

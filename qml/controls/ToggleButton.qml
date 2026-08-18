@@ -20,6 +20,7 @@ Button {
     id: root
     checkable: true
     hoverEnabled: AppMode.isDesktop
+    focusPolicy: Qt.StrongFocus
     leftPadding: 12
     rightPadding: 12
     topPadding: 5
@@ -45,6 +46,13 @@ Button {
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+    }
+
+    FocusBorder {
+        objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+        visible: root.visualFocus
+        borderRadius: root.bgRadius + 4
+        z: 1
     }
 
     states: [

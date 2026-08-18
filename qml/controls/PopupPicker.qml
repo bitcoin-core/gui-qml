@@ -79,7 +79,8 @@ Control {
         textAlignment: root.textAlignment
         caretSize: root.caretSize
         labelTextStyle: root.labelTextStyle
-        defaultBgColor: root.embedded ? Theme.color.neutral3 : Theme.color.background
+        defaultBgColor: root.embedded ? Theme.color.neutral2 : Theme.color.background
+        hoverBgColor: root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
         onClicked: root.opened ? root.close() : root.open()
     }
 
@@ -89,6 +90,7 @@ Control {
         parent: button
         modal: true
         dim: false
+        backgroundColor: root.embedded ? Theme.color.neutral2 : Theme.color.neutral1
         minMenuWidth: Math.max(root.minimumMenuWidth, root.width)
         x: button.width - width
         y: button.height + 2

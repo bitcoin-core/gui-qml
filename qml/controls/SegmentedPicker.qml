@@ -27,7 +27,7 @@ Control {
     padding: 5
 
     background: Rectangle {
-        color: Theme.color.neutral3
+        color: Theme.color.neutral2
         radius: 8
 
         Behavior on color {
@@ -45,6 +45,7 @@ Control {
                 required property int index
                 required property var modelData
 
+                objectName: root.objectName.length > 0 ? root.objectName + "Option_" + index : ""
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -53,13 +54,13 @@ Control {
                 checked: index === root.currentIndex
                 text: root.optionText(modelData)
                 bgRadius: 5
-                textColor: Theme.color.white
-                textHoverColor: Theme.color.orangeLight1
+                textColor: Theme.color.neutral9
+                textHoverColor: checked ? Theme.color.white : Theme.color.neutral9
                 textActiveColor: Theme.color.white
                 textActiveBold: true
-                bgHoverColor: checked ? Theme.color.neutral6 : Theme.color.neutral4
-                bgActiveColor: Theme.color.neutral6
-                bgDefaultColor: Theme.color.neutral3
+                bgHoverColor: checked ? Theme.color.orange : Theme.color.neutral4
+                bgActiveColor: Theme.color.orange
+                bgDefaultColor: Theme.color.neutral2
 
                 onClicked: {
                     root.selected(index, modelData)
