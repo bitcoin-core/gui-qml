@@ -278,6 +278,23 @@ Page {
                     text: qsTr("Settings")
                 }
             }
+            NavigationTab {
+                id: settingsv2TabButton
+                objectName: "desktopWalletSettingsPreviewTabButton"
+                iconSource: "image://images/gear"
+                iconColor: Theme.color.neutral7
+                Layout.preferredWidth: 30
+                property int index: 7
+                ButtonGroup.group: navigationTabs
+
+                Tooltip {
+                    anchors.top: settingsv2TabButton.bottom
+                    anchors.topMargin: -5
+                    anchors.horizontalCenter: settingsv2TabButton.horizontalCenter
+                    visible: settingsv2TabButton.hovered
+                    text: qsTr("Settings")
+                }
+            }
         }
         background: Rectangle {
             color: Theme.color.neutral4
@@ -361,6 +378,21 @@ Page {
             onSelectWalletRequested: root.openWalletSelection()
             onReceiveRequested: {
                 receiveTabButton.checked = true
+            }
+        }
+        Item {
+            Loader {
+                id: settingsPreviewLoader
+                objectName: "settingsPreviewLoader"
+                anchors.fill: parent
+                property bool retainItem: false
+                // Create Settings on first use, then retain its navigation
+                // stacks while the parent tab item is hidden.
+                active: settingsv2TabButton.checked || retainItem
+                onLoaded: retainItem = true
+                sourceComponent: SettingsView {
+                    showDoneButton: false
+                }
             }
         }
     }

@@ -83,7 +83,8 @@ TestCase {
             findChild(page, "blockClockTabButton"),
             findChild(page, "peersTabButton"),
             findChild(page, "consoleTabButton"),
-            findChild(page, "desktopWalletSettingsTabButton")
+            findChild(page, "desktopWalletSettingsTabButton"),
+            findChild(page, "desktopWalletSettingsPreviewTabButton")
         ]
 
         for (let i = 0; i < tabs.length; ++i) {
@@ -95,6 +96,29 @@ TestCase {
         compare(tabs[1].iconSize, 24)
         compare(tabs[2].iconSize, 24)
         compare(tabs[3].iconSize, 30)
+        compare(tabs[4].iconSize, 30)
+    }
+
+    function test_settings_preview_is_lazilyLoadedAndRetained() {
+        const page = createDesktopWallets()
+        const previewSettingsTab = findChild(page, "desktopWalletSettingsPreviewTabButton")
+        const previewLoader = findChild(page, "settingsPreviewLoader")
+
+        verify(previewSettingsTab !== null)
+        verify(previewLoader !== null)
+        compare(previewLoader.active, false)
+        compare(previewLoader.item, null)
+
+        previewSettingsTab.checked = true
+        tryCompare(previewSettingsTab, "checked", true)
+        tryCompare(previewLoader, "active", true)
+        tryVerify(function() { return previewLoader.item !== null })
+        compare(previewLoader.item.objectName, "settingsView")
+        const settingsView = previewLoader.item
+
+        previewSettingsTab.checked = false
+        compare(previewLoader.item, settingsView)
+        compare(previewLoader.active, true)
     }
 
     function test_console_autocomplete_closes_when_switching_tabs() {
