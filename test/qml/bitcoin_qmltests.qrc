@@ -22,6 +22,7 @@
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_feeselection.qml</file>
         <file>tst_importwalletoptions.qml</file>
+        <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
         <file>tst_mempoolinformationsettings.qml</file>
