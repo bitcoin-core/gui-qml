@@ -1974,6 +1974,7 @@ public:
     Q_INVOKABLE bool commitProxyLocation(const QString&) { return true; }
     Q_INVOKABLE bool commitTorLocation(const QString&) { return true; }
     Q_INVOKABLE QString defaultProxyAddress() const { return QStringLiteral("127.0.0.1:9050"); }
+    Q_INVOKABLE QString externalSignerPathValidationError(const QString&) const { return {}; }
     QObject* coreSettings() { return &m_core_settings; }
     QVariantMap coreSettingStatuses() const {
         QVariantMap statuses;

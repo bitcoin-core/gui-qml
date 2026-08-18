@@ -15,11 +15,25 @@ Page {
     id: root
     objectName: "settingsDebugLog"
     background: null
+    padding: 0
 
     property int pendingNewLines: 0
     property int displayedLines: 0
+    property real maximumContentWidth: 600
+    property real contentHorizontalPadding: 20
+    property bool ownsDebugLogActivity: false
     onPendingNewLinesChanged: if (pendingNewLines > 0) displayedLines = pendingNewLines
     property bool userIsScrolled: false
+
+    function updateDebugLogActivity() {
+        if (root.visible) {
+            debugLogModel.active = true
+            root.ownsDebugLogActivity = true
+        } else {
+            if (root.ownsDebugLogActivity) debugLogModel.active = false
+            root.ownsDebugLogActivity = false
+        }
+    }
 
     Connections {
         target: debugLogModel
@@ -41,7 +55,7 @@ Page {
     Timer {
         interval: 60000
         repeat: true
-        running: true
+        running: root.visible
         onTriggered: debugLogModel.updateRelativeTimes()
     }
 
@@ -91,7 +105,9 @@ Page {
     ColumnLayout {
         id: contentLayout
         objectName: "debugLogContentLayout"
-        width: Math.max(0, Math.min(parent.width - 40, 600))
+        width: Math.max(0, Math.min(
+            parent.width - root.contentHorizontalPadding * 2,
+            root.maximumContentWidth))
         anchors {
             top: parent.top
             bottom: parent.bottom
@@ -132,10 +148,9 @@ Page {
                 color: Theme.color.neutral9
                 placeholderTextColor: Theme.color.neutral5
                 placeholderText: qsTr("Search...")
-                // The page is unloaded whenever another Settings section is
-                // selected, while the C++ model intentionally retains its
-                // filter. Mirror that retained value on re-entry so the field
-                // and the rows cannot disagree.
+                // The C++ model intentionally retains its filter while this
+                // page is cached or closed. Mirror that retained value so the
+                // field and rows cannot disagree when the page is shown.
                 text: debugLogModel.filter
                 verticalAlignment: TextInput.AlignVCenter
                 selectByMouse: true
@@ -328,6 +343,9 @@ Page {
         }
     }
 
-    Component.onCompleted: debugLogModel.active = true
-    Component.onDestruction: debugLogModel.active = false
+    Component.onCompleted: root.updateDebugLogActivity()
+    onVisibleChanged: root.updateDebugLogActivity()
+    Component.onDestruction: {
+        if (root.ownsDebugLogActivity) debugLogModel.active = false
+    }
 }

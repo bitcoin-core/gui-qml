@@ -8,14 +8,20 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+import org.bitcoincore.qt 1.0
 
 import "../controls"
+import "../pages/settings" as LegacySettings
+import "../pages/settings/settingsv2" as SettingsV2
+import "../pages/wallet" as WalletPages
 
 Page {
     id: root
     objectName: "settingsView"
 
     signal doneClicked()
+    signal selectWalletRequested()
+    signal receiveRequested()
 
     property bool showDoneButton: true
     property string selectedSectionId: ""
@@ -23,6 +29,70 @@ Page {
     readonly property alias sidebar: sidebar
     readonly property alias pageContainer: pageContainer
     readonly property var sections: [
+        {
+            id: "wallet",
+            label: qsTr("Wallet"),
+            group: "wallet",
+            visible: AppMode.walletEnabled,
+            pageComponent: walletPage
+        },
+        {
+            id: "external-signer",
+            label: qsTr("External signer"),
+            group: "wallet",
+            visible: AppMode.walletEnabled,
+            pageComponent: externalSignerPage
+        },
+        {
+            id: "display",
+            label: qsTr("Display"),
+            group: "display",
+            pageComponent: displayPage
+        },
+        {
+            id: "window-behavior",
+            label: qsTr("Window behavior"),
+            group: "display",
+            visible: AppMode.isDesktop,
+            pageComponent: windowBehaviorPage
+        },
+        {
+            id: "storage",
+            label: qsTr("Storage"),
+            group: "display",
+            pageComponent: storagePage
+        },
+        {
+            id: "connection",
+            label: qsTr("Connection"),
+            group: "network",
+            pageComponent: connectionPage
+        },
+        {
+            id: "network-traffic",
+            label: qsTr("Network traffic"),
+            group: "network",
+            pageComponent: networkTrafficPage
+        },
+        {
+            id: "mempool",
+            label: qsTr("Mempool information"),
+            group: "network",
+            visible: nodeModel.mempoolInformationAvailable,
+            pageComponent: mempoolPage
+        },
+        {
+            id: "debug-log",
+            label: qsTr("Debug log"),
+            group: "developer",
+            pageComponent: debugLogPage
+        },
+        {
+            id: "about",
+            label: qsTr("About"),
+            group: "about",
+            pageComponent: aboutPage
+        }
     ]
 
     function sectionForId(sectionId) {
@@ -66,6 +136,17 @@ Page {
         if (!root.sectionIsVisible(root.selectedSectionId)) root.selectSection(root.firstVisibleSectionId())
     }
 
+    function openWalletSettings() {
+        root.selectSection("wallet")
+    }
+
+    function openWalletAddressHistory() {
+        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        walletController.selectedWallet.addressListModel.refresh()
+        root.selectSection("wallet", true)
+        pageContainer.push(addressListPage)
+    }
+
     background: null
     padding: 0
 
@@ -76,6 +157,20 @@ Page {
 
     Component.onCompleted: root.selectSection(
         root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
+
+    Connections {
+        target: typeof walletController !== "undefined" ? walletController : null
+
+        function onSelectedWalletChanged() {
+            if (root.selectedSectionId === "wallet" && pageContainer.depth > 1) root.selectSection("wallet", true)
+        }
+
+        function onIsWalletLoadedChanged() {
+            if (!walletController.isWalletLoaded && root.selectedSectionId === "wallet" && pageContainer.depth > 1) {
+                root.selectSection("wallet", true)
+            }
+        }
+    }
 
     contentItem: RowLayout {
         spacing: 0
@@ -131,4 +226,100 @@ Page {
         }
     }
 
+    Component {
+        id: walletPage
+
+        SettingsV2.WalletSectionPage {
+            onSelectWalletRequested: root.selectWalletRequested()
+            onPasswordRequested: pageContainer.push(walletPasswordPage, {
+                "updating": walletController.selectedWallet.isEncrypted
+            })
+            onSignVerifyMessageRequested: pageContainer.push(signVerifyPage)
+            onAddressesRequested: {
+                if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+                walletController.selectedWallet.addressListModel.refresh()
+                pageContainer.push(addressListPage)
+            }
+        }
+    }
+
+    Component {
+        id: walletPasswordPage
+
+        WalletPages.WalletPasswordSettings {
+            onBack: pageContainer.pop()
+            onSaved: pageContainer.pop()
+        }
+    }
+
+    Component {
+        id: signVerifyPage
+
+        WalletPages.SignVerifyMessage {
+            onBack: pageContainer.pop()
+        }
+    }
+
+    Component {
+        id: addressListPage
+
+        WalletPages.AddressList {
+            onBack: pageContainer.pop()
+            onReceiveRequested: {
+                pageContainer.pop()
+                root.receiveRequested()
+            }
+        }
+    }
+
+    Component {
+        id: externalSignerPage
+        SettingsV2.ExternalSignerSettingsPage {}
+    }
+
+    Component {
+        id: displayPage
+        SettingsV2.DisplaySettingsPage {}
+    }
+
+    Component {
+        id: windowBehaviorPage
+        SettingsV2.WindowBehaviorSettingsPage {}
+    }
+
+    Component {
+        id: storagePage
+        SettingsV2.StorageSettingsPage {}
+    }
+
+    Component {
+        id: connectionPage
+        SettingsV2.ConnectionSettingsPage {}
+    }
+
+    Component {
+        id: networkTrafficPage
+
+        SettingsV2.NetworkTrafficSettingsPage {}
+    }
+
+    Component {
+        id: mempoolPage
+        SettingsV2.MempoolSettingsPage {}
+    }
+
+    Component {
+        id: debugLogPage
+
+        LegacySettings.SettingsDebugLog {
+            showBackButton: false
+            maximumContentWidth: width
+            contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
+        }
+    }
+
+    Component {
+        id: aboutPage
+        SettingsV2.AboutSettingsPage {}
+    }
 }

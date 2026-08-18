@@ -129,7 +129,6 @@ SettingsPage {
             trailingItem: PopupPicker {
                 objectName: "designSystemLanguagePicker"
                 embedded: true
-                implicitWidth: 150
                 minimumMenuWidth: 180
                 currentValue: root.exampleLanguage
                 model: [

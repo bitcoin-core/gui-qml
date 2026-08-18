@@ -146,6 +146,16 @@
         <file>pages/settings/SettingsWallet.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
+        <file>pages/settings/settingsv2/AboutSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/ConnectionSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/DisplaySettingsPage.qml</file>
+        <file>pages/settings/settingsv2/ExternalSignerSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/MempoolSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/NetworkTrafficSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/ProxySettingsPage.qml</file>
+        <file>pages/settings/settingsv2/StorageSettingsPage.qml</file>
+        <file>pages/settings/settingsv2/WalletSectionPage.qml</file>
+        <file>pages/settings/settingsv2/WindowBehaviorSettingsPage.qml</file>
         <file>pages/wallet/Activity.qml</file>
         <file>pages/wallet/ActivityDetails.qml</file>
         <file>pages/wallet/ActivityTransactionVisuals.qml</file>

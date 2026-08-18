@@ -39,6 +39,7 @@
         <file>tst_send.qml</file>
         <file>tst_setting.qml</file>
         <file>tst_settingsheader.qml</file>
+        <file>tst_settingsnavigation.qml</file>
         <file>tst_settingsstatus.qml</file>
         <file>tst_settingswallet.qml</file>
         <file>tst_settingswindowbehavior.qml</file>
