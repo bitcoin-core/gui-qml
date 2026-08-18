@@ -68,6 +68,7 @@
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FocusBorder.qml</file>
+        <file>controls/FormSection.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
@@ -83,6 +84,7 @@
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
         <file>controls/PageIndicator.qml</file>
+        <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/ProxyLocationInput.qml</file>
@@ -93,6 +95,7 @@
         <file>controls/SegmentedPicker.qml</file>
         <file>controls/Setting.qml</file>
         <file>controls/SettingsHeader.qml</file>
+        <file>controls/SettingsPage.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/TextButton.qml</file>

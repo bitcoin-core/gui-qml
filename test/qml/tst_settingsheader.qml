@@ -43,6 +43,15 @@ TestCase {
         }
     }
 
+    Component {
+        id: compactBackHeader
+        SettingsHeader {
+            width: 400
+            title: "Display"
+            backButtonObjectName: "compactSettingsBack"
+        }
+    }
+
     // Regression: the right section must show its actions once visible. The
     // previous binding also read contentItem.visible, the child's *effective*
     // visibility, which includes the section's own Pane. Built while the parent
@@ -68,5 +77,21 @@ TestCase {
         compare(backButton.text, "Back")
         compare(backButton.iconSource.toString(), "image://images/caret-left")
         tryVerify(function() { return backButton.width > 40 })
+    }
+
+    function test_compactBackIconKeepsSizeAcrossThemeChanges() {
+        const originalDark = Theme.dark
+        const header = createTemporaryObject(compactBackHeader, testCase)
+        verify(header !== null)
+        const icon = findChild(header, "settingsHeaderBackIcon")
+        verify(icon !== null)
+
+        compare(icon.width, 24)
+        compare(icon.height, 24)
+
+        Theme.dark = !originalDark
+        tryCompare(icon, "width", 24)
+        tryCompare(icon, "height", 24)
+        Theme.dark = originalDark
     }
 }
