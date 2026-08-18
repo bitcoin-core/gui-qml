@@ -153,6 +153,7 @@
         <file>pages/settings/settingsv2/MempoolSettingsPage.qml</file>
         <file>pages/settings/settingsv2/NetworkTrafficSettingsPage.qml</file>
         <file>pages/settings/settingsv2/ProxySettingsPage.qml</file>
+        <file>pages/settings/settingsv2/RpcConsoleSettingsPage.qml</file>
         <file>pages/settings/settingsv2/StorageSettingsPage.qml</file>
         <file>pages/settings/settingsv2/WalletSectionPage.qml</file>
         <file>pages/settings/settingsv2/WindowBehaviorSettingsPage.qml</file>

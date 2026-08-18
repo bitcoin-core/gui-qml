@@ -88,6 +88,13 @@ Page {
             pageComponent: mempoolPage
         },
         {
+            id: "rpc-console",
+            label: qsTr("RPC console"),
+            group: "advanced",
+            visible: AppMode.isDesktop,
+            pageComponent: rpcConsolePage
+        },
+        {
             id: "debug-log",
             label: qsTr("Debug log"),
             group: "advanced",
@@ -327,6 +334,16 @@ Page {
     Component {
         id: mempoolPage
         SettingsV2.MempoolSettingsPage {}
+    }
+
+    Component {
+        id: rpcConsolePage
+
+        SettingsV2.RpcConsoleSettingsPage {
+            walletName: walletController.isWalletLoaded && walletController.selectedWallet
+                ? walletController.selectedWallet.name
+                : ""
+        }
     }
 
     Component {

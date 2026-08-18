@@ -379,11 +379,34 @@ TestCase {
         compare(view.sectionForId("storage").group, "general")
         compare(view.sectionForId("network-traffic").group, "network")
         compare(view.sectionForId("mempool").group, "advanced")
+        compare(view.sectionForId("rpc-console").group, "advanced")
         compare(view.sectionForId("debug-log").group, "advanced")
         compare(view.groupTitles.wallet, "Wallet")
         compare(view.groupTitles.general, "General")
         compare(view.groupTitles.network, "Network")
         compare(view.groupTitles.advanced, "Advanced")
+    }
+
+    function test_rpcConsoleUsesSettingsContainerAndTracksVisibility() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+
+        const page = findChild(view, "settingsv2RpcConsoleSettingsPage")
+        const header = findChild(view, "settingsv2RpcConsoleHeader")
+        const rpcConsole = findChild(view, "settingsv2RpcConsole")
+        verify(page !== null)
+        verify(header !== null)
+        verify(rpcConsole !== null)
+        compare(header.title, "RPC console")
+        compare(header.showBackButton, false)
+        compare(page.maximumContentWidth, 840)
+        verify(page.contentHorizontalPadding >= 24)
+        compare(rpcConsole.showHeader, false)
+        compare(rpcConsole.tabActive, true)
+
+        view.selectSection("about")
+        tryCompare(rpcConsole, "tabActive", false)
     }
 
     function test_displayPageUsesInlineGenericPickers() {
@@ -582,6 +605,7 @@ TestCase {
             { id: "connection", objectName: "settingsv2ConnectionSettingsPage" },
             { id: "network-traffic", objectName: "settingsv2NetworkTrafficSettingsPage" },
             { id: "mempool", objectName: "settingsv2MempoolSettingsPage" },
+            { id: "rpc-console", objectName: "settingsv2RpcConsoleSettingsPage" },
             { id: "debug-log", objectName: "settingsDebugLog" },
             { id: "about", objectName: "settingsv2AboutSettingsPage" }
         ]
