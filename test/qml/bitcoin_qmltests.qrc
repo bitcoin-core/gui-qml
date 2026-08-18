@@ -30,6 +30,7 @@
         <file>tst_nodesettings.qml</file>
         <file>tst_onboarding_datadir.qml</file>
         <file>tst_peeractions.qml</file>
+        <file>tst_popuppicker.qml</file>
         <file>tst_proxylocationinput.qml</file>
         <file>tst_requestpayment.qml</file>
         <file>tst_rightcontenticon.qml</file>

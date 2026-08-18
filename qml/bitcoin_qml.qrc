@@ -89,6 +89,7 @@
         <file>controls/PageIndicator.qml</file>
         <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
+        <file>controls/PopupPicker.qml</file>
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/ProxyLocationInput.qml</file>
         <file>controls/QRImage.qml</file>
