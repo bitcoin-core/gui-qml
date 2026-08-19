@@ -51,8 +51,8 @@ def navigate_to_console(gui):
     gui.click("nodeSettingsButton")
     gui.wait_for_property("settingsSidebar_rpc-console", "visible", True, timeout_ms=5000)
     gui.click("settingsSidebar_rpc-console")
-    gui.wait_for_page("settingsv2RpcConsoleSettingsPage", timeout_ms=5000)
-    gui.wait_for_page("settingsv2RpcConsole", timeout_ms=5000)
+    gui.wait_for_page("rpcConsoleSettingsPage", timeout_ms=5000)
+    gui.wait_for_page("rpcConsole", timeout_ms=5000)
     # The command input auto-focuses on open (desktop), mirroring Core's
     # RPCConsole, so the user can type immediately.
     gui.wait_for_property("consoleInput", "activeFocus", True, timeout_ms=5000)
@@ -69,14 +69,14 @@ def assert_close(actual, expected, label, tolerance=1):
 
 def submit_console_command(gui, command):
     gui.set_text("consoleInput", command)
-    gui.invoke("settingsv2RpcConsole", "runHighlightedOrSubmit")
+    gui.invoke("rpcConsole", "runHighlightedOrSubmit")
 
 
 def test_console_input_bar_matches_design(gui):
     """Console input bar follows the Figma Console input component geometry."""
     print("\n── test_console_input_bar_matches_design ───────────────────────")
 
-    root_width = gui.get_property("settingsv2RpcConsole", "width")
+    root_width = gui.get_property("rpcConsole", "width")
     row_x = gui.get_property("consoleInputRow", "x")
     row_width = gui.get_property("consoleInputRow", "width")
     row_height = gui.get_property("consoleInputRow", "height")
@@ -107,19 +107,19 @@ def test_console_input_bar_matches_design(gui):
     assert_close(action_height, 20, "console action cluster height")
     assert_close(content_x + action_x, row_width - 95, "console action cluster right alignment")
     assert gui.get_property("consoleInput", "placeholderText") == "Enter command..."
-    assert gui.get_property("settingsv2RpcConsole", "searchMode") is False
+    assert gui.get_property("rpcConsole", "searchMode") is False
 
     gui.click("consoleModeToggleButton")
-    gui.wait_for_property("settingsv2RpcConsole", "searchMode", True, timeout_ms=3000)
+    gui.wait_for_property("rpcConsole", "searchMode", True, timeout_ms=3000)
     assert gui.get_property("consoleInput", "placeholderText") == "Search..."
 
     gui.click("consoleFontIncreaseButton")
-    assert gui.get_property("settingsv2RpcConsole", "outputFontPixelSize") == 14
+    assert gui.get_property("rpcConsole", "outputFontPixelSize") == 14
     gui.click("consoleFontDecreaseButton")
-    assert gui.get_property("settingsv2RpcConsole", "outputFontPixelSize") == 13
+    assert gui.get_property("rpcConsole", "outputFontPixelSize") == 13
 
     gui.click("consoleModeToggleButton")
-    gui.wait_for_property("settingsv2RpcConsole", "searchMode", False, timeout_ms=3000)
+    gui.wait_for_property("rpcConsole", "searchMode", False, timeout_ms=3000)
     assert gui.get_property("consoleInput", "placeholderText") == "Enter command..."
     print("  PASSED: console input bar geometry and controls match the design component")
 
@@ -140,8 +140,8 @@ def test_console_output_rows_match_design(gui):
     """Console output rows follow the Figma Console entry component geometry."""
     print("\n── test_console_output_rows_match_design ───────────────────────")
 
-    gui.wait_for_property("settingsv2RpcConsole", "outputCount", lambda v: v >= 1, timeout_ms=3000)
-    root_width = gui.get_property("settingsv2RpcConsole", "width")
+    gui.wait_for_property("rpcConsole", "outputCount", lambda v: v >= 1, timeout_ms=3000)
+    root_width = gui.get_property("rpcConsole", "width")
     column_width = root_width - 40
 
     assert_close(gui.get_property("consoleOutputArea_contentColumn", "x"), 20, "console output column x")
@@ -155,10 +155,10 @@ def test_console_output_rows_match_design(gui):
     assert "Use ↑↓ arrows" in welcome_text
     assert "help-console" in welcome_text
 
-    count_before = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_before = gui.get_property("rpcConsole", "outputCount")
     submit_console_command(gui, "getblockcount")
-    gui.wait_for_property("settingsv2RpcConsole", "executing", False, timeout_ms=10000)
-    gui.wait_for_property("settingsv2RpcConsole", "outputCount", count_before + 2, timeout_ms=3000)
+    gui.wait_for_property("rpcConsole", "executing", False, timeout_ms=10000)
+    gui.wait_for_property("rpcConsole", "outputCount", count_before + 2, timeout_ms=3000)
 
     request_index = count_before
     reply_index = count_before + 1
@@ -179,13 +179,13 @@ def test_execute_getblockcount(gui):
     """Execute getblockcount and verify a request + reply pair appears (no error row)."""
     print("\n── test_execute_getblockcount ──────────────────────────────────")
 
-    count_before = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_before = gui.get_property("rpcConsole", "outputCount")
     submit_console_command(gui, "getblockcount")
 
     # Wait for execution to complete.
-    gui.wait_for_property("settingsv2RpcConsole", "executing", False, timeout_ms=10000)
+    gui.wait_for_property("rpcConsole", "executing", False, timeout_ms=10000)
 
-    count_after = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_after = gui.get_property("rpcConsole", "outputCount")
     # Expect exactly 2 new rows: one CMD_REQUEST (command echo) and one
     # CMD_REPLY (the numeric block count).  An error would add a third row.
     assert count_after == count_before + 2, (
@@ -199,12 +199,12 @@ def test_execute_help(gui):
     """Execute 'help' and verify output rows appear."""
     print("\n── test_execute_help ───────────────────────────────────────────")
 
-    count_before = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_before = gui.get_property("rpcConsole", "outputCount")
     submit_console_command(gui, "help")
 
-    gui.wait_for_property("settingsv2RpcConsole", "executing", False, timeout_ms=10000)
+    gui.wait_for_property("rpcConsole", "executing", False, timeout_ms=10000)
 
-    count_after = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_after = gui.get_property("rpcConsole", "outputCount")
     assert count_after > count_before, (
         f"Expected output rows after help (before={count_before}, after={count_after})"
     )
@@ -215,13 +215,13 @@ def test_execute_invalid_command(gui):
     """Execute an unknown command and verify the submit button re-enables and output appears."""
     print("\n── test_execute_invalid_command ────────────────────────────────")
 
-    count_before = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_before = gui.get_property("rpcConsole", "outputCount")
     submit_console_command(gui, "thiscommanddoesnotexist")
 
     # Wait for execution to complete (button stays disabled since input was cleared).
-    gui.wait_for_property("settingsv2RpcConsole", "executing", False, timeout_ms=10000)
+    gui.wait_for_property("rpcConsole", "executing", False, timeout_ms=10000)
 
-    count_after = gui.get_property("settingsv2RpcConsole", "outputCount")
+    count_after = gui.get_property("rpcConsole", "outputCount")
     assert count_after > count_before, (
         f"Expected error output rows after invalid command (before={count_before}, after={count_after})"
     )
@@ -281,7 +281,7 @@ def test_back_navigation(gui):
     """Close Settings from the RPC console and verify we return to NodeRunner."""
     print("\n── test_back_navigation ────────────────────────────────────────")
 
-    gui.click("settingsv2SettingsDoneButton")
+    gui.click("settingsDoneButton")
     gui.wait_for_page("nodeRunner", timeout_ms=5000)
     print("  PASSED: back navigation returned to NodeRunner")
 
@@ -291,12 +291,12 @@ def test_clear_button_restores_welcome_output(gui):
     print("\n── test_clear_button_restores_welcome_output ───────────────────")
 
     gui.set_text("consoleInput", "")
-    assert gui.get_property("settingsv2RpcConsole", "outputCount") > 0
+    assert gui.get_property("rpcConsole", "outputCount") > 0
     welcome_time_before = gui.get_text("consoleOutputArea_left_0")
 
     time.sleep(1.1)
     gui.click("consoleClearButton")
-    gui.wait_for_property("settingsv2RpcConsole", "outputCount", 1, timeout_ms=3000)
+    gui.wait_for_property("rpcConsole", "outputCount", 1, timeout_ms=3000)
 
     welcome_time_after = gui.get_text("consoleOutputArea_left_0")
     assert re.fullmatch(r"\d\d:\d\d:\d\d", welcome_time_after), (

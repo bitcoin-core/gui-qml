@@ -251,7 +251,7 @@ def open_selected_wallet_settings(gui):
     gui.wait_for_property("settingsSidebar_wallet", "visible", True, timeout_ms=10000)
     gui.click("settingsSidebar_wallet")
     try:
-        gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=1000)
+        gui.wait_for_page("walletSettingsPage", timeout_ms=1000)
     except QmlDriverError:
         # If a prior step left the preserved wallet stack on a subpage, return
         # to the redesigned wallet settings root.
@@ -266,7 +266,7 @@ def open_selected_wallet_settings(gui):
                     break
             except QmlDriverError:
                 pass
-        gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
+        gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
 def configure_external_signer_via_gui(harness, checkpoints, signer_path):
@@ -506,8 +506,8 @@ def run_test(args):
         configure_external_signer_via_gui(harness, checkpoints, signer_path)
         wallet_name = create_and_verify_external_wallet(harness, checkpoints)
         open_selected_wallet_settings(harness.driver)
-        harness.driver.wait_for_property("settingsv2WalletPasswordRow", "visible", False, timeout_ms=10000)
-        harness.driver.wait_for_property("settingsv2WalletBackupRow", "visible", True, timeout_ms=10000)
+        harness.driver.wait_for_property("walletPasswordRow", "visible", False, timeout_ms=10000)
+        harness.driver.wait_for_property("walletBackupRow", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("external signer wallet hides password settings", harness.driver)
 
         create_wallet(harness.gui_rpc_port, "miner", load_on_startup=False)

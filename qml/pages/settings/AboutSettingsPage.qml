@@ -9,13 +9,12 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
-import "../../../controls"
-import "../../../components"
-import ".." as LegacySettings
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2AboutSettingsPage"
+    objectName: "aboutSettingsPage"
     title: qsTr("About")
     showBackButton: false
 
@@ -52,7 +51,7 @@ SettingsPage {
         }
 
         LinkRow {
-            objectName: "settingsv2AboutVersionRow"
+            objectName: "aboutVersionRow"
             Layout.fillWidth: true
             title: qsTr("Version")
             value: BuildInfo.fullClientVersion
@@ -63,7 +62,7 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2AboutDeveloperRow"
+            objectName: "aboutDeveloperRow"
             Layout.fillWidth: true
             title: qsTr("Developer options")
             description: qsTr("Only use these if you have development experience.")
@@ -80,7 +79,7 @@ SettingsPage {
 
     ExternalPopup {
         id: externalLinkPopup
-        objectName: "settingsv2AboutExternalLinkPopup"
+        objectName: "aboutExternalLinkPopup"
         parent: Overlay.overlay
         anchors.centerIn: parent
         width: Math.min(450, Math.max(0, parent ? parent.width - 40 : 0))
@@ -89,7 +88,7 @@ SettingsPage {
     Component {
         id: developerPage
 
-        LegacySettings.SettingsDeveloper {
+        SettingsDeveloper {
             onBack: root.StackView.view.pop()
         }
     }

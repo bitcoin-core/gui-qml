@@ -8,12 +8,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2ExternalSignerSettingsPage"
+    objectName: "externalSignerSettingsPage"
     title: qsTr("External signer")
     showBackButton: false
 
@@ -55,19 +55,19 @@ SettingsPage {
     }
 
     PageHeading {
-        objectName: "settingsv2ExternalSignerIntroduction"
+        objectName: "externalSignerIntroduction"
         Layout.fillWidth: true
         description: qsTr("Connect a hardware wallet or another external signing tool.")
     }
 
     FormSection {
-        objectName: "settingsv2ExternalSignerPathSection"
+        objectName: "externalSignerPathSection"
         Layout.fillWidth: true
         title: qsTr("Signer path")
         footerText: qsTr("The add wallet flow can offer external wallets when exactly one supported signer is connected.")
 
         FormRow {
-            objectName: "settingsv2ExternalSignerPathRow"
+            objectName: "externalSignerPathRow"
             Layout.fillWidth: true
             enabled: root.signerStatus.canEdit !== false
             showDivider: false

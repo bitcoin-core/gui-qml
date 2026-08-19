@@ -9,11 +9,11 @@ import QtQuick.Controls 2.15
 import QtQuick.Dialogs
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
+import "../../controls"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2WalletSettingsPage"
+    objectName: "walletSettingsPage"
     title: qsTr("Wallet settings")
     showBackButton: false
 
@@ -82,7 +82,7 @@ SettingsPage {
 
     TextField {
         id: backupAutomationPath
-        objectName: "settingsv2WalletSettingsBackupPathField"
+        objectName: "walletSettingsBackupPathField"
         visible: false
     }
 
@@ -123,7 +123,7 @@ SettingsPage {
     }
 
     FormSection {
-        objectName: "settingsv2WalletInfoSection"
+        objectName: "walletInfoSection"
         visible: root.walletLoaded
         Layout.fillWidth: true
         title: qsTr("Wallet info")
@@ -131,7 +131,7 @@ SettingsPage {
         TextFieldRow {
             Layout.fillWidth: true
             title: qsTr("Name")
-            fieldObjectName: "settingsv2WalletNameInput"
+            fieldObjectName: "walletNameInput"
             fieldWidth: 220
             text: root.pendingDisplayName
             onTextEdited: function(text) { root.pendingDisplayName = text }
@@ -164,13 +164,13 @@ SettingsPage {
     }
 
     FormSection {
-        objectName: "settingsv2WalletActionsSection"
+        objectName: "walletActionsSection"
         visible: root.walletLoaded
         Layout.fillWidth: true
         title: qsTr("Wallet actions")
 
         ListRow {
-            objectName: "settingsv2WalletAddressesRow"
+            objectName: "walletAddressesRow"
             Layout.fillWidth: true
             title: qsTr("Addresses")
             showsDisclosureIndicator: true
@@ -178,7 +178,7 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2WalletPasswordRow"
+            objectName: "walletPasswordRow"
             visible: root.canManagePassphrase
             Layout.fillWidth: true
             title: root.wallet && root.wallet.isEncrypted ? qsTr("Update password") : qsTr("Set password")
@@ -187,7 +187,7 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2WalletBackupRow"
+            objectName: "walletBackupRow"
             Layout.fillWidth: true
             title: qsTr("Back up wallet")
             showsDisclosureIndicator: true
@@ -195,7 +195,7 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2WalletSignVerifyMessageRow"
+            objectName: "walletSignVerifyMessageRow"
             Layout.fillWidth: true
             title: qsTr("Sign or verify message")
             showDivider: false

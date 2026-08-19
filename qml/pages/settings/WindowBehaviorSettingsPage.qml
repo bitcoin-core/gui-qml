@@ -6,11 +6,11 @@ pragma ComponentBehavior: Bound
 
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
+import "../../controls"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2WindowBehaviorSettingsPage"
+    objectName: "windowBehaviorSettingsPage"
     title: qsTr("Window behavior")
     showBackButton: false
 
@@ -26,7 +26,7 @@ SettingsPage {
             description: qsTr("Keep the app available in the system tray.")
             enabled: root.windowBehaviorModel.desktopPlatform
             trailingItem: OptionSwitch {
-                objectName: "settingsv2ShowTrayIconSwitch"
+                objectName: "showTrayIconSwitch"
                 checked: root.windowBehaviorModel.showTrayIcon
                 onToggled: root.windowBehaviorModel.showTrayIcon = checked
             }
@@ -39,7 +39,7 @@ SettingsPage {
             enabled: root.windowBehaviorModel.desktopPlatform
                 && root.windowBehaviorModel.showTrayIcon
             trailingItem: OptionSwitch {
-                objectName: "settingsv2MinimizeToTraySwitch"
+                objectName: "minimizeToTraySwitch"
                 checked: root.windowBehaviorModel.minimizeToTray
                 onToggled: root.windowBehaviorModel.minimizeToTray = checked
             }
@@ -52,7 +52,7 @@ SettingsPage {
             enabled: root.windowBehaviorModel.desktopPlatform
             showDivider: false
             trailingItem: OptionSwitch {
-                objectName: "settingsv2MinimizeOnCloseSwitch"
+                objectName: "minimizeOnCloseSwitch"
                 checked: root.windowBehaviorModel.minimizeOnClose
                 onToggled: root.windowBehaviorModel.minimizeOnClose = checked
             }

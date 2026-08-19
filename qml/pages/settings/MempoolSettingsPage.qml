@@ -5,12 +5,12 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2MempoolSettingsPage"
+    objectName: "mempoolSettingsPage"
     title: qsTr("Mempool information")
     showBackButton: false
 
@@ -36,7 +36,7 @@ SettingsPage {
     }
 
     SettingsRestartNotice {
-        objectName: "settingsv2MempoolRestartNotice"
+        objectName: "mempoolRestartNotice"
         visible: optionsModel.mempoolSettingsDirty
         Layout.fillWidth: true
     }
@@ -46,14 +46,14 @@ SettingsPage {
         title: qsTr("Mempool")
 
         ValueRow {
-            objectName: "settingsv2MempoolTransactionsRow"
+            objectName: "mempoolTransactionsRow"
             Layout.fillWidth: true
             title: qsTr("Transactions")
             value: Number(nodeModel.mempoolTransactionCount).toLocaleString(Qt.locale(), "f", 0)
         }
 
         ValueRow {
-            objectName: "settingsv2MempoolMemoryUsedRow"
+            objectName: "mempoolMemoryUsedRow"
             Layout.fillWidth: true
             title: qsTr("Memory used")
             value: qsTr("%1 / %2")
@@ -63,11 +63,11 @@ SettingsPage {
 
         TextFieldRow {
             id: mempoolSizeRow
-            objectName: "settingsv2MempoolSizeLimitRow"
+            objectName: "mempoolSizeLimitRow"
             Layout.fillWidth: true
             title: qsTr("Mempool size limit (MB)")
             enabled: root.maxMempoolStatus.canEdit !== false
-            fieldObjectName: "settingsv2MempoolSizeLimitInput"
+            fieldObjectName: "mempoolSizeLimitInput"
             fieldWidth: 80
             text: root.mempoolSizeText
             validator: IntValidator {

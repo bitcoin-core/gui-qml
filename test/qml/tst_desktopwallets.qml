@@ -94,6 +94,7 @@ TestCase {
 
         compare(tabs[1].iconSize, 24)
         compare(tabs[2].iconSize, 30)
+        compare(tabs[2].iconSource, "image://images/gear-outline")
         compare(findChild(page, "consoleTabButton"), null)
         compare(findChild(page, "desktopWalletSettingsPreviewTabButton"), null)
     }
@@ -145,12 +146,12 @@ TestCase {
         const settingsPage = findChild(page, "settingsView")
         verify(settingsPage !== null)
 
-        const settingsContainer = findChild(page, "settingsv2SettingsPageContainer")
+        const settingsContainer = findChild(page, "settingsPageContainer")
         verify(settingsContainer !== null)
         tryCompare(settingsPage, "selectedSectionId", "wallet")
         tryCompare(settingsContainer, "currentSectionId", "wallet")
         tryCompare(settingsContainer, "depth", 2)
         compare(settingsContainer.currentItem.objectName, "addressListPage")
-        verify(findChild(page, "settingsv2WalletSettingsPage") !== null)
+        verify(findChild(page, "walletSettingsPage") !== null)
     }
 }

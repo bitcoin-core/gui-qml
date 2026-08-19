@@ -8,14 +8,14 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2ProxySettingsPage"
+    objectName: "proxySettingsPage"
     title: qsTr("Proxy settings")
-    backButtonObjectName: "settingsv2ProxySettingsBackButton"
+    backButtonObjectName: "proxySettingsBackButton"
 
     property var settingsModel: optionsModel
     property var coreSettingsModel: settingsModel.coreSettings
@@ -110,20 +110,20 @@ SettingsPage {
     Component.onCompleted: root.resetProxyDraft()
 
     rightItem: NavButton {
-        objectName: "settingsv2ProxySettingsSaveButton"
+        objectName: "proxySettingsSaveButton"
         text: qsTr("Save")
         enabled: root.canSaveProxyDraft
         onClicked: root.save()
     }
 
     SettingsRestartNotice {
-        objectName: "settingsv2ProxyRestartNotice"
+        objectName: "proxyRestartNotice"
         visible: root.settingsModel.proxySettingsDirty
         Layout.fillWidth: true
     }
 
     FormSection {
-        objectName: "settingsv2DefaultProxySection"
+        objectName: "defaultProxySection"
         Layout.fillWidth: true
         title: qsTr("Default proxy")
         description: qsTr("Route peer connections through a SOCKS5 proxy. IPv4, IPv6, and Tor connections are supported.")
@@ -134,7 +134,7 @@ SettingsPage {
             supportingText: root.proxySetting.infoText
             enabled: root.proxySetting.canEdit
             trailingItem: OptionSwitch {
-                objectName: "settingsv2ProxyEnableSwitch"
+                objectName: "proxyEnableSwitch"
                 checked: root.draftProxyEnabled
                 onToggled: root.draftProxyEnabled = checked
             }
@@ -142,11 +142,11 @@ SettingsPage {
 
         TextFieldRow {
             id: proxyAddressRow
-            objectName: "settingsv2ProxyAddressRow"
+            objectName: "proxyAddressRow"
             Layout.fillWidth: true
             title: qsTr("Proxy location")
             enabled: root.draftProxyEnabled && root.proxySetting.canEdit
-            fieldObjectName: "settingsv2ProxyAddressInput"
+            fieldObjectName: "proxyAddressInput"
             fieldWidth: 220
             text: root.draftProxyAddress
             placeholderText: root.proxySetting.defaultAddress()
@@ -163,7 +163,7 @@ SettingsPage {
     }
 
     FormSection {
-        objectName: "settingsv2TorProxySection"
+        objectName: "torProxySection"
         Layout.fillWidth: true
         title: qsTr("Tor proxy")
         description: qsTr("Route Tor connections through a dedicated SOCKS5 proxy.")
@@ -174,7 +174,7 @@ SettingsPage {
             supportingText: root.onionSetting.infoText
             enabled: root.onionSetting.canEdit
             trailingItem: OptionSwitch {
-                objectName: "settingsv2TorEnableSwitch"
+                objectName: "torEnableSwitch"
                 checked: root.draftTorEnabled
                 onToggled: root.draftTorEnabled = checked
             }
@@ -182,11 +182,11 @@ SettingsPage {
 
         TextFieldRow {
             id: torAddressRow
-            objectName: "settingsv2TorAddressRow"
+            objectName: "torAddressRow"
             Layout.fillWidth: true
             title: qsTr("Proxy location")
             enabled: root.draftTorEnabled && root.onionSetting.canEdit
-            fieldObjectName: "settingsv2TorAddressInput"
+            fieldObjectName: "torAddressInput"
             fieldWidth: 220
             text: root.draftTorAddress
             placeholderText: root.onionSetting.defaultAddress()
@@ -204,22 +204,22 @@ SettingsPage {
 
     AlertPopup {
         id: discardProxyChangesPopup
-        objectName: "settingsv2DiscardProxyChangesPopup"
+        objectName: "discardProxyChangesPopup"
         parent: Overlay.overlay
         title: qsTr("Discard changes?")
         message: qsTr("This will discard your proxy settings changes.")
-        messageObjectName: "settingsv2DiscardProxyChangesMessage"
+        messageObjectName: "discardProxyChangesMessage"
 
         AlertAction {
             text: qsTr("Cancel")
             role: AlertAction.Cancel
-            buttonObjectName: "settingsv2DiscardProxyChangesCancelButton"
+            buttonObjectName: "discardProxyChangesCancelButton"
         }
 
         AlertAction {
             text: qsTr("Discard")
             role: AlertAction.Destructive
-            buttonObjectName: "settingsv2DiscardProxyChangesConfirmButton"
+            buttonObjectName: "discardProxyChangesConfirmButton"
             onTriggered: {
                 root.resetProxyDraft()
                 root.closeRequested()

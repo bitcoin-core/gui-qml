@@ -178,7 +178,16 @@ def test_search_layout_matches_design(gui):
     )
     page_width = gui.get_property("settingsDebugLog", "width")
     content_width = gui.get_property("debugLogContentLayout", "width")
-    expected_content_width = max(0, min(page_width - 40, 600))
+    content_horizontal_padding = gui.get_property(
+        "settingsDebugLog", "contentHorizontalPadding"
+    )
+    maximum_content_width = gui.get_property(
+        "settingsDebugLog", "maximumContentWidth"
+    )
+    expected_content_width = max(
+        0,
+        min(page_width - content_horizontal_padding * 2, maximum_content_width),
+    )
 
     assert_close(content_width, expected_content_width,
                  "debug log content max width")
@@ -398,7 +407,7 @@ def test_load_more_at_bottom(gui, current_count):
 def test_close_settings(gui):
     """Clicking Done exits the desktop settings shell."""
     print("\n── test_close_settings ───────────────────────────────────────────")
-    gui.click("settingsv2SettingsDoneButton")
+    gui.click("settingsDoneButton")
     gui.wait_for_page("nodeSettingsButton", timeout_ms=5000)
     print("  PASSED: Done closed node settings")
 

@@ -135,17 +135,17 @@
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
-        <file>pages/settings/settingsv2/AboutSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/ConnectionSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/DisplaySettingsPage.qml</file>
-        <file>pages/settings/settingsv2/ExternalSignerSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/MempoolSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/NetworkTrafficSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/ProxySettingsPage.qml</file>
-        <file>pages/settings/settingsv2/RpcConsoleSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/StorageSettingsPage.qml</file>
-        <file>pages/settings/settingsv2/WalletSectionPage.qml</file>
-        <file>pages/settings/settingsv2/WindowBehaviorSettingsPage.qml</file>
+        <file>pages/settings/AboutSettingsPage.qml</file>
+        <file>pages/settings/ConnectionSettingsPage.qml</file>
+        <file>pages/settings/DisplaySettingsPage.qml</file>
+        <file>pages/settings/ExternalSignerSettingsPage.qml</file>
+        <file>pages/settings/MempoolSettingsPage.qml</file>
+        <file>pages/settings/NetworkTrafficSettingsPage.qml</file>
+        <file>pages/settings/ProxySettingsPage.qml</file>
+        <file>pages/settings/RpcConsoleSettingsPage.qml</file>
+        <file>pages/settings/StorageSettingsPage.qml</file>
+        <file>pages/settings/WalletSectionPage.qml</file>
+        <file>pages/settings/WindowBehaviorSettingsPage.qml</file>
         <file>pages/wallet/Activity.qml</file>
         <file>pages/wallet/ActivityDetails.qml</file>
         <file>pages/wallet/ActivityTransactionVisuals.qml</file>

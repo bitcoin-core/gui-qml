@@ -7,12 +7,12 @@ pragma ComponentBehavior: Bound
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2StorageSettingsPage"
+    objectName: "storageSettingsPage"
     title: qsTr("Storage")
     showBackButton: false
 
@@ -59,7 +59,7 @@ SettingsPage {
             supportingText: root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
             trailingItem: OptionSwitch {
-                objectName: "settingsv2PruneSwitch"
+                objectName: "pruneSwitch"
                 checked: root.pruneSetting.enabled
                 onToggled: root.pruneSetting.enabled = checked
             }
@@ -70,7 +70,7 @@ SettingsPage {
             Layout.fillWidth: true
             title: qsTr("Block storage limit (GB)")
             enabled: root.pruneSetting.enabled && root.pruneSetting.canEdit
-            fieldObjectName: "settingsv2PruneTargetInput"
+            fieldObjectName: "pruneTargetInput"
             fieldWidth: 80
             text: root.pruneTargetText
             validator: IntValidator { bottom: 1 }
@@ -102,7 +102,7 @@ SettingsPage {
             title: qsTr("Location")
             showDivider: false
             bodyItem: CoreText {
-                objectName: "settingsv2DataDirectoryValue"
+                objectName: "dataDirectoryValue"
                 Layout.fillWidth: true
                 text: root.settingsModel.dataDir
                 color: Theme.color.neutral7
@@ -116,7 +116,7 @@ SettingsPage {
     }
 
     SettingsRestartNotice {
-        objectName: "settingsv2StorageRestartNotice"
+        objectName: "storageRestartNotice"
         visible: root.settingsModel.storageSettingsDirty
         Layout.fillWidth: true
         Layout.maximumWidth: root.contentLayout.width

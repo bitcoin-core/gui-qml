@@ -8,12 +8,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2ConnectionSettingsPage"
+    objectName: "connectionSettingsPage"
     title: qsTr("Connection")
     showBackButton: false
 
@@ -39,7 +39,7 @@ SettingsPage {
             supportingText: root.listenSetting.infoText
             enabled: root.listenSetting.canEdit
             trailingItem: OptionSwitch {
-                objectName: "settingsv2ListenSwitch"
+                objectName: "listenSwitch"
                 checked: root.listenSetting.value
                 onToggled: root.listenSetting.value = checked
             }
@@ -51,7 +51,7 @@ SettingsPage {
             supportingText: root.natpmpSetting.infoText
             enabled: root.natpmpSetting.canEdit
             trailingItem: OptionSwitch {
-                objectName: "settingsv2NatpmpSwitch"
+                objectName: "natpmpSwitch"
                 checked: root.natpmpSetting.value
                 onToggled: root.natpmpSetting.value = checked
             }
@@ -64,7 +64,7 @@ SettingsPage {
             enabled: root.serverSetting.canEdit
             showDivider: false
             trailingItem: OptionSwitch {
-                objectName: "settingsv2ServerSwitch"
+                objectName: "serverSwitch"
                 checked: root.serverSetting.value
                 onToggled: root.serverSetting.value = checked
             }
@@ -76,7 +76,7 @@ SettingsPage {
         title: qsTr("Privacy")
 
         ListRow {
-            objectName: "settingsv2ProxySettingsRow"
+            objectName: "proxySettingsRow"
             Layout.fillWidth: true
             title: qsTr("Proxy settings")
             description: qsTr("Route peer and Tor connections through SOCKS5 proxies.")

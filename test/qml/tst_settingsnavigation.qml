@@ -250,26 +250,26 @@ TestCase {
         verify(view.componentForSection("display") !== null)
         compare(view.selectedSectionId, "display")
         tryCompare(view.pageContainer, "depth", 1)
-        const displayPage = findChild(view, "settingsv2DisplaySettingsPage")
+        const displayPage = findChild(view, "displaySettingsPage")
         verify(displayPage !== null)
-        verify(findChild(view, "settingsv2NetworkTrafficSettingsPage") === null)
+        verify(findChild(view, "networkTrafficSettingsPage") === null)
         verify(findChild(view, "settingsDebugLog") === null)
         compare(testNetworkTrafficTower.active, false)
         compare(testDebugLogModel.active, false)
 
         view.selectSection("network-traffic")
         tryCompare(view, "selectedSectionId", "network-traffic")
-        compare(findChild(view, "settingsv2DisplaySettingsPage"), displayPage)
-        const networkTrafficPage = findChild(view, "settingsv2NetworkTrafficSettingsPage")
+        compare(findChild(view, "displaySettingsPage"), displayPage)
+        const networkTrafficPage = findChild(view, "networkTrafficSettingsPage")
         verify(networkTrafficPage !== null)
         tryCompare(testNetworkTrafficTower, "active", true)
-        const networkTrafficHeading = findChild(view, "settingsv2NetworkTrafficHeading")
-        const networkTrafficDescription = findChild(view, "settingsv2NetworkTrafficHeadingDescription")
-        const networkTrafficSection = findChild(view, "settingsv2NetworkTrafficSection")
-        const networkTrafficRangePicker = findChild(view, "settingsv2NetworkTrafficRangePicker")
-        const networkTrafficReceivedGraph = findChild(view, "settingsv2NetworkTrafficReceivedGraph")
-        const networkTrafficSentRow = findChild(view, "settingsv2NetworkTrafficSentRow")
-        const networkTrafficSentGraph = findChild(view, "settingsv2NetworkTrafficSentGraph")
+        const networkTrafficHeading = findChild(view, "networkTrafficHeading")
+        const networkTrafficDescription = findChild(view, "networkTrafficHeadingDescription")
+        const networkTrafficSection = findChild(view, "networkTrafficSection")
+        const networkTrafficRangePicker = findChild(view, "networkTrafficRangePicker")
+        const networkTrafficReceivedGraph = findChild(view, "networkTrafficReceivedGraph")
+        const networkTrafficSentRow = findChild(view, "networkTrafficSentRow")
+        const networkTrafficSentGraph = findChild(view, "networkTrafficSentGraph")
         verify(networkTrafficHeading !== null)
         verify(networkTrafficDescription !== null)
         verify(networkTrafficSection !== null)
@@ -287,14 +287,14 @@ TestCase {
         compare(testNetworkTrafficTower.lastFilterWindowSize, 360)
 
         view.selectSection("debug-log")
-        compare(findChild(view, "settingsv2NetworkTrafficSettingsPage"), networkTrafficPage)
+        compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         tryCompare(testNetworkTrafficTower, "active", false)
         const debugLogPage = findChild(view, "settingsDebugLog")
         verify(debugLogPage !== null)
         tryCompare(testDebugLogModel, "active", true)
 
         view.selectSection("network-traffic")
-        compare(findChild(view, "settingsv2NetworkTrafficSettingsPage"), networkTrafficPage)
+        compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         compare(findChild(view, "settingsDebugLog"), debugLogPage)
         compare(networkTrafficPage.trafficGraphScale, 3600)
         tryCompare(testNetworkTrafficTower, "active", true)
@@ -307,7 +307,7 @@ TestCase {
 
         view.selectSection("about")
         tryCompare(testDebugLogModel, "active", false)
-        verify(findChild(view, "settingsv2AboutSettingsPage") !== null)
+        verify(findChild(view, "aboutSettingsPage") !== null)
         compare(findChild(view, "settingsDebugLog"), debugLogPage)
 
         view.visible = false
@@ -315,13 +315,13 @@ TestCase {
         tryCompare(testDebugLogModel, "active", false)
         tryCompare(testNetworkTrafficTower, "active", false)
         compare(findChild(view, "settingsDebugLog"), debugLogPage)
-        compare(findChild(view, "settingsv2NetworkTrafficSettingsPage"), networkTrafficPage)
+        compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
 
         view.visible = true
         compare(view.pageContainer.depth, 1)
-        verify(findChild(view, "settingsv2AboutSettingsPage") !== null)
+        verify(findChild(view, "aboutSettingsPage") !== null)
         compare(findChild(view, "settingsDebugLog"), debugLogPage)
-        compare(findChild(view, "settingsv2NetworkTrafficSettingsPage"), networkTrafficPage)
+        compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         tryCompare(testDebugLogModel, "active", false)
         tryCompare(testNetworkTrafficTower, "active", false)
     }
@@ -348,9 +348,9 @@ TestCase {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
 
-        const sidebarSurface = findChild(view, "settingsv2SettingsSidebarSurface")
-        const sidebarHeading = findChild(view, "settingsv2SettingsSidebarHeading")
-        const displayPage = findChild(view, "settingsv2DisplaySettingsPage")
+        const sidebarSurface = findChild(view, "settingsSidebarSurface")
+        const sidebarHeading = findChild(view, "settingsSidebarHeading")
+        const displayPage = findChild(view, "displaySettingsPage")
         verify(sidebarSurface !== null)
         verify(sidebarHeading !== null)
         verify(displayPage !== null)
@@ -375,7 +375,7 @@ TestCase {
         view.width = 1500
 
         view.selectSection("network-traffic")
-        const networkTrafficPage = findChild(view, "settingsv2NetworkTrafficSettingsPage")
+        const networkTrafficPage = findChild(view, "networkTrafficSettingsPage")
         verify(networkTrafficPage !== null)
         verify(networkTrafficPage.contentHorizontalPadding >= 24)
         tryCompare(networkTrafficPage.contentLayout, "width",
@@ -416,9 +416,9 @@ TestCase {
         verify(view !== null)
         view.selectSection("rpc-console")
 
-        const page = findChild(view, "settingsv2RpcConsoleSettingsPage")
-        const header = findChild(view, "settingsv2RpcConsoleHeader")
-        const rpcConsole = findChild(view, "settingsv2RpcConsole")
+        const page = findChild(view, "rpcConsoleSettingsPage")
+        const header = findChild(view, "rpcConsoleHeader")
+        const rpcConsole = findChild(view, "rpcConsole")
         verify(page !== null)
         verify(header !== null)
         verify(rpcConsole !== null)
@@ -437,13 +437,13 @@ TestCase {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
 
-        const themePicker = findChild(view, "settingsv2DisplayThemePicker")
-        const blockStatusSizePicker = findChild(view, "settingsv2DisplayBlockStatusSizePicker")
-        const moneyFontPicker = findChild(view, "settingsv2DisplayMoneyFontPicker")
-        const displayUnitPicker = findChild(view, "settingsv2DisplayUnitPicker")
-        const languageDisclosure = findChild(view, "settingsv2DisplayLanguageDisclosureIndicator")
-        const developerSection = findChild(view, "settingsv2DisplayDeveloperSection")
-        const designSystemRow = findChild(view, "settingsv2DisplayDesignSystemRow")
+        const themePicker = findChild(view, "displayThemePicker")
+        const blockStatusSizePicker = findChild(view, "displayBlockStatusSizePicker")
+        const moneyFontPicker = findChild(view, "displayMoneyFontPicker")
+        const displayUnitPicker = findChild(view, "displayUnitPicker")
+        const languageDisclosure = findChild(view, "displayLanguageDisclosureIndicator")
+        const developerSection = findChild(view, "displayDeveloperSection")
+        const designSystemRow = findChild(view, "displayDesignSystemRow")
 
         verify(themePicker !== null)
         verify(blockStatusSizePicker !== null)
@@ -522,7 +522,7 @@ TestCase {
 
         designSystemRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
-        verify(findChild(view, "settingsv2DisplayDesignSystemPage") !== null)
+        verify(findChild(view, "displayDesignSystemPage") !== null)
     }
 
     function test_mempoolPageUsesStandardFormRows() {
@@ -530,10 +530,10 @@ TestCase {
         verify(view !== null)
         view.selectSection("mempool")
 
-        const transactionsRow = findChild(view, "settingsv2MempoolTransactionsRow")
-        const memoryUsedRow = findChild(view, "settingsv2MempoolMemoryUsedRow")
-        const sizeLimitRow = findChild(view, "settingsv2MempoolSizeLimitRow")
-        const sizeLimitInput = findChild(view, "settingsv2MempoolSizeLimitInput")
+        const transactionsRow = findChild(view, "mempoolTransactionsRow")
+        const memoryUsedRow = findChild(view, "mempoolMemoryUsedRow")
+        const sizeLimitRow = findChild(view, "mempoolSizeLimitRow")
+        const sizeLimitInput = findChild(view, "mempoolSizeLimitInput")
 
         verify(transactionsRow !== null)
         verify(memoryUsedRow !== null)
@@ -542,7 +542,6 @@ TestCase {
         compare(transactionsRow.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(transactionsRow.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(memoryUsedRow.valueTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
-        verify(findChild(view, "mempoolTransactionsRow") === null)
 
         sizeLimitRow.text = "512"
         sizeLimitRow.editingFinished()
@@ -561,8 +560,8 @@ TestCase {
         compare(nodeModel.mempoolInfoPollingActive, false)
 
         view.selectSection("mempool")
-        const mempoolPage = findChild(view, "settingsv2MempoolSettingsPage")
-        const restartNotice = findChild(view, "settingsv2MempoolRestartNotice")
+        const mempoolPage = findChild(view, "mempoolSettingsPage")
+        const restartNotice = findChild(view, "mempoolRestartNotice")
         verify(mempoolPage !== null)
         verify(restartNotice !== null)
         tryCompare(nodeModel, "mempoolInfoPollingActive", true)
@@ -573,7 +572,7 @@ TestCase {
 
         view.selectSection("display")
         tryCompare(nodeModel, "mempoolInfoPollingActive", false)
-        compare(findChild(view, "settingsv2MempoolSettingsPage"), mempoolPage)
+        compare(findChild(view, "mempoolSettingsPage"), mempoolPage)
 
         view.selectSection("mempool")
         tryCompare(nodeModel, "mempoolInfoPollingActive", true)
@@ -592,17 +591,17 @@ TestCase {
         verify(view !== null)
         view.selectSection("connection")
 
-        const proxySettingsRow = findChild(view, "settingsv2ProxySettingsRow")
+        const proxySettingsRow = findChild(view, "proxySettingsRow")
         verify(proxySettingsRow !== null)
         proxySettingsRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
 
-        const proxyPage = findChild(view, "settingsv2ProxySettingsPage")
-        const defaultProxySection = findChild(view, "settingsv2DefaultProxySection")
-        const torProxySection = findChild(view, "settingsv2TorProxySection")
-        const proxySwitch = findChild(view, "settingsv2ProxyEnableSwitch")
-        const proxyAddressRow = findChild(view, "settingsv2ProxyAddressRow")
-        const saveButton = findChild(view, "settingsv2ProxySettingsSaveButton")
+        const proxyPage = findChild(view, "proxySettingsPage")
+        const defaultProxySection = findChild(view, "defaultProxySection")
+        const torProxySection = findChild(view, "torProxySection")
+        const proxySwitch = findChild(view, "proxyEnableSwitch")
+        const proxyAddressRow = findChild(view, "proxyAddressRow")
+        const saveButton = findChild(view, "proxySettingsSaveButton")
 
         verify(proxyPage !== null)
         verify(defaultProxySection !== null)
@@ -643,10 +642,10 @@ TestCase {
 
         proxyPage.back()
         tryCompare(view.pageContainer, "depth", 2)
-        const discardPopup = findChild(settingsWindow.contentItem, "settingsv2DiscardProxyChangesPopup")
+        const discardPopup = findChild(settingsWindow.contentItem, "discardProxyChangesPopup")
         verify(discardPopup !== null)
         tryCompare(discardPopup, "opened", true)
-        const cancelButton = findChild(settingsWindow.contentItem, "settingsv2DiscardProxyChangesCancelButton")
+        const cancelButton = findChild(settingsWindow.contentItem, "discardProxyChangesCancelButton")
         verify(cancelButton !== null)
         cancelButton.clicked()
         tryCompare(discardPopup, "opened", false)
@@ -663,17 +662,17 @@ TestCase {
         verify(view !== null)
 
         const destinations = [
-            { id: "wallet", objectName: "settingsv2WalletSettingsPage" },
-            { id: "external-signer", objectName: "settingsv2ExternalSignerSettingsPage" },
-            { id: "display", objectName: "settingsv2DisplaySettingsPage" },
-            { id: "window-behavior", objectName: "settingsv2WindowBehaviorSettingsPage" },
-            { id: "storage", objectName: "settingsv2StorageSettingsPage" },
-            { id: "connection", objectName: "settingsv2ConnectionSettingsPage" },
-            { id: "network-traffic", objectName: "settingsv2NetworkTrafficSettingsPage" },
-            { id: "mempool", objectName: "settingsv2MempoolSettingsPage" },
-            { id: "rpc-console", objectName: "settingsv2RpcConsoleSettingsPage" },
+            { id: "wallet", objectName: "walletSettingsPage" },
+            { id: "external-signer", objectName: "externalSignerSettingsPage" },
+            { id: "display", objectName: "displaySettingsPage" },
+            { id: "window-behavior", objectName: "windowBehaviorSettingsPage" },
+            { id: "storage", objectName: "storageSettingsPage" },
+            { id: "connection", objectName: "connectionSettingsPage" },
+            { id: "network-traffic", objectName: "networkTrafficSettingsPage" },
+            { id: "mempool", objectName: "mempoolSettingsPage" },
+            { id: "rpc-console", objectName: "rpcConsoleSettingsPage" },
             { id: "debug-log", objectName: "settingsDebugLog" },
-            { id: "about", objectName: "settingsv2AboutSettingsPage" }
+            { id: "about", objectName: "aboutSettingsPage" }
         ]
 
         for (let index = 0; index < destinations.length; ++index) {
@@ -684,19 +683,19 @@ TestCase {
             verify(findChild(view, destination.objectName) !== null,
                    "Expected instantiated destination " + destination.id)
             if (destination.id === "wallet") {
-                const walletInfoSection = findChild(view, "settingsv2WalletInfoSection")
-                const walletActionsSection = findChild(view, "settingsv2WalletActionsSection")
+                const walletInfoSection = findChild(view, "walletInfoSection")
+                const walletActionsSection = findChild(view, "walletActionsSection")
                 verify(walletInfoSection !== null)
                 verify(walletActionsSection !== null)
                 compare(walletInfoSection.title, "Wallet info")
                 compare(walletActionsSection.title, "Wallet actions")
             }
             if (destination.id === "external-signer") {
-                const signerPage = findChild(view, "settingsv2ExternalSignerSettingsPage")
-                const introduction = findChild(view, "settingsv2ExternalSignerIntroduction")
-                const signerSection = findChild(view, "settingsv2ExternalSignerPathSection")
-                const signerPathRow = findChild(view, "settingsv2ExternalSignerPathRow")
-                const signerFooter = findChild(view, "settingsv2ExternalSignerPathSectionFooter")
+                const signerPage = findChild(view, "externalSignerSettingsPage")
+                const introduction = findChild(view, "externalSignerIntroduction")
+                const signerSection = findChild(view, "externalSignerPathSection")
+                const signerPathRow = findChild(view, "externalSignerPathRow")
+                const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
                 const signerPathFocusBorder = findChild(view, "externalSignerPathFocusBorder")
                 const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
@@ -732,8 +731,8 @@ TestCase {
                 compare(signerStatusIndicator.height, 10)
             }
             if (destination.id === "about") {
-                const versionRow = findChild(view, "settingsv2AboutVersionRow")
-                const versionValue = findChild(view, "settingsv2AboutVersionRowValue")
+                const versionRow = findChild(view, "aboutVersionRow")
+                const versionValue = findChild(view, "aboutVersionRowValue")
                 verify(versionRow !== null)
                 verify(versionValue !== null)
                 compare(versionRow.value, BuildInfo.fullClientVersion)

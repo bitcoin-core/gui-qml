@@ -10,12 +10,12 @@ import QtQuick.Layouts 1.15
 
 import org.bitcoincore.qt 1.0
 
-import "../../../controls"
-import "../../../components"
+import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2NetworkTrafficSettingsPage"
+    objectName: "networkTrafficSettingsPage"
     title: qsTr("Network traffic")
     showBackButton: false
     maximumContentWidth: width
@@ -67,17 +67,17 @@ SettingsPage {
     }
 
     PageHeading {
-        objectName: "settingsv2NetworkTrafficHeading"
+        objectName: "networkTrafficHeading"
         Layout.fillWidth: true
         description: qsTr("How much data you have sent to and received from your peers.")
     }
 
     FormSection {
-        objectName: "settingsv2NetworkTrafficSection"
+        objectName: "networkTrafficSection"
         Layout.fillWidth: true
 
         SegmentedPicker {
-            objectName: "settingsv2NetworkTrafficRangePicker"
+            objectName: "networkTrafficRangePicker"
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
@@ -92,7 +92,7 @@ SettingsPage {
         }
 
         ValueRow {
-            objectName: "settingsv2NetworkTrafficReceivedRow"
+            objectName: "networkTrafficReceivedRow"
             Layout.fillWidth: true
             title: qsTr("Received")
             value: root.formatBytes(networkTrafficTower.totalBytesReceived)
@@ -104,7 +104,7 @@ SettingsPage {
                 color: Theme.color.green
             }
             bodyItem: NetworkTrafficGraph {
-                objectName: "settingsv2NetworkTrafficReceivedGraph"
+                objectName: "networkTrafficReceivedGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
                 backgroundColor: Theme.color.neutral1
@@ -121,7 +121,7 @@ SettingsPage {
         }
 
         ValueRow {
-            objectName: "settingsv2NetworkTrafficSentRow"
+            objectName: "networkTrafficSentRow"
             Layout.fillWidth: true
             title: qsTr("Sent")
             value: root.formatBytes(networkTrafficTower.totalBytesSent)
@@ -134,7 +134,7 @@ SettingsPage {
                 color: Theme.color.blue
             }
             bodyItem: NetworkTrafficGraph {
-                objectName: "settingsv2NetworkTrafficSentGraph"
+                objectName: "networkTrafficSentGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
                 backgroundColor: Theme.color.neutral1

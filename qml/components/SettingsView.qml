@@ -11,8 +11,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../controls"
-import "../pages/settings" as LegacySettings
-import "../pages/settings/settingsv2" as SettingsV2
+import "../pages/settings" as SettingsPages
 import "../pages/wallet" as WalletPages
 
 Page {
@@ -190,7 +189,7 @@ Page {
 
         Rectangle {
             id: sidebarSurface
-            objectName: "settingsv2SettingsSidebarSurface"
+            objectName: "settingsSidebarSurface"
             Layout.preferredWidth: root.sidebarWidth
             Layout.minimumWidth: root.sidebarWidth
             Layout.maximumWidth: root.sidebarWidth
@@ -210,7 +209,7 @@ Page {
                 spacing: 0
 
                 CoreText {
-                    objectName: "settingsv2SettingsSidebarHeading"
+                    objectName: "settingsSidebarHeading"
                     Layout.fillWidth: true
                     Layout.leftMargin: 10
                     Layout.rightMargin: 10
@@ -225,7 +224,7 @@ Page {
 
                 SettingsSidebar {
                     id: sidebar
-                    objectName: "settingsv2SettingsSidebar"
+                    objectName: "settingsSidebar"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: root.sections
@@ -235,7 +234,7 @@ Page {
                 }
 
                 NavButton {
-                    objectName: "settingsv2SettingsDoneButton"
+                    objectName: "settingsDoneButton"
                     visible: root.showDoneButton
                     text: qsTr("Done")
                     Layout.alignment: Qt.AlignHCenter
@@ -247,7 +246,7 @@ Page {
 
         SettingsPageContainer {
             id: pageContainer
-            objectName: "settingsv2SettingsPageContainer"
+            objectName: "settingsPageContainer"
             Layout.minimumWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -257,7 +256,7 @@ Page {
     Component {
         id: walletPage
 
-        SettingsV2.WalletSectionPage {
+        SettingsPages.WalletSectionPage {
             onSelectWalletRequested: root.selectWalletRequested()
             onPasswordRequested: pageContainer.push(walletPasswordPage, {
                 "updating": walletController.selectedWallet.isEncrypted
@@ -302,44 +301,44 @@ Page {
 
     Component {
         id: externalSignerPage
-        SettingsV2.ExternalSignerSettingsPage {}
+        SettingsPages.ExternalSignerSettingsPage {}
     }
 
     Component {
         id: displayPage
-        SettingsV2.DisplaySettingsPage {}
+        SettingsPages.DisplaySettingsPage {}
     }
 
     Component {
         id: windowBehaviorPage
-        SettingsV2.WindowBehaviorSettingsPage {}
+        SettingsPages.WindowBehaviorSettingsPage {}
     }
 
     Component {
         id: storagePage
-        SettingsV2.StorageSettingsPage {}
+        SettingsPages.StorageSettingsPage {}
     }
 
     Component {
         id: connectionPage
-        SettingsV2.ConnectionSettingsPage {}
+        SettingsPages.ConnectionSettingsPage {}
     }
 
     Component {
         id: networkTrafficPage
 
-        SettingsV2.NetworkTrafficSettingsPage {}
+        SettingsPages.NetworkTrafficSettingsPage {}
     }
 
     Component {
         id: mempoolPage
-        SettingsV2.MempoolSettingsPage {}
+        SettingsPages.MempoolSettingsPage {}
     }
 
     Component {
         id: rpcConsolePage
 
-        SettingsV2.RpcConsoleSettingsPage {
+        SettingsPages.RpcConsoleSettingsPage {
             walletName: typeof walletController !== "undefined"
                 && walletController.isWalletLoaded && walletController.selectedWallet
                 ? walletController.selectedWallet.name
@@ -350,7 +349,7 @@ Page {
     Component {
         id: debugLogPage
 
-        LegacySettings.SettingsDebugLog {
+        SettingsPages.SettingsDebugLog {
             showBackButton: false
             maximumContentWidth: width
             contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
@@ -359,6 +358,6 @@ Page {
 
     Component {
         id: aboutPage
-        SettingsV2.AboutSettingsPage {}
+        SettingsPages.AboutSettingsPage {}
     }
 }

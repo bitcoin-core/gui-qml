@@ -10,12 +10,11 @@ import QtQuick.Layouts 1.15
 
 import org.bitcoincore.qt 1.0
 
-import "../../../controls"
-import ".." as LegacySettings
+import "../../controls"
 
 SettingsPage {
     id: root
-    objectName: "settingsv2DisplaySettingsPage"
+    objectName: "displaySettingsPage"
     title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
 
@@ -24,11 +23,11 @@ SettingsPage {
         title: qsTr("Appearance")
 
         FormRow {
-            objectName: "settingsv2DisplayThemeRow"
+            objectName: "displayThemeRow"
             Layout.fillWidth: true
             title: qsTranslate("SettingsDisplay", "Theme")
             trailingItem: SegmentedPicker {
-                objectName: "settingsv2DisplayThemePicker"
+                objectName: "displayThemePicker"
                 implicitWidth: 190
                 implicitHeight: 36
                 model: [qsTr("Light"), qsTr("Dark")]
@@ -40,11 +39,11 @@ SettingsPage {
         }
 
         FormRow {
-            objectName: "settingsv2DisplayBlockStatusSizeRow"
+            objectName: "displayBlockStatusSizeRow"
             Layout.fillWidth: true
             title: qsTranslate("SettingsDisplay", "Block status size")
             trailingItem: PopupPicker {
-                objectName: "settingsv2DisplayBlockStatusSizePicker"
+                objectName: "displayBlockStatusSizePicker"
                 embedded: true
                 minimumMenuWidth: 520
                 subtitleRole: "description"
@@ -72,12 +71,12 @@ SettingsPage {
         }
 
         FormRow {
-            objectName: "settingsv2DisplayMoneyFontRow"
+            objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
             showDivider: false
             trailingItem: PopupPicker {
-                objectName: "settingsv2DisplayMoneyFontPicker"
+                objectName: "displayMoneyFontPicker"
                 embedded: true
                 minimumMenuWidth: 400
                 subtitleRole: "description"
@@ -106,11 +105,11 @@ SettingsPage {
         title: qsTr("Language and format")
 
         FormRow {
-            objectName: "settingsv2DisplayUnitRow"
+            objectName: "displayUnitRow"
             Layout.fillWidth: true
             title: qsTranslate("SettingsDisplay", "Display unit")
             trailingItem: PopupPicker {
-                objectName: "settingsv2DisplayUnitPicker"
+                objectName: "displayUnitPicker"
                 embedded: true
                 minimumMenuWidth: 400
                 subtitleRole: "description"
@@ -120,25 +119,25 @@ SettingsPage {
                     {
                         text: qsTr("BTC"),
                         value: 0,
-                        objectName: "settingsv2DisplayUnitBTC",
+                        objectName: "displayUnitBTC",
                         description: qsTr("8 decimal places (0.00000001 BTC = 1 sat)")
                     },
                     {
                         text: qsTr("mBTC"),
                         value: 1,
-                        objectName: "settingsv2DisplayUnitMBTC",
+                        objectName: "displayUnitMBTC",
                         description: qsTr("5 decimal places (0.00001 mBTC = 1 sat)")
                     },
                     {
                         text: qsTr("bits"),
                         value: 2,
-                        objectName: "settingsv2DisplayUnitBits",
+                        objectName: "displayUnitBits",
                         description: qsTr("2 decimal places (0.01 bits = 1 sat)")
                     },
                     {
                         text: qsTr("sat"),
                         value: 3,
-                        objectName: "settingsv2DisplayUnitSAT",
+                        objectName: "displayUnitSAT",
                         description: qsTr("Satoshi, the smallest unit (1 sat = 0.00000001 BTC)")
                     }
                 ]
@@ -149,12 +148,12 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2DisplayLanguageRow"
+            objectName: "displayLanguageRow"
             Layout.fillWidth: true
             title: qsTranslate("SettingsDisplay", "Language")
             enabled: ((optionsModel.coreSettingStatuses || ({})).lang || ({})).canEdit !== false
             showsDisclosureIndicator: true
-            disclosureIndicatorObjectName: "settingsv2DisplayLanguageDisclosureIndicator"
+            disclosureIndicatorObjectName: "displayLanguageDisclosureIndicator"
             trailingItem: CoreText {
                 text: optionsModel.languageLabel(optionsModel.language)
                 color: Theme.color.neutral7
@@ -164,7 +163,7 @@ SettingsPage {
         }
 
         ListRow {
-            objectName: "settingsv2DisplayTransactionUrlsRow"
+            objectName: "displayTransactionUrlsRow"
             Layout.fillWidth: true
             title: qsTr("Third-party transaction URLs")
             showDivider: false
@@ -174,13 +173,13 @@ SettingsPage {
     }
 
     FormSection {
-        objectName: "settingsv2DisplayDeveloperSection"
+        objectName: "displayDeveloperSection"
         Layout.fillWidth: true
         visible: BuildInfo.isDebug
         title: qsTr("Developer")
 
         ListRow {
-            objectName: "settingsv2DisplayDesignSystemRow"
+            objectName: "displayDesignSystemRow"
             Layout.fillWidth: true
             title: qsTr("Design system")
             description: qsTr("Preview reusable controls and design tokens.")
@@ -193,7 +192,7 @@ SettingsPage {
     Component {
         id: languagePage
 
-        LegacySettings.SettingsLanguage {
+        SettingsLanguage {
             onBack: root.StackView.view.pop()
         }
     }
@@ -201,8 +200,8 @@ SettingsPage {
     Component {
         id: designSystemPage
 
-        LegacySettings.SettingsDesignSystem {
-            objectName: "settingsv2DisplayDesignSystemPage"
+        SettingsDesignSystem {
+            objectName: "displayDesignSystemPage"
             onBack: root.StackView.view.pop()
         }
     }
@@ -223,7 +222,7 @@ SettingsPage {
             }
 
             CoreTextField {
-                objectName: "settingsv2ThirdPartyTransactionUrlsInput"
+                objectName: "thirdPartyTransactionUrlsInput"
                 Layout.fillWidth: true
                 text: optionsModel.thirdPartyTransactionUrls
                 placeholderText: "https://example.com/tx/%s"

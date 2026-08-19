@@ -18,12 +18,12 @@ from qml_driver import QmlDriverError
 
 POST_ONBOARDING_TIMEOUT_MS = 30_000
 DISPLAY_SETTING_ROWS = (
-    "settingsv2DisplayThemeRow",
-    "settingsv2DisplayBlockStatusSizeRow",
-    "settingsv2DisplayMoneyFontRow",
-    "settingsv2DisplayUnitRow",
-    "settingsv2DisplayLanguageRow",
-    "settingsv2DisplayTransactionUrlsRow",
+    "displayThemeRow",
+    "displayBlockStatusSizeRow",
+    "displayMoneyFontRow",
+    "displayUnitRow",
+    "displayLanguageRow",
+    "displayTransactionUrlsRow",
 )
 
 
@@ -32,8 +32,8 @@ def navigate_to_display_settings(gui):
     gui.click("nodeSettingsButton")
     gui.wait_for_property("settingsSidebar_display", "visible", True, timeout_ms=5000)
     gui.click("settingsSidebar_display")
-    gui.wait_for_page("settingsv2DisplaySettingsPage", timeout_ms=5000)
-    gui.wait_for_page("settingsv2DisplayUnitPicker", timeout_ms=5000)
+    gui.wait_for_page("displaySettingsPage", timeout_ms=5000)
+    gui.wait_for_page("displayUnitPicker", timeout_ms=5000)
     print("  Navigated to redesigned Display settings page")
 
 
@@ -44,26 +44,26 @@ def assert_display_rows_have_no_descriptions(gui):
 
 
 def select_display_unit(gui, item_name, expected_text):
-    gui.click("settingsv2DisplayUnitPickerButton")
+    gui.click("displayUnitPickerButton")
     gui.wait_for_property(item_name, "visible", True, timeout_ms=3000)
     gui.click(item_name)
     gui.wait_for_property(
-        "settingsv2DisplayUnitPicker", "currentText", expected_text, timeout_ms=3000
+        "displayUnitPicker", "currentText", expected_text, timeout_ms=3000
     )
 
 
 def select_language(gui, search_text, item_name):
-    gui.click("settingsv2DisplayLanguageRow")
+    gui.click("displayLanguageRow")
     gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
     if search_text:
         gui.set_text("languageSearch", search_text)
     gui.wait_for_page(item_name, timeout_ms=3000)
     gui.click(item_name)
-    gui.wait_for_page("settingsv2DisplayLanguageRow", timeout_ms=5000)
+    gui.wait_for_page("displayLanguageRow", timeout_ms=5000)
 
 
 def reset_display_unit_to_btc(gui):
-    select_display_unit(gui, "settingsv2DisplayUnitBTC", "BTC")
+    select_display_unit(gui, "displayUnitBTC", "BTC")
 
 
 def reset_language_to_system_default(gui):
@@ -74,8 +74,8 @@ def test_display_unit_selection(gui):
     print("\n── test_display_unit_selection ───────────────────────────────")
     try:
         reset_display_unit_to_btc(gui)
-        select_display_unit(gui, "settingsv2DisplayUnitSAT", "sat")
-        assert gui.get_property("settingsv2DisplayUnitPicker", "currentValue") == 3
+        select_display_unit(gui, "displayUnitSAT", "sat")
+        assert gui.get_property("displayUnitPicker", "currentValue") == 3
         print("  Display unit changed from BTC to sat  PASSED")
     finally:
         try:
@@ -90,8 +90,8 @@ def test_language_selection(gui):
         select_language(gui, "español", "language_es")
         assert_display_rows_have_no_descriptions(gui)
 
-        language_title = gui.get_property("settingsv2DisplayLanguageRow", "title")
-        unit_title = gui.get_property("settingsv2DisplayUnitRow", "title")
+        language_title = gui.get_property("displayLanguageRow", "title")
+        unit_title = gui.get_property("displayUnitRow", "title")
         assert language_title == "Idioma", language_title
         assert unit_title == "Unidad de visualización", unit_title
         print("  Spanish translated the inline Display rows  PASSED")
@@ -115,9 +115,9 @@ def test_settings_persistence(datadir):
         gui.wait_for_page("nodeSettingsButton", timeout_ms=POST_ONBOARDING_TIMEOUT_MS)
         navigate_to_display_settings(gui)
 
-        assert gui.get_property("settingsv2DisplayUnitPicker", "currentValue") == 3
-        assert gui.get_property("settingsv2DisplayLanguageRow", "title") == "Idioma"
-        assert gui.get_property("settingsv2DisplayUnitRow", "title") == "Unidad de visualización"
+        assert gui.get_property("displayUnitPicker", "currentValue") == 3
+        assert gui.get_property("displayLanguageRow", "title") == "Idioma"
+        assert gui.get_property("displayUnitRow", "title") == "Unidad de visualización"
         print("  Display unit and language persisted across restart  PASSED")
 
         reset_display_unit_to_btc(gui)
@@ -142,7 +142,7 @@ def run_tests():
         test_display_unit_selection(gui)
         test_language_selection(gui)
 
-        select_display_unit(gui, "settingsv2DisplayUnitSAT", "sat")
+        select_display_unit(gui, "displayUnitSAT", "sat")
         select_language(gui, "español", "language_es")
         datadir = harness.datadir
         tmpdir = harness.tmpdir

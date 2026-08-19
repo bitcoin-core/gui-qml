@@ -148,7 +148,7 @@ def open_wallet_settings(gui):
     gui.settle()
     gui.wait_for_property("settingsSidebar_wallet", "visible", True, timeout_ms=5000)
     gui.click("settingsSidebar_wallet")
-    gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
+    gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
 def open_wallet_selector(gui):
@@ -241,9 +241,9 @@ def case_rename_persists_across_restart(harness, checkpoints):
     open_wallet_settings(gui)
     checkpoints.checkpoint("wallet settings opened", gui)
 
-    gui.wait_for_property("settingsv2WalletNameInput", "visible", True, timeout_ms=5000)
-    gui.set_text("settingsv2WalletNameInput", display_name)
-    gui.invoke("settingsv2WalletNameInput", "editingFinished")
+    gui.wait_for_property("walletNameInput", "visible", True, timeout_ms=5000)
+    gui.set_text("walletNameInput", display_name)
+    gui.invoke("walletNameInput", "editingFinished")
     gui.wait_for_property("walletBadge", "text", display_name, timeout_ms=5000)
     checkpoints.checkpoint("wallet renamed", gui)
 
@@ -276,10 +276,10 @@ def case_backup_uses_automation_path(harness, checkpoints):
     open_wallet_settings(gui)
     checkpoints.checkpoint("wallet settings opened", gui)
 
-    gui.set_text("settingsv2WalletSettingsBackupPathField", backup_dir)
-    gui.click("settingsv2WalletBackupRow")
+    gui.set_text("walletSettingsBackupPathField", backup_dir)
+    gui.click("walletBackupRow")
     wait_for_file(backup_path)
-    assert gui.get_property("settingsv2WalletSettingsPage", "errorText") == "", (
+    assert gui.get_property("walletSettingsPage", "errorText") == "", (
         "Backup should not surface an error"
     )
     checkpoints.checkpoint("wallet backup created", gui)
@@ -304,7 +304,7 @@ def case_sign_verify_message(harness, checkpoints):
     address = rpc_call(harness.gui_rpc_port, "getnewaddress", ["", "legacy"], wallet=wallet_name)
 
     open_wallet_settings(gui)
-    gui.click("settingsv2WalletSignVerifyMessageRow")
+    gui.click("walletSignVerifyMessageRow")
     gui.wait_for_page("signVerifyMessagePage", timeout_ms=10000)
     checkpoints.checkpoint("sign verify message page opened", gui)
 
@@ -353,7 +353,7 @@ def case_subpages_close_when_wallet_becomes_unselected(harness, checkpoints):
     checkpoints.checkpoint("managed wallet loaded", gui)
 
     open_wallet_settings(gui)
-    gui.click("settingsv2WalletPasswordRow")
+    gui.click("walletPasswordRow")
     gui.wait_for_page("walletPasswordSettingsPage", timeout_ms=10000)
     checkpoints.checkpoint("password subpage opened", gui)
 
@@ -361,14 +361,14 @@ def case_subpages_close_when_wallet_becomes_unselected(harness, checkpoints):
     gui.wait_for_property("walletCloseConfirmationPopup", "opened", True, timeout_ms=5000)
     gui.click("walletCloseConfirmationConfirmButton")
     gui.wait_for_property("walletCloseConfirmationPopup", "opened", False, timeout_ms=5000)
-    gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
+    gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
     gui.wait_for_property("walletBadge", "noWalletLoaded", True, timeout_ms=5000)
     checkpoints.checkpoint("password subpage unwound after wallet close", gui)
 
     select_wallet(gui, wallet_name)
     wait_for_wallet_ready(harness, gui)
     gui.wait_for_property("walletBadge", "noWalletLoaded", False, timeout_ms=5000)
-    gui.wait_for_property("settingsv2WalletNameInput", "visible", True, timeout_ms=5000)
+    gui.wait_for_property("walletNameInput", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("wallet reselected from settings page", gui)
 
 
@@ -393,12 +393,12 @@ def case_password_page_closes_when_selected_wallet_changes(harness, checkpoints)
     checkpoints.checkpoint("first wallet selected", gui)
 
     open_wallet_settings(gui)
-    gui.click("settingsv2WalletPasswordRow")
+    gui.click("walletPasswordRow")
     gui.wait_for_page("walletPasswordSettingsPage", timeout_ms=10000)
     checkpoints.checkpoint("password subpage opened for first wallet", gui)
 
     select_wallet(gui, wallet_names[1])
-    gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
+    gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
     gui.wait_for_property("walletBadge", "text", wallet_names[1], timeout_ms=20000)
     checkpoints.checkpoint("password subpage unwound after selecting second wallet", gui)
 
@@ -420,7 +420,7 @@ def case_wrong_current_password_clears_current_field(harness, checkpoints):
     checkpoints.checkpoint("managed wallet loaded", gui)
 
     open_wallet_settings(gui)
-    gui.click("settingsv2WalletPasswordRow")
+    gui.click("walletPasswordRow")
     gui.wait_for_page("walletPasswordSettingsPage", timeout_ms=10000)
 
     gui.set_text("walletPasswordCurrentField", "wrong password")

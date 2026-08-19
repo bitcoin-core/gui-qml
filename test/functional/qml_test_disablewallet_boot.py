@@ -160,54 +160,54 @@ def assert_wallet_boot(gui):
 def walk_about_settings(gui, checkpoints):
     print("  Opening About settings (sidebar)")
     gui.click("settingsSidebar_about")
-    gui.wait_for_page("settingsv2AboutSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("aboutSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("about settings opened", gui)
 
-    gui.click("settingsv2AboutDeveloperRow")
+    gui.click("aboutDeveloperRow")
     gui.wait_for_page("settingsDeveloper", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("developer settings opened", gui)
     gui.click("settingsDeveloperBack")
-    gui.wait_for_page("settingsv2AboutSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("aboutSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("returned from developer settings", gui)
 
 
 def walk_display_settings(gui, checkpoints):
     print("  Opening Display settings (sidebar)")
     gui.click("settingsSidebar_display")
-    gui.wait_for_page("settingsv2DisplayUnitPicker", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("displayUnitPicker", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("display settings opened", gui)
 
-    gui.click("settingsv2DisplayUnitPickerButton")
-    gui.wait_for_page("settingsv2DisplayUnitPickerMenu", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.click("displayUnitPickerButton")
+    gui.wait_for_page("displayUnitPickerMenu", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("display unit picker opened", gui)
-    gui.click("settingsv2DisplayUnitBTC")
+    gui.click("displayUnitBTC")
 
-    gui.click("settingsv2DisplayLanguageRow")
+    gui.click("displayLanguageRow")
     gui.wait_for_page("settingsLanguagePage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("language settings opened", gui)
     gui.click("settingsLanguageBack")
-    gui.wait_for_page("settingsv2DisplayLanguageRow", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("displayLanguageRow", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("returned from display sub-pages", gui)
 
 
 def walk_storage_settings(gui, checkpoints):
     print("  Opening Storage settings (sidebar)")
     gui.click("settingsSidebar_storage")
-    gui.wait_for_page("settingsv2StorageSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("storageSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("storage settings opened", gui)
 
 
 def walk_connection_settings(gui, checkpoints):
     print("  Opening Connection settings (sidebar)")
     gui.click("settingsSidebar_connection")
-    gui.wait_for_page("settingsv2ProxySettingsRow", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("proxySettingsRow", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("connection settings opened", gui)
 
-    gui.click("settingsv2ProxySettingsRow")
-    gui.wait_for_page("settingsv2ProxySettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.click("proxySettingsRow")
+    gui.wait_for_page("proxySettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("proxy settings opened", gui)
-    gui.click("settingsv2ProxySettingsBackButton")
-    gui.wait_for_page("settingsv2ProxySettingsRow", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.click("proxySettingsBackButton")
+    gui.wait_for_page("proxySettingsRow", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("returned from proxy settings", gui)
 
 
@@ -224,7 +224,7 @@ def walk_peers(gui, checkpoints):
 def walk_network_traffic_settings(gui, checkpoints):
     print("  Opening Network Traffic settings (sidebar)")
     gui.click("settingsSidebar_network-traffic")
-    gui.wait_for_page("settingsv2NetworkTrafficSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
+    gui.wait_for_page("networkTrafficSettingsPage", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("network traffic settings opened", gui)
 
 
@@ -260,7 +260,7 @@ def run_node_only_flow(harness, checkpoints, *, full_walk):
             walk_network_traffic_settings(gui, checkpoints)
             walk_debug_log_settings(gui, checkpoints)
 
-        gui.click("settingsv2SettingsDoneButton")
+        gui.click("settingsDoneButton")
         gui.wait_for_page("nodeSettingsButton", timeout_ms=SETTINGS_TIMEOUT_MS)
         checkpoints.checkpoint("node settings closed", gui)
 

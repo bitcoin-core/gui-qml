@@ -236,7 +236,7 @@ def open_wallet_settings_page(gui):
     gui.click("desktopWalletSettingsTabButton")
     gui.wait_for_property("settingsSidebar_wallet", "visible", True, timeout_ms=10000)
     gui.click("settingsSidebar_wallet")
-    gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
+    gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
 def open_import_wallet_page(gui):
@@ -551,8 +551,8 @@ def case_close_loaded_wallet_from_selector(harness, checkpoints):
     remaining_wallet = next(name for name in wallet_names if name != selected_wallet)
 
     open_wallet_settings_page(gui)
-    gui.wait_for_property("settingsv2WalletPasswordRow", "visible", True, timeout_ms=10000)
-    gui.wait_for_property("settingsv2WalletBackupRow", "visible", True, timeout_ms=10000)
+    gui.wait_for_property("walletPasswordRow", "visible", True, timeout_ms=10000)
+    gui.wait_for_property("walletBackupRow", "visible", True, timeout_ms=10000)
     checkpoints.checkpoint("wallet settings opened", gui)
 
     open_wallet_selector(gui)

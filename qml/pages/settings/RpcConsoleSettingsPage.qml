@@ -7,12 +7,12 @@ pragma ComponentBehavior: Bound
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-import "../../../controls"
-import "../../node" as NodePages
+import "../../controls"
+import "../node" as NodePages
 
 Page {
     id: root
-    objectName: "settingsv2RpcConsoleSettingsPage"
+    objectName: "rpcConsoleSettingsPage"
 
     property string walletName: ""
     property real maximumContentWidth: 840
@@ -24,7 +24,7 @@ Page {
     clip: true
 
     header: SettingsHeader {
-        objectName: "settingsv2RpcConsoleHeader"
+        objectName: "rpcConsoleHeader"
         title: qsTr("RPC console")
         showBackButton: false
     }
@@ -44,7 +44,7 @@ Page {
 
         NodePages.CommandConsole {
             id: rpcConsole
-            objectName: "settingsv2RpcConsole"
+            objectName: "rpcConsole"
             anchors.fill: parent
             showHeader: false
             tabActive: root.visible
