@@ -90,10 +90,10 @@ def open_address_list_from_settings(gui):
     gui.click("desktopWalletSettingsTabButton")
     gui.wait_for_property("desktopWalletSettingsTabButton", "checked", True, timeout_ms=5000)
     gui.settle()
-    gui.wait_for_property("settings_wallet", "visible", True, timeout_ms=5000)
-    gui.click("settings_wallet")
-    gui.wait_for_property("walletSettingsPage", "visible", True, timeout_ms=5000)
-    gui.click("settingsAddresses")
+    gui.wait_for_property("settingsSidebar_wallet", "visible", True, timeout_ms=5000)
+    gui.click("settingsSidebar_wallet")
+    gui.wait_for_property("settingsv2WalletSettingsPage", "visible", True, timeout_ms=5000)
+    gui.click("settingsv2WalletAddressesRow")
     gui.wait_for_property("addressListPage", "visible", True, timeout_ms=10000)
 
 

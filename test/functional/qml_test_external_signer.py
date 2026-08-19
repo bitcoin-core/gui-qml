@@ -238,34 +238,35 @@ def ensure_desktop_wallets_visible(gui):
 def open_wallet_settings(gui):
     ensure_desktop_wallets_visible(gui)
     gui.click("desktopWalletSettingsTabButton")
-    # External-signer config moved into the node-settings sidebar's
-    # "External Signer" section (objectName settings_externalsigner), whose page
-    # hosts externalSignerPathInput.
-    gui.wait_for_property("settings_externalsigner", "visible", True, timeout_ms=10000)
-    gui.click("settings_externalsigner")
+    # External-signer configuration lives in its own redesigned sidebar page.
+    gui.wait_for_property("settingsSidebar_external-signer", "visible", True, timeout_ms=10000)
+    gui.click("settingsSidebar_external-signer")
     gui.wait_for_property("externalSignerPathInput", "visible", True, timeout_ms=10000)
 
 
 def open_selected_wallet_settings(gui):
     ensure_desktop_wallets_visible(gui)
     gui.click("desktopWalletSettingsTabButton")
-    # Per-wallet settings live under the sidebar "Wallet" section
-    # (objectName settings_wallet), which opens walletSettingsPage.
-    gui.wait_for_property("settings_wallet", "visible", True, timeout_ms=10000)
-    gui.click("settings_wallet")
+    # Per-wallet settings live under the sidebar Wallet section.
+    gui.wait_for_property("settingsSidebar_wallet", "visible", True, timeout_ms=10000)
+    gui.click("settingsSidebar_wallet")
     try:
-        gui.wait_for_page("walletSettingsPage", timeout_ms=1000)
+        gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=1000)
     except QmlDriverError:
-        # The wallet section is a PageStack; if a prior step left it on a
-        # sub-page, pop back to the wallet settings root.
-        for back_button in ("walletSettingsBackButton", "settingsWalletBack"):
+        # If a prior step left the preserved wallet stack on a subpage, return
+        # to the redesigned wallet settings root.
+        for back_button in (
+            "walletPasswordBackButton",
+            "addressListBackButton",
+            "signVerifyMessageBackButton",
+        ):
             try:
                 if gui.get_property(back_button, "visible") is True:
                     gui.click(back_button)
                     break
             except QmlDriverError:
                 pass
-        gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
+        gui.wait_for_page("settingsv2WalletSettingsPage", timeout_ms=10000)
 
 
 def configure_external_signer_via_gui(harness, checkpoints, signer_path):
@@ -505,8 +506,8 @@ def run_test(args):
         configure_external_signer_via_gui(harness, checkpoints, signer_path)
         wallet_name = create_and_verify_external_wallet(harness, checkpoints)
         open_selected_wallet_settings(harness.driver)
-        harness.driver.wait_for_property("walletSettingsPasswordRow", "visible", False, timeout_ms=10000)
-        harness.driver.wait_for_property("walletSettingsBackupRow", "visible", True, timeout_ms=10000)
+        harness.driver.wait_for_property("settingsv2WalletPasswordRow", "visible", False, timeout_ms=10000)
+        harness.driver.wait_for_property("settingsv2WalletBackupRow", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("external signer wallet hides password settings", harness.driver)
 
         create_wallet(harness.gui_rpc_port, "miner", load_on_startup=False)

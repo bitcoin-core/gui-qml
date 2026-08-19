@@ -317,12 +317,12 @@ class QmlDriver:
     def settle(
         self,
         timeout_ms=5000,
-        stack_view_names=("mainPageStack", "createWalletWizard", "nodeSettingsStack"),
+        stack_view_names=("mainPageStack", "createWalletWizard", "settingsNavigationStack_wallet"),
     ):
         """Wait for relevant StackView transitions to finish.
 
         The wallet flow transitions run through the app's main page stack and,
-        once opened, the nested create-wallet wizard stack and settings stack.
+        once opened, the nested create-wallet wizard and wallet-settings stacks.
         Waiting for their `busy` property to become false is more reliable than
         sleeping. Missing stack views are ignored so this remains safe before
         nested flows have been created.

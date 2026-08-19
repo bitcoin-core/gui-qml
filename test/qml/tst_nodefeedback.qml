@@ -172,6 +172,7 @@ TestCase {
         verify(warningButton !== null)
         verify(infoButton !== null)
         verify(settingsButton !== null)
+        compare(findChild(runner, "consoleTabButton"), null)
         tryCompare(warningButton, "visible", true)
 
         compare(warningButton.height, 34)

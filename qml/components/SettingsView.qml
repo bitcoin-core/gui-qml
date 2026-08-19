@@ -142,7 +142,7 @@ Page {
 
         if (forceReload === true) pageContainer.clear()
         root.selectedSectionId = resolvedId
-        if (root.visible) pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
+        pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
     }
 
     function ensureVisibleSelection() {
@@ -340,7 +340,8 @@ Page {
         id: rpcConsolePage
 
         SettingsV2.RpcConsoleSettingsPage {
-            walletName: walletController.isWalletLoaded && walletController.selectedWallet
+            walletName: typeof walletController !== "undefined"
+                && walletController.isWalletLoaded && walletController.selectedWallet
                 ? walletController.selectedWallet.name
                 : ""
         }

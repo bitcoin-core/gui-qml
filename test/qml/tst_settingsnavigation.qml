@@ -125,6 +125,8 @@ TestCase {
         optionsModel.moneyFontChoice = "embedded"
         optionsModel.maxMempoolSizeMB = 300
         optionsModel.storageSettingsDirty = false
+        optionsModel.mempoolSettingsDirty = false
+        nodeModel.resetMempoolInfoPollingTestState()
         optionsModel.clearCoreSettingStatusesForTest()
         const proxySetting = optionsModel.coreSettings.entry("proxy")
         const onionSetting = optionsModel.coreSettings.entry("onion")
@@ -162,6 +164,28 @@ TestCase {
         verify(connection !== null)
         connection.clicked()
         compare(activatedSection, "connection")
+    }
+
+    function test_settingsViewAppliesRuntimeVisibilityGates() {
+        AppMode.walletEnabled = false
+        AppMode.isDesktop = false
+        nodeModel.mempoolInformationAvailable = false
+
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+
+        compare(view.sectionIsVisible("wallet"), false)
+        compare(view.sectionIsVisible("external-signer"), false)
+        compare(view.sectionIsVisible("window-behavior"), false)
+        compare(view.sectionIsVisible("mempool"), false)
+        verify(findChild(view, "settingsSidebar_wallet") === null)
+        verify(findChild(view, "settingsSidebar_external-signer") === null)
+        verify(findChild(view, "settingsSidebar_window-behavior") === null)
+        verify(findChild(view, "settingsSidebar_mempool") === null)
+
+        compare(view.sectionIsVisible("display"), true)
+        compare(view.selectedSectionId, "display")
+        verify(findChild(view, "settingsSidebar_display") !== null)
     }
 
     function test_containerLazilyCachesAndRestoresEachSectionStack() {
@@ -482,9 +506,19 @@ TestCase {
         compare(moneyFontPicker.currentText, "Roboto Mono")
         tryCompare(moneyFontPicker, "width", embeddedMoneyFontWidth)
 
-        displayUnitPicker.activated(3)
-        compare(optionsModel.displayUnit, 3)
-        compare(displayUnitPicker.currentText, "sat")
+        const displayUnits = [
+            { value: 1, text: "mBTC" },
+            { value: 2, text: "bits" },
+            { value: 3, text: "sat" },
+            { value: 0, text: "BTC" }
+        ]
+        for (let index = 0; index < displayUnits.length; ++index) {
+            const unit = displayUnits[index]
+            displayUnitPicker.activated(unit.value)
+            compare(optionsModel.displayUnit, unit.value)
+            compare(displayUnitPicker.currentValue, unit.value)
+            compare(displayUnitPicker.currentText, unit.text)
+        }
 
         designSystemRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
@@ -519,6 +553,38 @@ TestCase {
         sizeLimitRow.editingFinished()
         compare(optionsModel.maxMempoolSizeMB, 512)
         verify(sizeLimitRow.errorText.length > 0)
+    }
+
+    function test_mempoolPollingAndRestartNoticeFollowVisibility() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        compare(nodeModel.mempoolInfoPollingActive, false)
+
+        view.selectSection("mempool")
+        const mempoolPage = findChild(view, "settingsv2MempoolSettingsPage")
+        const restartNotice = findChild(view, "settingsv2MempoolRestartNotice")
+        verify(mempoolPage !== null)
+        verify(restartNotice !== null)
+        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
+        compare(restartNotice.visible, false)
+
+        optionsModel.mempoolSettingsDirty = true
+        tryCompare(restartNotice, "visible", true)
+
+        view.selectSection("display")
+        tryCompare(nodeModel, "mempoolInfoPollingActive", false)
+        compare(findChild(view, "settingsv2MempoolSettingsPage"), mempoolPage)
+
+        view.selectSection("mempool")
+        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
+        view.visible = false
+        tryCompare(nodeModel, "mempoolInfoPollingActive", false)
+        view.visible = true
+        tryCompare(nodeModel, "mempoolInfoPollingActive", true)
+
+        view.destroy()
+        wait(0)
+        compare(nodeModel.mempoolInfoPollingActive, false)
     }
 
     function test_connectionProxyPageUsesRedesignedFormAndDraftCommit() {

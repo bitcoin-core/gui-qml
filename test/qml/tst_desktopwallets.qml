@@ -26,6 +26,7 @@ TestCase {
         walletController.initialized = true
         walletController.isWalletLoaded = true
         walletController.noWalletsFound = false
+        walletController.setSelectedWalletObject(testWalletModel)
         walletListModel.reset()
     }
 
@@ -82,9 +83,7 @@ TestCase {
         const tabs = [
             findChild(page, "blockClockTabButton"),
             findChild(page, "peersTabButton"),
-            findChild(page, "consoleTabButton"),
-            findChild(page, "desktopWalletSettingsTabButton"),
-            findChild(page, "desktopWalletSettingsPreviewTabButton")
+            findChild(page, "desktopWalletSettingsTabButton")
         ]
 
         for (let i = 0; i < tabs.length; ++i) {
@@ -94,51 +93,31 @@ TestCase {
         }
 
         compare(tabs[1].iconSize, 24)
-        compare(tabs[2].iconSize, 24)
-        compare(tabs[3].iconSize, 30)
-        compare(tabs[4].iconSize, 30)
+        compare(tabs[2].iconSize, 30)
+        compare(findChild(page, "consoleTabButton"), null)
+        compare(findChild(page, "desktopWalletSettingsPreviewTabButton"), null)
     }
 
-    function test_settings_preview_is_lazilyLoadedAndRetained() {
+    function test_settings_is_lazilyLoadedAndRetained() {
         const page = createDesktopWallets()
-        const previewSettingsTab = findChild(page, "desktopWalletSettingsPreviewTabButton")
-        const previewLoader = findChild(page, "settingsPreviewLoader")
+        const settingsTab = findChild(page, "desktopWalletSettingsTabButton")
+        const settingsLoader = findChild(page, "settingsLoader")
 
-        verify(previewSettingsTab !== null)
-        verify(previewLoader !== null)
-        compare(previewLoader.active, false)
-        compare(previewLoader.item, null)
+        verify(settingsTab !== null)
+        verify(settingsLoader !== null)
+        compare(settingsLoader.active, false)
+        compare(settingsLoader.item, null)
 
-        previewSettingsTab.checked = true
-        tryCompare(previewSettingsTab, "checked", true)
-        tryCompare(previewLoader, "active", true)
-        tryVerify(function() { return previewLoader.item !== null })
-        compare(previewLoader.item.objectName, "settingsView")
-        const settingsView = previewLoader.item
+        settingsTab.checked = true
+        tryCompare(settingsTab, "checked", true)
+        tryCompare(settingsLoader, "active", true)
+        tryVerify(function() { return settingsLoader.item !== null })
+        compare(settingsLoader.item.objectName, "settingsView")
+        const settingsView = settingsLoader.item
 
-        previewSettingsTab.checked = false
-        compare(previewLoader.item, settingsView)
-        compare(previewLoader.active, true)
-    }
-
-    function test_console_autocomplete_closes_when_switching_tabs() {
-        const page = createDesktopWallets()
-        const consoleTab = findChild(page, "consoleTabButton")
-        const activityTab = findChild(page, "activityTabButton")
-        const popup = findChild(page, "consoleAutocompletePopup")
-
-        verify(consoleTab !== null)
-        verify(activityTab !== null)
-        verify(popup !== null)
-
-        consoleTab.checked = true
-        tryCompare(consoleTab, "checked", true)
-        popup.open()
-        tryCompare(popup, "visible", true)
-
-        activityTab.checked = true
-        tryCompare(activityTab, "checked", true)
-        tryCompare(popup, "visible", false)
+        settingsTab.checked = false
+        compare(settingsLoader.item, settingsView)
+        compare(settingsLoader.active, true)
     }
 
     function test_receive_options_view_address_history_opens_settings_address_stack() {
@@ -163,13 +142,15 @@ TestCase {
         verify(settingsTab !== null)
         compare(settingsTab.checked, true)
 
-        const settingsPage = findChild(page, "nodeSettingsStack")
+        const settingsPage = findChild(page, "settingsView")
         verify(settingsPage !== null)
 
-        tryVerify(function() { return findChild(page, "walletSettingsStack") !== null })
-        const walletStack = findChild(page, "walletSettingsStack")
-        tryCompare(walletStack, "depth", 2)
-        compare(walletStack.currentItem.objectName, "addressListPage")
-        verify(findChild(page, "walletSettingsPage") !== null)
+        const settingsContainer = findChild(page, "settingsv2SettingsPageContainer")
+        verify(settingsContainer !== null)
+        tryCompare(settingsPage, "selectedSectionId", "wallet")
+        tryCompare(settingsContainer, "currentSectionId", "wallet")
+        tryCompare(settingsContainer, "depth", 2)
+        compare(settingsContainer.currentItem.objectName, "addressListPage")
+        verify(findChild(page, "settingsv2WalletSettingsPage") !== null)
     }
 }

@@ -29,6 +29,7 @@ Page {
 
     background: null
     padding: 0
+    contentWidth: root.maximumContentWidth
 
     header: SettingsHeader {
         id: settingsHeader

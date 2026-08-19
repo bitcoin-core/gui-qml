@@ -113,10 +113,9 @@ def navigate_to_debug_log(gui):
     """
     gui.wait_for_page("nodeRunner", timeout_ms=10000)
     gui.click("nodeSettingsButton")
-    gui.wait_for_page("nodeSettingsStack", timeout_ms=5000)
-    # Debug Log is a sidebar section (settings_debuglog) in the desktop layout.
-    gui.wait_for_property("settings_debuglog", "visible", True, timeout_ms=5000)
-    gui.click("settings_debuglog")
+    gui.wait_for_page("settingsView", timeout_ms=5000)
+    gui.wait_for_property("settingsSidebar_debug-log", "visible", True, timeout_ms=5000)
+    gui.click("settingsSidebar_debug-log")
     gui.wait_for_page("settingsDebugLog", timeout_ms=5000)
 
 
@@ -399,7 +398,7 @@ def test_load_more_at_bottom(gui, current_count):
 def test_close_settings(gui):
     """Clicking Done exits the desktop settings shell."""
     print("\n── test_close_settings ───────────────────────────────────────────")
-    gui.click("nodeSettingsDoneButton")
+    gui.click("settingsv2SettingsDoneButton")
     gui.wait_for_page("nodeSettingsButton", timeout_ms=5000)
     print("  PASSED: Done closed node settings")
 

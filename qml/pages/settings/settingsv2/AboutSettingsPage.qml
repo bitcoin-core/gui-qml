@@ -63,6 +63,7 @@ SettingsPage {
         }
 
         ListRow {
+            objectName: "settingsv2AboutDeveloperRow"
             Layout.fillWidth: true
             title: qsTr("Developer options")
             description: qsTr("Only use these if you have development experience.")

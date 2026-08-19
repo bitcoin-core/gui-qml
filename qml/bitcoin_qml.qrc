@@ -10,7 +10,6 @@
         <file>components/BitcoinAmountDisplayField.qml</file>
         <file>components/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
-        <file>components/BlockClockDisplayMode.qml</file>
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
@@ -41,7 +40,6 @@
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
-        <file>components/ThemeSettings.qml</file>
         <file>components/ToastBanner.qml</file>
         <file>components/ToastPopup.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
@@ -53,7 +51,6 @@
         <file>components/LabeledValueField.qml</file>
         <file>components/MultipleRecipientsSummary.qml</file>
         <file>components/SingleRecipientSummary.qml</file>
-        <file>components/WalletSettings.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AddWalletButton.qml</file>
@@ -119,9 +116,7 @@
         <file>pages/node/BannedPeers.qml</file>
         <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
-        <file>pages/node/MempoolInformationSettings.qml</file>
         <file>pages/node/NodeRunner.qml</file>
-        <file>pages/node/NodeSettings.qml</file>
         <file>pages/node/Peers.qml</file>
         <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
@@ -133,19 +128,13 @@
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/onboarding/OnboardingWizard.qml</file>
         <file>pages/settings/SettingsAbout.qml</file>
-        <file>pages/settings/SettingsDisplayUnit.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
-        <file>pages/settings/SettingsWindowBehavior.qml</file>
-        <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDebugLog.qml</file>
         <file>pages/settings/SettingsDesignSystem.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
-        <file>pages/settings/SettingsDisplay.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
-        <file>pages/settings/SettingsWallet.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
-        <file>pages/settings/SettingsTheme.qml</file>
         <file>pages/settings/settingsv2/AboutSettingsPage.qml</file>
         <file>pages/settings/settingsv2/ConnectionSettingsPage.qml</file>
         <file>pages/settings/settingsv2/DisplaySettingsPage.qml</file>
@@ -186,7 +175,6 @@
         <file>pages/wallet/SignVerifyMessage.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletPasswordSettings.qml</file>
-        <file>pages/wallet/WalletSettings.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
     </qresource>
     <qresource prefix="/icons">

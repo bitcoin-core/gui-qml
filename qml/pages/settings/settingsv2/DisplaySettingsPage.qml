@@ -16,7 +16,7 @@ import ".." as LegacySettings
 SettingsPage {
     id: root
     objectName: "settingsv2DisplaySettingsPage"
-    title: qsTr("Display")
+    title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
 
     FormSection {
@@ -24,8 +24,9 @@ SettingsPage {
         title: qsTr("Appearance")
 
         FormRow {
+            objectName: "settingsv2DisplayThemeRow"
             Layout.fillWidth: true
-            title: qsTr("Theme")
+            title: qsTranslate("SettingsDisplay", "Theme")
             trailingItem: SegmentedPicker {
                 objectName: "settingsv2DisplayThemePicker"
                 implicitWidth: 190
@@ -39,8 +40,9 @@ SettingsPage {
         }
 
         FormRow {
+            objectName: "settingsv2DisplayBlockStatusSizeRow"
             Layout.fillWidth: true
-            title: qsTr("Block status size")
+            title: qsTranslate("SettingsDisplay", "Block status size")
             trailingItem: PopupPicker {
                 objectName: "settingsv2DisplayBlockStatusSizePicker"
                 embedded: true
@@ -70,6 +72,7 @@ SettingsPage {
         }
 
         FormRow {
+            objectName: "settingsv2DisplayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
             showDivider: false
@@ -103,33 +106,39 @@ SettingsPage {
         title: qsTr("Language and format")
 
         FormRow {
+            objectName: "settingsv2DisplayUnitRow"
             Layout.fillWidth: true
-            title: qsTr("Display unit")
+            title: qsTranslate("SettingsDisplay", "Display unit")
             trailingItem: PopupPicker {
                 objectName: "settingsv2DisplayUnitPicker"
                 embedded: true
                 minimumMenuWidth: 400
                 subtitleRole: "description"
+                objectNameRole: "objectName"
                 currentValue: optionsModel.displayUnit
                 model: [
                     {
                         text: qsTr("BTC"),
                         value: 0,
+                        objectName: "settingsv2DisplayUnitBTC",
                         description: qsTr("8 decimal places (0.00000001 BTC = 1 sat)")
                     },
                     {
                         text: qsTr("mBTC"),
                         value: 1,
+                        objectName: "settingsv2DisplayUnitMBTC",
                         description: qsTr("5 decimal places (0.00001 mBTC = 1 sat)")
                     },
                     {
                         text: qsTr("bits"),
                         value: 2,
+                        objectName: "settingsv2DisplayUnitBits",
                         description: qsTr("2 decimal places (0.01 bits = 1 sat)")
                     },
                     {
                         text: qsTr("sat"),
                         value: 3,
+                        objectName: "settingsv2DisplayUnitSAT",
                         description: qsTr("Satoshi, the smallest unit (1 sat = 0.00000001 BTC)")
                     }
                 ]
@@ -142,7 +151,7 @@ SettingsPage {
         ListRow {
             objectName: "settingsv2DisplayLanguageRow"
             Layout.fillWidth: true
-            title: qsTr("Language")
+            title: qsTranslate("SettingsDisplay", "Language")
             enabled: ((optionsModel.coreSettingStatuses || ({})).lang || ({})).canEdit !== false
             showsDisclosureIndicator: true
             disclosureIndicatorObjectName: "settingsv2DisplayLanguageDisclosureIndicator"
@@ -155,6 +164,7 @@ SettingsPage {
         }
 
         ListRow {
+            objectName: "settingsv2DisplayTransactionUrlsRow"
             Layout.fillWidth: true
             title: qsTr("Third-party transaction URLs")
             showDivider: false
