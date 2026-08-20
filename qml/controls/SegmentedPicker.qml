@@ -45,7 +45,9 @@ Control {
                 required property int index
                 required property var modelData
 
-                objectName: root.objectName.length > 0 ? root.objectName + "Option_" + index : ""
+                objectName: typeof modelData === "object" && modelData !== null && modelData.objectName !== undefined
+                    ? modelData.objectName
+                    : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1

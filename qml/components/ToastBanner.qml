@@ -12,11 +12,17 @@ Rectangle {
     id: root
 
     property url iconSource: ""
-    property color iconColor: Theme.color.white
+    property color tintColor: Theme.color.blue
+    property real backgroundOpacity: 0.25
+    property color iconColor: tintColor
     property string text: ""
     property string textObjectName: ""
-    property color textColor: Theme.color.white
-    property color backgroundColor: Theme.color.neutral2
+    property color textColor: tintColor
+    property color backgroundColor: Qt.rgba(
+        tintColor.r,
+        tintColor.g,
+        tintColor.b,
+        backgroundOpacity)
     property bool showsCloseButton: false
     property string actionText: ""
     // When > 0, auto-emits dismissed() after this many seconds while visible.
@@ -26,8 +32,8 @@ Rectangle {
     signal dismissed()
 
     color: backgroundColor
-    radius: 5
-    implicitHeight: Math.max(50, contentRow.implicitHeight + 20)
+    radius: 15
+    implicitHeight: contentRow.implicitHeight + 16
     opacity: 0
 
     onVisibleChanged: {
@@ -80,24 +86,34 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 20
-        anchors.rightMargin: 12
-        spacing: 12
+        anchors.leftMargin: 15
+        anchors.rightMargin: 15
+        spacing: 8
 
         Icon {
+            objectName: root.objectName !== "" ? root.objectName + "Icon" : ""
             visible: root.iconSource != ""
             source: root.iconSource
             color: root.iconColor
-            size: 18
+            size: 24
+            Layout.preferredWidth: 24
+            Layout.preferredHeight: 24
             Layout.alignment: Qt.AlignVCenter
         }
 
         CoreText {
             objectName: root.textObjectName
             Layout.fillWidth: true
+            Layout.rightMargin: root.iconSource != ""
+                && root.actionText === ""
+                && !root.showsCloseButton
+                ? 24
+                : 0
             text: root.text
             color: root.textColor
-            font: Theme.text.description.font
+            font.pixelSize: 15
+            lineHeightMode: Text.FixedHeight
+            lineHeight: 21
             horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap

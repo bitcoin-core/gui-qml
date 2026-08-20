@@ -11,319 +11,292 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
-Page {
+SettingsPage {
     id: root
     objectName: "signVerifyMessagePage"
-    background: null
 
     property WalletQmlModel wallet: walletController.selectedWallet
     property var signVerifyModel: wallet ? wallet.signVerifyMessageModel : null
     property string verifyResultText: ""
     property bool verifyResultSuccess: false
     property int initialTab: SignVerifyMessage.SignTab
+    property int selectedMode: root.initialTab
 
     enum Tabs { SignTab, VerifyTab }
+    readonly property bool signingComplete: !!root.signVerifyModel
+        && root.signVerifyModel.signature.length > 0
 
-    signal back
-
-    ButtonGroup {
-        id: messageTabs
+    BitcoinAddress {
+        id: signAddressModel
+        objectName: "signMessageAddressModel"
     }
 
+    BitcoinAddress {
+        id: verifyAddressModel
+        objectName: "verifyMessageAddressModel"
+    }
+
+    title: qsTr("Sign or verify message")
+    backButtonObjectName: "signVerifyMessageBackButton"
+    maximumContentWidth: 706
+    contentSpacing: 24
+
     function clearSignForm() {
-        signAddress.text = "";
-        signMessageText.text = "";
-        if (root.signVerifyModel) {
-            root.signVerifyModel.clear();
-        }
+        signAddress.text = ""
+        signMessageText.text = ""
+        if (root.signVerifyModel) root.signVerifyModel.clear()
     }
 
     function clearVerifyForm() {
-        verifyAddress.text = "";
-        verifyMessageText.text = "";
-        verifySignature.text = "";
-        root.verifyResultText = "";
-        root.verifyResultSuccess = false;
+        verifyAddress.text = ""
+        verifyMessageText.text = ""
+        verifySignature.text = ""
+        root.verifyResultText = ""
+        root.verifyResultSuccess = false
     }
 
     function addressErrorText(address) {
-        if (address.length === 0 || (root.signVerifyModel && root.signVerifyModel.isLegacyP2PKHAddress(address))) {
-            return "";
+        if (address.length === 0
+                || (root.signVerifyModel && root.signVerifyModel.isLegacyP2PKHAddress(address))) {
+            return ""
         }
-        return qsTr("Not a valid P2PKH address.");
+        return qsTr("Not a valid P2PKH address.")
     }
 
     function submitSign(passphrase) {
-        if (!root.signVerifyModel) {
-            return;
-        }
-        const signed = passphrase === undefined ? root.signVerifyModel.signMessage(signAddress.text, signMessageText.text) : root.signVerifyModel.signMessageWithPassphrase(signAddress.text, signMessageText.text, passphrase);
+        if (!root.signVerifyModel) return
+        const signed = arguments.length === 0
+            ? root.signVerifyModel.signMessage(signAddressModel.address, signMessageText.text)
+            : root.signVerifyModel.signMessageWithPassphrase(signAddressModel.address, signMessageText.text, passphrase)
         if (signed) {
-            signPassphrasePopup.close();
-            return;
+            signPassphrasePopup.close()
+            return
         }
         if (root.signVerifyModel.signingNeedsUnlock) {
-            signPassphrasePopup.errorText = "";
-            signPassphrasePopup.open();
+            signPassphrasePopup.errorText = ""
+            signPassphrasePopup.open()
         }
     }
 
     function submitVerify() {
-        const verified = root.signVerifyModel && root.signVerifyModel.verifyMessage(verifyAddress.text, verifyMessageText.text, verifySignature.text);
-        root.verifyResultSuccess = verified;
-        root.verifyResultText = verified ? qsTr("Message verified successfully.") : qsTr("Message verification failed.");
+        const verified = root.signVerifyModel
+            && root.signVerifyModel.verifyMessage(
+                verifyAddressModel.address,
+                verifyMessageText.text,
+                verifySignature.text)
+        root.verifyResultSuccess = verified
+        root.verifyResultText = verified
+            ? qsTr("Message verified successfully.")
+            : qsTr("Message verification failed.")
     }
 
-    header: SettingsHeader {
-        title: qsTr("Sign or verify message")
-        backButtonObjectName: "signVerifyMessageBackButton"
-        onBack: root.back()
+    Component.onCompleted: {
+        if (root.signVerifyModel) root.signVerifyModel.clear()
     }
 
-    ScrollView {
-        clip: true
-        anchors.fill: parent
-        contentWidth: width
+    SegmentedPicker {
+        objectName: "signVerifyMessageModePicker"
+        Layout.fillWidth: true
+        Layout.maximumWidth: 400
+        Layout.alignment: Qt.AlignHCenter
+        model: [
+            {
+                text: qsTr("Sign message"),
+                objectName: "signMessageTab"
+            },
+            {
+                text: qsTr("Verify message"),
+                objectName: "verifyMessageTab"
+            }
+        ]
+        currentIndex: root.selectedMode
+        onSelected: (index) => root.selectedMode = index
+    }
 
-        ColumnLayout {
-            width: Math.min(parent.width - 40, 706)
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 0
+    StackLayout {
+        Layout.fillWidth: true
+        currentIndex: root.selectedMode
 
-            RowLayout {
+        FormSection {
+            objectName: "signMessageFormSection"
+            Layout.fillWidth: true
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 18
-                Layout.maximumWidth: 508
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 0
+                Layout.margins: 20
+                spacing: 20
 
-                NavigationTab {
-                    id: signTabButton
-                    objectName: "signMessageTab"
-                    text: qsTr("Sign Message")
-                    checked: true
+                PageHeading {
+                    objectName: "signMessageHeading"
                     Layout.fillWidth: true
-                    property int index: 0
-                    ButtonGroup.group: messageTabs
+                    description: qsTr("You can sign messages or agreements with your legacy P2PKH addresses to prove you can receive bitcoin sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully detailed statements you agree to.")
                 }
 
-                NavigationTab {
-                    id: verifyTabButton
-                    objectName: "verifyMessageTab"
-                    text: qsTr("Verify Message")
+                LabeledBitcoinAddressField {
+                    id: signAddress
+                    objectName: "signMessageAddressEntry"
                     Layout.fillWidth: true
-                    property int index: 1
-                    ButtonGroup.group: messageTabs
+                    label: qsTr("Bitcoin address")
+                    fieldObjectName: "signMessageAddressField"
+                    placeholderText: qsTr("Enter a legacy P2PKH address")
+                    address: signAddressModel
+                    fieldTextStyle: Theme.text.monoDescription
+                    errorText: root.addressErrorText(signAddressModel.address)
+                    readOnly: root.signingComplete
+                    showCopyButton: root.signingComplete
+                    copyButtonObjectName: "signMessageCopyAddressButton"
+                    onCopyRequested: Clipboard.setText(signAddressModel.address)
+                }
+
+                LabeledTextView {
+                    id: signMessageText
+                    objectName: "signMessageMessageEntry"
+                    Layout.fillWidth: true
+                    label: qsTr("Message")
+                    fieldObjectName: "signMessageMessageField"
+                    placeholderText: qsTr("Enter the message you want to sign")
+                    fieldBackgroundColor: Theme.color.neutral2
+                    readOnly: root.signingComplete
+                    showCopyButton: root.signingComplete
+                    copyButtonObjectName: "signMessageCopyMessageButton"
+                    onCopyRequested: Clipboard.setText(text)
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ContinueButton {
+                        objectName: "signMessageButton"
+                        Layout.fillWidth: true
+                        text: qsTr("Sign message")
+                        enabled: !!root.signVerifyModel
+                            && root.signVerifyModel.isLegacyP2PKHAddress(signAddressModel.address)
+                        onClicked: root.submitSign()
+                    }
+
+                    OutlineButton {
+                        objectName: "signMessageClearButton"
+                        embedded: true
+                        Layout.preferredWidth: 140
+                        text: qsTr("Clear all")
+                        onClicked: root.clearSignForm()
+                    }
+                }
+
+                CoreText {
+                    objectName: "signMessageErrorText"
+                    visible: !!root.signVerifyModel
+                        && root.signVerifyModel.signingError.length > 0
+                        && !root.signVerifyModel.signingNeedsUnlock
+                    Layout.fillWidth: true
+                    text: root.signVerifyModel ? root.signVerifyModel.signingError : ""
+                    color: Theme.color.red
+                    font: Theme.text.caption.font
+                    lineHeight: Theme.text.caption.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    wrap: true
+                }
+
+                LabeledTextView {
+                    objectName: "signMessageSignatureOutput"
+                    visible: root.signingComplete
+                    Layout.fillWidth: true
+                    label: qsTr("Signature")
+                    fieldObjectName: "signMessageSignatureText"
+                    text: root.signVerifyModel ? root.signVerifyModel.signature : ""
+                    readOnly: true
+                    wrapMode: TextEdit.WrapAnywhere
+                    fieldTextStyle: Theme.text.monoCaption
+                    fieldBackgroundColor: Theme.color.neutral2
+                    showCopyButton: true
+                    copyButtonObjectName: "signMessageCopySignatureButton"
+                    onCopyRequested: Clipboard.setText(root.signVerifyModel ? root.signVerifyModel.signature : "")
                 }
             }
+        }
 
-            StackLayout {
+        FormSection {
+            objectName: "verifyMessageFormSection"
+            Layout.fillWidth: true
+
+            ColumnLayout {
                 Layout.fillWidth: true
-                currentIndex: messageTabs.checkedButton.index
+                Layout.margins: 20
+                spacing: 20
 
-                ColumnLayout {
+                PageHeading {
+                    objectName: "verifyMessageHeading"
                     Layout.fillWidth: true
-                    spacing: 0
+                    description: qsTr("Enter the receiver's address, message (ensure you copy line breaks), spaces, tabs, etc. exactly) and signature below to verify the message. Be careful not to read more into the signature than what is in the signed message itself, to avoid being tricked by a man-in-the-middle attack. Note that this only proves the signing party receives with the address, it cannot prove sendership of any transaction.")
+                }
 
-                    CoreText {
+                LabeledBitcoinAddressField {
+                    id: verifyAddress
+                    objectName: "verifyMessageAddressEntry"
+                    Layout.fillWidth: true
+                    label: qsTr("Bitcoin address")
+                    fieldObjectName: "verifyMessageAddressField"
+                    placeholderText: qsTr("Enter a legacy P2PKH address")
+                    address: verifyAddressModel
+                    fieldTextStyle: Theme.text.monoDescription
+                    errorText: root.addressErrorText(verifyAddressModel.address)
+                }
+
+                LabeledTextView {
+                    id: verifyMessageText
+                    objectName: "verifyMessageMessageEntry"
+                    Layout.fillWidth: true
+                    label: qsTr("Message")
+                    fieldObjectName: "verifyMessageMessageField"
+                    placeholderText: qsTr("Enter the signed message")
+                    fieldBackgroundColor: Theme.color.neutral2
+                }
+
+                LabeledTextView {
+                    id: verifySignature
+                    objectName: "verifyMessageSignatureEntry"
+                    Layout.fillWidth: true
+                    label: qsTr("Signature")
+                    fieldObjectName: "verifyMessageSignatureField"
+                    placeholderText: qsTr("Enter the message signature")
+                    fieldHeight: 84
+                    fieldBackgroundColor: Theme.color.neutral2
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ContinueButton {
+                        objectName: "verifyMessageButton"
                         Layout.fillWidth: true
-                        Layout.topMargin: 36
-                        text: qsTr("You can sign messages or agreements with your legacy P2PKH addresses to prove you can receive bitcoin sent to them. Be careful not to sign anything vague or random, as phishing attacks may try to trick you into signing your identity over to them. Only sign fully detailed statements you agree to.")
-                        color: Theme.color.neutral7
-                        font: Theme.text.description.font
-                        wrapMode: Text.WordWrap
+                        text: qsTr("Verify message")
+                        enabled: !!root.signVerifyModel
+                            && root.signVerifyModel.isLegacyP2PKHAddress(verifyAddressModel.address)
+                            && verifySignature.text.length > 0
+                        onClicked: root.submitVerify()
                     }
 
-                    LineTextField {
-                        id: signAddress
-                        objectName: "signMessageAddressField"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 22
-                        placeholderText: qsTr("Enter a bitcoin address")
-                    }
-
-                    AddressError {
-                        objectName: "signMessageAddressError"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                        text: root.addressErrorText(signAddress.text)
-                    }
-
-                    LineTextArea {
-                        id: signMessageText
-                        objectName: "signMessageMessageField"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 22
-                        Layout.preferredHeight: 150
-                        placeholderText: qsTr("Enter the message you want to sign here")
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 32
-                        spacing: 15
-
-                        ContinueButton {
-                            objectName: "signMessageButton"
-                            Layout.preferredWidth: 206
-                            text: qsTr("Sign Message")
-                            enabled: root.signVerifyModel && root.signVerifyModel.isLegacyP2PKHAddress(signAddress.text)
-                            onClicked: root.submitSign()
-                        }
-
-                        OutlineButton {
-                            objectName: "signMessageClearButton"
-                            Layout.preferredWidth: 140
-                            text: qsTr("Clear All")
-                            onClicked: root.clearSignForm()
-                        }
-                    }
-
-                    CoreText {
-                        objectName: "signMessageErrorText"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 28
-                        visible: root.signVerifyModel && root.signVerifyModel.signingError.length > 0 && !root.signVerifyModel.signingNeedsUnlock
-                        text: root.signVerifyModel ? root.signVerifyModel.signingError : ""
-                        color: Theme.color.red
-                        font: Theme.text.caption.font
-                        wrapMode: Text.WordWrap
-                    }
-
-                    ColumnLayout {
-                        objectName: "signMessageSignatureOutput"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 28
-                        visible: root.signVerifyModel && root.signVerifyModel.signature.length > 0
-                        spacing: 10
-
-                        CoreText {
-                            text: qsTr("Signature")
-                            color: Theme.color.neutral7
-                            font: Theme.text.body.font
-                        }
-
-                        Rectangle {
-                            Layout.fillWidth: true
-                            implicitHeight: Math.max(70, signatureText.contentHeight + 34)
-                            color: Theme.color.neutral3
-                            radius: 5
-
-                            CoreText {
-                                id: signatureText
-                                objectName: "signMessageSignatureText"
-                                anchors.left: parent.left
-                                anchors.right: copySignatureButton.left
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: 22
-                                anchors.rightMargin: 10
-                                text: root.signVerifyModel ? root.signVerifyModel.signature : ""
-                                color: Theme.color.neutral9
-                                font: Theme.text.body.font
-                                wrapMode: Text.WrapAnywhere
-                            }
-
-                            IconButton {
-                                id: copySignatureButton
-                                objectName: "signMessageCopySignatureButton"
-                                anchors.right: parent.right
-                                anchors.rightMargin: 22
-                                anchors.verticalCenter: parent.verticalCenter
-                                iconSource: "image://images/copy"
-                                iconColor: Theme.color.neutral7
-                                hoverColor: Theme.color.orange
-                                onClicked: Clipboard.setText(root.signVerifyModel ? root.signVerifyModel.signature : "")
-                            }
-                        }
+                    OutlineButton {
+                        objectName: "verifyMessageClearButton"
+                        embedded: true
+                        Layout.preferredWidth: 140
+                        text: qsTr("Clear all")
+                        onClicked: root.clearVerifyForm()
                     }
                 }
 
-                ColumnLayout {
+                ToastBanner {
+                    objectName: "verifyMessageResultBanner"
+                    visible: root.verifyResultText.length > 0
                     Layout.fillWidth: true
-                    spacing: 0
-
-                    CoreText {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 36
-                        text: qsTr("Enter the receiver's address, message (ensure you copy line breaks), spaces, tabs, etc. exactly) and signature below to verify the message. Be careful not to read more into the signature than what is in the signed message itself, to avoid being tricked by a man-in-the-middle attack. Note that this only proves the signing party receives with the address, it cannot prove sendership of any transaction.")
-                        color: Theme.color.neutral7
-                        font: Theme.text.description.font
-                        wrapMode: Text.WordWrap
-                    }
-
-                    LineTextField {
-                        id: verifyAddress
-                        objectName: "verifyMessageAddressField"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 22
-                        placeholderText: qsTr("Enter a bitcoin address")
-                    }
-
-                    AddressError {
-                        objectName: "verifyMessageAddressError"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 8
-                        text: root.addressErrorText(verifyAddress.text)
-                    }
-
-                    LineTextArea {
-                        id: verifyMessageText
-                        objectName: "verifyMessageMessageField"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 22
-                        Layout.preferredHeight: 150
-                        placeholderText: qsTr("Enter the message you want to verify here")
-                    }
-
-                    CoreText {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 28
-                        text: qsTr("Signature")
-                        color: Theme.color.neutral7
-                        font: Theme.text.body.font
-                        horizontalAlignment: Text.AlignLeft
-                    }
-
-                    LineTextArea {
-                        id: verifySignature
-                        objectName: "verifyMessageSignatureField"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 12
-                        Layout.preferredHeight: 68
-                        placeholderText: qsTr("The signature when the message was signed")
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 32
-                        spacing: 15
-
-                        ContinueButton {
-                            objectName: "verifyMessageButton"
-                            Layout.preferredWidth: 220
-                            text: qsTr("Verify Message")
-                            enabled: root.signVerifyModel && root.signVerifyModel.isLegacyP2PKHAddress(verifyAddress.text) && verifySignature.text.length > 0
-                            onClicked: root.submitVerify()
-                        }
-
-                        OutlineButton {
-                            objectName: "verifyMessageClearButton"
-                            Layout.preferredWidth: 140
-                            text: qsTr("Clear All")
-                            onClicked: root.clearVerifyForm()
-                        }
-                    }
-
-                    ToastBanner {
-                        objectName: "verifyMessageResultBanner"
-                        Layout.fillWidth: true
-                        Layout.topMargin: 28
-                        visible: root.verifyResultText.length > 0
-                        backgroundColor: root.verifyResultSuccess ? Theme.color.green : Theme.color.red
-                        iconSource: root.verifyResultSuccess ? "image://images/check" : "image://images/info-filled"
-                        text: root.verifyResultText
-                        textObjectName: "verifyMessageResultText"
-                    }
+                    tintColor: root.verifyResultSuccess ? Theme.color.green : Theme.color.red
+                    iconSource: root.verifyResultSuccess
+                        ? "image://images/check"
+                        : "image://images/info-filled"
+                    text: root.verifyResultText
+                    textObjectName: "verifyMessageResultText"
                 }
             }
         }
@@ -342,91 +315,19 @@ Page {
         descriptionText: qsTr("Enter the wallet password to sign this message.")
         confirmText: qsTr("Unlock and sign")
         busyConfirmText: qsTr("Signing...")
-        onSubmitted: passphrase => {
-            signPassphrasePopup.busy = true;
-            if (root.signVerifyModel.signMessageWithPassphrase(signAddress.text, signMessageText.text, passphrase)) {
-                signPassphrasePopup.busy = false;
-                signPassphrasePopup.close();
-                return;
+        onSubmitted: (passphrase) => {
+            signPassphrasePopup.busy = true
+            if (root.signVerifyModel.signMessageWithPassphrase(
+                    signAddressModel.address,
+                    signMessageText.text,
+                    passphrase)) {
+                signPassphrasePopup.busy = false
+                signPassphrasePopup.close()
+                return
             }
-            signPassphrasePopup.busy = false;
-            signPassphrasePopup.errorText = root.signVerifyModel.signingError;
+            signPassphrasePopup.busy = false
+            signPassphrasePopup.errorText = root.signVerifyModel.signingError
         }
     }
 
-    component LineTextField: TextField {
-        id: lineField
-        selectByMouse: true
-        font: Theme.text.body.font
-        color: Theme.color.neutral9
-        placeholderTextColor: Theme.color.neutral6
-        leftPadding: 0
-        rightPadding: 0
-        background: Rectangle {
-            implicitHeight: 45
-            color: "transparent"
-            border.color: "transparent"
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: Theme.color.neutral5
-            }
-        }
-    }
-
-    component AddressError: RowLayout {
-        property alias text: errorText.text
-
-        visible: errorText.text.length > 0
-        spacing: 8
-
-        Icon {
-            source: "image://images/alert-filled"
-            size: 22
-            color: Theme.color.red
-        }
-
-        CoreText {
-            id: errorText
-            color: Theme.color.red
-            font: Theme.text.description.font
-            horizontalAlignment: Text.AlignLeft
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-        }
-    }
-
-    component LineTextArea: TextArea {
-        id: lineArea
-        selectByMouse: true
-        wrapMode: TextEdit.Wrap
-        font: Theme.text.body.font
-        color: Theme.color.neutral9
-        placeholderTextColor: Theme.color.neutral6
-        leftPadding: 0
-        rightPadding: 0
-        topPadding: 0
-        bottomPadding: 10
-        background: Rectangle {
-            color: "transparent"
-            border.color: "transparent"
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                height: 1
-                color: Theme.color.neutral5
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        if (root.initialTab === SignVerifyMessage.VerifyTab) {
-            verifyTabButton.checked = true
-        } else {
-            signTabButton.checked = true
-        }
-    }
 }

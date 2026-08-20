@@ -267,7 +267,7 @@ Page {
                 Layout.fillWidth: true
                 Layout.topMargin: 10
                 visible: root.savePsbtStatus.length > 0
-                backgroundColor: root.savePsbtError ? Theme.color.red : Theme.color.green
+                tintColor: root.savePsbtError ? Theme.color.red : Theme.color.green
                 iconSource: root.savePsbtError ? "image://images/info-filled" : "image://images/check"
                 text: root.savePsbtStatus
                 textObjectName: "sendReviewSavePsbtStatus"
