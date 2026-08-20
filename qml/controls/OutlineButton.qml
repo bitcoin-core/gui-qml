@@ -11,6 +11,7 @@ Button {
     hoverEnabled: AppMode.isDesktop
 
     property bool bold: false
+    property bool embedded: false
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -49,16 +50,23 @@ Button {
     }
     background: Rectangle {
         id: bg
+        objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         implicitHeight: 46
-        color: "transparent"
+        color: root.embedded
+            ? (root.hovered || root.down ? Theme.color.neutral3 : Theme.color.neutral2)
+            : "transparent"
         radius: 5
         border {
-            width: 1
+            width: root.embedded ? 0 : 1
             color: Theme.color.neutral6
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
             }
+        }
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
         }
     }
 

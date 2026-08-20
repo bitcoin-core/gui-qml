@@ -52,6 +52,7 @@
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/LabeledValueField.qml</file>
+        <file>components/LabeledBitcoinAddressField.qml</file>
         <file>components/MultipleRecipientsSummary.qml</file>
         <file>components/SingleRecipientSummary.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
@@ -81,8 +82,10 @@
         <file>controls/KeyValueRow.qml</file>
         <file>controls/LinkRow.qml</file>
         <file>controls/ListRow.qml</file>
+        <file>controls/LabeledField.qml</file>
         <file>controls/LabeledTextInput.qml</file>
         <file>controls/LabeledTextField.qml</file>
+        <file>controls/LabeledTextView.qml</file>
         <file>controls/LabeledCoinControlButton.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/NavigationBar.qml</file>
