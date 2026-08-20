@@ -171,6 +171,31 @@ TestCase {
     }
 
     Component {
+        id: labeledTextFieldComponent
+
+        LabeledTextField {
+            objectName: "exampleLabeledTextField"
+            width: 480
+            label: "Username"
+            fieldObjectName: "exampleLabeledTextFieldInput"
+            placeholderText: "Enter username..."
+        }
+    }
+
+    Component {
+        id: passwordTextFieldComponent
+
+        PasswordTextField {
+            objectName: "examplePasswordTextField"
+            width: 480
+            label: "Password"
+            fieldObjectName: "examplePasswordTextFieldInput"
+            visibilityToggleObjectName: "examplePasswordTextFieldToggle"
+            placeholderText: "Enter password..."
+        }
+    }
+
+    Component {
         id: bodyRowComponent
 
         FormRow {
@@ -384,6 +409,46 @@ TestCase {
         keyClick(Qt.Key_Enter)
         tryCompare(row.field, "activeFocus", false)
         compare(acceptedCount, 2)
+    }
+
+    function test_labeledTextFieldOwnsLabelSurfaceAndReturnBehavior() {
+        const control = createTemporaryObject(labeledTextFieldComponent, host)
+        verify(control !== null)
+        const label = findChild(control, "exampleLabeledTextFieldLabel")
+        const field = findChild(control, "exampleLabeledTextFieldInput")
+        verify(label !== null)
+        verify(field !== null)
+        compare(label.text, "Username")
+        compare(field.placeholderText, "Enter username...")
+        compare(field.background.radius, 10)
+        compare(field.background.color, Theme.color.neutral1)
+        compare(field.background.border.width, 0)
+
+        field.forceActiveFocus()
+        tryCompare(field.background.border, "width", 2)
+        tryCompare(field.background.border, "color", Theme.color.orange)
+        keyClick(Qt.Key_Return)
+        tryCompare(field, "activeFocus", false)
+        compare(field.background.border.width, 0)
+    }
+
+    function test_passwordTextFieldComposesSecureEntryAndVisibilityToggle() {
+        const control = createTemporaryObject(passwordTextFieldComponent, host)
+        verify(control !== null)
+        const field = findChild(control, "examplePasswordTextFieldInput")
+        const toggle = findChild(control, "examplePasswordTextFieldToggle")
+        verify(field !== null)
+        verify(toggle !== null)
+        compare(control.passwordVisible, false)
+        compare(field.echoMode, TextInput.Password)
+
+        toggle.clicked()
+        compare(control.passwordVisible, true)
+        compare(field.echoMode, TextInput.Normal)
+
+        toggle.clicked()
+        compare(control.passwordVisible, false)
+        compare(field.echoMode, TextInput.Password)
     }
 
     function test_formRowAcceptsFullWidthBodyContent() {

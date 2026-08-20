@@ -11,23 +11,26 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
-Page {
+SettingsPage {
     id: root
     objectName: "walletPasswordSettingsPage"
 
     required property bool updating
     property WalletQmlModel wallet: walletController.selectedWallet
     property string errorText: ""
+    property string successText: ""
+    readonly property string resultText: successText.length > 0 ? successText : errorText
+    readonly property bool resultSuccess: successText.length > 0
 
-    signal back()
     signal saved()
 
-    background: null
+    title: updating ? qsTr("Update password") : qsTr("Set password")
+    backButtonObjectName: "walletPasswordBackButton"
+    maximumContentWidth: 640
+    contentSpacing: 24
 
     function clearField(field) {
-        if (!field || field.text.length === 0) {
-            return
-        }
+        if (!field || field.text.length === 0) return
         field.text = Array(field.text.length + 1).join(" ")
         field.text = ""
     }
@@ -38,22 +41,40 @@ Page {
         clearField(confirmPassword)
     }
 
-    function focusInitialPasswordField() {
-        const field = root.updating ? currentPassword : newPassword
-        if (root.visible && field) {
-            field.forceActiveFocus()
+    function clearResult() {
+        root.errorText = ""
+        root.successText = ""
+    }
+
+    function handleSaveResult(ok) {
+        if (ok) {
+            root.errorText = ""
+            root.clearPasswordFields()
+            if (root.updating) {
+                root.successText = qsTr("Password updated successfully.")
+            } else {
+                if (acknowledgement.loadedTrailingItem) {
+                    acknowledgement.loadedTrailingItem.checked = false
+                }
+                root.saved()
+            }
+        } else {
+            root.successText = ""
+            root.errorText = root.wallet ? root.wallet.settingsError : ""
+            if (!root.updating) {
+                root.clearPasswordFields()
+            }
         }
     }
 
-    header: SettingsHeader {
-        title: root.updating ? qsTr("Update password") : qsTr("Set password")
-        backButtonObjectName: "walletPasswordBackButton"
-        onBack: root.back()
+    function focusInitialPasswordField() {
+        const entry = root.updating ? currentPassword : newPassword
+        if (root.visible && entry && entry.field) entry.field.forceActiveFocus()
     }
 
     Component.onCompleted: {
         if (root.wallet) root.wallet.clearSettingsError()
-        root.errorText = ""
+        root.clearResult()
         Qt.callLater(root.focusInitialPasswordField)
     }
     StackView.onActivated: Qt.callLater(root.focusInitialPasswordField)
@@ -68,165 +89,117 @@ Page {
 
     Connections {
         target: root.wallet
+
         function onSettingsErrorChanged() {
+            root.successText = ""
             root.errorText = root.wallet ? root.wallet.settingsError : ""
         }
     }
 
-    ColumnLayout {
-        width: Math.min(parent.width, 450)
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: 30
-        spacing: 0
+    PageHeading {
+        objectName: "walletPasswordIntroText"
+        Layout.fillWidth: true
+        description: root.updating
+            ? qsTr("Enter your current password, then choose a new password for this wallet.\n\nA secure password consists of ten or more random characters, or eight or more words.")
+            : qsTr("The password encrypts the wallet on your hard drive and helps prevent unwanted access.\n\nA secure password consists of ten or more random characters, or eight or more words.")
+    }
 
-        CoreText {
-            objectName: "walletPasswordIntroText"
+    FormSection {
+        objectName: "walletPasswordFormSection"
+        Layout.fillWidth: true
+
+        ColumnLayout {
             Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            font.pixelSize: 15
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            wrapMode: Text.WordWrap
-            text: root.updating
-                ? qsTr("Enter your current password, then choose a new password for this wallet.\n\nA secure password consists of ten or more random characters, or eight or more words.")
-                : qsTr("The password is used to encrypt the wallet on your hard drive, preventing unwanted access from others.\n\nA secure password consists of ten or more random characters, or eight or more words.")
-        }
+            Layout.margins: 20
+            spacing: 20
 
-        CoreText {
-            objectName: "walletPasswordCurrentLabel"
-            visible: root.updating
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            font.pixelSize: 15
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            text: qsTr("Current password")
-        }
-
-        CoreTextField {
-            id: currentPassword
-            objectName: "walletPasswordCurrentField"
-            visible: root.updating
-            Layout.fillWidth: true
-            Layout.topMargin: root.updating ? 5 : 0
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            focus: root.updating
-            hideText: true
-            placeholderText: qsTr("Enter current password...")
-            onTextEdited: root.errorText = ""
-        }
-
-        CoreText {
-            objectName: "walletPasswordNewLabel"
-            Layout.topMargin: 30
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            font.pixelSize: 15
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            text: root.updating ? qsTr("New password") : qsTr("Choose a password")
-        }
-
-        CoreTextField {
-            id: newPassword
-            objectName: "walletPasswordNewField"
-            Layout.fillWidth: true
-            Layout.topMargin: 5
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            focus: !root.updating
-            hideText: true
-            placeholderText: root.updating ? qsTr("Enter new password...") : qsTr("Enter password...")
-            onTextEdited: root.errorText = ""
-        }
-
-        CoreText {
-            objectName: "walletPasswordConfirmLabel"
-            Layout.topMargin: 20
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            font.pixelSize: 15
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            text: root.updating ? qsTr("Confirm new password") : qsTr("Confirm password")
-        }
-
-        CoreTextField {
-            id: confirmPassword
-            objectName: "walletPasswordConfirmField"
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            hideText: true
-            placeholderText: root.updating ? qsTr("Enter new password again...") : qsTr("Enter password again...")
-            onTextEdited: root.errorText = ""
-        }
-
-        Setting {
-            id: acknowledgement
-            objectName: "walletPasswordConfirmToggle"
-            visible: !root.updating
-            Layout.fillWidth: true
-            Layout.topMargin: 20
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-            actionItem: OptionSwitch { }
-            onClicked: {
-                loadedItem.toggle()
-                loadedItem.toggled()
+            PasswordTextField {
+                id: currentPassword
+                objectName: "walletPasswordCurrentEntry"
+                visible: root.updating
+                Layout.fillWidth: true
+                label: qsTr("Current password")
+                labelObjectName: "walletPasswordCurrentLabel"
+                fieldObjectName: "walletPasswordCurrentField"
+                visibilityToggleObjectName: "walletPasswordCurrentVisibilityToggle"
+                placeholderText: qsTr("Enter current password...")
+                fieldBackgroundColor: Theme.color.neutral2
+                onTextEdited: root.clearResult()
+                onAccepted: newPassword.field.forceActiveFocus()
             }
-        }
 
-        ContinueButton {
-            objectName: "walletPasswordSaveButton"
-            Layout.preferredWidth: Math.min(300, parent.width - 40)
-            Layout.topMargin: 40
-            Layout.alignment: Qt.AlignCenter
-            text: root.updating ? qsTr("Update password") : qsTr("Set password")
-            enabled: walletController.initialized &&
-                     newPassword.text !== "" &&
-                     confirmPassword.text !== "" &&
-                     newPassword.text === confirmPassword.text &&
-                     (root.updating ? currentPassword.text !== "" : acknowledgement.loadedItem.checked)
-            onClicked: {
-                root.errorText = ""
-                const ok = root.updating
-                    ? root.wallet.changeWalletPassphrase(currentPassword.text, newPassword.text)
-                    : root.wallet.encryptWallet(newPassword.text)
-                if (ok) {
-                    root.clearPasswordFields()
-                    if (!root.updating && acknowledgement.loadedItem) {
-                        acknowledgement.loadedItem.checked = false
-                    }
-                    root.saved()
-                } else {
-                    root.errorText = root.wallet ? root.wallet.settingsError : ""
-                    if (root.updating) {
-                        root.clearField(currentPassword)
-                    } else {
-                        root.clearPasswordFields()
-                    }
+            PasswordTextField {
+                id: newPassword
+                objectName: "walletPasswordNewEntry"
+                Layout.fillWidth: true
+                label: root.updating ? qsTr("New password") : qsTr("Choose a password")
+                labelObjectName: "walletPasswordNewLabel"
+                fieldObjectName: "walletPasswordNewField"
+                visibilityToggleObjectName: "walletPasswordNewVisibilityToggle"
+                placeholderText: root.updating ? qsTr("Enter new password...") : qsTr("Enter password...")
+                fieldBackgroundColor: Theme.color.neutral2
+                onTextEdited: root.clearResult()
+                onAccepted: confirmPassword.field.forceActiveFocus()
+            }
+
+            PasswordTextField {
+                id: confirmPassword
+                objectName: "walletPasswordConfirmEntry"
+                Layout.fillWidth: true
+                label: root.updating ? qsTr("Confirm new password") : qsTr("Confirm password")
+                labelObjectName: "walletPasswordConfirmLabel"
+                fieldObjectName: "walletPasswordConfirmField"
+                visibilityToggleObjectName: "walletPasswordConfirmVisibilityToggle"
+                placeholderText: root.updating ? qsTr("Enter new password again...") : qsTr("Enter password again...")
+                fieldBackgroundColor: Theme.color.neutral2
+                onTextEdited: root.clearResult()
+            }
+
+            ListRow {
+                id: acknowledgement
+                objectName: "walletPasswordConfirmToggle"
+                visible: !root.updating
+                Layout.fillWidth: true
+                description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
+                showDivider: false
+                accessibleRole: Accessible.CheckBox
+                trailingItem: OptionSwitch { }
+                onClicked: loadedTrailingItem.toggle()
+            }
+
+            ToastBanner {
+                objectName: "walletPasswordResultBanner"
+                visible: root.resultText.length > 0
+                Layout.fillWidth: true
+                readonly property color resultColor: root.resultSuccess ? Theme.color.green : Theme.color.red
+                backgroundColor: Qt.rgba(resultColor.r, resultColor.g, resultColor.b, 0.25)
+                iconSource: root.resultSuccess ? "image://images/check" : "image://images/info-filled"
+                iconColor: resultColor
+                text: root.resultText
+                textObjectName: "walletPasswordErrorText"
+                textColor: resultColor
+            }
+
+            ContinueButton {
+                objectName: "walletPasswordSaveButton"
+                Layout.preferredWidth: Math.min(320, parent.width)
+                Layout.alignment: Qt.AlignHCenter
+                text: root.updating ? qsTr("Update password") : qsTr("Set password")
+                enabled: walletController.initialized
+                    && newPassword.text !== ""
+                    && confirmPassword.text !== ""
+                    && newPassword.text === confirmPassword.text
+                    && (root.updating
+                        ? currentPassword.text !== ""
+                        : acknowledgement.loadedTrailingItem && acknowledgement.loadedTrailingItem.checked)
+                onClicked: {
+                    root.clearResult()
+                    const ok = root.updating
+                        ? root.wallet.changeWalletPassphrase(currentPassword.text, newPassword.text)
+                        : root.wallet.encryptWallet(newPassword.text)
+                    root.handleSaveResult(ok)
                 }
             }
-        }
-
-        CoreText {
-            objectName: "walletPasswordErrorText"
-            Layout.fillWidth: true
-            Layout.topMargin: 20
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            visible: text.length > 0
-            text: root.errorText
-            color: Theme.color.red
-            font.pixelSize: 15
-            horizontalAlignment: Text.AlignLeft
-            wrapMode: Text.WordWrap
         }
     }
 }
