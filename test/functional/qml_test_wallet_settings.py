@@ -403,7 +403,7 @@ def case_password_page_closes_when_selected_wallet_changes(harness, checkpoints)
     checkpoints.checkpoint("password subpage unwound after selecting second wallet", gui)
 
 
-def case_wrong_current_password_clears_current_field(harness, checkpoints):
+def case_wrong_current_password_preserves_current_field(harness, checkpoints):
     wallet_name = "settings_password_clear_wallet"
     new_password = "another correct horse battery staple"
 
@@ -434,8 +434,8 @@ def case_wrong_current_password_clears_current_field(harness, checkpoints):
         lambda text: "incorrect" in text.lower(),
         timeout_ms=10000,
     )
-    assert gui.get_text("walletPasswordCurrentField") == "", "Current password field should be cleared after failure"
-    checkpoints.checkpoint("wrong current password rejected and cleared", gui)
+    assert gui.get_text("walletPasswordCurrentField") == "wrong password", "Current password field should be preserved after failure"
+    checkpoints.checkpoint("wrong current password rejected and preserved", gui)
 
 
 def run_test(args):
@@ -450,7 +450,7 @@ def run_test(args):
         ("qml_wallet_settings_sign_verify_message", 420, case_sign_verify_message),
         ("qml_wallet_settings_subpage_close", 430, case_subpages_close_when_wallet_becomes_unselected),
         ("qml_wallet_settings_password_context_change", 440, case_password_page_closes_when_selected_wallet_changes),
-        ("qml_wallet_settings_password_failure_clears_current", 450, case_wrong_current_password_clears_current_field),
+        ("qml_wallet_settings_password_failure_preserves_current", 450, case_wrong_current_password_preserves_current_field),
     ]
 
     exit_code = 0
