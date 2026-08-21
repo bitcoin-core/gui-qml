@@ -448,6 +448,11 @@ bool ActivityListModel::transactionSortsBefore(const QSharedPointer<Transaction>
     return a->requestId.toLongLong() > b->requestId.toLongLong();
 }
 
+bool ActivityListModel::rowSortsBefore(int lhs_row, int rhs_row) const
+{
+    return transactionSortsBefore(m_transactions.at(lhs_row), m_transactions.at(rhs_row));
+}
+
 int ActivityListModel::sortedInsertPosition(const QSharedPointer<Transaction>& tx) const
 {
     const auto it = std::lower_bound(m_transactions.cbegin(), m_transactions.cend(),

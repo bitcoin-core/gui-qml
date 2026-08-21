@@ -54,6 +54,7 @@ public:
     void refreshLabels();
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int count() const { return rowCount(); }
+    bool rowSortsBefore(int lhs_row, int rhs_row) const;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 

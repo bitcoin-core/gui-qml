@@ -206,6 +206,14 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
 
 bool ActivityFilterProxyModel::lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const
 {
+    // Delegate to the source model's full ordering (newest first with
+    // deterministic tie-breaks). Comparing the timestamp alone leaves
+    // equal-time rows in arrival order, which diverges from the order a
+    // reload produces. The proxy sorts descending, so returning "left is
+    // less" when the right row sorts in front preserves that order.
+    if (const auto* model = qobject_cast<const ActivityListModel*>(sourceModel())) {
+        return model->rowSortsBefore(right_index.row(), left_index.row());
+    }
     const qint64 left_timestamp = sourceModel()->data(left_index, ActivityListModel::TimestampRole).toLongLong();
     const qint64 right_timestamp = sourceModel()->data(right_index, ActivityListModel::TimestampRole).toLongLong();
     return left_timestamp < right_timestamp;

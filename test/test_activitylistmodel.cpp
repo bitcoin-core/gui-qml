@@ -8,6 +8,7 @@
 
 #include <test/mocks/mockwallet.h>
 
+#include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/walletqmlmodel.h>
@@ -20,6 +21,7 @@
 #include <primitives/transaction.h>
 #include <uint256.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <set>
@@ -239,6 +241,7 @@ private Q_SLOTS:
     void paymentPredatingTheRequestDoesNotFulfillIt();
     void statusAndTypeRolesAreInts();
     void notificationsFromNodeThreadAreQueued();
+    void proxyOrderMatchesSourceForTiedTimestamps();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -555,6 +558,42 @@ void ActivityListModelTests::notificationsFromNodeThreadAreQueued()
     // update is queued until this (the model's) thread processes events.
     QCOMPARE(model->rowCount(), 0);
     QTRY_COMPARE(model->rowCount(), 1);
+}
+
+void ActivityListModelTests::proxyOrderMatchesSourceForTiedTimestamps()
+{
+    // The displayed order is the proxy's, so for tied timestamps its live
+    // inserts must follow the source model's deterministic tie-breaks (the
+    // order a reload produces), whichever order the ties arrive in.
+    for (const bool ascending_arrival : {true, false}) {
+        auto wallet{std::make_unique<TestActivityWallet>()};
+        wallet->addConfirmedTx(ReceiveTx(1, COIN, 100));
+        TestActivityWallet* wallet_ptr{wallet.get()};
+        WalletQmlModel wallet_model{std::move(wallet)};
+        ActivityListModel* model{wallet_model.activityListModel()};
+
+        ActivityFilterProxyModel proxy;
+        proxy.setSourceModel(model);
+        QCOMPARE(proxy.rowCount(), 1);
+
+        std::vector<interfaces::WalletTx> tied{
+            ReceiveTx(2, 2 * COIN, 200), ReceiveTx(3, 3 * COIN, 200), ReceiveTx(4, 4 * COIN, 200)};
+        std::sort(tied.begin(), tied.end(), [](const interfaces::WalletTx& a, const interfaces::WalletTx& b) {
+            return a.tx->GetHash().GetHex() < b.tx->GetHash().GetHex();
+        });
+        if (!ascending_arrival) std::reverse(tied.begin(), tied.end());
+        for (const auto& wtx : tied) {
+            wallet_ptr->addConfirmedTx(wtx);
+            wallet_ptr->notifyTransactionChanged(wtx);
+        }
+        QCOMPARE(proxy.rowCount(), 4);
+
+        QStringList proxy_order;
+        for (int row = 0; row < proxy.rowCount(); ++row) {
+            proxy_order.append(proxy.data(proxy.index(row, 0), ActivityListModel::TxIdRole).toString());
+        }
+        QCOMPARE(proxy_order, RowTxids(*model));
+    }
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
