@@ -201,8 +201,9 @@ private Q_SLOTS:
     void refreshLabelsFollowsAddressBook();
     void statusAndTypeRolesAreInts();
     void fulfilledRequestRowCarriesTheAddressLabel();
-    void notificationsFromNodeThreadAreQueued();
     void proxyOrderMatchesSourceForTiedTimestamps();
+    void notificationsFromNodeThreadAreQueued();
+    void contendedRefreshReadIsRetried();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -411,25 +412,6 @@ void ActivityListModelTests::fulfilledRequestRowCarriesTheAddressLabel()
     }
 }
 
-void ActivityListModelTests::notificationsFromNodeThreadAreQueued()
-{
-    auto wallet{std::make_unique<TestActivityWallet>()};
-    TestActivityWallet* wallet_ptr{wallet.get()};
-    WalletQmlModel wallet_model{std::move(wallet)};
-    ActivityListModel* model{wallet_model.activityListModel()};
-    QCOMPARE(model->rowCount(), 0);
-
-    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
-    wallet_ptr->addConfirmedTx(tx);
-    std::thread node_thread{[&] { wallet_ptr->notifyTransactionChanged(tx); }};
-    node_thread.join();
-
-    // The model must not have been mutated on the notifying thread; the
-    // update is queued until this (the model's) thread processes events.
-    QCOMPARE(model->rowCount(), 0);
-    QTRY_COMPARE(model->rowCount(), 1);
-}
-
 void ActivityListModelTests::proxyOrderMatchesSourceForTiedTimestamps()
 {
     // The displayed order is the proxy's, so for tied timestamps its live
@@ -465,6 +447,49 @@ void ActivityListModelTests::proxyOrderMatchesSourceForTiedTimestamps()
         }
         QCOMPARE(proxy_order, RowTxids(*model));
     }
+}
+
+void ActivityListModelTests::notificationsFromNodeThreadAreQueued()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 0);
+
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet_ptr->addConfirmedTx(tx);
+    std::thread node_thread{[&] { wallet_ptr->notifyTransactionChanged(tx); }};
+    node_thread.join();
+
+    // The model must not have been mutated on the notifying thread; the
+    // update is queued until this (the model's) thread processes events.
+    QCOMPARE(model->rowCount(), 0);
+    QTRY_COMPARE(model->rowCount(), 1);
+}
+
+void ActivityListModelTests::contendedRefreshReadIsRetried()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(tx, /*depth=*/1);
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 1);
+
+    // A refresh pass that loses the wallet lock race keeps the cached
+    // status, but must schedule a follow-up so the row does not stay
+    // stale until the next block.
+    wallet_ptr->setDepth(tx, 4);
+    wallet_ptr->m_fail_status_reads = true;
+    model->refreshStatuses();
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 1);
+
+    wallet_ptr->m_fail_status_reads = false;
+    QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 4);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

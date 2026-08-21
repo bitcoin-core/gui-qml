@@ -76,7 +76,7 @@ Q_SIGNALS:
 private:
     void refreshWallet();
     void addPendingReceiveRequests();
-    void updateTransactionStatus(QSharedPointer<Transaction> tx) const;
+    bool updateTransactionStatus(QSharedPointer<Transaction> tx) const;
     void updateTransactionLabel(QSharedPointer<Transaction> tx) const;
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
@@ -90,6 +90,7 @@ private:
     void fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx);
 
     int m_display_unit{0};
+    bool m_status_retry_scheduled{false};
     QList<QSharedPointer<Transaction>> m_transactions;
     QSet<QString> m_pending_request_addresses;
     WalletQmlModel* m_wallet_model;

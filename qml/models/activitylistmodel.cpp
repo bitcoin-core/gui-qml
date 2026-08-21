@@ -8,9 +8,16 @@
 #include <qml/models/walletqmlmodel.h>
 
 #include <QDateTime>
+#include <QTimer>
 #include <QVariantList>
 
 #include <algorithm>
+
+namespace {
+// A status read normally only loses the wallet lock race for a moment,
+// so a short fixed cadence is enough for the refresh sweep's follow-up.
+constexpr int STATUS_RETRY_INTERVAL_MS{250};
+} // namespace
 
 ActivityListModel::ActivityListModel(WalletQmlModel *parent)
     : QAbstractListModel(parent)
@@ -35,10 +42,10 @@ int ActivityListModel::rowCount(const QModelIndex &parent) const
     return m_transactions.size();
 }
 
-void ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) const
+bool ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) const
 {
     if (m_wallet_model == nullptr || tx->isPendingRequest) {
-        return;
+        return true;
     }
     interfaces::WalletTxStatus wtx;
     int num_blocks;
@@ -49,7 +56,9 @@ void ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) 
     // (the Widgets TransactionTablePriv does the same).
     if (m_wallet_model->tryGetTxStatus(tx->hash, wtx, num_blocks, block_time)) {
         tx->updateStatus(wtx, num_blocks, block_time);
+        return true;
     }
+    return false;
 }
 
 void ActivityListModel::updateTransactionLabel(QSharedPointer<Transaction> tx) const
@@ -218,11 +227,23 @@ void ActivityListModel::refreshStatuses()
     if (m_transactions.isEmpty()) {
         return;
     }
+    bool all_read{true};
     for (const auto& tx : m_transactions) {
-        updateTransactionStatus(tx);
+        all_read = updateTransactionStatus(tx) && all_read;
     }
     Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1),
                        {StatusRole, DepthRole, DateTimeRole, CanBumpRole, CountsForBalanceRole});
+    // A read lost to wallet lock contention keeps its cached status above;
+    // without a follow-up nothing re-reads it until the next block, so a
+    // just-confirmed row could stay pending indefinitely. Retry until a
+    // pass reads every row cleanly.
+    if (!all_read && !m_status_retry_scheduled) {
+        m_status_retry_scheduled = true;
+        QTimer::singleShot(STATUS_RETRY_INTERVAL_MS, this, [this] {
+            m_status_retry_scheduled = false;
+            refreshStatuses();
+        });
+    }
 }
 
 void ActivityListModel::refreshLabels()
