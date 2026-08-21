@@ -23,6 +23,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -237,6 +238,7 @@ private Q_SLOTS:
     void sameSecondRequestsFulfillOldestFirst();
     void paymentPredatingTheRequestDoesNotFulfillIt();
     void statusAndTypeRolesAreInts();
+    void notificationsFromNodeThreadAreQueued();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -534,6 +536,25 @@ void ActivityListModelTests::statusAndTypeRolesAreInts()
     QCOMPARE(model->data(row, ActivityListModel::StatusRole).typeId(), int{QMetaType::Int});
     QCOMPARE(model->data(row, ActivityListModel::TypeRole).typeId(), int{QMetaType::Int});
     QCOMPARE(model->data(row, ActivityListModel::TypeRole).toInt(), int{Transaction::RecvWithAddress});
+}
+
+void ActivityListModelTests::notificationsFromNodeThreadAreQueued()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 0);
+
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet_ptr->addConfirmedTx(tx);
+    std::thread node_thread{[&] { wallet_ptr->notifyTransactionChanged(tx); }};
+    node_thread.join();
+
+    // The model must not have been mutated on the notifying thread; the
+    // update is queued until this (the model's) thread processes events.
+    QCOMPARE(model->rowCount(), 0);
+    QTRY_COMPARE(model->rowCount(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

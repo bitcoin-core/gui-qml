@@ -49,6 +49,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QThread>
 #include <QVariantList>
 
 #include <algorithm>
@@ -1348,8 +1349,17 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(Tr
     if (!m_wallet) {
         return nullptr;
     }
-    return m_wallet->handleTransactionChanged([fn = std::move(fn)](const Txid& txid, ChangeType status) {
-        fn(txid.ToUint256(), status);
+    return m_wallet->handleTransactionChanged([this, fn = std::move(fn)](const Txid& txid, ChangeType status) {
+        const uint256 hash{txid.ToUint256()};
+        if (QThread::currentThread() == thread()) {
+            fn(hash, status);
+            return;
+        }
+        // The core fires this on a node thread, and the subscribing models
+        // (row inserts, moves) may only be touched on the GUI thread, so
+        // queue the delivery there. The Widgets transaction table marshals
+        // this notification the same way.
+        QMetaObject::invokeMethod(this, [fn, hash, status] { fn(hash, status); }, Qt::QueuedConnection);
     });
 }
 
