@@ -250,4 +250,30 @@ TestCase {
         verify(walletStack.depth > 1)
         compare(walletSettingsPage.showBackButton, false)
     }
+
+    function test_section_pages_keep_implicit_width_independent_of_layout() {
+        const page = createNodeSettingsPage()
+
+        const sections = [
+            { index: 1, name: "settingsWallet" },
+            { index: 4, name: "settingsStoragePage" },
+            { index: 7, name: "mempoolInformationSettingsPage" }
+        ]
+
+        for (let i = 0; i < sections.length; ++i) {
+            page.currentSection = sections[i].index
+            wait(0)
+
+            const sectionPage = findChild(page, sections[i].name)
+            verify(sectionPage !== null, sections[i].name + " was not created")
+
+            const implicitWidthBefore = sectionPage.implicitWidth
+            const widthBefore = sectionPage.width
+            sectionPage.width = widthBefore / 2
+            verify(sectionPage.width !== widthBefore,
+                   sections[i].name + " ignored the width it was given")
+            compare(sectionPage.implicitWidth, implicitWidthBefore,
+                    sections[i].name + " implicit width followed the width it was given")
+        }
+    }
 }

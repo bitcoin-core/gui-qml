@@ -45,6 +45,7 @@ Page {
 
     background: null
     clip: true
+    contentWidth: root.maximumWidth
 
     header: NavigationBar {
       id: navbar
@@ -60,7 +61,7 @@ Page {
 
         ColumnLayout {
             id: information
-            width: Math.min(parent.width, 600)
+            width: Math.min(parent.width, root.maximumWidth)
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 0
             Loader {
