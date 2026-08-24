@@ -808,7 +808,7 @@ void NodeModel::ConnectToBannedListChangedSignal()
     m_handler_notify_banned_list_changed = m_node.handleBannedListChanged([this]() {
         QMetaObject::invokeMethod(this, [this] {
             Q_EMIT bannedListChanged();
-        });
+        }, Qt::QueuedConnection);
     });
 }
 
