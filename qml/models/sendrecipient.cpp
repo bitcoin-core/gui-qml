@@ -109,6 +109,31 @@ CAmount SendRecipient::cAmount() const
     return m_amount->satoshi();
 }
 
+bool SendRecipient::isDataOutput() const
+{
+    return m_isDataOutput;
+}
+
+QString SendRecipient::dataHex() const
+{
+    return m_dataHex;
+}
+
+void SendRecipient::setDataOutput(const QString& hex)
+{
+    if (!m_isDataOutput) {
+        m_isDataOutput = true;
+        Q_EMIT isDataOutputChanged();
+    }
+    if (m_dataHex != hex) {
+        m_dataHex = hex;
+        Q_EMIT dataHexChanged();
+    }
+    setAddressError("");
+    setAmountError("");
+    Q_EMIT isValidChanged();
+}
+
 void SendRecipient::clear()
 {
     m_label = "";
@@ -116,6 +141,14 @@ void SendRecipient::clear()
     setSubtractFeeFromAmount(false);
     m_address->setAddress("", 0);
     m_amount->clear();
+    if (m_isDataOutput) {
+        m_isDataOutput = false;
+        Q_EMIT isDataOutputChanged();
+    }
+    if (!m_dataHex.isEmpty()) {
+        m_dataHex = "";
+        Q_EMIT dataHexChanged();
+    }
     Q_EMIT addressChanged();
     Q_EMIT labelChanged();
     Q_EMIT messageChanged();
@@ -140,6 +173,11 @@ void SendRecipient::validateAddress()
 
 void SendRecipient::validateAmount()
 {
+    if (m_isDataOutput) {
+        setAmountError("");
+        Q_EMIT isValidChanged();
+        return;
+    }
     if (m_amount->isSet()) {
         if (m_amount->satoshi() <= 0) {
             setAmountError(tr("Amount must be greater than zero"));
@@ -163,5 +201,6 @@ void SendRecipient::validateAmount()
 
 bool SendRecipient::isValid() const
 {
+    if (m_isDataOutput) return true;
     return m_addressError.isEmpty() && m_amountError.isEmpty() && m_amount->satoshi() > 0 && !m_address->isEmpty();
 }

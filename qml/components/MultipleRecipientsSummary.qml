@@ -42,18 +42,26 @@ ColumnLayout {
             required property string amount;
             required property string formattedAddress;
             required property string amountUnitLabel;
+            required property bool isDataOutput;
+            required property string dataHex;
             property bool expanded: false
             readonly property bool expandable: formattedAddress.length > 0
             readonly property string amountText: amountUnitLabel.length > 0 ? amount + " " + amountUnitLabel : amount
-            readonly property string primaryText: label.length > 0 ? label : address
-            readonly property string secondaryText: expanded ? formattedAddress : (label.length > 0 ? address : "")
+            readonly property string primaryText: isDataOutput ? qsTr("Data output") : (label.length > 0 ? label : address)
+            readonly property string secondaryText: {
+                if (isDataOutput) return dataHex
+                if (expanded) return formattedAddress
+                return label.length > 0 ? address : ""
+            }
             readonly property bool secondaryVisible: secondaryText.length > 0
 
             activeFocusOnTab: expandable
             Accessible.role: Accessible.Button
-            Accessible.name: label.length > 0
-                ? qsTr("%1, address %2, amount %3").arg(label).arg(formattedAddress).arg(amountText)
-                : qsTr("Address %1, amount %2").arg(formattedAddress).arg(amountText)
+            Accessible.name: isDataOutput
+                ? qsTr("Data output %1, amount %2").arg(dataHex).arg(amountText)
+                : label.length > 0
+                    ? qsTr("%1, address %2, amount %3").arg(label).arg(formattedAddress).arg(amountText)
+                    : qsTr("Address %1, amount %2").arg(formattedAddress).arg(amountText)
             Accessible.description: expanded ? qsTr("Hide full address") : qsTr("Show full address")
             Accessible.onPressAction: click()
 

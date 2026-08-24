@@ -25,6 +25,8 @@ class SendRecipient : public QObject
     Q_PROPERTY(QString addressError READ addressError NOTIFY addressErrorChanged)
     Q_PROPERTY(QString amountError READ amountError NOTIFY amountErrorChanged)
     Q_PROPERTY(bool isValid READ isValid NOTIFY isValidChanged)
+    Q_PROPERTY(bool isDataOutput READ isDataOutput NOTIFY isDataOutputChanged)
+    Q_PROPERTY(QString dataHex READ dataHex NOTIFY dataHexChanged)
 
 public:
     explicit SendRecipient(WalletQmlModel* wallet, QObject* parent = nullptr);
@@ -52,6 +54,10 @@ public:
 
     bool isValid() const;
 
+    bool isDataOutput() const;
+    QString dataHex() const;
+    void setDataOutput(const QString& hex);
+
     Q_INVOKABLE void clear();
 
 Q_SIGNALS:
@@ -62,6 +68,8 @@ Q_SIGNALS:
     void messageChanged();
     void subtractFeeFromAmountChanged();
     void isValidChanged();
+    void isDataOutputChanged();
+    void dataHexChanged();
 
 private:
     void validateAddress();
@@ -75,6 +83,8 @@ private:
     BitcoinAmount* m_amount;
     QString m_amountError{""};
     bool m_subtractFeeFromAmount{false};
+    bool m_isDataOutput{false};
+    QString m_dataHex{""};
 };
 
 #endif // BITCOIN_QML_MODELS_SENDRECIPIENT_H

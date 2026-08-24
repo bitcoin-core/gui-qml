@@ -547,7 +547,7 @@ private Q_SLOTS:
     void importPsbtFromFile_opensForeignUnsignedPsbtForReviewOnly();
     void importPsbtFromFile_broadcastsCompleteForeignMultisigPsbt();
     void saveCompleteBroadcastableImportedPsbt_preservesOriginalPsbt();
-    void importPsbtFromFile_skipsZeroValueOpReturnOutputs();
+    void importPsbtFromFile_showsOpReturnAsDataOutput();
     void importPsbtFromFile_opensUnsignedMultisigPsbtForReviewOnly();
     void importPsbtFromFile_blocksBroadcastWhenFeeIsInvalid();
     void importPsbtFromFile_returnsTransactionAlreadyKnownWhenTxIsInWallet();
@@ -2451,7 +2451,7 @@ void WalletQmlModelTests::saveCompleteBroadcastableImportedPsbt_preservesOrigina
     QCOMPARE(PsbtQmlModel::SerializePsbtRaw(saved), PsbtQmlModel::SerializePsbtRaw(psbt));
 }
 
-void WalletQmlModelTests::importPsbtFromFile_skipsZeroValueOpReturnOutputs()
+void WalletQmlModelTests::importPsbtFromFile_showsOpReturnAsDataOutput()
 {
     auto [wallet, model] = MakePasswordWalletModel();
 
@@ -2484,9 +2484,16 @@ void WalletQmlModelTests::importPsbtFromFile_skipsZeroValueOpReturnOutputs()
     QCOMPARE(model->importPsbtFromFile(source_path), WalletQmlModel::PsbtImportResult::WalletCannotSign);
     QVERIFY(model->currentTransaction() != nullptr);
     QVERIFY(model->currentTransactionCanBroadcast());
-    QCOMPARE(model->sendRecipientList()->count(), 1);
+    QCOMPARE(model->sendRecipientList()->count(), 2);
     QCOMPARE(model->sendRecipientList()->currentRecipient()->address()->address(), VALID_MAINNET_ADDRESS);
     QCOMPARE(model->sendRecipientList()->currentRecipient()->amount()->satoshi(), CAmount{1'500});
+
+    SendRecipient* data_output{model->sendRecipientList()->recipients().at(1)};
+    QVERIFY(data_output->isDataOutput());
+    QCOMPARE(data_output->dataHex(), QStringLiteral("6a020102"));
+    QCOMPARE(data_output->amount()->satoshi(), CAmount{0});
+    QVERIFY(data_output->isValid());
+    QVERIFY(data_output->address()->address().isEmpty());
 
     const QString saved_path{temp_dir.filePath(QStringLiteral("op-return-saved.psbt"))};
     QCOMPARE(model->saveCurrentTransactionAsPsbt(saved_path), QString{});

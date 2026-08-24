@@ -29,6 +29,8 @@ public:
         MessageRole,
         FormattedAddressRole,
         AmountUnitLabelRole,
+        IsDataOutputRole,
+        DataHexRole,
     };
 
     explicit SendRecipientsListModel(QObject* parent = nullptr);
