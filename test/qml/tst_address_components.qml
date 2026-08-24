@@ -152,6 +152,27 @@ TestCase {
         tryCompare(button, "visible", false)
     }
 
+    function test_row_menu_action_matches_an_existing_request() {
+        const row = createTemporaryObject(rowComponent, this)
+        verify(row !== null)
+
+        const action = findChild(row, "addressRowCreatePaymentRequestButton")
+        verify(action !== null)
+        compare(action.text, "Create payment request")
+        verify(row.offersPaymentRequestAction)
+
+        // With a request already saved the row must offer to edit it, the same
+        // wording and availability the address details button uses, including
+        // once the address has been used.
+        row.hasPaymentRequest = true
+        compare(action.text, "Edit payment request")
+        row.isUsed = true
+        verify(row.offersPaymentRequestAction)
+
+        row.hasPaymentRequest = false
+        verify(!row.offersPaymentRequestAction)
+    }
+
     function test_addressLabel_alternates_color_every_four_characters() {
         const label = createTemporaryObject(addressLabelComponent, host)
         verify(label !== null)

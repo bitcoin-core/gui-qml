@@ -223,7 +223,13 @@ Page {
                 spacing: 0
 
                 delegate: AddressRow {
+                    id: addressRowDelegate
                     width: addressList.width
+                    onMenuAboutToOpen: (address) => {
+                        addressRowDelegate.hasPaymentRequest = root.wallet && root.wallet.receiveRequests
+                            ? root.wallet.receiveRequests.matchingEntriesForAddress(address).length > 0
+                            : false;
+                    }
                     onEditLabelRequested: (address, label) => {
                         root.selectedAddress = address;
                         root.selectedLabel = label;
