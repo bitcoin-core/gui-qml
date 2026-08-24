@@ -15,6 +15,15 @@
 #include <algorithm>
 
 namespace {
+// Row dates are rendered as "N minutes ago" relative to the moment the row is
+// read, so without a periodic re-read they keep whatever age they had when the
+// view last asked. A minute is the smallest unit the string distinguishes, but
+// refreshing once a minute would leave a row reading "0 minutes ago" for nearly
+// two: the sweep runs on its own phase, unrelated to when any row was created.
+// Sampling several times a minute bounds that lag without costing anything,
+// since the sweep is a signal with no wallet work behind it and the view only
+// re-reads the delegates it has realized.
+constexpr int DATE_REFRESH_INTERVAL_MS{20 * 1000};
 // A notification read normally only loses the wallet lock race for a
 // moment, so a short fixed cadence is enough; the budget keeps a read that
 // can never succeed from polling for the lifetime of the model.
@@ -31,6 +40,11 @@ ActivityListModel::ActivityListModel(WalletQmlModel *parent)
         subscribeToCoreSignals();
         connect(m_wallet_model, &WalletQmlModel::addressListChanged,
                 this, &ActivityListModel::refreshLabels);
+
+        m_date_refresh_timer = new QTimer(this);
+        m_date_refresh_timer->setInterval(DATE_REFRESH_INTERVAL_MS);
+        connect(m_date_refresh_timer, &QTimer::timeout, this, &ActivityListModel::refreshDates);
+        m_date_refresh_timer->start();
     }
 }
 
@@ -256,6 +270,16 @@ void ActivityListModel::refreshLabels()
         updateTransactionLabel(tx);
     }
     Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1), {LabelRole});
+}
+
+void ActivityListModel::refreshDates()
+{
+    if (m_transactions.isEmpty()) {
+        return;
+    }
+    // Only the rendered string ages; the underlying timestamps do not change,
+    // so re-emitting the date role is all the view needs.
+    Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1), {DateTimeRole});
 }
 
 void ActivityListModel::refreshWallet()

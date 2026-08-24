@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include <QSignalSpy>
+#include <QTimer>
 
 #include <test/mocks/mockwallet.h>
 
@@ -117,6 +118,7 @@ public:
     std::set<interfaces::WalletTx> m_txs;
     std::map<Txid, interfaces::WalletTxStatus> m_statuses;
     bool m_fail_status_reads{false};
+    int m_wallet_height{0};
     std::map<CTxDestination, std::string> m_labels;
     std::map<std::string, std::string> m_stored_requests;
     std::vector<interfaces::Wallet::TransactionChangedFn> m_transaction_changed;
@@ -149,7 +151,7 @@ public:
         const auto it = m_statuses.find(txid);
         if (it == m_statuses.end()) return false;
         tx_status = it->second;
-        num_blocks = 0;
+        num_blocks = m_wallet_height;
         block_time = 0;
         return true;
     }
@@ -245,6 +247,7 @@ private Q_SLOTS:
     void contendedNotificationReadIsRetried();
     void permanentlyFailingNotificationReadStopsRetrying();
     void contendedRefreshReadIsRetried();
+    void relativeDatesRefreshWithoutANewBlock();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -668,6 +671,33 @@ void ActivityListModelTests::contendedRefreshReadIsRetried()
 
     wallet_ptr->m_fail_status_reads = false;
     QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 4);
+}
+
+void ActivityListModelTests::relativeDatesRefreshWithoutANewBlock()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    wallet->addConfirmedTx(ReceiveTx(1, COIN, 100));
+
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // Row dates read "N minutes ago" as of the moment they are read, so the
+    // model has to re-emit them as time passes; nothing else re-reads a row
+    // between blocks.
+    QSignalSpy changed_spy{model, &QAbstractItemModel::dataChanged};
+    model->refreshDates();
+    QCOMPARE(changed_spy.count(), 1);
+    const auto roles{changed_spy.takeFirst().at(2).value<QList<int>>()};
+    QVERIFY(roles.contains(ActivityListModel::DateTimeRole));
+    QVERIFY(!roles.contains(ActivityListModel::AmountRole));
+
+    // The refresh is wired to a timer so it happens on its own, and samples
+    // several times a minute so a row does not sit on a stale age.
+    const auto timers{model->findChildren<QTimer*>()};
+    QVERIFY(std::any_of(timers.begin(), timers.end(), [](const QTimer* t) {
+        return t->isActive() && t->interval() > 0 && t->interval() <= 30 * 1000;
+    }));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
