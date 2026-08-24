@@ -15,6 +15,13 @@ Page {
     signal back()
     background: null
 
+    function unbanPeer(row) {
+        if (!banListModel.unbanAt(row)) {
+            unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+            unbanActionError.open()
+        }
+    }
+
     header: NavigationBar2 {
         leftItem: NavButton {
             objectName: "bannedPeersBackButton"
@@ -96,15 +103,7 @@ Page {
                     bold: false
                     horizontalPadding: 24
                     text: qsTr("Unban")
-                    onClicked: {
-                        if (banListModel.unbanAt(index)) {
-                            banListModel.refresh()
-                        } else {
-                            unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
-                            unbanActionError.open()
-                            banListModel.refresh()
-                        }
-                    }
+                    onClicked: root.unbanPeer(index)
                 }
             }
         }

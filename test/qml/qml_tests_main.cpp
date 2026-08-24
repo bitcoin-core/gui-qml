@@ -2480,6 +2480,7 @@ class MockBanListModel : public QAbstractListModel
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool unbanResult MEMBER m_unban_result NOTIFY actionStateChanged)
+    Q_PROPERTY(bool resetOnUnban MEMBER m_reset_on_unban NOTIFY actionStateChanged)
     Q_PROPERTY(int unbanCalls READ unbanCalls NOTIFY actionCallsChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
@@ -2524,6 +2525,10 @@ public:
     {
         ++m_unban_calls;
         Q_EMIT actionCallsChanged();
+        if (m_reset_on_unban) {
+            beginResetModel();
+            endResetModel();
+        }
         return row >= 0 && row < count() && m_unban_result;
     }
 
@@ -2536,6 +2541,7 @@ public:
     Q_INVOKABLE void resetTestState()
     {
         m_unban_result = true;
+        m_reset_on_unban = false;
         m_unban_calls = 0;
         m_refresh_calls = 0;
         Q_EMIT actionStateChanged();
@@ -2551,6 +2557,7 @@ Q_SIGNALS:
 
 private:
     bool m_unban_result{true};
+    bool m_reset_on_unban{false};
     int m_unban_calls{0};
     int m_refresh_calls{0};
 };
