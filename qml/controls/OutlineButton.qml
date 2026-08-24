@@ -9,6 +9,14 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     hoverEnabled: AppMode.isDesktop
+    scale: enabled && down ? 0.98 : 1.0
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: 100
+            easing.type: Easing.OutCubic
+        }
+    }
 
     property bool bold: false
     property bool embedded: false
@@ -58,7 +66,7 @@ Button {
         radius: 5
         border {
             width: root.embedded ? 0 : 1
-            color: Theme.color.neutral6
+            color: Theme.color.neutral2
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
@@ -73,7 +81,7 @@ Button {
     states: [
         State {
             name: "PRESSED"; when: root.pressed
-            PropertyChanges { target: bg; border.color: Theme.color.orangeLight2 }
+            PropertyChanges { target: bg; border.color: Theme.color.neutral9 }
         },
         State {
             name: "HOVER"; when: root.hovered
