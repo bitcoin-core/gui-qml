@@ -585,10 +585,13 @@ int QmlGuiMain(int argc, char* argv[])
         // list up, mirroring the Widgets throttle of tip updates during IBD.
         // A newly selected wallet is refreshed as well, since only the
         // selected wallet's list follows the per-block refresh.
-        const auto refresh_activity_statuses = [controller = wallet_controller.get()] {
+        const auto refresh_activity_statuses = [controller = wallet_controller.get(), &node_model] {
             WalletQmlModel* wallet = controller->selectedWallet();
             if (wallet && wallet->activityListModel()) {
-                wallet->activityListModel()->refreshStatuses();
+                // Pass the height being refreshed to, so the model can tell a
+                // read taken before the wallet processed that block from one
+                // that is simply up to date.
+                wallet->activityListModel()->refreshStatuses(node_model.blockTipHeight());
             }
         };
         QObject::connect(&node_model, &NodeModel::blockTipHeightChanged,

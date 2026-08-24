@@ -24,10 +24,16 @@ namespace {
 // since the sweep is a signal with no wallet work behind it and the view only
 // re-reads the delegates it has realized.
 constexpr int DATE_REFRESH_INTERVAL_MS{20 * 1000};
+constexpr int STATUS_RETRY_INTERVAL_MS{250};
+constexpr int MAX_STATUS_RETRY_INTERVAL_MS{2000};
+// The wallet is normally only a moment behind, so the first retry comes
+// quickly and then backs off: a wallet still behind after this is rescanning
+// or otherwise busy rather than mid-block, and the next tip refreshes it
+// anyway. Each retry re-reads every row, so the budget stays small.
+constexpr int MAX_STATUS_RETRIES{6};
 // A notification read normally only loses the wallet lock race for a
 // moment, so a short fixed cadence is enough; the budget keeps a read that
 // can never succeed from polling for the lifetime of the model.
-constexpr int STATUS_RETRY_INTERVAL_MS{250};
 constexpr int MAX_NOTIFICATION_RETRIES{8};
 } // namespace
 
@@ -59,7 +65,7 @@ int ActivityListModel::rowCount(const QModelIndex &parent) const
     return m_transactions.size();
 }
 
-bool ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) const
+bool ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx, int* wallet_height) const
 {
     if (m_wallet_model == nullptr || tx->isPendingRequest) {
         return true;
@@ -73,6 +79,7 @@ bool ActivityListModel::updateTransactionStatus(QSharedPointer<Transaction> tx) 
     // (the Widgets TransactionTablePriv does the same).
     if (m_wallet_model->tryGetTxStatus(tx->hash, wtx, num_blocks, block_time)) {
         tx->updateStatus(wtx, num_blocks, block_time);
+        if (wallet_height != nullptr) *wallet_height = num_blocks;
         return true;
     }
     return false;
@@ -232,28 +239,55 @@ void ActivityListModel::setDisplayUnit(int unit)
     }
 }
 
-void ActivityListModel::refreshStatuses()
+void ActivityListModel::refreshStatuses(int chain_height)
 {
     if (m_transactions.isEmpty()) {
         return;
     }
+    // The latest announced tip is the height every read chases, kept in a
+    // member so a tip that arrives while a retry is already pending is not
+    // lost to the older target the retry was scheduled for. A genuinely
+    // new tip is what clears the attempt budget.
+    if (chain_height >= 0 && chain_height != m_status_target_height) {
+        m_status_target_height = chain_height;
+        m_status_retry_attempts = 0;
+    }
+
     bool all_read{true};
+    int wallet_height{-1};
     for (const auto& tx : m_transactions) {
-        all_read = updateTransactionStatus(tx) && all_read;
+        all_read = updateTransactionStatus(tx, &wallet_height) && all_read;
     }
     Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1),
                        {StatusRole, DepthRole, DateTimeRole, CanBumpRole, CountsForBalanceRole});
-    // A read lost to wallet lock contention keeps its cached status above;
-    // without a follow-up nothing re-reads it until the next block, so a
-    // just-confirmed row could stay pending indefinitely. Retry until a
-    // pass reads every row cleanly.
-    if (!all_read && !m_status_retry_scheduled) {
-        m_status_retry_scheduled = true;
-        QTimer::singleShot(250, this, [this] {
-            m_status_retry_scheduled = false;
-            refreshStatuses();
-        });
+
+    // Two ways a refresh leaves a row stale. A read lost to wallet lock
+    // contention keeps its cached status above, and a read taken while the
+    // wallet's height differs from the announced tip reports a depth from
+    // the wrong block: tryGetTxStatus answers with the wallet's own height,
+    // which trails the node's tip until the wallet catches up, and after a
+    // tip disconnect sits above it. Neither re-reads itself, since data()
+    // is a pure read, so a row would keep the wrong confirmation count
+    // until the next block. The Widgets table avoids both by comparing
+    // each row against the wallet's last processed block on every paint.
+    const bool out_of_sync{m_status_target_height >= 0 && wallet_height >= 0 &&
+                           wallet_height != m_status_target_height};
+    if (!all_read || out_of_sync) {
+        if (!m_status_retry_scheduled && m_status_retry_attempts < MAX_STATUS_RETRIES) {
+            m_status_retry_scheduled = true;
+            const int delay{std::min(STATUS_RETRY_INTERVAL_MS << m_status_retry_attempts,
+                                     MAX_STATUS_RETRY_INTERVAL_MS)};
+            ++m_status_retry_attempts;
+            // The pending retry reads the member rather than capturing the
+            // height, so it always chases the newest announced tip.
+            QTimer::singleShot(delay, this, [this] {
+                m_status_retry_scheduled = false;
+                refreshStatuses(m_status_target_height);
+            });
+        }
+        return;
     }
+    m_status_retry_attempts = 0;
 }
 
 void ActivityListModel::refreshLabels()

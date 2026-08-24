@@ -248,6 +248,10 @@ private Q_SLOTS:
     void permanentlyFailingNotificationReadStopsRetrying();
     void contendedRefreshReadIsRetried();
     void relativeDatesRefreshWithoutANewBlock();
+    void statusReadTakenBeforeTheWalletCaughtUpIsRetried();
+    void caughtUpStatusReadDoesNotRetry();
+    void tipArrivingDuringAPendingRetryIsNotLost();
+    void walletAheadOfTheAnnouncedTipIsRetried();
 };
 
 void ActivityListModelTests::initTestCase()
@@ -698,6 +702,106 @@ void ActivityListModelTests::relativeDatesRefreshWithoutANewBlock()
     QVERIFY(std::any_of(timers.begin(), timers.end(), [](const QTimer* t) {
         return t->isActive() && t->interval() > 0 && t->interval() <= 30 * 1000;
     }));
+}
+
+void ActivityListModelTests::statusReadTakenBeforeTheWalletCaughtUpIsRetried()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(tx, /*depth=*/1);
+    wallet->m_wallet_height = 100;
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // The node announces a new tip before the wallet has processed it, so the
+    // read succeeds but reports the depth from the previous block. Nothing
+    // re-reads a row on its own, so without a follow-up the row would show one
+    // confirmation too few until the next block arrived.
+    model->refreshStatuses(/*chain_height=*/101);
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 1);
+
+    wallet_ptr->m_wallet_height = 101;
+    wallet_ptr->setDepth(tx, 2);
+    QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 2);
+}
+
+void ActivityListModelTests::caughtUpStatusReadDoesNotRetry()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(tx, /*depth=*/2);
+    wallet->m_wallet_height = 101;
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+
+    // A wallet level with the announced tip needs no follow-up, so a later
+    // wallet-side change must not be picked up by a stray retry.
+    model->refreshStatuses(/*chain_height=*/101);
+    QSignalSpy changed_spy{model, &QAbstractItemModel::dataChanged};
+    wallet_ptr->setDepth(tx, 9);
+    QTest::qWait(600);
+    QCOMPARE(changed_spy.count(), 0);
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 2);
+}
+
+void ActivityListModelTests::tipArrivingDuringAPendingRetryIsNotLost()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(tx, /*depth=*/1);
+    wallet->m_wallet_height = 100;
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // The wallet trails the announced tip, so a retry is scheduled chasing
+    // height 101. A newer tip arrives while that retry is still pending;
+    // it cannot schedule its own follow-up, so the pending retry has to
+    // chase 102 rather than the height it was scheduled for.
+    model->refreshStatuses(/*chain_height=*/101);
+    model->refreshStatuses(/*chain_height=*/102);
+
+    // The wallet reaches 101 first: the pending retry sees it still short
+    // of 102 and must keep following up rather than settle for its
+    // original target and leave every row one confirmation behind.
+    wallet_ptr->m_wallet_height = 101;
+    wallet_ptr->setDepth(tx, 2);
+    QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 2);
+
+    wallet_ptr->m_wallet_height = 102;
+    wallet_ptr->setDepth(tx, 3);
+    QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 3);
+}
+
+void ActivityListModelTests::walletAheadOfTheAnnouncedTipIsRetried()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx tx{ReceiveTx(1, COIN, 100)};
+    wallet->addConfirmedTx(tx, /*depth=*/2);
+    wallet->m_wallet_height = 103;
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 1);
+
+    // After a tip disconnect the node announces a tip below the wallet's
+    // height. A read taken before the wallet processes the disconnect
+    // reports confirmations from the abandoned chain, so any height
+    // mismatch counts as out of sync, not only the wallet trailing.
+    model->refreshStatuses(/*chain_height=*/102);
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 2);
+
+    wallet_ptr->m_wallet_height = 102;
+    wallet_ptr->setDepth(tx, 1);
+    QTRY_COMPARE(model->data(model->index(0, 0), ActivityListModel::DepthRole).toInt(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
