@@ -15,8 +15,10 @@ Page {
 
     signal back
     property bool showBackButton: true
+    readonly property int maximumContentWidth: 450
 
     background: null
+    contentWidth: root.maximumContentWidth
 
     header: SettingsHeader {
         title: qsTr("External signer")
@@ -31,7 +33,7 @@ Page {
         clip: true
 
         ColumnLayout {
-            width: Math.min(parent.width, 450)
+            width: Math.min(parent.width, root.maximumContentWidth)
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 0
 
