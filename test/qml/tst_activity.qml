@@ -213,6 +213,29 @@ TestCase {
         compare(confirmedAmount.color, Theme.color.green)
     }
 
+    function test_pending_request_amount_is_not_settled_green() {
+        // A saved request has received nothing, so its amount must not carry
+        // the settled-money color a confirmed receive gets.
+        const pending = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Unconfirmed,
+            isPendingRequest: true,
+            countsForBalance: false
+        })
+        verify(pending !== null)
+        compare(pending.amountColor, Theme.color.neutral7)
+        compare(pending.iconColor, Theme.color.purple)
+
+        const settled = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Confirmed,
+            isPendingRequest: false,
+            countsForBalance: true
+        })
+        verify(settled !== null)
+        compare(settled.amountColor, Theme.color.green)
+    }
+
     function test_zero_conf_details_show_pending_confirmation() {
         const props = detailsProperties("bbbb")
         props.depth = 0
