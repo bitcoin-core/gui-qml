@@ -16,6 +16,7 @@
 #include <QSharedPointer>
 #include <QString>
 
+class QTimer;
 class WalletQmlModel;
 
 class ActivityListModel : public QAbstractListModel
@@ -54,6 +55,7 @@ public:
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const;
     void refreshStatuses();
     void refreshLabels();
+    void refreshDates();
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int count() const { return rowCount(); }
     bool rowSortsBefore(int lhs_row, int rhs_row) const;
@@ -91,6 +93,7 @@ private:
 
     int m_display_unit{0};
     bool m_status_retry_scheduled{false};
+    QTimer* m_date_refresh_timer{nullptr};
     QList<QSharedPointer<Transaction>> m_transactions;
     QSet<QString> m_pending_request_addresses;
     WalletQmlModel* m_wallet_model;
