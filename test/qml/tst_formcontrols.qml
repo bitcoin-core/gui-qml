@@ -97,6 +97,26 @@ TestCase {
     }
 
     Component {
+        id: outlineButtonComponent
+
+        OutlineButton {
+            objectName: "exampleOutlineButton"
+            width: 140
+            height: 46
+            text: "Cancel"
+        }
+    }
+
+    Component {
+        id: continueButtonComponent
+
+        ContinueButton {
+            text: "Continue"
+            enabled: false
+        }
+    }
+
+    Component {
         id: designSystemPageComponent
 
         SettingsDesignSystem {
@@ -292,6 +312,53 @@ TestCase {
 
         compare(activatedValue, "light")
         compare(picker.currentValue, "dark")
+    }
+
+    function test_outlineButtonSupportsEmbeddedAppearance() {
+        const button = createTemporaryObject(outlineButtonComponent, host)
+        verify(button !== null)
+        const background = findChild(button, "exampleOutlineButtonBackground")
+        verify(background !== null)
+
+        compare(button.embedded, false)
+        compare(background.color, Qt.rgba(0, 0, 0, 0))
+        compare(background.border.width, 1)
+
+        button.embedded = true
+        tryCompare(background, "color", Theme.color.neutral2)
+        compare(background.border.width, 0)
+
+        button.down = true
+        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(button, "scale", 0.98)
+
+        button.down = false
+        tryCompare(button, "scale", 1.0)
+    }
+
+    function test_continueButtonKeepsPrimaryColorWhenDisabled() {
+        const button = createTemporaryObject(continueButtonComponent, host)
+        verify(button !== null)
+
+        compare(button.enabled, false)
+        compare(button.background.color, Theme.color.orange)
+        compare(button.textColor, Theme.color.white)
+        compare(button.opacity, 0.4)
+
+        button.down = true
+        compare(button.background.color, Theme.color.orange)
+        compare(button.textColor, Theme.color.white)
+        compare(button.scale, 1.0)
+
+        button.enabled = true
+        tryCompare(button.background, "color", Theme.color.orangeLight2)
+        compare(button.textColor, Theme.color.white)
+        compare(button.opacity, 1.0)
+        tryCompare(button, "scale", 0.98)
+
+        button.down = false
+        tryCompare(button.background, "color", Theme.color.orange)
+        tryCompare(button, "scale", 1.0)
     }
 
     function test_designSystemPageShowsGenericControlExamples() {

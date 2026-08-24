@@ -9,6 +9,14 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     hoverEnabled: AppMode.isDesktop
+    scale: enabled && down ? 0.98 : 1.0
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: 100
+            easing.type: Easing.OutCubic
+        }
+    }
 
     property bool bold: false
     property bool embedded: false
