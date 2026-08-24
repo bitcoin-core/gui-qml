@@ -37,8 +37,10 @@ QtObject {
 
     // An amount that does not yet count for the balance must not carry the
     // settled-money color; the Widgets model greys such rows the same way
-    // (immature coinbase keeps its color there too).
-    readonly property color amountColor: !root.isPendingRequest && !root.countsForBalance
+    // (immature coinbase keeps its color there too). A payment request is
+    // greyed for the same reason: nothing has been received for it at all,
+    // so it cannot read as more settled than an unconfirmed receive.
+    readonly property color amountColor: !root.countsForBalance
             && root.transactionStatus != Transaction.Immature
         ? Theme.color.neutral7
         : root.incoming ? Theme.color.green : Theme.color.neutral9
