@@ -53,7 +53,7 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE QVariantMap firstTransactionDetails(const QString& txid) const;
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const;
-    void refreshStatuses();
+    void refreshStatuses(int chain_height = -1);
     void refreshLabels();
     void refreshDates();
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -78,7 +78,7 @@ Q_SIGNALS:
 private:
     void refreshWallet();
     void addPendingReceiveRequests();
-    bool updateTransactionStatus(QSharedPointer<Transaction> tx) const;
+    bool updateTransactionStatus(QSharedPointer<Transaction> tx, int* wallet_height = nullptr) const;
     void updateTransactionLabel(QSharedPointer<Transaction> tx) const;
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
@@ -93,6 +93,8 @@ private:
 
     int m_display_unit{0};
     bool m_status_retry_scheduled{false};
+    int m_status_retry_attempts{0};
+    int m_status_target_height{-1};
     QTimer* m_date_refresh_timer{nullptr};
     QList<QSharedPointer<Transaction>> m_transactions;
     QSet<QString> m_pending_request_addresses;
