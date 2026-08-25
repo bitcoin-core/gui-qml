@@ -683,12 +683,12 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
 
 void NodeModelTests::initialSyncCompletionIgnoresVerificationEstimateForGenesis()
 {
-    NiceMock<MockNode> node;
+    MockNode node;
     MempoolState mempool;
 
-    InstallDefaultHandlers(node);
-    InstallMempoolGetters(node, mempool);
-    ON_CALL(node, isInitialBlockDownload()).WillByDefault(Return(false));
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.is_initial_block_download_fn = [] { return false; };
 
     NodeModel model{node};
     WaitForInitialMempoolRefresh(mempool);
@@ -711,24 +711,22 @@ void NodeModelTests::initialSyncCompletionIgnoresVerificationEstimateForGenesis(
 
 void NodeModelTests::initialSyncCompletionWaitsForStartupCatchUpAndLatches()
 {
-    NiceMock<MockNode> node;
+    MockNode node;
     MempoolState mempool;
     interfaces::Node::NotifyBlockTipFn block_tip_fn;
     interfaces::Node::NotifyHeaderTipFn header_tip_fn;
 
-    InstallDefaultHandlers(node);
-    InstallMempoolGetters(node, mempool);
-    ON_CALL(node, isInitialBlockDownload()).WillByDefault(Return(false));
-    ON_CALL(node, handleNotifyBlockTip(testing::_))
-        .WillByDefault(Invoke([&](interfaces::Node::NotifyBlockTipFn fn) {
-            block_tip_fn = std::move(fn);
-            return MakeNoopHandler();
-        }));
-    ON_CALL(node, handleNotifyHeaderTip(testing::_))
-        .WillByDefault(Invoke([&](interfaces::Node::NotifyHeaderTipFn fn) {
-            header_tip_fn = std::move(fn);
-            return MakeNoopHandler();
-        }));
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.is_initial_block_download_fn = [] { return false; };
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn fn) {
+        block_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_header_tip_fn = [&](interfaces::Node::NotifyHeaderTipFn fn) {
+        header_tip_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
 
     NodeModel model{node};
     WaitForInitialMempoolRefresh(mempool);
