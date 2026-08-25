@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2025 The Bitcoin Core developers
+// Copyright (c) 2024-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -155,8 +155,14 @@ Page {
                 Repeater {
                     model: optionsModel.thirdPartyTransactionLinks(root.txid)
                     delegate: ExternalLink {
+                        required property int index
                         required property var modelData
-                        width: thirdPartyLinks.width
+                        objectName: "activityDetailsThirdPartyLink_" + index
+                        // Sized to its own content and centred, so the icon
+                        // sits next to the label instead of being pushed to
+                        // the far edge, and the clickable area is the link
+                        // rather than the full column width.
+                        anchors.horizontalCenter: parent.horizontalCenter
                         parentState: "FILLED"
                         description: qsTr("Show in %1").arg(modelData.host)
                         link: modelData.url

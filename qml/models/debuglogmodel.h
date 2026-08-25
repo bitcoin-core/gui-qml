@@ -15,6 +15,8 @@
 #include <QTimer>
 
 #include <atomic>
+#include <functional>
+#include <utility>
 
 class QThread;
 
@@ -47,6 +49,7 @@ class DebugLogModel : public QAbstractListModel
     Q_PROPERTY(int  loadLimit   READ loadLimit    WRITE setLoadLimit   NOTIFY loadLimitChanged)
     Q_PROPERTY(QString filter   READ filter       WRITE setFilter      NOTIFY filterChanged)
     Q_PROPERTY(QString openError READ openError   NOTIFY openErrorChanged)
+    Q_PROPERTY(bool logAvailable READ logAvailable NOTIFY logAvailableChanged)
 
 public:
     enum Role {
@@ -93,13 +96,42 @@ public:
     QString filter() const { return m_filter; }
     void setFilter(const QString& filter);
 
-    QString openError() const { return m_open_error; }
+    //! Two failures can be pending, and they have deliberately different
+    //! lifetimes.
+    //!
+    //! m_external_open_error is the outcome of a single user action (handing
+    //! the log to another application). It is transient: it clears on a later
+    //! successful openLogFile(), and on clearOpenError() when the page is
+    //! re-entered, so a stale click failure does not follow the user around.
+    //!
+    //! m_open_error describes the state of the log itself (missing or
+    //! unreadable). That state outlives any one visit, so it must survive
+    //! navigation and is owned solely by the background reader.
+    //!
+    //! The action error wins while it is set, because it answers the question
+    //! the user just asked.
+    QString openError() const { return m_external_open_error.isEmpty() ? m_open_error : m_external_open_error; }
+
+    //! False while the log cannot be read. Controls that only make sense
+    //! against readable log content (searching it, opening it in another
+    //! application) are disabled on this.
+    bool logAvailable() const { return m_log_available; }
 
     Q_INVOKABLE void refresh(bool full_load = false);
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE bool openLogFile();
+    //! Clear the external-open error. Called when re-entering the page so a
+    //! stale openLogFile() failure does not persist across navigation; the
+    //! banner reflects the last open attempt, not the log content.
+    Q_INVOKABLE void clearOpenError();
     Q_INVOKABLE void updateRelativeTimes();
     void stop();
+
+    using OpenLocalFileFn = std::function<bool(const QString&)>;
+    //! Replaces the hand-off to the desktop's file association, so tests can
+    //! drive the "no application is associated" failure without depending on
+    //! the machine having (or not having) a handler for .log files.
+    void setOpenLocalFileFnForTesting(OpenLocalFileFn fn) { m_open_local_file_fn = std::move(fn); }
 
 Q_SIGNALS:
     void hasMoreLinesChanged();
@@ -107,6 +139,7 @@ Q_SIGNALS:
     void loadLimitChanged();
     void filterChanged();
     void openErrorChanged();
+    void logAvailableChanged();
     //! Emitted when new lines are prepended at the top during an auto-refresh.
     void newLinesAdded(int count);
 
@@ -209,6 +242,16 @@ private:
     //! so empty/short logs and interrupted loadMore requests are unambiguous.
     int m_loaded_limit{0};
     QString m_open_error;
+    //! Failure from openLogFile() (open the log in an external application),
+    //! kept separate from m_open_error, which the background reader owns and
+    //! clears on any successful read.
+    QString m_external_open_error;
+
+    //! Whether the last background read could open the log. Starts true so the
+    //! page does not flash a disabled state before the first read lands.
+    bool m_log_available{true};
+
+    OpenLocalFileFn m_open_local_file_fn;
 
     //! End-of-file state from the last successful worker read. Normal
     //! refreshes validate the anchor, seek to file_size, and parse only bytes

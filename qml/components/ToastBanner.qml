@@ -28,7 +28,15 @@ Rectangle {
     color: backgroundColor
     radius: 5
     implicitHeight: Math.max(50, contentRow.implicitHeight + 20)
-    opacity: 0
+    // Follows the initial visibility instead of always starting transparent.
+    // A banner whose condition already holds when it is built inside an
+    // already visible page never sees visible change, so the fade-in below
+    // would not run and the banner would keep its space in the layout while
+    // drawing nothing. Whether that happens depends on creation order (a page
+    // whose tree becomes visible only after construction still gets the
+    // change), so both orders must draw. The animations assign opacity
+    // directly, which drops this binding once one of them runs.
+    opacity: visible ? 1 : 0
 
     onVisibleChanged: {
         if (visible) {
@@ -41,6 +49,12 @@ Rectangle {
             dismissTimer.stop()
             opacity = 0
         }
+    }
+
+    // Shown outright rather than faded in, so the auto-dismiss countdown that
+    // normally starts when the fade completes has to be started here instead.
+    Component.onCompleted: {
+        if (root.opacity === 1 && root.dismissAfter > 0) dismissTimer.start()
     }
 
     NumberAnimation {
@@ -96,6 +110,11 @@ Rectangle {
             objectName: root.textObjectName
             Layout.fillWidth: true
             text: root.text
+            // Banner text is a message, never markup. Without this the Text
+            // default of AutoText would silently upgrade markup-looking
+            // strings (an error can interpolate a filesystem path) to rich
+            // text.
+            textFormat: Text.PlainText
             color: root.textColor
             font: Theme.text.description.font
             horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter

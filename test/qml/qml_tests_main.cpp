@@ -14,6 +14,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
@@ -3085,6 +3086,7 @@ class MockDebugLogModel : public QAbstractListModel
     Q_PROPERTY(bool hasMoreLines READ hasMoreLines NOTIFY hasMoreLinesChanged)
     Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged)
     Q_PROPERTY(QString openError READ openError NOTIFY openErrorChanged)
+    Q_PROPERTY(bool logAvailable READ logAvailable NOTIFY logAvailableChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int loadMoreCalls READ loadMoreCalls NOTIFY loadMoreCallsChanged)
 
@@ -3159,7 +3161,14 @@ public:
         m_filter = filter;
         Q_EMIT filterChanged();
     }
-    QString openError() const { return {}; }
+    QString openError() const { return m_open_error; }
+    bool logAvailable() const { return m_log_available; }
+    Q_INVOKABLE void setLogAvailable(bool available)
+    {
+        if (m_log_available == available) return;
+        m_log_available = available;
+        Q_EMIT logAvailableChanged();
+    }
     int loadMoreCalls() const { return m_load_more_calls; }
 
     Q_INVOKABLE void refresh(bool = false) {}
@@ -3170,7 +3179,36 @@ public:
         appendRowsForTest(20);
         setHasMoreLinesForTest(false);
     }
-    Q_INVOKABLE bool openLogFile() { return true; }
+    Q_INVOKABLE bool openLogFile()
+    {
+        const QString next = m_open_result ? QString{} : m_pending_error;
+        if (m_open_error != next) {
+            m_open_error = next;
+            Q_EMIT openErrorChanged();
+        }
+        return m_open_result;
+    }
+    Q_INVOKABLE void setOpenLogFileResult(bool ok, const QString& error)
+    {
+        m_open_result = ok;
+        m_pending_error = error;
+    }
+    Q_INVOKABLE void clearOpenError()
+    {
+        if (m_open_error.isEmpty()) return;
+        m_open_error.clear();
+        Q_EMIT openErrorChanged();
+    }
+    Q_INVOKABLE void reset()
+    {
+        m_open_result = true;
+        m_pending_error.clear();
+        setLogAvailable(true);
+        if (!m_open_error.isEmpty()) {
+            m_open_error.clear();
+            Q_EMIT openErrorChanged();
+        }
+    }
     Q_INVOKABLE void updateRelativeTimes() {}
 
     Q_INVOKABLE void resetForTest(int count, bool has_more_lines)
@@ -3279,6 +3317,7 @@ Q_SIGNALS:
     void hasMoreLinesChanged();
     void filterChanged();
     void openErrorChanged();
+    void logAvailableChanged();
     void newLinesAdded(int count);
     void countChanged();
     void loadMoreCallsChanged();
@@ -3308,6 +3347,52 @@ private:
     int m_load_more_calls{0};
     int m_next_new_row{0};
     int m_next_old_row{0};
+    QString m_open_error;
+    QString m_pending_error;
+    bool m_open_result{true};
+    bool m_log_available{true};
+};
+
+class MockClipboard : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void setText(const QString& text) { m_text = text; }
+    Q_INVOKABLE QString text() const { return m_text; }
+
+private:
+    QString m_text;
+};
+
+//! Stands in for the real UrlOpener so the popup's success and failure paths
+//! can be driven without launching a browser. Mirrors the production scheme
+//! allowlist so a test cannot pass on a URL the real opener would reject.
+class MockUrlOpener : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE bool openUrl(const QString& url)
+    {
+        m_last_url = url;
+        const QUrl parsed(url, QUrl::StrictMode);
+        if (!parsed.isValid() || parsed.host().isEmpty()) return false;
+        const QString scheme = parsed.scheme().toLower();
+        if (scheme != QStringLiteral("http") && scheme != QStringLiteral("https")) return false;
+        return m_open_result;
+    }
+    Q_INVOKABLE void setOpenResult(bool ok) { m_open_result = ok; }
+    Q_INVOKABLE QString lastUrl() const { return m_last_url; }
+    Q_INVOKABLE void reset()
+    {
+        m_open_result = true;
+        m_last_url.clear();
+    }
+
+private:
+    bool m_open_result{true};
+    QString m_last_url;
 };
 
 class QmlTestsSetup : public QObject
@@ -3341,6 +3426,8 @@ public Q_SLOTS:
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
+        static MockClipboard clipboard;
+        static MockUrlOpener url_opener;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setActivityListModel(&activity_list_model);
         wallet_model.setBumpModel(&bump_model);
@@ -3351,6 +3438,8 @@ public Q_SLOTS:
         wallet_controller.setSelectedWalletObject(&wallet_model);
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
+        qmlRegisterSingletonInstance<MockClipboard>("org.bitcoincore.qt", 1, 0, "Clipboard", &clipboard);
+        qmlRegisterSingletonInstance<MockUrlOpener>("org.bitcoincore.qt", 1, 0, "UrlOpener", &url_opener);
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",
             1,
@@ -3387,6 +3476,8 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
         engine->rootContext()->setContextProperty(QStringLiteral("nodeModel"), &node_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testUrlOpener"), &url_opener);
         engine->rootContext()->setContextProperty(QStringLiteral("peerTableModel"), &peer_table_model);
         engine->rootContext()->setContextProperty(QStringLiteral("networkTrafficTower"), &network_traffic_tower);
         engine->rootContext()->setContextProperty(QStringLiteral("testNetworkTrafficTower"), &network_traffic_tower);
@@ -3406,7 +3497,6 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testCoinsListModel"), &coins_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
-        engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
