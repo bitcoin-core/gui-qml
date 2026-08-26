@@ -21,7 +21,6 @@ Requires:
 
 import sys
 import re
-import time
 
 from qml_test_harness import (
     QmlTestHarness,
@@ -72,9 +71,9 @@ def submit_console_command(gui, command):
     gui.invoke("rpcConsole", "runHighlightedOrSubmit")
 
 
-def test_console_input_bar_matches_design(gui):
-    """Console input bar follows the Figma Console input component geometry."""
-    print("\n── test_console_input_bar_matches_design ───────────────────────")
+def test_console_page_matches_design(gui):
+    """Console page uses the settings layout, toolbar, and command footer."""
+    print("\n── test_console_page_matches_design ────────────────────────────")
 
     root_width = gui.get_property("rpcConsole", "width")
     row_x = gui.get_property("consoleInputRow", "x")
@@ -88,40 +87,33 @@ def test_console_input_bar_matches_design(gui):
     prompt_width = gui.get_property("consolePromptIcon", "width")
     prompt_height = gui.get_property("consolePromptIcon", "height")
     input_x = gui.get_property("consoleInput", "x")
-    action_x = gui.get_property("consoleInputActions", "x")
-    action_width = gui.get_property("consoleInputActions", "width")
-    action_height = gui.get_property("consoleInputActions", "height")
 
-    assert_close(row_x, 20, "console input row x")
-    assert_close(row_width, root_width - 40, "console input row width")
-    assert_close(row_height, 41, "console input row height")
+    assert_close(row_x, 0, "console input row x")
+    assert_close(row_width, root_width, "console input row width")
+    assert_close(row_height, 64, "console input row height")
     assert_close(divider_width, row_width, "console input divider width")
-    assert_close(divider_height, 1, "console input divider height")
-    assert_close(content_x, 55, "console input content x")
-    assert_close(content_y, 11, "console input content y")
-    assert_close(content_height, 20, "console input content height")
-    assert_close(prompt_width, 20, "console prompt icon width")
-    assert_close(prompt_height, 20, "console prompt icon height")
-    assert_close(content_x + input_x, 80, "console text field x within row")
-    assert_close(action_width, 95, "console action cluster width")
-    assert_close(action_height, 20, "console action cluster height")
-    assert_close(content_x + action_x, row_width - 95, "console action cluster right alignment")
-    assert gui.get_property("consoleInput", "placeholderText") == "Enter command..."
-    assert gui.get_property("rpcConsole", "searchMode") is False
-
-    gui.click("consoleModeToggleButton")
-    gui.wait_for_property("rpcConsole", "searchMode", True, timeout_ms=3000)
-    assert gui.get_property("consoleInput", "placeholderText") == "Search..."
+    assert_close(divider_height, 1, "console footer separator height")
+    assert_close(content_x, 12, "console input content x")
+    assert_close(content_y, 12, "console input content y")
+    assert_close(content_height, 40, "console input content height")
+    assert_close(prompt_width, 16, "console prompt icon width")
+    assert_close(prompt_height, 16, "console prompt icon height")
+    assert_close(content_x + input_x, 36, "console text field x within row")
+    assert gui.get_property("consoleInput", "placeholderText") == "Enter command…"
+    assert gui.get_property("rpcConsoleSearchField", "placeholderText") == "Search console"
+    assert gui.get_property("rpcConsoleSearchPreviousButton", "enabled") is False
+    assert gui.get_property("rpcConsoleSearchNextButton", "enabled") is False
+    assert gui.get_property("rpcConsoleWarningBanner", "text") == (
+        "Beware of scammers who may ask you to enter commands here to steal your funds. "
+        "Only enter commands you fully understand."
+    )
 
     gui.click("consoleFontIncreaseButton")
     assert gui.get_property("rpcConsole", "outputFontPixelSize") == 14
     gui.click("consoleFontDecreaseButton")
     assert gui.get_property("rpcConsole", "outputFontPixelSize") == 13
 
-    gui.click("consoleModeToggleButton")
-    gui.wait_for_property("rpcConsole", "searchMode", False, timeout_ms=3000)
-    assert gui.get_property("consoleInput", "placeholderText") == "Enter command..."
-    print("  PASSED: console input bar geometry and controls match the design component")
+    print("  PASSED: settings toolbar, font stepper, and command footer match the design")
 
 
 def assert_console_entry_geometry(gui, index, row_width):
@@ -140,20 +132,18 @@ def test_console_output_rows_match_design(gui):
     """Console output rows follow the Figma Console entry component geometry."""
     print("\n── test_console_output_rows_match_design ───────────────────────")
 
-    gui.wait_for_property("rpcConsole", "outputCount", lambda v: v >= 1, timeout_ms=3000)
+    assert gui.get_property("rpcConsole", "outputCount") == 0
     root_width = gui.get_property("rpcConsole", "width")
-    column_width = root_width - 40
+    column_width = root_width - 32
 
-    assert_close(gui.get_property("consoleOutputArea_contentColumn", "x"), 20, "console output column x")
+    assert_close(gui.get_property("consoleOutputArea_contentColumn", "x"), 16, "console output column x")
     assert_close(gui.get_property("consoleOutputArea_contentColumn", "width"), column_width, "console output column width")
-    assert_close(gui.get_property("consoleOutputArea_contentColumn", "topPadding"), 15, "console output top padding")
-    assert_console_entry_geometry(gui, 0, column_width)
-
-    welcome_time = gui.get_text("consoleOutputArea_left_0")
-    assert re.fullmatch(r"\d\d:\d\d:\d\d", welcome_time), f"Unexpected welcome timestamp: {welcome_time!r}"
-    welcome_text = gui.get_text("consoleOutputArea_content_0")
-    assert "Use ↑↓ arrows" in welcome_text
-    assert "help-console" in welcome_text
+    assert_close(gui.get_property("consoleOutputArea_contentColumn", "topPadding"), 16, "console output top padding")
+    help_text = gui.get_text("rpcConsoleHelpFooter")
+    assert help_text == (
+        "Use ↑↓ arrows to navigate history. Type help for an overview of available commands. "
+        "Type help-console for console syntax help."
+    )
 
     count_before = gui.get_property("rpcConsole", "outputCount")
     submit_console_command(gui, "getblockcount")
@@ -172,6 +162,21 @@ def test_console_output_rows_match_design(gui):
     request_text = gui.get_text(f"consoleOutputArea_content_{request_index}")
     assert "getblockcount" in request_text
     assert "&gt;&gt;" not in request_text
+
+    # Searching selects the matching occurrence without removing any rows.
+    output_count = gui.get_property("rpcConsole", "outputCount")
+    gui.set_text("rpcConsoleSearchField", "getblockcount")
+    gui.wait_for_property("rpcConsole", "searchResultCount", 1, timeout_ms=3000)
+    assert gui.get_property("rpcConsole", "outputCount") == output_count
+    assert gui.get_property("rpcConsoleSearchPreviousButton", "enabled") is True
+    assert gui.get_property("rpcConsoleSearchNextButton", "enabled") is True
+    assert gui.get_property(
+        f"consoleOutputArea_content_{request_index}", "selectedText"
+    ).lower() == "getblockcount"
+    gui.click("rpcConsoleSearchNextButton")
+    assert gui.get_property("rpcConsole", "currentSearchResultIndex") == 0
+    gui.set_text("rpcConsoleSearchField", "")
+    gui.wait_for_property("rpcConsole", "searchResultCount", 0, timeout_ms=3000)
     print("  PASSED: console output entry geometry, timestamps, and categories match design")
 
 
@@ -235,6 +240,14 @@ def test_autocomplete_popup_appears(gui):
     gui.set_text("consoleInput", "getblock")
     # Popup should become visible since "getblock" matches commands like getblockcount
     gui.wait_for_property("consoleAutocompletePopup", "visible", True, timeout_ms=3000)
+    popup_x = gui.get_property("consoleAutocompletePopup", "x")
+    field_x = (
+        gui.get_property("consoleInputContent", "x")
+        + gui.get_property("consoleInput", "x")
+    )
+    assert_close(popup_x, field_x, "autocomplete menu left alignment")
+    assert_close(gui.get_property("consoleAutocomplete_0", "height"), 36,
+                 "autocomplete context-menu item height")
     print("  PASSED: autocomplete popup appeared for partial command")
     # Clear for next test
     gui.set_text("consoleInput", "")
@@ -286,27 +299,20 @@ def test_back_navigation(gui):
     print("  PASSED: back navigation returned to NodeRunner")
 
 
-def test_clear_button_restores_welcome_output(gui):
-    """The X action clears prior output and restores the welcome row."""
-    print("\n── test_clear_button_restores_welcome_output ───────────────────")
+def test_clear_removes_output_and_keeps_help_footer(gui):
+    """Clearing removes console rows while keeping help outside the card."""
+    print("\n── test_clear_removes_output_and_keeps_help_footer ─────────────")
 
     gui.set_text("consoleInput", "")
     assert gui.get_property("rpcConsole", "outputCount") > 0
-    welcome_time_before = gui.get_text("consoleOutputArea_left_0")
 
-    time.sleep(1.1)
-    gui.click("consoleClearButton")
-    gui.wait_for_property("rpcConsole", "outputCount", 1, timeout_ms=3000)
-
-    welcome_time_after = gui.get_text("consoleOutputArea_left_0")
-    assert re.fullmatch(r"\d\d:\d\d:\d\d", welcome_time_after), (
-        f"Unexpected welcome timestamp after clear: {welcome_time_after!r}"
+    gui.invoke("rpcConsole", "clearInputOrOutput")
+    gui.wait_for_property("rpcConsole", "outputCount", 0, timeout_ms=3000)
+    assert gui.get_text("rpcConsoleHelpFooter") == (
+        "Use ↑↓ arrows to navigate history. Type help for an overview of available commands. "
+        "Type help-console for console syntax help."
     )
-    assert welcome_time_after != welcome_time_before, "Expected clear to re-add welcome row with a fresh timestamp"
-    welcome_text = gui.get_text("consoleOutputArea_content_0")
-    assert "Use ↑↓ arrows" in welcome_text
-    assert "help-console" in welcome_text
-    print("  PASSED: clear action restored the welcome output with a fresh timestamp")
+    print("  PASSED: clear removed output and retained the external help footer")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -326,7 +332,7 @@ def main():
         navigate_to_console(gui)
 
         # Run the test cases.
-        test_console_input_bar_matches_design(gui)
+        test_console_page_matches_design(gui)
         test_console_output_rows_match_design(gui)
         test_execute_getblockcount(gui)
         test_execute_help(gui)
@@ -335,7 +341,7 @@ def main():
         test_autocomplete_popup_hidden_no_match(gui)
         test_autocomplete_click_applies_suggestion(gui)
         test_autocomplete_help_variants(gui)
-        test_clear_button_restores_welcome_output(gui)
+        test_clear_removes_output_and_keeps_help_footer(gui)
         test_back_navigation(gui)
 
         print("\nAll console tests passed.")

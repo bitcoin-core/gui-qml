@@ -24,6 +24,7 @@
         <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
+        <file>tst_monospaceoutputview.qml</file>
         <file>tst_navbutton.qml</file>
         <file>tst_nodefeedback.qml</file>
         <file>tst_onboarding_datadir.qml</file>
@@ -32,6 +33,7 @@
         <file>tst_proxylocationinput.qml</file>
         <file>tst_requestpayment.qml</file>
         <file>tst_rightcontenticon.qml</file>
+        <file>tst_searchbar.qml</file>
         <file>tst_sendoptionspopup.qml</file>
         <file>tst_send.qml</file>
         <file>tst_setting.qml</file>

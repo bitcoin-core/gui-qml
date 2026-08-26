@@ -75,44 +75,19 @@ SettingsPage {
         Layout.fillWidth: true
         spacing: 16
 
-        TextField {
-            id: searchField
-            objectName: "debugLogSearchField"
+        SearchBar {
+            id: searchBar
+            objectName: "debugLogSearchBar"
+            fieldObjectName: "debugLogSearchField"
+            searchIconObjectName: "debugLogSearchIcon"
+            clearButtonObjectName: "debugLogSearchClearButton"
             Layout.fillWidth: true
             Layout.minimumWidth: 140
-            Layout.maximumWidth: 340
-            implicitHeight: 36
-            leftPadding: 38
-            rightPadding: 12
-            topPadding: 0
-            bottomPadding: 0
+            Layout.maximumWidth: implicitWidth
             text: debugLogModel.filter
             placeholderText: qsTr("Search messages")
-            placeholderTextColor: Theme.color.neutral7
-            color: Theme.color.neutral9
-            font: Theme.text.caption.font
-            verticalAlignment: TextInput.AlignVCenter
-            selectByMouse: true
-            Accessible.name: qsTr("Search debug log messages")
+            accessibleName: qsTr("Search debug log messages")
             onTextChanged: searchDebounce.restart()
-
-            background: Rectangle {
-                color: Theme.color.neutral1
-                radius: 8
-                border.width: searchField.activeFocus ? 2 : 0
-                border.color: Theme.color.orange
-
-                Behavior on border.color { ColorAnimation { duration: 150 } }
-            }
-
-            Icon {
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                source: "image://images/search"
-                color: Theme.color.neutral7
-                size: 16
-            }
         }
 
         Item { Layout.fillWidth: true }
@@ -178,8 +153,8 @@ SettingsPage {
         enabled: root.visible
         sequences: [StandardKey.Find]
         onActivated: {
-            searchField.forceActiveFocus()
-            searchField.selectAll()
+            searchBar.focusSearch()
+            searchBar.selectAll()
         }
     }
 
@@ -200,7 +175,7 @@ SettingsPage {
             id: logList
             objectName: "debugLogListView"
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(300, root.height - 294)
+            Layout.preferredHeight: Math.max(300, root.height - 298)
             clip: true
             model: debugLogModel
             spacing: 0
@@ -268,7 +243,7 @@ SettingsPage {
             objectName: "debugLogTableFooter"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
-            color: Theme.color.neutral3
+            color: Theme.color.neutral1
             radius: 16
 
             Rectangle {
@@ -278,6 +253,15 @@ SettingsPage {
                 anchors.top: parent.top
                 height: parent.radius
                 color: parent.color
+            }
+
+            Rectangle {
+                objectName: "debugLogTableFooterDivider"
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 1
+                color: Theme.color.neutral2
             }
 
             OutlineButton {
@@ -300,7 +284,7 @@ SettingsPage {
         id: searchDebounce
         interval: 150
         repeat: false
-        onTriggered: debugLogModel.filter = searchField.text
+        onTriggered: debugLogModel.filter = searchBar.text
     }
 
     Connections {

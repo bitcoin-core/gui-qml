@@ -20,7 +20,7 @@ Control {
 
     background: Rectangle {
         objectName: "debugLogTitlesHeaderBackground"
-        color: Theme.color.neutral3
+        color: Theme.color.neutral1
         radius: root.cornerRadius
 
         Rectangle {
@@ -30,6 +30,15 @@ Control {
             anchors.bottom: parent.bottom
             height: parent.radius
             color: parent.color
+        }
+
+        Rectangle {
+            objectName: "debugLogTitlesHeaderDivider"
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: Theme.color.neutral2
         }
     }
 

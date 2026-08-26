@@ -125,7 +125,9 @@ def test_page_structure(gui):
         "debugLogTableSectionCard",
         "debugLogListView",
         "debugLogTitlesHeader",
+        "debugLogTitlesHeaderDivider",
         "debugLogTableFooter",
+        "debugLogTableFooterDivider",
         "debugLogScrollToBottomButton",
     ):
         gui.wait_for_property(object_name, "visible", True, timeout_ms=5000)
@@ -148,9 +150,11 @@ def test_page_structure(gui):
     )
     assert_close(gui.get_property("debugLogOptionsButton", "height"), 36, "options")
     assert gui.get_property("debugLogOptionsButton", "iconSource") == "image://images/ellipsis"
-    assert_close(gui.get_property("debugLogSearchField", "height"), 36, "search")
+    assert_close(gui.get_property("debugLogSearchField", "height"), 40, "search")
     assert_close(gui.get_property("debugLogTitlesHeader", "height"), 44, "table header")
+    assert_close(gui.get_property("debugLogTitlesHeaderDivider", "height"), 1, "header divider")
     assert_close(gui.get_property("debugLogTableFooter", "height"), 44, "table footer")
+    assert_close(gui.get_property("debugLogTableFooterDivider", "height"), 1, "footer divider")
 
     gui.invoke("debugLogView", "scrollToTop")
     gui.wait_for_property("debugLogItemRow_0", "visible", True, timeout_ms=3000)

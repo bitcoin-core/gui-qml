@@ -48,6 +48,7 @@
         <file>components/PaymentDetailOptionsPopup.qml</file>
         <file>components/QRCodePopup.qml</file>
         <file>components/ReceiveOptionsPopup.qml</file>
+        <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/MultipleRecipientsSummary.qml</file>
@@ -143,7 +144,7 @@
         <file>pages/settings/MempoolSettingsPage.qml</file>
         <file>pages/settings/NetworkTrafficSettingsPage.qml</file>
         <file>pages/settings/ProxySettingsPage.qml</file>
-        <file>pages/settings/RpcConsoleSettingsPage.qml</file>
+        <file>pages/settings/SettingsRpcConsoleView.qml</file>
         <file>pages/settings/StorageSettingsPage.qml</file>
         <file>pages/settings/WalletSectionPage.qml</file>
         <file>pages/settings/WindowBehaviorSettingsPage.qml</file>
