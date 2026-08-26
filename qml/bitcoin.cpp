@@ -123,6 +123,7 @@ Q_IMPORT_PLUGIN(QtLabsPlatformPlugin)
 #endif
 Q_IMPORT_PLUGIN(QtQuickLayoutsPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2Plugin)
+Q_IMPORT_PLUGIN(QtLabsPlatformPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2BasicStylePlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2BasicStyleImplPlugin)
 Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin)

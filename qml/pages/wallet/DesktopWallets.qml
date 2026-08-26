@@ -29,6 +29,68 @@ Page {
         activityPage.navigateToTransaction(txid, outputIndex)
     }
 
+    function requestCloseWallet() {
+        if (!walletController.isWalletLoaded || !walletController.selectedWallet) {
+            return
+        }
+        closeConfirmationPopup.walletName = walletController.selectedWallet.name
+        closeConfirmationPopup.open()
+    }
+
+    function startWalletBackup() {
+        root.openSettingsRoute("backup")
+    }
+
+    function openWalletPassword(updating) {
+        root.openSettingsRoute("password", updating)
+    }
+
+    function openSignVerifyMessage(initialTab) {
+        root.openSettingsRoute("sign-verify-message", initialTab)
+    }
+
+    function openSettings(section) {
+        root.openSettingsRoute(section)
+    }
+
+    function openUriImporter() {
+        sendTabButton.checked = true
+        sendPage.openPaymentRequestImport()
+    }
+
+    function openPsbtImporter() {
+        sendTabButton.checked = true
+        sendPage.openPsbtFileImport()
+    }
+
+    function openConsole() {
+        root.openSettings("rpc-console")
+    }
+
+    function openPeers() {
+        peersTabButton.checked = true
+    }
+
+    function openNetworkTraffic() {
+        root.openSettings("network-traffic")
+    }
+
+    function openNode() {
+        blockClockTabButton.checked = true
+    }
+
+    function openActivity() {
+        activityTabButton.checked = true
+    }
+
+    function openSend() {
+        sendTabButton.checked = true
+    }
+
+    function openReceive() {
+        receiveTabButton.checked = true
+    }
+
     function toggleWalletSelection() {
         if (!walletController.initialized) {
             return
@@ -57,8 +119,9 @@ Page {
         }
     }
 
-    function openSettingsRoute(route) {
+    function openSettingsRoute(route, argument) {
         settingsLoader.pendingRoute = route
+        settingsLoader.pendingArgument = argument
         settingsTabButton.checked = true
         Qt.callLater(settingsLoader.applyPendingRoute)
     }
@@ -158,6 +221,7 @@ Page {
                 ButtonGroup.group: navigationTabs
             }
             NavigationTab {
+                id: sendTabButton
                 objectName: "sendTabButton"
                 text: qsTr("Send")
                 property int index: 1
@@ -282,6 +346,7 @@ Page {
             id: activityPage
         }
         Send {
+            id: sendPage
             onTransactionPrepared: (multipleRecipientsEnabled) => {
                 root.sendTransaction(multipleRecipientsEnabled)
             }
@@ -341,12 +406,23 @@ Page {
                 anchors.fill: parent
                 property bool retainItem: false
                 property string pendingRoute: ""
+                property var pendingArgument: null
 
                 function applyPendingRoute() {
                     if (!item || pendingRoute.length === 0) return
-                    if (pendingRoute === "addresses") item.openWalletAddressHistory()
-                    else item.selectSection(pendingRoute)
+                    if (pendingRoute === "addresses") {
+                        item.openWalletAddressHistory()
+                    } else if (pendingRoute === "backup") {
+                        item.startWalletBackup()
+                    } else if (pendingRoute === "password") {
+                        item.openWalletPassword(pendingArgument)
+                    } else if (pendingRoute === "sign-verify-message") {
+                        item.openSignVerifyMessage(pendingArgument)
+                    } else {
+                        item.selectSection(pendingRoute)
+                    }
                     pendingRoute = ""
+                    pendingArgument = null
                 }
 
                 // Create Settings on first use, then retain its navigation
