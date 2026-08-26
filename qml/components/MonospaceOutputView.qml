@@ -57,8 +57,13 @@ Item {
     property color errorLeftColumnColor: leftColumnColor
     property color selectionColor:    Theme.color.orange
     property color selectedTextColor: Theme.color.white
-    property string filterText: ""
-    readonly property string normalizedFilterText: filterText.toLowerCase()
+    property string searchText: ""
+    readonly property string normalizedSearchText: searchText.toLowerCase()
+    readonly property int searchResultCount: _searchMatches.length
+    property int currentSearchResultIndex: -1
+    property var _searchMatches: []
+    property var _selectedSearchEditor: null
+    property bool _resetSearchOnRefresh: false
 
     // ── Layout metrics ───────────────────────────────────────────────────
 
@@ -108,6 +113,103 @@ Item {
     function scrollToTop() {
         flick.contentY = 0
         flick.returnToBounds()
+    }
+
+    function scheduleSearchRefresh(resetCurrent) {
+        root._resetSearchOnRefresh = root._resetSearchOnRefresh || resetCurrent
+        searchRefreshTimer.restart()
+    }
+
+    function rebuildSearchMatches(resetCurrent) {
+        const matches = []
+        if (root.normalizedSearchText.length > 0) {
+            for (let row = 0; row < rowRepeater.count; ++row) {
+                const item = rowRepeater.itemAt(row)
+                if (!item || !item.contentEditor) continue
+                const editor = item.contentEditor
+                const plainText = editor.getText(0, editor.length)
+                const normalized = plainText.toLowerCase()
+                let offset = 0
+                while (offset <= normalized.length - root.normalizedSearchText.length) {
+                    const matchOffset = normalized.indexOf(root.normalizedSearchText, offset)
+                    if (matchOffset < 0) break
+                    matches.push({
+                        row: row,
+                        start: matchOffset,
+                        end: matchOffset + root.searchText.length
+                    })
+                    offset = matchOffset + Math.max(1, root.normalizedSearchText.length)
+                }
+            }
+        }
+
+        root._searchMatches = matches
+        if (matches.length === 0) {
+            root.currentSearchResultIndex = -1
+        } else if (resetCurrent || root.currentSearchResultIndex < 0) {
+            root.currentSearchResultIndex = 0
+        } else {
+            root.currentSearchResultIndex = Math.min(root.currentSearchResultIndex,
+                                                     matches.length - 1)
+        }
+        root.applyCurrentSearchMatch()
+    }
+
+    function applyCurrentSearchMatch() {
+        if (root._selectedSearchEditor) {
+            root._selectedSearchEditor.deselect()
+            root._selectedSearchEditor = null
+        }
+        if (root.currentSearchResultIndex < 0
+                || root.currentSearchResultIndex >= root._searchMatches.length) return
+
+        const match = root._searchMatches[root.currentSearchResultIndex]
+        const item = rowRepeater.itemAt(match.row)
+        if (!item || !item.contentEditor) return
+        const editor = item.contentEditor
+        editor.select(match.start, match.end)
+        root._selectedSearchEditor = editor
+
+        // Scroll to the occurrence itself, not merely its containing row. A
+        // console response can span many lines, with the match near the end.
+        const startRect = editor.positionToRectangle(match.start)
+        const endRect = editor.positionToRectangle(Math.max(match.start, match.end - 1))
+        const matchTop = item.y + editor.y + startRect.y
+        const matchBottom = item.y + editor.y + endRect.y + endRect.height
+        if (matchTop < flick.contentY) {
+            flick.contentY = Math.max(0, matchTop)
+        } else if (matchBottom > flick.contentY + flick.height) {
+            flick.contentY = Math.max(0, matchBottom - flick.height)
+        }
+        flick.returnToBounds()
+    }
+
+    function showNextSearchResult() {
+        if (root.searchResultCount === 0) return
+        root.currentSearchResultIndex = (root.currentSearchResultIndex + 1)
+            % root.searchResultCount
+        root.applyCurrentSearchMatch()
+    }
+
+    function showPreviousSearchResult() {
+        if (root.searchResultCount === 0) return
+        root.currentSearchResultIndex = (root.currentSearchResultIndex
+                                         + root.searchResultCount - 1)
+            % root.searchResultCount
+        root.applyCurrentSearchMatch()
+    }
+
+    onSearchTextChanged: scheduleSearchRefresh(true)
+
+    Timer {
+        id: searchRefreshTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            const resetCurrent = root._resetSearchOnRefresh
+            root._resetSearchOnRefresh = false
+            root.rebuildSearchMatches(resetCurrent)
+        }
     }
 
     // ── Signal ───────────────────────────────────────────────────────────
@@ -166,6 +268,9 @@ Item {
                 id: rowRepeater
                 model: root.listModel
 
+                onItemAdded: root.scheduleSearchRefresh(false)
+                onItemRemoved: root.scheduleSearchRefresh(false)
+
                 delegate: RowLayout {
                     id: rowRoot
 
@@ -175,6 +280,7 @@ Item {
                     required property var model
                     required property int index
                     readonly property string rowContent: rowRoot.model[root.contentRole] ?? ""
+                    onRowContentChanged: root.scheduleSearchRefresh(false)
                     readonly property int rowCategory: root.categoryRole !== ""
                                                        ? Number(rowRoot.model[root.categoryRole] ?? -1)
                                                        : -1
@@ -197,14 +303,11 @@ Item {
                                                                         : rowCategory === root.replyCategory
                                                                           ? root.replyLeftColumnColor
                                                                           : root.leftColumnColor
-                    readonly property bool matchesFilter: root.normalizedFilterText.length === 0
-                                                          || rowContent.toLowerCase().indexOf(root.normalizedFilterText) !== -1
+                    property alias contentEditor: contentTextEditor
 
                     objectName: root.objectName.length > 0 ? root.objectName + "_row_" + index : ""
                     width: contentColumn.width
-                    height: matchesFilter ? implicitHeight : 0
                     spacing: root.columnSpacing
-                    visible: matchesFilter
 
                     Accessible.role: Accessible.ListItem
                     Accessible.name: rowContent
@@ -228,11 +331,12 @@ Item {
 
                     // Main content column: TextEdit for per-row select + copy.
                     TextEdit {
+                        id: contentTextEditor
                         objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
                         text: rowRoot.rowContent
                         readOnly: true
                         selectByMouse: true
-                        persistentSelection: false
+                        persistentSelection: root.normalizedSearchText.length > 0
                         textFormat: root.contentTextFormat
                         wrapMode: Text.WrapAnywhere
                         font.family: root.fontFamily
@@ -275,7 +379,10 @@ Item {
     // accurate and the scroll reaches the true bottom.
     Connections {
         target: flick
-        enabled: root.autoScrollToBottom
+        // While searching, navigation owns the viewport position. Otherwise a
+        // content relayout can pull the view back to the bottom immediately
+        // after applyCurrentSearchMatch() scrolls to the active occurrence.
+        enabled: root.autoScrollToBottom && root.normalizedSearchText.length === 0
         function onContentHeightChanged() {
             root.scrollToBottom()
         }

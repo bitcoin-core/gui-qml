@@ -313,28 +313,6 @@ void RpcConsoleModel::appendFormattedRow(const QString& time, int category, cons
     m_output_model.appendRow(time, body, category);
 }
 
-void RpcConsoleModel::ensureWelcomeMessage()
-{
-    if (m_welcome_added) return;
-    m_welcome_added = true;
-
-    const QString warning_open = QStringLiteral("<span style='color:%1'>").arg(m_error_color.name());
-    QString welcome_message =
-        /*: RPC console starter message. Placeholders %1 and %2 are style tags
-            and are intentionally adjacent to the warning text. */
-        tr("Use ↑↓ arrows to navigate history. Type <b>help</b> for an overview of available commands. "
-           "Type <b>help-console</b> for console syntax help.\n"
-           "\n"
-           "%1<b>WARNING:</b> Scammers and thieves will request that you type commands here to steal your coins. "
-           "Do not type any commands unless you fully understand them.%2")
-            .arg(warning_open,
-                 QStringLiteral("</span>"));
-    welcome_message.replace(QLatin1Char('\n'), QStringLiteral("<br>"));
-    m_output_model.appendRow(QDateTime::currentDateTime().toString("hh:mm:ss"),
-                             welcome_message,
-                             CMD_REPLY);
-}
-
 bool RpcConsoleModel::submitCommand(const QString& command, const QString& wallet_name)
 {
     const QString trimmed_command = command.trimmed();
@@ -448,8 +426,6 @@ void RpcConsoleModel::resetHistoryNavigation()
 void RpcConsoleModel::clear()
 {
     m_output_model.resetAll();
-    m_welcome_added = false;
-    ensureWelcomeMessage();
 }
 
 void RpcConsoleModel::onNodeInitialized()

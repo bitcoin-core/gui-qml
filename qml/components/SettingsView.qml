@@ -355,7 +355,7 @@ Page {
     Component {
         id: rpcConsolePage
 
-        SettingsPages.RpcConsoleSettingsPage {
+        SettingsPages.SettingsRpcConsoleView {
             walletName: typeof walletController !== "undefined"
                 && walletController.isWalletLoaded && walletController.selectedWallet
                 ? walletController.selectedWallet.name
