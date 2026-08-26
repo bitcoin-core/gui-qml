@@ -13,7 +13,8 @@
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
-        <file>components/DebugLogOutputView.qml</file>
+        <file>components/DebugLogItemRow.qml</file>
+        <file>components/DebugLogTitlesHeader.qml</file>
         <file>components/MempoolInformationRows.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
@@ -130,7 +131,7 @@
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
-        <file>pages/settings/SettingsDebugLog.qml</file>
+        <file>pages/settings/SettingsDebugLogView.qml</file>
         <file>pages/settings/SettingsDesignSystem.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>

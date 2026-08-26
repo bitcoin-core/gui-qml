@@ -4,26 +4,31 @@
 
 #include <qml/models/debuglogmodel.h>
 
+#include <logging.h>
 #include <util/threadnames.h>
 
 #include <algorithm>
 #include <utility>
 
-#include <QDateTime>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QObject>
 #include <QRegularExpression>
+#include <QSet>
+#include <QStringList>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
 
 static const QRegularExpression TIMESTAMP_RX(
-    QStringLiteral(R"(^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s*(.*)$)"));
-static const QRegularExpression COMMAND_PREFIX_RX(
-    QStringLiteral(R"(^([^:]{1,80}):\s+(.*)$)"));
+    QStringLiteral(R"(^(?:\[\*\]\s*)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?Z\s*(.*)$)"));
+static const QRegularExpression BRACKET_PREFIX_RX(
+    QStringLiteral(R"(^\[([^\]]+)\]\s*)"));
+static const QRegularExpression LEGACY_LEVEL_RX(
+    QStringLiteral(R"(^(ERROR|WARNING):\s*(.*)$)"),
+    QRegularExpression::CaseInsensitiveOption);
 
 namespace {
 constexpr qint64 TAIL_READ_BLOCK_SIZE{64 * 1024};
@@ -36,6 +41,31 @@ QByteArray ReadAnchor(QFile& file, qint64 file_size)
     if (anchor_size <= 0 || !file.seek(file_size - anchor_size)) return {};
     return file.read(anchor_size);
 }
+
+bool IsLogLevel(const QString& value)
+{
+    static const QSet<QString> levels{
+        QStringLiteral("trace"),
+        QStringLiteral("debug"),
+        QStringLiteral("info"),
+        QStringLiteral("warning"),
+        QStringLiteral("error"),
+    };
+    return levels.contains(value);
+}
+
+bool IsLogCategory(const QString& value)
+{
+    static const QSet<QString> categories = [] {
+        QSet<QString> result{QStringLiteral("all")};
+        for (const LogCategory& category : LogInstance().LogCategoriesList()) {
+            result.insert(QString::fromStdString(category.category));
+        }
+        return result;
+    }();
+    return categories.contains(value);
+}
+
 } // namespace
 
 DebugLogModel::DebugLogModel(const fs::path& log_path, QObject* parent)
@@ -79,15 +109,10 @@ QVariant DebugLogModel::data(const QModelIndex& index, int role) const
 
     const LogLine& line = m_display_lines.at(index.row());
     switch (role) {
-    // The number is derived from the model row. Prepending new records no
-    // longer requires copying and renumbering every stored LogLine.
-    case LineNumberRole:   return QString::number(index.row() + 1);
-    case ContentRole:      return line.content;
-    case RelativeTimeRole: return line.relativeTime;
-    case CommandRole:      return line.command;
-    case MessageRole:      return line.message;
-    case DateLabelRole:    return line.relativeTime;
-    case SeverityRole:     return line.severity;
+    case MessageRole:   return line.message;
+    case TimestampRole: return line.timestamp;
+    case IsErrorRole:   return line.is_error;
+    case IsWarningRole: return line.is_warning;
     }
     return {};
 }
@@ -95,13 +120,10 @@ QVariant DebugLogModel::data(const QModelIndex& index, int role) const
 QHash<int, QByteArray> DebugLogModel::roleNames() const
 {
     return {
-        {LineNumberRole,   "lineNumber"},
-        {ContentRole,      "content"},
-        {RelativeTimeRole, "relativeTime"},
-        {CommandRole,      "command"},
-        {MessageRole,      "message"},
-        {DateLabelRole,    "dateLabel"},
-        {SeverityRole,     "severity"},
+        {MessageRole,   "message"},
+        {TimestampRole, "timestamp"},
+        {IsErrorRole,   "isError"},
+        {IsWarningRole, "isWarning"},
     };
 }
 
@@ -114,7 +136,7 @@ void DebugLogModel::setLoadLimit(int limit)
     Q_EMIT loadLimitChanged();
 
     if (m_all_lines.size() > m_load_limit) {
-        QList<LogLine> retained = m_all_lines.first(m_load_limit);
+        QList<LogLine> retained = m_all_lines.last(m_load_limit);
         applyLines(std::move(retained), /*force_reset=*/false);
         m_loaded_limit = std::min(m_loaded_limit, m_load_limit);
         const bool has_more = m_load_limit < kMaxLoadLimit;
@@ -167,6 +189,14 @@ void DebugLogModel::setFilter(const QString& filter)
     Q_EMIT filterChanged();
     // Cached rows remain observable while inactive, so keep the display
     // projection in sync even when the page is currently unloaded.
+    buildDisplayLines(/*force_reset=*/true);
+}
+
+void DebugLogModel::setWarningsAndErrorsOnly(bool warnings_and_errors_only)
+{
+    if (m_warnings_and_errors_only == warnings_and_errors_only) return;
+    m_warnings_and_errors_only = warnings_and_errors_only;
+    Q_EMIT warningsAndErrorsOnlyChanged();
     buildDisplayLines(/*force_reset=*/true);
 }
 
@@ -283,34 +313,6 @@ bool DebugLogModel::openLogFile()
         Q_EMIT openErrorChanged();
     }
     return true;
-}
-
-void DebugLogModel::updateRelativeTimes()
-{
-    if (!m_active || (m_all_lines.isEmpty() && m_display_lines.isEmpty())) return;
-    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-
-    for (LogLine& line : m_all_lines) {
-        if (line.timestamp_ms >= 0)
-            line.relativeTime = RelativeTimeLabelStatic(line.timestamp_ms, now_ms);
-    }
-
-    int first_changed = -1;
-    int last_changed = -1;
-    for (int i = 0; i < m_display_lines.size(); ++i) {
-        LogLine& line = m_display_lines[i];
-        if (line.timestamp_ms < 0) continue;
-        const QString next_label = RelativeTimeLabelStatic(line.timestamp_ms, now_ms);
-        if (line.relativeTime == next_label) continue;
-        line.relativeTime = next_label;
-        if (first_changed < 0) first_changed = i;
-        last_changed = i;
-    }
-
-    if (first_changed >= 0) {
-        Q_EMIT dataChanged(index(first_changed, 0), index(last_changed, 0),
-                           {RelativeTimeRole, DateLabelRole});
-    }
 }
 
 void DebugLogModel::stop()
@@ -585,8 +587,6 @@ QList<DebugLogModel::LogLine> DebugLogModel::ParseCompleteLines(
 {
     QList<LogLine> result;
     result.reserve(std::min<int>(max_filtered_lines, 1024));
-    const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-
     qsizetype scan_end = bytes.size();
     while (scan_end > 0 && result.size() < max_filtered_lines) {
         if (cancelled.load(std::memory_order_relaxed)) return {};
@@ -608,18 +608,16 @@ QList<DebugLogModel::LogLine> DebugLogModel::ParseCompleteLines(
             const QString line = QString::fromUtf8(raw);
             const QRegularExpressionMatch match = TIMESTAMP_RX.match(line);
             if (match.hasMatch()) {
-                const QDateTime dt = QDateTime::fromString(match.captured(1), Qt::ISODateWithMs);
-                entry.timestamp_ms = dt.isValid() ? dt.toMSecsSinceEpoch() : -1;
-                raw_message = match.captured(2);
+                entry.timestamp = FormatTime(match.captured(1));
+                raw_message = match.captured(3);
+                if (line.startsWith(QLatin1String("[*]"))) {
+                    raw_message.prepend(QStringLiteral("[*] "));
+                }
             } else {
-                entry.timestamp_ms = -1;
                 raw_message = line;
             }
             PopulateParsedFields(entry, raw_message);
-            entry.relativeTime = entry.timestamp_ms >= 0
-                ? RelativeTimeLabelStatic(entry.timestamp_ms, now_ms)
-                : QString{};
-            if (!entry.content.trimmed().isEmpty() || entry.timestamp_ms >= 0) {
+            if (!entry.message.isEmpty() || !entry.timestamp.isEmpty()) {
                 result.append(std::move(entry));
             }
         }
@@ -674,6 +672,9 @@ void DebugLogModel::onReadCompleted(const ReadResult& result,
     if (result.full_snapshot) {
         QList<LogLine> next_lines = result.lines;
         if (next_lines.size() > m_load_limit) next_lines.resize(m_load_limit);
+        // File reads are newest-first so the bounded tail can stop early;
+        // the Debug Log V2 presentation is chronological.
+        std::reverse(next_lines.begin(), next_lines.end());
         next_has_more = (result.has_more_lines || result.lines.size() > m_load_limit)
             && m_load_limit < kMaxLoadLimit;
         force_reset = force_reset || m_all_lines.isEmpty();
@@ -752,14 +753,18 @@ QList<DebugLogModel::LogLine> DebugLogModel::filteredLines(
     const QList<LogLine>& lines) const
 {
     QList<LogLine> filtered;
-    if (m_filter.isEmpty()) {
-        filtered = lines;
-    } else {
-        const QString f = m_filter.toLower();
-        for (const LogLine& line : lines) {
-            if (line.content.toLower().contains(f))
-                filtered.append(line);
+    filtered.reserve(lines.size());
+    for (const LogLine& line : lines) {
+        if (m_warnings_and_errors_only && !line.is_error && !line.is_warning) continue;
+        if (!m_filter.isEmpty()) {
+            const QString searchable = line.timestamp + QLatin1Char(' ')
+                + (line.is_error ? QStringLiteral("error ")
+                    : line.is_warning ? QStringLiteral("warning ")
+                                      : QStringLiteral("regular "))
+                + line.message;
+            if (!searchable.contains(m_filter, Qt::CaseInsensitive)) continue;
         }
+        filtered.append(line);
     }
     return filtered;
 }
@@ -785,6 +790,7 @@ bool DebugLogModel::applyDelta(QList<LogLine> lines)
 
     const bool omitted_new_lines = lines.size() > m_load_limit;
     if (omitted_new_lines) lines.resize(m_load_limit);
+    std::reverse(lines.begin(), lines.end());
 
     const int old_size = static_cast<int>(m_all_lines.size());
     const int new_size = static_cast<int>(lines.size());
@@ -792,48 +798,28 @@ bool DebugLogModel::applyDelta(QList<LogLine> lines)
         old_size, std::max(0, m_load_limit - new_size));
     const int old_remove_count = old_size - old_keep_count;
 
-    int display_remove_count{0};
-    if (m_filter.isEmpty()) {
-        display_remove_count = old_remove_count;
-    } else if (old_remove_count > 0) {
-        const QString filter = m_filter.toLower();
-        for (int i = old_keep_count; i < m_all_lines.size(); ++i) {
-            if (m_all_lines.at(i).content.toLower().contains(filter)) {
-                ++display_remove_count;
-            }
-        }
-    }
+    const int display_remove_count = old_remove_count > 0
+        ? filteredLines(m_all_lines.first(old_remove_count)).size()
+        : 0;
 
     QList<LogLine> display_insert = filteredLines(lines);
-    const int display_insert_count = display_insert.size();
-    const int surviving_display_count = m_display_lines.size() - display_remove_count;
-
-    // Publish the prepend first so a ListView can anchor the previously visible
-    // row. Any cap-induced removal is confined to the oldest filtered suffix.
-    if (!display_insert.isEmpty()) {
-        beginInsertRows(QModelIndex{}, 0, display_insert.size() - 1);
-        display_insert.reserve(display_insert.size() + m_display_lines.size());
-        display_insert.append(m_display_lines);
-        m_display_lines = std::move(display_insert);
-        endInsertRows();
-    }
     if (display_remove_count > 0) {
-        const int first = display_insert_count + surviving_display_count;
-        beginRemoveRows(QModelIndex{}, first, m_display_lines.size() - 1);
-        m_display_lines.erase(m_display_lines.begin() + first,
-                              m_display_lines.end());
+        beginRemoveRows(QModelIndex{}, 0, display_remove_count - 1);
+        m_display_lines.erase(m_display_lines.begin(),
+                              m_display_lines.begin() + display_remove_count);
         endRemoveRows();
     }
-
-    lines.reserve(lines.size() + old_keep_count);
-    lines.append(m_all_lines.cbegin(), m_all_lines.cbegin() + old_keep_count);
-    m_all_lines = std::move(lines);
-
-    if (display_insert_count > 0 && surviving_display_count > 0) {
-        Q_EMIT dataChanged(index(display_insert_count, 0),
-                           index(display_insert_count + surviving_display_count - 1, 0),
-                           {LineNumberRole});
+    if (!display_insert.isEmpty()) {
+        const int first = m_display_lines.size();
+        beginInsertRows(QModelIndex{}, first, first + display_insert.size() - 1);
+        m_display_lines.append(display_insert);
+        endInsertRows();
     }
+
+    QList<LogLine> retained = m_all_lines.mid(old_remove_count, old_keep_count);
+    retained.reserve(retained.size() + lines.size());
+    retained.append(lines);
+    m_all_lines = std::move(retained);
     return omitted_new_lines || old_remove_count > 0;
 }
 
@@ -861,19 +847,32 @@ void DebugLogModel::applyDisplayLines(QList<LogLine> lines, bool force_reset)
         return;
     }
 
-    // Appends to debug.log can only add a prefix (newest rows) and pruning can
-    // only remove a suffix. loadMore does the inverse operation at the bottom.
-    // Locate the old first row in the new projection and preserve the largest
-    // contiguous run from there. Stable byte offsets distinguish identical
-    // timestamp/message duplicates.
-    int prefix_count{-1};
+    // Full snapshots may add older history at the beginning, add newer rows at
+    // the end, or trim either side after a capacity change. Preserve the common
+    // contiguous run so the virtualized view can retain its visual anchor.
+    QHash<qint64, int> new_positions;
+    new_positions.reserve(lines.size());
     for (int i = 0; i < lines.size(); ++i) {
-        if (lines.at(i) == m_display_lines.first()) {
-            prefix_count = i;
-            break;
-        }
+        new_positions.insert(lines.at(i).source_offset, i);
     }
-    if (prefix_count < 0) {
+
+    int old_start{-1};
+    int new_start{-1};
+    int common_count{0};
+    for (int i = 0; i < m_display_lines.size(); ++i) {
+        const auto position = new_positions.constFind(m_display_lines.at(i).source_offset);
+        if (position == new_positions.cend() || !(m_display_lines.at(i) == lines.at(*position))) continue;
+        old_start = i;
+        new_start = *position;
+        while (old_start + common_count < m_display_lines.size()
+               && new_start + common_count < lines.size()
+               && m_display_lines.at(old_start + common_count) == lines.at(new_start + common_count)) {
+            ++common_count;
+        }
+        break;
+    }
+
+    if (common_count == 0) {
         beginRemoveRows(QModelIndex{}, 0, m_display_lines.size() - 1);
         m_display_lines.clear();
         endRemoveRows();
@@ -883,22 +882,27 @@ void DebugLogModel::applyDisplayLines(QList<LogLine> lines, bool force_reset)
         return;
     }
 
-    int common_count{0};
-    while (common_count < m_display_lines.size()
-           && prefix_count + common_count < lines.size()
-           && m_display_lines.at(common_count) == lines.at(prefix_count + common_count)) {
-        ++common_count;
-    }
-
-    const int old_suffix_count = m_display_lines.size() - common_count;
+    const int old_suffix_count = m_display_lines.size() - old_start - common_count;
     if (old_suffix_count > 0) {
-        beginRemoveRows(QModelIndex{}, common_count, m_display_lines.size() - 1);
-        m_display_lines.erase(m_display_lines.begin() + common_count,
+        const int first = old_start + common_count;
+        beginRemoveRows(QModelIndex{}, first, m_display_lines.size() - 1);
+        m_display_lines.erase(m_display_lines.begin() + first,
                               m_display_lines.end());
         endRemoveRows();
     }
-
-    const int new_suffix_start = prefix_count + common_count;
+    if (old_start > 0) {
+        beginRemoveRows(QModelIndex{}, 0, old_start - 1);
+        m_display_lines.erase(m_display_lines.begin(), m_display_lines.begin() + old_start);
+        endRemoveRows();
+    }
+    if (new_start > 0) {
+        beginInsertRows(QModelIndex{}, 0, new_start - 1);
+        for (int i = new_start - 1; i >= 0; --i) {
+            m_display_lines.prepend(lines.at(i));
+        }
+        endInsertRows();
+    }
+    const int new_suffix_start = new_start + common_count;
     if (new_suffix_start < lines.size()) {
         const int first = m_display_lines.size();
         const int count = lines.size() - new_suffix_start;
@@ -907,23 +911,6 @@ void DebugLogModel::applyDisplayLines(QList<LogLine> lines, bool force_reset)
             m_display_lines.append(lines.at(i));
         }
         endInsertRows();
-    }
-
-    // Apply a racing loadMore suffix before a live-update prefix. The QML
-    // view restores both anchors asynchronously; making the prepend the final
-    // structural notification ensures its top-row anchor wins.
-    if (prefix_count > 0) {
-        beginInsertRows(QModelIndex{}, 0, prefix_count - 1);
-        for (int i = prefix_count - 1; i >= 0; --i) {
-            m_display_lines.prepend(lines.at(i));
-        }
-        endInsertRows();
-    }
-
-    if (prefix_count > 0 && common_count > 0) {
-        Q_EMIT dataChanged(index(prefix_count, 0),
-                           index(m_display_lines.size() - 1, 0),
-                           {LineNumberRole});
     }
 }
 
@@ -934,40 +921,57 @@ void DebugLogModel::buildDisplayLines(bool force_reset)
 
 void DebugLogModel::PopulateParsedFields(LogLine& entry, const QString& raw_message)
 {
-    entry.content = raw_message.toHtmlEscaped();
-    const QString trimmed = raw_message.trimmed();
-    entry.command.clear();
-    entry.message = trimmed;
-    entry.severity = InfoSeverity;
+    QString remaining = raw_message.trimmed();
+    QStringList preserved_prefixes;
+    entry.is_error = false;
+    entry.is_warning = false;
 
-    const QRegularExpressionMatch command_match = COMMAND_PREFIX_RX.match(trimmed);
-    if (command_match.hasMatch()) {
-        const QString command = command_match.captured(1).trimmed();
-        const QString message = command_match.captured(2).trimmed();
-        if (!command.isEmpty() && !message.isEmpty()) {
-            entry.command = command;
-            entry.message = message;
+    while (true) {
+        const QRegularExpressionMatch prefix_match = BRACKET_PREFIX_RX.match(remaining);
+        if (!prefix_match.hasMatch()) break;
+
+        const QString original = QStringLiteral("[%1]").arg(prefix_match.captured(1));
+        const QString value = prefix_match.captured(1).trimmed().toLower();
+        bool recognised{false};
+
+        if (IsLogLevel(value)) {
+            entry.is_error = value == QLatin1String("error");
+            entry.is_warning = value == QLatin1String("warning");
+            recognised = true;
+        } else {
+            const qsizetype separator = value.indexOf(QLatin1Char(':'));
+            if (separator > 0 && value.indexOf(QLatin1Char(':'), separator + 1) < 0) {
+                const QString category = value.first(separator);
+                const QString level = value.sliced(separator + 1);
+                if (IsLogCategory(category) && IsLogLevel(level)) {
+                    entry.is_error = level == QLatin1String("error");
+                    entry.is_warning = level == QLatin1String("warning");
+                    recognised = true;
+                }
+            } else if (IsLogCategory(value)) {
+                recognised = true;
+            }
         }
+
+        if (!recognised) preserved_prefixes.append(original);
+        remaining.remove(0, prefix_match.capturedLength());
+        remaining = remaining.trimmed();
     }
 
-    const QString severity_source = entry.command.isEmpty() ? trimmed : entry.command;
-    if (severity_source.compare(QLatin1String("ERROR"), Qt::CaseInsensitive) == 0) {
-        entry.severity = ErrorSeverity;
-    } else if (severity_source.compare(QLatin1String("WARNING"), Qt::CaseInsensitive) == 0) {
-        entry.severity = WarningSeverity;
+    const QRegularExpressionMatch legacy_match = LEGACY_LEVEL_RX.match(remaining);
+    if (legacy_match.hasMatch()) {
+        entry.is_error = legacy_match.captured(1).compare(QLatin1String("ERROR"), Qt::CaseInsensitive) == 0;
+        entry.is_warning = !entry.is_error;
+        remaining = legacy_match.captured(2).trimmed();
     }
+
+    if (!preserved_prefixes.isEmpty()) {
+        remaining.prepend(preserved_prefixes.join(QLatin1Char(' ')) + QLatin1Char(' '));
+    }
+    entry.message = remaining.trimmed();
 }
 
-QString DebugLogModel::relativeTimeLabel(qint64 timestamp_ms, qint64 now_ms) const
+QString DebugLogModel::FormatTime(const QString& utc_seconds)
 {
-    return RelativeTimeLabelStatic(timestamp_ms, now_ms);
-}
-
-QString DebugLogModel::RelativeTimeLabelStatic(qint64 timestamp_ms, qint64 now_ms)
-{
-    const qint64 diff = (now_ms - timestamp_ms) / 1000;
-    if (diff < 60)    return QObject::tr("just now");
-    if (diff < 3600)  return QObject::tr("%1 min ago").arg(diff / 60);
-    if (diff < 86400) return QObject::tr("%1 hr ago").arg(diff / 3600);
-    return QObject::tr("%1 d ago").arg(diff / 86400);
+    return utc_seconds.right(8);
 }

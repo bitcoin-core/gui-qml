@@ -254,7 +254,7 @@ TestCase {
         const displayPage = findChild(view, "displaySettingsPage")
         verify(displayPage !== null)
         verify(findChild(view, "networkTrafficSettingsPage") === null)
-        verify(findChild(view, "settingsDebugLog") === null)
+        verify(findChild(view, "debugLogView") === null)
         compare(testNetworkTrafficTower.active, false)
         compare(testDebugLogModel.active, false)
 
@@ -290,38 +290,38 @@ TestCase {
         view.selectSection("debug-log")
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         tryCompare(testNetworkTrafficTower, "active", false)
-        const debugLogPage = findChild(view, "settingsDebugLog")
+        const debugLogPage = findChild(view, "debugLogView")
         verify(debugLogPage !== null)
         tryCompare(testDebugLogModel, "active", true)
 
         view.selectSection("network-traffic")
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
-        compare(findChild(view, "settingsDebugLog"), debugLogPage)
+        compare(findChild(view, "debugLogView"), debugLogPage)
         compare(networkTrafficPage.trafficGraphScale, 3600)
         tryCompare(testNetworkTrafficTower, "active", true)
         tryCompare(testDebugLogModel, "active", false)
 
         view.selectSection("debug-log")
-        compare(findChild(view, "settingsDebugLog"), debugLogPage)
+        compare(findChild(view, "debugLogView"), debugLogPage)
         tryCompare(testNetworkTrafficTower, "active", false)
         tryCompare(testDebugLogModel, "active", true)
 
         view.selectSection("about")
         tryCompare(testDebugLogModel, "active", false)
         verify(findChild(view, "aboutSettingsPage") !== null)
-        compare(findChild(view, "settingsDebugLog"), debugLogPage)
+        compare(findChild(view, "debugLogView"), debugLogPage)
 
         view.visible = false
         compare(view.pageContainer.depth, 1)
         tryCompare(testDebugLogModel, "active", false)
         tryCompare(testNetworkTrafficTower, "active", false)
-        compare(findChild(view, "settingsDebugLog"), debugLogPage)
+        compare(findChild(view, "debugLogView"), debugLogPage)
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
 
         view.visible = true
         compare(view.pageContainer.depth, 1)
         verify(findChild(view, "aboutSettingsPage") !== null)
-        compare(findChild(view, "settingsDebugLog"), debugLogPage)
+        compare(findChild(view, "debugLogView"), debugLogPage)
         compare(findChild(view, "networkTrafficSettingsPage"), networkTrafficPage)
         tryCompare(testDebugLogModel, "active", false)
         tryCompare(testNetworkTrafficTower, "active", false)
@@ -440,7 +440,7 @@ TestCase {
         verify(networkTrafficPage.contentLayout.width > 840)
 
         view.selectSection("debug-log")
-        const debugLogPage = findChild(view, "settingsDebugLog")
+        const debugLogPage = findChild(view, "debugLogView")
         const debugLogContent = findChild(view, "debugLogContentLayout")
         verify(debugLogPage !== null)
         verify(debugLogContent !== null)
@@ -727,7 +727,7 @@ TestCase {
             { id: "network-traffic", objectName: "networkTrafficSettingsPage" },
             { id: "mempool", objectName: "mempoolSettingsPage" },
             { id: "rpc-console", objectName: "rpcConsoleSettingsPage" },
-            { id: "debug-log", objectName: "settingsDebugLog" },
+            { id: "debug-log", objectName: "debugLogView" },
             { id: "about", objectName: "aboutSettingsPage" }
         ]
 

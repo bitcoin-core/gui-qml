@@ -43,7 +43,7 @@ QByteArray OversizedLine(char fill)
 
 QString ContentAt(const DebugLogModel& model, int row)
 {
-    return model.data(model.index(row, 0), DebugLogModel::ContentRole).toString();
+    return model.data(model.index(row, 0), DebugLogModel::MessageRole).toString();
 }
 } // namespace
 
@@ -59,12 +59,12 @@ private Q_SLOTS:
     void initialLoad_discardsOversizedPartialAndResynchronizes();
     void initialLoad_skipsOversizedCompleteLine();
     void deltaAfterEmptyLoad_preservesHasMoreSentinel();
-    void liveRefresh_insertsAtTopWithoutResetAndPrunesTail();
+    void liveRefresh_appendsWithoutResetAndPrunesHead();
     void liveRefresh_canFullyDisplaceCacheWithoutReset();
     void liveRefresh_handlesDuplicateRecordsAndPartialWrites();
     void liveRefresh_discardsOversizedPartialUntilNewline();
     void liveRefresh_skipsOversizedCompleteLine();
-    void loadMore_insertsOlderRowsAtBottom();
+    void loadMore_insertsOlderRowsAtTop();
     void widerTailRequest_survivesRacesAndDeactivation();
     void filter_updatesIncrementallyAndWhileInactive();
     void rotation_fallsBackToFullSnapshot();
@@ -100,7 +100,7 @@ void DebugLogModelTests::inactiveModel_ignoresRefreshUntilActivated()
     QSignalSpy insert_spy(&model, &QAbstractItemModel::rowsInserted);
     QSignalSpy reset_spy(&model, &QAbstractItemModel::modelReset);
     model.setActive(true);
-    QTRY_COMPARE(ContentAt(model, 0), QStringLiteral("line two"));
+    QTRY_COMPARE(ContentAt(model, 1), QStringLiteral("line two"));
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(insert_spy.count(), 1);
     QCOMPARE(reset_spy.count(), 0);
@@ -113,39 +113,55 @@ void DebugLogModelTests::parsedRoles_extractStructuredLogLines()
     const QString log_path = dir.filePath("debug.log");
 
     QByteArray records;
-    records += Record("connect() to 127.0.0.1:9050 failed after wait: Connection refused (61)");
-    records += Record("Writing 0 mempool transactions to file...");
-    records += Record("ERROR: boom <bad>");
-    records += Record("UpdateTip: new best=abc height=1");
+    records += "2026-06-19T10:00:00.123456Z [net] Bound to 127.0.0.1\n";
+    records += "2026-06-19T10:00:01Z [rpc:error] boom <bad>\n";
+    records += "2026-06-19T10:00:02Z [mempool] Imported transactions\n";
+    records += "2026-06-19T10:00:02Z [bench] benchmark completed\n";
+    records += "2026-06-19T10:00:02Z [net:warning] peer is slow\n";
+    records += "2026-06-19T10:00:03Z ERROR: legacy failure\n";
+    records += "continuation without metadata\n";
     QVERIFY(WriteBytes(log_path, records));
 
     DebugLogModel model(fs::PathFromString(log_path.toStdString()));
     model.setActive(true);
-    QTRY_COMPARE(model.rowCount(), 4);
+    QTRY_COMPARE(model.rowCount(), 7);
 
-    const QModelIndex update_tip = model.index(0, 0);
-    QCOMPARE(model.data(update_tip, DebugLogModel::LineNumberRole).toString(), QStringLiteral("1"));
-    QCOMPARE(model.data(update_tip, DebugLogModel::CommandRole).toString(), QStringLiteral("UpdateTip"));
-    QCOMPARE(model.data(update_tip, DebugLogModel::MessageRole).toString(), QStringLiteral("new best=abc height=1"));
-    QCOMPARE(model.data(update_tip, DebugLogModel::ContentRole).toString(), QStringLiteral("UpdateTip: new best=abc height=1"));
-    QCOMPARE(model.data(update_tip, DebugLogModel::SeverityRole).toInt(), int(DebugLogModel::InfoSeverity));
-    QVERIFY(!model.data(update_tip, DebugLogModel::DateLabelRole).toString().isEmpty());
+    const QModelIndex network = model.index(0, 0);
+    QCOMPARE(model.data(network, DebugLogModel::MessageRole).toString(), QStringLiteral("Bound to 127.0.0.1"));
+    QCOMPARE(model.data(network, DebugLogModel::IsErrorRole).toBool(), false);
+    QCOMPARE(model.data(network, DebugLogModel::IsWarningRole).toBool(), false);
+    QCOMPARE(model.data(network, DebugLogModel::TimestampRole).toString(), QStringLiteral("10:00:00"));
 
-    const QModelIndex error = model.index(1, 0);
-    QCOMPARE(model.data(error, DebugLogModel::CommandRole).toString(), QStringLiteral("ERROR"));
-    QCOMPARE(model.data(error, DebugLogModel::MessageRole).toString(), QStringLiteral("boom <bad>"));
-    QCOMPARE(model.data(error, DebugLogModel::ContentRole).toString(), QStringLiteral("ERROR: boom &lt;bad&gt;"));
-    QCOMPARE(model.data(error, DebugLogModel::SeverityRole).toInt(), int(DebugLogModel::ErrorSeverity));
+    const QModelIndex rpc_error = model.index(1, 0);
+    QCOMPARE(model.data(rpc_error, DebugLogModel::MessageRole).toString(), QStringLiteral("boom <bad>"));
+    QCOMPARE(model.data(rpc_error, DebugLogModel::IsErrorRole).toBool(), true);
+    QCOMPARE(model.data(rpc_error, DebugLogModel::IsWarningRole).toBool(), false);
 
-    const QModelIndex plain = model.index(2, 0);
-    QCOMPARE(model.data(plain, DebugLogModel::CommandRole).toString(), QString{});
-    QCOMPARE(model.data(plain, DebugLogModel::MessageRole).toString(),
-             QStringLiteral("Writing 0 mempool transactions to file..."));
+    const QModelIndex mempool = model.index(2, 0);
+    QCOMPARE(model.data(mempool, DebugLogModel::MessageRole).toString(), QStringLiteral("Imported transactions"));
+    QCOMPARE(model.data(mempool, DebugLogModel::IsErrorRole).toBool(), false);
 
-    const QModelIndex endpoint = model.index(3, 0);
-    QCOMPARE(model.data(endpoint, DebugLogModel::CommandRole).toString(), QString{});
-    QCOMPARE(model.data(endpoint, DebugLogModel::MessageRole).toString(),
-             QStringLiteral("connect() to 127.0.0.1:9050 failed after wait: Connection refused (61)"));
+    const QModelIndex bench = model.index(3, 0);
+    QCOMPARE(model.data(bench, DebugLogModel::MessageRole).toString(), QStringLiteral("benchmark completed"));
+
+    const QModelIndex warning = model.index(4, 0);
+    QCOMPARE(model.data(warning, DebugLogModel::MessageRole).toString(), QStringLiteral("peer is slow"));
+    QCOMPARE(model.data(warning, DebugLogModel::IsErrorRole).toBool(), false);
+    QCOMPARE(model.data(warning, DebugLogModel::IsWarningRole).toBool(), true);
+
+    const QModelIndex legacy_error = model.index(5, 0);
+    QCOMPARE(model.data(legacy_error, DebugLogModel::MessageRole).toString(), QStringLiteral("legacy failure"));
+    QCOMPARE(model.data(legacy_error, DebugLogModel::IsErrorRole).toBool(), true);
+    QCOMPARE(model.data(legacy_error, DebugLogModel::IsWarningRole).toBool(), false);
+
+    const QModelIndex continuation = model.index(6, 0);
+    QCOMPARE(model.data(continuation, DebugLogModel::TimestampRole).toString(), QString{});
+
+    model.setWarningsAndErrorsOnly(true);
+    QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("boom <bad>"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("peer is slow"));
+    QCOMPARE(ContentAt(model, 2), QStringLiteral("legacy failure"));
 }
 
 void DebugLogModelTests::initialLoad_isSingleBatchAndDetectsHasMore()
@@ -175,8 +191,8 @@ void DebugLogModelTests::initialLoad_isSingleBatchAndDetectsHasMore()
     QTRY_COMPARE(extra_model.rowCount(), 1000);
     QTRY_VERIFY(extra_model.hasMoreLines());
     QCOMPARE(reset_spy.count(), 1);
-    QCOMPARE(ContentAt(extra_model, 0), QStringLiteral("line 1000"));
-    QCOMPARE(ContentAt(extra_model, 999), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(extra_model, 0), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(extra_model, 999), QStringLiteral("line 1000"));
 }
 
 void DebugLogModelTests::initialLoad_handlesBlankLinesAtBlockBoundaries()
@@ -201,8 +217,8 @@ void DebugLogModelTests::initialLoad_handlesBlankLinesAtBlockBoundaries()
     model.setActive(true);
     QTRY_COMPARE(model.rowCount(), 400);
     QVERIFY(model.hasMoreLines());
-    QVERIFY(ContentAt(model, 0).startsWith(QStringLiteral("very long y")));
-    QVERIFY(ContentAt(model, 0).size() > 64 * 1024);
+    QVERIFY(ContentAt(model, 399).startsWith(QStringLiteral("very long y")));
+    QVERIFY(ContentAt(model, 399).size() > 64 * 1024);
 }
 
 void DebugLogModelTests::initialLoad_discardsOversizedPartialAndResynchronizes()
@@ -216,8 +232,8 @@ void DebugLogModelTests::initialLoad_discardsOversizedPartialAndResynchronizes()
     DebugLogModel model(fs::PathFromString(log_path.toStdString()));
     model.setActive(true);
     QTRY_COMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("older two"));
-    QCOMPARE(ContentAt(model, 1), QStringLiteral("older one"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("older one"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("older two"));
 
     // The newline completes the discarded physical line. Parsing resumes with
     // the first normal record after it instead of exposing a tail fragment.
@@ -225,8 +241,8 @@ void DebugLogModelTests::initialLoad_discardsOversizedPartialAndResynchronizes()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 3);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("after oversized"));
     QCOMPARE(ContentAt(model, 1), QStringLiteral("older two"));
+    QCOMPARE(ContentAt(model, 2), QStringLiteral("after oversized"));
 }
 
 void DebugLogModelTests::initialLoad_skipsOversizedCompleteLine()
@@ -240,8 +256,8 @@ void DebugLogModelTests::initialLoad_skipsOversizedCompleteLine()
     DebugLogModel model(fs::PathFromString(log_path.toStdString()));
     model.setActive(true);
     QTRY_COMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("newer"));
-    QCOMPARE(ContentAt(model, 1), QStringLiteral("older"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("older"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("newer"));
 }
 
 void DebugLogModelTests::deltaAfterEmptyLoad_preservesHasMoreSentinel()
@@ -262,17 +278,17 @@ void DebugLogModelTests::deltaAfterEmptyLoad_preservesHasMoreSentinel()
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 1000);
     QTRY_VERIFY(model.hasMoreLines());
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 1000"));
-    QCOMPARE(ContentAt(model, 999), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(model, 999), QStringLiteral("line 1000"));
     QCOMPARE(reset_spy.count(), 1);
 
     model.loadMore();
     QTRY_COMPARE(model.rowCount(), 1001);
     QVERIFY(!model.hasMoreLines());
-    QCOMPARE(ContentAt(model, 1000), QStringLiteral("line 0"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 0"));
 }
 
-void DebugLogModelTests::liveRefresh_insertsAtTopWithoutResetAndPrunesTail()
+void DebugLogModelTests::liveRefresh_appendsWithoutResetAndPrunesHead()
 {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -293,18 +309,16 @@ void DebugLogModelTests::liveRefresh_insertsAtTopWithoutResetAndPrunesTail()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
 
-    QTRY_COMPARE(ContentAt(model, 0), QStringLiteral("line 4"));
+    QTRY_COMPARE(ContentAt(model, 2), QStringLiteral("line 4"));
     QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 2"));
     QCOMPARE(ContentAt(model, 1), QStringLiteral("line 3"));
-    QCOMPARE(ContentAt(model, 2), QStringLiteral("line 2"));
-    QCOMPARE(model.data(model.index(2, 0), DebugLogModel::LineNumberRole).toString(),
-             QStringLiteral("3"));
     QCOMPARE(insert_spy.count(), 1);
-    QCOMPARE(insert_spy.at(0).at(1).toInt(), 0);
-    QCOMPARE(insert_spy.at(0).at(2).toInt(), 1);
+    QCOMPARE(insert_spy.at(0).at(1).toInt(), 1);
+    QCOMPARE(insert_spy.at(0).at(2).toInt(), 2);
     QCOMPARE(remove_spy.count(), 1);
-    QCOMPARE(remove_spy.at(0).at(1).toInt(), 3);
-    QCOMPARE(remove_spy.at(0).at(2).toInt(), 4);
+    QCOMPARE(remove_spy.at(0).at(1).toInt(), 0);
+    QCOMPARE(remove_spy.at(0).at(2).toInt(), 1);
     QCOMPARE(reset_spy.count(), 0);
     QCOMPARE(new_lines_spy.count(), 1);
     QCOMPARE(new_lines_spy.at(0).at(0).toInt(), 2);
@@ -335,16 +349,16 @@ void DebugLogModelTests::liveRefresh_canFullyDisplaceCacheWithoutReset()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
 
-    QTRY_COMPARE(ContentAt(model, 0), QStringLiteral("line 6"));
+    QTRY_COMPARE(ContentAt(model, 2), QStringLiteral("line 6"));
     QCOMPARE(model.rowCount(), 3);
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 4"));
     QCOMPARE(ContentAt(model, 1), QStringLiteral("line 5"));
-    QCOMPARE(ContentAt(model, 2), QStringLiteral("line 4"));
     QCOMPARE(insert_spy.count(), 1);
     QCOMPARE(insert_spy.at(0).at(1).toInt(), 0);
     QCOMPARE(insert_spy.at(0).at(2).toInt(), 2);
     QCOMPARE(remove_spy.count(), 1);
-    QCOMPARE(remove_spy.at(0).at(1).toInt(), 3);
-    QCOMPARE(remove_spy.at(0).at(2).toInt(), 5);
+    QCOMPARE(remove_spy.at(0).at(1).toInt(), 0);
+    QCOMPARE(remove_spy.at(0).at(2).toInt(), 2);
     QCOMPARE(reset_spy.count(), 0);
     QVERIFY(model.hasMoreLines());
 }
@@ -381,7 +395,7 @@ void DebugLogModelTests::liveRefresh_handlesDuplicateRecordsAndPartialWrites()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 4);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("split record"));
+    QCOMPARE(ContentAt(model, 3), QStringLiteral("split record"));
     QCOMPARE(insert_spy.count(), 2);
     QCOMPARE(reset_spy.count(), 0);
 }
@@ -420,8 +434,8 @@ void DebugLogModelTests::liveRefresh_discardsOversizedPartialUntilNewline()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("after oversized"));
-    QCOMPARE(ContentAt(model, 1), QStringLiteral("baseline"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("baseline"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("after oversized"));
 }
 
 void DebugLogModelTests::liveRefresh_skipsOversizedCompleteLine()
@@ -441,12 +455,12 @@ void DebugLogModelTests::liveRefresh_skipsOversizedCompleteLine()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 3);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("after oversized"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("baseline"));
     QCOMPARE(ContentAt(model, 1), QStringLiteral("before oversized"));
-    QCOMPARE(ContentAt(model, 2), QStringLiteral("baseline"));
+    QCOMPARE(ContentAt(model, 2), QStringLiteral("after oversized"));
 }
 
-void DebugLogModelTests::loadMore_insertsOlderRowsAtBottom()
+void DebugLogModelTests::loadMore_insertsOlderRowsAtTop()
 {
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -465,12 +479,13 @@ void DebugLogModelTests::loadMore_insertsOlderRowsAtBottom()
     QTRY_COMPARE(model.rowCount(), 1200);
     QCOMPARE(model.loadLimit(), 2000);
     QVERIFY(!model.hasMoreLines());
-    QCOMPARE(ContentAt(model, 999), QStringLiteral("line 200"));
-    QCOMPARE(ContentAt(model, 1000), QStringLiteral("line 199"));
-    QCOMPARE(ContentAt(model, 1199), QStringLiteral("line 0"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 0"));
+    QCOMPARE(ContentAt(model, 199), QStringLiteral("line 199"));
+    QCOMPARE(ContentAt(model, 200), QStringLiteral("line 200"));
+    QCOMPARE(ContentAt(model, 1199), QStringLiteral("line 1199"));
     QCOMPARE(insert_spy.count(), 1);
-    QCOMPARE(insert_spy.at(0).at(1).toInt(), 1000);
-    QCOMPARE(insert_spy.at(0).at(2).toInt(), 1199);
+    QCOMPARE(insert_spy.at(0).at(1).toInt(), 0);
+    QCOMPARE(insert_spy.at(0).at(2).toInt(), 199);
     QCOMPARE(reset_spy.count(), 0);
 }
 
@@ -494,7 +509,8 @@ void DebugLogModelTests::widerTailRequest_survivesRacesAndDeactivation()
         QCOMPARE(model.loadLimit(), 3000);
         QTRY_COMPARE(model.rowCount(), 2500);
         QVERIFY(!model.hasMoreLines());
-        QCOMPARE(ContentAt(model, 2499), QStringLiteral("line 0"));
+        QCOMPARE(ContentAt(model, 0), QStringLiteral("line 0"));
+        QCOMPARE(ContentAt(model, 2499), QStringLiteral("line 2499"));
     }
 
     {
@@ -512,7 +528,7 @@ void DebugLogModelTests::widerTailRequest_survivesRacesAndDeactivation()
         model.setActive(true);
         QTRY_COMPARE(model.rowCount(), 1200);
         QCOMPARE(model.loadLimit(), 2000);
-        QCOMPARE(ContentAt(model, 1199), QStringLiteral("line 0"));
+        QCOMPARE(ContentAt(model, 0), QStringLiteral("line 0"));
     }
 }
 
@@ -536,14 +552,15 @@ void DebugLogModelTests::filter_updatesIncrementallyAndWhileInactive()
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("keep new"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("keep old"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("keep new"));
     QCOMPARE(insert_spy.count(), 1);
     QCOMPARE(reset_spy.count(), 0);
 
     model.setActive(false);
     model.setFilter(QStringLiteral("drop"));
     QCOMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("drop new"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("drop old"));
     QVERIFY(WriteBytes(log_path, Record("drop while inactive"),
                        QIODevice::Append | QIODevice::WriteOnly));
     model.refresh();
@@ -552,7 +569,7 @@ void DebugLogModelTests::filter_updatesIncrementallyAndWhileInactive()
 
     QSignalSpy reactivate_reset_spy(&model, &QAbstractItemModel::modelReset);
     model.setActive(true);
-    QTRY_COMPARE(ContentAt(model, 0), QStringLiteral("drop while inactive"));
+    QTRY_COMPARE(ContentAt(model, 2), QStringLiteral("drop while inactive"));
     QCOMPARE(model.rowCount(), 3);
     QCOMPARE(reactivate_reset_spy.count(), 0);
 }
@@ -572,8 +589,8 @@ void DebugLogModelTests::rotation_fallsBackToFullSnapshot()
     QVERIFY(WriteBytes(log_path, Record("rotated one") + Record("rotated two")));
     model.refresh();
     QTRY_COMPARE(model.rowCount(), 2);
-    QCOMPARE(ContentAt(model, 0), QStringLiteral("rotated two"));
-    QCOMPARE(ContentAt(model, 1), QStringLiteral("rotated one"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("rotated one"));
+    QCOMPARE(ContentAt(model, 1), QStringLiteral("rotated two"));
     QCOMPARE(reset_spy.count(), 1);
 }
 
@@ -595,16 +612,17 @@ void DebugLogModelTests::loadLimit_changesKeepRetainedCacheBounded()
     QVERIFY(model.hasMoreLines());
 
     // Raising the cap while inactive forces a wider bounded tail read on the
-    // next activation; older rows are appended at the bottom.
+    // next activation; older rows are prepended at the top.
     QSignalSpy insert_spy(&model, &QAbstractItemModel::rowsInserted);
     model.setLoadLimit(4);
     QCOMPARE(model.rowCount(), 2);
     model.setActive(true);
     QTRY_COMPARE(model.rowCount(), 4);
-    QCOMPARE(ContentAt(model, 3), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(model, 0), QStringLiteral("line 1"));
+    QCOMPARE(ContentAt(model, 3), QStringLiteral("line 4"));
     QCOMPARE(insert_spy.count(), 1);
-    QCOMPARE(insert_spy.at(0).at(1).toInt(), 2);
-    QCOMPARE(insert_spy.at(0).at(2).toInt(), 3);
+    QCOMPARE(insert_spy.at(0).at(1).toInt(), 0);
+    QCOMPARE(insert_spy.at(0).at(2).toInt(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
