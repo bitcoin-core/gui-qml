@@ -155,6 +155,7 @@ def run_unit_tests():
     qml_commands = [
         ["./bin/test_bitcoin-qt.exe", "--suite=unit"],
         ["./bin/test_bitcoin-qt.exe", "--suite=qml", "-platform", "minimal"],
+        ["./bin/test_bitcoin-qt.exe", "--suite=integration", "-platform", "minimal"],
     ]
     for cmd in qml_commands:
         run(cmd, env=qml_test_env)
