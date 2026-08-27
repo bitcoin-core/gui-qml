@@ -37,6 +37,9 @@ To run the QML GUI C++ unit tests manually, launch `build/bin/test_bitcoin-qt`.
 
 To run the QML tests manually, launch `build/bin/test_bitcoin-qt --suite=qml -platform minimal`.
 
+To run the QML GUI integration tests manually, launch
+`build/bin/test_bitcoin-qt --suite=integration -platform minimal`.
+
 ### Running individual tests
 
 The `test_bitcoin` runner accepts command line arguments from the Boost
