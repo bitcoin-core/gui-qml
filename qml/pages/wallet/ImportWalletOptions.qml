@@ -19,7 +19,7 @@ Page {
     signal next
     background: null
     readonly property bool hasImportError: walletController.walletLoadError.length > 0
-    readonly property real heroWidth: Math.min(parent.width - 40, 520)
+    readonly property real heroWidth: Math.min(root.width - 40, 520)
     readonly property int heroTopMargin: 64
     readonly property int importHeroTopMargin: heroTopMargin + 10
     readonly property int heroIconSize: 60
