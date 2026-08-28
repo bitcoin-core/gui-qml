@@ -5,6 +5,7 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QColor>
 #include <QDateTime>
 #include <QFont>
 #include <QHash>
@@ -3377,6 +3378,160 @@ private:
     int m_next_old_row{0};
 };
 
+class MockRpcOutputListModel : public QAbstractListModel
+{
+    Q_OBJECT
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+
+public:
+    enum Role {
+        TimestampRole = Qt::UserRole + 1,
+        ContentRole,
+        CategoryRole,
+    };
+    Q_ENUM(Role)
+
+    int rowCount(const QModelIndex& parent = QModelIndex()) const override
+    {
+        return parent.isValid() ? 0 : m_rows.size();
+    }
+
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override
+    {
+        if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size()) return {};
+        const Row& row = m_rows.at(index.row());
+        switch (role) {
+        case TimestampRole: return row.timestamp;
+        case ContentRole: return row.content;
+        case CategoryRole: return row.category;
+        default: return {};
+        }
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {
+            {TimestampRole, "timestamp"},
+            {ContentRole, "content"},
+            {CategoryRole, "category"},
+        };
+    }
+
+    void appendRow(const QString& content, int category)
+    {
+        beginInsertRows(QModelIndex(), m_rows.size(), m_rows.size());
+        m_rows.append(Row{QStringLiteral("00:00:00"), content, category});
+        endInsertRows();
+        Q_EMIT countChanged();
+    }
+
+    void resetAll()
+    {
+        if (m_rows.isEmpty()) return;
+        beginResetModel();
+        m_rows.clear();
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
+Q_SIGNALS:
+    void countChanged();
+
+private:
+    struct Row {
+        QString timestamp;
+        QString content;
+        int category{0};
+    };
+
+    QList<Row> m_rows;
+};
+
+class MockRpcConsoleModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool executing READ executing NOTIFY executingChanged)
+    Q_PROPERTY(QStringList availableCommands READ availableCommands NOTIFY availableCommandsChanged)
+    Q_PROPERTY(QAbstractListModel* outputModel READ outputModel CONSTANT)
+    Q_PROPERTY(QColor requestColor MEMBER m_request_color)
+    Q_PROPERTY(QColor replyColor MEMBER m_reply_color)
+    Q_PROPERTY(QColor errorColor MEMBER m_error_color)
+    Q_PROPERTY(QColor keyColor MEMBER m_key_color)
+    // Test-only observation point: every command the console accepted.
+    Q_PROPERTY(QStringList submittedCommands READ submittedCommands NOTIFY submittedCommandsChanged)
+
+public:
+    bool executing() const { return m_executing; }
+    QStringList availableCommands() const { return m_available_commands; }
+    QAbstractListModel* outputModel() { return &m_output_model; }
+    QStringList submittedCommands() const { return m_submitted_commands; }
+
+    Q_INVOKABLE bool submitCommand(const QString& command, const QString& /*wallet_name*/ = {})
+    {
+        if (!m_accept_commands) return false;
+        m_submitted_commands.append(command);
+        m_output_model.appendRow(command, 0);
+        Q_EMIT submittedCommandsChanged();
+        return true;
+    }
+
+    Q_INVOKABLE void ensureWelcomeMessage()
+    {
+        if (m_output_model.rowCount() > 0) return;
+        m_output_model.appendRow(QStringLiteral("Welcome"), 0);
+    }
+
+    // No history is replayed; Up/Down leave the typed text as it is.
+    Q_INVOKABLE QString browseHistory(int /*direction*/, const QString& current_text) { return current_text; }
+
+    Q_INVOKABLE void resetHistoryNavigation() {}
+
+    Q_INVOKABLE void clear()
+    {
+        m_output_model.resetAll();
+        ensureWelcomeMessage();
+    }
+
+    // Reset every observable back to a known state between test functions.
+    Q_INVOKABLE void resetForTest()
+    {
+        m_output_model.resetAll();
+        m_submitted_commands.clear();
+        m_accept_commands = true;
+        setAvailableCommands({QStringLiteral("getbalance"),
+                              QStringLiteral("getblockcount"),
+                              QStringLiteral("getblockhash"),
+                              QStringLiteral("help")});
+        Q_EMIT submittedCommandsChanged();
+    }
+
+    Q_INVOKABLE void setAvailableCommands(const QStringList& commands)
+    {
+        if (m_available_commands == commands) return;
+        m_available_commands = commands;
+        Q_EMIT availableCommandsChanged();
+    }
+
+    // Make submitCommand() refuse, mirroring a console that is still busy.
+    Q_INVOKABLE void setAcceptCommands(bool accept) { m_accept_commands = accept; }
+
+Q_SIGNALS:
+    void executingChanged();
+    void availableCommandsChanged();
+    void submittedCommandsChanged();
+
+private:
+    MockRpcOutputListModel m_output_model;
+    QStringList m_available_commands;
+    QStringList m_submitted_commands;
+    bool m_executing{false};
+    bool m_accept_commands{true};
+    QColor m_request_color;
+    QColor m_reply_color;
+    QColor m_error_color;
+    QColor m_key_color;
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -3408,6 +3563,8 @@ public Q_SLOTS:
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
+        static MockRpcConsoleModel rpc_console_model;
+        rpc_console_model.resetForTest();
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setActivityListModel(&activity_list_model);
         wallet_model.setBumpModel(&bump_model);
@@ -3475,6 +3632,8 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("rpcConsoleModel"), &rpc_console_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testRpcConsoleModel"), &rpc_console_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
 };

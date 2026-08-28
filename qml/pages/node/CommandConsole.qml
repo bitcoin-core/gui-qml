@@ -329,8 +329,8 @@ Page {
                 // popup is open; otherwise it submits the command. This mirrors the
                 // Tab behaviour and avoids submitting the raw half-typed text while a
                 // completion is highlighted.
-                Keys.onReturnPressed: root.acceptHighlightedOrSubmit(event)
-                Keys.onEnterPressed: root.acceptHighlightedOrSubmit(event)
+                Keys.onReturnPressed: (event) => root.acceptHighlightedOrSubmit(event)
+                Keys.onEnterPressed: (event) => root.acceptHighlightedOrSubmit(event)
 
                 // Up/Down: navigate autocomplete when popup is open,
                 // otherwise browse command history.
@@ -362,7 +362,7 @@ Page {
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
-                Keys.onTabPressed: {
+                Keys.onTabPressed: (event) => {
                     if (!root.searchMode && autocompletePopup.visible && filteredCommands.length > 0) {
                         applySuggestion(filteredCommands[autocompleteIndex])
                         event.accepted = true

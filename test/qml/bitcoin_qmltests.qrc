@@ -4,6 +4,7 @@
         <file>tst_activity.qml</file>
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
+        <file>tst_commandconsole.qml</file>
         <file>tst_contextmenubutton.qml</file>
         <file>tst_contextmenudivider.qml</file>
         <file>tst_contextmenupicker.qml</file>
