@@ -10,6 +10,7 @@ import "../../components"
 
 InformationPage {
     id: root
+    objectName: "settingsStoragePage"
     property var settingsModel: optionsModel
     property bool customStorage: false
     property int customStorageAmount

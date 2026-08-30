@@ -117,6 +117,7 @@ private Q_SLOTS:
     void initializationSuccessDuringCoreShutdownSkipsReadyState();
     void destructorUnsubscribesCoreSignalsBeforeStoppingPolling();
     void nodeNotificationHandlersUpdateModelThroughQueuedSignals();
+    void bannedListNotificationFromGuiThreadIsNotDeliveredReentrantly();
     void blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues();
     void blockSyncActiveFollowsInitializationAndBlockTipState();
     void alertNotificationsRefreshWarningList();
@@ -542,6 +543,34 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
     QCOMPARE(model.numPeers(), 9);
     QCOMPARE(model.numInboundPeers(), 2);
     QCOMPARE(model.numOutboundPeers(), 7);
+}
+
+void NodeModelTests::bannedListNotificationFromGuiThreadIsNotDeliveredReentrantly()
+{
+    MockNode node;
+    MempoolState mempool;
+    interfaces::Node::BannedListChangedFn banned_list_changed_fn;
+
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.handle_banned_list_changed_fn = [&](interfaces::Node::BannedListChangedFn fn) {
+        banned_list_changed_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+    QVERIFY(banned_list_changed_fn);
+
+    QSignalSpy banned_list_spy{&model, &NodeModel::bannedListChanged};
+
+    // A ban list change caused by a GUI action reaches the notification handler
+    // on the GUI thread. Delivering it directly would reset the ban list model
+    // while the QML handler that triggered it is still running.
+    banned_list_changed_fn();
+    QCOMPARE(banned_list_spy.count(), 0);
+
+    QTRY_COMPARE_WITH_TIMEOUT(banned_list_spy.count(), 1, ASYNC_TIMEOUT_MS);
 }
 
 void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()

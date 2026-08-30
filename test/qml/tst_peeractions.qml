@@ -85,6 +85,15 @@ TestCase {
         verify(message.text.indexOf(expectedText) >= 0)
     }
 
+    function verifyUnbanActionError(page) {
+        const popup = findChild(page, "unbanActionErrorPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        const message = findChild(popup, "actionErrorMessage")
+        verify(message !== null)
+        verify(message.text.indexOf("Could not unban peer.") >= 0)
+    }
+
     function test_disconnect_success_refreshes_peer_table_without_error() {
         const page = createPeerDetailsPage()
         const button = findChild(page, "peerDisconnectButton")
@@ -151,7 +160,7 @@ TestCase {
         verifyPeerActionError(page, "Could not ban peer.")
     }
 
-    function test_unban_success_refreshes_ban_list_without_error() {
+    function test_unban_success_leaves_refresh_to_the_model_without_error() {
         const page = createBannedPeersPage()
         const button = findChild(page, "unbanButton_0")
         const popup = findChild(page, "unbanActionErrorPopup")
@@ -161,7 +170,7 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
-        compare(banListModel.refreshCalls, 1)
+        compare(banListModel.refreshCalls, 0)
         compare(popup.opened, false)
     }
 
@@ -174,12 +183,36 @@ TestCase {
         button.clicked()
 
         compare(banListModel.unbanCalls, 1)
-        compare(banListModel.refreshCalls, 1)
+        compare(banListModel.refreshCalls, 0)
+        verifyUnbanActionError(page)
+    }
+
+    function test_unban_survives_synchronous_model_reset() {
+        banListModel.resetOnUnban = true
+        const page = createBannedPeersPage()
+        const button = findChild(page, "unbanButton_0")
         const popup = findChild(page, "unbanActionErrorPopup")
+        verify(button !== null)
         verify(popup !== null)
-        tryCompare(popup, "opened", true)
-        const message = findChild(popup, "actionErrorMessage")
-        verify(message !== null)
-        verify(message.text.indexOf("Could not unban peer.") >= 0)
+
+        button.clicked()
+
+        compare(banListModel.unbanCalls, 1)
+        compare(banListModel.refreshCalls, 0)
+        compare(popup.opened, false)
+    }
+
+    function test_unban_failure_with_synchronous_model_reset_opens_error_popup() {
+        banListModel.resetOnUnban = true
+        banListModel.unbanResult = false
+        const page = createBannedPeersPage()
+        const button = findChild(page, "unbanButton_0")
+        verify(button !== null)
+
+        button.clicked()
+
+        compare(banListModel.unbanCalls, 1)
+        compare(banListModel.refreshCalls, 0)
+        verifyUnbanActionError(page)
     }
 }
