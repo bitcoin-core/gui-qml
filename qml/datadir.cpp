@@ -118,6 +118,7 @@ QString ValidateCustomDataDir(const QString& path)
         accessible = accessible && target_info.isExecutable();
 #endif
         if (!accessible) {
+            //: Error shown during onboarding when the selected data directory cannot be read or entered.
             return DataDirTr("The selected directory is not accessible.");
         }
         if (!target_info.isWritable()) {
@@ -249,6 +250,7 @@ QString ValidateExplicitDataDir(const ArgsManager& args)
         return QString::fromStdString(e.what());
     }
 
+    //: Startup error shown when a data directory explicitly supplied on the command line does not exist. %1 is the supplied path.
     return DataDirTr("Specified data directory \"%1\" does not exist.")
         .arg(QString::fromStdString(args.GetArg("-datadir", "")));
 }
