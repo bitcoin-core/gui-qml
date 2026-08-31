@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 
 import org.bitcoincore.qt 1.0
 
@@ -23,6 +24,11 @@ Item {
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
+    readonly property bool windowVisible: root.Window.window !== null &&
+        root.Window.window.visible &&
+        root.Window.window.visibility !== Window.Hidden &&
+        root.Window.window.visibility !== Window.Minimized
+    readonly property bool presentationActive: root.renderingActive && root.visible && root.windowVisible
 
     width: dial.width
     height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
@@ -72,7 +78,7 @@ Item {
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
-        renderingActive: root.renderingActive
+        renderingActive: root.presentationActive
 
         Behavior on backgroundColor {
             ColorAnimation { duration: 150 }
@@ -143,7 +149,7 @@ Item {
         SequentialAnimation {
             id: estimatingTime
             objectName: "blockClockEstimatingAnimation"
-            running: root.renderingActive && subText.estimating
+            running: root.presentationActive && subText.estimating
             loops: Animation.Infinite
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }
@@ -161,7 +167,7 @@ Item {
         indicatorDimensions: dial.width * (3/200)
         indicatorSpacing: dial.width / 40
         paused: root.paused || root.faulted
-        active: root.renderingActive
+        active: root.presentationActive
     }
 
     NetworkIndicator {

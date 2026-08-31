@@ -396,6 +396,7 @@ void BlockClockDialTests::futureBlocksPreserveConfirmationDepth_data()
     QTest::addColumn<int>("future_confirmations");
 
     QTest::newRow("ahead-of-now") << QList<qreal>{0.25, 0.50, 0.76} << 1;
+    QTest::newRow("equal-future-timestamps") << QList<qreal>{0.25, 0.50, 0.76, 0.76} << 2;
     QTest::newRow("exactly-now") << QList<qreal>{0.25, 0.50, 0.75} << 1;
     QTest::newRow("period-end") << QList<qreal>{0.25, 0.50, 1.0} << 1;
     QTest::newRow("several-future-blocks") << QList<qreal>{0.25, 0.50, 0.76, 0.80} << 2;
