@@ -7,6 +7,7 @@
 
 #include <qml/core_settings.h>
 
+#include <QByteArray>
 #include <QSet>
 #include <QSettings>
 #include <QString>
@@ -39,6 +40,11 @@ struct GuiSettingsStore {
     QString file_name;
     QSettings::Format format{QSettings::NativeFormat};
     QSettings::Scope scope{QSettings::UserScope};
+};
+
+struct SettingsFileBackup {
+    QString source_path;
+    QByteArray contents;
 };
 
 struct PendingApply {
@@ -101,13 +107,14 @@ struct OnboardingStartupStatus {
 };
 
 bool PrepareArgs(ArgsManager& args, const std::vector<std::string>& argv, bool can_listen_ipc, std::string& error);
+bool CaptureSettingsFileBackup(ArgsManager& args, SettingsFileBackup& backup, QString* error = nullptr);
 GuiSettingsStore CurrentGuiSettingsStore();
 OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::string>& argv, bool can_listen_ipc);
 PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc, const DataDirSelection& data_dir);
 PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc, const QString& data_dir);
 bool MarkQmlOnboarded(ArgsManager& args, QString* error = nullptr);
 bool PrepareApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir, const QString& resolved_data_dir, const QSet<QString>& touched_settings, const QmlCoreSettings::Values& values, bool effective_reset, PendingApply& pending, QString* error = nullptr);
-bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstrap_gui_settings, const PendingApply* pending, FinalizeResult* result = nullptr, QString* error = nullptr);
+bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstrap_gui_settings, const PendingApply* pending, FinalizeResult* result = nullptr, QString* error = nullptr, const SettingsFileBackup* settings_file_backup = nullptr);
 
 } // namespace QmlOnboardingSettings
 

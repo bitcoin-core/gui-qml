@@ -96,6 +96,7 @@ private Q_SLOTS:
     void resetGuiSettingsClearsAndBacksUpSettingsJson();
     void resetGuiSettingsHonorsFinalSourcePrecedence();
     void resetGuiSettingsAllowsUnreadableSettingsProfile();
+    void resetGuiSettingsPreservesMalformedSettingsBackup();
     void resetLegacyCleanupRollsBackOnWriteFailure();
     void resetGuiSettingsPreviewIgnoresSelectedCustomDataDirSettingsJson();
     void resetGuiSettingsApplyClearsSelectedCustomDataDirSettingsJson();
@@ -175,6 +176,7 @@ private Q_SLOTS:
     void onboardingApplyRetainsListenChoiceWhenDisablingProxy();
     void onboardingApplyRejectsProfileDrift();
     void onboardingFinalizeIgnoresUnusedBootstrapStore();
+    void onboardingFinalizeIgnoresUnusedActiveStore();
     void onboardingApplyClearsResetFlagInBootstrapAndActiveStores();
 
 private:
@@ -1482,6 +1484,66 @@ void OptionsModelTests::resetGuiSettingsAllowsUnreadableSettingsProfile()
     };
     QVERIFY2(config_reset_status.ok, qPrintable(config_reset_status.error));
     QVERIFY(config_reset_status.should_show_onboarding);
+}
+
+void OptionsModelTests::resetGuiSettingsPreservesMalformedSettingsBackup()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    QVERIFY(QDir(data_dir.path()).mkpath(QStringLiteral("regtest")));
+
+    const QByteArray malformed_settings{"{not valid json"};
+    QFile settings_file{
+        QDir(data_dir.path()).filePath(QStringLiteral("regtest/settings.json"))
+    };
+    QVERIFY(settings_file.open(QIODevice::WriteOnly));
+    QCOMPARE(settings_file.write(malformed_settings), malformed_settings.size());
+    settings_file.close();
+
+    const std::vector<std::string> argv{TestArgvWithDataDir(data_dir.path())};
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
+
+    QmlOnboardingSettings::SettingsFileBackup captured_backup;
+    QString capture_error;
+    bool capture_called{false};
+    const std::optional<common::ConfigError> init_error{
+        common::InitConfig(
+            args,
+            [&](const bilingual_str&, const std::vector<std::string>&) {
+                capture_called = true;
+                return !QmlOnboardingSettings::CaptureSettingsFileBackup(
+                    args,
+                    captured_backup,
+                    &capture_error);
+            })
+    };
+    QVERIFY(capture_called);
+    QVERIFY2(capture_error.isEmpty(), qPrintable(capture_error));
+    QVERIFY2(!init_error, init_error ? init_error->message.original.c_str() : "");
+    args.SelectConfigNetwork(args.GetChainTypeString());
+
+    const QmlOnboardingSettings::GuiSettingsStore bootstrap_gui_settings{
+        QmlOnboardingSettings::CurrentGuiSettingsStore()
+    };
+    QString finalize_error;
+    QVERIFY2(
+        QmlOnboardingSettings::FinalizeStartupSettings(
+            args,
+            bootstrap_gui_settings,
+            /*pending=*/nullptr,
+            /*result=*/nullptr,
+            &finalize_error,
+            &captured_backup),
+        qPrintable(finalize_error));
+
+    fs::path backup_path;
+    QVERIFY(args.GetSettingsPath(&backup_path, /*temp=*/false, /*backup=*/true));
+    QFile backup_file{QString::fromStdString(fs::PathToString(backup_path))};
+    QVERIFY(backup_file.open(QIODevice::ReadOnly));
+    QCOMPARE(backup_file.readAll(), malformed_settings);
 }
 
 void OptionsModelTests::resetLegacyCleanupRollsBackOnWriteFailure()
@@ -4282,6 +4344,54 @@ void OptionsModelTests::onboardingFinalizeIgnoresUnusedBootstrapStore()
         /*file_name=*/unusable_store_path.path(),
         QSettings::IniFormat,
         QSettings::UserScope,
+    };
+    InitializeAndFinalizeSettings(
+        args,
+        bootstrap_gui_settings,
+        /*pending=*/nullptr,
+        /*result=*/nullptr);
+}
+
+void OptionsModelTests::onboardingFinalizeIgnoresUnusedActiveStore()
+{
+    const QString original_app_name{QCoreApplication::applicationName()};
+    [[maybe_unused]] const auto restore_app_name{
+        qScopeGuard([&] {
+            QCoreApplication::setApplicationName(original_app_name);
+        })
+    };
+    QCoreApplication::setApplicationName(QStringLiteral("UnreadableActiveStore"));
+
+    QString active_settings_path;
+    {
+        QSettings active_settings;
+        active_settings.setFallbacksEnabled(false);
+        active_settings_path = active_settings.fileName();
+    }
+    QVERIFY(QFile::remove(active_settings_path) || !QFileInfo::exists(active_settings_path));
+    QVERIFY(QDir().mkpath(active_settings_path));
+    [[maybe_unused]] const auto remove_unreadable_store{
+        qScopeGuard([&] {
+            QDir(active_settings_path).removeRecursively();
+        })
+    };
+    {
+        QSettings unreadable_settings;
+        unreadable_settings.setFallbacksEnabled(false);
+        unreadable_settings.sync();
+        QVERIFY(unreadable_settings.status() != QSettings::NoError);
+    }
+
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(
+        PrepareTestArgs(args, TestArgvWithDataDir(data_dir.path()), parse_error),
+        parse_error.c_str());
+
+    const QmlOnboardingSettings::GuiSettingsStore bootstrap_gui_settings{
+        QmlOnboardingSettings::CurrentGuiSettingsStore()
     };
     InitializeAndFinalizeSettings(
         args,
