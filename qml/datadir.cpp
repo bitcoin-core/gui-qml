@@ -26,11 +26,6 @@
 namespace {
 constexpr const char* RESET_GUI_SETTINGS_KEY{"fReset"};
 
-QString DataDirTr(const char* source_text)
-{
-    return QCoreApplication::translate("DataDirectory", source_text);
-}
-
 QString CleanComparablePath(const QString& path)
 {
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
@@ -101,27 +96,28 @@ QString ValidateCustomDataDir(const QString& path)
 {
 #ifdef __ANDROID__
     Q_UNUSED(path);
-    return DataDirTr("Custom data directories are not supported on this platform yet.");
+    return QCoreApplication::translate("DataDirectory", "Custom data directories are not supported on this platform yet.");
 #else
     const QString local_path = NormalizeLocalPath(path);
     if (local_path.isEmpty()) {
-        return DataDirTr("Choose a data directory.");
+        return QCoreApplication::translate("DataDirectory", "Choose a data directory.");
     }
 
     QFileInfo target_info(local_path);
     if (target_info.exists()) {
         if (!target_info.isDir()) {
-            return DataDirTr("The selected path exists and is not a directory.");
+            return QCoreApplication::translate("DataDirectory", "The selected path exists and is not a directory.");
         }
         bool accessible{target_info.isReadable()};
 #ifndef Q_OS_WIN
         accessible = accessible && target_info.isExecutable();
 #endif
         if (!accessible) {
-            return DataDirTr("The selected directory is not accessible.");
+            //: Error shown during onboarding when the selected data directory cannot be read or entered.
+            return QCoreApplication::translate("DataDirectory", "The selected directory is not accessible.");
         }
         if (!target_info.isWritable()) {
-            return DataDirTr("The selected directory is not writable.");
+            return QCoreApplication::translate("DataDirectory", "The selected directory is not writable.");
         }
     }
 
@@ -130,12 +126,12 @@ QString ValidateCustomDataDir(const QString& path)
         const QString current = parent_path;
         parent_path = QFileInfo(parent_path).absoluteDir().absolutePath();
         if (parent_path.isEmpty() || parent_path == current) {
-            return DataDirTr("The data directory cannot be created here.");
+            return QCoreApplication::translate("DataDirectory", "The data directory cannot be created here.");
         }
     }
     QFileInfo parent_info(parent_path);
     if (!parent_info.isDir() || !parent_info.isWritable()) {
-        return DataDirTr("The parent directory is not writable.");
+        return QCoreApplication::translate("DataDirectory", "The parent directory is not writable.");
     }
     return {};
 #endif
@@ -146,7 +142,7 @@ StorageSpaceResult CheckStorageSpace(const QString& path)
     StorageSpaceResult result;
     result.path = NormalizeLocalPath(path);
     if (result.path.isEmpty()) {
-        result.message = DataDirTr("Choose a data directory.");
+        result.message = QCoreApplication::translate("DataDirectory", "Choose a data directory.");
         return result;
     }
 
@@ -161,7 +157,7 @@ StorageSpaceResult CheckStorageSpace(const QString& path)
         }
 
         if (!fs::exists(parent_dir)) {
-            result.message = DataDirTr("Cannot create data directory here.");
+            result.message = QCoreApplication::translate("DataDirectory", "Cannot create data directory here.");
             return result;
         }
 
@@ -175,16 +171,16 @@ StorageSpaceResult CheckStorageSpace(const QString& path)
         if (result.path_exists) {
             if (result.path_is_directory) {
                 result.ok = true;
-                result.message = DataDirTr("Directory already exists.");
+                result.message = QCoreApplication::translate("DataDirectory", "Directory already exists.");
             } else {
-                result.message = DataDirTr("Path already exists, and is not a directory.");
+                result.message = QCoreApplication::translate("DataDirectory", "Path already exists, and is not a directory.");
             }
         } else {
             result.ok = true;
-            result.message = DataDirTr("A new data directory will be created.");
+            result.message = QCoreApplication::translate("DataDirectory", "A new data directory will be created.");
         }
     } catch (const fs::filesystem_error&) {
-        result.message = DataDirTr("Cannot create data directory here.");
+        result.message = QCoreApplication::translate("DataDirectory", "Cannot create data directory here.");
     }
     return result;
 }
@@ -204,7 +200,7 @@ bool EnsureDataDir(const QString& path, QString* error)
             TryCreateDirectories(data_dir_path / "wallets");
         }
     } catch (const fs::filesystem_error&) {
-        if (error) *error = DataDirTr("The selected data directory could not be created.");
+        if (error) *error = QCoreApplication::translate("DataDirectory", "The selected data directory could not be created.");
         return false;
     }
     if (error) error->clear();
@@ -261,7 +257,8 @@ QString ValidateExplicitDataDir(const ArgsManager& args)
         return QString::fromStdString(e.what());
     }
 
-    return DataDirTr("Specified data directory \"%1\" does not exist.")
+    //: Startup error shown when a data directory explicitly supplied on the command line does not exist. %1 is the supplied path.
+    return QCoreApplication::translate("DataDirectory", "Specified data directory \"%1\" does not exist.")
         .arg(QString::fromStdString(args.GetArg("-datadir", "")));
 }
 
