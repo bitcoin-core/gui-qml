@@ -303,11 +303,25 @@ enum class PreInitOnboardingStatus {
     FAILED,
 };
 
-bool ErrorSettingsRead(const bilingual_str& error, const std::vector<std::string>& details)
+bool ErrorSettingsRead(
+    const bilingual_str& error,
+    const std::vector<std::string>& details,
+    std::optional<QmlOnboardingSettings::SettingsFileBackup>& settings_file_backup,
+    QString& settings_file_backup_error)
 {
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        return false;
-    }
+    const auto capture_backup = [&] {
+        QmlOnboardingSettings::SettingsFileBackup backup;
+        if (!QmlOnboardingSettings::CaptureSettingsFileBackup(
+                gArgs,
+                backup,
+                &settings_file_backup_error)) {
+            return false;
+        }
+        settings_file_backup = std::move(backup);
+        return true;
+    };
+
+    if (gArgs.GetBoolArg("-resetguisettings", false)) return !capture_backup();
 
     QMessageBox message_box{
         QMessageBox::Critical,
@@ -315,13 +329,15 @@ bool ErrorSettingsRead(const bilingual_str& error, const std::vector<std::string
         QString::fromStdString(strprintf("%s.", error.translated)),
         QMessageBox::Reset | QMessageBox::Abort,
     };
+    /*: Explanatory text shown on startup when the settings file cannot be read.
+      Prompts user to make a choice between resetting or aborting. */
     message_box.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
     message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
     message_box.setTextFormat(Qt::PlainText);
     message_box.setDefaultButton(QMessageBox::Reset);
     switch (message_box.exec()) {
     case QMessageBox::Reset:
-        return false;
+        return !capture_backup();
     case QMessageBox::Abort:
         return true;
     default:
@@ -545,9 +561,20 @@ int QmlGuiMain(int argc, char* argv[])
         break;
     }
 
+    std::optional<QmlOnboardingSettings::SettingsFileBackup> settings_file_backup;
+    QString settings_file_backup_error;
     if (auto error = common::InitConfig(
             gArgs,
-            ErrorSettingsRead)) {
+            [&](const bilingual_str& message, const std::vector<std::string>& details) {
+                return ErrorSettingsRead(
+                    message,
+                    details,
+                    settings_file_backup,
+                    settings_file_backup_error);
+            })) {
+        if (!settings_file_backup_error.isEmpty()) {
+            InitError(Untranslated(settings_file_backup_error.toStdString()));
+        }
         return EXIT_FAILURE;
     }
 
@@ -558,7 +585,8 @@ int QmlGuiMain(int argc, char* argv[])
             bootstrap_gui_settings,
             pre_init_onboarding_context.pending_apply ? &*pre_init_onboarding_context.pending_apply : nullptr,
             /*result=*/nullptr,
-            &finalize_settings_error)) {
+            &finalize_settings_error,
+            settings_file_backup ? &*settings_file_backup : nullptr)) {
         InitError(Untranslated(finalize_settings_error.toStdString()));
         return EXIT_FAILURE;
     }

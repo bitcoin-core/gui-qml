@@ -168,8 +168,9 @@ def run_malformed_settings_reset_recovers(tmpdir):
     network_dir = os.path.join(harness.datadir, "regtest")
     os.makedirs(network_dir, exist_ok=True)
     settings_path = os.path.join(network_dir, "settings.json")
+    malformed_settings = "{not valid json"
     with open(settings_path, "w", encoding="utf8") as settings_file:
-        settings_file.write("{not valid json")
+        settings_file.write(malformed_settings)
 
     gui = None
     try:
@@ -178,6 +179,8 @@ def run_malformed_settings_reset_recovers(tmpdir):
         complete_current_onboarding(harness)
         settings = load_settings(harness.datadir)
         assert settings.get("qml_onboarded") is True, settings
+        with open(settings_path + ".bak", encoding="utf8") as backup_file:
+            assert backup_file.read() == malformed_settings
     except Exception:
         if gui is not None:
             dump_qml_tree(gui)

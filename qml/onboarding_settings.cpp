@@ -24,7 +24,10 @@
 #include <wallet/db.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QObject>
+#include <QSaveFile>
 #include <QSettings>
 #include <QVariantMap>
 
@@ -220,7 +223,14 @@ bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QStri
             return true;
         }
         result.settings_file_unreadable = true;
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to read settings.json.
+                *error = QObject::tr("Settings file could not be read.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
         return false;
     }
     if (error) error->clear();
@@ -349,14 +359,24 @@ bool WriteSettingsFile(ArgsManager& args, QString* error)
     if (!EnsureSettingsDirectory(args, settings_path, error)) return false;
     std::vector<std::string> settings_errors;
     if (!args.WriteSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to write settings.json.
+                *error = QObject::tr("Settings file could not be written.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
         return false;
     }
     if (error) error->clear();
     return true;
 }
 
-bool BackupSettingsFile(ArgsManager& args, QString* error)
+bool BackupSettingsFile(
+    ArgsManager& args,
+    const QmlOnboardingSettings::SettingsFileBackup* captured_backup,
+    QString* error)
 {
     fs::path settings_path;
     if (!args.GetSettingsPath(&settings_path)) {
@@ -364,9 +384,50 @@ bool BackupSettingsFile(ArgsManager& args, QString* error)
         return true;
     }
 
+    if (captured_backup) {
+        const QString current_path{
+            QmlDataDir::NormalizeLocalPath(
+                QString::fromStdString(fs::PathToString(settings_path)))
+        };
+        if (!SameDataDirPath(captured_backup->source_path, current_path)) {
+            if (error) {
+                //: Startup error shown when the settings file selected for reset changed before its backup could be written.
+                *error = QObject::tr("The settings file changed while startup was in progress. Restart before resetting settings.");
+            }
+            return false;
+        }
+
+        fs::path backup_path;
+        if (!args.GetSettingsPath(&backup_path, /*temp=*/false, /*backup=*/true)) {
+            return true;
+        }
+        QSaveFile backup_file{
+            QString::fromStdString(fs::PathToString(backup_path))
+        };
+        if (!backup_file.open(QIODevice::WriteOnly) ||
+            backup_file.write(captured_backup->contents) != captured_backup->contents.size() ||
+            !backup_file.commit()) {
+            if (error) {
+                //: Startup error shown when the original settings file cannot be saved before settings are reset. %1 is the backup file path.
+                *error = QObject::tr("Settings file backup could not be written to %1.")
+                             .arg(QString::fromStdString(fs::PathToString(backup_path)));
+            }
+            return false;
+        }
+        if (error) error->clear();
+        return true;
+    }
+
     std::vector<std::string> settings_errors;
     if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to back up settings.json before resetting it.
+                *error = QObject::tr("Settings file backup could not be written.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
         return false;
     }
     if (error) error->clear();
@@ -430,7 +491,10 @@ bool SyncGuiSettings(QSettings& settings, const QString& action, QString* error)
 {
     settings.sync();
     if (settings.status() == QSettings::NoError) return true;
-    if (error) *error = QStringLiteral("%1 failed for %2.").arg(action, settings.fileName());
+    if (error) {
+        //: Startup error shown when a GUI settings operation fails. %1 is the operation and %2 is the settings file path.
+        *error = QObject::tr("%1 failed for %2.").arg(action, settings.fileName());
+    }
     return false;
 }
 
@@ -444,14 +508,19 @@ bool WriteGuiSettings(QSettings& settings, const QVariantMap& values, const QStr
 }
 
 void RestoreGuiSettings(
+    std::unique_ptr<QSettings>& settings,
     const QmlOnboardingSettings::GuiSettingsStore& store,
     const QVariantMap& values,
     QString* error)
 {
-    std::unique_ptr<QSettings> settings{OpenGuiSettings(store)};
+    settings.reset();
+    settings = OpenGuiSettings(store);
     QString rollback_error;
-    if (!WriteGuiSettings(*settings, values, QStringLiteral("GUI settings rollback"), &rollback_error) && error) {
-        *error += QStringLiteral(" %1").arg(rollback_error);
+    //: Name of the operation that restores GUI settings after a later startup operation fails.
+    const QString rollback_action{QObject::tr("GUI settings rollback")};
+    if (!WriteGuiSettings(*settings, values, rollback_action, &rollback_error) && error) {
+        error->append(QLatin1Char(' '));
+        error->append(rollback_error);
     }
 }
 
@@ -462,10 +531,12 @@ bool BackupGuiSettings(QSettings& source, const fs::path& backup_path, QString* 
         QSettings::IniFormat,
     };
     backup.setFallbacksEnabled(false);
+    //: Name of the operation that backs up GUI settings before resetting them.
+    const QString backup_action{QObject::tr("GUI settings backup")};
     return WriteGuiSettings(
         backup,
         SnapshotGuiSettings(source),
-        QStringLiteral("GUI settings backup"),
+        backup_action,
         error);
 }
 
@@ -507,7 +578,9 @@ bool RollBackSettingsFile(ArgsManager& args, const std::map<std::string, common:
     QString rollback_error;
     if (WriteSettingsFile(args, &rollback_error)) return true;
     if (error) {
-        *error += QStringLiteral(" Settings rollback failed: %1").arg(rollback_error);
+        //: Startup error shown when settings.json cannot be restored after a later operation fails. %1 is the preceding error and %2 explains why restoration failed.
+        *error = QObject::tr("%1 Settings file rollback failed: %2")
+                     .arg(*error, rollback_error);
     }
     return false;
 }
@@ -556,7 +629,10 @@ bool ApplyPendingCoreSettings(ArgsManager& args, const QmlOnboardingSettings::Pe
     RestoreForcedSettings(args, original_forced_settings);
 
     if (!settings_written) {
-        if (error) *error = QStringLiteral("One or more startup settings could not be written.");
+        if (error) {
+            //: Startup error shown when one or more options selected during onboarding cannot be saved to settings.json.
+            *error = QObject::tr("One or more startup settings could not be written.");
+        }
         return false;
     }
 
@@ -597,12 +673,14 @@ bool ValidatePendingApply(
     const QmlOnboardingSettings::PendingApply& pending,
     QString* error)
 {
+    const auto profile_changed_error = [] {
+        //: Startup error shown when the data directory, network, settings file, or reset option changed after onboarding was opened.
+        return QObject::tr(
+            "The selected Bitcoin profile changed while onboarding was open. "
+            "Restart and review the current data directory, network, and settings before applying.");
+    };
     if (pending.effective_reset != args.GetBoolArg("-resetguisettings", false)) {
-        if (error) {
-            *error = QStringLiteral(
-                "The selected Bitcoin profile changed while onboarding was open. "
-                "Restart and review the current data directory, network, and settings before applying.");
-        }
+        if (error) *error = profile_changed_error();
         return false;
     }
 
@@ -617,11 +695,7 @@ bool ValidatePendingApply(
         return true;
     }
 
-    if (error) {
-        *error = QStringLiteral(
-            "The selected Bitcoin profile changed while onboarding was open. "
-            "Restart and review the current data directory, network, and settings before applying.");
-    }
+    if (error) *error = profile_changed_error();
     return false;
 }
 
@@ -679,6 +753,40 @@ bool PrepareArgs(ArgsManager& args, const std::vector<std::string>& argv, bool c
     raw_argv.reserve(argv.size());
     for (const std::string& arg : argv) raw_argv.push_back(arg.c_str());
     return args.ParseParameters(static_cast<int>(raw_argv.size()), raw_argv.data(), error);
+}
+
+bool CaptureSettingsFileBackup(ArgsManager& args, SettingsFileBackup& backup, QString* error)
+{
+    if (error) error->clear();
+    backup = {};
+
+    fs::path settings_path;
+    if (!args.GetSettingsPath(&settings_path)) return true;
+
+    QFile settings_file{
+        QString::fromStdString(fs::PathToString(settings_path))
+    };
+    if (!settings_file.open(QIODevice::ReadOnly)) {
+        if (error) {
+            //: Startup error shown when the existing settings file cannot be preserved before resetting it. %1 is the settings file path.
+            *error = QObject::tr("Settings file %1 could not be preserved before reset.")
+                         .arg(settings_file.fileName());
+        }
+        return false;
+    }
+
+    backup.source_path = QmlDataDir::NormalizeLocalPath(settings_file.fileName());
+    backup.contents = settings_file.readAll();
+    if (settings_file.error() != QFileDevice::NoError) {
+        if (error) {
+            //: Startup error shown when the existing settings file cannot be preserved before resetting it. %1 is the settings file path.
+            *error = QObject::tr("Settings file %1 could not be preserved before reset.")
+                         .arg(settings_file.fileName());
+        }
+        backup = {};
+        return false;
+    }
+    return true;
 }
 
 GuiSettingsStore CurrentGuiSettingsStore()
@@ -924,29 +1032,42 @@ bool PrepareApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir_sele
     return true;
 }
 
-bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstrap_gui_settings, const PendingApply* pending, FinalizeResult* result, QString* error)
+bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstrap_gui_settings, const PendingApply* pending, FinalizeResult* result, QString* error, const SettingsFileBackup* settings_file_backup)
 {
     if (error) error->clear();
     if (result) *result = {};
 
     if (pending && !ValidatePendingApply(args, *pending, error)) return false;
 
-    const bool reset_gui_settings{args.GetBoolArg("-resetguisettings", false)};
+    // A captured backup means InitConfig recovered from an unreadable
+    // settings file after the user selected Reset. Treat that choice the same
+    // as an explicit -resetguisettings request.
+    const bool reset_gui_settings{
+        args.GetBoolArg("-resetguisettings", false) || settings_file_backup != nullptr
+    };
     const std::map<std::string, common::SettingsValue> original_rw_settings{SnapshotRwSettings(args)};
 
-    const GuiSettingsStore active_gui_settings_store{CurrentGuiSettingsStore()};
-    std::unique_ptr<QSettings> active_gui_settings{OpenGuiSettings(active_gui_settings_store)};
-    const QVariantMap original_active_gui_settings{SnapshotGuiSettings(*active_gui_settings)};
-    if (active_gui_settings->status() != QSettings::NoError) {
-        if (error) {
-            *error = QStringLiteral("GUI settings could not be read from %1.")
-                         .arg(active_gui_settings->fileName());
+    const bool gui_settings_needed{pending != nullptr || reset_gui_settings};
+    GuiSettingsStore active_gui_settings_store;
+    std::unique_ptr<QSettings> active_gui_settings;
+    QVariantMap original_active_gui_settings;
+    bool bootstrap_is_active{false};
+    if (gui_settings_needed) {
+        active_gui_settings_store = CurrentGuiSettingsStore();
+        active_gui_settings = OpenGuiSettings(active_gui_settings_store);
+        original_active_gui_settings = SnapshotGuiSettings(*active_gui_settings);
+        if (active_gui_settings->status() != QSettings::NoError) {
+            if (error) {
+                //: Startup error shown when the network-specific GUI settings file cannot be read. %1 is the file path.
+                *error = QObject::tr("GUI settings could not be read from %1.")
+                             .arg(active_gui_settings->fileName());
+            }
+            return false;
         }
-        return false;
+        bootstrap_is_active = SameGuiSettingsStore(active_gui_settings_store, bootstrap_gui_settings);
     }
-    const bool bootstrap_is_active{SameGuiSettingsStore(active_gui_settings_store, bootstrap_gui_settings)};
     const bool bootstrap_settings_needed{
-        !bootstrap_is_active && (pending != nullptr || reset_gui_settings)
+        gui_settings_needed && !bootstrap_is_active
     };
     std::unique_ptr<QSettings> bootstrap_gui_settings_owner;
     QSettings* bootstrap_settings{bootstrap_is_active ? active_gui_settings.get() : nullptr};
@@ -957,7 +1078,8 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
         original_bootstrap_gui_settings = SnapshotGuiSettings(*bootstrap_settings);
         if (bootstrap_settings->status() != QSettings::NoError) {
             if (error) {
-                *error = QStringLiteral("Bootstrap GUI settings could not be read from %1.")
+                //: Startup error shown when the GUI settings file used before network selection cannot be read. %1 is the file path.
+                *error = QObject::tr("Bootstrap GUI settings could not be read from %1.")
                              .arg(bootstrap_settings->fileName());
             }
             return false;
@@ -965,7 +1087,7 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
     }
 
     if (reset_gui_settings) {
-        if (!BackupSettingsFile(args, error)) return false;
+        if (!BackupSettingsFile(args, settings_file_backup, error)) return false;
         if (!BackupGuiSettings(*active_gui_settings, args.GetDataDirNet() / "guisettings.ini.bak", error)) return false;
         args.LockSettings([](common::Settings& settings) {
             settings.rw_settings.clear();
@@ -1019,26 +1141,30 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
     const bool bootstrap_gui_settings_changed{
         bootstrap_settings_needed && bootstrap_gui_settings_values != original_bootstrap_gui_settings
     };
+    //: Name of the operation that saves network-specific GUI settings during startup.
+    const QString active_update_action{QObject::tr("GUI settings update")};
     if (active_gui_settings_changed &&
         !WriteGuiSettings(
             *active_gui_settings,
             active_gui_settings_values,
-            QStringLiteral("GUI settings update"),
+            active_update_action,
             error)) {
-        RestoreGuiSettings(active_gui_settings_store, original_active_gui_settings, error);
+        RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
         RollBackSettingsFile(args, original_rw_settings, error);
         return false;
     }
+    //: Name of the operation that saves GUI settings used before network selection.
+    const QString bootstrap_update_action{QObject::tr("Bootstrap GUI settings update")};
     if (bootstrap_gui_settings_changed &&
         !WriteGuiSettings(
             *bootstrap_settings,
             bootstrap_gui_settings_values,
-            QStringLiteral("Bootstrap GUI settings update"),
+            bootstrap_update_action,
             error)) {
         if (active_gui_settings_changed) {
-            RestoreGuiSettings(active_gui_settings_store, original_active_gui_settings, error);
+            RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
         }
-        RestoreGuiSettings(bootstrap_gui_settings, original_bootstrap_gui_settings, error);
+        RestoreGuiSettings(bootstrap_gui_settings_owner, bootstrap_gui_settings, original_bootstrap_gui_settings, error);
         RollBackSettingsFile(args, original_rw_settings, error);
         return false;
     }
@@ -1076,10 +1202,10 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
     if (!legacy_cleanup_ok) {
         if (error) *error = legacy_cleanup_error;
         if (bootstrap_gui_settings_changed) {
-            RestoreGuiSettings(bootstrap_gui_settings, original_bootstrap_gui_settings, error);
+            RestoreGuiSettings(bootstrap_gui_settings_owner, bootstrap_gui_settings, original_bootstrap_gui_settings, error);
         }
         if (active_gui_settings_changed) {
-            RestoreGuiSettings(active_gui_settings_store, original_active_gui_settings, error);
+            RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
         }
         RollBackSettingsFile(args, original_rw_settings, error);
         return false;
