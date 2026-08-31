@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 
 import org.bitcoincore.qt 1.0
 
@@ -23,6 +24,11 @@ Item {
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property bool offline: networkStatusModelRef !== null && networkStatusModelRef.networkOffline
+    readonly property bool windowVisible: root.Window.window !== null &&
+        root.Window.window.visible &&
+        root.Window.window.visibility !== Window.Hidden &&
+        root.Window.window.visibility !== Window.Minimized
+    readonly property bool presentationActive: root.renderingActive && root.visible && root.windowVisible
 
     readonly property bool showOfflineState: !root.faulted && root.offline
     readonly property bool showPausedState: root.paused && !root.faulted && !root.offline
@@ -63,7 +69,7 @@ Item {
         backgroundColor: Theme.color.neutral3
         timeTickColor: "transparent"
         confirmationColors: Theme.color.confirmationColors
-        renderingActive: root.renderingActive
+        renderingActive: root.presentationActive
     }
 
     Item {

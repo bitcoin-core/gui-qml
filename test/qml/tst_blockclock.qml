@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/components"
 
@@ -11,6 +12,13 @@ TestCase {
     when: windowShown
     width: 800
     height: 700
+
+    Window {
+        id: presentationWindow
+        width: 800
+        height: 700
+        visible: false
+    }
 
     QtObject {
         id: nodeModelMock
@@ -201,7 +209,14 @@ TestCase {
 
             verify(subText !== null)
             compare(subText.text, "Pre-syncing headers")
-            verify(subText.paintedWidth <= subText.width)
+            tryVerify(function() {
+                return subText.paintedWidth <= subText.width
+            }, 1000)
+            verify(!subText.truncated,
+                   "text was truncated at requested pixel size " + subText.font.pixelSize +
+                   ", resolved pixel size " + subText.fontInfo.pixelSize +
+                   ", width " + subText.width +
+                   ", painted width " + subText.paintedWidth)
         }
     }
 
@@ -463,13 +478,21 @@ TestCase {
         nodeModelMock.numPeers = 1
         nodeModelMock.verificationProgress = 0.5
         nodeModelMock.remainingSyncTime = 0
-        const clock = createClock()
+        presentationWindow.visible = true
+        const clock = createTemporaryObject(blockClockComponent, presentationWindow.contentItem)
+        verify(clock !== null)
+        wait(0)
         const dial = findChild(clock, "blockClockDial")
         const estimatingAnimation = findChild(clock, "blockClockEstimatingAnimation")
         const peers = findChild(clock, "blockClockPeersIndicator")
         verify(dial !== null)
         verify(estimatingAnimation !== null)
         verify(peers !== null)
+        compare(clock.renderingActive, true)
+        compare(clock.visible, true)
+        compare(clock.windowVisible, true)
+        compare(clock.presentationActive, true)
+        compare(clock.estimating, true)
         tryCompare(estimatingAnimation, "running", true)
 
         clock.renderingActive = false
@@ -486,5 +509,60 @@ TestCase {
         compare(dial.renderingActive, true)
         compare(dial.currentTimeFraction, 0.75)
         compare(dial.blockTimeFractions.length, 3)
+
+        clock.visible = false
+        compare(clock.presentationActive, false)
+        compare(dial.renderingActive, false)
+        compare(peers.active, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        clock.visible = true
+        compare(clock.presentationActive, true)
+        compare(dial.renderingActive, true)
+        compare(peers.active, true)
+        tryCompare(estimatingAnimation, "running", true)
+        presentationWindow.visible = false
+    }
+
+    function test_hidden_window_suspends_clock_presentations() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 0.5
+        nodeModelMock.remainingSyncTime = 0
+        presentationWindow.visible = true
+
+        const clock = createTemporaryObject(blockClockComponent, presentationWindow.contentItem)
+        verify(clock !== null)
+        const miniClock = createTemporaryObject(miniBlockClockComponent, presentationWindow.contentItem)
+        verify(miniClock !== null)
+        const dial = findChild(clock, "blockClockDial")
+        const miniDial = findChild(miniClock, "miniBlockClockDial")
+        const estimatingAnimation = findChild(clock, "blockClockEstimatingAnimation")
+        const peers = findChild(clock, "blockClockPeersIndicator")
+        verify(dial !== null)
+        verify(miniDial !== null)
+        verify(estimatingAnimation !== null)
+        verify(peers !== null)
+        tryCompare(clock, "presentationActive", true)
+        tryCompare(miniClock, "presentationActive", true)
+        compare(miniDial.renderingActive, true)
+        tryCompare(estimatingAnimation, "running", true)
+
+        presentationWindow.visible = false
+        tryCompare(clock, "presentationActive", false)
+        tryCompare(miniClock, "presentationActive", false)
+        compare(dial.renderingActive, false)
+        compare(miniDial.renderingActive, false)
+        compare(peers.presentationActive, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        presentationWindow.visible = true
+        tryCompare(clock, "presentationActive", true)
+        tryCompare(miniClock, "presentationActive", true)
+        compare(dial.renderingActive, true)
+        compare(miniDial.renderingActive, true)
+        compare(peers.presentationActive, true)
+        tryCompare(estimatingAnimation, "running", true)
+        presentationWindow.visible = false
     }
 }
