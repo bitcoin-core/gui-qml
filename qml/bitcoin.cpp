@@ -340,11 +340,25 @@ enum class PreInitOnboardingStatus {
     FAILED,
 };
 
-bool ErrorSettingsRead(const bilingual_str& error, const std::vector<std::string>& details)
+bool ErrorSettingsRead(
+    const bilingual_str& error,
+    const std::vector<std::string>& details,
+    std::optional<QmlOnboardingSettings::SettingsFileBackup>& settings_file_backup,
+    QString& settings_file_backup_error)
 {
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        return false;
-    }
+    const auto capture_backup = [&] {
+        QmlOnboardingSettings::SettingsFileBackup backup;
+        if (!QmlOnboardingSettings::CaptureSettingsFileBackup(
+                gArgs,
+                backup,
+                &settings_file_backup_error)) {
+            return false;
+        }
+        settings_file_backup = std::move(backup);
+        return true;
+    };
+
+    if (gArgs.GetBoolArg("-resetguisettings", false)) return !capture_backup();
 
     QMessageBox message_box{
         QMessageBox::Critical,
@@ -352,13 +366,15 @@ bool ErrorSettingsRead(const bilingual_str& error, const std::vector<std::string
         QString::fromStdString(strprintf("%s.", error.translated)),
         QMessageBox::Reset | QMessageBox::Abort,
     };
+    /*: Explanatory text shown on startup when the settings file cannot be read.
+      Prompts user to make a choice between resetting or aborting. */
     message_box.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
     message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
     message_box.setTextFormat(Qt::PlainText);
     message_box.setDefaultButton(QMessageBox::Reset);
     switch (message_box.exec()) {
     case QMessageBox::Reset:
-        return false;
+        return !capture_backup();
     case QMessageBox::Abort:
         return true;
     default:
@@ -629,14 +645,19 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     std::unique_ptr<interfaces::Node> node;
     std::unique_ptr<interfaces::Chain> chain;
     const auto prepare_node = [&](const QmlOnboardingSettings::PendingApply* pending = nullptr) {
+        std::optional<QmlOnboardingSettings::SettingsFileBackup> settings_file_backup;
+        QString settings_file_backup_error;
         const auto read_error = [&](const bilingual_str& message, const std::vector<std::string>& details) {
             bool abort{true};
-            const auto show_error = [&] { abort = ErrorSettingsRead(message, details); };
+            const auto show_error = [&] { abort = ErrorSettingsRead(message, details, settings_file_backup, settings_file_backup_error); };
             if (QThread::currentThread() == app.thread()) show_error();
             else QMetaObject::invokeMethod(&app, show_error, Qt::BlockingQueuedConnection);
             return abort;
         };
-        if (common::InitConfig(gArgs, read_error)) return false;
+        if (common::InitConfig(gArgs, read_error)) {
+            if (!settings_file_backup_error.isEmpty()) InitError(Untranslated(settings_file_backup_error.toStdString()));
+            return false;
+        }
         const auto setup_settings = [&] {
             setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
         };
@@ -644,7 +665,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         else QMetaObject::invokeMethod(&app, setup_settings, Qt::BlockingQueuedConnection);
         QString finalize_settings_error;
         if (!QmlOnboardingSettings::FinalizeStartupSettings(
-                gArgs, bootstrap_gui_settings, pending, nullptr, &finalize_settings_error)) {
+                gArgs, bootstrap_gui_settings, pending, nullptr, &finalize_settings_error,
+                settings_file_backup ? &*settings_file_backup : nullptr)) {
             return InitError(Untranslated(finalize_settings_error.toStdString()));
         }
         // GUI programs should not print to the console unnecessarily.

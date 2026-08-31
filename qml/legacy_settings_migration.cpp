@@ -26,6 +26,7 @@
 
 #include <QDataStream>
 #include <QMetaType>
+#include <QObject>
 #include <QSettings>
 #include <QVariant>
 #include <QVariantMap>
@@ -220,8 +221,13 @@ bool RestoreStores(
         if (store.settings->status() != QSettings::NoError) {
             restored = false;
             if (error) {
-                *error += QStringLiteral(" Legacy settings rollback failed for %1.")
-                              .arg(store.settings->fileName());
+                //: Startup error shown when legacy GUI settings cannot be restored after a later operation fails. %1 is the settings file path.
+                const QString rollback_error{
+                    QObject::tr("Legacy settings rollback failed for %1.")
+                        .arg(store.settings->fileName())
+                };
+                if (!error->isEmpty()) error->append(QLatin1Char(' '));
+                error->append(rollback_error);
             }
         }
     }
@@ -240,7 +246,8 @@ bool CommitStores(
         if (store.settings->status() == QSettings::NoError) continue;
 
         if (error) {
-            *error = QStringLiteral("%1 failed for %2.")
+            //: Startup error shown when a legacy GUI settings operation fails. %1 is the operation and %2 is the settings file path.
+            *error = QObject::tr("%1 failed for %2.")
                          .arg(action, store.settings->fileName());
         }
         RestoreStores(stores, snapshots, error);
@@ -594,7 +601,9 @@ bool ClearLegacyGuiSettings(const QString& chain, QString* error)
     ApplyGuiCleanup(*data_dir_store.settings, GuiCleanup::DataDirAndReset);
     MarkChangedStores(stores, snapshots);
 
-    return CommitStores(stores, snapshots, QStringLiteral("Legacy GUI settings cleanup"), error);
+    //: Name of the operation that removes obsolete GUI settings during startup.
+    const QString cleanup_action{QObject::tr("Legacy GUI settings cleanup")};
+    return CommitStores(stores, snapshots, cleanup_action, error);
 }
 
 MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode, GuiCleanup cleanup)
@@ -632,13 +641,12 @@ MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode, GuiCl
         if (mode == MigrationMode::Persist) {
             MarkChangedStores(stores, snapshots);
         }
-        if (mode == MigrationMode::Persist &&
-            !CommitStores(
-                stores,
-                snapshots,
-                QStringLiteral("Legacy GUI settings migration"),
-                &result.error)) {
-            RestoreRwSettings(args, original_rw_settings);
+        if (mode == MigrationMode::Persist) {
+            //: Name of the operation that moves settings from older Bitcoin GUI versions during startup.
+            const QString migration_action{QObject::tr("Legacy GUI settings migration")};
+            if (!CommitStores(stores, snapshots, migration_action, &result.error)) {
+                RestoreRwSettings(args, original_rw_settings);
+            }
         }
     } catch (const std::exception& e) {
         result.error = QString::fromStdString(e.what());
