@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: MacOS Install Deps
         if: contains(matrix.os, 'macos')
@@ -48,7 +48,7 @@ jobs:
           echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> "$GITHUB_ENV"
 
       - name: Restore Ccache cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: ccache-cache
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -64,7 +64,7 @@ jobs:
           cmake --build build -j$(nproc)
 
       - name: Save Ccache cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: github.event_name != 'pull_request' && steps.ccache-cache.outputs.cache-hit != 'true'
         with:
           path: ${{ env.CCACHE_DIR }}
