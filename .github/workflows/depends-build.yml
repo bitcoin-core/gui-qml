@@ -46,7 +46,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -101,7 +101,7 @@ jobs:
           fi
 
       - name: Restore depends sources cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: depends-sources-cache
         with:
           path: bitcoin/depends/sources
@@ -110,7 +110,7 @@ jobs:
             ${{ matrix.cache-id }}-depends-sources-
 
       - name: Restore depends package cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: depends-built-cache
         with:
           path: bitcoin/depends/built
@@ -124,14 +124,14 @@ jobs:
           ${{ matrix.make }} -j"${JOBS}" HOST="${HOST}" DEBUG= LOG=1
 
       - name: Save depends sources cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: github.event_name != 'pull_request' && steps.depends-sources-cache.outputs.cache-hit != 'true'
         with:
           path: bitcoin/depends/sources
           key: ${{ steps.depends-sources-cache.outputs.cache-primary-key }}
 
       - name: Save depends package cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: github.event_name != 'pull_request' && steps.depends-built-cache.outputs.cache-hit != 'true'
         with:
           path: bitcoin/depends/built

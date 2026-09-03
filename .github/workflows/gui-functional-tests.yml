@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -43,7 +43,7 @@ jobs:
             qml6-module-qtquick-dialogs qml6-module-qtquick-templates
 
       - name: Restore legacy bitcoind cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: legacy-bitcoind-cache
         with:
           path: releases/v${{ env.LEGACY_BITCOIND_VERSION }}
@@ -77,14 +77,14 @@ jobs:
           "${legacy_dir}/bin/bitcoind" --version | head -n 1
 
       - name: Save legacy bitcoind cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: github.event_name != 'pull_request' && steps.legacy-bitcoind-cache.outputs.cache-hit != 'true'
         with:
           path: releases/v${{ env.LEGACY_BITCOIND_VERSION }}
           key: ${{ runner.os }}-legacy-bitcoind-v${{ env.LEGACY_BITCOIND_VERSION }}
 
       - name: Restore bitcoin-qt compatibility cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         id: bitcoin-qt-compat-cache
         with:
           path: releases/v${{ env.QT_COMPAT_VERSION }}
@@ -118,7 +118,7 @@ jobs:
           "${compat_dir}/bin/bitcoin-qt" --version | head -n 1
 
       - name: Save bitcoin-qt compatibility cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         if: github.event_name != 'pull_request' && steps.bitcoin-qt-compat-cache.outputs.cache-hit != 'true'
         with:
           path: releases/v${{ env.QT_COMPAT_VERSION }}
