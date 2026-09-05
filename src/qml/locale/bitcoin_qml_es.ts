@@ -165,6 +165,20 @@
     </message>
 </context>
 <context>
+    <name>DebugLogModel</name>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="127"/>
+        <source>Debug log file not found: %1</source>
+        <translation type="unfinished">Archivo de registro de depuración no encontrado: %1</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="133"/>
+        <source>Could not open debug log file. No application is associated with this file type.</source>
+        <translation type="unfinished">No se pudo abrir el archivo de registro de depuración. Ninguna aplicación está asociada con este tipo de archivo.</translation>
+    </message>
+</context>
+
+<context>
     <name>ExternalPopup</name>
     <message>
         <location filename="../components/ExternalPopup.qml" line="31"/>
@@ -1458,6 +1472,44 @@ Si lo encuentras útil, por favor contribuye.
         <location filename="../pages/node/NetworkTraffic.qml" line="149"/>
         <source>Sent: %1</source>
         <translation type="unfinished">Enviado: %1</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDebugLog</name>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="52"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="161"/>
+        <source>Search...</source>
+        <translation type="unfinished">Buscar...</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="162"/>
+        <source>Search debug log</source>
+        <translation type="unfinished">Buscar en el registro de depuración</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="215"/>
+        <source>1 new entry</source>
+        <translation type="unfinished">1 entrada nueva</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="216"/>
+        <source>%1 new entries</source>
+        <translation type="unfinished">%1 entradas nuevas</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="285"/>
+        <source>Debug log entries</source>
+        <translation type="unfinished">Entradas del registro de depuración</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDebugLog.qml" line="307"/>
+        <source>Load more</source>
+        <translation type="unfinished">Cargar más</translation>
     </message>
 </context>
 </TS>

@@ -23,9 +23,23 @@ RowLayout {
         onClicked: warningsPopup.open()
     }
 
+    IconButton {
+        objectName: "nodeInformationButton"
+        iconSource: "image://images/info"
+        iconColor: Theme.color.neutral7
+        hoverColor: Theme.color.neutral9
+        activeColor: Theme.color.orange
+        size: 34
+        onClicked: informationPopup.open()
+    }
+
     NodeWarningsPopup {
         id: warningsPopup
         parent: Overlay.overlay
     }
 
+    NodeInformationPopup {
+        id: informationPopup
+        parent: Overlay.overlay
+    }
 }
