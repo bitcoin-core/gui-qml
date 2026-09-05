@@ -50,6 +50,8 @@ add_library(bitcoinqml STATIC
   initexecutor.h
   legacy_settings_migration.cpp
   legacy_settings_migration.h
+  models/banlistmodel.cpp
+  models/banlistmodel.h
   models/chainmodel.cpp
   models/chainmodel.h
   models/chainsyncmodel.cpp
@@ -75,6 +77,12 @@ add_library(bitcoinqml STATIC
   models/onboardingoptionsmodel.h
   models/options_model.cpp
   models/options_model.h
+  models/peerdetailsmodel.cpp
+  models/peerdetailsmodel.h
+  models/peerlistmodel.cpp
+  models/peerlistmodel.h
+  models/peerlistsortproxy.cpp
+  models/peerlistsortproxy.h
   models/runtimedialogmodel.cpp
   models/runtimedialogmodel.h
   models/settings_keys.h
@@ -84,6 +92,8 @@ add_library(bitcoinqml STATIC
   onboarding_settings.h
   onboarding_storage.cpp
   onboarding_storage.h
+  peerstatsutil.cpp
+  peerstatsutil.h
   translationmanager.cpp
   translationmanager.h
   ${BITCOIN_QML_QRC}

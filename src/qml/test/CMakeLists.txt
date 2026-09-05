@@ -11,6 +11,7 @@ add_executable(test_bitcoin-qt
   test_navigation_integration.cpp
   test_onboarding_integration.cpp
   test_node_integration.cpp
+  test_banlistmodel.cpp
   test_blockclockdial.cpp
   test_desktopwindowbehaviormodel.cpp
   test_display_settings.cpp
@@ -22,6 +23,8 @@ add_executable(test_bitcoin-qt
   test_onboarding_storage.cpp
   test_onboarding_profile.cpp
   test_startupsettings.cpp
+  test_peerlistmodel.cpp
+  test_peerstatsutil.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )

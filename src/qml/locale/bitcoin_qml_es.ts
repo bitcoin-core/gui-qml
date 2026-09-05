@@ -36,6 +36,40 @@
 </context>
 
 <context>
+    <name>BannedPeers</name>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="22"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="28"/>
+        <source>Banned peers</source>
+        <translation type="unfinished">Pares bloqueados</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="48"/>
+        <source>You banned these peers from connecting to your node.</source>
+        <translation type="unfinished">Has bloqueado estos pares para que no se conecten a tu nodo.</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="87"/>
+        <source>Until %1</source>
+        <translation type="unfinished">Hasta %1</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="97"/>
+        <source>Unban</source>
+        <translation type="unfinished">Desbloquear</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/BannedPeers.qml" line="110"/>
+        <source>No banned peers.</source>
+        <translation type="unfinished">No hay pares bloqueados.</translation>
+    </message>
+</context>
+
+<context>
     <name>BlockClock</name>
     <message>
         <location filename="../components/BlockClock.qml" line="229"/>
@@ -421,6 +455,292 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
     </message>
 </context>
 
+<context>
+    <name>PeerDetails</name>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="30"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="36"/>
+        <source>Peer %1</source>
+        <translation type="unfinished">Par %1</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="55"/>
+        <source>Information</source>
+        <translation type="unfinished">Información</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="66"/>
+        <source>Address</source>
+        <translation type="unfinished">Dirección</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="67"/>
+        <source>VIA</source>
+        <translation type="unfinished">VÍA</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="68"/>
+        <source>Type</source>
+        <translation type="unfinished">Tipo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="74"/>
+        <source>Permissions</source>
+        <translation type="unfinished">Permisos</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="94"/>
+        <source>Version</source>
+        <translation type="unfinished">Versión</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="95"/>
+        <source>User agent</source>
+        <translation type="unfinished">Agente de usuario</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="96"/>
+        <source>Services</source>
+        <translation type="unfinished">Servicios</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="100"/>
+        <source>Transaction relay</source>
+        <translation type="unfinished">Retransmisión de transacciones</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="111"/>
+        <source>Address relay</source>
+        <translation type="unfinished">Retransmisión de direcciones</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="124"/>
+        <source>Mapped AS</source>
+        <translation type="unfinished">Sistema autónomo asignado</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="151"/>
+        <source>Block data</source>
+        <translation type="unfinished">Datos de bloques</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="161"/>
+        <source>Starting block</source>
+        <translation type="unfinished">Bloque inicial</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="162"/>
+        <source>Synced headers</source>
+        <translation type="unfinished">Cabeceras sincronizadas</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="163"/>
+        <source>Synced blocks</source>
+        <translation type="unfinished">Bloques sincronizados</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="167"/>
+        <source>Network traffic</source>
+        <translation type="unfinished">Tráfico de red</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="177"/>
+        <source>Direction</source>
+        <translation type="unfinished">Sentido</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="190"/>
+        <source>Connection time</source>
+        <translation type="unfinished">Tiempo de conexión</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="191"/>
+        <source>Last send</source>
+        <translation type="unfinished">Último envío</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="191"/>
+        <location filename="../pages/node/PeerDetails.qml" line="192"/>
+        <source> ago</source>
+        <translation type="unfinished"> atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="192"/>
+        <source>Last receive</source>
+        <translation type="unfinished">Última recepción</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="193"/>
+        <source>Sent</source>
+        <translation type="unfinished">Enviado</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="193"/>
+        <location filename="../pages/node/PeerDetails.qml" line="194"/>
+        <source> total</source>
+        <translation type="unfinished"> total</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="194"/>
+        <source>Received</source>
+        <translation type="unfinished">Recibido</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="195"/>
+        <source>Ping time</source>
+        <translation type="unfinished">Tiempo de ping</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="201"/>
+        <source>Ping wait</source>
+        <translation type="unfinished">Espera de ping</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="231"/>
+        <source>Min ping</source>
+        <translation type="unfinished">Ping mínimo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="232"/>
+        <source>Time offset</source>
+        <translation type="unfinished">Desfase de tiempo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="243"/>
+        <source>Disconnect</source>
+        <translation type="unfinished">Desconectar</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="252"/>
+        <location filename="../pages/node/PeerDetails.qml" line="348"/>
+        <source>Ban</source>
+        <translation type="unfinished">Bloquear</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="276"/>
+        <source>1 hour</source>
+        <translation type="unfinished">1 hora</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="277"/>
+        <source>1 day</source>
+        <translation type="unfinished">1 día</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="278"/>
+        <source>1 week</source>
+        <translation type="unfinished">1 semana</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="279"/>
+        <source>1 year</source>
+        <translation type="unfinished">1 año</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="289"/>
+        <source>Ban this peer</source>
+        <translation type="unfinished">Bloquear este par</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/PeerDetails.qml" line="340"/>
+        <source>Cancel</source>
+        <translation type="unfinished">Cancelar</translation>
+    </message>
+</context>
+<context>
+    <name>PeerDetailsModel</name>
+    <message>
+        <location filename="../models/peerdetailsmodel.h" line="70"/>
+        <location filename="../models/peerdetailsmodel.h" line="73"/>
+        <source>N/A</source>
+        <translation type="unfinished">N/D</translation>
+    </message>
+</context>
+<context>
+    <name>PeerListModel</name>
+    <message>
+        <location filename="../models/peerlistmodel.cpp" line="62"/>
+        <source>Inbound</source>
+        <translation type="unfinished">Entrante</translation>
+    </message>
+    <message>
+        <location filename="../models/peerlistmodel.cpp" line="62"/>
+        <source>Outbound</source>
+        <translation type="unfinished">Saliente</translation>
+    </message>
+</context>
+<context>
+    <name>Peers</name>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="25"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="31"/>
+        <source>Peers</source>
+        <translation type="unfinished">Pares</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="60"/>
+        <source>Peers are nodes you exchange data with.</source>
+        <translation type="unfinished">Los pares son nodos con los que intercambias datos.</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="78"/>
+        <source>ID</source>
+        <translation type="unfinished">ID</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="87"/>
+        <source>Direction</source>
+        <translation type="unfinished">Sentido</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="96"/>
+        <source>User Agent</source>
+        <translation type="unfinished">Agente de usuario</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="105"/>
+        <source>Type</source>
+        <translation type="unfinished">Tipo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="114"/>
+        <source>Ip</source>
+        <translation type="unfinished">Ip</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="123"/>
+        <source>Network</source>
+        <translation type="unfinished">Red</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="161"/>
+        <source>Looking for %1 more peer(s)</source>
+        <translation type="unfinished">Buscando %1 par(es) más</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="174"/>
+        <source>View %1 banned %2</source>
+        <translation type="unfinished">Ver %1 bloqueado(s) %2</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="174"/>
+        <source>peer</source>
+        <translation type="unfinished">par</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/Peers.qml" line="174"/>
+        <source>peers</source>
+        <translation type="unfinished">pares</translation>
+    </message>
+</context>
 <context>
     <name>ProxySettings</name>
     <message>
