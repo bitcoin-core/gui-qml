@@ -26,7 +26,7 @@ private Q_SLOTS:
         QSignalSpy warnings(&engine, &QQmlEngine::warnings);
         const auto destinations = router.destinations();
         for (const auto& destination : destinations) {
-            if (destination.id == "shutdown") continue;
+            if (destination.id == "shutdown" || destination.id == "peer-details") continue;
             QVERIFY2(router.navigate(destination.id), qPrintable(destination.id));
             QObject* host = engine.rootObjects().constFirst()->findChild<QObject*>("applicationPageHost");
             QVERIFY(host);

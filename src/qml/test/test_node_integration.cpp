@@ -3,8 +3,10 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/bitcoinqmlapplication.h>
+#include <qml/models/banlistmodel.h>
 #include <qml/models/chainsyncmodel.h>
 #include <qml/models/nodenetworkmodel.h>
+#include <qml/models/peerlistmodel.h>
 #include <qml/test/integration_test_registry.h>
 #include <interfaces/node.h>
 #include <netbase.h>
@@ -35,6 +37,7 @@ private Q_SLOTS:
     {
         // Restore only this case's node changes, also following failed assertions.
         m_app.node().setNetworkActive(m_network_was_active);
+        m_app.node().unban(LookupSubNet("192.0.2.1/32"));
     }
 
     void networkActionsAndCoreNotificationsAgree()
@@ -63,6 +66,29 @@ private Q_SLOTS:
         QTRY_COMPARE(sync->blockTipHeight(), previous_height + 1);
         QCOMPARE(sync->blockTipHeight(), m_app.node().getNumBlocks());
         QVERIFY(sync->verificationProgress() > 0.0);
+    }
+
+    void peerActionsPublishAndRemoveCoreBans()
+    {
+        auto* peers = model<PeerListModel>("peerTableModel");
+        auto* bans = model<BanListModel>("banListModel");
+        QVERIFY(peers && bans);
+        QVERIFY(!peers->banPeer(QStringLiteral("192.0.2.1"), 0));
+        QVERIFY(!peers->banPeer(QStringLiteral("not-an-address"), 60));
+        QVERIFY(peers->banPeer(QStringLiteral("192.0.2.1"), 60));
+        const CSubNet subnet{LookupSubNet("192.0.2.1/32")};
+        banmap_t core_bans;
+        QVERIFY(m_app.node().getBanned(core_bans));
+        QVERIFY(core_bans.contains(subnet));
+        QTRY_VERIFY(bans->count() > 0);
+        int row{-1};
+        for (int i = 0; i < bans->count(); ++i) {
+            if (bans->data(bans->index(i), static_cast<int>(BanListModel::BanRoles::AddressRole)).toString() == QStringLiteral("192.0.2.1/32")) row = i;
+        }
+        QVERIFY(row >= 0);
+        QVERIFY(bans->unbanAt(row));
+        QVERIFY(m_app.node().getBanned(core_bans));
+        QVERIFY(!core_bans.contains(subnet));
     }
 
 };
