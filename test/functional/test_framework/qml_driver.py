@@ -228,6 +228,19 @@ class QmlDriver:
         response = self._send({"cmd": "close_window"})
         self._raise_for_error(response, "close_window")
 
+    def click(self, object_name):
+        self._input("click", object_name)
+
+    def type_text(self, object_name, text):
+        self._input("type_text", object_name, text)
+
+    def press_key(self, object_name, key):
+        self._input("press_key", object_name, key)
+
+    def _input(self, action, object_name, text=""):
+        response = self._send({"cmd": action, "objectName": object_name, "text": text})
+        self._raise_for_error(response, f"{action}({object_name!r})")
+
     def _send(self, command):
         if not self.transport:
             raise QmlDriverError("Test bridge is not connected")
