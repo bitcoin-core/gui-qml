@@ -17,7 +17,8 @@ from test_framework.test_framework import (
 class GuiTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-server"]]
+        # This test exercises node startup, so bypass the interactive onboarding.
+        self.extra_args = [["-server", "-qml_onboarded=1"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_gui()

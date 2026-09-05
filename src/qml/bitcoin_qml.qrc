@@ -1,21 +1,77 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
+        <file>components/AboutOptions.qml</file>
+        <file>components/AlertAction.qml</file>
+        <file>components/AlertPopup.qml</file>
+        <file>components/ConnectionSettings.qml</file>
+        <file>components/ExternalPopup.qml</file>
+        <file>components/InfoBanner.qml</file>
+        <file>components/ProxySettings.qml</file>
+        <file>components/Separator.qml</file>
+        <file>components/SettingsRestartNotice.qml</file>
+        <file>components/StorageLocations.qml</file>
+        <file>components/StorageOptions.qml</file>
+        <file>components/StorageSettings.qml</file>
+        <file>controls/CaretRightIcon.qml</file>
+        <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
+        <file>controls/ExternalLink.qml</file>
+        <file>controls/FocusBorder.qml</file>
+        <file>controls/Header.qml</file>
+        <file>controls/Icon.qml</file>
+        <file>controls/IconButton.qml</file>
+        <file>controls/InformationPage.qml</file>
+        <file>controls/NavButton.qml</file>
+        <file>controls/NavigationBar.qml</file>
+        <file>controls/OptionButton.qml</file>
+        <file>controls/OptionSwitch.qml</file>
+        <file>controls/OutlineButton.qml</file>
+        <file>controls/PageStack.qml</file>
+        <file>controls/ProxyLocationInput.qml</file>
+        <file>controls/RightContentIcon.qml</file>
+        <file>controls/Setting.qml</file>
+        <file>controls/SettingsHeader.qml</file>
+        <file>controls/SpinningIndicator.qml</file>
+        <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
+        <file>controls/ValueInput.qml</file>
         <file>controls/qmldir</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/ApplicationShell.qml</file>
         <file>components/GlobalMenu.qml</file>
+        <file>pages/preinit.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/Shutdown.qml</file>
+        <file>pages/onboarding/OnboardingBlockclock.qml</file>
+        <file>pages/onboarding/OnboardingConnection.qml</file>
+        <file>pages/onboarding/OnboardingCover.qml</file>
+        <file>pages/onboarding/OnboardingStorageAmount.qml</file>
+        <file>pages/onboarding/OnboardingStorageLocation.qml</file>
+        <file>pages/onboarding/OnboardingStrengthen.qml</file>
+        <file>pages/onboarding/OnboardingWizard.qml</file>
+        <file>pages/settings/SettingsAbout.qml</file>
+        <file>pages/settings/SettingsConnection.qml</file>
+        <file>pages/settings/SettingsProxy.qml</file>
+        <file>pages/settings/SettingsStorage.qml</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
+        <file alias="bitcoin">res/icons/bitcoin.png</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
+        <file alias="caret-left">res/icons/caret-left.png</file>
+        <file alias="caret-right">res/icons/caret-right.png</file>
+        <file alias="check">res/icons/check.png</file>
+        <file alias="cross">res/icons/cross.png</file>
+        <file alias="export">res/icons/export.png</file>
+        <file alias="info-filled">res/icons/info-filled.png</file>
+        <file alias="info">res/icons/info.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
+        <file alias="tooltip-arrow-dark">res/icons/tooltip-arrow-dark.png</file>
+        <file alias="tooltip-arrow-light">res/icons/tooltip-arrow-light.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file alias="bitcoincoresans/regular">res/fonts/BitcoinCoreSans-Regular.otf</file>

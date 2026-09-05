@@ -9,7 +9,10 @@ add_executable(test_bitcoin-qt
   test_applicationrouter.cpp
   test_translationmanager.cpp
   test_navigation_integration.cpp
+  test_onboarding_integration.cpp
+  test_guiargs.cpp
   test_nodemodel.cpp
+  test_onboarding_storage.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )
@@ -19,6 +22,9 @@ qt6_add_resources(test_bitcoin-qt qml_tests
   PREFIX /test
   FILES
     qml/tst_globalmenu.qml
+    qml/tst_navbutton.qml
+    qml/tst_proxylocationinput.qml
+    qml/tst_valueinput.qml
 )
 # See: https://bugreports.qt.io/browse/QTBUG-141858.
 get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
