@@ -5,12 +5,15 @@
 #include <qml/test/testbridge.h>
 
 #include <QByteArrayView>
+#include <QCoreApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QList>
+#include <QKeyEvent>
 #include <QLocalSocket>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -213,6 +216,10 @@ QByteArray TestBridge::processCommand(const QByteArray& command) const
     }
     if (command_name == QLatin1String("list_objects")) return listObjects();
     if (command_name == QLatin1String("close_window")) return closeWindow();
+    if (command_name == QLatin1String("click") || command_name == QLatin1String("type_text") || command_name == QLatin1String("press_key")) {
+        return input(object.value(QStringLiteral("objectName")).toString(), command_name,
+                     object.value(QStringLiteral("text")).toString());
+    }
     return errorResponse(QStringLiteral("Unknown command: %1").arg(command_name));
 }
 
@@ -286,6 +293,50 @@ QByteArray TestBridge::closeWindow() const
         }
     }
     return errorResponse(QStringLiteral("No QQuickWindow root object found"));
+}
+
+QByteArray TestBridge::input(const QString& object_name, const QString& action, const QString& text) const
+{
+    // Exercise normal event handlers, never arbitrary QML methods or model
+    // setters. The bridge remains regtest-only and uses its bounded protocol.
+    QPointer<QQuickItem> item{qobject_cast<QQuickItem*>(findObjectByName(object_name))};
+    if (!item || !item->isVisible() || !item->isEnabled() || !item->window()) {
+        return errorResponse(QStringLiteral("Input target must be a visible, enabled item: %1").arg(object_name));
+    }
+    QPointer<QQuickWindow> window{item->window()};
+    if (!window->isVisible()) return errorResponse(QStringLiteral("Input target window is hidden"));
+    if (action == QLatin1String("click")) {
+        const QPointF position = item->mapToScene(QPointF(item->width() / 2, item->height() / 2));
+        if (item->width() <= 0 || item->height() <= 0 || !window->contentItem()->contains(position)) {
+            return errorResponse(QStringLiteral("Input target is outside the window"));
+        }
+        const QPointF global = window->mapToGlobal(position.toPoint());
+        QMouseEvent press(QEvent::MouseButtonPress, position, global, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(window, &press);
+        if (window) {
+            QMouseEvent release(QEvent::MouseButtonRelease, position, global, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(window, &release);
+        }
+    } else {
+        int key = Qt::Key_unknown;
+        QString event_text = text;
+        if (action == QLatin1String("press_key")) {
+            if (text == QLatin1String("Return")) key = Qt::Key_Return;
+            else if (text == QLatin1String("Tab")) key = Qt::Key_Tab;
+            else if (text == QLatin1String("Escape")) key = Qt::Key_Escape;
+            else if (text == QLatin1String("Backspace")) key = Qt::Key_Backspace;
+            else return errorResponse(QStringLiteral("Unsupported input key"));
+            event_text.clear();
+        }
+        item->forceActiveFocus(Qt::OtherFocusReason);
+        QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier, event_text);
+        QCoreApplication::sendEvent(window, &press);
+        if (window) {
+            QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, event_text);
+            QCoreApplication::sendEvent(window, &release);
+        }
+    }
+    return QByteArrayLiteral("{\"ok\":true}");
 }
 
 QByteArray TestBridge::errorResponse(const QString& message)
