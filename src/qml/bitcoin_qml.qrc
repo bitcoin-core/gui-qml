@@ -32,6 +32,7 @@
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
         <file>controls/InformationPage.qml</file>
+        <file>controls/KeyValueRow.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
@@ -46,6 +47,7 @@
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
+        <file>controls/ToggleButton.qml</file>
         <file>controls/ValueInput.qml</file>
         <file>controls/qmldir</file>
         <file>controls/utils.js</file>
@@ -53,8 +55,11 @@
         <file>pages/ApplicationShell.qml</file>
         <file>components/GlobalMenu.qml</file>
         <file>pages/preinit.qml</file>
+        <file>pages/node/BannedPeers.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
+        <file>pages/node/PeerDetails.qml</file>
+        <file>pages/node/Peers.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
@@ -78,6 +83,8 @@
     </qresource>
     <qresource prefix="/icons">
         <file alias="alert-filled">res/icons/alert-filled.png</file>
+        <file alias="arrow-down">res/icons/arrow-down.png</file>
+        <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="bitcoin">res/icons/bitcoin.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
@@ -94,6 +101,7 @@
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info-filled">res/icons/info-filled.png</file>
         <file alias="info">res/icons/info.png</file>
+        <file alias="minus">res/icons/minus.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="node-0-connections">res/icons/node-0-connections.png</file>

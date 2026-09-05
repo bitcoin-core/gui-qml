@@ -11,6 +11,7 @@
 #include <QRect>
 #include <QStringList>
 
+class BanListModel;
 class AppMode;
 class BuildInfo;
 class ChainModel;
@@ -21,6 +22,8 @@ class NetworkStatusModel;
 class NetworkStyle;
 class NodeLifecycleModel;
 class OptionsQmlModel;
+class PeerListModel;
+class PeerListSortProxy;
 class QmlInitExecutor;
 class QQmlApplicationEngine;
 class QString;
@@ -76,6 +79,9 @@ private:
     std::unique_ptr<DesktopWindowBehaviorModel> m_desktop_window_behavior_model;
     std::unique_ptr<DesktopTrayIconController> m_desktop_tray_icon_controller;
     std::unique_ptr<OptionsQmlModel> m_options_model;
+    std::unique_ptr<PeerListModel> m_peer_model;
+    std::unique_ptr<PeerListSortProxy> m_peer_model_sort_proxy;
+    std::unique_ptr<BanListModel> m_ban_list_model;
     std::unique_ptr<const NetworkStyle> m_network_style;
     std::unique_ptr<QQmlApplicationEngine> m_engine;
     std::unique_ptr<TestBridge> m_test_bridge;
