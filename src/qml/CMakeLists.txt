@@ -31,6 +31,8 @@ add_library(bitcoinqml STATIC
   bitcoin.h
   bitcoinqmlapplication.cpp
   bitcoinqmlapplication.h
+  bitcoinunits.cpp
+  bitcoinunits.h
   buildinfo.h
   clipboard.h
   components/blockclockdial.cpp
@@ -54,6 +56,13 @@ add_library(bitcoinqml STATIC
   models/chainsyncmodel.h
   models/core_settings_model.cpp
   models/core_settings_model.h
+  models/desktoptrayiconcontroller.cpp
+  models/desktoptrayiconcontroller.h
+  models/desktopwindowbehaviormodel.cpp
+  models/desktopwindowbehaviormodel.h
+  models/languagesettingsmodel.cpp
+  models/languagesettingsmodel.h
+  models/macdockiconhandler.h
   models/networkstatusmodel.cpp
   models/networkstatusmodel.h
   models/nodelifecyclemodel.cpp
@@ -64,6 +73,8 @@ add_library(bitcoinqml STATIC
   models/nodenetworkmodel.h
   models/onboardingoptionsmodel.cpp
   models/onboardingoptionsmodel.h
+  models/options_model.cpp
+  models/options_model.h
   models/runtimedialogmodel.cpp
   models/runtimedialogmodel.h
   models/settings_keys.h
@@ -120,6 +131,13 @@ if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
 endif()
 unset(warn_flags)
 unset(ts_files)
+
+if(APPLE)
+  target_sources(bitcoinqml PRIVATE
+    models/macdockiconhandler.h
+    models/macdockiconhandler.mm
+  )
+endif()
 
 target_compile_definitions(bitcoinqml
   PUBLIC

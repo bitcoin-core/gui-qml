@@ -1,0 +1,38 @@
+// Copyright (c) 2011-present The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <qml/models/macdockiconhandler.h>
+
+#include <AppKit/AppKit.h>
+#include <objc/runtime.h>
+
+static MacDockIconHandler *s_instance = nullptr;
+
+bool dockClickHandler(id self, SEL _cmd, ...) {
+    Q_UNUSED(self)
+    Q_UNUSED(_cmd)
+
+    Q_EMIT s_instance->dockIconClicked();
+
+    // Return NO (false) to suppress the default macOS reopen action
+    return false;
+}
+
+static void setupDockClickHandler() {
+    Class delClass = (Class)[[[NSApplication sharedApplication] delegate] class];
+    SEL shouldHandle = sel_registerName("applicationShouldHandleReopen:hasVisibleWindows:");
+    class_replaceMethod(delClass, shouldHandle, (IMP)dockClickHandler, "B@:");
+}
+
+MacDockIconHandler::MacDockIconHandler() : QObject()
+{
+    setupDockClickHandler();
+}
+
+MacDockIconHandler *MacDockIconHandler::instance()
+{
+    if (!s_instance)
+        s_instance = new MacDockIconHandler();
+    return s_instance;
+}
