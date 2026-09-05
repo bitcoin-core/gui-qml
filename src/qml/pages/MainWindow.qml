@@ -36,4 +36,6 @@ ApplicationWindow {
         nodeLifecycleModel.requestShutdown()
     }
     ApplicationShell { anchors.fill: parent }
+    NodeRuntimeDialog { parent: Overlay.overlay }
+    NodeFatalErrorPopup { parent: Overlay.overlay }
 }

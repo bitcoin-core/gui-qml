@@ -36,6 +36,20 @@
 </context>
 
 <context>
+    <name>BlockClock</name>
+    <message>
+        <location filename="../components/BlockClock.qml" line="229"/>
+        <source>Connecting</source>
+        <translation type="unfinished">Conectando</translation>
+    </message>
+    <message>
+        <location filename="../components/BlockClock.qml" line="231"/>
+        <source>Please wait</source>
+        <translation type="unfinished">Por favor espere</translation>
+    </message>
+</context>
+
+<context>
     <name>ConnectionSettings</name>
     <message>
         <location filename="../components/ConnectionSettings.qml" line="16"/>
@@ -85,6 +99,48 @@
         <location filename="../components/ExternalPopup.qml" line="69"/>
         <source>Ok</source>
         <translation type="unfinished">Aceptar</translation>
+    </message>
+</context>
+
+<context>
+    <name>NavigationBar2</name>
+    <message>
+        <location filename="../controls/NavigationBar2.qml" line="16"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+</context>
+<context>
+    <name>NetworkIndicator</name>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="52"/>
+        <source>Testnet</source>
+        <translation type="unfinished">Testnet</translation>
+    </message>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="52"/>
+        <source>Test Network</source>
+        <translation type="unfinished">Red de pruebas</translation>
+    </message>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="61"/>
+        <source>Signet</source>
+        <translation type="unfinished">Signet</translation>
+    </message>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="61"/>
+        <source>Signet Network</source>
+        <translation type="unfinished">Red Signet</translation>
+    </message>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="70"/>
+        <source>Regtest</source>
+        <translation type="unfinished">Regtest</translation>
+    </message>
+    <message>
+        <location filename="../components/NetworkIndicator.qml" line="70"/>
+        <source>Regtest Mode</source>
+        <translation type="unfinished">Modo Regtest</translation>
     </message>
 </context>
 
