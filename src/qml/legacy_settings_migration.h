@@ -4,6 +4,31 @@
 
 #ifndef BITCOIN_QML_LEGACY_SETTINGS_MIGRATION_H
 #define BITCOIN_QML_LEGACY_SETTINGS_MIGRATION_H
+
 #include <QString>
-namespace QmlLegacySettings { QString ReadGuiLanguage(const QString& chain); }
-#endif
+
+class ArgsManager;
+
+namespace QmlLegacySettings {
+
+enum class MigrationMode {
+    Preview,
+    Persist,
+};
+
+struct MigrationResult {
+    bool settings_changed{false};
+    QString error;
+};
+
+QString ReadLegacyGuiDataDir();
+bool ReadLegacyGuiReset();
+int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback);
+QString ReadLegacyGuiLanguage(const QString& chain);
+QString ReadGuiLanguage(const QString& chain);
+void ClearLegacyGuiSettings(const QString& chain);
+MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode);
+
+} // namespace QmlLegacySettings
+
+#endif // BITCOIN_QML_LEGACY_SETTINGS_MIGRATION_H

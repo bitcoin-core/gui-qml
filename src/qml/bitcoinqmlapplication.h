@@ -14,6 +14,7 @@
 class AppMode;
 class BuildInfo;
 class Clipboard;
+class NetworkStyle;
 class NodeModel;
 class QmlInitExecutor;
 class QQmlApplicationEngine;
@@ -40,6 +41,7 @@ public:
     bool createTestBridge(const QString& socket_path);
     void requestInitialize();
     void requestShutdown();
+    void setInitialWindowGeometry(const QRect& geometry);
     void installLanguage(const QString& language);
 
     interfaces::Node& node() const;
@@ -57,11 +59,13 @@ private:
     std::unique_ptr<Clipboard> m_clipboard;
     std::unique_ptr<NodeModel> m_node_model;
     std::unique_ptr<QmlInitExecutor> m_init_executor;
+    std::unique_ptr<const NetworkStyle> m_network_style;
     std::unique_ptr<QQmlApplicationEngine> m_engine;
     std::unique_ptr<TestBridge> m_test_bridge;
     std::unique_ptr<TranslationManager> m_translations;
     std::unique_ptr<ApplicationRouter> m_router;
     std::unique_ptr<NavigationModel> m_navigation_model;
+    QRect m_initial_window_geometry;
     bool m_base_initialized{false};
     bool m_shutdown_complete{false};
 };

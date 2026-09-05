@@ -17,8 +17,10 @@
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
 #include <qml/guiconstants.h>
+#include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
 #include <qml/models/nodemodel.h>
+#include <qml/networkstyle.h>
 #include <qml/test/testbridge.h>
 
 #include <QMetaType>
@@ -93,6 +95,7 @@ BitcoinQmlApplication::~BitcoinQmlApplication()
     m_engine.reset();
     m_navigation_model.reset();
     m_router.reset();
+    m_network_style.reset();
     m_clipboard.reset();
     m_build_info.reset();
     m_app_mode.reset();
@@ -148,8 +151,13 @@ bool BitcoinQmlApplication::createWindow()
         exit(node().getExitStatus());
     });
 
+    m_network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
+    assert(m_network_style);
+    setApplicationName(m_network_style->getAppName());
+    setWindowIcon(m_network_style->getAppIcon());
     m_engine = std::make_unique<QQmlApplicationEngine>();
     m_translations->attachEngine(*m_engine);
+    m_engine->addImageProvider(QStringLiteral("images"), new ImageProvider{m_network_style.get()});
     QQmlContext* const context{m_engine->rootContext()};
     context->setContextProperty(QStringLiteral("nodeLifecycleModel"), m_node_model.get());
     context->setContextProperty(QStringLiteral("applicationRouter"), m_router.get());
@@ -161,6 +169,7 @@ bool BitcoinQmlApplication::createWindow()
 
     auto* const window{qobject_cast<QQuickWindow*>(m_engine->rootObjects().constFirst())};
     if (!window) return false;
+    if (m_initial_window_geometry.isValid()) window->setGeometry(m_initial_window_geometry);
     // NodeModel interrupts Core first. All preceding direct slots drain
     // feature workers before this last slot queues destruction of Core state.
     connect(m_node_model.get(), &NodeModel::requestedShutdown, m_init_executor.get(), &QmlInitExecutor::shutdown);
@@ -191,6 +200,11 @@ void BitcoinQmlApplication::requestShutdown()
 {
     assert(m_node_model);
     m_node_model->requestShutdown();
+}
+
+void BitcoinQmlApplication::setInitialWindowGeometry(const QRect& geometry)
+{
+    m_initial_window_geometry = geometry;
 }
 
 void BitcoinQmlApplication::installLanguage(const QString& language)

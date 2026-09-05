@@ -5,9 +5,11 @@
 #include <common/args.h>
 #include <common/settings.h>
 #include <univalue.h>
+#include <qml/core_settings.h>
 #include <qml/guiargs.h>
 #include <qml/guiconstants.h>
 #include <qml/models/settings_keys.h>
+#include <qml/onboarding_settings.h>
 #include <qml/translationmanager.h>
 
 #include <QLocale>
@@ -79,6 +81,30 @@ private Q_SLOTS:
         else regtest.remove(SettingsKeys::LANGUAGE);
         QCOMPARE(language, QString("es"));
         QCOMPARE(QSettings().value(SettingsKeys::LANGUAGE).toString(), QString("de"));
+    }
+
+    void onboardingPreviewResolvesTheExistingProfileBeforeQml()
+    {
+        QTemporaryDir profile;
+        QVERIFY(profile.isValid());
+        QFile config(profile.filePath("bitcoin.conf"));
+        QVERIFY(config.open(QIODevice::WriteOnly));
+        QVERIFY(config.write("regtest=1\nlang=fr\n") > 0);
+        config.close();
+        QVERIFY(QDir(profile.path()).mkdir("regtest"));
+        QFile settings(profile.filePath("regtest/settings.json"));
+        QVERIFY(settings.open(QIODevice::WriteOnly));
+        QVERIFY(settings.write("{\"lang\":\"es\"}") > 0);
+        settings.close();
+        std::vector<std::string> argv{"bitcoin-qt", "-datadir=" + profile.path().toStdString(), "-choosedatadir"};
+        auto status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, false);
+        QVERIFY2(status.ok, qPrintable(status.error));
+        QVERIFY(status.should_show_onboarding);
+        QCOMPARE(status.language, QString("es"));
+        argv.push_back("-lang=");
+        status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, false);
+        QVERIFY2(status.ok, qPrintable(status.error));
+        QCOMPARE(status.language, QString{});
     }
 
     void localeInstalledBeforeQmlAndRetranslatesLiveEngines()
