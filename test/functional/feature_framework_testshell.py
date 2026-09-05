@@ -60,11 +60,7 @@ def run_testshell_qml_example(functional_tests_dir):
         if not test.is_qml_compiled():
             return
         qml = test.start_qml()
-        assert_equal(qml.driver.get_property("mainWindow", "visible"), True)
-        test.wait_until(
-            lambda: qml.driver.get_property("mainWindow", "nodeStatus") == "Node is running",
-            timeout=30,
-        )
+        assert_equal(qml.driver.get_property("preInitWindow", "visible"), True)
     finally:
         test.shutdown()
         if qml is not None:

@@ -76,7 +76,10 @@ class QmlInterfaceTest(BitcoinTestFramework):
         harness = None
         try:
             self.log.info("Starting QML %s and connecting the test bridge", name)
-            harness = self.start_qml(multiprocess=multiprocess)
+            harness = self.start_qml(
+                multiprocess=multiprocess,
+                extra_args=["-qml_onboarded=1"],
+            )
             gui = harness.driver
 
             objects = gui.list_objects()
