@@ -6,6 +6,9 @@ add_executable(test_bitcoin-qt
   qml/qml_tests_main.cpp
   ../../init/bitcoin-qt.cpp
   test_application.cpp
+  test_applicationrouter.cpp
+  test_translationmanager.cpp
+  test_navigation_integration.cpp
   test_nodemodel.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
@@ -13,8 +16,9 @@ add_executable(test_bitcoin-qt
 add_windows_application_manifest(test_bitcoin-qt)
 
 qt6_add_resources(test_bitcoin-qt qml_tests
-  PREFIX /test/qml
-  FILES qml/tst_mainwindow.qml
+  PREFIX /test
+  FILES
+    qml/tst_globalmenu.qml
 )
 # See: https://bugreports.qt.io/browse/QTBUG-141858.
 get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
@@ -25,6 +29,7 @@ unset(warn_flags)
 
 target_compile_definitions(test_bitcoin-qt
   PRIVATE
+    BITCOINQML_NO_TEST_MAIN
     QUICK_TEST_SOURCE_DIR=":/test/qml"
 )
 
@@ -34,14 +39,21 @@ target_link_libraries(test_bitcoin-qt
     bitcoinqml
     test_util
     bitcoin_node
-    $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
     Qt6::QuickTest
     Qt6::Test
 )
 
 get_target_property(qt_qml_test_lib_type Qt6::Core TYPE)
 if(qt_qml_test_lib_type STREQUAL "STATIC_LIBRARY")
-  target_link_libraries(test_bitcoin-qt PRIVATE Qt6::qtquickcontrols2basicstyleplugin)
+  target_link_libraries(test_bitcoin-qt PRIVATE
+    Qt6::qquicklayoutsplugin
+    Qt6::qtqmlcoreplugin
+    Qt6::qtquickcontrols2basicstyleimplplugin
+    Qt6::qtquickcontrols2basicstyleplugin
+    Qt6::qtquickcontrols2implplugin
+    Qt6::qtquickcontrols2plugin
+    Qt6::qtquickdialogsplugin
+  )
 endif()
 
 import_plugins(test_bitcoin-qt)
@@ -63,10 +75,21 @@ set_property(
   TEST
     test_bitcoin-qt
     test_bitcoin-qt-qml
-    test_bitcoin-qt-integration
   APPEND PROPERTY
     ENVIRONMENT_MODIFICATION
       QT_FATAL_WARNINGS=set:1
+)
+
+# Avoid stale compiled QML from another worktree. The minimal platform plugin
+# may also report unavailable desktop services while constructing the system
+# tray controller, so keep integration warnings visible but non-fatal.
+set_property(
+  TEST
+    test_bitcoin-qt
+    test_bitcoin-qt-qml
+    test_bitcoin-qt-integration
+  APPEND PROPERTY
+    ENVIRONMENT_MODIFICATION
       QML_DISABLE_DISK_CACHE=set:1
 )
 
