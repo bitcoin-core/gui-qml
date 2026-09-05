@@ -33,16 +33,32 @@ add_library(bitcoinqml STATIC
   bitcoinqmlapplication.h
   buildinfo.h
   clipboard.h
+  core_settings.cpp
+  core_settings.h
+  datadir.cpp
+  datadir.h
   guiargs.cpp
   guiargs.h
   guiconstants.h
+  imageprovider.cpp
+  imageprovider.h
   initexecutor.cpp
   initexecutor.h
   legacy_settings_migration.cpp
   legacy_settings_migration.h
+  models/core_settings_model.cpp
+  models/core_settings_model.h
   models/nodemodel.cpp
   models/nodemodel.h
+  models/onboardingoptionsmodel.cpp
+  models/onboardingoptionsmodel.h
   models/settings_keys.h
+  networkstyle.cpp
+  networkstyle.h
+  onboarding_settings.cpp
+  onboarding_settings.h
+  onboarding_storage.cpp
+  onboarding_storage.h
   translationmanager.cpp
   translationmanager.h
   ${BITCOIN_QML_QRC}

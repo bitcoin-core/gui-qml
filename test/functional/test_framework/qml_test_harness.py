@@ -103,8 +103,12 @@ class QmlTestHarness:
                 if self.driver:
                     try:
                         self.driver.close_window()
+                    except (QmlDriverError, OSError):
+                        # The application can close its pipe before the reply is read.
+                        pass
+                    try:
                         self.process.wait(timeout=10)
-                    except (QmlDriverError, OSError, subprocess.TimeoutExpired):
+                    except (OSError, subprocess.TimeoutExpired):
                         pass
                 if self.process.poll() is None:
                     self.process.terminate()
@@ -149,15 +153,33 @@ class TestFrameworkQmlTestHarness(unittest.TestCase):
         self.assertIsNone(self.harness.driver)
         self.assertIsNone(self.harness.socket_dir)
 
+    def test_stop_waits_when_bridge_closes_during_shutdown(self):
+        self.process.poll.return_value = None
+        self.driver.close_window.side_effect = QmlDriverError("Bridge disconnected")
+
+        def wait(*, timeout):
+            self.process.poll.return_value = 0
+            return 0
+
+        self.process.wait.side_effect = wait
+
+        self.harness.stop()
+
+        self.process.wait.assert_called_once_with(timeout=10)
+        self.process.terminate.assert_not_called()
+        self.process.kill.assert_not_called()
+        self.driver.close.assert_called_once_with()
+
     def test_stop_terminates_when_bridge_fails(self):
         self.process.poll.return_value = None
         self.driver.close_window.side_effect = QmlDriverError("Bridge disconnected")
+        self.process.wait.side_effect = [subprocess.TimeoutExpired("bitcoin-qt", 10), 0]
 
         self.harness.stop()
 
         self.driver.close_window.assert_called_once_with()
         self.process.terminate.assert_called_once_with()
-        self.process.wait.assert_called_once_with(timeout=10)
+        self.assertEqual(self.process.wait.call_count, 2)
         self.process.kill.assert_not_called()
         self.driver.close.assert_called_once_with()
 
