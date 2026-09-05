@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test that bitcoin-gui starts up and can be stopped via RPC."""
 
+from test_framework.gui_util import MINIMAL_PLATFORM_STDERR
 from test_framework.test_framework import (
     BitcoinTestFramework,
     SkipTest,
@@ -25,12 +26,15 @@ class GuiTest(BitcoinTestFramework):
             raise SkipTest("minimal Qt platform plugin unusable with vcpkg Qt")
 
     def setup_nodes(self):
+        self.extra_args[0].append(f"-test-settings-dir={self.options.tmpdir}/qml-settings")
         self.extra_init = [{"use_gui": True}]
         super().setup_nodes()
 
     def run_test(self):
         self.log.info("Test that bitcoin-gui starts up and can be stopped via RPC")
-        self.stop_node(0)
+        # Qt's minimal platform lacks application fonts and a native tray.
+        # Permit only these warnings; other startup or shutdown errors still fail.
+        self.stop_node(0, expected_stderr=MINIMAL_PLATFORM_STDERR)
 
 
 if __name__ == "__main__":

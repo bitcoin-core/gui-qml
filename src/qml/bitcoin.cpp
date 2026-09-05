@@ -14,6 +14,10 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <qml/bitcoinqmlapplication.h>
+#include <qml/guiargs.h>
+#include <qml/translationmanager.h>
+#include <QFontDatabase>
+#include <QSettings>
 #include <util/strencodings.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
@@ -30,6 +34,7 @@
 int QmlGuiMain(int argc, char* argv[])
 {
     Q_INIT_RESOURCE(bitcoin_qml);
+    Q_INIT_RESOURCE(bitcoin_compat);
 
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -42,11 +47,7 @@ int QmlGuiMain(int argc, char* argv[])
     std::unique_ptr<interfaces::Init> init{interfaces::MakeGuiInit(argc, argv)};
 
     SetupServerArgs(gArgs, init->canListenIpc());
-    gArgs.AddArg("-test-automation=<path>",
-        "Enable the GUI test automation bridge at the given local socket path",
-        ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_NEGATION |
-            ArgsManager::DISALLOW_ELISION | ArgsManager::DEBUG_ONLY,
-        OptionsCategory::GUI);
+    SetupQmlGuiArgs(gArgs);
     std::string error;
     if (!gArgs.ParseParameters(argc, argv, error)) {
         InitError(Untranslated(strprintf("Error parsing command line arguments: %s", error)));
@@ -86,6 +87,15 @@ int QmlGuiMain(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
+    const auto settings_dir = gArgs.GetArg("-test-settings-dir", "");
+    if (!settings_dir.empty()) {
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, QString::fromStdString(settings_dir));
+    }
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/regular"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/semibold"));
+    QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/robotomono/regular"));
+    app.installLanguage(TranslationManager::ResolveLanguage(gArgs));
     app.parameterSetup();
     app.createNode(*init);
     if (!app.baseInitialize()) {

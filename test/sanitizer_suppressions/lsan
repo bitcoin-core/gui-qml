@@ -4,3 +4,7 @@ leak:test_bitcoin-qt-legacy
 leak:bitcoin-qt
 leak:bitcoin-qt-legacy
 leak:bitcoin-gui-legacy
+
+# Qt 6.4's software renderer retains cached textures on shutdown (QTBUG-106968).
+# https://github.com/qt/qtdeclarative/commit/761bd1810d76156001908744c58e7cc46b41ee1c
+leak:QSGRenderContext::textureForFactory

@@ -1,5 +1,25 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
+        <file>controls/CoreText.qml</file>
+        <file>controls/Theme.qml</file>
+        <file>controls/qmldir</file>
         <file>pages/MainWindow.qml</file>
+        <file>pages/ApplicationShell.qml</file>
+        <file>components/GlobalMenu.qml</file>
+        <file>pages/node/NodeRunner.qml</file>
+        <file>pages/node/Shutdown.qml</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
+        <file alias="blocktime-light">res/icons/blocktime-light.png</file>
+        <file alias="network-dark">res/icons/network-dark.png</file>
+        <file alias="network-light">res/icons/network-light.png</file>
+        <file alias="storage-dark">res/icons/storage-dark.png</file>
+        <file alias="storage-light">res/icons/storage-light.png</file>
+    </qresource>
+    <qresource prefix="/fonts">
+        <file alias="bitcoincoresans/regular">res/fonts/BitcoinCoreSans-Regular.otf</file>
+        <file alias="bitcoincoresans/semibold">res/fonts/BitcoinCoreSans-SemiBold.otf</file>
+        <file alias="robotomono/regular">res/fonts/RobotoMono-Regular.ttf</file>
     </qresource>
 </RCC>

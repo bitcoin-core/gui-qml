@@ -1,0 +1,5 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/qml">
+        <file alias="controls/AppSettings.qml">AppSettings.qml</file>
+    </qresource>
+</RCC>

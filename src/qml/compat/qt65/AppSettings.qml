@@ -1,0 +1,3 @@
+import QtCore
+
+Settings { }

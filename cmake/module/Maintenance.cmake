@@ -34,6 +34,9 @@ function(add_windows_deploy_target)
       COMMAND ${CMAKE_STRIP} $<TARGET_FILE:bitcoin-util> -o release/$<TARGET_FILE_NAME:bitcoin-util>
       COMMAND ${CMAKE_STRIP} $<TARGET_FILE:test_bitcoin> -o release/$<TARGET_FILE_NAME:test_bitcoin>
       COMMAND ${CMAKE_COMMAND} -D BIN_DIR=release -D LIBEXEC_DIR=release -P GenerateWindowsInstaller.cmake
+      DEPENDS
+        bitcoin bitcoin-qt bitcoind bitcoin-cli bitcoin-tx bitcoin-wallet bitcoin-util test_bitcoin
+        ${PROJECT_BINARY_DIR}/GenerateWindowsInstaller.cmake
     )
     add_custom_target(deploy DEPENDS ${PROJECT_BINARY_DIR}/bitcoin-win64-setup.exe)
   endif()
