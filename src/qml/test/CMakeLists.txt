@@ -21,6 +21,7 @@ add_executable(test_bitcoin-qt
   test_nodemodel.cpp
   test_noderuntimemodels.cpp
   test_runtimedialogmodel.cpp
+  test_mempoolmodel.cpp
   test_onboarding_storage.cpp
   test_onboarding_profile.cpp
   test_startupsettings.cpp
