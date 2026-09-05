@@ -20,6 +20,7 @@ class DesktopTrayIconController;
 class DesktopWindowBehaviorModel;
 class NetworkStatusModel;
 class NetworkStyle;
+class NetworkTrafficTower;
 class NodeLifecycleModel;
 class OptionsQmlModel;
 class PeerListModel;
@@ -74,6 +75,7 @@ private:
     std::unique_ptr<Clipboard> m_clipboard;
     std::unique_ptr<NodeLifecycleModel> m_node_model;
     std::unique_ptr<QmlInitExecutor> m_init_executor;
+    std::unique_ptr<NetworkTrafficTower> m_network_traffic_tower;
     std::unique_ptr<NetworkStatusModel> m_network_status_model;
     std::unique_ptr<ChainModel> m_chain_model;
     std::unique_ptr<DesktopWindowBehaviorModel> m_desktop_window_behavior_model;
