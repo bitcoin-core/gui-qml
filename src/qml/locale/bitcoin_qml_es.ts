@@ -48,6 +48,29 @@
         <translation type="unfinished">Por favor espere</translation>
     </message>
 </context>
+<context>
+    <name>BlockClockDisplayMode</name>
+    <message>
+        <location filename="../components/BlockClockDisplayMode.qml" line="22"/>
+        <source>Compact</source>
+        <translation type="unfinished">Compacto</translation>
+    </message>
+    <message>
+        <location filename="../components/BlockClockDisplayMode.qml" line="23"/>
+        <source>For personal use on a computer or smartphone.</source>
+        <translation type="unfinished">Para uso personal en ordenador o teléfono inteligente.</translation>
+    </message>
+    <message>
+        <location filename="../components/BlockClockDisplayMode.qml" line="34"/>
+        <source>Showcase</source>
+        <translation type="unfinished">Presentación</translation>
+    </message>
+    <message>
+        <location filename="../components/BlockClockDisplayMode.qml" line="35"/>
+        <source>A larger block clock for public display on a tablet or other large screen.</source>
+        <translation type="unfinished">Un reloj de bloques más grande para visualización pública en tableta u otra pantalla grande.</translation>
+    </message>
+</context>
 
 <context>
     <name>ConnectionSettings</name>
@@ -78,6 +101,35 @@
     </message>
 </context>
 
+
+<context>
+    <name>DeveloperOptions</name>
+    <message>
+        <location filename="../components/DeveloperOptions.qml" line="16"/>
+        <source>Database cache size (MiB)</source>
+        <translation type="unfinished">Tamaño de caché de base de datos (MiB)</translation>
+    </message>
+    <message>
+        <location filename="../components/DeveloperOptions.qml" line="17"/>
+        <source>This is not a valid cache size. Please choose a value between %1 and %2 MiB.</source>
+        <translation type="unfinished">No es un tamaño de caché válido. Elige un valor entre %1 y %2 MiB.</translation>
+    </message>
+    <message>
+        <location filename="../components/DeveloperOptions.qml" line="41"/>
+        <source>Script verification threads</source>
+        <translation type="unfinished">Hilos de verificación de scripts</translation>
+    </message>
+    <message>
+        <location filename="../components/DeveloperOptions.qml" line="42"/>
+        <source>This is not a valid thread count. Please choose a value between %1 and %2 threads.</source>
+        <translation type="unfinished">No es un número de hilos válido. Elige un valor entre %1 y %2 hilos.</translation>
+    </message>
+    <message>
+        <location filename="../components/DeveloperOptions.qml" line="65"/>
+        <source>Dark Mode</source>
+        <translation type="unfinished">Modo oscuro</translation>
+    </message>
+</context>
 <context>
     <name>ExternalPopup</name>
     <message>
@@ -143,7 +195,59 @@
         <translation type="unfinished">Modo Regtest</translation>
     </message>
 </context>
-
+<context>
+    <name>NodeSettings</name>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="41"/>
+        <source>Settings</source>
+        <translation type="unfinished">Configuración</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="45"/>
+        <source>Done</source>
+        <translation type="unfinished">Listo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="61"/>
+        <source>About</source>
+        <translation type="unfinished">Acerca de</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="74"/>
+        <source>Display</source>
+        <translation type="unfinished">Pantalla</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="86"/>
+        <source>Storage</source>
+        <translation type="unfinished">Almacenamiento</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="100"/>
+        <source>External Signer</source>
+        <translation type="unfinished">Firmante externo</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="116"/>
+        <source>Connection</source>
+        <translation type="unfinished">Conexión</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="129"/>
+        <source>Peers</source>
+        <translation type="unfinished">Pares</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="142"/>
+        <source>Network Traffic</source>
+        <translation type="unfinished">Tráfico de red</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NodeSettings.qml" line="155"/>
+        <source>Debug Log</source>
+        <translation type="unfinished">Registro de depuración</translation>
+    </message>
+</context>
 <context>
     <name>OnboardingBlockclock</name>
     <message>
@@ -356,6 +460,174 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
         <translation type="unfinished">Ejecutar conexiones Tor a través de un proxy dedicado.</translation>
     </message>
 </context>
+<context>
+    <name>QObject</name>
+    <message>
+        <location filename="../models/options_model.cpp" line="437"/>
+        <source>System default</source>
+        <translation type="unfinished">Predeterminado del sistema</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="25"/>
+        <source>Inbound</source>
+        <translation type="unfinished">Entrante</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="26"/>
+        <source>Outbound</source>
+        <translation type="unfinished">Saliente</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="30"/>
+        <source>Full Relay</source>
+        <translation type="unfinished">Retransmisión completa</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="31"/>
+        <source>Block Relay</source>
+        <translation type="unfinished">Retransmisión de bloques</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="32"/>
+        <source>Manual</source>
+        <translation type="unfinished">Manual</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="33"/>
+        <source>Feeler</source>
+        <translation type="unfinished">Sensor</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="34"/>
+        <source>Address Fetch</source>
+        <translation type="unfinished">Recuperación de direcciones</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="42"/>
+        <source>Unroutable</source>
+        <translation type="unfinished">No enrutable</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="43"/>
+        <source>IPv4</source>
+        <comment>network name</comment>
+        <translation type="unfinished">IPv4</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="44"/>
+        <source>IPv6</source>
+        <comment>network name</comment>
+        <translation type="unfinished">IPv6</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="45"/>
+        <source>Onion</source>
+        <comment>network name</comment>
+        <translation type="unfinished">Onion</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="46"/>
+        <source>I2P</source>
+        <comment>network name</comment>
+        <translation type="unfinished">I2P</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="47"/>
+        <source>CJDNS</source>
+        <comment>network name</comment>
+        <translation type="unfinished">CJDNS</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="62"/>
+        <location filename="../peerstatsutil.cpp" line="74"/>
+        <source>%1 d</source>
+        <translation type="unfinished">%1 d</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="63"/>
+        <location filename="../peerstatsutil.cpp" line="75"/>
+        <source>%1 h</source>
+        <translation type="unfinished">%1 h</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="64"/>
+        <location filename="../peerstatsutil.cpp" line="76"/>
+        <source>%1 m</source>
+        <translation type="unfinished">%1 m</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="66"/>
+        <location filename="../peerstatsutil.cpp" line="77"/>
+        <location filename="../peerstatsutil.cpp" line="102"/>
+        <source>%1 s</source>
+        <translation type="unfinished">%1 s</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="89"/>
+        <source>None</source>
+        <translation type="unfinished">Ninguno</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="95"/>
+        <source>N/A</source>
+        <translation type="unfinished">N/D</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="97"/>
+        <source>%1 ms</source>
+        <translation type="unfinished">%1 ms</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="107"/>
+        <source>%1 B</source>
+        <translation type="unfinished">%1 B</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="108"/>
+        <source>%1 kB</source>
+        <translation type="unfinished">%1 kB</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="109"/>
+        <source>%1 MB</source>
+        <translation type="unfinished">%1 MB</translation>
+    </message>
+    <message>
+        <location filename="../peerstatsutil.cpp" line="110"/>
+        <source>%1 GB</source>
+        <translation type="unfinished">%1 GB</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="171"/>
+        <source>Could not open debug log file: %1</source>
+        <translation type="unfinished">No se pudo abrir el archivo de registro de depuración: %1</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="172"/>
+        <source>Debug log file not found: %1</source>
+        <translation type="unfinished">Archivo de registro de depuración no encontrado: %1</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="391"/>
+        <source>just now</source>
+        <translation type="unfinished">ahora mismo</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="392"/>
+        <source>%1 min ago</source>
+        <translation type="unfinished">hace %1 min</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="393"/>
+        <source>%1 hr ago</source>
+        <translation type="unfinished">hace %1 h</translation>
+    </message>
+    <message>
+        <location filename="../models/debuglogmodel.cpp" line="394"/>
+        <source>%1 d ago</source>
+        <translation type="unfinished">hace %1 d</translation>
+    </message>
+</context>
 
 <context>
     <name>SettingsAbout</name>
@@ -382,7 +654,19 @@ Si lo encuentras útil, por favor contribuye.
         <translation type="unfinished">Atrás</translation>
     </message>
 </context>
-
+<context>
+    <name>SettingsBlockClockDisplayMode</name>
+    <message>
+        <location filename="../pages/settings/SettingsBlockClockDisplayMode.qml" line="24"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsBlockClockDisplayMode.qml" line="30"/>
+        <source>Block clock display mode</source>
+        <translation type="unfinished">Modo del reloj de bloques</translation>
+    </message>
+</context>
 <context>
     <name>SettingsConnection</name>
     <message>
@@ -402,7 +686,141 @@ Si lo encuentras útil, por favor contribuye.
         <translation type="unfinished">Listo</translation>
     </message>
 </context>
-
+<context>
+    <name>SettingsDesignSystem</name>
+    <message>
+        <location filename="../pages/settings/SettingsDesignSystem.qml" line="50"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDesignSystem.qml" line="56"/>
+        <source>Design system</source>
+        <translation type="unfinished">Sistema de diseño</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDesignSystem.qml" line="78"/>
+        <source>Typography</source>
+        <translation type="unfinished">Tipografía</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDesignSystem.qml" line="121"/>
+        <source>Colors</source>
+        <translation type="unfinished">Colores</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDesignSystem.qml" line="127"/>
+        <source>Palette tokens for the active theme. Toggle Theme to compare.</source>
+        <translation type="unfinished">Tokens de la paleta del tema activo. Cambia el tema para comparar.</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDeveloper</name>
+    <message>
+        <location filename="../pages/settings/SettingsDeveloper.qml" line="17"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDeveloper.qml" line="25"/>
+        <source>Developer options</source>
+        <translation type="unfinished">Opciones de desarrollador</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDeveloper.qml" line="52"/>
+        <source>Developer settings</source>
+        <translation type="unfinished">Ajustes de desarrollador</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDisplay</name>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="31"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="37"/>
+        <source>Display</source>
+        <translation type="unfinished">Pantalla</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="47"/>
+        <source>Theme</source>
+        <translation type="unfinished">Tema</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="59"/>
+        <source>Block status size</source>
+        <translation type="unfinished">Tamaño del estado de bloques</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="90"/>
+        <source>System default</source>
+        <translation type="unfinished">Predeterminado del sistema</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="72"/>
+        <source>Display unit</source>
+        <translation type="unfinished">Unidad de visualización</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplay.qml" line="86"/>
+        <source>Language</source>
+        <translation type="unfinished">Idioma</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsDisplayUnit</name>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="26"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="32"/>
+        <source>Display unit</source>
+        <translation type="unfinished">Unidad de visualización</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="44"/>
+        <source>BTC</source>
+        <translation type="unfinished">BTC</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="45"/>
+        <source>8 decimal places (0.00000001 BTC = 1 sat)</source>
+        <translation type="unfinished">8 decimales (0.00000001 BTC = 1 sat)</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="53"/>
+        <source>sat</source>
+        <translation type="unfinished">sat</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsDisplayUnit.qml" line="54"/>
+        <source>Satoshi, the smallest unit (1 sat = 0.00000001 BTC)</source>
+        <translation type="unfinished">Satoshi, la unidad más pequeña (1 sat = 0.00000001 BTC)</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsLanguage</name>
+    <message>
+        <location filename="../pages/settings/SettingsLanguage.qml" line="26"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsLanguage.qml" line="32"/>
+        <source>Choose language</source>
+        <translation type="unfinished">Elegir idioma</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsLanguage.qml" line="45"/>
+        <source>Search...</source>
+        <translation type="unfinished">Buscar...</translation>
+    </message>
+</context>
 <context>
     <name>SettingsProxy</name>
     <message>
@@ -442,6 +860,19 @@ Si lo encuentras útil, por favor contribuye.
         <location filename="../pages/settings/SettingsStorage.qml" line="71"/>
         <source>Done</source>
         <translation type="unfinished">Listo</translation>
+    </message>
+</context>
+<context>
+    <name>SettingsTheme</name>
+    <message>
+        <location filename="../pages/settings/SettingsTheme.qml" line="25"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/settings/SettingsTheme.qml" line="31"/>
+        <source>Theme</source>
+        <translation type="unfinished">Tema</translation>
     </message>
 </context>
 
@@ -538,6 +969,29 @@ Si lo encuentras útil, por favor contribuye.
         <translation type="unfinished">Directorio de datos</translation>
     </message>
 </context>
+<context>
+    <name>ThemeSettings</name>
+    <message>
+        <location filename="../components/ThemeSettings.qml" line="24"/>
+        <source>Light</source>
+        <translation type="unfinished">Claro</translation>
+    </message>
+    <message>
+        <location filename="../components/ThemeSettings.qml" line="39"/>
+        <source>Dark</source>
+        <translation type="unfinished">Oscuro</translation>
+    </message>
+    <message>
+        <location filename="../components/ThemeSettings.qml" line="60"/>
+        <source>Developer</source>
+        <translation type="unfinished">Desarrollador</translation>
+    </message>
+    <message>
+        <location filename="../components/ThemeSettings.qml" line="70"/>
+        <source>Design system</source>
+        <translation type="unfinished">Sistema de diseño</translation>
+    </message>
+</context>
 
 <context>
     <name>MainWindow</name>
@@ -606,5 +1060,14 @@ Si lo encuentras útil, por favor contribuye.
     <name>ApplicationShell</name>
     <message><source>Back</source><translation>Atrás</translation></message>
 </context>
-
+<context>
+    <name>LanguageSettingsModel</name>
+    <message><source>System default</source><translation>Predeterminado del sistema</translation></message>
+</context>
+<context>
+    <name>DesktopTrayIconController</name>
+    <message><source>Show</source><translation>Mostrar</translation></message>
+    <message><source>Hide</source><translation>Ocultar</translation></message>
+    <message><source>Quit</source><translation>Salir</translation></message>
+</context>
 </TS>
