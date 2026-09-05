@@ -1390,4 +1390,57 @@ Si lo encuentras útil, por favor contribuye.
     <message><source>Hide</source><translation>Ocultar</translation></message>
     <message><source>Quit</source><translation>Salir</translation></message>
 </context>
+<context>
+    <name>NetworkTraffic</name>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="24"/>
+        <source>Back</source>
+        <translation type="unfinished">Atrás</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="30"/>
+        <source>Network traffic</source>
+        <translation type="unfinished">Tráfico de red</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="34"/>
+        <source>Network Traffic</source>
+        <translation type="unfinished">Tráfico de red</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="36"/>
+        <source>How much data you have sent to and received from your peers.</source>
+        <translation type="unfinished">Cuántos datos has enviado a y recibido de tus pares.</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="62"/>
+        <source>5 min</source>
+        <translation type="unfinished">5 min</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="78"/>
+        <source>1 hour</source>
+        <translation type="unfinished">1 hora</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="94"/>
+        <source>12 hours</source>
+        <translation type="unfinished">12 horas</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="110"/>
+        <source>1 day</source>
+        <translation type="unfinished">1 día</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="129"/>
+        <source>Received: %1</source>
+        <translation type="unfinished">Recibido: %1</translation>
+    </message>
+    <message>
+        <location filename="../pages/node/NetworkTraffic.qml" line="149"/>
+        <source>Sent: %1</source>
+        <translation type="unfinished">Enviado: %1</translation>
+    </message>
+</context>
 </TS>
