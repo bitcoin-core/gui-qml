@@ -105,6 +105,22 @@ class QmlInterfaceTest(BitcoinTestFramework):
             gui.click("nodeSettingsDoneButton")
             self.wait_until(lambda: any(item["objectName"] == "blockClock" for item in gui.list_objects()))
 
+            self.log.info("Opening the console and executing a read-only node command")
+            gui.click("consoleTabButton")
+            self.wait_until(lambda: any(item["objectName"] == "consoleInput" for item in gui.list_objects()))
+            gui.type_text("consoleInput", "getblockchaininfo")
+            gui.press_key("consoleInput", "Escape")  # Dismiss completion before submitting.
+            gui.press_key("consoleInput", "Return")
+
+            def has_regtest_reply():
+                for item in gui.list_objects():
+                    if item["objectName"].startswith("consoleOutputArea_content_"):
+                        if "regtest" in gui.get_property(item["objectName"], "text"):
+                            return True
+                return False
+
+            self.wait_until(has_regtest_reply, timeout=30)
+
             self.log.info("Closing the application window through the bridge")
             gui.close_window()
             assert_equal(harness.wait_for_exit(), 0)

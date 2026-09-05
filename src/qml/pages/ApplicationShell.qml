@@ -80,6 +80,7 @@ Item {
         function onNavigateRequested(route) { applicationRouter.navigate(route) }
         function onSettingsClicked() { applicationRouter.navigate("settings") }
         function onPeersClicked() { applicationRouter.navigate("peers") }
+        function onConsoleClicked() { applicationRouter.navigate("console") }
         function onPeerSelected(details) { applicationRouter.navigate("peer-details", {"details": details}) }
         function onBannedPeers() { applicationRouter.navigate("banned-peers") }
         function onDesignSystemRequested() { applicationRouter.navigate("settings/design-system") }

@@ -7,12 +7,15 @@
         <file>components/BlockClockDisplayMode.qml</file>
         <file>components/ConnectionSettings.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/DebugLogOutputView.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/InfoBanner.qml</file>
         <file>components/MempoolInformationRows.qml</file>
+        <file>components/MonospaceOutputView.qml</file>
         <file>components/NetworkIndicator.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
+        <file>components/NodeInformationPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
         <file>components/NodeStatusActions.qml</file>
         <file>components/NodeWarningsPopup.qml</file>
@@ -59,6 +62,7 @@
         <file>components/GlobalMenu.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/BannedPeers.qml</file>
+        <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/MempoolInformationSettings.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
@@ -81,6 +85,7 @@
         <file>pages/settings/SettingsDisplay.qml</file>
         <file>pages/settings/SettingsDisplayUnit.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
+        <file>pages/settings/SettingsDebugLog.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
@@ -99,6 +104,7 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
+        <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
@@ -114,6 +120,9 @@
         <file alias="node-2-connections">res/icons/node-2-connections.png</file>
         <file alias="node-3-connections">res/icons/node-3-connections.png</file>
         <file alias="node-4-connections">res/icons/node-4-connections.png</file>
+        <file alias="plus">res/icons/plus.png</file>
+        <file alias="refresh">res/icons/refresh.png</file>
+        <file alias="search">res/icons/search.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>

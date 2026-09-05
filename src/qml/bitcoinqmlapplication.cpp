@@ -21,6 +21,7 @@
 #include <qml/models/nodenetworkmodel.h>
 #include <qml/models/runtimedialogmodel.h>
 #include <qml/models/mempoolmodel.h>
+#include <qml/models/nodeinformationmodel.h>
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
 #include <qml/components/blockclockdial.h>
@@ -32,6 +33,7 @@
 #include <qml/models/chainmodel.h>
 #include <qml/models/desktoptrayiconcontroller.h>
 #include <qml/models/desktopwindowbehaviormodel.h>
+#include <qml/models/debuglogmodel.h>
 #include <qml/models/networkstatusmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
@@ -39,6 +41,7 @@
 #include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/models/peerlistsortproxy.h>
+#include <qml/models/rpcconsolemodel.h>
 #include <qml/networkstyle.h>
 #include <qml/test/testbridge.h>
 
@@ -85,6 +88,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
+    qmlRegisterUncreatableType<DebugLogModel>("org.bitcoincore.qt", 1, 0, "DebugLogModel", "");
+    qmlRegisterUncreatableType<RpcConsoleModel>("org.bitcoincore.qt", 1, 0, "RpcConsoleModel", "");
     registered = true;
 }
 } // namespace
@@ -119,6 +124,7 @@ BitcoinQmlApplication::~BitcoinQmlApplication()
     m_engine.reset();
     m_language_settings_model.reset();
     m_options_model.reset();
+    m_node_information_model.reset();
     m_mempool_model.reset();
     m_node_network_model.reset();
     m_chain_sync_model.reset();
@@ -126,6 +132,8 @@ BitcoinQmlApplication::~BitcoinQmlApplication()
     m_router.reset();
     m_desktop_tray_icon_controller.reset();
     m_desktop_window_behavior_model.reset();
+    m_rpc_console_model.reset();
+    m_debug_log_model.reset();
     m_ban_list_model.reset();
     m_peer_model_sort_proxy.reset();
     m_peer_model.reset();
@@ -182,6 +190,7 @@ bool BitcoinQmlApplication::createWindow()
     m_chain_sync_model = std::make_unique<ChainSyncModel>(*m_node);
     m_node_network_model = std::make_unique<NodeNetworkModel>(*m_node);
     m_mempool_model = std::make_unique<MempoolModel>(*m_node);
+    m_node_information_model = std::make_unique<NodeInformationModel>(*m_node, *m_chain_sync_model, *m_node_network_model, *m_runtime_dialog_model);
     m_router = std::make_unique<ApplicationRouter>();
     m_router->registerDestination({QStringLiteral("node"), QUrl{QStringLiteral("qrc:///qml/pages/node/NodeRunner.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Node"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("settings"), QUrl{QStringLiteral("qrc:///qml/pages/settings/SettingsDisplay.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Settings"), true, QStringLiteral("")});
@@ -189,6 +198,8 @@ bool BitcoinQmlApplication::createWindow()
     m_router->registerDestination({QStringLiteral("banned-peers"), QUrl{QStringLiteral("qrc:///qml/pages/node/BannedPeers.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Banned peers"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("traffic"), QUrl{QStringLiteral("qrc:///qml/pages/node/NetworkTraffic.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Network traffic"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("mempool"), QUrl{QStringLiteral("qrc:///qml/pages/node/MempoolInformationSettings.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Mempool"), true, QStringLiteral("")});
+    m_router->registerDestination({QStringLiteral("console"), QUrl{QStringLiteral("qrc:///qml/pages/node/CommandConsole.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Console"), true, QStringLiteral("")});
+    m_router->registerDestination({QStringLiteral("debug-log"), QUrl{QStringLiteral("qrc:///qml/pages/settings/SettingsDebugLog.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Debug log"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("peer-details"), QUrl{QStringLiteral("qrc:///qml/pages/node/PeerDetails.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Peer details"), false, QStringLiteral("peers")});
     m_router->registerDestination({QStringLiteral("shutdown"), QUrl{QStringLiteral("qrc:///qml/pages/node/Shutdown.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Shutting down"), false, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("settings/window"), QUrl{QStringLiteral("qrc:///qml/pages/settings/SettingsWindowBehavior.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Window"), false, QStringLiteral("settings")});
@@ -209,11 +220,13 @@ bool BitcoinQmlApplication::createWindow()
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_chain_sync_model.get(), &ChainSyncModel::stop);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_node_network_model.get(), &NodeNetworkModel::stop);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_mempool_model.get(), &MempoolModel::stop);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_node_information_model.get(), [this] { m_node_information_model->setReady(false); });
     m_init_executor = std::make_unique<QmlInitExecutor>(*m_node);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedInitialize, m_init_executor.get(), &QmlInitExecutor::initialize);
     connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_node_model.get(), &NodeLifecycleModel::initializeResult);
     connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_chain_sync_model.get(), &ChainSyncModel::initializeResult);
     connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_mempool_model.get(), &MempoolModel::initializeResult);
+    connect(m_node_model.get(), &NodeLifecycleModel::initializationFinished, m_node_information_model.get(), &NodeInformationModel::setReady);
     connect(m_node_model.get(), &NodeLifecycleModel::nodeInitialized, m_node_network_model.get(), &NodeNetworkModel::refreshPeerCounts);
     connect(m_init_executor.get(), &QmlInitExecutor::shutdownResult, m_node_model.get(), &NodeLifecycleModel::shutdownResult);
     connect(m_init_executor.get(), &QmlInitExecutor::runawayException, this, &BitcoinQmlApplication::handleRunawayException);
@@ -257,7 +270,13 @@ bool BitcoinQmlApplication::createWindow()
     m_ban_list_model = std::make_unique<BanListModel>(*m_node);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_ban_list_model.get(), &BanListModel::stop);
     connect(m_node_model.get(), &NodeLifecycleModel::nodeInitialized, m_ban_list_model.get(), &BanListModel::refresh);
+
+    m_debug_log_model = std::make_unique<DebugLogModel>(gArgs.GetDataDirNet() / "debug.log");
+    m_rpc_console_model = std::make_unique<RpcConsoleModel>(*m_node);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_rpc_console_model.get(), &RpcConsoleModel::stop);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_network_traffic_tower.get(), &NetworkTrafficTower::stop);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_debug_log_model.get(), &DebugLogModel::stop);
+    connect(m_node_model.get(), &NodeLifecycleModel::nodeInitialized, m_rpc_console_model.get(), &RpcConsoleModel::onNodeInitialized);
 
     m_network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
     assert(m_network_style);
@@ -276,6 +295,7 @@ bool BitcoinQmlApplication::createWindow()
     context->setContextProperty(QStringLiteral("nodeNetworkModel"), m_node_network_model.get());
     context->setContextProperty(QStringLiteral("runtimeDialogModel"), m_runtime_dialog_model.get());
     context->setContextProperty(QStringLiteral("mempoolModel"), m_mempool_model.get());
+    context->setContextProperty(QStringLiteral("nodeInformationModel"), m_node_information_model.get());
     context->setContextProperty(QStringLiteral("applicationRouter"), m_router.get());
     context->setContextProperty(QStringLiteral("navigationModel"), m_navigation_model.get());
     context->setContextProperty(QStringLiteral("languageSettingsModel"), m_language_settings_model.get());
@@ -297,6 +317,8 @@ bool BitcoinQmlApplication::createWindow()
     context->setContextProperty(QStringLiteral("peerTableModel"), m_peer_model.get());
     context->setContextProperty(QStringLiteral("peerListModelProxy"), m_peer_model_sort_proxy.get());
     context->setContextProperty(QStringLiteral("banListModel"), m_ban_list_model.get());
+    context->setContextProperty(QStringLiteral("debugLogModel"), m_debug_log_model.get());
+    context->setContextProperty(QStringLiteral("rpcConsoleModel"), m_rpc_console_model.get());
 
     m_engine->load(QUrl{QStringLiteral("qrc:///qml/pages/MainWindow.qml")});
     if (m_engine->rootObjects().isEmpty()) return false;

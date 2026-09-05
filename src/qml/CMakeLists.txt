@@ -76,12 +76,18 @@ add_library(bitcoinqml STATIC
   models/languagesettingsmodel.cpp
   models/languagesettingsmodel.h
   models/macdockiconhandler.h
+  models/debuglogmodel.cpp
+  models/debuglogmodel.h
+  models/debuglogreader.cpp
+  models/debuglogreader.h
   models/mempoolmodel.cpp
   models/mempoolmodel.h
   models/networkstatusmodel.cpp
   models/networkstatusmodel.h
   models/networktraffictower.cpp
   models/networktraffictower.h
+  models/nodeinformationmodel.cpp
+  models/nodeinformationmodel.h
   models/nodelifecyclemodel.cpp
   models/nodelifecyclemodel.h
   models/nodemodel.cpp
@@ -98,6 +104,10 @@ add_library(bitcoinqml STATIC
   models/peerlistmodel.h
   models/peerlistsortproxy.cpp
   models/peerlistsortproxy.h
+  models/rpccommandexecutor.cpp
+  models/rpccommandexecutor.h
+  models/rpcconsolemodel.cpp
+  models/rpcconsolemodel.h
   models/runtimedialogmodel.cpp
   models/runtimedialogmodel.h
   models/settings_keys.h
@@ -180,6 +190,7 @@ target_sources(bitcoinqml
 target_link_libraries(bitcoinqml
   PRIVATE
     core_interface
+    bitcoin_cli
     bitcoin_node
     $<$<PLATFORM_ID:Darwin>:-framework\ AppKit>
   PUBLIC
