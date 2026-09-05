@@ -22,6 +22,7 @@ TEST_FRAMEWORK_MODULES = [
     "crypto.chacha20",
     "crypto.ellswift",
     "extendedkey",
+    "gui_util",
     "key",
     "messages",
     "crypto.muhash",

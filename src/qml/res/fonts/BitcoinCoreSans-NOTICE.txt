@@ -1,0 +1,18 @@
+BitcoinCoreSans is a modified derivative of the Inter font family.
+
+Source:
+- https://github.com/rsms/inter
+
+Modification:
+- The default numeral glyphs were frozen to tabular figures with slashed zero
+  by applying the OpenType `tnum` and `zero` features to the bundled Regular
+  and Semi Bold OTFs.
+- Inter's default numerals are already lining figures, so there was no `lnum`
+  feature to freeze in the source build.
+
+Renaming:
+- The family was renamed to `BitcoinCoreSans` to avoid redistributing a
+  modified font under the Reserved Font Name `Inter`.
+
+License:
+- See BitcoinCoreSans-OFL-1.1.txt

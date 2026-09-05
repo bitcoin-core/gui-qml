@@ -57,6 +57,7 @@ class QmlTestHarness:
 
         environment = dict(os.environ)
         environment["QT_QPA_PLATFORM"] = os.getenv("QML_TEST_QPA_PLATFORM", "minimal")
+        environment["QML_DISABLE_DISK_CACHE"] = "1"
         for directory in (self.config_dir, self.cache_dir, self.home_dir):
             directory.mkdir(exist_ok=True)
         environment["XDG_CONFIG_HOME"] = str(self.config_dir)
