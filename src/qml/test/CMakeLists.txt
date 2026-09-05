@@ -8,6 +8,7 @@ add_executable(test_bitcoin-qt
   test_application.cpp
   test_applicationrouter.cpp
   test_translationmanager.cpp
+  test_console_integration.cpp
   test_navigation_integration.cpp
   test_onboarding_integration.cpp
   test_node_integration.cpp
@@ -15,6 +16,7 @@ add_executable(test_bitcoin-qt
   test_blockclockdial.cpp
   test_desktopwindowbehaviormodel.cpp
   test_display_settings.cpp
+  test_debuglog.cpp
   test_guiargs.cpp
   test_networkstatusmodel.cpp
   test_networktraffictower.cpp
@@ -27,6 +29,7 @@ add_executable(test_bitcoin-qt
   test_startupsettings.cpp
   test_peerlistmodel.cpp
   test_peerstatsutil.cpp
+  test_rpccommandexecutor.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )

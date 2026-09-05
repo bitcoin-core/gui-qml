@@ -6,6 +6,7 @@
 #include <qml/models/banlistmodel.h>
 #include <qml/models/chainsyncmodel.h>
 #include <qml/models/mempoolmodel.h>
+#include <qml/models/nodeinformationmodel.h>
 #include <qml/models/nodenetworkmodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/test/integration_test_registry.h>
@@ -105,6 +106,22 @@ private Q_SLOTS:
         QVERIFY(!core_bans.contains(subnet));
     }
 
+    void diagnosticRowsReadTheRunningNode()
+    {
+        auto* information = model<NodeInformationModel>("nodeInformationModel");
+        QVERIFY(information);
+        const auto rows = information->nodeInformationRows();
+        auto value = [&](const QString& label) {
+            for (const auto& item : rows) {
+                const auto row{item.toMap()};
+                if (row.value(QStringLiteral("label")).toString() == label) return row.value(QStringLiteral("value")).toString();
+            }
+            return QString{};
+        };
+        QCOMPARE(value(QStringLiteral("Network")), QStringLiteral("regtest"));
+        QCOMPARE(value(QStringLiteral("Block height")), QString::number(m_app.node().getNumBlocks()));
+        QVERIFY(!value(QStringLiteral("Client version")).isEmpty());
+    }
 };
 BITCOINQML_REGISTER_INTEGRATION_TEST(NodeIntegrationTests)
 #include <test_node_integration.moc>
