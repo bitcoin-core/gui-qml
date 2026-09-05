@@ -8,8 +8,10 @@
 #include <qml/core_settings.h>
 #include <qml/guiargs.h>
 #include <qml/guiconstants.h>
+#include <qml/models/languagesettingsmodel.h>
 #include <qml/models/settings_keys.h>
 #include <qml/onboarding_settings.h>
+#include <qml/test/mocks/stubnode.h>
 #include <qml/translationmanager.h>
 
 #include <QLocale>
@@ -22,6 +24,23 @@
 #include <QtTest/QtTest>
 
 #include <memory>
+
+namespace {
+class LanguageNode : public StubNode
+{
+public:
+    explicit LanguageNode(ArgsManager& args) : m_args(args) {}
+    common::SettingsValue getPersistentSetting(const std::string& name) override { return m_args.GetPersistentSetting(name); }
+    void updateRwSetting(const std::string& name, const common::SettingsValue& value) override
+    {
+        ++writes;
+        QmlCoreSettings::SetRwSetting(m_args, QString::fromStdString(name), value);
+    }
+    int writes{0};
+private:
+    ArgsManager& m_args;
+};
+}
 
 class TranslationManagerTests : public QObject
 {
@@ -63,7 +82,42 @@ private Q_SLOTS:
         std::string error;
         QVERIFY(args.ParseParameters(2, argv, error));
         QCOMPARE(TranslationManager::ResolveLanguage(args), QString{});
+        TranslationManager translations;
+        LanguageNode node(args);
+        LanguageSettingsModel language(node, args, translations);
+        QVERIFY(!language.status().value("canEdit").toBool());
+        language.setLanguage("es");
+        QCOMPARE(language.language(), QString{});
+        QCOMPARE(node.writes, 0);
+        QCOMPARE(QSettings().value(SettingsKeys::LANGUAGE).toString(), QString("de"));
+    }
 
+    void settingsUseTheSameServiceAndPersistDefault()
+    {
+        ArgsManager args;
+        SetupQmlGuiArgs(args);
+        args.LockSettings([](common::Settings& settings) { settings.ro_config[""]["lang"] = {"fr"}; });
+        TranslationManager translations;
+        LanguageNode node(args);
+        LanguageSettingsModel language(node, args, translations);
+        QCOMPARE(language.language(), QString("fr"));
+        QSignalSpy changed(&language, &LanguageSettingsModel::languageChanged);
+        language.setLanguage("es");
+        QCOMPARE(language.language(), translations.language());
+        QCOMPARE(TranslationManager::ResolveLanguage(args), QString("es"));
+        QCOMPARE(QSettings().value(SettingsKeys::LANGUAGE).toString(), QString("es"));
+        QCOMPARE(node.writes, 1);
+        QCOMPARE(changed.count(), 1);
+        language.setLanguage("es");
+        QCOMPARE(node.writes, 1);
+        language.setLanguage("");
+        QCOMPARE(TranslationManager::ResolveLanguage(args), QString{});
+        QCOMPARE(QLocale().name(), QLocale::system().name());
+        QVERIFY(language.availableLanguages().contains("es"));
+        QCOMPARE(language.availableLanguages().first(), QString{});
+        TranslationManager restarted;
+        LanguageSettingsModel reloaded(node, args, restarted);
+        QCOMPARE(reloaded.language(), QString{});
     }
 
     void bootstrapUsesTheSelectedNetworksSettingsStore()
