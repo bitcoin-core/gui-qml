@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QFile>
+#include <QSettings>
 #include <QTemporaryDir>
 
 #include <functional>
@@ -63,6 +64,10 @@ bool ParseTestSuite(int& argc, char* argv[], TestSuite& suite)
 int RunUnitTests(int argc, char* argv[])
 {
     QCoreApplication app(argc, argv);
+    QTemporaryDir settings_dir;
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    QSettings::setPath(QSettings::NativeFormat, QSettings::UserScope, settings_dir.path());
 
     int status{0};
     for (const auto& test : qttestregistry::SortedEntries()) {
