@@ -50,6 +50,7 @@ jobs:
             qt6-tools-dev-tools \
             qt6-declarative-dev \
             qml6-module-qt-labs-platform \
+            qt6-declarative-private-dev \
             qml6-module-qt-labs-settings \
             qml6-module-qtquick \
             qml6-module-qtquick-controls \

@@ -101,6 +101,7 @@
 #include <QTranslator>
 #include <QUrl>
 #include <QVariant>
+#include <QtGlobal>
 
 QT_BEGIN_NAMESPACE
 class QMessageLogContext;
@@ -127,6 +128,24 @@ Q_IMPORT_PLUGIN(QtQuickControls2BasicStylePlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2BasicStyleImplPlugin)
 Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin)
 #endif
+
+void ConfigureQmlCachePolicy()
+{
+    // QML_FORCE_DISK_CACHE overrides the safe settings below, so do not allow
+    // it to re-enable host-generated cache reads or writes.
+    qunsetenv("QML_FORCE_DISK_CACHE");
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
+    qunsetenv("QML_DISABLE_DISK_CACHE");
+    qputenv("QML_DISK_CACHE", "aot");
+#else
+    // Before Qt 6.6, embedded AOT units and host-generated cache files cannot
+    // be controlled separately. Prefer a safe source fallback on those Qt
+    // versions instead of allowing stale host cache files to be loaded.
+    qunsetenv("QML_DISK_CACHE");
+    qputenv("QML_DISABLE_DISK_CACHE", "1");
+#endif
+}
 
 // Qt emits "OpenType support missing for ..." warnings when BitcoinCoreSans
 // lacks glyphs for a script and Qt falls back to another font. These are
@@ -396,13 +415,14 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 
 int QmlGuiMain(int argc, char* argv[])
 {
+    ConfigureQmlCachePolicy();
+
 #ifdef WIN32
     common::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
 #endif // WIN32
 
     Q_INIT_RESOURCE(bitcoin_qml);
-    Q_INIT_RESOURCE(bitcoin_compat);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);

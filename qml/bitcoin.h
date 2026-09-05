@@ -9,6 +9,10 @@ class QString;
 
 int QmlGuiMain(int argc, char* argv[]);
 
+//! Configure QML to ignore host-generated cache files. Must be called before
+//! constructing a Qt application or QML engine.
+void ConfigureQmlCachePolicy();
+
 //! Returns true for benign Qt font fallback warnings ("OpenType support
 //! missing for ...") that should be logged at debug level rather than printed.
 bool IsBenignQtFontWarning(const QString& msg);
