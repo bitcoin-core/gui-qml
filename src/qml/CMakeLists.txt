@@ -2,6 +2,15 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or https://opensource.org/license/mit/.
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  enable_language(OBJCXX)
+  set(CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+  set(CMAKE_OBJCXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+  set(CMAKE_OBJCXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+  set(CMAKE_OBJCXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL}")
+  string(APPEND CMAKE_OBJCXX_COMPILE_OBJECT " ${APPEND_CPPFLAGS} ${APPEND_CXXFLAGS}")
+endif()
+
 include(ImportQtPlugins)
 
 set(CMAKE_AUTOMOC ON)
@@ -31,6 +40,8 @@ add_library(bitcoinqml STATIC
   bitcoin.h
   bitcoinqmlapplication.cpp
   bitcoinqmlapplication.h
+  bitcoinunits.cpp
+  bitcoinunits.h
   buildinfo.h
   clipboard.h
   components/blockclockdial.cpp
@@ -54,6 +65,13 @@ add_library(bitcoinqml STATIC
   models/chainsyncmodel.h
   models/core_settings_model.cpp
   models/core_settings_model.h
+  models/desktoptrayiconcontroller.cpp
+  models/desktoptrayiconcontroller.h
+  models/desktopwindowbehaviormodel.cpp
+  models/desktopwindowbehaviormodel.h
+  models/languagesettingsmodel.cpp
+  models/languagesettingsmodel.h
+  models/macdockiconhandler.h
   models/networkstatusmodel.cpp
   models/networkstatusmodel.h
   models/nodelifecyclemodel.cpp
@@ -64,6 +82,8 @@ add_library(bitcoinqml STATIC
   models/nodenetworkmodel.h
   models/onboardingoptionsmodel.cpp
   models/onboardingoptionsmodel.h
+  models/options_model.cpp
+  models/options_model.h
   models/runtimedialogmodel.cpp
   models/runtimedialogmodel.h
   models/settings_keys.h
@@ -121,6 +141,13 @@ endif()
 unset(warn_flags)
 unset(ts_files)
 
+if(APPLE)
+  target_sources(bitcoinqml PRIVATE
+    models/macdockiconhandler.h
+    models/macdockiconhandler.mm
+  )
+endif()
+
 target_compile_definitions(bitcoinqml
   PUBLIC
     QT_NO_KEYWORDS
@@ -138,6 +165,7 @@ target_link_libraries(bitcoinqml
   PRIVATE
     core_interface
     bitcoin_node
+    $<$<PLATFORM_ID:Darwin>:-framework\ AppKit>
   PUBLIC
     Boost::headers
     core_interface
