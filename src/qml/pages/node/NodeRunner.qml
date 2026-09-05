@@ -1,13 +1,44 @@
-// Copyright (c) 2026 The Bitcoin Core developers
+// Copyright (c) 2022 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 import "../../controls"
+import "../../controls/utils.js" as Utils
+import "../../components"
 
 Page {
+    signal settingsClicked
+    id: root
     objectName: "nodeRunner"
     background: null
-    CoreText { anchors.centerIn: parent; text: nodeLifecycleModel.statusText; font.pixelSize: 20 }
+    clip: true
+    header: NavigationBar2 {
+        rightItem: Item {
+            implicitWidth: actionsRow.implicitWidth + 12
+            implicitHeight: actionsRow.implicitHeight + 10
+
+            RowLayout {
+                id: actionsRow
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.topMargin: 8
+                anchors.rightMargin: 12
+                spacing: 4
+
+                NodeStatusActions {
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+            }
+        }
+    }
+
+    BlockClock {
+        parentWidth: parent.width - 40
+        parentHeight: parent.height
+        anchors.centerIn: parent
+    }
 }

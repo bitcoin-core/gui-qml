@@ -10,8 +10,13 @@ add_executable(test_bitcoin-qt
   test_translationmanager.cpp
   test_navigation_integration.cpp
   test_onboarding_integration.cpp
+  test_node_integration.cpp
+  test_blockclockdial.cpp
   test_guiargs.cpp
+  test_networkstatusmodel.cpp
   test_nodemodel.cpp
+  test_noderuntimemodels.cpp
+  test_runtimedialogmodel.cpp
   test_onboarding_storage.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
@@ -21,6 +26,7 @@ add_windows_application_manifest(test_bitcoin-qt)
 qt6_add_resources(test_bitcoin-qt qml_tests
   PREFIX /test
   FILES
+    qml/tst_blockclock.qml
     qml/tst_globalmenu.qml
     qml/tst_navbutton.qml
     qml/tst_proxylocationinput.qml

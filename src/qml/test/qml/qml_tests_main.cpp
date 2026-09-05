@@ -7,6 +7,7 @@
 #include <qml/appmode.h>
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
+#include <qml/components/blockclockdial.h>
 #include <qml/guiconstants.h>
 
 #include <QCoreApplication>
@@ -59,6 +60,7 @@ public Q_SLOTS:
         qmlRegisterSingletonInstance("org.bitcoincore.qt", 1, 0, "AppMode", m_app_mode.get());
         qmlRegisterSingletonInstance("org.bitcoincore.qt", 1, 0, "BuildInfo", m_build_info.get());
         qmlRegisterSingletonInstance("org.bitcoincore.qt", 1, 0, "Clipboard", m_clipboard.get());
+        qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
