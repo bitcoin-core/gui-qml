@@ -37,6 +37,8 @@ add_library(bitcoinqml STATIC
   clipboard.h
   components/blockclockdial.cpp
   components/blockclockdial.h
+  controls/linegraph.cpp
+  controls/linegraph.h
   core_settings.cpp
   core_settings.h
   datadir.cpp
@@ -67,6 +69,8 @@ add_library(bitcoinqml STATIC
   models/macdockiconhandler.h
   models/networkstatusmodel.cpp
   models/networkstatusmodel.h
+  models/networktraffictower.cpp
+  models/networktraffictower.h
   models/nodelifecyclemodel.cpp
   models/nodelifecyclemodel.h
   models/nodemodel.cpp

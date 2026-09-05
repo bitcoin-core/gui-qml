@@ -10,6 +10,7 @@
         <file>components/ExternalPopup.qml</file>
         <file>components/InfoBanner.qml</file>
         <file>components/NetworkIndicator.qml</file>
+        <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
         <file>components/NodeStatusActions.qml</file>
@@ -22,6 +23,7 @@
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
+        <file>components/TotalBytesIndicator.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
@@ -56,6 +58,7 @@
         <file>components/GlobalMenu.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/BannedPeers.qml</file>
+        <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
         <file>pages/node/PeerDetails.qml</file>
