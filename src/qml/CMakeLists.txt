@@ -33,6 +33,8 @@ add_library(bitcoinqml STATIC
   bitcoinqmlapplication.h
   buildinfo.h
   clipboard.h
+  components/blockclockdial.cpp
+  components/blockclockdial.h
   core_settings.cpp
   core_settings.h
   datadir.cpp
@@ -46,12 +48,24 @@ add_library(bitcoinqml STATIC
   initexecutor.h
   legacy_settings_migration.cpp
   legacy_settings_migration.h
+  models/chainmodel.cpp
+  models/chainmodel.h
+  models/chainsyncmodel.cpp
+  models/chainsyncmodel.h
   models/core_settings_model.cpp
   models/core_settings_model.h
+  models/networkstatusmodel.cpp
+  models/networkstatusmodel.h
+  models/nodelifecyclemodel.cpp
+  models/nodelifecyclemodel.h
   models/nodemodel.cpp
   models/nodemodel.h
+  models/nodenetworkmodel.cpp
+  models/nodenetworkmodel.h
   models/onboardingoptionsmodel.cpp
   models/onboardingoptionsmodel.h
+  models/runtimedialogmodel.cpp
+  models/runtimedialogmodel.h
   models/settings_keys.h
   networkstyle.cpp
   networkstyle.h

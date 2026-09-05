@@ -14,11 +14,17 @@
 #include <qml/appmode.h>
 #include <qml/applicationrouter.h>
 #include <qml/translationmanager.h>
+#include <qml/models/chainsyncmodel.h>
+#include <qml/models/nodenetworkmodel.h>
+#include <qml/models/runtimedialogmodel.h>
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
+#include <qml/components/blockclockdial.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
+#include <qml/models/chainmodel.h>
+#include <qml/models/networkstatusmodel.h>
 #include <qml/models/nodemodel.h>
 #include <qml/networkstyle.h>
 #include <qml/test/testbridge.h>
@@ -63,6 +69,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         QQmlEngine::setObjectOwnership(clipboard_instance, QQmlEngine::CppOwnership);
         return clipboard_instance;
     });
+    qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     registered = true;
 }
 } // namespace
@@ -88,19 +95,27 @@ BitcoinQmlApplication::BitcoinQmlApplication(int& argc, char** argv)
 
 BitcoinQmlApplication::~BitcoinQmlApplication()
 {
+    // A Core initialization worker may be waiting for an unanswered GUI prompt.
+    if (m_runtime_dialog_model) m_runtime_dialog_model->stop();
     // Interrupt blocking RPCs before joining their worker during fallback
     // teardown (for example when QML window creation failed).
     if (m_node && m_base_initialized && !m_shutdown_complete) m_node->startShutdown();
     m_test_bridge.reset();
     m_engine.reset();
+    m_node_network_model.reset();
+    m_chain_sync_model.reset();
     m_navigation_model.reset();
     m_router.reset();
+    m_chain_model.reset();
+    m_network_status_model.reset();
     m_network_style.reset();
     m_clipboard.reset();
     m_build_info.reset();
     m_app_mode.reset();
     m_init_executor.reset();
     m_node_model.reset();
+    m_runtime_dialog_model.reset();
+    m_chain.reset();
     if (m_node && m_base_initialized && !m_shutdown_complete) {
         m_node->startShutdown();
         m_node->appShutdown();
@@ -117,7 +132,9 @@ void BitcoinQmlApplication::parameterSetup()
 void BitcoinQmlApplication::createNode(interfaces::Init& init)
 {
     assert(!m_node);
+    assert(!m_chain);
     m_node = init.makeNode();
+    m_chain = init.makeChain();
 }
 
 bool BitcoinQmlApplication::baseInitialize()
@@ -130,26 +147,42 @@ bool BitcoinQmlApplication::baseInitialize()
 bool BitcoinQmlApplication::createWindow()
 {
     assert(m_node);
+    assert(m_chain);
     assert(!m_node_model);
 
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
-    m_node_model = std::make_unique<NodeModel>(*m_node);
+
+    m_runtime_dialog_model = std::make_unique<RuntimeDialogModel>(*m_node);
+    m_runtime_dialog_model->addStartupWarnings(m_startup_warnings);
+    m_node_model = std::make_unique<NodeLifecycleModel>(*m_node, m_runtime_dialog_model.get());
+    m_chain_sync_model = std::make_unique<ChainSyncModel>(*m_node);
+    m_node_network_model = std::make_unique<NodeNetworkModel>(*m_node);
     m_router = std::make_unique<ApplicationRouter>();
     m_router->registerDestination({QStringLiteral("node"), QUrl{QStringLiteral("qrc:///qml/pages/node/NodeRunner.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Node"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("shutdown"), QUrl{QStringLiteral("qrc:///qml/pages/node/Shutdown.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Shutting down"), false, QStringLiteral("")});
     m_router->navigate(QStringLiteral("node"));
     m_navigation_model = std::make_unique<NavigationModel>(*m_router);
     connect(m_translations.get(), &TranslationManager::languageChanged, m_router.get(), &ApplicationRouter::retranslate);
-    connect(m_node_model.get(), &NodeModel::requestedShutdown, m_router.get(), &ApplicationRouter::beginShutdown);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_router.get(), &ApplicationRouter::beginShutdown);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_chain_sync_model.get(), &ChainSyncModel::stop);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_node_network_model.get(), &NodeNetworkModel::stop);
     m_init_executor = std::make_unique<QmlInitExecutor>(*m_node);
-    connect(m_node_model.get(), &NodeModel::requestedInitialize, m_init_executor.get(), &QmlInitExecutor::initialize);
-    connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_node_model.get(), &NodeModel::initializeResult);
-    connect(m_init_executor.get(), &QmlInitExecutor::shutdownResult, m_node_model.get(), &NodeModel::shutdownResult);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedInitialize, m_init_executor.get(), &QmlInitExecutor::initialize);
+    connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_node_model.get(), &NodeLifecycleModel::initializeResult);
+    connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_chain_sync_model.get(), &ChainSyncModel::initializeResult);
+    connect(m_node_model.get(), &NodeLifecycleModel::nodeInitialized, m_node_network_model.get(), &NodeNetworkModel::refreshPeerCounts);
+    connect(m_init_executor.get(), &QmlInitExecutor::shutdownResult, m_node_model.get(), &NodeLifecycleModel::shutdownResult);
     connect(m_init_executor.get(), &QmlInitExecutor::runawayException, this, &BitcoinQmlApplication::handleRunawayException);
-    connect(m_node_model.get(), &NodeModel::shutdownComplete, this, [this] {
+    connect(m_node_model.get(), &NodeLifecycleModel::shutdownComplete, this, [this] {
         m_shutdown_complete = true;
         exit(node().getExitStatus());
     });
+    m_network_status_model = std::make_unique<NetworkStatusModel>();
+    m_chain_model = std::make_unique<ChainModel>(*m_chain);
+    m_chain_model->setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
+
+    connect(m_chain_sync_model.get(), &ChainSyncModel::setTimeRatioList, m_chain_model.get(), &ChainModel::setTimeRatioList);
+    connect(m_chain_sync_model.get(), &ChainSyncModel::setTimeRatioListInitial, m_chain_model.get(), &ChainModel::setTimeRatioListInitial);
 
     m_network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
     assert(m_network_style);
@@ -159,9 +192,14 @@ bool BitcoinQmlApplication::createWindow()
     m_translations->attachEngine(*m_engine);
     m_engine->addImageProvider(QStringLiteral("images"), new ImageProvider{m_network_style.get()});
     QQmlContext* const context{m_engine->rootContext()};
+    context->setContextProperty(QStringLiteral("networkStatusModel"), m_network_status_model.get());
     context->setContextProperty(QStringLiteral("nodeLifecycleModel"), m_node_model.get());
+    context->setContextProperty(QStringLiteral("chainSyncModel"), m_chain_sync_model.get());
+    context->setContextProperty(QStringLiteral("nodeNetworkModel"), m_node_network_model.get());
+    context->setContextProperty(QStringLiteral("runtimeDialogModel"), m_runtime_dialog_model.get());
     context->setContextProperty(QStringLiteral("applicationRouter"), m_router.get());
     context->setContextProperty(QStringLiteral("navigationModel"), m_navigation_model.get());
+    context->setContextProperty(QStringLiteral("chainModel"), m_chain_model.get());
 
     connect(this, &QGuiApplication::lastWindowClosed, this, &BitcoinQmlApplication::requestShutdown);
     m_engine->load(QUrl{QStringLiteral("qrc:///qml/pages/MainWindow.qml")});
@@ -170,9 +208,10 @@ bool BitcoinQmlApplication::createWindow()
     auto* const window{qobject_cast<QQuickWindow*>(m_engine->rootObjects().constFirst())};
     if (!window) return false;
     if (m_initial_window_geometry.isValid()) window->setGeometry(m_initial_window_geometry);
-    // NodeModel interrupts Core first. All preceding direct slots drain
+    m_node_model->startShutdownPolling();
+    // NodeLifecycleModel interrupts Core first. All preceding direct slots drain
     // feature workers before this last slot queues destruction of Core state.
-    connect(m_node_model.get(), &NodeModel::requestedShutdown, m_init_executor.get(), &QmlInitExecutor::shutdown);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_init_executor.get(), &QmlInitExecutor::shutdown);
     return true;
 }
 
@@ -193,13 +232,18 @@ bool BitcoinQmlApplication::createTestBridge(const QString& socket_path)
 void BitcoinQmlApplication::requestInitialize()
 {
     assert(m_node_model);
-    QTimer::singleShot(0, m_node_model.get(), &NodeModel::start);
+    QTimer::singleShot(0, m_node_model.get(), &NodeLifecycleModel::start);
 }
 
 void BitcoinQmlApplication::requestShutdown()
 {
     assert(m_node_model);
     m_node_model->requestShutdown();
+}
+
+void BitcoinQmlApplication::addStartupWarnings(const QStringList& warnings)
+{
+    m_startup_warnings = warnings;
 }
 
 void BitcoinQmlApplication::setInitialWindowGeometry(const QRect& geometry)
@@ -229,7 +273,7 @@ interfaces::Node& BitcoinQmlApplication::node() const
     return *m_node;
 }
 
-NodeModel& BitcoinQmlApplication::nodeModel() const
+NodeLifecycleModel& BitcoinQmlApplication::nodeModel() const
 {
     assert(m_node_model);
     return *m_node_model;
