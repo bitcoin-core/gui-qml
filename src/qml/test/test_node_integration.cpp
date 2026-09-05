@@ -5,6 +5,7 @@
 #include <qml/bitcoinqmlapplication.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/chainsyncmodel.h>
+#include <qml/models/mempoolmodel.h>
 #include <qml/models/nodenetworkmodel.h>
 #include <qml/models/peerlistmodel.h>
 #include <qml/test/integration_test_registry.h>
@@ -38,6 +39,7 @@ private Q_SLOTS:
         // Restore only this case's node changes, also following failed assertions.
         m_app.node().setNetworkActive(m_network_was_active);
         m_app.node().unban(LookupSubNet("192.0.2.1/32"));
+        if (auto* mempool = model<MempoolModel>("mempoolModel")) mempool->setMempoolInfoPollingActive(false);
     }
 
     void networkActionsAndCoreNotificationsAgree()
@@ -66,6 +68,18 @@ private Q_SLOTS:
         QTRY_COMPARE(sync->blockTipHeight(), previous_height + 1);
         QCOMPARE(sync->blockTipHeight(), m_app.node().getNumBlocks());
         QVERIFY(sync->verificationProgress() > 0.0);
+    }
+
+    void mempoolSamplesTheRealCoreMetrics()
+    {
+        auto* mempool = model<MempoolModel>("mempoolModel");
+        QVERIFY(mempool);
+        QVERIFY(mempool->mempoolInformationAvailable());
+        mempool->setMempoolInfoPollingActive(true);
+        QTRY_VERIFY(mempool->mempoolMaxUsageMB() > 0.0);
+        QCOMPARE(mempool->mempoolTransactionCount(), static_cast<int>(m_app.node().getMempoolSize()));
+        QCOMPARE(mempool->mempoolUsageMB(), m_app.node().getMempoolDynamicUsage() / 1'000'000.0);
+        QCOMPARE(mempool->mempoolMaxUsageMB(), m_app.node().getMempoolMaxUsage() / 1'000'000.0);
     }
 
     void peerActionsPublishAndRemoveCoreBans()

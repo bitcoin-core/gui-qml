@@ -67,6 +67,8 @@ add_library(bitcoinqml STATIC
   models/languagesettingsmodel.cpp
   models/languagesettingsmodel.h
   models/macdockiconhandler.h
+  models/mempoolmodel.cpp
+  models/mempoolmodel.h
   models/networkstatusmodel.cpp
   models/networkstatusmodel.h
   models/networktraffictower.cpp

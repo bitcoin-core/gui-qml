@@ -454,7 +454,24 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
         <translation type="unfinished">Recomendado</translation>
     </message>
 </context>
-
+<context>
+    <name>OptionsQmlModel</name>
+    <message>
+        <location filename="../models/options_model.cpp" line="321"/>
+        <source>The configured signer path does not exist.</source>
+        <translation type="unfinished">La ruta configurada del firmante no existe.</translation>
+    </message>
+    <message>
+        <location filename="../models/options_model.cpp" line="324"/>
+        <source>The configured signer path is not a file.</source>
+        <translation type="unfinished">La ruta configurada del firmante no es un archivo.</translation>
+    </message>
+    <message>
+        <location filename="../models/options_model.cpp" line="327"/>
+        <source>The configured signer path is not executable.</source>
+        <translation type="unfinished">La ruta configurada del firmante no es ejecutable.</translation>
+    </message>
+</context>
 <context>
     <name>PeerDetails</name>
     <message>

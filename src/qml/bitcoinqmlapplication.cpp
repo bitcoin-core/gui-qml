@@ -18,6 +18,7 @@
 #include <qml/models/chainsyncmodel.h>
 #include <qml/models/nodenetworkmodel.h>
 #include <qml/models/runtimedialogmodel.h>
+#include <qml/models/mempoolmodel.h>
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
 #include <qml/components/blockclockdial.h>
@@ -116,6 +117,7 @@ BitcoinQmlApplication::~BitcoinQmlApplication()
     m_engine.reset();
     m_language_settings_model.reset();
     m_options_model.reset();
+    m_mempool_model.reset();
     m_node_network_model.reset();
     m_chain_sync_model.reset();
     m_navigation_model.reset();
@@ -177,12 +179,14 @@ bool BitcoinQmlApplication::createWindow()
     m_node_model = std::make_unique<NodeLifecycleModel>(*m_node, m_runtime_dialog_model.get());
     m_chain_sync_model = std::make_unique<ChainSyncModel>(*m_node);
     m_node_network_model = std::make_unique<NodeNetworkModel>(*m_node);
+    m_mempool_model = std::make_unique<MempoolModel>(*m_node);
     m_router = std::make_unique<ApplicationRouter>();
     m_router->registerDestination({QStringLiteral("node"), QUrl{QStringLiteral("qrc:///qml/pages/node/NodeRunner.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Node"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("settings"), QUrl{QStringLiteral("qrc:///qml/pages/settings/SettingsDisplay.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Settings"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("peers"), QUrl{QStringLiteral("qrc:///qml/pages/node/Peers.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Peers"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("banned-peers"), QUrl{QStringLiteral("qrc:///qml/pages/node/BannedPeers.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Banned peers"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("traffic"), QUrl{QStringLiteral("qrc:///qml/pages/node/NetworkTraffic.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Network traffic"), true, QStringLiteral("")});
+    m_router->registerDestination({QStringLiteral("mempool"), QUrl{QStringLiteral("qrc:///qml/pages/node/MempoolInformationSettings.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Mempool"), true, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("peer-details"), QUrl{QStringLiteral("qrc:///qml/pages/node/PeerDetails.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Peer details"), false, QStringLiteral("peers")});
     m_router->registerDestination({QStringLiteral("shutdown"), QUrl{QStringLiteral("qrc:///qml/pages/node/Shutdown.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Shutting down"), false, QStringLiteral("")});
     m_router->registerDestination({QStringLiteral("settings/window"), QUrl{QStringLiteral("qrc:///qml/pages/settings/SettingsWindowBehavior.qml")}, QT_TRANSLATE_NOOP("ApplicationRouter", "Window"), false, QStringLiteral("settings")});
@@ -202,10 +206,12 @@ bool BitcoinQmlApplication::createWindow()
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_router.get(), &ApplicationRouter::beginShutdown);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_chain_sync_model.get(), &ChainSyncModel::stop);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_node_network_model.get(), &NodeNetworkModel::stop);
+    connect(m_node_model.get(), &NodeLifecycleModel::requestedShutdown, m_mempool_model.get(), &MempoolModel::stop);
     m_init_executor = std::make_unique<QmlInitExecutor>(*m_node);
     connect(m_node_model.get(), &NodeLifecycleModel::requestedInitialize, m_init_executor.get(), &QmlInitExecutor::initialize);
     connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_node_model.get(), &NodeLifecycleModel::initializeResult);
     connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_chain_sync_model.get(), &ChainSyncModel::initializeResult);
+    connect(m_init_executor.get(), &QmlInitExecutor::initializeResult, m_mempool_model.get(), &MempoolModel::initializeResult);
     connect(m_node_model.get(), &NodeLifecycleModel::nodeInitialized, m_node_network_model.get(), &NodeNetworkModel::refreshPeerCounts);
     connect(m_init_executor.get(), &QmlInitExecutor::shutdownResult, m_node_model.get(), &NodeLifecycleModel::shutdownResult);
     connect(m_init_executor.get(), &QmlInitExecutor::runawayException, this, &BitcoinQmlApplication::handleRunawayException);
@@ -267,6 +273,7 @@ bool BitcoinQmlApplication::createWindow()
     context->setContextProperty(QStringLiteral("chainSyncModel"), m_chain_sync_model.get());
     context->setContextProperty(QStringLiteral("nodeNetworkModel"), m_node_network_model.get());
     context->setContextProperty(QStringLiteral("runtimeDialogModel"), m_runtime_dialog_model.get());
+    context->setContextProperty(QStringLiteral("mempoolModel"), m_mempool_model.get());
     context->setContextProperty(QStringLiteral("applicationRouter"), m_router.get());
     context->setContextProperty(QStringLiteral("navigationModel"), m_navigation_model.get());
     context->setContextProperty(QStringLiteral("languageSettingsModel"), m_language_settings_model.get());

@@ -9,6 +9,7 @@
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/InfoBanner.qml</file>
+        <file>components/MempoolInformationRows.qml</file>
         <file>components/NetworkIndicator.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
@@ -58,6 +59,7 @@
         <file>components/GlobalMenu.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/BannedPeers.qml</file>
+        <file>pages/node/MempoolInformationSettings.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
