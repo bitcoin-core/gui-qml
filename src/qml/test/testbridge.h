@@ -33,6 +33,7 @@ private:
     QByteArray getProperty(const QString& object_name, const QString& property_name) const;
     QByteArray listObjects() const;
     QByteArray closeWindow() const;
+    QByteArray input(const QString& object_name, const QString& action, const QString& text) const;
     static QByteArray errorResponse(const QString& message);
 
     QPointer<QQmlApplicationEngine> m_engine;

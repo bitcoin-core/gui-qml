@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 import subprocess
 
-from test_framework.qml_driver import QmlDriverError
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 
@@ -84,22 +83,27 @@ class QmlInterfaceTest(BitcoinTestFramework):
 
             objects = gui.list_objects()
             object_names = {entry["objectName"] for entry in objects}
-            assert "mainWindow" in object_names
+            for object_name in (
+                "mainWindow",
+                "nodeRunner",
+                "blockClock",
+                "nodeSettingsButton",
+            ):
+                assert object_name in object_names, (
+                    f"missing {object_name!r}; found {sorted(object_names)}"
+                )
 
-            self.log.info("Checking the top-level window")
+            self.log.info("Checking the node runner window")
             assert_equal(gui.get_property("mainWindow", "visible"), True)
             assert_equal(gui.get_property("mainWindow", "title"), "Bitcoin Core")
-
             self.log.info("Waiting for the node to finish starting")
             self.wait_until(lambda: gui.get_property("mainWindow", "nodeStatus") == "Node is running", timeout=30)
 
-            self.log.info("Checking bridge error handling")
-            try:
-                gui.get_property("missingObject", "visible")
-            except QmlDriverError as error:
-                assert "Object not found" in str(error)
-            else:
-                raise AssertionError("Missing QML object did not return a bridge error")
+            self.log.info("Opening display settings from the block clock")
+            gui.click("nodeSettingsButton")
+            self.wait_until(lambda: any(item["objectName"] == "gotoBlockClockSize" for item in gui.list_objects()))
+            gui.click("nodeSettingsDoneButton")
+            self.wait_until(lambda: any(item["objectName"] == "blockClock" for item in gui.list_objects()))
 
             self.log.info("Closing the application window through the bridge")
             gui.close_window()
