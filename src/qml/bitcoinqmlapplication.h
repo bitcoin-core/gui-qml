@@ -36,6 +36,7 @@ class LanguageSettingsModel;
 class ChainSyncModel;
 class NodeNetworkModel;
 class RuntimeDialogModel;
+class MempoolModel;
 namespace interfaces {
 class Chain;
 class Init;
@@ -94,6 +95,7 @@ private:
     std::unique_ptr<ChainSyncModel> m_chain_sync_model;
     std::unique_ptr<NodeNetworkModel> m_node_network_model;
     std::unique_ptr<RuntimeDialogModel> m_runtime_dialog_model;
+    std::unique_ptr<MempoolModel> m_mempool_model;
     QStringList m_startup_warnings;
     QRect m_initial_window_geometry;
     bool m_base_initialized{false};
