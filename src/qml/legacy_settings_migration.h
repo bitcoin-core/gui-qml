@@ -16,6 +16,12 @@ enum class MigrationMode {
     Persist,
 };
 
+enum class GuiCleanup {
+    None,
+    ResetOnly,
+    DataDirAndReset,
+};
+
 struct MigrationResult {
     bool settings_changed{false};
     QString error;
@@ -26,8 +32,11 @@ bool ReadLegacyGuiReset();
 int ReadLegacyGuiDisplayUnit(const QString& chain, int fallback);
 QString ReadLegacyGuiLanguage(const QString& chain);
 QString ReadGuiLanguage(const QString& chain);
-void ClearLegacyGuiSettings(const QString& chain);
-MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode);
+bool ClearLegacyGuiSettings(const QString& chain, QString* error = nullptr);
+MigrationResult MigrateCoreSettings(
+    ArgsManager& args,
+    MigrationMode mode,
+    GuiCleanup cleanup = GuiCleanup::None);
 
 } // namespace QmlLegacySettings
 
