@@ -24,6 +24,11 @@ namespace QmlUtil {
 */
 QString GraphicsApi(QQuickWindow* window);
 
+/**
+ * Writes to debug.log short info about the used Qt and the host system.
+ */
+void LogQtInfo();
+
 SecureString SecureStringFromQString(const QString& value);
 void ClearSecureString(SecureString& value);
 

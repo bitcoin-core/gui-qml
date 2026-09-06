@@ -4,6 +4,7 @@
 
 #include <qml/util.h>
 
+#include <logging.h>
 #include <support/cleanse.h>
 
 #include <cassert>
@@ -11,9 +12,15 @@
 #include <string>
 
 #include <QByteArray>
+#include <QGuiApplication>
+#include <QJsonObject>
+#include <QPluginLoader>
+#include <QQuickStyle>
 #include <QQuickWindow>
+#include <QScreen>
 #include <QSGRendererInterface>
 #include <QString>
+#include <QSysInfo>
 
 namespace QmlUtil {
 
@@ -35,6 +42,35 @@ QString GraphicsApi(QQuickWindow* window)
 #endif
     } // no default case, so the compiler can warn about missing cases
     assert(false);
+}
+
+void LogQtInfo()
+{
+#ifdef QT_STATIC
+    const std::string qt_link{"static"};
+#else
+    const std::string qt_link{"dynamic"};
+#endif
+    LogInfo("Qt %s (%s), plugin=%s\n", qVersion(), qt_link, QGuiApplication::platformName().toStdString());
+
+    const auto static_plugins = QPluginLoader::staticPlugins();
+    if (static_plugins.empty()) {
+        LogInfo("No static plugins.\n");
+    } else {
+        LogInfo("Static plugins:\n");
+        for (const QStaticPlugin& p : static_plugins) {
+            QJsonObject meta_data = p.metaData();
+            const std::string plugin_class = meta_data.take(QString("className")).toString().toStdString();
+            const int plugin_version = meta_data.take(QString("version")).toInt();
+            LogInfo(" %s, version %d\n", plugin_class, plugin_version);
+        }
+    }
+
+    LogInfo("Qt Quick Controls style: %s\n", QQuickStyle::name().toStdString());
+    LogInfo("System: %s, %s\n", QSysInfo::prettyProductName().toStdString(), QSysInfo::buildAbi().toStdString());
+    for (const QScreen* s : QGuiApplication::screens()) {
+        LogInfo("Screen: %s %dx%d, pixel ratio=%.1f\n", s->name().toStdString(), s->size().width(), s->size().height(), s->devicePixelRatio());
+    }
 }
 
 SecureString SecureStringFromQString(const QString& value)

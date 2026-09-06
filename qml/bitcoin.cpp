@@ -544,6 +544,8 @@ int QmlGuiMain(int argc, char* argv[])
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
 
+    QmlUtil::LogQtInfo();
+
     // legacy GUI: createNode()
     std::unique_ptr<interfaces::Node> node = init->makeNode();
     std::unique_ptr<interfaces::Chain> chain = init->makeChain();
