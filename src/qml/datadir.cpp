@@ -19,6 +19,7 @@
 #include <QSettings>
 #include <QUrl>
 
+#include <exception>
 #include <string>
 #include <vector>
 
@@ -108,11 +109,21 @@ QString ValidateCustomDataDir(const QString& path)
     }
 
     QFileInfo target_info(local_path);
-    if (target_info.exists() && !target_info.isDir()) {
-        return DataDirTr("The selected path exists and is not a directory.");
-    }
-    if (target_info.exists() && !target_info.isWritable()) {
-        return DataDirTr("The selected directory is not writable.");
+    if (target_info.exists()) {
+        if (!target_info.isDir()) {
+            return DataDirTr("The selected path exists and is not a directory.");
+        }
+        bool accessible{target_info.isReadable()};
+#ifndef Q_OS_WIN
+        accessible = accessible && target_info.isExecutable();
+#endif
+        if (!accessible) {
+            //: Error shown during onboarding when the selected data directory cannot be read or entered.
+            return DataDirTr("The selected directory is not accessible.");
+        }
+        if (!target_info.isWritable()) {
+            return DataDirTr("The selected directory is not writable.");
+        }
     }
 
     QString parent_path = target_info.absoluteDir().absolutePath();
@@ -190,7 +201,9 @@ bool EnsureDataDir(const QString& path, QString* error)
 
     try {
         const fs::path data_dir_path = QStringToPath(local_path);
-        TryCreateDirectories(data_dir_path);
+        if (TryCreateDirectories(data_dir_path)) {
+            TryCreateDirectories(data_dir_path / "wallets");
+        }
     } catch (const fs::filesystem_error&) {
         if (error) *error = DataDirTr("The selected data directory could not be created.");
         return false;
@@ -223,65 +236,31 @@ void PersistDefaultDataDirSelection()
     QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
 }
 
-bool ResetGuiSettings(ArgsManager& args, QString* error)
-{
-    if (error) error->clear();
-
-    QSettings settings;
-    settings.clear();
-    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
-
-    try {
-        SelectParams(args.GetChainType());
-        args.SelectConfigNetwork(args.GetChainTypeString());
-        QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(args.GetChainTypeString()));
-    } catch (const std::exception& e) {
-        if (error) *error = QString::fromStdString(e.what());
-        return false;
-    }
-
-    fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path) || !fs::exists(settings_path)) {
-        return true;
-    }
-
-    std::vector<std::string> settings_errors;
-    if (!args.ReadSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
-        return false;
-    }
-    if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
-        return false;
-    }
-    args.LockSettings([](common::Settings& settings) {
-        settings.rw_settings.clear();
-    });
-    settings_errors.clear();
-    if (!args.WriteSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
-        return false;
-    }
-    return true;
-}
-
 bool HasExplicitDataDirArg(const ArgsManager& args)
 {
     return args.IsArgSet("-datadir") && !args.GetPathArg("-datadir").empty();
 }
 
-bool ShouldShowDataDirChooser(const ArgsManager& args)
+QString ValidateExplicitDataDir(const ArgsManager& args)
+{
+    if (!HasExplicitDataDirArg(args)) return {};
+    try {
+        if (CheckDataDirOption(args)) return {};
+    } catch (const std::exception& e) {
+        return QString::fromStdString(e.what());
+    }
+
+    //: Startup error shown when a data directory explicitly supplied on the command line does not exist. %1 is the supplied path.
+    return DataDirTr("Specified data directory \"%1\" does not exist.")
+        .arg(QString::fromStdString(args.GetArg("-datadir", "")));
+}
+
+bool IsDataDirChooserRequested(const ArgsManager& args)
 {
     if (HasExplicitDataDirArg(args)) return false;
 
     QSettings settings;
-    const QString data_dir = ReadGuiDataDir();
-    const QString validation_error = IsDefaultDataDir(data_dir) ? QString{} : ValidateCustomDataDir(data_dir);
-    const QFileInfo data_dir_info(data_dir);
-    return !validation_error.isEmpty() ||
-           !data_dir_info.exists() ||
-           !data_dir_info.isDir() ||
-           args.GetBoolArg("-choosedatadir", false) ||
+    return args.GetBoolArg("-choosedatadir", false) ||
            args.GetBoolArg("-resetguisettings", false) ||
            settings.value(RESET_GUI_SETTINGS_KEY, false).toBool() ||
            QmlLegacySettings::ReadLegacyGuiReset();

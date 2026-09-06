@@ -11,6 +11,7 @@
 #include <qml/guiargs.h>
 #include <qml/onboarding_settings.h>
 #include <qml/test/qt_test_registry.h>
+#include <qml/test/startupsettings_test_util.h>
 #include <test/util/setup_common.h>
 #include <univalue.h>
 #include <util/fs.h>
@@ -22,7 +23,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMap>
-#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -298,6 +298,9 @@ void OnboardingSettingsTests::customSignetOnboardingCompletes_data()
 void OnboardingSettingsTests::customSignetOnboardingCompletes()
 {
     QFETCH(QByteArray, challenge);
+    startupsettingstest::SavedGuiDataDirSettings saved_settings;
+    startupsettingstest::SavedNamedSettings qml_settings{QStringLiteral("BitcoinCore"), QStringLiteral("BitcoinCore-App-signet")};
+    startupsettingstest::SavedNamedSettings legacy_settings{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt-signet")};
     QTemporaryDir profile;
     QVERIFY(profile.isValid());
     QVERIFY(WriteFile(profile.filePath("bitcoin.conf"), "signet=1\n[signet]\nsignetchallenge=" + challenge + '\n'));
@@ -307,13 +310,10 @@ void OnboardingSettingsTests::customSignetOnboardingCompletes()
     const auto public_signet_before{ProfileFiles(profile.filePath("signet"))};
 
     const auto argv{ProfileArgs(profile.path())};
-    auto status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, false)};
-    QVERIFY2(status.ok, qPrintable(status.error));
-    QVERIFY(!status.qml_onboarded);
-    QVERIFY(status.should_show_onboarding);
     const auto preview{QmlOnboardingSettings::Preview(argv, false, profile.path())};
     QVERIFY2(preview.ok, qPrintable(preview.error));
-    QVERIFY(preview.profile.has_settings_file);
+    QCOMPARE(preview.resolved_chain, QString{"signet"});
+    QCOMPARE(QDir::fromNativeSeparators(preview.resolved_settings_path), settings_path);
     QVERIFY(!preview.values.prune);
     auto values{preview.values};
     values.prune = true;
@@ -321,18 +321,27 @@ void OnboardingSettingsTests::customSignetOnboardingCompletes()
 
     gArgs.ForceSetArg("-datadir", profile.path().toStdString());
     gArgs.ClearPathCache();
+    const auto bootstrap{QmlOnboardingSettings::CurrentGuiSettingsStore()};
+    QmlOnboardingSettings::PendingApply pending;
     QString error;
-    QVERIFY2(QmlOnboardingSettings::ApplyToArgs(
+    QVERIFY2(QmlOnboardingSettings::PrepareApplyToArgs(
                  gArgs, {profile.path(), QmlOnboardingSettings::DataDirSource::ExplicitArg},
-                 QSet<QString>{"prune"}, values, &error),
+                 preview.resolved_data_dir, {"prune"}, values, preview.effective_reset, pending, &error),
              qPrintable(error));
+    pending.resolved_chain = preview.resolved_chain;
+    pending.resolved_settings_path = preview.resolved_settings_path;
+    pending.target_complete = true;
+
+    const auto init_error{common::InitConfig(gArgs)};
+    QVERIFY2(!init_error, init_error ? init_error->message.original.c_str() : "");
+    QVERIFY2(QmlOnboardingSettings::FinalizeStartupSettings(gArgs, bootstrap, &pending, nullptr, &error), qPrintable(error));
 
     std::map<std::string, common::SettingsValue> persisted;
     std::vector<std::string> read_errors;
     QVERIFY(common::ReadSettings(fs::PathFromString(settings_path.toStdString()), persisted, read_errors));
     QVERIFY(persisted.at("qml_onboarded").get_bool());
     QCOMPARE(persisted.at("prune").get_str(), std::string{"2861"});
-    status = QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, false);
+    const auto status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, false)};
     QVERIFY2(status.ok, qPrintable(status.error));
     QVERIFY(status.qml_onboarded);
     QVERIFY(!status.should_show_onboarding);
