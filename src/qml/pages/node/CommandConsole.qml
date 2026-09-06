@@ -321,12 +321,11 @@ Page {
                 bottomPadding: 0
                 background: Item {}
 
-                // Enter accepts the highlighted autocomplete suggestion when the
-                // popup is open; otherwise it submits the command. This mirrors the
-                // Tab behaviour and avoids submitting the raw half-typed text while a
-                // completion is highlighted.
-                Keys.onReturnPressed: root.acceptHighlightedOrSubmit(event)
-                Keys.onEnterPressed: root.acceptHighlightedOrSubmit(event)
+                // Like the Widgets console, Enter submits the highlighted
+                // completion when the popup is open, otherwise the typed command.
+                // Tab only fills a suggestion so arguments can still be added.
+                Keys.onReturnPressed: (event) => root.acceptHighlightedOrSubmit(event)
+                Keys.onEnterPressed: (event) => root.acceptHighlightedOrSubmit(event)
 
                 // Up/Down: navigate autocomplete when popup is open,
                 // otherwise browse command history.
@@ -357,11 +356,13 @@ Page {
                     }
                 }
 
-                // Tab key: accept the top autocomplete suggestion.
-                Keys.onTabPressed: {
+                // Tab accepts the highlighted suggestion, or moves focus normally.
+                Keys.onTabPressed: (event) => {
                     if (!root.searchMode && autocompletePopup.visible && filteredCommands.length > 0) {
                         applySuggestion(filteredCommands[autocompleteIndex])
                         event.accepted = true
+                    } else {
+                        event.accepted = false
                     }
                 }
 
