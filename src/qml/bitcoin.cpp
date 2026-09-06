@@ -19,7 +19,6 @@
 #include <qml/guiargs.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
-#include <qml/legacy_settings_migration.h>
 #include <qml/models/onboardingoptionsmodel.h>
 #include <qml/models/settings_keys.h>
 #include <qml/networkstyle.h>
@@ -27,12 +26,14 @@
 #include <qml/test/testbridge.h>
 #include <qml/translationmanager.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 
 #include <QEventLoop>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QMessageBox>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -86,8 +87,37 @@ enum class PreInitOnboardingStatus {
     FAILED,
 };
 
+bool ErrorSettingsRead(
+    const bilingual_str& error,
+    const std::vector<std::string>& details,
+    std::optional<QmlOnboardingSettings::SettingsFileBackup>& settings_file_backup,
+    QString& settings_file_backup_error)
+{
+    const auto capture_backup = [&] {
+        QmlOnboardingSettings::SettingsFileBackup backup;
+        if (!QmlOnboardingSettings::CaptureSettingsFileBackup(gArgs, backup, &settings_file_backup_error)) return false;
+        settings_file_backup = std::move(backup);
+        return true;
+    };
+    if (gArgs.GetBoolArg("-resetguisettings", false)) return !capture_backup();
+
+    QMessageBox message_box{
+        QMessageBox::Critical,
+        QGuiApplication::applicationDisplayName(),
+        QString::fromStdString(error.translated),
+        QMessageBox::Reset | QMessageBox::Abort,
+    };
+    /*: Startup prompt when the settings file cannot be read. */
+    message_box.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
+    message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
+    message_box.setTextFormat(Qt::PlainText);
+    message_box.setDefaultButton(QMessageBox::Reset);
+    return message_box.exec() != QMessageBox::Reset || !capture_backup();
+}
+
 struct PreInitOnboardingContext {
     std::unique_ptr<OnboardingOptionsModel> options_model;
+    std::optional<QmlOnboardingSettings::PendingApply> pending_apply;
     std::unique_ptr<const NetworkStyle> network_style;
     std::unique_ptr<QQmlApplicationEngine> engine;
     std::unique_ptr<TestBridge> test_bridge;
@@ -110,10 +140,20 @@ PreInitOnboardingStatus RunPreInitOnboarding(
     bool can_listen_ipc,
     const std::optional<std::string>& test_automation_socket)
 {
+    // Invalid explicit paths cannot be changed in onboarding. Let InitConfig
+    // report them without first attempting to read an unresolved profile.
+    if (!QmlDataDir::ValidateExplicitDataDir(gArgs).isEmpty()) return PreInitOnboardingStatus::NOT_SHOWN;
+
     const QmlOnboardingSettings::OnboardingStartupStatus status{
         QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc)};
+    // Validate the bridge with the read-only preview, not an early InitConfig
+    // against live gArgs. Automation and ordinary startup share the same path.
+    if (test_automation_socket && (!status.ok || status.resolved_chain != QLatin1String("regtest"))) {
+        InitError(Untranslated("The -test-automation option is only available on regtest."));
+        return PreInitOnboardingStatus::FAILED;
+    }
     translations.setLanguage(status.language);
-    if (status.ok && !status.should_show_onboarding) {
+    if (status.settings_file_unreadable || (status.ok && !status.should_show_onboarding)) {
         QmlDataDir::ApplyGuiDataDirSetting(gArgs);
         return PreInitOnboardingStatus::NOT_SHOWN;
     }
@@ -156,11 +196,13 @@ PreInitOnboardingStatus RunPreInitOnboarding(
     }
 
     QString error;
-    if (!context.options_model->applyToArgs(gArgs, &error)) {
+    QmlOnboardingSettings::PendingApply pending_apply;
+    if (!context.options_model->prepareApplyToArgs(gArgs, pending_apply, &error)) {
         InitError(Untranslated(error.toStdString()));
         context.close();
         return PreInitOnboardingStatus::FAILED;
     }
+    context.pending_apply = std::move(pending_apply);
     return PreInitOnboardingStatus::COMPLETED;
 }
 } // namespace
@@ -216,32 +258,9 @@ int QmlGuiMain(int argc, char* argv[])
         }
     }
 
-    // Validate the test bridge against command-line and configuration-file
-    // chain selection before any onboarding window can expose the socket.
-    // Normal startup still defers InitConfig until onboarding has chosen the
-    // data directory.
-    bool config_initialized{false};
-    if (test_automation_socket) {
-        if (auto config_error{common::InitConfig(gArgs)}) {
-            InitError(config_error->message, config_error->details);
-            return EXIT_FAILURE;
-        }
-        config_initialized = true;
-        if (gArgs.GetChainTypeString() != "regtest") {
-            InitError(Untranslated("The -test-automation option is only available on regtest."));
-            return EXIT_FAILURE;
-        }
-    }
-
     ApplyTestSettingsDir();
     SetupChainQSettings(app, QString::fromStdString(gArgs.GetChainTypeString()));
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        QString reset_error;
-        if (!QmlDataDir::ResetGuiSettings(gArgs, &reset_error)) {
-            InitError(Untranslated(reset_error.toStdString()));
-            return EXIT_FAILURE;
-        }
-    }
+    const auto bootstrap_gui_settings{QmlOnboardingSettings::CurrentGuiSettingsStore()};
 
     LoadFontResource(QStringLiteral(":/fonts/bitcoincoresans/regular"));
     LoadFontResource(QStringLiteral(":/fonts/bitcoincoresans/semibold"));
@@ -259,26 +278,33 @@ int QmlGuiMain(int argc, char* argv[])
     if (onboarding_status == PreInitOnboardingStatus::CANCELED) return EXIT_SUCCESS;
     if (onboarding_status == PreInitOnboardingStatus::FAILED) return EXIT_FAILURE;
 
-    if (!config_initialized) {
-        if (auto config_error{common::InitConfig(gArgs)}) {
+    std::optional<QmlOnboardingSettings::SettingsFileBackup> settings_file_backup;
+    QString settings_file_backup_error;
+    if (auto config_error{common::InitConfig(gArgs, [&](const bilingual_str& message, const std::vector<std::string>& details) {
+            return ErrorSettingsRead(message, details, settings_file_backup, settings_file_backup_error);
+        })}) {
+        if (!settings_file_backup_error.isEmpty()) {
+            InitError(Untranslated(settings_file_backup_error.toStdString()));
+        } else if (config_error->status != common::ConfigStatus::ABORTED) {
             InitError(config_error->message, config_error->details);
-            return EXIT_FAILURE;
         }
-    }
-
-    const QmlLegacySettings::MigrationResult migration{
-        QmlLegacySettings::MigrateCoreSettings(gArgs, QmlLegacySettings::MigrationMode::Persist)};
-    if (!migration.error.isEmpty()) {
-        InitError(Untranslated(migration.error.toStdString()));
         return EXIT_FAILURE;
     }
-    if (migration.settings_changed) {
-        std::vector<std::string> settings_errors;
-        if (!gArgs.WriteSettingsFile(&settings_errors)) {
-            InitError(_("Settings file could not be written"), settings_errors);
-            return EXIT_FAILURE;
-        }
+    // The user may have selected a different profile while onboarding was open.
+    if (test_automation_socket && gArgs.GetChainTypeString() != "regtest") {
+        InitError(Untranslated("The -test-automation option is only available on regtest."));
+        return EXIT_FAILURE;
     }
+    SetupChainQSettings(app, QString::fromStdString(gArgs.GetChainTypeString()));
+    QString finalize_error;
+    if (!QmlOnboardingSettings::FinalizeStartupSettings(
+            gArgs, bootstrap_gui_settings,
+            pre_init_context.pending_apply ? &*pre_init_context.pending_apply : nullptr,
+            nullptr, &finalize_error, settings_file_backup ? &*settings_file_backup : nullptr)) {
+        InitError(Untranslated(finalize_error.toStdString()));
+        return EXIT_FAILURE;
+    }
+    app.installLanguage(TranslationManager::ResolveLanguage(gArgs));
     app.parameterSetup();
     app.createNode(*init);
     if (!app.baseInitialize()) return EXIT_FAILURE;

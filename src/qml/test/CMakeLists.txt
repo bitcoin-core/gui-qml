@@ -20,6 +20,8 @@ add_executable(test_bitcoin-qt
   test_noderuntimemodels.cpp
   test_runtimedialogmodel.cpp
   test_onboarding_storage.cpp
+  test_onboarding_profile.cpp
+  test_startupsettings.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )
@@ -28,6 +30,7 @@ add_windows_application_manifest(test_bitcoin-qt)
 qt6_add_resources(test_bitcoin-qt qml_tests
   PREFIX /test
   FILES
+    qml/tst_appfolderdialog.qml
     qml/tst_blockclock.qml
     qml/tst_globalmenu.qml
     qml/tst_navbutton.qml
@@ -83,6 +86,20 @@ add_test(NAME test_bitcoin-qt-qml
 
 add_test(NAME test_bitcoin-qt-integration
   COMMAND test_bitcoin-qt --suite=integration -platform minimal
+)
+
+# The ordinary-startup test also needs the production executable when only
+# the Qt test target is requested.
+add_dependencies(test_bitcoin-qt bitcoin-qt)
+add_test(NAME test_bitcoin-qt-startup
+  COMMAND ${CMAKE_COMMAND}
+    -DGUI=$<TARGET_FILE:bitcoin-qt>
+    -DTEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/startup-test
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/startup_invalid_datadir.cmake
+)
+set_tests_properties(test_bitcoin-qt-startup PROPERTIES
+  TIMEOUT 70
+  ENVIRONMENT "QT_QPA_PLATFORM=minimal;QML_DISABLE_DISK_CACHE=1"
 )
 
 set_property(
