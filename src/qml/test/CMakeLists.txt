@@ -30,6 +30,7 @@ add_executable(test_bitcoin-qt
   test_peerlistmodel.cpp
   test_peerstatsutil.cpp
   test_rpccommandexecutor.cpp
+  test_qtinfo_integration.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )
