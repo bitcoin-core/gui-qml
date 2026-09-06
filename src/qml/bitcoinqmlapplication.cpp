@@ -41,6 +41,7 @@
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/models/rpcconsolemodel.h>
 #include <qml/networkstyle.h>
+#include <qml/qtinfo.h>
 #include <qml/test/testbridge.h>
 
 #include <QMetaType>
@@ -157,6 +158,7 @@ void BitcoinQmlApplication::parameterSetup()
     gArgs.SoftSetBoolArg("-printtoconsole", false);
     InitLogging(gArgs);
     InitParameterInteraction(gArgs);
+    QmlDiagnostics::LogQtInfo();
 }
 
 void BitcoinQmlApplication::createNode(interfaces::Init& init)

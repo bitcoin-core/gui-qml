@@ -110,6 +110,8 @@ add_library(bitcoinqml STATIC
   onboarding_storage.h
   peerstatsutil.cpp
   peerstatsutil.h
+  qtinfo.cpp
+  qtinfo.h
   translationmanager.cpp
   translationmanager.h
   ${BITCOIN_QML_QRC}
