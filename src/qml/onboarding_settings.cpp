@@ -15,15 +15,24 @@
 #include <qml/core_settings.h>
 #include <qml/datadir.h>
 #include <qml/guiargs.h>
+#include <qml/guiconstants.h>
 #include <qml/legacy_settings_migration.h>
+#include <qml/models/settings_keys.h>
 #include <qml/translationmanager.h>
 #include <univalue.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
 
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QObject>
+#include <QSaveFile>
+#include <QSettings>
+#include <QVariantMap>
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <system_error>
@@ -63,6 +72,16 @@ QString NormalizedDataDirPath(const QmlOnboardingSettings::DataDirSelection& sel
     return normalized.isEmpty() ? QmlDataDir::DefaultDataDirString() : normalized;
 }
 
+QString ComparableDataDirPath(const QString& path)
+{
+    return QDir::cleanPath(QmlDataDir::NormalizeLocalPath(path));
+}
+
+bool SameDataDirPath(const QString& a, const QString& b)
+{
+    return ComparableDataDirPath(a) == ComparableDataDirPath(b);
+}
+
 bool ShouldApplyDataDirBeforeConfig(QmlOnboardingSettings::DataDirSource source, bool explicit_datadir_arg, const QString& data_dir)
 {
     return !explicit_datadir_arg &&
@@ -87,14 +106,82 @@ QString ActiveDataDirString(const ArgsManager& args)
     return QmlDataDir::NormalizeLocalPath(QString::fromStdString(fs::PathToString(data_dir)));
 }
 
+QmlOnboardingSettings::DataDirSource ResolvedDataDirSource(
+    QmlOnboardingSettings::DataDirSource selected_source,
+    const QString& selected_data_dir,
+    const QString& resolved_data_dir,
+    bool explicit_datadir_arg)
+{
+    if (explicit_datadir_arg) return QmlOnboardingSettings::DataDirSource::ExplicitArg;
+    if (!SameDataDirPath(selected_data_dir, resolved_data_dir)) return QmlOnboardingSettings::DataDirSource::Config;
+    return selected_source;
+}
+
+bool ShouldDisplayResolvedConfigDataDir(
+    QmlOnboardingSettings::DataDirSource selected_source,
+    const QString& selected_data_dir,
+    const QString& resolved_data_dir,
+    bool explicit_datadir_arg)
+{
+    return !explicit_datadir_arg &&
+           selected_source == QmlOnboardingSettings::DataDirSource::Default &&
+           !QmlDataDir::IsDefaultDataDir(resolved_data_dir) &&
+           !SameDataDirPath(selected_data_dir, resolved_data_dir);
+}
+
+void SetStartupDataDirs(
+    QmlOnboardingSettings::OnboardingStartupStatus& status,
+    QString selected_data_dir,
+    QmlOnboardingSettings::DataDirSource selected_source,
+    QString resolved_data_dir,
+    bool explicit_datadir_arg)
+{
+    if (selected_data_dir.isEmpty()) selected_data_dir = QmlDataDir::DefaultDataDirString();
+    if (resolved_data_dir.isEmpty()) resolved_data_dir = selected_data_dir;
+
+    const bool display_resolved_config_data_dir{
+        ShouldDisplayResolvedConfigDataDir(selected_source, selected_data_dir, resolved_data_dir, explicit_datadir_arg)
+    };
+    status.selected_data_dir = display_resolved_config_data_dir ? resolved_data_dir : selected_data_dir;
+    status.selected_data_dir_source = display_resolved_config_data_dir ? QmlOnboardingSettings::DataDirSource::Config : selected_source;
+    status.resolved_data_dir = resolved_data_dir;
+    status.resolved_data_dir_source = ResolvedDataDirSource(selected_source, selected_data_dir, resolved_data_dir, explicit_datadir_arg);
+    status.config_redirected_data_dir = !SameDataDirPath(selected_data_dir, resolved_data_dir);
+
+    // Compatibility fields keep existing callers working while new callers can
+    // distinguish the editable selection from the resolved Core datadir.
+    status.active_data_dir = status.resolved_data_dir;
+    status.data_dir_source = status.resolved_data_dir_source;
+}
+
+void SetPreviewDataDirs(
+    QmlOnboardingSettings::PreviewResult& result,
+    QString selected_data_dir,
+    QmlOnboardingSettings::DataDirSource selected_source,
+    QString resolved_data_dir,
+    bool explicit_datadir_arg)
+{
+    if (selected_data_dir.isEmpty()) selected_data_dir = QmlDataDir::DefaultDataDirString();
+    if (resolved_data_dir.isEmpty()) resolved_data_dir = selected_data_dir;
+
+    const bool display_resolved_config_data_dir{
+        ShouldDisplayResolvedConfigDataDir(selected_source, selected_data_dir, resolved_data_dir, explicit_datadir_arg)
+    };
+    result.selected_data_dir = display_resolved_config_data_dir ? resolved_data_dir : selected_data_dir;
+    result.selected_data_dir_source = display_resolved_config_data_dir ? QmlOnboardingSettings::DataDirSource::Config : selected_source;
+    result.resolved_data_dir = resolved_data_dir;
+    result.resolved_data_dir_source = ResolvedDataDirSource(selected_source, selected_data_dir, resolved_data_dir, explicit_datadir_arg);
+    result.config_redirected_data_dir = !SameDataDirPath(selected_data_dir, resolved_data_dir);
+}
+
 bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
 {
-    std::string config_error;
-    if (!args.ReadConfigFiles(config_error, true)) {
-        if (error) *error = QString::fromStdString(config_error);
-        return false;
-    }
     try {
+        std::string config_error;
+        if (!args.ReadConfigFiles(config_error, true)) {
+            if (error) *error = QString::fromStdString(config_error);
+            return false;
+        }
         SelectParams(args.GetChainType());
         args.SelectConfigNetwork(args.GetChainTypeString());
     } catch (const std::exception& e) {
@@ -105,17 +192,45 @@ bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
     return true;
 }
 
-bool ReadSettingsFileIfPresent(ArgsManager& args, QString* error)
+struct ReadOnlyProfileResult {
+    bool settings_enabled{true};
+    bool config_file_path_available{false};
+    bool settings_file_unreadable{false};
+};
+
+bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QString* error)
 {
+    result = {};
+    if (!ReadConfigAndSelectNetwork(args, error)) return false;
+    result.config_file_path_available = true;
+
     fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path) || !fs::exists(settings_path)) {
+    if (!args.GetSettingsPath(&settings_path)) {
+        result.settings_enabled = false;
         if (error) error->clear();
         return true;
     }
 
+    const bool reset_without_settings{
+        args.GetBoolArg("-resetguisettings", false)
+    };
     std::vector<std::string> settings_errors;
     if (!args.ReadSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
+        // Preserve settings.json precedence when it is readable, while still
+        // allowing an already-selected reset to recover an unreadable file.
+        if (reset_without_settings) {
+            if (error) error->clear();
+            return true;
+        }
+        result.settings_file_unreadable = true;
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to read settings.json.
+                *error = QObject::tr("Settings file could not be read.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
         return false;
     }
     if (error) error->clear();
@@ -126,7 +241,7 @@ bool PathExists(const fs::path& path)
 {
     if (path.empty()) return false;
     std::error_code ec;
-    return std::filesystem::exists(path, ec) && !ec;
+    return fs::exists(fs::status(path, ec)) && !ec;
 }
 
 bool DirectoryExists(const fs::path& path)
@@ -196,7 +311,9 @@ bool EnsureSettingsDirectory(ArgsManager& args, const fs::path& settings_path, Q
 {
     try {
         const fs::path network_data_dir{args.GetDataDirNet()};
-        TryCreateDirectories(network_data_dir);
+        if (TryCreateDirectories(network_data_dir)) {
+            TryCreateDirectories(network_data_dir / "wallets");
+        }
         TryCreateDirectories(settings_path.parent_path());
     } catch (const fs::filesystem_error& e) {
         if (error) *error = QString::fromStdString(e.what());
@@ -216,11 +333,374 @@ bool WriteSettingsFile(ArgsManager& args, QString* error)
     if (!EnsureSettingsDirectory(args, settings_path, error)) return false;
     std::vector<std::string> settings_errors;
     if (!args.WriteSettingsFile(&settings_errors)) {
-        if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be written."} : settings_errors.front());
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to write settings.json.
+                *error = QObject::tr("Settings file could not be written.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
         return false;
     }
     if (error) error->clear();
     return true;
+}
+
+bool BackupSettingsFile(
+    ArgsManager& args,
+    const QmlOnboardingSettings::SettingsFileBackup* captured_backup,
+    QString* error)
+{
+    fs::path settings_path;
+    if (!args.GetSettingsPath(&settings_path)) {
+        if (error) error->clear();
+        return true;
+    }
+
+    if (captured_backup) {
+        const QString current_path{
+            QmlDataDir::NormalizeLocalPath(
+                QString::fromStdString(fs::PathToString(settings_path)))
+        };
+        if (!SameDataDirPath(captured_backup->source_path, current_path)) {
+            if (error) {
+                //: Startup error shown when the settings file selected for reset changed before its backup could be written.
+                *error = QObject::tr("The settings file changed while startup was in progress. Restart before resetting settings.");
+            }
+            return false;
+        }
+
+        fs::path backup_path;
+        if (!args.GetSettingsPath(&backup_path, /*temp=*/false, /*backup=*/true)) {
+            return true;
+        }
+        QSaveFile backup_file{
+            QString::fromStdString(fs::PathToString(backup_path))
+        };
+        if (!backup_file.open(QIODevice::WriteOnly) ||
+            backup_file.write(captured_backup->contents) != captured_backup->contents.size() ||
+            !backup_file.commit()) {
+            if (error) {
+                //: Startup error shown when the original settings file cannot be saved before settings are reset. %1 is the backup file path.
+                *error = QObject::tr("Settings file backup could not be written to %1.")
+                             .arg(QString::fromStdString(fs::PathToString(backup_path)));
+            }
+            return false;
+        }
+        if (error) error->clear();
+        return true;
+    }
+
+    std::vector<std::string> settings_errors;
+    if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
+        if (error) {
+            if (settings_errors.empty()) {
+                //: Startup error shown when Bitcoin Core does not provide a more specific reason for failing to back up settings.json before resetting it.
+                *error = QObject::tr("Settings file backup could not be written.");
+            } else {
+                *error = QString::fromStdString(settings_errors.front());
+            }
+        }
+        return false;
+    }
+    if (error) error->clear();
+    return true;
+}
+
+std::unique_ptr<QSettings> OpenGuiSettings(const QmlOnboardingSettings::GuiSettingsStore& store)
+{
+    std::unique_ptr<QSettings> settings;
+    if (!store.organization_name.isEmpty() && !store.application_name.isEmpty()) {
+        settings = std::make_unique<QSettings>(
+            store.format,
+            store.scope,
+            store.organization_name,
+            store.application_name);
+    } else {
+        settings = std::make_unique<QSettings>(store.file_name, store.format);
+    }
+    settings->setFallbacksEnabled(false);
+    return settings;
+}
+
+QString GuiApplicationNameForChain(const QString& chain)
+{
+    const QString normalized{chain.toLower()};
+    if (normalized == QStringLiteral("test")) return QStringLiteral(QAPP_APP_NAME_TESTNET);
+    if (normalized == QStringLiteral("testnet4")) return QStringLiteral(QAPP_APP_NAME_TESTNET4);
+    if (normalized == QStringLiteral("signet")) return QStringLiteral(QAPP_APP_NAME_SIGNET);
+    if (normalized == QStringLiteral("regtest")) return QStringLiteral(QAPP_APP_NAME_REGTEST);
+    return QStringLiteral(QAPP_APP_NAME_DEFAULT);
+}
+
+bool ReadResolvedGuiReset(const ArgsManager& args)
+{
+    QmlOnboardingSettings::GuiSettingsStore store{
+        QmlOnboardingSettings::CurrentGuiSettingsStore()
+    };
+    store.application_name = GuiApplicationNameForChain(
+        QString::fromStdString(args.GetChainTypeString()));
+    const std::unique_ptr<QSettings> settings{OpenGuiSettings(store)};
+    return settings->value(QStringLiteral("fReset"), false).toBool();
+}
+
+bool SameGuiSettingsStore(
+    const QmlOnboardingSettings::GuiSettingsStore& left,
+    const QmlOnboardingSettings::GuiSettingsStore& right)
+{
+    return left.file_name == right.file_name && left.format == right.format;
+}
+
+QVariantMap SnapshotGuiSettings(const QSettings& settings)
+{
+    QVariantMap values;
+    for (const QString& key : settings.allKeys()) {
+        values.insert(key, settings.value(key));
+    }
+    return values;
+}
+
+bool SyncGuiSettings(QSettings& settings, const QString& action, QString* error)
+{
+    settings.sync();
+    if (settings.status() == QSettings::NoError) return true;
+    if (error) {
+        //: Startup error shown when a GUI settings operation fails. %1 is the operation and %2 is the settings file path.
+        *error = QObject::tr("%1 failed for %2.").arg(action, settings.fileName());
+    }
+    return false;
+}
+
+bool WriteGuiSettings(QSettings& settings, const QVariantMap& values, const QString& action, QString* error)
+{
+    settings.clear();
+    for (auto it = values.cbegin(); it != values.cend(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    return SyncGuiSettings(settings, action, error);
+}
+
+void RestoreGuiSettings(
+    std::unique_ptr<QSettings>& settings,
+    const QmlOnboardingSettings::GuiSettingsStore& store,
+    const QVariantMap& values,
+    QString* error)
+{
+    settings.reset();
+    settings = OpenGuiSettings(store);
+    QString rollback_error;
+    //: Name of the operation that restores GUI settings after a later startup operation fails.
+    const QString rollback_action{QObject::tr("GUI settings rollback")};
+    if (!WriteGuiSettings(*settings, values, rollback_action, &rollback_error) && error) {
+        error->append(QLatin1Char(' '));
+        error->append(rollback_error);
+    }
+}
+
+bool BackupGuiSettings(QSettings& source, const fs::path& backup_path, QString* error)
+{
+    QSettings backup{
+        QString::fromStdString(fs::PathToString(backup_path)),
+        QSettings::IniFormat,
+    };
+    backup.setFallbacksEnabled(false);
+    //: Name of the operation that backs up GUI settings before resetting them.
+    const QString backup_action{QObject::tr("GUI settings backup")};
+    return WriteGuiSettings(
+        backup,
+        SnapshotGuiSettings(source),
+        backup_action,
+        error);
+}
+
+std::map<std::string, common::SettingsValue> SnapshotRwSettings(ArgsManager& args)
+{
+    std::map<std::string, common::SettingsValue> values;
+    args.LockSettings([&](common::Settings& settings) {
+        values = settings.rw_settings;
+    });
+    return values;
+}
+
+bool RwSettingsEqual(
+    const std::map<std::string, common::SettingsValue>& left,
+    const std::map<std::string, common::SettingsValue>& right)
+{
+    if (left.size() != right.size()) return false;
+    auto left_it = left.cbegin();
+    auto right_it = right.cbegin();
+    for (; left_it != left.cend(); ++left_it, ++right_it) {
+        if (left_it->first != right_it->first ||
+            left_it->second.write() != right_it->second.write()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RestoreRwSettings(ArgsManager& args, const std::map<std::string, common::SettingsValue>& values)
+{
+    args.LockSettings([&](common::Settings& settings) {
+        settings.rw_settings = values;
+    });
+}
+
+bool RollBackSettingsFile(ArgsManager& args, const std::map<std::string, common::SettingsValue>& values, QString* error)
+{
+    RestoreRwSettings(args, values);
+    QString rollback_error;
+    if (WriteSettingsFile(args, &rollback_error)) return true;
+    if (error) {
+        //: Startup error shown when settings.json cannot be restored after a later operation fails. %1 is the preceding error and %2 explains why restoration failed.
+        *error = QObject::tr("%1 Settings file rollback failed: %2")
+                     .arg(*error, rollback_error);
+    }
+    return false;
+}
+
+void RestoreForcedSettings(
+    ArgsManager& args,
+    const std::map<std::string, common::SettingsValue>& forced_settings)
+{
+    args.LockSettings([&](common::Settings& settings) {
+        settings.forced_settings = forced_settings;
+    });
+}
+
+bool ApplyPendingCoreSettings(ArgsManager& args, const QmlOnboardingSettings::PendingApply& pending, QString* error)
+{
+    std::map<std::string, common::SettingsValue> original_forced_settings;
+    args.LockSettings([&](common::Settings& settings) {
+        original_forced_settings = settings.forced_settings;
+    });
+
+    QmlCoreSettings::Session core_settings{
+        pending.values,
+        QmlCoreSettings::BuildCoreSettingStatuses(args, QmlCoreSettings::OnboardingCoreSettingNames()),
+    };
+    const auto write_setting = [&](const QString& name) {
+        return !pending.touched_settings.contains(name) || core_settings.writeToArgs(args, name);
+    };
+    const auto recompute_interactions = [&] {
+        RestoreForcedSettings(args, original_forced_settings);
+        InitParameterInteraction(args);
+    };
+
+    bool settings_written{true};
+    for (const QString& name : {
+             QStringLiteral("proxy"),
+             QStringLiteral("onion"),
+             QStringLiteral("server"),
+             QStringLiteral("prune"),
+         }) {
+        settings_written = write_setting(name) && settings_written;
+    }
+    recompute_interactions();
+    settings_written = write_setting(QStringLiteral("listen")) && settings_written;
+    recompute_interactions();
+    settings_written = write_setting(QStringLiteral("natpmp")) && settings_written;
+    RestoreForcedSettings(args, original_forced_settings);
+
+    if (!settings_written) {
+        if (error) {
+            //: Startup error shown when one or more options selected during onboarding cannot be saved to settings.json.
+            *error = QObject::tr("One or more startup settings could not be written.");
+        }
+        return false;
+    }
+
+    QmlCoreSettings::SetRwSetting(args, QString::fromLatin1(QML_ONBOARDED_KEY), common::SettingsValue{true});
+    return true;
+}
+
+bool SameOptionalPath(const QString& left, const QString& right)
+{
+    if (left.isEmpty() || right.isEmpty()) return left.isEmpty() && right.isEmpty();
+    return SameDataDirPath(left, right);
+}
+
+QString SettingsPathString(ArgsManager& args)
+{
+    fs::path settings_path;
+    if (!args.GetSettingsPath(&settings_path)) return {};
+    return QmlDataDir::NormalizeLocalPath(
+        QString::fromStdString(fs::PathToString(settings_path)));
+}
+
+QString SettingsPathForNewDataDir(ArgsManager& args, const QString& data_dir)
+{
+    const fs::path settings{args.GetPathArg("-settings", BITCOIN_SETTINGS_FILENAME)};
+    if (settings.empty()) return {};
+
+    fs::path network_data_dir{QmlDataDir::QStringToPath(data_dir)};
+    if (!BaseParams().DataDir().empty()) {
+        network_data_dir /= fs::PathFromString(BaseParams().DataDir());
+    }
+    return QmlDataDir::NormalizeLocalPath(
+        QString::fromStdString(
+            fs::PathToString(fsbridge::AbsPathJoin(network_data_dir, settings))));
+}
+
+bool ValidatePendingApply(
+    ArgsManager& args,
+    const QmlOnboardingSettings::PendingApply& pending,
+    QString* error)
+{
+    const auto profile_changed_error = [] {
+        //: Startup error shown when the data directory, network, settings file, or reset option changed after onboarding was opened.
+        return QObject::tr(
+            "The selected Bitcoin profile changed while onboarding was open. "
+            "Restart and review the current data directory, network, and settings before applying.");
+    };
+    if (pending.effective_reset != args.GetBoolArg("-resetguisettings", false)) {
+        if (error) *error = profile_changed_error();
+        return false;
+    }
+
+    if (!pending.target_complete) return true;
+
+    const QString actual_data_dir{ActiveDataDirString(args)};
+    const QString actual_chain{QString::fromStdString(args.GetChainTypeString())};
+    const QString actual_settings_path{SettingsPathString(args)};
+    if (SameDataDirPath(actual_data_dir, pending.resolved_data_dir) &&
+        actual_chain == pending.resolved_chain &&
+        SameOptionalPath(actual_settings_path, pending.resolved_settings_path)) {
+        return true;
+    }
+
+    if (error) *error = profile_changed_error();
+    return false;
+}
+
+bool ShouldUpdateBootstrapDataDir(const QmlOnboardingSettings::PendingApply& pending)
+{
+    return ShouldPersistGuiDataDirSelection(pending.data_dir.source, pending.explicit_datadir_arg);
+}
+
+void ApplyBootstrapGuiSettings(QVariantMap& settings, const QmlOnboardingSettings::PendingApply& pending)
+{
+    if (ShouldUpdateBootstrapDataDir(pending)) {
+        if (QmlDataDir::IsDefaultDataDir(pending.data_dir.path)) {
+            settings.remove(QString::fromUtf8(SettingsKeys::DATA_DIR));
+        } else {
+            settings.insert(QString::fromUtf8(SettingsKeys::DATA_DIR), pending.data_dir.path);
+        }
+    }
+    settings.insert(QStringLiteral("fReset"), false);
+}
+
+QVariantMap ResetGuiSettingsValues(
+    const QVariantMap& original,
+    bool onboarding_completed)
+{
+    QVariantMap values;
+    const QString data_dir_key{QString::fromUtf8(SettingsKeys::DATA_DIR)};
+    if (original.contains(data_dir_key)) {
+        values.insert(data_dir_key, original.value(data_dir_key));
+    }
+    values.insert(QStringLiteral("fReset"), !onboarding_completed);
+    return values;
 }
 
 std::optional<bool> CommandLineBoolArg(ArgsManager& args, const std::string& name)
@@ -249,6 +729,53 @@ bool PrepareArgs(ArgsManager& args, const std::vector<std::string>& argv, bool c
     return args.ParseParameters(static_cast<int>(raw_argv.size()), raw_argv.data(), error);
 }
 
+bool CaptureSettingsFileBackup(ArgsManager& args, SettingsFileBackup& backup, QString* error)
+{
+    if (error) error->clear();
+    backup = {};
+
+    fs::path settings_path;
+    if (!args.GetSettingsPath(&settings_path)) return true;
+
+    QFile settings_file{
+        QString::fromStdString(fs::PathToString(settings_path))
+    };
+    if (!settings_file.open(QIODevice::ReadOnly)) {
+        if (error) {
+            //: Startup error shown when the existing settings file cannot be preserved before resetting it. %1 is the settings file path.
+            *error = QObject::tr("Settings file %1 could not be preserved before reset.")
+                         .arg(settings_file.fileName());
+        }
+        return false;
+    }
+
+    backup.source_path = QmlDataDir::NormalizeLocalPath(settings_file.fileName());
+    backup.contents = settings_file.readAll();
+    if (settings_file.error() != QFileDevice::NoError) {
+        if (error) {
+            //: Startup error shown when the existing settings file cannot be preserved before resetting it. %1 is the settings file path.
+            *error = QObject::tr("Settings file %1 could not be preserved before reset.")
+                         .arg(settings_file.fileName());
+        }
+        backup = {};
+        return false;
+    }
+    return true;
+}
+
+GuiSettingsStore CurrentGuiSettingsStore()
+{
+    QSettings settings;
+    settings.setFallbacksEnabled(false);
+    return {
+        settings.organizationName(),
+        settings.applicationName(),
+        settings.fileName(),
+        settings.format(),
+        settings.scope(),
+    };
+}
+
 OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::string>& argv, bool can_listen_ipc)
 {
     OnboardingStartupStatus status;
@@ -259,53 +786,61 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         status.error = QString::fromStdString(parse_error);
         return status;
     }
-    status.language = TranslationManager::ResolveLanguage(preview_args);
+    if (const QString datadir_error{QmlDataDir::ValidateExplicitDataDir(preview_args)};
+        !datadir_error.isEmpty()) {
+        status.error = datadir_error;
+        return status;
+    }
 
     try {
         SelectParams(preview_args.GetChainType());
+        status.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
     } catch (const std::exception& e) {
         status.error = QString::fromStdString(e.what());
         return status;
     }
 
-    const bool reset_gui_settings = preview_args.GetBoolArg("-resetguisettings", false);
+    // Capture explicit chooser requests before config or saved GUI settings
+    // supply -datadir. Check directory availability only after resolving the
+    // profile, since bitcoin.conf can redirect away from the default directory.
+    const bool force_data_dir_chooser{
+        QmlDataDir::IsDataDirChooserRequested(preview_args)
+    };
     const bool explicit_datadir = HasExplicitDataDirArg(preview_args);
-    const bool force_show_onboarding = reset_gui_settings || QmlDataDir::ShouldShowDataDirChooser(preview_args);
+    QString selected_data_dir;
+    DataDirSource selected_data_dir_source{DataDirSource::Default};
     if (explicit_datadir) {
-        status.active_data_dir = ExplicitDataDirString(preview_args);
-        status.data_dir_source = DataDirSource::ExplicitArg;
-    } else if (reset_gui_settings) {
-        status.active_data_dir = QmlDataDir::DefaultDataDirString();
-        status.data_dir_source = DataDirSource::Default;
+        selected_data_dir = ExplicitDataDirString(preview_args);
+        selected_data_dir_source = DataDirSource::ExplicitArg;
     } else {
         const QmlDataDir::GuiDataDir gui_data_dir = QmlDataDir::ReadGuiDataDirWithSource();
-        status.active_data_dir = gui_data_dir.path;
-        status.data_dir_source = ToOnboardingDataDirSource(gui_data_dir.source);
+        selected_data_dir = gui_data_dir.path;
+        selected_data_dir_source = ToOnboardingDataDirSource(gui_data_dir.source);
     }
-    if (status.active_data_dir.isEmpty()) {
-        status.active_data_dir = QmlDataDir::DefaultDataDirString();
+    if (selected_data_dir.isEmpty()) {
+        selected_data_dir = QmlDataDir::DefaultDataDirString();
     }
+    SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
 
-    const bool apply_datadir_before_config = ShouldApplyDataDirBeforeConfig(status.data_dir_source, explicit_datadir, status.active_data_dir);
-    const bool custom_datadir_exists = apply_datadir_before_config && QFileInfo::exists(status.active_data_dir);
-    const bool can_read_profile = !apply_datadir_before_config || custom_datadir_exists;
-    if (custom_datadir_exists) {
-        QmlDataDir::ApplyDataDirArg(preview_args, status.active_data_dir);
+    const bool apply_datadir_before_config = ShouldApplyDataDirBeforeConfig(selected_data_dir_source, explicit_datadir, selected_data_dir);
+    const bool custom_datadir_exists = apply_datadir_before_config && QFileInfo::exists(selected_data_dir);
+    const bool custom_datadir_usable = custom_datadir_exists && QmlDataDir::ValidateCustomDataDir(selected_data_dir).isEmpty();
+    const bool can_read_profile = !apply_datadir_before_config || custom_datadir_usable;
+    if (custom_datadir_usable) {
+        QmlDataDir::ApplyDataDirArg(preview_args, selected_data_dir);
     }
 
     QString read_error;
+    ReadOnlyProfileResult profile_read;
     if (can_read_profile) {
-        if (!ReadConfigAndSelectNetwork(preview_args, &read_error)) {
+        if (!ReadResolvedProfile(preview_args, profile_read, &read_error)) {
             status.error = read_error;
+            status.settings_file_unreadable = profile_read.settings_file_unreadable;
             return status;
         }
         const QString resolved_data_dir = ActiveDataDirString(preview_args);
-        if (!resolved_data_dir.isEmpty()) {
-            status.active_data_dir = resolved_data_dir;
-            if (status.data_dir_source == DataDirSource::Default && !QmlDataDir::IsDefaultDataDir(resolved_data_dir)) {
-                status.data_dir_source = DataDirSource::Config;
-            }
-        }
+        status.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
+        SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, resolved_data_dir, explicit_datadir);
     } else {
         try {
             SelectParams(preview_args.GetChainType());
@@ -314,38 +849,32 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
             status.error = QString::fromStdString(e.what());
             return status;
         }
+        SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
         status.ok = true;
         status.should_show_onboarding = true;
         return status;
     }
 
-    // Reuse the same read-only profile preview for startup translation, even
-    // when onboarding is explicitly requested for an existing profile.
-    if (!ReadSettingsFileIfPresent(preview_args, &read_error)) {
-        status.error = read_error;
-        return status;
-    }
     status.language = TranslationManager::ResolveLanguage(preview_args);
 
-    if (force_show_onboarding) {
+    const bool force_show_onboarding{
+        preview_args.GetBoolArg("-resetguisettings", false) ||
+        force_data_dir_chooser ||
+        !QFileInfo(status.active_data_dir).isDir() ||
+        (!explicit_datadir && ReadResolvedGuiReset(preview_args))
+    };
+    status.settings_enabled = profile_read.settings_enabled;
+    if (!status.settings_enabled) {
         status.ok = true;
-        status.qml_onboarded = false;
-        status.should_show_onboarding = true;
+        status.qml_onboarded = !force_show_onboarding;
+        status.should_show_onboarding = force_show_onboarding;
         return status;
     }
 
-    fs::path settings_path;
-    if (!preview_args.GetSettingsPath(&settings_path)) {
-        status.ok = true;
-        status.settings_enabled = false;
-        status.qml_onboarded = true;
-        status.should_show_onboarding = false;
-        return status;
-    }
-
-    status.qml_onboarded = CommandLineBoolArg(preview_args, QML_ONBOARDED_KEY)
+    const bool qml_onboarded = CommandLineBoolArg(preview_args, QML_ONBOARDED_KEY)
         .value_or(SettingToBool(preview_args.GetPersistentSetting(QML_ONBOARDED_KEY), false));
-    status.should_show_onboarding = !status.qml_onboarded;
+    status.qml_onboarded = force_show_onboarding ? false : qml_onboarded;
+    status.should_show_onboarding = force_show_onboarding || !qml_onboarded;
     status.ok = true;
     return status;
 }
@@ -355,6 +884,10 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     PreviewResult result;
 
     const QString data_dir = NormalizedDataDirPath(data_dir_selection);
+    result.selected_data_dir = data_dir;
+    result.selected_data_dir_source = data_dir_selection.source;
+    result.resolved_data_dir = data_dir;
+    result.resolved_data_dir_source = data_dir_selection.source;
     const QString validation_error = QmlDataDir::ValidateCustomDataDir(data_dir);
     if (!validation_error.isEmpty()) {
         result.error = validation_error;
@@ -367,6 +900,11 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         result.error = QString::fromStdString(parse_error);
         return result;
     }
+    if (const QString datadir_error{QmlDataDir::ValidateExplicitDataDir(preview_args)};
+        !datadir_error.isEmpty()) {
+        result.error = datadir_error;
+        return result;
+    }
 
     try {
         SelectParams(preview_args.GetChainType());
@@ -376,6 +914,9 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     }
 
     const bool explicit_datadir = HasExplicitDataDirArg(preview_args);
+    const QString selected_data_dir = explicit_datadir ? ExplicitDataDirString(preview_args) : data_dir;
+    const DataDirSource selected_data_dir_source = explicit_datadir ? DataDirSource::ExplicitArg : data_dir_selection.source;
+    SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
     const bool apply_datadir_before_config = ShouldApplyDataDirBeforeConfig(data_dir_selection.source, explicit_datadir, data_dir);
     const bool custom_datadir_exists = apply_datadir_before_config && QFileInfo::exists(data_dir);
     bool config_file_path_available{false};
@@ -384,26 +925,20 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     }
 
     if (!apply_datadir_before_config || custom_datadir_exists) {
-        std::string config_error;
-        if (!preview_args.ReadConfigFiles(config_error, true)) {
-            result.error = QString::fromStdString(config_error);
+        ReadOnlyProfileResult profile_read;
+        QString read_error;
+        if (!ReadResolvedProfile(preview_args, profile_read, &read_error)) {
+            result.error = read_error;
             return result;
         }
-        config_file_path_available = true;
-        try {
-            SelectParams(preview_args.GetChainType());
-            preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
-        } catch (const std::exception& e) {
-            result.error = QString::fromStdString(e.what());
-            return result;
-        }
-        const bool reset_gui_settings = preview_args.GetBoolArg("-resetguisettings", false);
-        if (!reset_gui_settings) {
-            std::vector<std::string> settings_errors;
-            if (!preview_args.ReadSettingsFile(&settings_errors)) {
-                result.error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
-                return result;
-            }
+        config_file_path_available = profile_read.config_file_path_available;
+        SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, ActiveDataDirString(preview_args), explicit_datadir);
+        result.effective_reset = preview_args.GetBoolArg("-resetguisettings", false);
+        if (result.effective_reset) {
+            preview_args.LockSettings([](common::Settings& settings) {
+                settings.rw_settings.clear();
+            });
+        } else {
             const QmlLegacySettings::MigrationResult migration_result{
                 QmlLegacySettings::MigrateCoreSettings(preview_args, QmlLegacySettings::MigrationMode::Preview)
             };
@@ -414,7 +949,9 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         }
     } else {
         preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
-        if (!preview_args.GetBoolArg("-resetguisettings", false)) {
+        SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
+        result.effective_reset = preview_args.GetBoolArg("-resetguisettings", false);
+        if (!result.effective_reset) {
             const QmlLegacySettings::MigrationResult migration_result{
                 QmlLegacySettings::MigrateCoreSettings(preview_args, QmlLegacySettings::MigrationMode::Preview)
             };
@@ -436,6 +973,12 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     result.profile = BuildProfileSummary(preview_args, config_file_path_available);
     result.core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(preview_args, QmlCoreSettings::OnboardingCoreSettingNames());
     result.values = QmlCoreSettings::LoadEffectiveValues(preview_args);
+    result.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
+    if (apply_datadir_before_config && !custom_datadir_exists) {
+        result.resolved_settings_path = SettingsPathForNewDataDir(preview_args, result.resolved_data_dir);
+    } else {
+        result.resolved_settings_path = SettingsPathString(preview_args);
+    }
     result.ok = true;
     return result;
 }
@@ -451,7 +994,7 @@ bool MarkQmlOnboarded(ArgsManager& args, QString* error)
     return WriteSettingsFile(args, error);
 }
 
-bool ApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir_selection, const QSet<QString>& touched_settings, const QmlCoreSettings::Values& values, QString* error)
+bool PrepareApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir_selection, const QString& resolved_data_dir, const QSet<QString>& touched_settings, const QmlCoreSettings::Values& values, bool effective_reset, PendingApply& pending, QString* error)
 {
     if (error) error->clear();
 
@@ -467,85 +1010,202 @@ bool ApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir_selection, 
         QmlDataDir::ApplyDataDirArg(args, data_dir);
     }
 
-    std::string config_error;
-    if (!args.ReadConfigFiles(config_error, true)) {
-        if (error) *error = QString::fromStdString(config_error);
-        return false;
-    }
-    try {
-        SelectParams(args.GetChainType());
-        args.SelectConfigNetwork(args.GetChainTypeString());
-    } catch (const std::exception& e) {
-        if (error) *error = QString::fromStdString(e.what());
-        return false;
-    }
-
-    std::vector<std::string> settings_errors;
-    const bool reset_gui_settings = args.GetBoolArg("-resetguisettings", false);
-    if (reset_gui_settings) {
-        fs::path settings_path;
-        if (args.GetSettingsPath(&settings_path) && fs::exists(settings_path)) {
-            if (!args.ReadSettingsFile(&settings_errors)) {
-                if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
-                return false;
-            }
-            if (!args.WriteSettingsFile(&settings_errors, /*backup=*/true)) {
-                if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file backup could not be written."} : settings_errors.front());
-                return false;
-            }
-        }
-        args.LockSettings([](common::Settings& settings) {
-            settings.rw_settings.clear();
-        });
-        QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(args.GetChainTypeString()));
-    } else {
-        if (!args.ReadSettingsFile(&settings_errors)) {
-            if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
-            return false;
-        }
-        const QmlLegacySettings::MigrationResult migration_result{
-            QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Persist)
-        };
-        if (!migration_result.error.isEmpty()) {
-            if (error) *error = migration_result.error;
-            return false;
-        }
-    }
-
-    std::map<std::string, common::SettingsValue> original_forced_settings;
-    args.LockSettings([&](common::Settings& settings) {
-        original_forced_settings = settings.forced_settings;
-    });
-    InitParameterInteraction(args);
-
-    QmlCoreSettings::Session core_settings{values, QmlCoreSettings::BuildCoreSettingStatuses(args, QmlCoreSettings::OnboardingCoreSettingNames())};
-    core_settings.setTouchedSettings(touched_settings);
-    const bool touched_settings_written = core_settings.writeTouchedToArgs(args);
-    args.LockSettings([&](common::Settings& settings) {
-        settings.forced_settings = std::move(original_forced_settings);
-    });
-    if (!touched_settings_written) {
-        if (error) *error = QStringLiteral("One or more startup settings could not be written.");
-        return false;
-    }
-
-    QmlCoreSettings::SetRwSetting(args, QString::fromLatin1(QML_ONBOARDED_KEY), common::SettingsValue{true});
-    if (!WriteSettingsFile(args, error)) return false;
-
-    if (ShouldPersistGuiDataDirSelection(data_dir_selection.source, explicit_datadir)) {
-        if (QmlDataDir::IsDefaultDataDir(data_dir)) {
-            QmlDataDir::PersistDefaultDataDirSelection();
-        } else if (!QmlDataDir::PersistGuiDataDirSelection(data_dir, &data_dir_error)) {
-            if (error) *error = data_dir_error;
-            return false;
-        }
-    }
+    pending.data_dir = {
+        data_dir,
+        data_dir_selection.source,
+    };
+    pending.resolved_data_dir = QmlDataDir::NormalizeLocalPath(resolved_data_dir);
+    pending.touched_settings = touched_settings;
+    pending.values = values;
+    pending.explicit_datadir_arg = explicit_datadir;
+    pending.effective_reset = effective_reset;
     return true;
 }
 
-bool ApplyToArgs(ArgsManager& args, const QString& data_dir, const QSet<QString>& touched_settings, const QmlCoreSettings::Values& values, QString* error)
+bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstrap_gui_settings, const PendingApply* pending, FinalizeResult* result, QString* error, const SettingsFileBackup* settings_file_backup)
 {
-    return ApplyToArgs(args, DataDirSelection{data_dir, DataDirSource::UserSelection}, touched_settings, values, error);
+    if (error) error->clear();
+    if (result) *result = {};
+
+    if (pending && !ValidatePendingApply(args, *pending, error)) return false;
+
+    // A captured backup means InitConfig recovered from an unreadable
+    // settings file after the user selected Reset. Treat that choice the same
+    // as an explicit -resetguisettings request.
+    const bool reset_gui_settings{
+        args.GetBoolArg("-resetguisettings", false) || settings_file_backup != nullptr
+    };
+    const std::map<std::string, common::SettingsValue> original_rw_settings{SnapshotRwSettings(args)};
+
+    const bool gui_settings_needed{pending != nullptr || reset_gui_settings};
+    GuiSettingsStore active_gui_settings_store;
+    std::unique_ptr<QSettings> active_gui_settings;
+    QVariantMap original_active_gui_settings;
+    bool bootstrap_is_active{false};
+    if (gui_settings_needed) {
+        active_gui_settings_store = CurrentGuiSettingsStore();
+        active_gui_settings = OpenGuiSettings(active_gui_settings_store);
+        original_active_gui_settings = SnapshotGuiSettings(*active_gui_settings);
+        if (active_gui_settings->status() != QSettings::NoError) {
+            if (error) {
+                //: Startup error shown when the network-specific GUI settings file cannot be read. %1 is the file path.
+                *error = QObject::tr("GUI settings could not be read from %1.")
+                             .arg(active_gui_settings->fileName());
+            }
+            return false;
+        }
+        bootstrap_is_active = SameGuiSettingsStore(active_gui_settings_store, bootstrap_gui_settings);
+    }
+    const bool bootstrap_settings_needed{
+        gui_settings_needed && !bootstrap_is_active
+    };
+    std::unique_ptr<QSettings> bootstrap_gui_settings_owner;
+    QSettings* bootstrap_settings{bootstrap_is_active ? active_gui_settings.get() : nullptr};
+    QVariantMap original_bootstrap_gui_settings;
+    if (bootstrap_settings_needed) {
+        bootstrap_gui_settings_owner = OpenGuiSettings(bootstrap_gui_settings);
+        bootstrap_settings = bootstrap_gui_settings_owner.get();
+        original_bootstrap_gui_settings = SnapshotGuiSettings(*bootstrap_settings);
+        if (bootstrap_settings->status() != QSettings::NoError) {
+            if (error) {
+                //: Startup error shown when the GUI settings file used before network selection cannot be read. %1 is the file path.
+                *error = QObject::tr("Bootstrap GUI settings could not be read from %1.")
+                             .arg(bootstrap_settings->fileName());
+            }
+            return false;
+        }
+    }
+
+    if (reset_gui_settings) {
+        if (!BackupSettingsFile(args, settings_file_backup, error)) return false;
+        if (!BackupGuiSettings(*active_gui_settings, args.GetDataDirNet() / "guisettings.ini.bak", error)) return false;
+        args.LockSettings([](common::Settings& settings) {
+            settings.rw_settings.clear();
+        });
+    }
+
+    if (!reset_gui_settings) {
+        const QmlLegacySettings::MigrationResult migration_result{
+            QmlLegacySettings::MigrateCoreSettings(args, QmlLegacySettings::MigrationMode::Preview)
+        };
+        if (!migration_result.error.isEmpty()) {
+            if (error) *error = migration_result.error;
+            RestoreRwSettings(args, original_rw_settings);
+            return false;
+        }
+    }
+
+    if (pending) {
+        if (!ApplyPendingCoreSettings(args, *pending, error)) {
+            RestoreRwSettings(args, original_rw_settings);
+            return false;
+        }
+    }
+
+    const bool settings_changed{!RwSettingsEqual(SnapshotRwSettings(args), original_rw_settings)};
+    if (settings_changed && !WriteSettingsFile(args, error)) {
+        RestoreRwSettings(args, original_rw_settings);
+        return false;
+    }
+
+    QVariantMap active_gui_settings_values{original_active_gui_settings};
+    QVariantMap bootstrap_gui_settings_values{original_bootstrap_gui_settings};
+    if (reset_gui_settings) {
+        active_gui_settings_values = ResetGuiSettingsValues(
+            original_active_gui_settings,
+            /*onboarding_completed=*/pending != nullptr);
+    }
+
+    if (pending) {
+        active_gui_settings_values.insert(QStringLiteral("fReset"), false);
+        if (bootstrap_is_active) {
+            ApplyBootstrapGuiSettings(active_gui_settings_values, *pending);
+        } else {
+            ApplyBootstrapGuiSettings(bootstrap_gui_settings_values, *pending);
+        }
+    } else if (reset_gui_settings && !bootstrap_is_active) {
+        bootstrap_gui_settings_values.insert(QStringLiteral("fReset"), true);
+    }
+
+    const bool active_gui_settings_changed{active_gui_settings_values != original_active_gui_settings};
+    const bool bootstrap_gui_settings_changed{
+        bootstrap_settings_needed && bootstrap_gui_settings_values != original_bootstrap_gui_settings
+    };
+    //: Name of the operation that saves network-specific GUI settings during startup.
+    const QString active_update_action{QObject::tr("GUI settings update")};
+    if (active_gui_settings_changed &&
+        !WriteGuiSettings(
+            *active_gui_settings,
+            active_gui_settings_values,
+            active_update_action,
+            error)) {
+        RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
+        RollBackSettingsFile(args, original_rw_settings, error);
+        return false;
+    }
+    //: Name of the operation that saves GUI settings used before network selection.
+    const QString bootstrap_update_action{QObject::tr("Bootstrap GUI settings update")};
+    if (bootstrap_gui_settings_changed &&
+        !WriteGuiSettings(
+            *bootstrap_settings,
+            bootstrap_gui_settings_values,
+            bootstrap_update_action,
+            error)) {
+        if (active_gui_settings_changed) {
+            RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
+        }
+        RestoreGuiSettings(bootstrap_gui_settings_owner, bootstrap_gui_settings, original_bootstrap_gui_settings, error);
+        RollBackSettingsFile(args, original_rw_settings, error);
+        return false;
+    }
+
+    QString legacy_cleanup_error;
+    bool legacy_cleanup_ok{true};
+    if (reset_gui_settings) {
+        legacy_cleanup_ok = QmlLegacySettings::ClearLegacyGuiSettings(
+            QString::fromStdString(args.GetChainTypeString()),
+            &legacy_cleanup_error);
+    } else {
+        QmlLegacySettings::GuiCleanup cleanup{QmlLegacySettings::GuiCleanup::None};
+        if (pending && ShouldUpdateBootstrapDataDir(*pending)) {
+            cleanup = QmlLegacySettings::GuiCleanup::DataDirAndReset;
+        } else if (pending) {
+            cleanup = QmlLegacySettings::GuiCleanup::ResetOnly;
+        }
+
+        const std::map<std::string, common::SettingsValue> committed_rw_settings{
+            SnapshotRwSettings(args)
+        };
+        const QmlLegacySettings::MigrationResult migration_result{
+            QmlLegacySettings::MigrateCoreSettings(
+                args,
+                QmlLegacySettings::MigrationMode::Persist,
+                cleanup)
+        };
+        // Persist removes the staged legacy keys, but the values already
+        // committed above remain authoritative for this process.
+        RestoreRwSettings(args, committed_rw_settings);
+        legacy_cleanup_ok = migration_result.error.isEmpty();
+        legacy_cleanup_error = migration_result.error;
+    }
+
+    if (!legacy_cleanup_ok) {
+        if (error) *error = legacy_cleanup_error;
+        if (bootstrap_gui_settings_changed) {
+            RestoreGuiSettings(bootstrap_gui_settings_owner, bootstrap_gui_settings, original_bootstrap_gui_settings, error);
+        }
+        if (active_gui_settings_changed) {
+            RestoreGuiSettings(active_gui_settings, active_gui_settings_store, original_active_gui_settings, error);
+        }
+        RollBackSettingsFile(args, original_rw_settings, error);
+        return false;
+    }
+
+    if (result) {
+        result->reset_applied = reset_gui_settings;
+        result->settings_changed = settings_changed;
+    }
+    return true;
 }
 
 } // namespace QmlOnboardingSettings
