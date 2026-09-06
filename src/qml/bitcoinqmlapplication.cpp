@@ -203,13 +203,6 @@ bool BitcoinQmlApplication::createWindow()
     m_chain_model = std::make_unique<ChainModel>(*m_chain);
     m_chain_model->setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
 
-    if (gArgs.IsArgSet("-resetguisettings")) {
-        QSettings settings;
-        settings.remove(QStringLiteral("fHideTrayIcon"));
-        settings.remove(QStringLiteral("fMinimizeToTray"));
-        settings.remove(QStringLiteral("fMinimizeOnClose"));
-    }
-
     connect(m_chain_sync_model.get(), &ChainSyncModel::setTimeRatioList, m_chain_model.get(), &ChainModel::setTimeRatioList);
     connect(m_chain_sync_model.get(), &ChainSyncModel::setTimeRatioListInitial, m_chain_model.get(), &ChainModel::setTimeRatioListInitial);
 
