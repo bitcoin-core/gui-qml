@@ -153,6 +153,8 @@ public:
     std::function<CoinsList()> list_coins_fn;
     std::function<OutputType()> get_default_address_type_fn;
     std::function<std::unique_ptr<interfaces::Handler>(TransactionChangedFn)> handle_transaction_changed_fn;
+    std::function<interfaces::WalletTx(const Txid&)> get_wallet_tx_fn;
+    std::function<bool(const Txid&, interfaces::WalletTxStatus&, int&, int64_t&)> try_get_tx_status_fn;
     std::function<bool(const Txid&)> transaction_can_be_bumped_fn;
     std::function<bool(const Txid&, const wallet::CCoinControl&, std::vector<bilingual_str>&, CAmount&, CAmount&, CMutableTransaction&)> create_bump_transaction_fn;
     std::function<bool(CMutableTransaction&)> sign_bump_transaction_fn;
@@ -162,6 +164,8 @@ public:
         CallCounter getNewDestination{"getNewDestination"};
         CallCounter createTransaction{"createTransaction"};
         CallCounter getWalletTxs{"getWalletTxs"};
+        CallCounter getWalletTx{"getWalletTx"};
+        CallCounter tryGetTxStatus{"tryGetTxStatus"};
         CallCounter getBalance{"getBalance"};
         CallCounter getAvailableBalance{"getAvailableBalance"};
         CallCounter getRequiredFee{"getRequiredFee"};
@@ -207,6 +211,18 @@ public:
     {
         ++calls.getWalletTxs;
         return get_wallet_txs_fn ? get_wallet_txs_fn() : std::set<interfaces::WalletTx>{};
+    }
+
+    interfaces::WalletTx getWalletTx(const Txid& txid) override
+    {
+        ++calls.getWalletTx;
+        return get_wallet_tx_fn ? get_wallet_tx_fn(txid) : interfaces::WalletTx{};
+    }
+
+    bool tryGetTxStatus(const Txid& txid, interfaces::WalletTxStatus& tx_status, int& num_blocks, int64_t& block_time) override
+    {
+        ++calls.tryGetTxStatus;
+        return try_get_tx_status_fn ? try_get_tx_status_fn(txid, tx_status, num_blocks, block_time) : false;
     }
 
     CAmount getBalance() override
