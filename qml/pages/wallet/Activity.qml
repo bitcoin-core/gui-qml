@@ -928,10 +928,10 @@ PageStack {
                         { text: qsTr("Received"),         value: ActivityFilterProxyModel.Received,       objectName: "activityTypeReceived" },
                         { text: qsTr("Sent"),             value: ActivityFilterProxyModel.Sent,           objectName: "activityTypeSent" },
                         { text: qsTr("Sent to yourself"), value: ActivityFilterProxyModel.SentToSelf,     objectName: "activityTypeSentToSelf" },
+                        { text: qsTr("Payment request"),  value: ActivityFilterProxyModel.PaymentRequest, objectName: "activityTypePaymentRequest" },
                         { text: qsTr("Mined"),            value: ActivityFilterProxyModel.Mined,          objectName: "activityTypeMined" },
                         //: Activity type filter menu entry for other transaction types.
-                        { text: qsTr("Other"),            value: ActivityFilterProxyModel.Other,          objectName: "activityTypeOther" },
-                        { text: qsTr("Payment request"),  value: ActivityFilterProxyModel.PaymentRequest, objectName: "activityTypePaymentRequest" }
+                        { text: qsTr("Other"),            value: ActivityFilterProxyModel.Other,          objectName: "activityTypeOther" }
                     ]
                     onActivated: function(value) {
                         activityFilterProxy.typeFilter = value
