@@ -158,6 +158,30 @@ TestCase {
         compare(page.currentItem.address, "bcrt1qsecondsendaddress")
     }
 
+    function test_navigateToTransaction_resets_a_stale_detail_stack() {
+        testActivityListModel.setCountForTest(3)
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+        compare(page.depth, 1)
+
+        // A detail page the user left open before going to Send. The wallet tabs
+        // are a StackLayout that keeps this stack alive, so it is still here when
+        // that send's "View Transaction" deeplink arrives.
+        page.push(activityDetailsComponent, detailsProperties("tx-stale"))
+        tryCompare(page, "depth", 2)
+        compare(page.currentItem.txid, "tx-stale")
+
+        page.navigateToTransaction("bbbb")
+
+        // The deeplinked transaction replaces the stale page rather than stacking
+        // on top of it, so Back goes to the Activity list and not through a page
+        // left bound to rows a reload() has invalidated.
+        tryCompare(page, "depth", 2)
+        compare(page.currentItem.txid, "bbbb")
+        page.pop()
+        tryCompare(page, "depth", 1)
+    }
+
     function test_selectedWalletChanged_pops_to_root() {
         const page = createTemporaryObject(activityComponent, this)
         verify(page !== null)

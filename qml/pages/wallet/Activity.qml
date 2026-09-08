@@ -26,6 +26,13 @@ PageStack {
         if (Object.keys(details).length === 0)
             return
 
+        // Show the transaction on top of the Activity list rather than on top of
+        // whatever detail page is still open. The wallet tabs are a StackLayout
+        // that keeps this stack alive, so a detail page opened before the user
+        // went to Send is still here when that send's "View Transaction" arrives:
+        // without the reset, Back walks into that stale page, which by then is
+        // bound to rows the accompanying reload() has already invalidated.
+        stackView.pop(null)
         var page = stackView.push("ActivityDetails.qml", details)
         page.showTransaction.connect(stackView.navigateToTransaction)
     }
