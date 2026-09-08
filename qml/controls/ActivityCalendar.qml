@@ -58,11 +58,11 @@ ColumnLayout {
 
     // Internal state --------------------------------------------------------
 
-    // Dates are shown in the same long shape as the rest of the app (see
-    // Transaction::dateTimeString), but rendered with toLocaleDateString so
-    // month names localize (a Qt.formatDate format string renders C-locale
-    // English in Qt 6), matching the localized month header and weekday row.
-    readonly property string activityDateFormat: "MMMM d, yyyy"
+    // Every date the calendar renders goes through toLocaleDateString with a
+    // Locale format rather than an explicit pattern, so the locale decides the
+    // field order as well as the month and weekday names. The chips take the
+    // short form because they are narrow; the day cells take the long form
+    // because they are only ever read aloud.
 
     // customFrom and customTo are local Date values (or null). While pickingEnd
     // is true the start is chosen and the next click sets the end; hoverDate
@@ -83,8 +83,8 @@ ColumnLayout {
     // null until the grid is first focused after opening.
     property var calendarFocusDate: null
 
-    // The chips are too narrow for the long Activity date format (a month
-    // like September wraps), so they use the locale's short date form.
+    // The chips are too narrow for a long date (a month like September wraps),
+    // so they use the locale's short date form.
     function formatRangeDate(date) {
         if (!date || isNaN(date.getTime())) {
             return ""
@@ -227,7 +227,7 @@ ColumnLayout {
     // selection state, so the state is announced to a screen reader and not
     // conveyed by color alone.
     function dayCellAccessibleName(cell) {
-        var base = cell.modelData.toLocaleDateString(Qt.locale(), root.activityDateFormat)
+        var base = cell.modelData.toLocaleDateString(Qt.locale(), Locale.LongFormat)
         if (cell.endpoint) {
             //: Screen reader label for a chosen start or end day in the Activity custom date range calendar. %1 is the date.
             return qsTr("%1, selected range endpoint").arg(base)
@@ -298,9 +298,10 @@ ColumnLayout {
         CoreText {
             objectName: "calendarMonthLabel"
             Layout.fillWidth: true
-            // toLocaleDateString localizes the month name (a Qt.formatDate
-            // format string would render C-locale English), matching the
-            // localized weekday header.
+            // The one place a pattern is unavoidable: Locale has no month-and-year
+            // format to ask for. toLocaleDateString still localizes the month name
+            // here (a Qt.formatDate format string would render C-locale English),
+            // so only the field order is fixed.
             text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
