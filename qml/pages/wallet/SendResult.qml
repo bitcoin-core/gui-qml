@@ -14,7 +14,12 @@ Page {
     id: root
     objectName: "sendResultPopup"
     property bool opened: visible
-    property string descriptionText: qsTr("Based on your selected fee, it should be confirmed within the next 10 minutes.")
+    property bool navigationBackEnabled: false
+    readonly property bool _hasExternalSigner:
+        walletController.selectedWallet && walletController.selectedWallet.hasExternalSigner
+    property string descriptionText: _hasExternalSigner
+        ? qsTr("Approved on external signer. It should be confirmed within the next 10 minutes.")
+        : qsTr("Based on your selected fee, it should be confirmed within the next 10 minutes.")
     property string actionText: qsTr("Done")
     property string txid: ""
 

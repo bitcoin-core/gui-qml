@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 #include <QSettings>
 
+#include <qml/appmode.h>
 #include <qml/bitcoinunits.h>
 #include <qml/models/settings_keys.h>
 
@@ -22,6 +23,8 @@ private Q_SLOTS:
     void displayUnit_defaultIsBtc();
     void displayUnit_persistsToQSettings();
     void language_persistsToQSettings();
+    void adaptiveSidebarLayout_defaultsToLegacy();
+    void adaptiveSidebarLayout_persistsToQSettings();
     void qmlBitcoinUnits_satFormat_zero();
     void qmlBitcoinUnits_satFormat_positive();
     void qmlBitcoinUnits_satFormat_negative();
@@ -92,6 +95,55 @@ void DisplaySettingsTests::language_persistsToQSettings()
         QString lang = settings.value(SettingsKeys::LANGUAGE, "").toString();
         settings.endGroup();
         QCOMPARE(lang, QStringLiteral("de"));
+    }
+}
+
+void DisplaySettingsTests::adaptiveSidebarLayout_defaultsToLegacy()
+{
+    QSettings settings;
+    const bool had_layout_setting = settings.contains(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+    const QVariant previous_layout_setting = settings.value(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+    settings.remove(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+
+    AppMode app_mode{AppMode::DESKTOP, true};
+    QVERIFY(!app_mode.adaptiveSidebarLayout());
+
+    if (had_layout_setting) {
+        settings.setValue(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT, previous_layout_setting);
+    } else {
+        settings.remove(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+    }
+}
+
+void DisplaySettingsTests::adaptiveSidebarLayout_persistsToQSettings()
+{
+    QSettings settings;
+    const bool had_layout_setting = settings.contains(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+    const QVariant previous_layout_setting = settings.value(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+    settings.remove(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
+
+    {
+        AppMode app_mode{AppMode::DESKTOP, true};
+        QSignalSpy changed_spy{&app_mode, &AppMode::adaptiveSidebarLayoutChanged};
+        app_mode.setAdaptiveSidebarLayout(true);
+        if (!app_mode.adaptiveSidebarLayoutAvailable()) {
+            QVERIFY(!app_mode.adaptiveSidebarLayout());
+            QCOMPARE(changed_spy.count(), 0);
+            QVERIFY(!settings.contains(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT));
+        } else {
+            QVERIFY(app_mode.adaptiveSidebarLayout());
+            QCOMPARE(changed_spy.count(), 1);
+            QVERIFY(settings.value(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT).toBool());
+        }
+    }
+
+    AppMode restored_app_mode{AppMode::DESKTOP, true};
+    QCOMPARE(restored_app_mode.adaptiveSidebarLayout(), restored_app_mode.adaptiveSidebarLayoutAvailable());
+
+    if (had_layout_setting) {
+        settings.setValue(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT, previous_layout_setting);
+    } else {
+        settings.remove(SettingsKeys::ADAPTIVE_SIDEBAR_LAYOUT);
     }
 }
 

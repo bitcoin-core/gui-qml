@@ -36,7 +36,7 @@ AbstractButton {
         states: [
             State {
                 name: "DEFAULT"
-                PropertyChanges { target: bg; color: Theme.color.background }
+                PropertyChanges { target: bg; color: "transparent" }
             },
             State {
                 name: "HOVER"

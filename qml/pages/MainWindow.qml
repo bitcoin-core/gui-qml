@@ -15,7 +15,7 @@ ApplicationWindow {
     id: appWindow
     objectName: "appWindow"
     title: qsTr("Bitcoin Core App")
-    minimumWidth: 800
+    minimumWidth: AppMode.adaptiveSidebarLayout ? 550 : 800
     minimumHeight: 665
     color: Theme.color.background
     palette.window: Theme.color.neutral1 // Context menu background
@@ -55,12 +55,25 @@ ApplicationWindow {
             return
         }
         appWindow.postOnboardingWalletRouteResolved = true
-        main.replace(desktopWallets, {}, StackView.Immediate)
+        main.replace(appWindow.applicationShell(), {}, StackView.Immediate)
         if (walletController.noWalletsFound) {
             main.push(createWalletWizard, {
                 "launchContext": CreateWalletWizard.Context.Onboarding
             }, StackView.Immediate)
         }
+    }
+
+    function applicationShell() {
+        if (AppMode.adaptiveSidebarLayout) return mainShell
+        return appWindow.desktopWalletMode ? desktopWallets : node
+    }
+
+    function applyLayoutPreference() {
+        if (appWindow.waitForPostOnboardingWalletRoute
+                && !appWindow.postOnboardingWalletRouteResolved) {
+            return
+        }
+        main.replace(appWindow.applicationShell(), {}, StackView.Immediate)
     }
 
     AppSettings {
@@ -153,7 +166,7 @@ ApplicationWindow {
         objectName: "mainPageStack"
         initialItem: appWindow.waitForPostOnboardingWalletRoute
             ? postOnboardingStartup
-            : (appWindow.desktopWalletMode ? desktopWallets : node)
+            : appWindow.applicationShell()
         anchors.fill: parent
         focus: true
         Keys.onReleased: (event) => {
@@ -161,6 +174,13 @@ ApplicationWindow {
                 nodeModel.requestShutdown()
                 event.accepted = true
             }
+        }
+    }
+
+    Connections {
+        target: AppMode
+        function onAdaptiveSidebarLayoutChanged() {
+            Qt.callLater(appWindow.applyLayoutPreference)
         }
     }
 
@@ -222,6 +242,15 @@ ApplicationWindow {
             }
             onSendTransaction: {
                 main.push(sendReviewPage)
+            }
+        }
+    }
+
+    Component {
+        id: mainShell
+        MainShell {
+            onAddWallet: {
+                main.push(createWalletWizard, { "launchContext": CreateWalletWizard.Context.Main })
             }
         }
     }

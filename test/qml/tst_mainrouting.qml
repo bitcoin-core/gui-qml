@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/pages"
 
 TestCase {
@@ -25,7 +26,7 @@ TestCase {
         }
     }
 
-    function cleanup() {
+    function destroyMainWindow() {
         if (windowUnderTest) {
             windowUnderTest.close()
             windowUnderTest.destroy()
@@ -33,8 +34,13 @@ TestCase {
         }
     }
 
+    function cleanup() {
+        destroyMainWindow()
+        AppMode.adaptiveSidebarLayout = false
+    }
+
     function createMain(wallet_enabled, preinit_onboarding_ran, no_wallets_found, wallet_dir_loaded, initialized) {
-        cleanup()
+        destroyMainWindow()
         walletAvailable = wallet_enabled
         preInitOnboardingRan = preinit_onboarding_ran || false
         walletController.reset()
@@ -55,6 +61,26 @@ TestCase {
         verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "walletBadge") !== null)
         verify(findChild(window, "nodeRunner") === null)
+    }
+
+    function test_adaptive_sidebar_layout_routes_to_main_shell() {
+        AppMode.adaptiveSidebarLayout = true
+        const window = createMain(true)
+        verify(findChild(window, "mainShellPage") !== null)
+        verify(findChild(window, "desktopWalletsPage") === null)
+    }
+
+    function test_layout_preference_switches_shell_at_runtime() {
+        const window = createMain(true)
+        verify(findChild(window, "desktopWalletsPage") !== null)
+
+        AppMode.adaptiveSidebarLayout = true
+        tryVerify(function() { return findChild(window, "mainShellPage") !== null })
+        verify(findChild(window, "desktopWalletsPage") === null)
+
+        AppMode.adaptiveSidebarLayout = false
+        tryVerify(function() { return findChild(window, "desktopWalletsPage") !== null })
+        verify(findChild(window, "mainShellPage") === null)
     }
 
     function test_wallet_unavailable_routes_to_node_runner() {

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -111,7 +112,44 @@ Item {
                     }
                     onClicked: displaySettingsView.push(money_font_page)
                 }
+                CoreText {
+                    objectName: "displayLayoutDeveloperSectionLabel"
+                    Layout.topMargin: 36
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 4
+                    horizontalAlignment: Text.AlignLeft
+                    bold: true
+                    font.pixelSize: 13
+                    color: Theme.color.neutral7
+                    text: qsTr("Developer")
+                    visible: AppMode.adaptiveSidebarLayoutAvailable
+                }
+                Separator {
+                    objectName: "displayLayoutDeveloperSectionSeparator"
+                    Layout.fillWidth: true
+                    visible: AppMode.adaptiveSidebarLayoutAvailable
+                }
+                Setting {
+                    id: gotoApplicationLayout
+                    objectName: "gotoApplicationLayout"
+                    Layout.fillWidth: true
+                    visible: AppMode.adaptiveSidebarLayoutAvailable
+                    header: qsTr("Layout")
+                    description: AppMode.adaptiveSidebarLayout
+                        ? qsTr("[Experimental] Adaptive sidebar layout")
+                        : qsTr("Default layout")
+                    actionItem: CaretRightIcon {
+                        color: gotoApplicationLayout.stateColor
+                    }
+                    onClicked: displaySettingsView.push(layout_page)
+                }
             }
+        }
+    }
+    Component {
+        id: layout_page
+        SettingsLayout {
+            onBack: displaySettingsView.pop()
         }
     }
     Component {

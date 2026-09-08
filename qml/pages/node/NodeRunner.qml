@@ -17,6 +17,7 @@ Page {
     objectName: "nodeRunner"
     background: null
     clip: true
+    property bool showNavigationButtons: true
     header: NavigationBar2 {
         rightItem: Item {
             implicitWidth: actionsRow.implicitWidth + 12
@@ -35,6 +36,7 @@ Page {
                 }
                 IconButton {
                     objectName: "peersTabButton"
+                    visible: root.showNavigationButtons
                     iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
                     iconColor: Theme.color.neutral7
                     hoverColor: Theme.color.neutral9
@@ -45,6 +47,7 @@ Page {
                 }
                 IconButton {
                     objectName: "consoleTabButton"
+                    visible: root.showNavigationButtons
                     iconSource: "image://images/console"
                     iconColor: Theme.color.neutral7
                     hoverColor: Theme.color.neutral9
@@ -55,6 +58,7 @@ Page {
                 }
                 IconButton {
                     objectName: "nodeSettingsButton"
+                    visible: root.showNavigationButtons
                     iconSource: "image://images/gear"
                     iconColor: Theme.color.neutral9
                     hoverColor: Theme.color.neutral9

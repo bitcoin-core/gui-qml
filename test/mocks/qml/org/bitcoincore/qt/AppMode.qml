@@ -12,5 +12,7 @@ QtObject {
     readonly property bool isDesktop: true
     readonly property bool isMobile: !isDesktop
     readonly property string state: isDesktop ? "DESKTOP" : "MOBILE"
+    readonly property bool adaptiveSidebarLayoutAvailable: true
+    readonly property bool adaptiveSidebarLayout: false
     readonly property bool walletEnabled: true
 }

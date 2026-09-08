@@ -35,6 +35,7 @@ find_package(Qt 6.2 MODULE REQUIRED
 find_package(QRencode MODULE REQUIRED)
 
 option(ENABLE_TEST_AUTOMATION "Enable test automation bridge for QML UI testing" OFF)
+option(ENABLE_TABVIEW_SHELL "Enable the adaptive sidebar/tab-bar shell" OFF)
 
 # Do not build any executable targets from bitcoin submodule
 set(BUILD_BENCH OFF)
@@ -108,6 +109,9 @@ target_compile_definitions(bitcoinqml
 )
 if(ENABLE_TEST_AUTOMATION)
   target_compile_definitions(bitcoinqml PUBLIC ENABLE_TEST_AUTOMATION)
+endif()
+if(ENABLE_TABVIEW_SHELL)
+  target_compile_definitions(bitcoinqml PUBLIC ENABLE_TABVIEW_SHELL)
 endif()
 target_include_directories(bitcoinqml
   PRIVATE

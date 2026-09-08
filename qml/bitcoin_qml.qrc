@@ -93,8 +93,12 @@
         <file>controls/SegmentedPicker.qml</file>
         <file>controls/Setting.qml</file>
         <file>controls/SettingsHeader.qml</file>
+        <file>controls/SizeClass.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
+        <file>controls/Tab.qml</file>
+        <file>controls/TabSection.qml</file>
+        <file>controls/TabView.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
@@ -102,6 +106,7 @@
         <file>controls/ValueInput.qml</file>
         <file>controls/WalletTypeListItem.qml</file>
         <file>pages/initerrormessage.qml</file>
+        <file>pages/MainShell.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/BannedPeers.qml</file>
@@ -123,6 +128,7 @@
         <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsDisplayUnit.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
+        <file>pages/settings/SettingsLayout.qml</file>
         <file>pages/settings/SettingsWindowBehavior.qml</file>
         <file>pages/settings/SettingsBlockClockDisplayMode.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
@@ -162,6 +168,7 @@
         <file>pages/wallet/SpeedUpOverlay.qml</file>
         <file>pages/wallet/SignVerifyMessage.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>
+        <file>pages/wallet/WalletContainer.qml</file>
         <file>pages/wallet/WalletPasswordSettings.qml</file>
         <file>pages/wallet/WalletSettings.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
@@ -228,6 +235,20 @@
         <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
+        <file alias="tab-add">res/icons/plus.svg</file>
+        <file alias="tab-add-filled">res/icons/plus-filled.svg</file>
+        <file alias="tab-console">res/icons/console.svg</file>
+        <file alias="tab-console-filled">res/icons/console-filled.svg</file>
+        <file alias="tab-contacts">res/icons/contacts.svg</file>
+        <file alias="tab-contacts-filled">res/icons/contacts-filled.svg</file>
+        <file alias="tab-node">res/icons/node-hardware.svg</file>
+        <file alias="tab-node-filled">res/icons/node-hardware-filled.svg</file>
+        <file alias="tab-peers">res/icons/node-3-connections.svg</file>
+        <file alias="tab-peers-filled">res/icons/node-3-connections-filled.svg</file>
+        <file alias="tab-settings">res/icons/gear.svg</file>
+        <file alias="tab-settings-filled">res/icons/gear-filled.svg</file>
+        <file alias="tab-wallet">res/icons/wallet.svg</file>
+        <file alias="tab-wallet-filled">res/icons/wallet-filled.svg</file>
         <file alias="tooltip-arrow-dark">res/icons/tooltip-arrow-dark.png</file>
         <file alias="tooltip-arrow-light">res/icons/tooltip-arrow-light.png</file>
         <file alias="triangle-down">res/icons/triangle-down.png</file>

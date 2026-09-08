@@ -5,13 +5,75 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
+import "../../qml/pages/settings"
 
 TestCase {
     name: "DisplaySettings"
     when: windowShown
     width: 600
     height: 800
+
+    function cleanup() {
+        AppMode.adaptiveSidebarLayout = false
+        AppMode.adaptiveSidebarLayoutAvailable = true
+    }
+
+    Component {
+        id: layoutPicker
+        SettingsLayout {}
+    }
+
+    Component {
+        id: displaySettingsPage
+        SettingsDisplay { showBackButton: false }
+    }
+
+    function test_layoutPicker_is_available_from_display_developer_section() {
+        const page = createTemporaryObject(displaySettingsPage, this)
+        verify(page !== null)
+
+        const layoutSetting = findChild(page, "gotoApplicationLayout")
+        verify(layoutSetting !== null)
+        layoutSetting.clicked()
+        tryVerify(function() { return findChild(page, "settingsLayoutPage") !== null })
+    }
+
+    function test_layoutPicker_is_hidden_when_adaptive_shell_is_not_built() {
+        AppMode.adaptiveSidebarLayoutAvailable = false
+        const page = createTemporaryObject(displaySettingsPage, this)
+        verify(page !== null)
+
+        compare(findChild(page, "displayLayoutDeveloperSectionLabel").visible, false)
+        compare(findChild(page, "displayLayoutDeveloperSectionSeparator").visible, false)
+        compare(findChild(page, "gotoApplicationLayout").visible, false)
+    }
+
+    function test_layoutPicker_selects_default_layout() {
+        AppMode.adaptiveSidebarLayout = false
+        const page = createTemporaryObject(layoutPicker, this)
+        verify(page !== null)
+
+        const defaultButton = findChild(page, "layoutDefault")
+        const adaptiveButton = findChild(page, "layoutAdaptiveSidebar")
+        verify(defaultButton !== null)
+        verify(adaptiveButton !== null)
+        compare(defaultButton.checked, true)
+        compare(adaptiveButton.checked, false)
+    }
+
+    function test_layoutPicker_selects_adaptive_sidebar_layout() {
+        AppMode.adaptiveSidebarLayout = false
+        const page = createTemporaryObject(layoutPicker, this)
+        verify(page !== null)
+
+        const adaptiveButton = findChild(page, "layoutAdaptiveSidebar")
+        adaptiveButton.clicked()
+        compare(AppMode.adaptiveSidebarLayout, true)
+        compare(adaptiveButton.checked, true)
+        compare(findChild(page, "layoutDefault").checked, false)
+    }
 
     // Minimal component exercising display-unit OptionButton binding logic.
     // Uses OptionButton directly (no NavButton / org.bitcoincore.qt dependency)

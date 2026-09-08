@@ -30,11 +30,15 @@ class MockAppMode : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(bool isDesktop READ isDesktop WRITE setIsDesktop NOTIFY isDesktopChanged)
+    Q_PROPERTY(bool adaptiveSidebarLayoutAvailable READ adaptiveSidebarLayoutAvailable WRITE setAdaptiveSidebarLayoutAvailable NOTIFY adaptiveSidebarLayoutAvailableChanged)
+    Q_PROPERTY(bool adaptiveSidebarLayout READ adaptiveSidebarLayout WRITE setAdaptiveSidebarLayout NOTIFY adaptiveSidebarLayoutChanged)
     Q_PROPERTY(bool walletEnabled READ walletEnabled WRITE setWalletEnabled NOTIFY walletEnabledChanged)
     Q_PROPERTY(QString state READ state WRITE setState NOTIFY stateChanged)
 
 public:
     bool isDesktop() const { return m_is_desktop; }
+    bool adaptiveSidebarLayoutAvailable() const { return m_adaptive_sidebar_layout_available; }
+    bool adaptiveSidebarLayout() const { return m_adaptive_sidebar_layout; }
     bool walletEnabled() const { return m_wallet_enabled; }
     QString state() const { return m_state; }
 
@@ -44,6 +48,20 @@ public Q_SLOTS:
         if (m_is_desktop == value) return;
         m_is_desktop = value;
         Q_EMIT isDesktopChanged();
+    }
+    void setAdaptiveSidebarLayout(const bool value)
+    {
+        if (value && !m_adaptive_sidebar_layout_available) return;
+        if (m_adaptive_sidebar_layout == value) return;
+        m_adaptive_sidebar_layout = value;
+        Q_EMIT adaptiveSidebarLayoutChanged();
+    }
+    void setAdaptiveSidebarLayoutAvailable(const bool value)
+    {
+        if (m_adaptive_sidebar_layout_available == value) return;
+        m_adaptive_sidebar_layout_available = value;
+        if (!value) setAdaptiveSidebarLayout(false);
+        Q_EMIT adaptiveSidebarLayoutAvailableChanged();
     }
     void setWalletEnabled(const bool value)
     {
@@ -60,11 +78,15 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void isDesktopChanged();
+    void adaptiveSidebarLayoutAvailableChanged();
+    void adaptiveSidebarLayoutChanged();
     void walletEnabledChanged();
     void stateChanged();
 
 private:
     bool m_is_desktop{true};
+    bool m_adaptive_sidebar_layout_available{true};
+    bool m_adaptive_sidebar_layout{false};
     bool m_wallet_enabled{true};
     QString m_state{QStringLiteral("DESKTOP")};
 };
