@@ -535,16 +535,24 @@ ColumnLayout {
         Accessible.role: Accessible.Button
         Accessible.name: navButton.accessibleName
         contentItem: Item {
+            // Two plain Icons rather than a Repeater over a 1-or-2 model: a
+            // delegate inside an inline component is not wrapped in an implicit
+            // Component on Qt 6.2, which reads the delegate as the Component
+            // itself and fails to load the whole calendar. Row leaves out an
+            // invisible child, so the single caret sits exactly where it did.
             Row {
                 anchors.centerIn: parent
                 spacing: -5
-                Repeater {
-                    model: navButton.doubled ? 2 : 1
-                    delegate: Icon {
-                        source: navButton.iconSource
-                        color: Theme.color.orange
-                        size: 14
-                    }
+                Icon {
+                    source: navButton.iconSource
+                    color: Theme.color.orange
+                    size: 14
+                }
+                Icon {
+                    visible: navButton.doubled
+                    source: navButton.iconSource
+                    color: Theme.color.orange
+                    size: 14
                 }
             }
         }
