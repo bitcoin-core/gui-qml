@@ -899,10 +899,10 @@ PageStack {
                             hoverEnabled: enabled && AppMode.isDesktop
                             // Pass ISO strings rather than the Dates: a JS Date
                             // converted straight to QDate can shift a day across
-                            // time zones.
+                            // time zones. applyCustomRange selects the custom
+                            // date filter along with the range.
                             onClicked: {
-                                activityFilterProxy.setCustomRange(calendar.startIso, calendar.endIso)
-                                activityFilterProxy.dateFilter = ActivityFilterProxyModel.CustomRange
+                                activityFilterProxy.applyCustomRange(calendar.startIso, calendar.endIso)
                                 datePopup.close()
                             }
                         }

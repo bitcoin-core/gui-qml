@@ -2976,8 +2976,8 @@ class MockActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
-    Q_PROPERTY(QDate rangeStart READ rangeStart WRITE setRangeStart NOTIFY rangeChanged)
-    Q_PROPERTY(QDate rangeEnd READ rangeEnd WRITE setRangeEnd NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -3108,43 +3108,34 @@ public:
     }
 
     QDate rangeStart() const { return m_range_start; }
-    void setRangeStart(const QDate& range_start)
-    {
-        if (m_range_start == range_start) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        beginFilterChange();
-#endif
-        m_range_start = range_start;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-        invalidateFilter();
-#endif
-        Q_EMIT rangeChanged();
-        Q_EMIT countChanged();
-    }
-
     QDate rangeEnd() const { return m_range_end; }
-    void setRangeEnd(const QDate& range_end)
+
+    Q_INVOKABLE bool applyCustomRange(const QString& start_iso, const QString& end_iso)
     {
-        if (m_range_end == range_end) return;
+        const QDate start = QDate::fromString(start_iso, Qt::ISODate);
+        const QDate end = QDate::fromString(end_iso, Qt::ISODate);
+        if (!start.isValid() || !end.isValid() || start > end) return false;
+
+        const bool range_changed = start != m_range_start || end != m_range_end;
+        const bool filter_changed = m_date_filter != CustomRange;
+        if (!range_changed && !filter_changed) return true;
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
         beginFilterChange();
 #endif
-        m_range_end = range_end;
+        m_range_start = start;
+        m_range_end = end;
+        m_date_filter = CustomRange;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
         endFilterChange(QSortFilterProxyModel::Direction::Rows);
 #else
         invalidateFilter();
 #endif
-        Q_EMIT rangeChanged();
-        Q_EMIT countChanged();
-    }
 
-    Q_INVOKABLE void setCustomRange(const QString& start_iso, const QString& end_iso)
-    {
-        setRangeStart(QDate::fromString(start_iso, Qt::ISODate));
-        setRangeEnd(QDate::fromString(end_iso, Qt::ISODate));
+        if (range_changed) Q_EMIT rangeChanged();
+        if (filter_changed) Q_EMIT dateFilterChanged();
+        Q_EMIT countChanged();
+        return true;
     }
 
     int count() const { return rowCount(); }

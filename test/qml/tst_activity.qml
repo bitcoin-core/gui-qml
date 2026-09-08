@@ -441,8 +441,8 @@ TestCase {
         verify(activityPage !== null)
         verify(calendar !== null)
 
-        // Apply a fixed range through the timezone-safe ISO setter.
-        proxy.setCustomRange("2025-06-10", "2025-06-20")
+        // Apply a fixed range through the timezone-safe ISO entry point.
+        verify(proxy.applyCustomRange("2025-06-10", "2025-06-20"))
 
         // Reopening the date popup re-seeds the calendar draft from
         // proxy.rangeStart / rangeEnd, which reach QML as UTC-midnight JS Dates.

@@ -184,49 +184,43 @@ QDate ActivityFilterProxyModel::rangeStart() const
     return m_range_start;
 }
 
-void ActivityFilterProxyModel::setRangeStart(const QDate& range_start)
-{
-    if (m_range_start == range_start) return;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    beginFilterChange();
-#endif
-    m_range_start = range_start;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-    endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-    invalidateFilter();
-#endif
-    Q_EMIT rangeChanged();
-    Q_EMIT countChanged();
-}
-
 QDate ActivityFilterProxyModel::rangeEnd() const
 {
     return m_range_end;
 }
 
-void ActivityFilterProxyModel::setRangeEnd(const QDate& range_end)
+bool ActivityFilterProxyModel::applyCustomRange(const QString& start_iso, const QString& end_iso)
 {
-    if (m_range_end == range_end) return;
+    const QDate start = QDate::fromString(start_iso, Qt::ISODate);
+    const QDate end = QDate::fromString(end_iso, Qt::ISODate);
+    // Reject a half-picked or inverted range outright: filtering on one would
+    // silently show nothing, which reads as a broken filter rather than a
+    // rejected input.
+    if (!start.isValid() || !end.isValid() || start > end) return false;
+
+    const bool range_changed = start != m_range_start || end != m_range_end;
+    const bool filter_changed = m_date_filter != CustomRange;
+    if (!range_changed && !filter_changed) return true;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     beginFilterChange();
 #endif
-    m_range_end = range_end;
+    m_range_start = start;
+    m_range_end = end;
+    m_date_filter = CustomRange;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     endFilterChange(QSortFilterProxyModel::Direction::Rows);
 #else
     invalidateFilter();
 #endif
-    Q_EMIT rangeChanged();
-    Q_EMIT countChanged();
-}
 
-void ActivityFilterProxyModel::setCustomRange(const QString& start_iso, const QString& end_iso)
-{
-    setRangeStart(QDate::fromString(start_iso, Qt::ISODate));
-    setRangeEnd(QDate::fromString(end_iso, Qt::ISODate));
+    // Both dates and the date filter move together, so the view refilters once
+    // instead of passing through the intermediate half-applied ranges two
+    // separate setters would have published.
+    if (range_changed) Q_EMIT rangeChanged();
+    if (filter_changed) Q_EMIT dateFilterChanged();
+    Q_EMIT countChanged();
+    return true;
 }
 
 int ActivityFilterProxyModel::count() const

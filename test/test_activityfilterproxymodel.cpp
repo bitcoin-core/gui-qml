@@ -141,6 +141,8 @@ private Q_SLOTS:
     void searchMatchesLabelAddressAndTxid();
     void filtersByDateBuckets();
     void filtersByCustomDateRange();
+    void rejectsInvalidCustomRange();
+    void appliesCustomRangeWithOneNotification();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
     void usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter();
     void filtersByMinimumAmount();
@@ -442,9 +444,8 @@ void ActivityFilterProxyModelTests::filtersByCustomDateRange()
 
     ActivityFilterProxyModel proxy;
     proxy.setSourceModel(&source);
-    proxy.setRangeStart(start);
-    proxy.setRangeEnd(end);
-    proxy.setDateFilter(ActivityFilterProxyModel::CustomRange);
+    QVERIFY(proxy.applyCustomRange(start.toString(Qt::ISODate), end.toString(Qt::ISODate)));
+    QCOMPARE(proxy.dateFilter(), ActivityFilterProxyModel::CustomRange);
 
     QCOMPARE(proxy.rowCount(), 3);
     QVERIFY(ContainsLabel(proxy, "On start")); // lower bound inclusive
@@ -452,6 +453,73 @@ void ActivityFilterProxyModelTests::filtersByCustomDateRange()
     QVERIFY(ContainsLabel(proxy, "On end"));   // upper bound inclusive (whole day)
     QVERIFY(!ContainsLabel(proxy, "Before"));
     QVERIFY(!ContainsLabel(proxy, "After"));
+}
+
+void ActivityFilterProxyModelTests::rejectsInvalidCustomRange()
+{
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // An unparseable, empty, or inverted range leaves the model untouched: the
+    // previous filter keeps applying rather than collapsing to an empty list.
+    QVERIFY(!proxy.applyCustomRange("not-a-date", "2025-06-20"));
+    QVERIFY(!proxy.applyCustomRange("2025-06-10", ""));
+    QVERIFY(!proxy.applyCustomRange("2025-06-20", "2025-06-10"));
+
+    QCOMPARE(proxy.dateFilter(), ActivityFilterProxyModel::DateAll);
+    QVERIFY(!proxy.rangeStart().isValid());
+    QVERIFY(!proxy.rangeEnd().isValid());
+    QCOMPARE(proxy.rowCount(), 1);
+
+    // A single-day range is not inverted and is accepted.
+    QVERIFY(proxy.applyCustomRange("2025-06-15", "2025-06-15"));
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void ActivityFilterProxyModelTests::appliesCustomRangeWithOneNotification()
+{
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    QSignalSpy range_spy(&proxy, &ActivityFilterProxyModel::rangeChanged);
+    QSignalSpy date_filter_spy(&proxy, &ActivityFilterProxyModel::dateFilterChanged);
+    QSignalSpy count_spy(&proxy, &ActivityFilterProxyModel::countChanged);
+
+    // Setting both ends and the date filter together notifies once, not once
+    // per end, so no observer sees a half-applied range.
+    QVERIFY(proxy.applyCustomRange("2025-06-10", "2025-06-20"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // Re-applying the same range is a no-op and stays silent.
+    QVERIFY(proxy.applyCustomRange("2025-06-10", "2025-06-20"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // A rejected range notifies nothing either.
+    QVERIFY(!proxy.applyCustomRange("2025-06-20", "2025-06-10"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // Moving only the range while the filter is already CustomRange notifies
+    // the range but not the filter.
+    QVERIFY(proxy.applyCustomRange("2025-06-11", "2025-06-21"));
+    QCOMPARE(range_spy.count(), 2);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 2);
 }
 
 void ActivityFilterProxyModelTests::filtersByMinimumAmount()

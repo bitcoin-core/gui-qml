@@ -22,8 +22,8 @@ class ActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
-    Q_PROPERTY(QDate rangeStart READ rangeStart WRITE setRangeStart NOTIFY rangeChanged)
-    Q_PROPERTY(QDate rangeEnd READ rangeEnd WRITE setRangeEnd NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -70,15 +70,16 @@ public:
     void setMinAmount(CAmount min_amount);
 
     QDate rangeStart() const;
-    void setRangeStart(const QDate& range_start);
-
     QDate rangeEnd() const;
-    void setRangeEnd(const QDate& range_end);
 
-    // Set the custom range from ISO yyyy-MM-dd strings. QML passes strings
-    // rather than assigning the QDate properties directly because the
-    // JavaScript Date to QDate conversion shifts the day across time zones.
-    Q_INVOKABLE void setCustomRange(const QString& start_iso, const QString& end_iso);
+    // Apply a custom date range from ISO yyyy-MM-dd strings, selecting the
+    // CustomRange date filter with it. QML passes strings rather than assigning
+    // the QDate properties directly because the JavaScript Date to QDate
+    // conversion shifts the day across time zones. Returns false, changing
+    // nothing, when either date is unparseable or the range is inverted; the
+    // range is only ever set through here, which is why the two date properties
+    // are read-only.
+    Q_INVOKABLE bool applyCustomRange(const QString& start_iso, const QString& end_iso);
 
     int count() const;
 
