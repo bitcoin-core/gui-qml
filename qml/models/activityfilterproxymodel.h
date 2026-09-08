@@ -32,7 +32,6 @@ public:
         Today,
         ThisWeek,
         ThisMonth,
-        LastMonth,
         ThisYear,
         CustomRange
     };

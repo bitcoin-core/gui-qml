@@ -115,9 +115,6 @@ PageStack {
                     return qsTr("This week")
                 case ActivityFilterProxyModel.ThisMonth:
                     return qsTr("This month")
-                case ActivityFilterProxyModel.LastMonth:
-                    //: Activity date filter option for the previous calendar month.
-                    return qsTr("Last month")
                 case ActivityFilterProxyModel.ThisYear:
                     return qsTr("This year")
                 case ActivityFilterProxyModel.CustomRange:
@@ -802,8 +799,6 @@ PageStack {
                         { text: qsTr("Today"),        value: ActivityFilterProxyModel.Today,       objectName: "activityDateToday" },
                         { text: qsTr("This week"),    value: ActivityFilterProxyModel.ThisWeek,    objectName: "activityDateThisWeek" },
                         { text: qsTr("This month"),   value: ActivityFilterProxyModel.ThisMonth,   objectName: "activityDateThisMonth" },
-                        //: Activity date filter menu entry for the previous calendar month.
-                        { text: qsTr("Last month"),   value: ActivityFilterProxyModel.LastMonth,   objectName: "activityDateLastMonth" },
                         { text: qsTr("This year"),    value: ActivityFilterProxyModel.ThisYear,    objectName: "activityDateThisYear" },
                         //: Activity date filter menu entry that opens the custom start/end date calendar.
                         { text: qsTr("Custom range"), value: ActivityFilterProxyModel.CustomRange, objectName: "activityDateCustomRange" }
