@@ -5,6 +5,7 @@
         <file>components/AddressLabel.qml</file>
         <file>components/AlertAction.qml</file>
         <file>components/AlertPopup.qml</file>
+        <file>components/BannedPeersPopup.qml</file>
         <file>components/BitcoinAddressDisplayField.qml</file>
         <file>components/BitcoinAddressInputField.qml</file>
         <file>components/BitcoinAmountDisplayField.qml</file>
@@ -45,6 +46,7 @@
         <file>components/TotalBytesIndicator.qml</file>
         <file>components/DetailEditRow.qml</file>
         <file>components/PaymentDetailOptionsPopup.qml</file>
+        <file>components/PeerActionsMenu.qml</file>
         <file>components/QRCodePopup.qml</file>
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Tooltip.qml</file>
@@ -115,11 +117,11 @@
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
-        <file>pages/node/BannedPeers.qml</file>
         <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/Peers.qml</file>
+        <file>pages/node/PeersView.qml</file>
         <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>

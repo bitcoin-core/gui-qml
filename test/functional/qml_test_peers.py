@@ -490,6 +490,8 @@ def test_disconnect_peer(gui, harness, node_id):
 
     _open_peer_details(gui, node_id)
 
+    gui.click("peerActionsButton")
+    gui.wait_for_property("peerDisconnectButton", "visible", True)
     gui.click("peerDisconnectButton")
     print("  Clicked Disconnect")
 
@@ -501,8 +503,8 @@ def test_disconnect_peer(gui, harness, node_id):
     peers = harness.rpc_call("getpeerinfo")
     assert peers == [], f"Expected no peers after disconnect, got: {peers}"
     print("  PASSED: peer is disconnected")
-    # PeerDetails.qml automatically calls root.back() on the onDisconnected
-    # signal, so no manual navigation is needed here.
+    # PeersView returns compact layouts to the list when the selected peer's
+    # disconnected signal arrives, so no manual navigation is needed here.
 
 
 def test_ban_peer(gui, harness, node_id, duration_secs, duration_label):
@@ -510,11 +512,11 @@ def test_ban_peer(gui, harness, node_id, duration_secs, duration_label):
 
     _open_peer_details(gui, node_id)
 
-    gui.click("peerBanButton")
-    gui.wait_for_property(f"banDurationRow_{duration_secs}", "visible", True)
+    gui.click("peerActionsButton")
+    gui.wait_for_property(f"peerBanDuration_{duration_secs}", "visible", True)
+    gui.click(f"peerBanDuration_{duration_secs}")
 
-    gui.click(f"banDurationRow_{duration_secs}")
-
+    gui.wait_for_property("banConfirmationPopup", "opened", True)
     gui.click("banConfirmButton")
     print(f"  Confirmed ban ({duration_label})")
 
@@ -668,9 +670,10 @@ def test_ban_one_of_two_peers(gui, harness):
     gui.wait_for_property(f"peerListItem_{target_id}", "visible", True, timeout_ms=PEER_LIST_ITEM_VISIBLE_TIMEOUT_MS)
 
     _open_peer_details(gui, target_id)
-    gui.click("peerBanButton")
-    gui.wait_for_property("banDurationRow_3600", "visible", True)
-    gui.click("banDurationRow_3600")
+    gui.click("peerActionsButton")
+    gui.wait_for_property("peerBanDuration_3600", "visible", True)
+    gui.click("peerBanDuration_3600")
+    gui.wait_for_property("banConfirmationPopup", "opened", True)
     gui.click("banConfirmButton")
     print(f"  Banned peer {target_id} (subnet: 127.0.0.1/32)")
 
