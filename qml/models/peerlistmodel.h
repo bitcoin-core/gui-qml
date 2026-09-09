@@ -54,6 +54,7 @@ public:
         Sent,
         Received,
         Subversion,
+        Transport,
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
