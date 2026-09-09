@@ -14,6 +14,7 @@ Popup {
     property int itemSpacing: 0
     property int menuPadding: 6
     property color backgroundColor: Theme.color.neutral1
+    readonly property alias titleItem: _title
 
     default property alias menuItems: _column.data
 
@@ -57,6 +58,7 @@ Popup {
         function _closeMenu() { root.close() }
 
         CoreText {
+            id: _title
             visible: root.title !== ""
             Layout.fillWidth: true
             Layout.leftMargin: 10
@@ -65,8 +67,8 @@ Popup {
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            font: Theme.text.heading.font
-            lineHeight: Theme.text.heading.lineHeight
+            font: Theme.text.captionStrong.font
+            lineHeight: Theme.text.captionStrong.lineHeight
             lineHeightMode: Text.FixedHeight
             wrap: false
             color: Theme.color.neutral6

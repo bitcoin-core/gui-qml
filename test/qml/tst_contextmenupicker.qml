@@ -121,6 +121,15 @@ TestCase {
         compare(picker.itemAtIndex(0).rowValue, "date")
     }
 
+    function test_section_title_uses_bold_caption_typography() {
+        const host_layout = createTemporaryObject(objectsPickerComponent, host)
+        verify(host_layout !== null)
+        const picker = host_layout.picker
+        compare(picker.titleItem.font.pixelSize, Theme.text.captionStrong.pixelSize)
+        compare(picker.titleItem.font.styleName, "Semi Bold")
+        compare(picker.titleItem.lineHeight, Theme.text.captionStrong.lineHeight)
+    }
+
     function test_activating_row_emits_without_replacing_currentValue_binding() {
         const host_layout = createTemporaryObject(objectsPickerComponent, host)
         verify(host_layout !== null)
