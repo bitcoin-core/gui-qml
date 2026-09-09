@@ -78,6 +78,7 @@ Q_SIGNALS:
 private:
     void refreshWallet();
     void addPendingReceiveRequests();
+    void removeTransactionRows(const uint256& hash);
     bool updateTransactionStatus(QSharedPointer<Transaction> tx, int* wallet_height = nullptr) const;
     void updateTransactionLabel(QSharedPointer<Transaction> tx) const;
     void subscribeToCoreSignals();

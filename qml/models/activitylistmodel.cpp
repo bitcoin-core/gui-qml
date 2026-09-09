@@ -539,15 +539,43 @@ int ActivityListModel::sortedInsertPosition(const QSharedPointer<Transaction>& t
     return std::distance(m_transactions.cbegin(), it);
 }
 
+void ActivityListModel::removeTransactionRows(const uint256& hash)
+{
+    bool removed{false};
+    // Highest to lowest so earlier removals do not shift the rows still
+    // to be checked.
+    for (int i = m_transactions.size() - 1; i >= 0; --i) {
+        if (m_transactions.at(i)->hash != hash) continue;
+        beginRemoveRows(QModelIndex(), i, i);
+        m_transactions.removeAt(i);
+        endRemoveRows();
+        removed = true;
+    }
+    if (removed) {
+        Q_EMIT countChanged();
+    }
+}
+
 void ActivityListModel::subscribeToCoreSignals()
 {
     // Connect signals to wallet. The callback fires on the wallet's
     // notification thread.
     m_handler_transaction_changed = m_wallet_model->handleTransactionChanged([this](const uint256& hash, ChangeType status) {
-        // Read the status here, on the wallet's notification thread: it already
-        // holds cs_wallet, so the try-lock inside tryGetTxStatus is guaranteed
-        // to succeed. Deferred to the GUI thread it can lose the try-lock while
-        // the wallet is still processing the block and silently drop the update.
+        // A deleted transaction has no wallet record left, so the status
+        // read below can never succeed for it: remove its rows instead,
+        // queued to the model's thread like any other mutation.
+        if (status == CT_DELETED) {
+            QMetaObject::invokeMethod(this, [this, hash] {
+                removeTransactionRows(hash);
+            }, Qt::QueuedConnection);
+            return;
+        }
+        // Read the status here, on the wallet's notification thread: the wallet
+        // fires this callback while holding cs_wallet, so the try-lock inside
+        // tryGetTxStatus is guaranteed to succeed. That guarantee is positional
+        // and the snapshot must stay in this callback context: deferred to the
+        // GUI thread it can lose the try-lock while the wallet is still
+        // processing the block and silently drop the update.
         interfaces::WalletTxStatus wtx;
         int num_blocks;
         int64_t block_time;

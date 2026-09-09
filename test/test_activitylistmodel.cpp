@@ -162,10 +162,10 @@ public:
         m_statuses[wtx.tx->GetHash()] = status;
     }
 
-    void notifyTransactionChanged(const interfaces::WalletTx& wtx)
+    void notifyTransactionChanged(const interfaces::WalletTx& wtx, ChangeType change_type = CT_NEW)
     {
         for (const auto& fn : m_transaction_changed) {
-            fn(wtx.tx->GetHash(), CT_NEW);
+            fn(wtx.tx->GetHash(), change_type);
         }
     }
 };
@@ -205,6 +205,7 @@ private Q_SLOTS:
     void fulfilledRequestRowCarriesTheAddressLabel();
     void proxyOrderMatchesSourceForTiedTimestamps();
     void notificationsFromNodeThreadAreQueued();
+    void deletedTransactionRowsAreRemoved();
     void contendedRefreshReadIsRetried();
     void relativeDatesRefreshWithoutANewBlock();
     void statusReadTakenBeforeTheWalletCaughtUpIsRetried();
@@ -473,6 +474,32 @@ void ActivityListModelTests::notificationsFromNodeThreadAreQueued()
     // update is queued until this (the model's) thread processes events.
     QCOMPARE(model->rowCount(), 0);
     QTRY_COMPARE(model->rowCount(), 1);
+}
+
+void ActivityListModelTests::deletedTransactionRowsAreRemoved()
+{
+    auto wallet{std::make_unique<TestActivityWallet>()};
+    const interfaces::WalletTx deleted{TwoOutputReceiveTx(1, COIN, 200)};
+    const interfaces::WalletTx kept{ReceiveTx(5, COIN, 100)};
+    wallet->addConfirmedTx(deleted);
+    wallet->addConfirmedTx(kept);
+
+    TestActivityWallet* wallet_ptr{wallet.get()};
+    WalletQmlModel wallet_model{std::move(wallet)};
+    ActivityListModel* model{wallet_model.activityListModel()};
+    QCOMPARE(model->rowCount(), 3);
+
+    // Deleting the transaction leaves no wallet record behind, so a status
+    // read can never succeed for it again: every one of its rows has to go,
+    // and no retry may keep polling for a record that will not come back.
+    wallet_ptr->m_txs.erase(deleted);
+    wallet_ptr->m_statuses.erase(deleted.tx->GetHash());
+    wallet_ptr->notifyTransactionChanged(deleted, CT_DELETED);
+    QTRY_COMPARE(model->rowCount(), 1);
+    QCOMPARE(model->data(model->index(0, 0), ActivityListModel::TimestampRole).toLongLong(), qint64{100});
+
+    QTest::qWait(600);
+    QCOMPARE(model->rowCount(), 1);
 }
 
 void ActivityListModelTests::contendedRefreshReadIsRetried()
