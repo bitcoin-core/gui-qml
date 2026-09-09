@@ -345,7 +345,7 @@ Page {
                     renderingActive: root.visible
                 }
 
-                Tooltip {
+                HoverTooltip {
                     id: blockClockTooltip
                     objectName: "blockClockTooltip"
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
@@ -356,11 +356,6 @@ Page {
                     property bool offline: typeof networkStatusModel !== "undefined" && networkStatusModel.networkOffline
                     property bool headerSyncActive: nodeModel.headerSyncActive
 
-                    anchors.top: blockClockTabButton.bottom
-                    anchors.topMargin: 8
-                    anchors.horizontalCenter: blockClockTabButton.horizontalCenter
-
-                    shown: blockClockTabButton.hovered
                     text: {
                         if (faulted) {
                             qsTr("Error")
@@ -397,11 +392,8 @@ Page {
                     }
                 }
 
-                Tooltip {
-                    anchors.top: peersTabButton.bottom
-                    anchors.topMargin: 8
-                    anchors.horizontalCenter: peersTabButton.horizontalCenter
-                    shown: peersTabButton.hovered
+                HoverTooltip {
+                    objectName: "peersTabButtonTooltip"
                     text: qsTr("Peers")
                 }
             }
@@ -414,11 +406,8 @@ Page {
                 property int index: 5
                 ButtonGroup.group: navigationTabs
 
-                Tooltip {
-                    anchors.top: settingsTabButton.bottom
-                    anchors.topMargin: 8
-                    anchors.horizontalCenter: settingsTabButton.horizontalCenter
-                    shown: settingsTabButton.hovered
+                HoverTooltip {
+                    objectName: "desktopWalletSettingsTabButtonTooltip"
                     text: qsTr("Settings")
                 }
             }
