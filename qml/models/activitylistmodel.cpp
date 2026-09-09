@@ -556,8 +556,16 @@ void ActivityListModel::repositionTransaction(int index)
     endMoveRows();
 }
 
-void ActivityListModel::applyTransactionChanged(const uint256& hash, int attempt)
+void ActivityListModel::applyTransactionChanged(const uint256& hash, ChangeType change_type, int attempt)
 {
+    // A deleted transaction has no wallet record left, so a status read
+    // can never succeed for it: remove its rows instead of scheduling
+    // reads that would only burn the retry budget.
+    if (change_type == CT_DELETED) {
+        removeTransactionRows(hash);
+        return;
+    }
+
     interfaces::WalletTxStatus wtx;
     int num_blocks;
     int64_t block_time;
@@ -576,16 +584,33 @@ void ActivityListModel::applyTransactionChanged(const uint256& hash, int attempt
     if (attempt >= MAX_NOTIFICATION_RETRIES) {
         return;
     }
-    QTimer::singleShot(STATUS_RETRY_INTERVAL_MS, this, [this, hash, attempt] {
-        applyTransactionChanged(hash, attempt + 1);
+    QTimer::singleShot(STATUS_RETRY_INTERVAL_MS, this, [this, hash, change_type, attempt] {
+        applyTransactionChanged(hash, change_type, attempt + 1);
     });
+}
+
+void ActivityListModel::removeTransactionRows(const uint256& hash)
+{
+    bool removed{false};
+    // Highest to lowest so earlier removals do not shift the rows still
+    // to be checked.
+    for (int i = m_transactions.size() - 1; i >= 0; --i) {
+        if (m_transactions.at(i)->hash != hash) continue;
+        beginRemoveRows(QModelIndex(), i, i);
+        m_transactions.removeAt(i);
+        endRemoveRows();
+        removed = true;
+    }
+    if (removed) {
+        Q_EMIT countChanged();
+    }
 }
 
 void ActivityListModel::subscribeToCoreSignals()
 {
     // Connect signals to wallet
     m_handler_transaction_changed = m_wallet_model->handleTransactionChanged([this](const uint256& hash, ChangeType status) {
-        applyTransactionChanged(hash);
+        applyTransactionChanged(hash, status);
     });
 }
 
