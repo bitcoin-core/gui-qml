@@ -13,6 +13,7 @@ Popup {
     property int minMenuWidth: 240
     property int itemSpacing: 0
     property int menuPadding: 6
+    property color backgroundColor: Theme.color.neutral1
 
     default property alias menuItems: _column.data
 
@@ -36,7 +37,7 @@ Popup {
     height: implicitHeight
 
     background: Rectangle {
-        color: Theme.color.neutral1
+        color: root.backgroundColor
         border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
         border.width: 1
         radius: 5

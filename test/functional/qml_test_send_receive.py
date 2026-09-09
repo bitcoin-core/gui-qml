@@ -395,6 +395,11 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("activityTypeFilterButton")
         gui.click("activityTypeSent")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
+        wait_until(
+            lambda: gui.get_list_item_property("activityListView", 0, "amount") != "",
+            timeout=10,
+            description="sent Activity row delegate",
+        )
         activity_amount_text = gui.get_list_item_property("activityListView", 0, "amount")
         activity_amount_sats = amount_text_to_sats(activity_amount_text)
         assert activity_amount_text.startswith("-"), (

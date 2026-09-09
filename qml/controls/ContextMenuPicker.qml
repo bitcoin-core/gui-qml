@@ -15,10 +15,12 @@ Item {
     property string textRole: "text"
     property string valueRole: "value"
     property string subtitleRole: ""
+    property string iconRole: ""
     property string objectNameRole: ""
     property string subtitleObjectNameRole: ""
     property var currentValue
     property url selectionIconSource: "image://images/check"
+    property int iconSize: 18
     property int rowHeight: 36
     property int subtitleRowHeight: 52
 
@@ -37,6 +39,11 @@ Item {
     function _rowSubtitle(item) {
         if (root.subtitleRole === "" || typeof item !== 'object' || item === null) return ""
         const v = item[root.subtitleRole]
+        return v === undefined || v === null ? "" : v
+    }
+    function _rowIconSource(item) {
+        if (root.iconRole === "" || typeof item !== 'object' || item === null) return ""
+        const v = item[root.iconRole]
         return v === undefined || v === null ? "" : v
     }
     function _rowObjectName(item) {
@@ -88,12 +95,13 @@ Item {
                 property string rowText: root._rowText(rowData)
                 property var rowValue: root._rowValue(rowData)
                 property string subtitle: root._rowSubtitle(rowData)
+                property url rowIconSource: root._rowIconSource(rowData)
                 property string subtitleObjectName: root._rowSubtitleObjectName(rowData)
                 objectName: root._rowObjectName(rowData)
                 readonly property bool selected: root.currentValue === rowValue
-                readonly property int _effectiveHeight: subtitle !== ""
-                    ? root.subtitleRowHeight
-                    : root.rowHeight
+                readonly property int _textHeight: subtitle !== "" ? root.subtitleRowHeight : root.rowHeight
+                readonly property int _iconHeight: rowIconSource.toString() !== "" ? root.iconSize + 12 : 0
+                readonly property int _effectiveHeight: Math.max(_textHeight, _iconHeight)
 
                 Accessible.name: rowText
                 Accessible.checkable: true
@@ -110,6 +118,20 @@ Item {
 
                 contentItem: RowLayout {
                     spacing: 7
+
+                    Item {
+                        visible: _row.rowIconSource.toString() !== ""
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: visible ? root.iconSize : 0
+                        Layout.preferredHeight: visible ? root.iconSize : 0
+
+                        Icon {
+                            anchors.centerIn: parent
+                            source: _row.rowIconSource
+                            color: _row._highlighted ? _row._hoverColor : _row._idleColor
+                            size: root.iconSize
+                        }
+                    }
 
                     ColumnLayout {
                         Layout.fillWidth: true

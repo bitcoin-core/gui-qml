@@ -87,6 +87,7 @@ TestCase {
     function test_empty_menu_clamps_to_min_width() {
         const menu = openMenu(emptyMenuComponent)
         compare(menu.implicitWidth, menu.minMenuWidth)
+        compare(menu.background.color, Theme.color.neutral1)
     }
 
     function test_escape_closes_focused_menu() {

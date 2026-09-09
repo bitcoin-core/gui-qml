@@ -17,19 +17,18 @@
         <file>tst_createwalletwizard.qml</file>
         <file>tst_debuglogoutputview.qml</file>
         <file>tst_desktopwallets.qml</file>
-        <file>tst_displaysettings.qml</file>
         <file>tst_dropdownbutton.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_feeselection.qml</file>
         <file>tst_importwalletoptions.qml</file>
+        <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
-        <file>tst_mempoolinformationsettings.qml</file>
         <file>tst_navbutton.qml</file>
         <file>tst_nodefeedback.qml</file>
-        <file>tst_nodesettings.qml</file>
         <file>tst_onboarding_datadir.qml</file>
         <file>tst_peeractions.qml</file>
+        <file>tst_popuppicker.qml</file>
         <file>tst_proxylocationinput.qml</file>
         <file>tst_requestpayment.qml</file>
         <file>tst_rightcontenticon.qml</file>
@@ -37,15 +36,13 @@
         <file>tst_send.qml</file>
         <file>tst_setting.qml</file>
         <file>tst_settingsheader.qml</file>
+        <file>tst_settingsnavigation.qml</file>
         <file>tst_settingsstatus.qml</file>
-        <file>tst_settingswallet.qml</file>
-        <file>tst_settingswindowbehavior.qml</file>
         <file>tst_utils.qml</file>
         <file>tst_valueinput.qml</file>
         <file>tst_walletpassphrasepopup.qml</file>
         <file>tst_walletpasswordsettings.qml</file>
         <file>tst_walletselect.qml</file>
-        <file>tst_walletsettings.qml</file>
         <file>tst_wallettypelistitem.qml</file>
         <file>tst_watchonlyxpub.qml</file>
     </qresource>

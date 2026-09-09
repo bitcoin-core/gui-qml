@@ -64,16 +64,16 @@ Pane {
                         rightMargin: -2
                         border.color: Theme.color.orange
                     }
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
                 }
 
-                contentItem: Icon {
-                    source: "image://images/caret-left"
-                    color: Theme.color.neutral9
-                    size: 24
+                contentItem: Item {
+                    Icon {
+                        objectName: "settingsHeaderBackIcon"
+                        anchors.centerIn: parent
+                        source: "image://images/caret-left"
+                        color: Theme.color.neutral9
+                        size: 24
+                    }
                 }
 
                 HoverHandler {

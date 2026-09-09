@@ -18,6 +18,7 @@ AbstractButton {
     property url iconSource
     property int role: ContextMenuButton.Normal
     property bool autoClose: true
+    property color hoverBackgroundColor: Theme.color.neutral3
 
     readonly property bool _destructive: role === ContextMenuButton.Destructive
     readonly property bool _highlighted: enabled && (hovered || down || visualFocus)
@@ -95,7 +96,7 @@ AbstractButton {
     }
 
     background: Rectangle {
-        color: root._highlighted ? Theme.color.neutral2 : "transparent"
+        color: root._highlighted ? root.hoverBackgroundColor : "transparent"
         radius: 6
     }
 }

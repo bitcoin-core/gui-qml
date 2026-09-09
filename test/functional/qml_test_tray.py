@@ -46,9 +46,9 @@ def navigate_to_window_behavior(gui):
     """Open Settings then navigate to the Window Behavior page."""
     gui.click("nodeSettingsButton")
     # Wait for the settings list with the Window Behavior entry.
-    gui.wait_for_page("settings_windowbehavior", timeout_ms=5000)
-    gui.click("settings_windowbehavior")
-    gui.wait_for_page("windowBehaviorPage", timeout_ms=5000)
+    gui.wait_for_page("settingsSidebar_window-behavior", timeout_ms=5000)
+    gui.click("settingsSidebar_window-behavior")
+    gui.wait_for_page("windowBehaviorSettingsPage", timeout_ms=5000)
 
 
 def run_tests():
@@ -126,9 +126,9 @@ def run_tests():
         # showTrayIcon defaults to true; the others default to false.
         print("Test 3: Verify default switch states ...")
         expected_defaults = {
-            "showTrayIconSwitch":    True,   # show tray icon is on by default
-            "minimizeToTraySwitch":  False,  # minimize-to-tray is off by default
-            "minimizeOnCloseSwitch": False,  # minimize-on-close is off by default
+            "showTrayIconSwitch": True,
+            "minimizeToTraySwitch": False,
+            "minimizeOnCloseSwitch": False,
         }
         for switch_name, expected in expected_defaults.items():
             checked = gui.get_property(switch_name, "checked")
@@ -141,7 +141,7 @@ def run_tests():
             print(f"  -> {switch_name}.checked == {str(expected).lower()}  ✓")
 
         # ── Tests 4–5: showTrayIcon toggle round-trip ─────────────────────────
-        # Run the toggle tests while only one windowBehaviorPage instance is in
+        # Run the toggle tests while only one Window Behavior page instance is in
         # the StackView (before the back/re-open cycle), so objectName lookups
         # are unambiguous.
         #
@@ -149,26 +149,26 @@ def run_tests():
         # disabled) is already covered by the C++ unit tests in
         # test_desktopwindowbehaviormodel.cpp. Here we only verify that the
         # toggle round-trip works correctly via the UI on the offscreen backend.
-        print("Test 4: showTrayIconSwitch toggles off and the model reflects the change ...")
+        print("Test 4: Show tray icon toggles off and the model reflects the change ...")
         gui.click("showTrayIconSwitch")
         gui.wait_for_property("showTrayIconSwitch", "checked", False, timeout_ms=2000)
-        print("  -> showTrayIconSwitch clicked off  ✓")
+        print("  -> Show tray icon clicked off  ✓")
 
-        print("Test 5: showTrayIconSwitch toggles back on ...")
+        print("Test 5: Show tray icon toggles back on ...")
         gui.click("showTrayIconSwitch")
         gui.wait_for_property("showTrayIconSwitch", "checked", True, timeout_ms=2000)
-        print("  -> showTrayIconSwitch restored to on  ✓")
+        print("  -> Show tray icon restored to on  ✓")
 
         # ── Test 6: Sidebar navigation after interaction ──────────────────────
         print("Test 6: Sidebar navigation still works after interacting with Window Behavior ...")
-        gui.click("settings_about")
-        gui.wait_for_page("settingsAbout", timeout_ms=5000)
+        gui.click("settingsSidebar_about")
+        gui.wait_for_page("aboutSettingsPage", timeout_ms=5000)
         print("  -> switched to About section  ✓")
 
         # ── Test 7: Re-open page (round-trip) ─────────────────────────────────
         print("Test 7: Re-open Window Behavior page (round-trip) ...")
-        gui.click("settings_windowbehavior")
-        gui.wait_for_page("windowBehaviorPage", timeout_ms=5000)
+        gui.click("settingsSidebar_window-behavior")
+        gui.wait_for_page("windowBehaviorSettingsPage", timeout_ms=5000)
         print("  -> re-opened Window Behavior  ✓")
 
         # ── Test 8: Close with minimizeOnClose keeps app alive ────────────────

@@ -26,6 +26,7 @@ TestCase {
         walletController.initialized = true
         walletController.isWalletLoaded = true
         walletController.noWalletsFound = false
+        walletController.setSelectedWalletObject(testWalletModel)
         walletListModel.reset()
     }
 
@@ -82,7 +83,6 @@ TestCase {
         const tabs = [
             findChild(page, "blockClockTabButton"),
             findChild(page, "peersTabButton"),
-            findChild(page, "consoleTabButton"),
             findChild(page, "desktopWalletSettingsTabButton")
         ]
 
@@ -93,28 +93,32 @@ TestCase {
         }
 
         compare(tabs[1].iconSize, 24)
-        compare(tabs[2].iconSize, 24)
-        compare(tabs[3].iconSize, 30)
+        compare(tabs[2].iconSize, 30)
+        compare(tabs[2].iconSource, "image://images/gear-outline")
+        compare(findChild(page, "consoleTabButton"), null)
+        compare(findChild(page, "desktopWalletSettingsPreviewTabButton"), null)
     }
 
-    function test_console_autocomplete_closes_when_switching_tabs() {
+    function test_settings_is_lazilyLoadedAndRetained() {
         const page = createDesktopWallets()
-        const consoleTab = findChild(page, "consoleTabButton")
-        const activityTab = findChild(page, "activityTabButton")
-        const popup = findChild(page, "consoleAutocompletePopup")
+        const settingsTab = findChild(page, "desktopWalletSettingsTabButton")
+        const settingsLoader = findChild(page, "settingsLoader")
 
-        verify(consoleTab !== null)
-        verify(activityTab !== null)
-        verify(popup !== null)
+        verify(settingsTab !== null)
+        verify(settingsLoader !== null)
+        compare(settingsLoader.active, false)
+        compare(settingsLoader.item, null)
 
-        consoleTab.checked = true
-        tryCompare(consoleTab, "checked", true)
-        popup.open()
-        tryCompare(popup, "visible", true)
+        settingsTab.checked = true
+        tryCompare(settingsTab, "checked", true)
+        tryCompare(settingsLoader, "active", true)
+        tryVerify(function() { return settingsLoader.item !== null })
+        compare(settingsLoader.item.objectName, "settingsView")
+        const settingsView = settingsLoader.item
 
-        activityTab.checked = true
-        tryCompare(activityTab, "checked", true)
-        tryCompare(popup, "visible", false)
+        settingsTab.checked = false
+        compare(settingsLoader.item, settingsView)
+        compare(settingsLoader.active, true)
     }
 
     function test_receive_options_view_address_history_opens_settings_address_stack() {
@@ -139,13 +143,15 @@ TestCase {
         verify(settingsTab !== null)
         compare(settingsTab.checked, true)
 
-        const settingsPage = findChild(page, "nodeSettingsStack")
+        const settingsPage = findChild(page, "settingsView")
         verify(settingsPage !== null)
 
-        tryVerify(function() { return findChild(page, "walletSettingsStack") !== null })
-        const walletStack = findChild(page, "walletSettingsStack")
-        tryCompare(walletStack, "depth", 2)
-        compare(walletStack.currentItem.objectName, "addressListPage")
+        const settingsContainer = findChild(page, "settingsPageContainer")
+        verify(settingsContainer !== null)
+        tryCompare(settingsPage, "selectedSectionId", "wallet")
+        tryCompare(settingsContainer, "currentSectionId", "wallet")
+        tryCompare(settingsContainer, "depth", 2)
+        compare(settingsContainer.currentItem.objectName, "addressListPage")
         verify(findChild(page, "walletSettingsPage") !== null)
     }
 }

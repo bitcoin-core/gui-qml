@@ -9,6 +9,7 @@ Switch {
     id: root
     implicitWidth: 45
     implicitHeight: 28
+    focusPolicy: Qt.StrongFocus
     background: Rectangle {
         radius: Math.floor(height / 2)
         color: root.checked ? Theme.color.orange : Theme.color.neutral4
@@ -33,5 +34,12 @@ Switch {
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+    }
+
+    FocusBorder {
+        objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+        visible: root.visualFocus
+        borderRadius: Math.floor(height / 2)
+        z: 1
     }
 }

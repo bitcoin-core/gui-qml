@@ -221,11 +221,11 @@ def run_test(save_screenshots=False, screenshot_root=None):
         checkpoints.checkpoint("search by request label applied", gui)
 
         gui.click("desktopWalletSettingsTabButton")
-        gui.wait_for_property("settings_display", "visible", True, timeout_ms=5000)
-        gui.click("settings_display")
-        gui.wait_for_page("gotoDisplayUnit", timeout_ms=5000)
-        gui.click("gotoDisplayUnit")
-        gui.wait_for_page("settingsDisplayUnitPage", timeout_ms=5000)
+        gui.wait_for_property("settingsSidebar_display", "visible", True, timeout_ms=5000)
+        gui.click("settingsSidebar_display")
+        gui.wait_for_page("displayUnitPicker", timeout_ms=5000)
+        gui.click("displayUnitPickerButton")
+        gui.wait_for_page("displayUnitSAT", timeout_ms=5000)
         gui.click("displayUnitSAT")
         checkpoints.checkpoint("display unit switched to sats", gui)
 

@@ -47,7 +47,12 @@ TestCase {
         compare(button.role, ContextMenuButton.Normal)
         compare(button.autoClose, true)
         compare(button.focusPolicy, Qt.StrongFocus)
+        compare(button.hoverBackgroundColor, Theme.color.neutral3)
         verify(button.hoverEnabled)
+
+        button.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(button, "visualFocus", true)
+        compare(button.background.color, Theme.color.neutral3)
     }
 
     function test_destructive_role_marker() {

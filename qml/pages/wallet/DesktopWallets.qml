@@ -57,11 +57,16 @@ Page {
         }
     }
 
+    function openSettingsRoute(route) {
+        settingsLoader.pendingRoute = route
+        settingsTabButton.checked = true
+        Qt.callLater(settingsLoader.applyPendingRoute)
+    }
+
     Connections {
         target: walletController
         function onOpenWalletSettingsRequested() {
-            settingsTabButton.checked = true
-            nodeSettings.openWalletSettings()
+            root.openSettingsRoute("wallet")
         }
         function onOpenReceiveRequested() {
             receiveTabButton.checked = true
@@ -244,30 +249,12 @@ Page {
                 }
             }
             NavigationTab {
-                id: consoleTabButton
-                objectName: "consoleTabButton"
-                iconSource: "image://images/console"
-                iconColor: Theme.color.neutral7
-                iconSize: 24
-                Layout.preferredWidth: 30
-                property int index: 5
-                ButtonGroup.group: navigationTabs
-
-                Tooltip {
-                    anchors.top: consoleTabButton.bottom
-                    anchors.topMargin: -5
-                    anchors.horizontalCenter: consoleTabButton.horizontalCenter
-                    visible: consoleTabButton.hovered
-                    text: qsTr("Console")
-                }
-            }
-            NavigationTab {
                 id: settingsTabButton
                 objectName: "desktopWalletSettingsTabButton"
                 iconSource: "image://images/gear-outline"
                 iconColor: Theme.color.neutral7
                 Layout.preferredWidth: 30
-                property int index: 6
+                property int index: 5
                 ButtonGroup.group: navigationTabs
 
                 Tooltip {
@@ -304,8 +291,7 @@ Page {
         }
         RequestPayment {
             onAddressHistoryRequested: {
-                settingsTabButton.checked = true
-                nodeSettings.openWalletAddressHistory()
+                root.openSettingsRoute("addresses")
             }
         }
         Item {
@@ -348,19 +334,33 @@ Page {
                 }
             }
         }
-        CommandConsole {
-            showHeader: false
-            tabActive: consoleTabButton.checked
-            walletName: walletController.isWalletLoaded && walletController.selectedWallet
-                ? walletController.selectedWallet.name
-                : ""
-        }
-        NodeSettings {
-            id: nodeSettings
-            showDoneButton: false
-            onSelectWalletRequested: root.openWalletSelection()
-            onReceiveRequested: {
-                receiveTabButton.checked = true
+        Item {
+            Loader {
+                id: settingsLoader
+                objectName: "settingsLoader"
+                anchors.fill: parent
+                property bool retainItem: false
+                property string pendingRoute: ""
+
+                function applyPendingRoute() {
+                    if (!item || pendingRoute.length === 0) return
+                    if (pendingRoute === "addresses") item.openWalletAddressHistory()
+                    else item.selectSection(pendingRoute)
+                    pendingRoute = ""
+                }
+
+                // Create Settings on first use, then retain its navigation
+                // stacks while the parent tab item is hidden.
+                active: settingsTabButton.checked || retainItem
+                onLoaded: {
+                    retainItem = true
+                    Qt.callLater(applyPendingRoute)
+                }
+                sourceComponent: SettingsView {
+                    showDoneButton: false
+                    onSelectWalletRequested: root.openWalletSelection()
+                    onReceiveRequested: receiveTabButton.checked = true
+                }
             }
         }
     }
