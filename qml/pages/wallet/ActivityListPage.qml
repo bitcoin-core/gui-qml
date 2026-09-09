@@ -95,6 +95,11 @@ Page {
         return value
     }
 
+    function defaultExportFileUrl() {
+        const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
+        return "file://" + walletController.homePath() + "/activity-" + stamp + ".csv"
+    }
+
     function exportActivity(path) {
         const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
         exportSucceeded = ok
@@ -168,8 +173,13 @@ Page {
     AppFileDialog {
         id: exportDialog
         objectName: "activityExportDialog"
+        //: Title of the file save dialog opened by the Export CSV entry in the Activity page's overflow menu.
+        //: The dialog writes the list of transactions currently shown in Activity to a CSV file.
+        title: qsTr("Export activity to CSV")
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
+        currentFolder: "file://" + walletController.homePath()
+        currentFile: root.defaultExportFileUrl()
         nameFilters: [qsTr("Comma separated file (*.csv)")]
         onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
     }
@@ -258,6 +268,13 @@ Page {
                 objectName: "activityMoreButton"
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
+
+                HoverToolTip {
+                    objectName: "activityMoreButtonTooltip"
+                    y: moreButton.height + Theme.space.m
+                    visible: moreButton.hovered && !moreMenu.opened
+                    text: moreButton.Accessible.name
+                }
             }
         }
 
@@ -301,6 +318,13 @@ Page {
                     iconSize: 20
                     text: count === 1 ? qsTr("1 active filter") : qsTr("%1 active filters").arg(count)
                     onClicked: clearFiltersMenu.opened ? clearFiltersMenu.close() : clearFiltersMenu.open()
+
+                    HoverToolTip {
+                        objectName: "activityActiveFiltersButtonTooltip"
+                        y: activeFiltersButton.height + Theme.space.m
+                        visible: activeFiltersButton.hovered && !clearFiltersMenu.opened
+                        text: activeFiltersButton.Accessible.name
+                    }
                 }
             }
             DropdownButton {
@@ -590,7 +614,10 @@ Page {
                     const path = automationExportPathField.text
                     automationExportPathField.text = ""
                     root.exportActivity(path)
-                } else exportDialog.open()
+                } else {
+                    exportDialog.currentFile = root.defaultExportFileUrl()
+                    exportDialog.open()
+                }
             }
         }
     }

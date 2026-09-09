@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
 import "../../qml/controls"
@@ -20,6 +21,13 @@ TestCase {
     FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
     FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
     FontLoader { source: "qrc:/fonts/robotomono/regular" }
+
+    Window {
+        id: hoverWindow
+        width: 1180
+        height: 950
+        visible: false
+    }
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
 
@@ -745,6 +753,59 @@ TestCase {
         compare(findChild(edited, "activityRowRequestBadge").parent,
             findChild(edited, "activityRowLabel").parent)
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
+    }
+
+    // Issue #851: the Activity toolbar's icon-only buttons gave no hint of what
+    // they do. The redesign replaced the file icon with a labelled "Export CSV"
+    // menu entry, so the unlabelled icons left are the overflow and
+    // active-filter buttons; each shows its accessible name on hover.
+    function test_activity_toolbar_icons_have_tooltips() {
+        const page = createPage()
+
+        const moreButton = findChild(page, "activityMoreButton")
+        const moreTooltip = findChild(page, "activityMoreButtonTooltip")
+        verify(moreButton !== null)
+        verify(moreTooltip !== null)
+        compare(moreTooltip.text, "More options")
+        verify(!moreTooltip.visible)
+
+        const filtersButton = findChild(page, "activityActiveFiltersButton")
+        const filtersTooltip = findChild(page, "activityActiveFiltersButtonTooltip")
+        verify(filtersButton !== null)
+        verify(filtersTooltip !== null)
+        compare(filtersTooltip.text, filtersButton.Accessible.name)
+        verify(!filtersTooltip.visible)
+    }
+
+    // The bubble opens below the button and gives way to the menu it opens.
+    function test_more_button_tooltip_shows_on_hover() {
+        // Hover needs a real window; hand activation back to the test window after.
+        hoverWindow.visible = true
+        try {
+            const page = createTemporaryObject(pageComponent, hoverWindow.contentItem)
+            verify(page !== null)
+            hoverWindow.requestActivate()
+            tryCompare(hoverWindow, "active", true)
+            waitForRendering(page)
+
+            const button = findChild(page, "activityMoreButton")
+            const tooltip = findChild(page, "activityMoreButtonTooltip")
+            const menu = findChild(page, "activityMoreMenu")
+            mouseMove(button, button.width / 2, button.height / 2)
+            tryCompare(button, "hovered", true)
+            tryCompare(tooltip, "opened", true)
+            verify(tooltip.contentItem.mapToItem(null, 0, 0).y >= button.mapToItem(null, 0, button.height).y)
+
+            mouseClick(button)
+            tryCompare(menu, "opened", true)
+            tryCompare(tooltip, "visible", false)
+            menu.close()
+            tryCompare(menu, "visible", false)
+        } finally {
+            hoverWindow.visible = false
+            testCase.Window.window.requestActivate()
+            tryCompare(testCase.Window.window, "active", true)
+        }
     }
 
     function test_filter_menus_export_and_wallet_switch() {
