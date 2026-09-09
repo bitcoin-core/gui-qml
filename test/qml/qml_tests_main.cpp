@@ -2789,7 +2789,6 @@ public:
         StatusRole,
         TypeRole,
         TxidRole,
-        CanBumpRole,
         ReplacesTxidRole,
         ReplacedByTxidRole,
         IsPendingRequestRole,
@@ -2821,7 +2820,6 @@ public:
             case StatusRole: return MockTransaction::Confirmed;
             case TypeRole: return MockTransaction::RecvWithAddress;
             case TxidRole: return QStringLiteral("aaaa");
-            case CanBumpRole: return false;
             case ReplacesTxidRole: return QString{};
             case ReplacedByTxidRole: return QString{};
             case IsPendingRequestRole: return false;
@@ -2847,7 +2845,6 @@ public:
         case StatusRole: return MockTransaction::Unconfirmed;
         case TypeRole: return MockTransaction::SendToAddress;
         case TxidRole: return QStringLiteral("bbbb");
-        case CanBumpRole: return true;
         case ReplacesTxidRole: return QString{};
         case ReplacedByTxidRole: return QString{};
         case IsPendingRequestRole: return false;
@@ -2871,7 +2868,6 @@ public:
             {StatusRole, "status"},
             {TypeRole, "type"},
             {TxidRole, "txid"},
-            {CanBumpRole, "canBump"},
             {ReplacesTxidRole, "replacesTxid"},
             {ReplacedByTxidRole, "replacedByTxid"},
             {IsPendingRequestRole, "isPendingRequest"},
@@ -2932,7 +2928,9 @@ private:
         return {
             {"txid", data(model_index, TxidRole)},
             {"outputIndex", data(model_index, OutputIndexRole)},
-            {"canBump", data(model_index, CanBumpRole)},
+            // Bump eligibility is only read when details open, mirroring
+            // the real model, which exposes no per-row role for it.
+            {"canBump", row != 0},
             {"replacedByTxid", data(model_index, ReplacedByTxidRole)},
             {"amount", data(model_index, AmountRole)},
             {"date", data(model_index, DateRole)},

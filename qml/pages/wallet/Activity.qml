@@ -440,7 +440,6 @@ PageStack {
                         required property int status
                         required property int type
                         required property string txid
-                        required property bool canBump
                         required property string replacedByTxid
                         required property bool isPendingRequest
                         required property string requestId
@@ -458,8 +457,10 @@ PageStack {
                                 walletController.selectedWallet.loadPaymentRequestDetail(delegate.requestId)
                                 stackView.push(paymentRequestDetailPage)
                             } else {
-                                var page = stackView.push(detailsPage)
-                                page.showTransaction.connect(stackView.navigateToTransaction)
+                                // Details come from the model's invokable, which
+                                // reads bump eligibility once on open; a row role
+                                // would query the wallet on every delegate paint.
+                                stackView.navigateToTransaction(delegate.txid, delegate.outputIndex)
                             }
                         }
 
@@ -525,27 +526,6 @@ PageStack {
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                                 color: transactionVisuals.amountColor
-                            }
-
-                            Component {
-                                id: detailsPage
-                                ActivityDetails {
-                                    txid: delegate.txid
-                                    outputIndex: delegate.outputIndex
-                                    canBump: delegate.canBump
-                                    replacedByTxid: delegate.replacedByTxid
-                                    amount: delegate.amount
-                                    date: delegate.date
-                                    depth: delegate.depth
-                                    type: delegate.type
-                                    status: delegate.status
-                                    countsForBalance: delegate.countsForBalance
-                                    address: delegate.address
-                                    label: delegate.label
-                                    paymentRequests: walletController.selectedWallet
-                                        ? walletController.selectedWallet.receiveRequests.matchingEntriesForAddress(delegate.address)
-                                        : []
-                                }
                             }
 
                             Component {

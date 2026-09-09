@@ -37,7 +37,6 @@ public:
         TypeRole,
         TxidRole,
         TxIdRole = TxidRole,
-        CanBumpRole,
         ReplacesTxidRole,
         ReplacedByTxidRole,
         TimestampRole,

@@ -118,8 +118,6 @@ QVariant ActivityListModel::data(const QModelIndex &index, int role) const
         return static_cast<int>(tx->type);
     case TxidRole:
         return tx->isPendingRequest ? QString{} : tx->txid;
-    case CanBumpRole:
-        return m_wallet_model ? m_wallet_model->canBumpTransaction(tx->hash) : false;
     case ReplacesTxidRole:
         return tx->replacesTxid;
     case ReplacedByTxidRole:
@@ -152,7 +150,6 @@ QHash<int, QByteArray> ActivityListModel::roleNames() const
     roles[StatusRole] = "status";
     roles[TypeRole] = "type";
     roles[TxidRole] = "txid";
-    roles[CanBumpRole] = "canBump";
     roles[ReplacesTxidRole] = "replacesTxid";
     roles[ReplacedByTxidRole] = "replacedByTxid";
     roles[TimestampRole] = "timestamp";
@@ -259,7 +256,7 @@ void ActivityListModel::refreshStatuses(int chain_height)
         all_read = updateTransactionStatus(tx, &wallet_height) && all_read;
     }
     Q_EMIT dataChanged(index(0), index(m_transactions.size() - 1),
-                       {StatusRole, DepthRole, DateTimeRole, CanBumpRole, CountsForBalanceRole});
+                       {StatusRole, DepthRole, DateTimeRole, CountsForBalanceRole});
 
     // Two ways a refresh leaves a row stale. A read lost to wallet lock
     // contention keeps its cached status above, and a read taken while the
