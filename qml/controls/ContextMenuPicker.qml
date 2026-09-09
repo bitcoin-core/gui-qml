@@ -23,6 +23,7 @@ Item {
     property int iconSize: 18
     property int rowHeight: 36
     property int subtitleRowHeight: 52
+    readonly property alias titleItem: _title
 
     signal activated(var value)
 
@@ -77,8 +78,8 @@ Item {
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            font: Theme.text.heading.font
-            lineHeight: Theme.text.heading.lineHeight
+            font: Theme.text.captionStrong.font
+            lineHeight: Theme.text.captionStrong.lineHeight
             lineHeightMode: Text.FixedHeight
             wrap: false
             color: Theme.color.neutral6

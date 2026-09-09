@@ -15,15 +15,57 @@ Popup {
     property string title: ""
     property string message: ""
     property string messageObjectName: "alertMessage"
+    property real verticalOffset: 0
     default property alias actions: actionStore.data
 
     property var visibleActions: [defaultAction]
 
     modal: true
+    dim: true
     padding: 0
-    anchors.centerIn: parent
     width: parent ? Math.min(parent.width - 40, 360) : 360
     implicitHeight: columnLayout.implicitHeight
+    x: parent ? Math.round((parent.width - width) / 2) : 0
+    y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
+
+    Overlay.modal: Rectangle {
+        objectName: "alertPopupDimmer"
+        color: Qt.rgba(0, 0, 0, 0.5)
+    }
+
+    enter: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            property: "verticalOffset"
+            from: -30
+            to: 0
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    exit: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 1
+            to: 0
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+        NumberAnimation {
+            property: "verticalOffset"
+            from: 0
+            to: -30
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+    }
 
     property Item actionStoreItem: Item {
         id: actionStore
@@ -39,9 +81,10 @@ Popup {
     onOpened: refreshActions()
 
     background: Rectangle {
-        color: Theme.color.background
-        radius: 8
-        border.color: Theme.color.neutral4
+        objectName: "alertPopupSurface"
+        color: Theme.color.neutral1
+        radius: 10
+        border.color: Theme.color.neutral2
         border.width: 1
     }
 
@@ -64,6 +107,7 @@ Popup {
 
         Separator {
             Layout.fillWidth: true
+            color: Theme.color.neutral2
         }
 
         CoreText {
@@ -112,10 +156,10 @@ Popup {
                     textHoverColor: textColor
                     textPressedColor: textColor
                     backgroundColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.background
+                        ? Theme.color.neutral1
                         : alertAction.role === AlertAction.Destructive ? Theme.color.red : Theme.color.orange
                     backgroundHoverColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.background
+                        ? Theme.color.neutral1
                         : alertAction.role === AlertAction.Destructive ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
                     backgroundPressedColor: alertAction.role === AlertAction.Cancel
                         ? Theme.color.neutral2

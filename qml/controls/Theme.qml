@@ -217,6 +217,12 @@ Control {
             pixelSize: 13
             lineHeight: 19
         }
+        readonly property TextStyle captionStrong: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 13
+            lineHeight: 19
+        }
 
         // Controls
         readonly property TextStyle button: TextStyle {
