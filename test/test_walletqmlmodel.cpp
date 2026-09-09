@@ -49,6 +49,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -593,6 +594,7 @@ private Q_SLOTS:
     void usedAddressReceiveRequestRowIsFlaggedAndUntracked();
     void paidPendingRequestBecomesUsedAddressRequestLive();
     void paymentMarksEveryPendingRequestForAddressUsedLive();
+    void transactionChangedOffThreadIsQueuedToModelThread();
     void reloadMarksEveryRequestForPaidAddressUsed();
     void prepareTransactionOnLockedWalletRequiresPassword();
     void prepareTransactionWithPrivateKeysDisabledDoesNotRequirePassword();
@@ -1973,8 +1975,9 @@ void WalletQmlModelTests::paidPendingRequestBecomesUsedAddressRequestLive()
 
     // The request is kept as a used-address request (Payment request filter only)
     // and the received transaction is added as its own row, matching the reloaded
-    // state instead of consuming the request in place.
-    QCOMPARE(activity->rowCount(), 2);
+    // state instead of consuming the request in place. The update is queued to
+    // the model's thread, so spin the event loop for it.
+    QTRY_COMPARE(activity->rowCount(), 2);
     QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsPendingRequestRole).toBool());
     QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsUsedAddressRequestRole).toBool());
     QCOMPARE(activity->data(activity->index(0), ActivityListModel::TypeRole).toInt(),
@@ -2050,7 +2053,7 @@ void WalletQmlModelTests::paymentMarksEveryPendingRequestForAddressUsedLive()
         cb(received.tx->GetHash(), CT_NEW);
     }
 
-    QCOMPARE(activity->rowCount(), 4);
+    QTRY_COMPARE(activity->rowCount(), 4);
     const auto states = RequestRowStates(activity);
     QVERIFY(states.at(QStringLiteral("req-a1")).used);
     QVERIFY(states.at(QStringLiteral("req-a2")).used);
@@ -2062,6 +2065,66 @@ void WalletQmlModelTests::paymentMarksEveryPendingRequestForAddressUsedLive()
     QCOMPARE(proxy.rowCount(), 2);
     proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
     QCOMPARE(proxy.rowCount(), 3);
+}
+
+// The wallet fires transactionChanged on its notification thread. The model
+// must not mutate itself there: the rows and their model signals belong to
+// the thread the attached proxies and views live on, so the update has to be
+// queued and land only once that thread's event loop runs (the marshalling
+// the Widgets TransactionTableModel does for this same notification).
+void WalletQmlModelTests::transactionChangedOffThreadIsQueuedToModelThread()
+{
+    auto wallet = std::make_unique<MockWallet>();
+    auto* wallet_ptr = wallet.get();
+
+    const CTxDestination dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 7)}}};
+    const QString address = QString::fromStdString(EncodeDestination(dest));
+    const interfaces::WalletTx received = ReceiveWalletTxFor(dest, 50 * COIN);
+
+    std::vector<interfaces::Wallet::TransactionChangedFn> callbacks;
+    wallet_ptr->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
+    wallet_ptr->get_balance_fn = [] { return 10 * COIN; };
+    wallet_ptr->handle_transaction_changed_fn = [&](interfaces::Wallet::TransactionChangedFn fn) {
+        callbacks.push_back(std::move(fn));
+        return std::unique_ptr<interfaces::Handler>{};
+    };
+    wallet_ptr->get_wallet_tx_fn = [received](const Txid&) { return received; };
+    std::atomic<bool> status_read_on_notifier_thread{false};
+    std::thread::id notifier_id;
+    wallet_ptr->try_get_tx_status_fn = [&](const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) {
+        if (std::this_thread::get_id() == notifier_id) {
+            status_read_on_notifier_thread = true;
+        }
+        return true;
+    };
+
+    WalletQmlModel model{std::move(wallet)};
+    ActivityListModel* activity = model.activityListModel();
+
+    activity->addReceiveRequest(address, QStringLiteral("req"), 0, 100, QStringLiteral("1"));
+    QCOMPARE(activity->rowCount(), 1);
+
+    // Fire the notification from a worker thread, the way the wallet does.
+    QVERIFY(!callbacks.empty());
+    std::thread notifier{[&] {
+        notifier_id = std::this_thread::get_id();
+        for (const auto& cb : callbacks) {
+            cb(received.tx->GetHash(), CT_NEW);
+        }
+    }};
+    notifier.join();
+
+    // The notification thread must only have queued the update, not applied
+    // it: the row set is unchanged until this thread's event loop runs.
+    QCOMPARE(activity->rowCount(), 1);
+
+    // The status snapshot, however, must have been taken on the notification
+    // thread itself: it holds cs_wallet there, so the try-lock inside
+    // tryGetTxStatus cannot fail. Deferred to this thread it can lose the
+    // try-lock and silently drop the update.
+    QVERIFY(status_read_on_notifier_thread);
+
+    QTRY_COMPARE(activity->rowCount(), 2);
 }
 
 // The reload half of the same rule: rebuilding the model from the wallet

@@ -404,14 +404,26 @@ void ActivityListModel::fulfillPendingRequest(int index, const QSharedPointer<Tr
 
 void ActivityListModel::subscribeToCoreSignals()
 {
-    // Connect signals to wallet
+    // Connect signals to wallet. The callback fires on the wallet's
+    // notification thread.
     m_handler_transaction_changed = m_wallet_model->handleTransactionChanged([this](const uint256& hash, ChangeType status) {
+        // Read the status here, on the wallet's notification thread: it already
+        // holds cs_wallet, so the try-lock inside tryGetTxStatus is guaranteed
+        // to succeed. Deferred to the GUI thread it can lose the try-lock while
+        // the wallet is still processing the block and silently drop the update.
         interfaces::WalletTxStatus wtx;
         int num_blocks;
         int64_t block_time;
-        if (m_wallet_model->tryGetTxStatus(hash, wtx, num_blocks, block_time)) {
-            updateTransaction(hash, wtx, num_blocks, block_time);
+        if (!m_wallet_model->tryGetTxStatus(hash, wtx, num_blocks, block_time)) {
+            return;
         }
+        // Apply the update on the thread the model (and its attached proxy and
+        // views) lives on: emitting row signals from the notification thread
+        // corrupts the proxy's row mapping. This is the same marshalling the
+        // Widgets TransactionTableModel does for this notification.
+        QMetaObject::invokeMethod(this, [this, hash, wtx, num_blocks, block_time] {
+            updateTransaction(hash, wtx, num_blocks, block_time);
+        }, Qt::QueuedConnection);
     });
 }
 
