@@ -54,7 +54,6 @@
         <file>components/QRCodePopup.qml</file>
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/SearchBar.qml</file>
-        <file>components/Tooltip.qml</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/LabeledBitcoinAddressField.qml</file>
         <file>components/MultipleRecipientsSummary.qml</file>
@@ -83,6 +82,7 @@
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
         <file>controls/Header.qml</file>
+        <file>controls/HoverTooltip.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
         <file>controls/InformationPage.qml</file>
@@ -125,6 +125,7 @@
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
+        <file>controls/Tooltip.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
         <file>controls/ValueRow.qml</file>

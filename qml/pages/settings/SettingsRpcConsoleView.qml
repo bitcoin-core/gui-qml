@@ -67,6 +67,13 @@ SettingsPage {
         HoverHandler {
             cursorShape: fontSizeButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         }
+
+        HoverTooltip {
+            objectName: fontSizeButton.objectName.length > 0
+                ? fontSizeButton.objectName + "Tooltip"
+                : ""
+            text: fontSizeButton.accessibleName
+        }
     }
 
     PageHeading {
@@ -98,6 +105,8 @@ SettingsPage {
         objectName: "rpcConsoleToolbar"
         Layout.fillWidth: true
         spacing: 16
+        // Let this row's hover tooltips draw over the console below it.
+        z: 1
 
         SearchBar {
             id: searchBar

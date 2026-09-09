@@ -258,8 +258,9 @@ Page {
                     pageSelected: blockClockTabButton.checked
                 }
 
-                Tooltip {
+                HoverTooltip {
                     id: blockClockTooltip
+                    objectName: "blockClockTabButtonTooltip"
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
                     property bool synced: nodeModel.verificationProgress > 0.999
                     property bool paused: nodeModel.pause
@@ -268,11 +269,8 @@ Page {
                     property bool offline: typeof networkStatusModel !== "undefined" && networkStatusModel.networkOffline
                     property bool headerSyncActive: nodeModel.headerSyncActive
 
-                    anchors.top: blockClockTabButton.bottom
                     anchors.topMargin: -5
-                    anchors.horizontalCenter: blockClockTabButton.horizontalCenter
 
-                    visible: blockClockTabButton.hovered
                     text: {
                         if (faulted) {
                             qsTr("Error")
@@ -309,11 +307,9 @@ Page {
                     }
                 }
 
-                Tooltip {
-                    anchors.top: peersTabButton.bottom
+                HoverTooltip {
+                    objectName: "peersTabButtonTooltip"
                     anchors.topMargin: -5
-                    anchors.horizontalCenter: peersTabButton.horizontalCenter
-                    visible: peersTabButton.hovered
                     text: qsTr("Peers")
                 }
             }
@@ -326,11 +322,9 @@ Page {
                 property int index: 5
                 ButtonGroup.group: navigationTabs
 
-                Tooltip {
-                    anchors.top: settingsTabButton.bottom
+                HoverTooltip {
+                    objectName: "desktopWalletSettingsTabButtonTooltip"
                     anchors.topMargin: -5
-                    anchors.horizontalCenter: settingsTabButton.horizontalCenter
-                    visible: settingsTabButton.hovered
                     text: qsTr("Settings")
                 }
             }

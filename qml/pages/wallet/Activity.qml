@@ -108,6 +108,11 @@ PageStack {
                 return value
             }
 
+            function defaultExportFileUrl() {
+                const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
+                return "file://" + walletController.homePath() + "/activity-" + stamp + ".csv"
+            }
+
             function exportActivity(path) {
                 const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
                 exportSucceeded = ok
@@ -300,8 +305,13 @@ PageStack {
 
             FileDialog {
                 id: exportDialog
+                //: Shown as the tooltip of the file icon button in the Activity page header, and as the title of the save dialog that button opens.
+                //: The action writes the list of transactions currently shown in Activity to a CSV file.
+                title: qsTr("Export activity to CSV")
                 defaultSuffix: "csv"
                 fileMode: FileDialog.SaveFile
+                currentFolder: "file://" + walletController.homePath()
+                currentFile: root.defaultExportFileUrl()
                 nameFilters: [qsTr("Comma separated file (*.csv)")]
                 onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
             }
@@ -314,18 +324,25 @@ PageStack {
 
             header: Item {
                 id: pageHeader
+                objectName: "activityPageHeader"
                 // Mirror the Send/Receive title block: 36 above the title and
                 // 36 below it, with the ListView's own top margin counted
                 // toward the lower gap.
                 implicitHeight: 36 + activityHeader.height + 36 - root.activityListTopMargin
                     + (root.filtersVisible ? filterRow.implicitHeight + 10 : 0)
+                // Let the header's hover tooltips draw over the activity list.
+                z: 1
 
                 RowLayout {
                     id: activityHeader
+                    objectName: "activityHeaderRow"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.topMargin: 36
+                    // Let this row's hover tooltips draw over the filter row,
+                    // which follows it and would otherwise paint on top.
+                    z: 1
                     height: activityTitle.implicitHeight
                     spacing: 10
 
@@ -353,6 +370,9 @@ PageStack {
                         activeColor: Theme.color.orange
                         size: 30
                         iconSize: 22
+                        //: Shown as the tooltip of the file icon button in the Activity page header, and as the title of the save dialog that button opens.
+                        //: The action writes the list of transactions currently shown in Activity to a CSV file.
+                        tooltipText: qsTr("Export activity to CSV")
                         onClicked: {
                             if (automationExportPathField.text.length > 0) {
                                 const exportPath = automationExportPathField.text
@@ -360,6 +380,7 @@ PageStack {
                                 root.exportActivity(exportPath)
                                 return
                             }
+                            exportDialog.currentFile = root.defaultExportFileUrl()
                             exportDialog.open()
                         }
                     }
@@ -378,12 +399,20 @@ PageStack {
                         activeColor: Theme.color.orange
                         size: 30
                         iconSize: 24
+                        tooltipText: root.filtersVisible
+                            //: Tooltip for the search icon button in the Activity page header, shown while the search and filter row is open.
+                            //: Pressing the button hides that row again.
+                            ? qsTr("Hide search and filters")
+                            //: Tooltip for the search icon button in the Activity page header, shown while the search and filter row is hidden.
+                            //: Pressing the button reveals the row, which searches and filters the list of transactions.
+                            : qsTr("Search and filter activity")
                         onClicked: root.toggleFilters()
                     }
                 }
 
                 ColumnLayout {
                     id: filterRow
+                    objectName: "activityFilterRow"
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: activityHeader.bottom
