@@ -126,6 +126,9 @@ TestCase {
         optionsModel.mempoolSettingsDirty = false
         nodeModel.resetMempoolInfoPollingTestState()
         optionsModel.clearCoreSettingStatusesForTest()
+        walletController.reset()
+        walletController.setWalletLoaded(true)
+        walletController.selectedWallet.isEncrypted = false
         const proxySetting = optionsModel.coreSettings.entry("proxy")
         const onionSetting = optionsModel.coreSettings.entry("onion")
         proxySetting.enabled = false
@@ -340,6 +343,61 @@ TestCase {
         view.visible = true
         compare(view.pageContainer.depth, 2)
         compare(view.pageContainer.currentItem, addressPage)
+    }
+
+    function test_walletStackResetsWhenSelectedWalletChangesWhileHidden() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+
+        view.selectSection("wallet")
+        const setPasswordRow = findChild(view, "walletPasswordRow")
+        verify(setPasswordRow !== null)
+        compare(setPasswordRow.title, "Set password")
+        setPasswordRow.clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        const setPasswordPage = findChild(view, "walletPasswordSettingsPage")
+        verify(setPasswordPage !== null)
+        compare(setPasswordPage.updating, false)
+
+        view.selectSection("display")
+        compare(view.selectedSectionId, "display")
+        walletController.selectedWallet.isEncrypted = true
+        walletController.setSelectedWallet("encrypted-wallet")
+        compare(view.selectedSectionId, "display")
+        compare(view.pageContainer.sectionDepth("wallet"), 1)
+
+        view.selectSection("wallet")
+        tryCompare(view.pageContainer, "depth", 1)
+        const updatePasswordRow = findChild(view, "walletPasswordRow")
+        verify(updatePasswordRow !== null)
+        compare(updatePasswordRow.title, "Update password")
+        updatePasswordRow.clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        const updatePasswordPage = findChild(view, "walletPasswordSettingsPage")
+        verify(updatePasswordPage !== null)
+        compare(updatePasswordPage.updating, true)
+    }
+
+    function test_walletStackResetsWhenWalletUnloadsWhileHidden() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+
+        view.selectSection("wallet")
+        const passwordRow = findChild(view, "walletPasswordRow")
+        verify(passwordRow !== null)
+        passwordRow.clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        verify(findChild(view, "walletPasswordSettingsPage") !== null)
+
+        view.selectSection("display")
+        compare(view.selectedSectionId, "display")
+        walletController.setWalletLoaded(false)
+        compare(view.selectedSectionId, "display")
+        compare(view.pageContainer.sectionDepth("wallet"), 1)
+
+        view.selectSection("wallet")
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(view.pageContainer.currentItem.objectName, "walletSettingsPage")
     }
 
     function test_settingsViewPinsSidebarAndLetsPageContainerGrow() {

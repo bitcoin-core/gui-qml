@@ -172,13 +172,11 @@ Page {
         target: typeof walletController !== "undefined" ? walletController : null
 
         function onSelectedWalletChanged() {
-            if (root.selectedSectionId === "wallet" && pageContainer.depth > 1) root.selectSection("wallet", true)
+            pageContainer.resetSection("wallet")
         }
 
         function onIsWalletLoadedChanged() {
-            if (!walletController.isWalletLoaded && root.selectedSectionId === "wallet" && pageContainer.depth > 1) {
-                root.selectSection("wallet", true)
-            }
+            if (!walletController.isWalletLoaded) pageContainer.resetSection("wallet")
         }
     }
 

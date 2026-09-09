@@ -65,6 +65,17 @@ Page {
         return internal.currentStack.pop()
     }
 
+    function sectionDepth(sectionId) {
+        const sectionStack = internal.sectionStacks[sectionId]
+        return sectionStack ? sectionStack.depth : 0
+    }
+
+    function resetSection(sectionId) {
+        const sectionStack = internal.sectionStacks[sectionId]
+        if (!sectionStack || sectionStack.depth <= 1) return
+        sectionStack.pop(null, StackView.Immediate)
+    }
+
     function clear() {
         const sectionStacks = internal.sectionStacks
         if (internal.currentStack) internal.currentStack.visible = false
