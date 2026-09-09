@@ -83,6 +83,7 @@
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
         <file>controls/NavigationTab.qml</file>
+        <file>controls/NavigationSplitView.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>

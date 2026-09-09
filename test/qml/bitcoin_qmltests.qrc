@@ -25,6 +25,7 @@
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
         <file>tst_navbutton.qml</file>
+        <file>tst_navigationsplitview.qml</file>
         <file>tst_nodefeedback.qml</file>
         <file>tst_onboarding_datadir.qml</file>
         <file>tst_peeractions.qml</file>
