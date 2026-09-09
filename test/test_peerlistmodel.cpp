@@ -26,7 +26,7 @@ interfaces::Node::NodesStats MakeStats(std::initializer_list<CNodeStats> node_st
 
 CNodeStats MakeNodeStats(NodeId node_id, std::string address, bool inbound, ConnectionType connection_type, Network network)
 {
-    CNodeStats stats;
+    CNodeStats stats{};
     stats.nodeid = node_id;
     stats.m_connected = NodeClock::time_point{std::chrono::seconds{1'000}};
     stats.m_addr_name = std::move(address);
@@ -103,6 +103,9 @@ void PeerListModelTests::mapsRoleData()
 
     PeerDetailsModel details{stats_ptr, &model};
     QCOMPARE(details.sessionId(), QString{"043604a60a54b3f5"});
+    QVERIFY(details.mappedAS().isEmpty());
+    QVERIFY(details.permission().isEmpty());
+    QVERIFY(details.startingHeight().isEmpty());
     QVERIFY(details.highBandwidth());
     QVERIFY(details.addressRelay());
     QCOMPARE(details.addressesProcessed(), QString{"1076"});

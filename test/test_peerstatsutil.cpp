@@ -79,8 +79,8 @@ void PeerStatsUtilTests::formatServices()
 
 void PeerStatsUtilTests::formatPingTime()
 {
-    QCOMPARE(PeerStatsUtil::FormatPingTime(0us), QString("N/A"));
-    QCOMPARE(PeerStatsUtil::FormatPingTime(NodeClock::duration::max()), QString("N/A"));
+    QCOMPARE(PeerStatsUtil::FormatPingTime(0us), QString{});
+    QCOMPARE(PeerStatsUtil::FormatPingTime(NodeClock::duration::max()), QString{});
     QCOMPARE(PeerStatsUtil::FormatPingTime(1500us), QString("1 ms"));
     QCOMPARE(PeerStatsUtil::FormatPingTime(2500us), QString("2 ms"));
 }

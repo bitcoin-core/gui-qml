@@ -81,7 +81,7 @@ Item {
         sourceComponent: root.detailComponent
         x: root.isCompact
             ? (root.compactColumn === NavigationSplitView.Detail ? 0 : root.width)
-            : primaryLoader.width + root.separatorWidth
+            : root.effectivePrimaryWidth + root.separatorWidth
         width: root.isCompact
             ? root.width
             : Math.max(0, root.width - primaryLoader.width - root.separatorWidth)

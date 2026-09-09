@@ -306,7 +306,6 @@ Page {
                         peerTableModel.startAutoRefresh()
                     } else {
                         peerTableModel.stopAutoRefresh()
-                        if (peersStack.depth > 1) peersStack.pop(null)
                     }
                 }
 
@@ -381,29 +380,9 @@ Page {
                 showNetworkIndicator: false
             }
         }
-        PageStack {
-            id: peersStack
-            initialItem: Peers {
-                showBackButton: false
-                onPeerSelected: (peerDetails) => {
-                    peersStack.push(peerDetailsComp, {"details": peerDetails})
-                }
-                onBannedPeers: {
-                    peersStack.push(bannedPeersComp)
-                }
-            }
-            Component {
-                id: peerDetailsComp
-                PeerDetails {
-                    onBack: peersStack.pop()
-                }
-            }
-            Component {
-                id: bannedPeersComp
-                BannedPeers {
-                    onBack: peersStack.pop()
-                }
-            }
+        PeersView {
+            showHeader: false
+            showBackButton: false
         }
         Item {
             Loader {

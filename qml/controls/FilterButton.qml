@@ -46,6 +46,7 @@ AbstractButton {
         radius: 5
 
         FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
             borderRadius: 9
         }

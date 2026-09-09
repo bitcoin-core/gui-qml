@@ -66,7 +66,7 @@ public:
     bool highBandwidth() const { return m_combinedStats->nodeStats.m_bip152_highbandwidth_to || m_combinedStats->nodeStats.m_bip152_highbandwidth_from; }
     QString addressesProcessed() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_processed); }
     QString addressesRateLimited() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_rate_limited); }
-    QString startingHeight() const { return tr("N/A"); }
+    QString startingHeight() const { return {}; }
     QString syncedHeaders() const { return QString::number(m_combinedStats->nodeStateStats.nSyncHeight); }
     QString syncedBlocks() const { return QString::number(m_combinedStats->nodeStateStats.nCommonHeight); }
     QString direction() const { return QString::fromStdString(m_combinedStats->nodeStats.fInbound ? "Inbound" : "Outbound"); }
@@ -79,10 +79,10 @@ public:
     QString pingMin() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStats.m_min_ping_time); }
     QString pingWait() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStateStats.m_ping_wait); }
     QString timeOffset() const { return PeerStatsUtil::FormatTimeOffset(Ticks<std::chrono::seconds>(m_combinedStats->nodeStateStats.time_offset)); }
-    QString mappedAS() const { return m_combinedStats->nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats->nodeStats.m_mapped_as) : tr("N/A"); }
+    QString mappedAS() const { return m_combinedStats->nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats->nodeStats.m_mapped_as) : QString{}; }
     QString permission() const {
         if (m_combinedStats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
-            return tr("N/A");
+            return {};
         }
         QStringList permissions;
         for (const auto& permission : NetPermissions::ToStrings(m_combinedStats->nodeStats.m_permission_flags)) {

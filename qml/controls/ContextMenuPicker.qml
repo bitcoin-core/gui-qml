@@ -78,7 +78,10 @@ Item {
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            font: Theme.text.captionStrong.font
+            // Bind font properties directly for older Qt versions.
+            font.family: Theme.text.captionStrong.family
+            font.styleName: Theme.text.captionStrong.styleName
+            font.pixelSize: Theme.text.captionStrong.pixelSize
             lineHeight: Theme.text.captionStrong.lineHeight
             lineHeightMode: Text.FixedHeight
             wrap: false
