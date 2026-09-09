@@ -52,6 +52,11 @@ QString NetworkToQString(Network net)
     assert(false);
 }
 
+QString TransportToQString(TransportProtocolType transport)
+{
+    return QString::fromStdString(TransportTypeAsString(transport));
+}
+
 QString FormatDurationStr(std::chrono::nanoseconds dur)
 {
     const auto d{std::chrono::duration_cast<std::chrono::days>(dur)};

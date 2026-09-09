@@ -5,7 +5,8 @@
 #include <qml/models/peerdetailsmodel.h>
 
 PeerDetailsModel::PeerDetailsModel(const CNodeCombinedStats* nodeStats, PeerListModel* parent)
-: m_node_id{static_cast<int>(nodeStats->nodeStats.nodeid)}
+: QObject(parent)
+, m_node_id{static_cast<int>(nodeStats->nodeStats.nodeid)}
 , m_addr{nodeStats->nodeStats.addr}
 , m_combinedStats{nodeStats}
 , m_model{parent}

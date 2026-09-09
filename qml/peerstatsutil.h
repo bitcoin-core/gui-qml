@@ -16,6 +16,7 @@ namespace PeerStatsUtil {
 
 QString ConnectionTypeToQString(ConnectionType conn_type, bool prepend_direction);
 QString NetworkToQString(Network net);
+QString TransportToQString(TransportProtocolType transport);
 QString FormatDurationStr(std::chrono::nanoseconds dur);
 QString FormatPeerAge(NodeClock::time_point time_connected);
 QString FormatServicesStr(quint64 mask);

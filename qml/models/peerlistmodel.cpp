@@ -72,6 +72,8 @@ QVariant PeerListModel::data(const QModelIndex& index, int role) const
         return PeerStatsUtil::FormatBytes(rec.nodeStats.nRecvBytes);
     case Subversion:
         return QString::fromStdString(rec.nodeStats.cleanSubVer);
+    case Transport:
+        return PeerStatsUtil::TransportToQString(rec.nodeStats.m_transport_type);
     case StatsRole:
         return QVariant::fromValue(&rec);
     }
@@ -92,6 +94,7 @@ QHash<int, QByteArray> PeerListModel::roleNames() const
     roles[Sent] = "sent";
     roles[Received] = "received";
     roles[Subversion] = "subversion";
+    roles[Transport] = "transport";
     roles[StatsRole] = "stats";
     return roles;
 }

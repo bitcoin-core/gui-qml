@@ -5,6 +5,7 @@
 #include <QtTest/QtTest>
 
 #include <test/mocks/mocknode.h>
+#include <qml/models/peerdetailsmodel.h>
 #include <qml/models/peerlistsortproxy.h>
 #include <qml/models/peerlistmodel.h>
 #include <util/translation.h>
@@ -36,6 +37,7 @@ CNodeStats MakeNodeStats(NodeId node_id, std::string address, bool inbound, Conn
     stats.nSendBytes = 1'200;
     stats.nRecvBytes = 900;
     stats.cleanSubVer = "/Satoshi:28.0.0/";
+    stats.m_transport_type = TransportProtocolType::V1;
     return stats;
 }
 
@@ -57,7 +59,12 @@ private Q_SLOTS:
 
 void PeerListModelTests::mapsRoleData()
 {
-    const auto stats{MakeStats({MakeNodeStats(7, "127.0.0.1:8333", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_IPV4)})};
+    auto stats{MakeStats({MakeNodeStats(7, "127.0.0.1:8333", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_IPV4)})};
+    std::get<0>(stats[0]).m_session_id = "043604a60a54b3f5";
+    std::get<0>(stats[0]).m_bip152_highbandwidth_to = true;
+    std::get<2>(stats[0]).m_addr_relay_enabled = true;
+    std::get<2>(stats[0]).m_addr_processed = 1'076;
+    std::get<2>(stats[0]).m_addr_rate_limited = 3;
     MockNode node;
     node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats& result) {
         result = stats;
@@ -75,6 +82,7 @@ void PeerListModelTests::mapsRoleData()
     QCOMPARE(roles.value(PeerListModel::NetNodeId), QByteArray{"nodeId"});
     QCOMPARE(roles.value(PeerListModel::Address), QByteArray{"address"});
     QCOMPARE(roles.value(PeerListModel::ConnectionType), QByteArray{"connectionType"});
+    QCOMPARE(roles.value(PeerListModel::Transport), QByteArray{"transport"});
     QCOMPARE(roles.value(PeerListModel::StatsRole), QByteArray{"stats"});
 
     QCOMPARE(model.data(index, PeerListModel::NetNodeId).toLongLong(), 7LL);
@@ -86,11 +94,19 @@ void PeerListModelTests::mapsRoleData()
     QCOMPARE(model.data(index, PeerListModel::Sent).toString(), QString{"1 kB"});
     QCOMPARE(model.data(index, PeerListModel::Received).toString(), QString{"900 B"});
     QCOMPARE(model.data(index, PeerListModel::Subversion).toString(), QString{"/Satoshi:28.0.0/"});
+    QCOMPARE(model.data(index, PeerListModel::Transport).toString(), QString{"v1"});
     QVERIFY(!model.data(index, PeerListModel::Age).toString().isEmpty());
 
     const CNodeCombinedStats* stats_ptr = model.data(index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
     QVERIFY(stats_ptr != nullptr);
     QCOMPARE(stats_ptr->nodeStats.nodeid, 7);
+
+    PeerDetailsModel details{stats_ptr, &model};
+    QCOMPARE(details.sessionId(), QString{"043604a60a54b3f5"});
+    QVERIFY(details.highBandwidth());
+    QVERIFY(details.addressRelay());
+    QCOMPARE(details.addressesProcessed(), QString{"1076"});
+    QCOMPARE(details.addressesRateLimited(), QString{"3"});
 
     QCOMPARE(model.flags(QModelIndex{}), Qt::NoItemFlags);
     QVERIFY(model.flags(index).testFlag(Qt::ItemIsSelectable));
@@ -261,12 +277,53 @@ void PeerListModelTests::sortProxySortsByRoles()
     assert_sort("age", [](const CNodeStats& left, const CNodeStats& right) { return left.m_connected > right.m_connected; });
     assert_sort("address", [](const CNodeStats& left, const CNodeStats& right) { return left.m_addr_name.compare(right.m_addr_name) < 0; });
     assert_sort("direction", [](const CNodeStats& left, const CNodeStats& right) { return left.fInbound > right.fInbound; });
-    assert_sort("connectionType", [](const CNodeStats& left, const CNodeStats& right) { return left.m_conn_type < right.m_conn_type; });
-    assert_sort("network", [](const CNodeStats& left, const CNodeStats& right) { return left.m_network < right.m_network; });
+    assert_sort("connectionType", [](const CNodeStats& left, const CNodeStats& right) {
+        return PeerStatsUtil::ConnectionTypeToQString(left.m_conn_type, false).localeAwareCompare(
+            PeerStatsUtil::ConnectionTypeToQString(right.m_conn_type, false)) < 0;
+    });
+    assert_sort("network", [](const CNodeStats& left, const CNodeStats& right) {
+        return PeerStatsUtil::NetworkToQString(left.m_network).localeAwareCompare(
+            PeerStatsUtil::NetworkToQString(right.m_network)) < 0;
+    });
     assert_sort("ping", [](const CNodeStats& left, const CNodeStats& right) { return left.m_min_ping_time < right.m_min_ping_time; });
     assert_sort("sent", [](const CNodeStats& left, const CNodeStats& right) { return left.nSendBytes < right.nSendBytes; });
     assert_sort("received", [](const CNodeStats& left, const CNodeStats& right) { return left.nRecvBytes < right.nRecvBytes; });
     assert_sort("subversion", [](const CNodeStats& left, const CNodeStats& right) { return left.cleanSubVer.compare(right.cleanSubVer) < 0; });
+    assert_sort("transport", [](const CNodeStats& left, const CNodeStats& right) {
+        return PeerStatsUtil::TransportToQString(left.m_transport_type).localeAwareCompare(
+            PeerStatsUtil::TransportToQString(right.m_transport_type)) < 0;
+    });
+
+    proxy.setSortBy("nodeId");
+    proxy.setSortAscending(false);
+    QCOMPARE(proxy.data(proxy.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 30LL);
+
+    proxy.setSearchText("10.0.0.10");
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.data(proxy.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 20LL);
+    proxy.setSearchText({});
+
+    proxy.setDirectionFilters({QStringLiteral("outbound")});
+    QCOMPARE(proxy.rowCount(), 2);
+    proxy.setNetworkFilters({QStringLiteral("onion")});
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.data(proxy.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 30LL);
+    proxy.setDirectionFilters({});
+    proxy.setNetworkFilters({});
+
+    proxy.setDirectionFilters({QStringLiteral("inbound"), QStringLiteral("outbound")});
+    QCOMPARE(proxy.rowCount(), 3);
+    proxy.setConnectionTypeFilters({QStringLiteral("manual"), QStringLiteral("block-relay")});
+    QCOMPARE(proxy.rowCount(), 2);
+    proxy.setDirectionFilters({});
+    proxy.setConnectionTypeFilters({});
+
+    const int node_20_row = proxy.indexOfNodeId(20);
+    QVERIFY(node_20_row >= 0);
+    auto* details = proxy.peerDetailsAt(node_20_row);
+    QVERIFY(details != nullptr);
+    QCOMPARE(details->nodeId(), 20);
+    QCOMPARE(proxy.peerDetailsAt(node_20_row), details);
     QCOMPARE(node.calls.getNodesStats.load(), 1);
 }
 
