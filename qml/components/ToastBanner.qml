@@ -131,12 +131,15 @@ Rectangle {
         }
 
         Icon {
+            objectName: root.objectName !== "" ? root.objectName + "CloseButton" : ""
             visible: root.showsCloseButton
             source: "image://images/cross"
             color: root.textColor
             size: 14
             enabled: true
             padding: 6
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Dismiss")
             onClicked: root.dismissed()
             HoverHandler {
                 cursorShape: Qt.PointingHandCursor

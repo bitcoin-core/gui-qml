@@ -173,8 +173,7 @@ private Q_SLOTS:
     void stopRunsSynchronouslyWhileExecuting();
     void walletNameScopesRpcToWalletUri();
     void outputRowsExposeCategoryAndRawTimestamp();
-    void welcomeMessageAddedOnce();
-    void clearRestoresWelcomeMessageWithFreshTimestamp();
+    void clearRemovesOutput();
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
     void availableCommandsIncludesHelpVariants();
@@ -366,74 +365,18 @@ void RpcConsoleModelTests::outputRowsExposeCategoryAndRawTimestamp()
     QCOMPARE(out->data(out->index(1, 0), category_role).toInt(), int(RpcConsoleModel::CMD_REPLY));
 }
 
-void RpcConsoleModelTests::welcomeMessageAddedOnce()
+void RpcConsoleModelTests::clearRemovesOutput()
 {
     RpcTestStubNode mock;
     RpcConsoleModel model{mock};
 
     auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
     QVERIFY(out != nullptr);
-    const int timestamp_role = roleForName(out, "timestamp");
-    const int content_role = roleForName(out, "content");
-    const int category_role = roleForName(out, "category");
-    QVERIFY(timestamp_role != -1);
-    QVERIFY(content_role != -1);
-    QVERIFY(category_role != -1);
-
-    model.ensureWelcomeMessage();
-    QCOMPARE(out->rowCount(), 1);
-    model.ensureWelcomeMessage();
-    QCOMPARE(out->rowCount(), 1);
-
-    const QModelIndex welcome_index = out->index(0, 0);
-    QCOMPARE(out->data(welcome_index, category_role).toInt(), int(RpcConsoleModel::CMD_REPLY));
-    const QString timestamp = out->data(welcome_index, timestamp_role).toString();
-    QCOMPARE(timestamp.size(), 8);
-    QVERIFY(!timestamp.startsWith("["));
-    QVERIFY(!timestamp.endsWith("]"));
-
-    const QString welcome_html = out->data(welcome_index, content_role).toString();
-    QVERIFY(welcome_html.contains("Use"));
-    QVERIFY(welcome_html.contains("help-console"));
-    QVERIFY(welcome_html.contains("Scammers and thieves"));
-    QVERIFY(welcome_html.contains("<span"));
-}
-
-void RpcConsoleModelTests::clearRestoresWelcomeMessageWithFreshTimestamp()
-{
-    RpcTestStubNode mock;
-    RpcConsoleModel model{mock};
-
-    auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
-    QVERIFY(out != nullptr);
-    const int timestamp_role = roleForName(out, "timestamp");
-    const int content_role = roleForName(out, "content");
-    const int category_role = roleForName(out, "category");
-    QVERIFY(timestamp_role != -1);
-    QVERIFY(content_role != -1);
-    QVERIFY(category_role != -1);
-
-    model.ensureWelcomeMessage();
-    QCOMPARE(out->rowCount(), 1);
-    const QString first_timestamp = out->data(out->index(0, 0), timestamp_role).toString();
-
     submitAndSettle(model, "getblockcount");
-    QVERIFY(out->rowCount() > 1);
+    QVERIFY(out->rowCount() > 0);
 
-    QTest::qWait(1100);
     model.clear();
-    QCOMPARE(out->rowCount(), 1);
-
-    const QModelIndex welcome_index = out->index(0, 0);
-    QCOMPARE(out->data(welcome_index, category_role).toInt(), int(RpcConsoleModel::CMD_REPLY));
-    const QString second_timestamp = out->data(welcome_index, timestamp_role).toString();
-    QCOMPARE(second_timestamp.size(), 8);
-    QVERIFY2(first_timestamp != second_timestamp, "clearing the console should re-add the welcome row with the current time");
-
-    const QString welcome_html = out->data(welcome_index, content_role).toString();
-    QVERIFY(welcome_html.contains("Use"));
-    QVERIFY(welcome_html.contains("help-console"));
-    QVERIFY(welcome_html.contains("Scammers and thieves"));
+    QCOMPARE(out->rowCount(), 0);
 }
 
 void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()

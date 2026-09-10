@@ -10,7 +10,7 @@ Button {
     id: root
     hoverEnabled: AppMode.isDesktop
 
-    property bool bold: false
+    property bool bold: true
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -54,7 +54,7 @@ Button {
         radius: 5
         border {
             width: 1
-            color: Theme.color.neutral6
+            color: Theme.color.neutral2
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

@@ -334,7 +334,7 @@ Page {
     Component {
         id: rpcConsolePage
 
-        SettingsPages.RpcConsoleSettingsPage {
+        SettingsPages.SettingsRpcConsoleView {
             walletName: typeof walletController !== "undefined"
                 && walletController.isWalletLoaded && walletController.selectedWallet
                 ? walletController.selectedWallet.name
@@ -345,11 +345,7 @@ Page {
     Component {
         id: debugLogPage
 
-        SettingsPages.SettingsDebugLog {
-            showBackButton: false
-            maximumContentWidth: width
-            contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
-        }
+        SettingsPages.SettingsDebugLogView {}
     }
 
     Component {

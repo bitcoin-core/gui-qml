@@ -3152,28 +3152,20 @@ class MockDebugLogModel : public QAbstractListModel
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(bool hasMoreLines READ hasMoreLines NOTIFY hasMoreLinesChanged)
     Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged)
+    Q_PROPERTY(bool warningsAndErrorsOnly READ warningsAndErrorsOnly WRITE setWarningsAndErrorsOnly NOTIFY warningsAndErrorsOnlyChanged)
     Q_PROPERTY(QString openError READ openError NOTIFY openErrorChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int loadMoreCalls READ loadMoreCalls NOTIFY loadMoreCallsChanged)
+    Q_PROPERTY(int openLogFileCalls READ openLogFileCalls NOTIFY openLogFileCallsChanged)
 
 public:
     enum Role {
-        LineNumberRole = Qt::UserRole + 1,
-        ContentRole,
-        RelativeTimeRole,
-        CommandRole,
-        MessageRole,
-        DateLabelRole,
-        SeverityRole,
+        MessageRole = Qt::UserRole + 1,
+        TimestampRole,
+        IsErrorRole,
+        IsWarningRole,
     };
     Q_ENUM(Role)
-
-    enum Severity {
-        InfoSeverity = 0,
-        WarningSeverity,
-        ErrorSeverity,
-    };
-    Q_ENUM(Severity)
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override
     {
@@ -3187,13 +3179,10 @@ public:
         if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size()) return {};
         const Row& row = m_rows.at(index.row());
         switch (role) {
-        case LineNumberRole: return QString::number(index.row() + 1);
-        case ContentRole: return row.message;
-        case RelativeTimeRole: return row.date_label;
-        case CommandRole: return row.command;
         case MessageRole: return row.message;
-        case DateLabelRole: return row.date_label;
-        case SeverityRole: return row.severity;
+        case TimestampRole: return row.timestamp;
+        case IsErrorRole: return row.is_error;
+        case IsWarningRole: return row.is_warning;
         default: return {};
         }
     }
@@ -3201,13 +3190,10 @@ public:
     QHash<int, QByteArray> roleNames() const override
     {
         return {
-            {LineNumberRole, "lineNumber"},
-            {ContentRole, "content"},
-            {RelativeTimeRole, "relativeTime"},
-            {CommandRole, "command"},
             {MessageRole, "message"},
-            {DateLabelRole, "dateLabel"},
-            {SeverityRole, "severity"},
+            {TimestampRole, "timestamp"},
+            {IsErrorRole, "isError"},
+            {IsWarningRole, "isWarning"},
         };
     }
 
@@ -3228,21 +3214,35 @@ public:
         Q_EMIT filterChanged();
     }
     QString openError() const { return {}; }
+    bool warningsAndErrorsOnly() const { return m_warnings_and_errors_only; }
+    void setWarningsAndErrorsOnly(bool warnings_and_errors_only)
+    {
+        if (m_warnings_and_errors_only == warnings_and_errors_only) return;
+        m_warnings_and_errors_only = warnings_and_errors_only;
+        Q_EMIT warningsAndErrorsOnlyChanged();
+    }
     int loadMoreCalls() const { return m_load_more_calls; }
+    int openLogFileCalls() const { return m_open_log_file_calls; }
 
     Q_INVOKABLE void refresh(bool = false) {}
     Q_INVOKABLE void loadMore()
     {
         ++m_load_more_calls;
         Q_EMIT loadMoreCallsChanged();
-        appendRowsForTest(20);
+        prependRowsForTest(20);
         setHasMoreLinesForTest(false);
     }
-    Q_INVOKABLE bool openLogFile() { return true; }
-    Q_INVOKABLE void updateRelativeTimes() {}
+    Q_INVOKABLE bool openLogFile()
+    {
+        ++m_open_log_file_calls;
+        Q_EMIT openLogFileCallsChanged();
+        return true;
+    }
 
     Q_INVOKABLE void resetForTest(int count, bool has_more_lines)
     {
+        m_filter.clear();
+        m_warnings_and_errors_only = false;
         beginResetModel();
         m_rows.clear();
         m_rows.reserve(count);
@@ -3253,8 +3253,12 @@ public:
         m_next_new_row = 0;
         m_next_old_row = count;
         m_load_more_calls = 0;
+        m_open_log_file_calls = 0;
         Q_EMIT countChanged();
+        Q_EMIT filterChanged();
+        Q_EMIT warningsAndErrorsOnlyChanged();
         Q_EMIT loadMoreCallsChanged();
+        Q_EMIT openLogFileCallsChanged();
         setHasMoreLinesForTest(has_more_lines);
     }
 
@@ -3265,7 +3269,7 @@ public:
         QList<Row> added;
         added.reserve(count);
         for (int i = 0; i < count; ++i) {
-            added.append(makeRow(QStringLiteral("new-%1").arg(m_next_new_row++)));
+            added.append(makeRow(QStringLiteral("old-%1").arg(m_next_old_row++)));
         }
 
         beginInsertRows(QModelIndex(), 0, count - 1);
@@ -3284,7 +3288,7 @@ public:
         const int first = m_rows.size();
         beginInsertRows(QModelIndex(), first, first + count - 1);
         for (int i = 0; i < count; ++i) {
-            m_rows.append(makeRow(QStringLiteral("old-%1").arg(m_next_old_row++)));
+            m_rows.append(makeRow(QStringLiteral("new-%1").arg(m_next_new_row++)));
         }
         endInsertRows();
         Q_EMIT countChanged();
@@ -3326,7 +3330,31 @@ public:
         if (row < 0 || row >= m_rows.size() || m_rows.at(row).message == message) return;
         m_rows[row].message = message;
         const QModelIndex changed_index = index(row, 0);
-        Q_EMIT dataChanged(changed_index, changed_index, {ContentRole, MessageRole});
+        Q_EMIT dataChanged(changed_index, changed_index, {MessageRole});
+    }
+
+    Q_INVOKABLE void setStructuredFieldsForTest(int row,
+                                                bool is_error,
+                                                const QString& timestamp)
+    {
+        if (row < 0 || row >= m_rows.size()) return;
+        Row& item = m_rows[row];
+        item.is_error = is_error;
+        item.is_warning = false;
+        item.timestamp = timestamp;
+        const QModelIndex changed_index = index(row, 0);
+        Q_EMIT dataChanged(changed_index, changed_index,
+                           {IsErrorRole, IsWarningRole, TimestampRole});
+    }
+
+    Q_INVOKABLE void setWarningForTest(int row, bool is_warning)
+    {
+        if (row < 0 || row >= m_rows.size()) return;
+        Row& item = m_rows[row];
+        item.is_warning = is_warning;
+        if (is_warning) item.is_error = false;
+        const QModelIndex changed_index = index(row, 0);
+        Q_EMIT dataChanged(changed_index, changed_index, {IsErrorRole, IsWarningRole});
     }
 
     Q_INVOKABLE QString messageAt(int row) const
@@ -3346,34 +3374,38 @@ Q_SIGNALS:
     void activeChanged();
     void hasMoreLinesChanged();
     void filterChanged();
+    void warningsAndErrorsOnlyChanged();
     void openErrorChanged();
     void newLinesAdded(int count);
     void countChanged();
     void loadMoreCallsChanged();
+    void openLogFileCallsChanged();
 
 private:
     struct Row {
-        QString command;
         QString message;
-        QString date_label;
-        int severity{InfoSeverity};
+        QString timestamp;
+        bool is_error{false};
+        bool is_warning{false};
     };
 
     static Row makeRow(const QString& message)
     {
         return Row{
-            QStringLiteral("test"),
             message,
-            QStringLiteral("just now"),
-            InfoSeverity,
+            QStringLiteral("15:42:08"),
+            false,
+            false,
         };
     }
 
     bool m_active{false};
     bool m_has_more_lines{false};
     QString m_filter;
+    bool m_warnings_and_errors_only{false};
     QList<Row> m_rows;
     int m_load_more_calls{0};
+    int m_open_log_file_calls{0};
     int m_next_new_row{0};
     int m_next_old_row{0};
 };

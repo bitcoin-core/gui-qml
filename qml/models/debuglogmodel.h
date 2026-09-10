@@ -20,16 +20,11 @@ class QThread;
 
 //! List model for the in-app debug.log viewer.
 //!
-//! Exposes log lines as list items with display roles:
-//!   - LineNumberRole  — 1-based line number as a display string ("1", "2", …)
-//!   - ContentRole     — HTML-escaped message text (no inline style; colours
-//!                       are applied by the QML delegate)
-//!   - RelativeTimeRole — human-readable age string ("just now", "3 min ago",
-//!                        …) updated by updateRelativeTimes()
-//!   - CommandRole      — parsed message prefix before ":" when present
-//!   - MessageRole      — parsed message body after the prefix
-//!   - DateLabelRole    — label shown in the row's right-hand date slot
-//!   - SeverityRole     — display severity used by the QML delegate
+//! Exposes structured log records for the Debug Log V2 table:
+//!   - MessageRole    — the message with recognised logging metadata removed
+//!   - TimestampRole  — local wall-clock time preserving the file's precision
+//!   - IsErrorRole    — true only for error-level records
+//!   - IsWarningRole  — true only for warning-level records
 //!
 //! Pagination: only the most recent `loadLimit` lines are kept in memory.
 //! Call loadMore() to increase the limit by 1000, up to kMaxLoadLimit.
@@ -46,26 +41,17 @@ class DebugLogModel : public QAbstractListModel
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(int  loadLimit   READ loadLimit    WRITE setLoadLimit   NOTIFY loadLimitChanged)
     Q_PROPERTY(QString filter   READ filter       WRITE setFilter      NOTIFY filterChanged)
+    Q_PROPERTY(bool warningsAndErrorsOnly READ warningsAndErrorsOnly WRITE setWarningsAndErrorsOnly NOTIFY warningsAndErrorsOnlyChanged)
     Q_PROPERTY(QString openError READ openError   NOTIFY openErrorChanged)
 
 public:
     enum Role {
-        LineNumberRole  = Qt::UserRole + 1,
-        ContentRole,
-        RelativeTimeRole,
-        CommandRole,
-        MessageRole,
-        DateLabelRole,
-        SeverityRole,
+        MessageRole = Qt::UserRole + 1,
+        TimestampRole,
+        IsErrorRole,
+        IsWarningRole,
     };
     Q_ENUM(Role)
-
-    enum Severity {
-        InfoSeverity = 0,
-        WarningSeverity,
-        ErrorSeverity,
-    };
-    Q_ENUM(Severity)
 
     //! Hard ceiling on loadLimit to protect against unbounded memory growth.
     static constexpr int kMaxLoadLimit = 50'000;
@@ -93,12 +79,14 @@ public:
     QString filter() const { return m_filter; }
     void setFilter(const QString& filter);
 
+    bool warningsAndErrorsOnly() const { return m_warnings_and_errors_only; }
+    void setWarningsAndErrorsOnly(bool warnings_and_errors_only);
+
     QString openError() const { return m_open_error; }
 
     Q_INVOKABLE void refresh(bool full_load = false);
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE bool openLogFile();
-    Q_INVOKABLE void updateRelativeTimes();
     void stop();
 
 Q_SIGNALS:
@@ -106,31 +94,26 @@ Q_SIGNALS:
     void activeChanged();
     void loadLimitChanged();
     void filterChanged();
+    void warningsAndErrorsOnlyChanged();
     void openErrorChanged();
-    //! Emitted when new lines are prepended at the top during an auto-refresh.
+    //! Emitted when new lines are appended during an auto-refresh.
     void newLinesAdded(int count);
 
 private:
     struct LogLine {
-        QString content;      // HTML-escaped full message text
-        QString command;      // parsed message prefix, plain text
-        QString message;      // parsed message body, plain text
+        QString message;
+        QString timestamp;
         qint64  source_offset{-1}; // byte offset in debug.log (stable across appends)
-        qint64  timestamp_ms; // epoch ms, -1 if not parseable
-        QString relativeTime; // cached human-readable age
-        Severity severity{InfoSeverity};
+        bool is_error{false};
+        bool is_warning{false};
 
-        // Identity for incremental display diffs. relativeTime is derived
-        // (refreshed separately by the relative-time timer) and deliberately
-        // excluded.
         bool operator==(const LogLine& o) const
         {
             return source_offset == o.source_offset
-                && content == o.content
-                && command == o.command
                 && message == o.message
-                && severity == o.severity
-                && timestamp_ms == o.timestamp_ms;
+                && timestamp == o.timestamp
+                && is_error == o.is_error
+                && is_warning == o.is_warning;
         }
     };
 
@@ -189,20 +172,20 @@ private:
     bool applyDelta(QList<LogLine> lines);
     void applyDisplayLines(QList<LogLine> lines, bool force_reset);
     QList<LogLine> filteredLines(const QList<LogLine>& lines) const;
-    QString relativeTimeLabel(qint64 timestamp_ms, qint64 now_ms) const;
 
     static void PopulateParsedFields(LogLine& entry, const QString& raw_message);
-    static QString RelativeTimeLabelStatic(qint64 timestamp_ms, qint64 now_ms);
+    static QString FormatTime(const QString& utc_seconds);
 
     fs::path m_log_path;
 
-    //! All loaded lines stored newest-first (index 0 = newest).
+    //! All loaded lines stored chronologically (index 0 = oldest loaded).
     QList<LogLine> m_all_lines;
 
-    //! Filtered subset of m_all_lines, also newest-first.
+    //! Filtered subset of m_all_lines, also chronological.
     QList<LogLine> m_display_lines;
 
     QString m_filter;
+    bool m_warnings_and_errors_only{false};
     int  m_load_limit{1000};
     bool m_has_more_lines{false};
     //! Tail capacity represented by m_all_lines. Kept separate from rowCount

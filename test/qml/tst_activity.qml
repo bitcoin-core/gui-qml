@@ -123,6 +123,17 @@ TestCase {
         }
     }
 
+    function test_search_toggle_uses_toolbar_icon_size() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        const searchToggle = findChild(page, "activitySearchToggle")
+        verify(searchToggle !== null)
+        compare(searchToggle.width, 30)
+        compare(searchToggle.height, 30)
+        compare(searchToggle.iconSize, 24)
+    }
+
     function test_navigateToTransaction_uses_lowest_output_and_supports_exact_output() {
         testActivityListModel.setCountForTest(3)
         const page = createTemporaryObject(activityComponent, this)

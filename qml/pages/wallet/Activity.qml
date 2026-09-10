@@ -262,6 +262,7 @@ PageStack {
                         iconColor: Theme.color.neutral7
                         activeColor: Theme.color.orange
                         size: 30
+                        iconSize: 24
                         onClicked: root.toggleFilters()
                     }
                 }

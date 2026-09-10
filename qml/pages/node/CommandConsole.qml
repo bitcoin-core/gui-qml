@@ -1,4 +1,4 @@
-// Copyright (c) 2024 The Bitcoin Core developers
+// Copyright (c) 2024-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,11 +13,14 @@ Page {
     id: root
     objectName: "commandConsole"
     signal back()
-    background: null
+    background: Rectangle {
+        color: Theme.color.neutral1
+        radius: 16
+    }
     clip: true
 
-    // Theme-aware palette for model-generated inline spans (welcome links,
-    // warning text, and JSON keys). Row-level colours are applied by QML so the
+    // Theme-aware palette for model-generated inline spans (welcome links and
+    // JSON keys). Row-level colours are applied by QML so the
     // output follows the design-system tokens.
     readonly property color consoleRequestColor: Theme.color.blue
     readonly property color consoleReplyColor:   Theme.color.neutral9
@@ -26,9 +29,18 @@ Page {
     readonly property int minimumOutputFontPixelSize: 10
     readonly property int maximumOutputFontPixelSize: 18
     property int outputFontPixelSize: Theme.text.caption.pixelSize
-    property bool searchMode: false
+    property string searchText: ""
     property string commandDraft: ""
-    property string searchDraft: ""
+    readonly property alias searchResultCount: outputView.searchResultCount
+    readonly property alias currentSearchResultIndex: outputView.currentSearchResultIndex
+
+    function showNextSearchResult() {
+        outputView.showNextSearchResult()
+    }
+
+    function showPreviousSearchResult() {
+        outputView.showPreviousSearchResult()
+    }
 
     // True while this view's tab is the selected one. As a persistent StackLayout
     // child, the console is never destroyed on tab changes, and its autocomplete
@@ -61,7 +73,6 @@ Page {
 
     Component.onCompleted: {
         _pushPalette()
-        rpcConsoleModel.ensureWelcomeMessage()
         Qt.callLater(function() { if (root.visible) root.focusInput() })
     }
     Connections {
@@ -87,7 +98,6 @@ Page {
     QtObject {
         id: internal
         property bool navigatingHistory: false
-        property bool switchingInputMode: false
     }
 
     property bool showHeader: true
@@ -137,8 +147,8 @@ Page {
         rightColumnRole: ""
         categoryRole: "category"
         fontPixelSize: root.outputFontPixelSize
-        fontFamily: Theme.text.caption.family
-        fontStyleName: Theme.text.caption.styleName
+        fontFamily: Theme.text.monoFamily
+        fontStyleName: "Regular"
         textLineHeight: Math.round(root.outputFontPixelSize * 1.4)
         contentColor: Theme.color.neutral9
         leftColumnColor: root.consoleTimeColor
@@ -151,30 +161,28 @@ Page {
         selectionColor: Theme.color.orange
         accessibleName: qsTr("Console output")
         autoScrollToBottom: true
-        filterText: root.searchMode ? root.searchDraft : ""
-        horizontalPadding: 20
-        topPadding: 15
-        bottomPadding: 15
+        searchText: root.searchText
+        horizontalPadding: 16
+        topPadding: 16
+        bottomPadding: 16
         rowSpacing: 5
         columnSpacing: 20
         leftColumnWidth: 60
     }
 
-    // Autocomplete popup (anchored above the input area).
-    // Sizing: width matches the input field; height hugs the suggestion
-    // ListView's contentHeight so the opaque background cannot spill over
-    // the output area (fixes the "display disappears on typing" regression).
-    // z is raised so the popup reliably renders above neighbours.
-    Popup {
+    // Autocomplete menu, aligned to the command field's left edge and styled
+    // like the shared application context menus.
+    ContextMenu {
         id: autocompletePopup
         objectName: "consoleAutocompletePopup"
         parent: inputArea
         x: inputField.mapToItem(inputArea, 0, 0).x
         y: -height - 4
         z: 10
-        width: Math.min(inputField.width, 300)
-        height: Math.min(autocompleteList.contentHeight + 8, 200)
-        padding: 4
+        width: Math.min(inputField.width, 360)
+        height: Math.min(autocompleteList.contentHeight + 2 * menuPadding, 228)
+        minMenuWidth: 0
+        focus: false
         // Deliberately NOT CloseOnPressOutside: a real mouse press on the submit
         // button would otherwise close this popup (and clear filteredCommands)
         // before the button's onClicked fires, so the button could never act on
@@ -182,42 +190,29 @@ Page {
         // input losing focus (see the TapHandler and inputField.onActiveFocusChanged).
         closePolicy: Popup.CloseOnEscape
         onClosed: filteredCommands = []
-        background: Rectangle {
-            color: Theme.color.neutral1
-            border.color: Theme.color.neutral3
-            radius: 4
-        }
 
         ListView {
             id: autocompleteList
             objectName: "consoleAutocompleteList"
-            anchors.fill: parent
+            Layout.preferredWidth: autocompletePopup.width - 2 * autocompletePopup.menuPadding
+            Layout.preferredHeight: Math.min(contentHeight, 216)
             clip: true
             currentIndex: autocompleteIndex
             highlightFollowsCurrentItem: true
             model: filteredCommands
-            delegate: ItemDelegate {
+            delegate: ContextMenuButton {
                 required property string modelData
                 required property int index
                 objectName: "consoleAutocomplete_" + index
                 width: autocompleteList.width
-                height: 28
-                leftPadding: 8
-                rightPadding: 8
-                background: Rectangle {
-                    color: parent.hovered ? Theme.color.neutral2 : "transparent"
-                    radius: 2
-                }
-                contentItem: Text {
-                    text: modelData
-                    font.family: "monospace"
-                    font.pixelSize: 13
-                    color: index === autocompleteIndex ? Theme.color.orange : Theme.color.neutral9
-                    elide: Text.ElideRight
-                }
+                text: modelData
+                autoClose: false
+                selected: index === autocompleteIndex
+                focusPolicy: Qt.NoFocus
+                onHoveredChanged: if (hovered) autocompleteIndex = index
                 // Apply the suggestion without stealing focus from the
                 // input field — per MarnixCroes PR #540 feedback.
-                onClicked: applySuggestion(modelData)
+                onTriggered: applySuggestion(modelData)
             }
         }
     }
@@ -231,36 +226,6 @@ Page {
         inputField.forceActiveFocus()
     }
 
-    component ConsoleIconButton: AbstractButton {
-        id: consoleIconButton
-        required property url iconSource
-        required property string accessibleName
-
-        Layout.preferredWidth: 20
-        Layout.preferredHeight: 20
-        implicitWidth: 20
-        implicitHeight: 20
-        padding: 0
-        hoverEnabled: AppMode.isDesktop
-        focusPolicy: Qt.TabFocus
-
-        Accessible.role: Accessible.Button
-        Accessible.name: accessibleName
-
-        background: Item {}
-
-        contentItem: Icon {
-            source: consoleIconButton.iconSource
-            color: consoleIconButton.enabled ? Theme.color.neutral9 : Theme.color.neutral4
-            size: 20
-            opacity: consoleIconButton.hovered && consoleIconButton.enabled ? 0.75 : 1
-        }
-
-        HoverHandler {
-            cursorShape: consoleIconButton.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        }
-    }
-
     // Command input area
     Rectangle {
         id: inputArea
@@ -269,11 +234,10 @@ Page {
             left: parent.left
             right: parent.right
             bottom: parent.bottom
-            leftMargin: 20
-            rightMargin: 20
         }
-        height: 41
-        color: "transparent"
+        height: 64
+        color: Theme.color.neutral1
+        radius: 16
 
         Rectangle {
             id: inputDivider
@@ -284,29 +248,28 @@ Page {
                 right: parent.right
             }
             height: 1
-            color: Theme.color.neutral5
+            color: Theme.color.neutral2
         }
 
         RowLayout {
             id: inputContent
             objectName: "consoleInputContent"
             anchors {
-                top: parent.top
-                left: parent.left
-                right: parent.right
-                topMargin: 11
-                leftMargin: 55
+                fill: parent
+                leftMargin: 12
+                rightMargin: 12
+                topMargin: 12
+                bottomMargin: 12
             }
-            height: 20
-            spacing: 5
+            spacing: 8
 
             Icon {
                 objectName: "consolePromptIcon"
-                source: root.searchMode ? "image://images/search" : "image://images/caret-right"
-                color: Theme.color.neutral9
-                size: 20
-                Layout.preferredWidth: 20
-                Layout.preferredHeight: 20
+                source: "image://images/caret-right"
+                color: Theme.color.orange
+                size: 16
+                Layout.preferredWidth: 16
+                Layout.preferredHeight: 16
                 Layout.alignment: Qt.AlignVCenter
             }
 
@@ -314,16 +277,23 @@ Page {
                 id: inputField
                 objectName: "consoleInput"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 20
-                font: Theme.text.caption.font
+                Layout.fillHeight: true
+                font.family: Theme.text.monoFamily
+                font.pixelSize: 13
                 color: Theme.color.neutral9
-                placeholderText: root.searchMode ? qsTr("Search...") : qsTr("Enter command...")
-                placeholderTextColor: Theme.color.neutral6
-                leftPadding: 0
-                rightPadding: 0
+                placeholderText: qsTr("Enter command…")
+                placeholderTextColor: Theme.color.neutral7
+                leftPadding: 12
+                rightPadding: 12
                 topPadding: 0
                 bottomPadding: 0
-                background: Item {}
+                verticalAlignment: TextInput.AlignVCenter
+                background: Rectangle {
+                    color: Theme.color.neutral2
+                    radius: 8
+                    border.width: inputField.activeFocus ? 2 : 0
+                    border.color: Theme.color.orange
+                }
 
                 // Enter accepts the highlighted autocomplete suggestion when the
                 // popup is open; otherwise it submits the command. This mirrors the
@@ -335,48 +305,37 @@ Page {
                 // Up/Down: navigate autocomplete when popup is open,
                 // otherwise browse command history.
                 Keys.onUpPressed: {
-                    if (!root.searchMode) {
-                        if (autocompletePopup.visible && filteredCommands.length > 0) {
-                            autocompleteIndex = Math.max(0, autocompleteIndex - 1)
-                        } else {
-                            internal.navigatingHistory = true
-                            var result = rpcConsoleModel.browseHistory(1, inputField.text)
-                            inputField.text = result
-                            inputField.cursorPosition = result.length
-                            internal.navigatingHistory = false
-                        }
+                    if (autocompletePopup.visible && filteredCommands.length > 0) {
+                        autocompleteIndex = Math.max(0, autocompleteIndex - 1)
+                    } else {
+                        internal.navigatingHistory = true
+                        var result = rpcConsoleModel.browseHistory(1, inputField.text)
+                        inputField.text = result
+                        inputField.cursorPosition = result.length
+                        internal.navigatingHistory = false
                     }
                 }
                 Keys.onDownPressed: {
-                    if (!root.searchMode) {
-                        if (autocompletePopup.visible && filteredCommands.length > 0) {
-                            autocompleteIndex = Math.min(filteredCommands.length - 1, autocompleteIndex + 1)
-                        } else {
-                            internal.navigatingHistory = true
-                            var result = rpcConsoleModel.browseHistory(-1, inputField.text)
-                            inputField.text = result
-                            inputField.cursorPosition = result.length
-                            internal.navigatingHistory = false
-                        }
+                    if (autocompletePopup.visible && filteredCommands.length > 0) {
+                        autocompleteIndex = Math.min(filteredCommands.length - 1, autocompleteIndex + 1)
+                    } else {
+                        internal.navigatingHistory = true
+                        var result = rpcConsoleModel.browseHistory(-1, inputField.text)
+                        inputField.text = result
+                        inputField.cursorPosition = result.length
+                        internal.navigatingHistory = false
                     }
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
                 Keys.onTabPressed: {
-                    if (!root.searchMode && autocompletePopup.visible && filteredCommands.length > 0) {
+                    if (autocompletePopup.visible && filteredCommands.length > 0) {
                         applySuggestion(filteredCommands[autocompleteIndex])
                         event.accepted = true
                     }
                 }
 
                 onTextChanged: {
-                    if (internal.switchingInputMode) return
-                    if (root.searchMode) {
-                        root.searchDraft = inputField.text
-                        filteredCommands = []
-                        autocompletePopup.close()
-                        return
-                    }
                     root.commandDraft = inputField.text
                     if (!internal.navigatingHistory) {
                         rpcConsoleModel.resetHistoryNavigation()
@@ -394,45 +353,6 @@ Page {
                     }
                 }
             }
-
-            RowLayout {
-                id: inputActions
-                objectName: "consoleInputActions"
-                spacing: 5
-                Layout.preferredWidth: 95
-                Layout.preferredHeight: 20
-                Layout.alignment: Qt.AlignVCenter
-
-                ConsoleIconButton {
-                    objectName: "consoleModeToggleButton"
-                    iconSource: root.searchMode ? "image://images/console" : "image://images/search"
-                    accessibleName: root.searchMode ? qsTr("Switch to command input") : qsTr("Search console output")
-                    onClicked: root.toggleSearchMode()
-                }
-
-                ConsoleIconButton {
-                    objectName: "consoleFontIncreaseButton"
-                    iconSource: "image://images/plus"
-                    accessibleName: qsTr("Increase console text size")
-                    enabled: root.outputFontPixelSize < root.maximumOutputFontPixelSize
-                    onClicked: root.changeOutputFontSize(1)
-                }
-
-                ConsoleIconButton {
-                    objectName: "consoleFontDecreaseButton"
-                    iconSource: "image://images/minus"
-                    accessibleName: qsTr("Decrease console text size")
-                    enabled: root.outputFontPixelSize > root.minimumOutputFontPixelSize
-                    onClicked: root.changeOutputFontSize(-1)
-                }
-
-                ConsoleIconButton {
-                    objectName: "consoleClearButton"
-                    iconSource: "image://images/cross"
-                    accessibleName: qsTr("Clear console input or output")
-                    onClicked: root.clearInputOrOutput()
-                }
-            }
         }
     }
 
@@ -442,11 +362,6 @@ Page {
     property int autocompleteIndex: 0
 
     function updateFilteredCommands() {
-        if (root.searchMode) {
-            filteredCommands = []
-            autocompletePopup.close()
-            return
-        }
         // Guard: availableCommands is empty until the node is initialised.
         // Calling this before init used to throw and abort the textChanged
         // handler, which (combined with the oversized popup) made the
@@ -494,26 +409,10 @@ Page {
         }
     }
 
-    function toggleSearchMode() {
-        if (root.searchMode) {
-            root.searchDraft = inputField.text
-        } else {
-            root.commandDraft = inputField.text
-            filteredCommands = []
-            autocompletePopup.close()
-        }
-        internal.switchingInputMode = true
-        root.searchMode = !root.searchMode
-        inputField.text = root.searchMode ? root.searchDraft : root.commandDraft
-        internal.switchingInputMode = false
-        inputField.forceActiveFocus()
-    }
-
     function changeOutputFontSize(delta) {
         root.outputFontPixelSize = Math.max(root.minimumOutputFontPixelSize,
                                             Math.min(root.maximumOutputFontPixelSize,
                                                      root.outputFontPixelSize + delta))
-        inputField.forceActiveFocus()
     }
 
     function clearInputOrOutput() {
@@ -531,7 +430,6 @@ Page {
     // Tab only fills the suggestion in (for adding arguments). To run a different
     // command, dismiss the menu first (click away or type past the matches).
     function runHighlightedOrSubmit() {
-        if (root.searchMode) return
         if (autocompletePopup.visible && filteredCommands.length > 0) {
             inputField.text = filteredCommands[autocompleteIndex]
             autocompletePopup.close()
