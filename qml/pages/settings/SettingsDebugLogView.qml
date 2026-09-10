@@ -90,14 +90,52 @@ SettingsPage {
             onTextChanged: searchDebounce.restart()
         }
 
+        FilterButton {
+            id: messageFilterButton
+            objectName: "debugLogFilterButton"
+            active: debugLogModel.warningsAndErrorsOnly
+            Accessible.name: qsTr("Filter debug log messages")
+            onClicked: {
+                if (messageFilterMenu.opened) {
+                    messageFilterMenu.close()
+                } else {
+                    messageFilterMenu.open()
+                }
+            }
+        }
+
+        ContextMenu {
+            id: messageFilterMenu
+            objectName: "debugLogFilterMenu"
+            parent: messageFilterButton
+            x: parent.width - width
+            y: parent.height + 2
+            modal: true
+            dim: false
+
+            ContextMenuPicker {
+                id: messageFilterPicker
+                objectName: "debugLogMessageFilterPicker"
+                objectNameRole: "objectName"
+                currentValue: debugLogModel.warningsAndErrorsOnly
+                    ? "warnings-and-errors"
+                    : "all"
+                model: [
+                    { text: qsTr("All messages"), value: "all", objectName: "debugLogFilterAllMessages" },
+                    { text: qsTr("Warnings and errors"), value: "warnings-and-errors", objectName: "debugLogFilterWarningsAndErrors" }
+                ]
+                onActivated: function(value) {
+                    debugLogModel.warningsAndErrorsOnly = value === "warnings-and-errors"
+                    messageFilterMenu.close()
+                }
+            }
+        }
+
         Item { Layout.fillWidth: true }
 
-        IconButton {
+        OverflowMenuButton {
             id: logOptionsButton
             objectName: "debugLogOptionsButton"
-            size: 36
-            iconSize: 20
-            iconSource: "image://images/ellipsis"
             checked: logOptionsMenu.opened
             Accessible.name: qsTr("Debug log options")
             onClicked: {
@@ -117,27 +155,6 @@ SettingsPage {
             y: parent.height + 2
             modal: true
             dim: false
-
-            ContextMenuPicker {
-                id: messageFilterPicker
-                objectName: "debugLogMessageFilterPicker"
-                objectNameRole: "objectName"
-                currentValue: debugLogModel.warningsAndErrorsOnly
-                    ? "warnings-and-errors"
-                    : "all"
-                model: [
-                    { text: qsTr("All messages"), value: "all", objectName: "debugLogFilterAllMessages" },
-                    { text: qsTr("Warnings and errors"), value: "warnings-and-errors", objectName: "debugLogFilterWarningsAndErrors" }
-                ]
-                onActivated: function(value) {
-                    debugLogModel.warningsAndErrorsOnly = value === "warnings-and-errors"
-                    logOptionsMenu.close()
-                }
-            }
-
-            ContextMenuDivider {
-                objectName: "debugLogOptionsDivider"
-            }
 
             ContextMenuButton {
                 objectName: "debugLogOpenFileButton"
@@ -194,7 +211,6 @@ SettingsPage {
                     visible: parent.height > 0
                     text: qsTr("Load older messages")
                     textFontPixelSize: 13
-                    bold: false
                     onClicked: debugLogModel.loadMore()
                 }
             }
@@ -273,7 +289,6 @@ SettingsPage {
                 height: 32
                 text: qsTr("Scroll to bottom")
                 textFontPixelSize: 13
-                bold: false
                 enabled: logList.count > 0 && !logList.atYEnd
                 onClicked: root.scrollToBottom()
             }

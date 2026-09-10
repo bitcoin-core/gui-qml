@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Controls.impl 2.15 as ControlsImpl
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
@@ -14,10 +15,24 @@ Control {
 
     property alias text: searchField.text
     property alias placeholderText: searchField.placeholderText
+    property alias placeholder: searchField.placeholderText
     property alias inputField: searchField
+    readonly property alias cancelButton: clearButton
     property string accessibleName: qsTr("Search")
+    property string cancelAccessibleName: qsTr("Clear search")
+    property bool showsSearchIcon: true
+    property bool showsCancel: true
+    property bool clearsOnCancel: true
+    property bool refocusesOnCancel: true
     property bool showNavigationButtons: false
     property bool navigationEnabled: true
+    property url searchIconSource: "image://images/search"
+    property url cancelIconSource: "qrc:/icons/cross-circle-filled"
+    property int searchIconSize: 14
+    property int cancelButtonSize: 14
+    property color cancelIconColor: Theme.color.neutral6
+    property color cancelIconHoverColor: Theme.color.neutral5
+    property color cancelIconPressedColor: Theme.color.neutral4
     property Item nextTabItem: null
     property string fieldObjectName: ""
     property string searchIconObjectName: ""
@@ -31,6 +46,9 @@ Control {
 
     signal previousRequested()
     signal nextRequested()
+    signal queryEdited(string query)
+    signal searchRequested(string query)
+    signal cancelRequested()
 
     function focusSearch() {
         searchField.forceActiveFocus()
@@ -60,8 +78,8 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.minimumWidth: 64
-            leftPadding: 32
-            rightPadding: clearButton.visible ? 28 : 10
+            leftPadding: root.showsSearchIcon ? 32 : 10
+            rightPadding: clearButton.visible ? root.cancelButtonSize + 14 : 10
             topPadding: 0
             bottomPadding: 0
             placeholderTextColor: Theme.color.neutral7
@@ -75,20 +93,23 @@ Control {
                 : root.nextTabItem
 
             Keys.onReturnPressed: function(event) {
-                if (!root.showNavigationButtons || !root.navigationEnabled) return
-                if (event.modifiers & Qt.ShiftModifier) {
-                    root.previousRequested()
+                if (root.showNavigationButtons && root.navigationEnabled) {
+                    if (event.modifiers & Qt.ShiftModifier) {
+                        root.previousRequested()
+                    } else {
+                        root.nextRequested()
+                    }
                 } else {
-                    root.nextRequested()
+                    root.searchRequested(searchField.text)
                 }
                 event.accepted = true
             }
 
+            onTextEdited: root.queryEdited(text)
+
             background: Rectangle {
                 color: Theme.color.neutral2
                 radius: 5
-                border.width: searchField.activeFocus ? 2 : 0
-                border.color: Theme.color.orange
             }
 
             Icon {
@@ -96,41 +117,50 @@ Control {
                 anchors.left: parent.left
                 anchors.leftMargin: 9
                 anchors.verticalCenter: parent.verticalCenter
-                source: "image://images/search"
+                visible: root.showsSearchIcon
+                source: root.searchIconSource
                 color: Theme.color.neutral7
-                size: 14
+                size: root.searchIconSize
                 hoverEnabled: false
             }
 
             AbstractButton {
                 id: clearButton
 
-                readonly property color clearColor: Theme.color.neutral4
-
                 objectName: root.clearButtonObjectName
                 anchors.right: parent.right
                 anchors.rightMargin: 7
                 anchors.verticalCenter: parent.verticalCenter
-                width: 14
-                height: 14
+                width: root.cancelButtonSize
+                height: root.cancelButtonSize
                 padding: 0
-                visible: searchField.text.length > 0
+                visible: root.showsCancel && searchField.text.length > 0
                 hoverEnabled: AppMode.isDesktop
                 focusPolicy: Qt.NoFocus
                 Accessible.role: Accessible.Button
-                Accessible.name: qsTr("Clear search")
+                Accessible.name: root.cancelAccessibleName
 
-                background: Rectangle {
-                    color: clearButton.hovered || clearButton.pressed
-                        ? Theme.color.neutral3
-                        : "transparent"
-                    border.width: 1
-                    border.color: clearButton.clearColor
-                    radius: width / 2
-                }
+                background: null
 
-                contentItem: ClearSearchIcon {
-                    strokeColor: clearButton.clearColor
+                contentItem: Item {
+                    readonly property url source: root.cancelIconSource
+                    readonly property color color: clearButton.pressed
+                        ? root.cancelIconPressedColor
+                        : clearButton.hovered
+                            ? root.cancelIconHoverColor
+                            : root.cancelIconColor
+                    readonly property int size: Math.max(1, root.cancelButtonSize - 2)
+
+                    ControlsImpl.IconImage {
+                        anchors.centerIn: parent
+                        width: parent.size
+                        height: parent.size
+                        source: parent.source
+                        color: parent.color
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                    }
                 }
 
                 HoverHandler {
@@ -138,8 +168,9 @@ Control {
                 }
 
                 onClicked: {
-                    searchField.clear()
-                    searchField.forceActiveFocus()
+                    root.cancelRequested()
+                    if (root.clearsOnCancel) searchField.clear()
+                    if (root.refocusesOnCancel) searchField.forceActiveFocus()
                 }
             }
         }
@@ -273,34 +304,4 @@ Control {
         onHeightChanged: requestPaint()
     }
 
-    component ClearSearchIcon: Canvas {
-        id: clearIcon
-
-        required property color strokeColor
-        readonly property real size: 6
-        readonly property real strokeWidth: 1.5
-
-        antialiasing: true
-
-        onPaint: {
-            const context = getContext("2d")
-            const centerX = width / 2
-            const centerY = height / 2
-            const halfSize = size / 2
-            context.clearRect(0, 0, width, height)
-            context.strokeStyle = strokeColor
-            context.lineWidth = strokeWidth
-            context.lineCap = "round"
-            context.beginPath()
-            context.moveTo(centerX - halfSize, centerY - halfSize)
-            context.lineTo(centerX + halfSize, centerY + halfSize)
-            context.moveTo(centerX + halfSize, centerY - halfSize)
-            context.lineTo(centerX - halfSize, centerY + halfSize)
-            context.stroke()
-        }
-
-        onStrokeColorChanged: requestPaint()
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-    }
 }

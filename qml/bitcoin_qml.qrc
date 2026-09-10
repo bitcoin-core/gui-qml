@@ -69,6 +69,7 @@
         <file>controls/CoreTextField.qml</file>
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>
+        <file>controls/FilterButton.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
@@ -88,6 +89,7 @@
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
+        <file>controls/OverflowMenuButton.qml</file>
         <file>controls/PageIndicator.qml</file>
         <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
@@ -202,6 +204,7 @@
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="cross-circle-filled">res/icons/cross-circle-filled.png</file>
         <file alias="cross-filled">res/icons/cross-filled.png</file>
         <file alias="devices-filled">res/icons/devices-filled.png</file>
         <file alias="edit">res/icons/edit.png</file>
@@ -209,6 +212,8 @@
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="file">res/icons/file.png</file>
+        <file alias="filter">res/icons/filter.png</file>
+        <file alias="filter-active">res/icons/filter-active.png</file>
         <file alias="flip-vertical">res/icons/flip-vertical.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>

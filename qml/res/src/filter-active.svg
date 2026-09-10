@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <mask id="filter-lines" maskUnits="userSpaceOnUse" x="0" y="0" width="128" height="128">
+    <circle cx="64" cy="64" r="54" fill="white"/>
+    <g fill="none" stroke="black" stroke-width="9" stroke-linecap="round">
+      <line x1="30" y1="49" x2="98" y2="49"/>
+      <line x1="38" y1="67" x2="90" y2="67"/>
+      <line x1="47" y1="85" x2="81" y2="85"/>
+    </g>
+  </mask>
+  <circle cx="64" cy="64" r="54" fill="currentColor" mask="url(#filter-lines)"/>
+</svg>
