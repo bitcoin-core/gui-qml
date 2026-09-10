@@ -21,6 +21,7 @@ from qml_wallet_test_lib import (
     WalletFlowHarness,
     find_bitcoind,
     find_legacy_bitcoind,
+    open_wallet_selector,
     rpc_call,
     wait_for_rpc,
 )
@@ -196,14 +197,6 @@ def assert_passphrase_not_in_ui(gui, passphrase):
     assert not leaks, f"Passphrase leaked through QML text properties: {', '.join(leaks)}"
 
 
-def open_wallet_selector(gui):
-    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
-    if gui.get_property("walletSelectPopup", "opened") is True:
-        return
-    gui.click("walletBadge")
-    gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
-
-
 def select_wallet(gui, wallet_name):
     open_wallet_selector(gui)
     wallet_selector_object_name = f"walletSelectItem_{sanitize_object_suffix(wallet_name)}"
@@ -216,6 +209,7 @@ def close_wallet_from_selector(gui, wallet_name):
         open_wallet_selector(gui)
     gui.settle()
     deadline = time.time() + 5
+    gui.click(f"walletSelectActions_{sanitize_object_suffix(wallet_name)}")
     object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
     while True:
         try:
@@ -559,7 +553,7 @@ def case_close_loaded_wallet_from_selector(harness, checkpoints):
     gui.settle()
     for wallet_name in (selected_wallet, remaining_wallet):
         deadline = time.time() + 5
-        object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
+        object_name = f"walletSelectActions_{sanitize_object_suffix(wallet_name)}"
         while True:
             try:
                 if gui.get_property(object_name, "visible") is True:

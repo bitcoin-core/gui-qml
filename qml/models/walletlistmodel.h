@@ -44,6 +44,7 @@ public:
         ErrorMessageRole,
         BalanceRole,
         KeySchemeKindRole,
+        WalletSectionRole,
     };
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -68,7 +69,7 @@ private:
         QString format;
         bool from_wallet_dir{false};
         std::optional<qint64> balance;
-        int keySchemeKind{0};   // 0 == WalletQmlModel::KeyScheme::SingleKey
+        int keySchemeKind{-1}; // Unknown until this wallet has been loaded.
     };
 
     bool itemLess(const Item& a, const Item& b) const;
