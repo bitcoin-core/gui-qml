@@ -1,0 +1,5 @@
+<!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/qml">
+        <file>pages/MainWindow.qml</file>
+    </qresource>
+</RCC>

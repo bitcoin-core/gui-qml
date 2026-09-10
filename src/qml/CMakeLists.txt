@@ -1,0 +1,108 @@
+# Copyright (c) 2026 The Bitcoin Core developers
+# Distributed under the MIT software license, see the accompanying
+# file COPYING or https://opensource.org/license/mit/.
+
+include(ImportQtPlugins)
+
+set(CMAKE_AUTOMOC ON)
+
+qt6_add_resources(BITCOIN_QML_QRC bitcoin_qml.qrc)
+# See: https://bugreports.qt.io/browse/QTBUG-141858.
+get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
+if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
+  set_source_files_properties(${BITCOIN_QML_QRC} PROPERTIES COMPILE_OPTIONS -Wno-trailing-whitespace)
+endif()
+unset(warn_flags)
+
+add_library(bitcoinqml STATIC
+  bitcoin.cpp
+  bitcoin.h
+  bitcoinqmlapplication.cpp
+  bitcoinqmlapplication.h
+  initexecutor.cpp
+  initexecutor.h
+  models/nodemodel.cpp
+  models/nodemodel.h
+  ${BITCOIN_QML_QRC}
+)
+
+target_compile_definitions(bitcoinqml
+  PUBLIC
+    QT_NO_KEYWORDS
+    QT_NO_CONTEXTLESS_CONNECT
+    QT_USE_QSTRINGBUILDER
+)
+
+target_sources(bitcoinqml
+  PRIVATE
+    test/testbridge.cpp
+    test/testbridge.h
+)
+
+target_link_libraries(bitcoinqml
+  PRIVATE
+    core_interface
+    bitcoin_node
+  PUBLIC
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::Network
+)
+
+add_executable(bitcoin-qt WIN32
+  main.cpp
+  res/bitcoin-qt-res.rc
+  ../init/bitcoin-qt.cpp
+)
+add_windows_application_manifest(bitcoin-qt)
+
+target_link_libraries(bitcoin-qt
+  PRIVATE
+    core_interface
+    bitcoinqml
+    bitcoin_node
+    $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
+)
+
+qt6_import_qml_plugins(bitcoin-qt)
+import_plugins(bitcoin-qt)
+install_binary_component(bitcoin-qt HAS_MANPAGE)
+if(WIN32 AND VCPKG_TARGET_TRIPLET AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.27)
+  get_target_property(qt_core_type Qt6::Core TYPE)
+  if(qt_core_type STREQUAL "SHARED_LIBRARY")
+    file(GENERATE
+      OUTPUT $<TARGET_FILE_DIR:bitcoin-qt>/qt.conf
+      CONTENT "[Paths]\nPrefix = $<PATH:GET_PARENT_PATH,$<PATH:GET_PARENT_PATH,$<TARGET_FILE_DIR:Qt6::QWindowsIntegrationPlugin>>>\n"
+    )
+    add_custom_command(TARGET bitcoin-qt POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+              $<TARGET_RUNTIME_DLL_DIRS:bitcoin-qt> $<TARGET_FILE_DIR:bitcoin-qt>
+      COMMAND_EXPAND_LISTS
+      VERBATIM
+    )
+  endif()
+  unset(qt_core_type)
+endif()
+
+if(ENABLE_IPC)
+  add_executable(bitcoin-gui WIN32
+    main.cpp
+    ../init/bitcoin-gui.cpp
+  )
+  target_link_libraries(bitcoin-gui
+    PRIVATE
+      core_interface
+      bitcoinqml
+      bitcoin_node
+      bitcoin_ipc
+      $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
+  )
+  qt6_import_qml_plugins(bitcoin-gui)
+  import_plugins(bitcoin-gui)
+  install_binary_component(bitcoin-gui INTERNAL)
+endif()
+
+if(BUILD_GUI_TESTS)
+  add_subdirectory(test)
+endif()

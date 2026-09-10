@@ -15,6 +15,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "BUILD_GUI": "ON",
+        "BUILD_GUI_TESTS": "ON",
         "WITH_ZMQ": "ON"
       }
     },
@@ -32,6 +33,7 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static",
         "BUILD_GUI": "ON",
+        "BUILD_GUI_TESTS": "ON",
         "WITH_ZMQ": "ON"
       }
     },
@@ -70,6 +72,7 @@
         "BUILD_DAEMON": "ON",
         "BUILD_FUZZ_BINARY": "ON",
         "BUILD_GUI": "ON",
+        "BUILD_GUI_LEGACY": "ON",
         "BUILD_GUI_TESTS": "ON",
         "BUILD_KERNEL_LIB": "ON",
         "BUILD_SHARED_LIBS": "ON",
@@ -81,7 +84,6 @@
         "ENABLE_EXTERNAL_SIGNER": "ON",
         "ENABLE_WALLET": "ON",
         "ENABLE_IPC": "ON",
-        "WITH_QRENCODE": "ON",
         "WITH_USDT": "ON",
         "WITH_ZMQ": "ON"
       }

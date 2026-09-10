@@ -403,8 +403,11 @@ if(BUILD_UTIL)
 endif()
 
 
-if(BUILD_GUI)
+if(BUILD_GUI_LEGACY)
   add_subdirectory(qt)
+endif()
+if(BUILD_GUI)
+  add_subdirectory(qml)
 endif()
 
 

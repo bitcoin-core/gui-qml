@@ -19,7 +19,7 @@ export CI_LIMIT_STACK_SIZE=1
 # Disable fortification with -U_FORTIFY_SOURCE to work around https://github.com/bitcoin/bitcoin/issues/30586
 export BITCOIN_CONFIG="\
   --preset=dev-mode \
-  -DBUILD_GUI=OFF \
+  -DBUILD_GUI=OFF -DBUILD_GUI_LEGACY=OFF \
   -DSANITIZERS=thread \
   -DAPPEND_CPPFLAGS='-DARENA_DEBUG -DDEBUG_LOCKCONTENTION -D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES -U_FORTIFY_SOURCE' \
 "

@@ -19,6 +19,7 @@ class GuiTest(BitcoinTestFramework):
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_gui()
+        self.skip_if_no_ipc()
         # On Windows, bitcoin.exe exits immediately when launching bitcoin-gui.exe,
         # causing the test framework's process monitor to see a premature node exit.
         # This issue is likely fixable.
@@ -26,7 +27,7 @@ class GuiTest(BitcoinTestFramework):
             raise SkipTest("bitcoin-gui test not supported on Windows")
 
     def setup_nodes(self):
-        self.extra_init = [{"use_gui": True}]
+        self.extra_init = [{"use_gui": True, "ipcbind": True}]
         super().setup_nodes()
 
     def run_test(self):

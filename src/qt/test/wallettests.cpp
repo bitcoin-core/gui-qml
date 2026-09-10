@@ -255,9 +255,9 @@ public:
 //
 // This also requires overriding the default minimal Qt platform:
 //
-//     QT_QPA_PLATFORM=xcb     build/bin/test_bitcoin-qt  # Linux
-//     QT_QPA_PLATFORM=windows build/bin/test_bitcoin-qt  # Windows
-//     QT_QPA_PLATFORM=cocoa   build/bin/test_bitcoin-qt  # macOS
+//     QT_QPA_PLATFORM=xcb     build/bin/test_bitcoin-qt-legacy  # Linux
+//     QT_QPA_PLATFORM=windows build/bin/test_bitcoin-qt-legacy  # Windows
+//     QT_QPA_PLATFORM=cocoa   build/bin/test_bitcoin-qt-legacy  # macOS
 void TestGUI(interfaces::Node& node, const std::shared_ptr<CWallet>& wallet)
 {
     // Create widgets for sending coins and listing transactions.
