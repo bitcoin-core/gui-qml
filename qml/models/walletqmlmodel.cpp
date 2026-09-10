@@ -931,6 +931,16 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
         return false;
     }
 
+    // Capture the stored label before this save replaces the entry, so the
+    // address book sync below can tell a label edit from a save that only
+    // touched other fields (amount, message).
+    std::optional<QString> previous_label;
+    if (is_update && m_receive_requests) {
+        if (const auto previous_entry = m_receive_requests->entryById(request_id_text)) {
+            previous_label = QString::fromStdString(previous_entry->recipient.label);
+        }
+    }
+
     QmlRecentRequestEntry request_entry;
     request_entry.id = request_id;
     request_entry.date = is_update ? m_current_payment_request->created() : QDateTime::currentDateTime();
@@ -978,14 +988,16 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     // Keep the address book label in sync with the request label, so the
     // Addresses page and any other address-book reader reflect an edited
     // request, matching what getNewDestination writes at creation time.
-    // Only write when this save actually changes the label, and never let an
-    // empty request label clear a label the user may have set independently
-    // on the Addresses page. Write the address book alone: Core supports
-    // multiple requests per address with their own labels, so saving this
-    // request must not fan its label out to sibling requests the way an
-    // Addresses page edit deliberately does.
+    // Only write when this edit actually changed the request label: a save
+    // that only touched the amount or message must not re-assert the request
+    // label over one set independently on the Addresses page, and an empty
+    // request label must never clear such a label. Write the address book
+    // alone: Core supports multiple requests per address with their own
+    // labels, so saving this request must not fan its label out to sibling
+    // requests the way an Addresses page edit deliberately does.
     const QString request_label = m_current_payment_request->label();
-    if (!request_label.isEmpty() && request_label != getAddressLabel(m_current_payment_request->address())) {
+    const bool label_edited = !previous_label.has_value() || request_label != *previous_label;
+    if (label_edited && !request_label.isEmpty() && request_label != getAddressLabel(m_current_payment_request->address())) {
         writeAddressBookLabel(m_current_payment_request->address(), request_label);
     }
 

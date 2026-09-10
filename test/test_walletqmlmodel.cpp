@@ -587,6 +587,7 @@ private Q_SLOTS:
     void editedReceiveRequestLabelShownInActivityRow();
     void editedRequestSyncsAddressBookLabel();
     void requestSaveLeavesUneditedAddressBookLabelAlone();
+    void amountOnlyRequestEditPreservesAddressBookLabel();
     void editedAddressBookLabelSyncsRequestLabel();
     void requestSaveLeavesSiblingRequestLabelsAlone();
     void labelSyncSkipsInMemoryUpdateWhenPersistFails();
@@ -1791,6 +1792,33 @@ void WalletQmlModelTests::requestSaveLeavesUneditedAddressBookLabelAlone()
     model->currentPaymentRequest()->setLabel(QStringLiteral("Book label"));
     QVERIFY(model->commitPaymentRequest());
     QCOMPARE(wallet->set_address_book_calls, 0);
+}
+
+void WalletQmlModelTests::amountOnlyRequestEditPreservesAddressBookLabel()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    wallet->get_address_result = true;
+
+    // Creating the request labels its address.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Request label"));
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->last_set_address_book_label, std::string{"Request label"});
+
+    // The address is then relabeled independently on the Addresses page.
+    wallet->get_address_label = "Independent label";
+    const int calls_before = wallet->set_address_book_calls;
+
+    // Editing only the amount must not re-assert the request label over the
+    // independent one; the save changed no label.
+    model->currentPaymentRequest()->amount()->setSatoshi(12'345);
+    QVERIFY(model->commitPaymentRequest());
+    QCOMPARE(wallet->set_address_book_calls, calls_before);
+
+    // Editing the request label itself still writes it back.
+    model->currentPaymentRequest()->setLabel(QStringLiteral("Renamed request"));
+    QVERIFY(model->commitPaymentRequest());
+    QVERIFY(wallet->set_address_book_calls > calls_before);
+    QCOMPARE(wallet->last_set_address_book_label, std::string{"Renamed request"});
 }
 
 void WalletQmlModelTests::editedAddressBookLabelSyncsRequestLabel()
