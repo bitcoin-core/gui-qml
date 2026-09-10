@@ -113,7 +113,7 @@ Q_SIGNALS:
     void walletLoadWarningsChanged();
     void walletCreateErrorChanged();
     void walletInfoChanged(const QString& name,
-                           const QString& balance,
+                           qint64 balance,
                            int keySchemeKind);
     void walletLoadSucceeded();
     void walletImportSucceeded();

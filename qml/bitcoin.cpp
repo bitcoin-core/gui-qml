@@ -693,6 +693,13 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     OptionsQmlModel options_model(*node);
+#ifdef ENABLE_WALLET
+    if (wallet_list_model) {
+        wallet_list_model->setDisplayUnit(options_model.displayUnit());
+        QObject::connect(&options_model, &OptionsQmlModel::displayUnitChanged,
+                         wallet_list_model.get(), &WalletListModel::setDisplayUnit);
+    }
+#endif
     engine->rootContext()->setContextProperty("optionsModel", &options_model);
 #ifdef ENABLE_TEST_AUTOMATION
     engine->rootContext()->setContextProperty("testAutomationEnabled", true);

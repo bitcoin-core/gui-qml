@@ -145,6 +145,7 @@ class FakeWallet : public interfaces::Wallet
 public:
     struct State {
         int remove_calls{0};
+        CAmount balance{0};
         interfaces::Wallet::UnloadFn unload_fn;
     };
 
@@ -212,7 +213,7 @@ public:
     }
     interfaces::WalletBalances getBalances() override { return {}; }
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
-    CAmount getBalance() override { return 0; }
+    CAmount getBalance() override { return m_state ? m_state->balance : 0; }
     CAmount getAvailableBalance(const wallet::CCoinControl&) override { return 0; }
     bool txinIsMine(const CTxIn&) override { return false; }
     bool txoutIsMine(const CTxOut&) override { return false; }
@@ -1163,6 +1164,8 @@ void WalletQmlControllerTests::publishOpenWalletsInfoEmitsWalletInfoChangedForEa
     FakeWalletLoader loader;
     FakeWallet::State alpha_state;
     FakeWallet::State beta_state;
+    alpha_state.balance = 13900000000LL;
+    beta_state.balance = 1;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -1182,6 +1185,20 @@ void WalletQmlControllerTests::publishOpenWalletsInfoEmitsWalletInfoChangedForEa
     names << info_spy.at(0).at(0).toString() << info_spy.at(1).at(0).toString();
     names.sort();
     QCOMPARE(names, QStringList({"alpha_wallet", "beta_wallet"}));
+    const auto verify_raw_balances = [&info_spy]() {
+        QCOMPARE(info_spy.count(), 2);
+        for (const auto& args : info_spy) {
+            QCOMPARE(args.at(1).metaType().id(), QMetaType::LongLong);
+            QCOMPARE(args.at(1).toLongLong(), args.at(0).toString() == "alpha_wallet" ? 13900000000LL : 1LL);
+        }
+    };
+    verify_raw_balances();
+    controller.setSelectedWallet("alpha_wallet", "sqlite");
+    controller.selectedWallet()->setDisplayUnit(3);
+    controller.setSelectedWallet("beta_wallet", "sqlite");
+    info_spy.clear();
+    controller.publishOpenWalletsInfo();
+    verify_raw_balances();
 }
 
 void WalletQmlControllerTests::walletNameAvailabilityErrorRejectsEmptyAndWhitespace()
