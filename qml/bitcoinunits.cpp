@@ -66,6 +66,28 @@ QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, Separa
     return quotient_str + "." + remainder_str;
 }
 
+QString QmlBitcoinUnits::formatForDisplay(Unit unit, CAmount amount, bool plussign, const QLocale& locale)
+{
+    // Split the integer amount before formatting: converting BTC through a
+    // double can round away satoshis. Unsigned arithmetic also handles INT64_MIN.
+    const quint64 magnitude = amount < 0 ? quint64{0} - static_cast<quint64>(amount)
+                                         : static_cast<quint64>(amount);
+    const quint64 divisor = factor(unit);
+    QString result = locale.toString(magnitude / divisor);
+    const int precision = decimals(unit);
+    if (precision > 0) {
+        const quint64 remainder = magnitude % divisor;
+        QLocale fractional_locale{locale};
+        fractional_locale.setNumberOptions(locale.numberOptions() | QLocale::OmitGroupSeparator);
+        const int padding = precision - QString::number(remainder).size();
+        result += locale.decimalPoint() + locale.zeroDigit().repeated(padding)
+            + fractional_locale.toString(remainder);
+    }
+    if (amount < 0) result.prepend(locale.negativeSign());
+    else if (plussign && amount > 0) result.prepend(locale.positiveSign());
+    return result;
+}
+
 QmlBitcoinUnits::Unit QmlBitcoinUnits::fromDisplayUnit(int display_unit)
 {
     switch (display_unit) {

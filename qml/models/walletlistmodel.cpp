@@ -235,7 +235,7 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
     case ErrorMessageRole:
         return (m_load_error.first == item.name) ? m_load_error.second : QString();
     case BalanceRole:
-        return item.balance ? QmlBitcoinUnits::format(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
+        return item.balance ? QmlBitcoinUnits::formatForDisplay(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
     case KeySchemeKindRole:
         return item.keySchemeKind;
     default:
