@@ -6,6 +6,8 @@
 
 #include <interfaces/node.h>
 
+#include <qml/bitcoinunits.h>
+
 #include <QSettings>
 
 #include <algorithm>
@@ -164,7 +166,16 @@ void WalletListModel::setWalletLoadState(const QString& name, LoadState state, c
     }
 }
 
-void WalletListModel::setWalletInfo(const QString& name, const QString& balance, int keySchemeKind)
+void WalletListModel::setDisplayUnit(int unit)
+{
+    if (m_display_unit == unit) return;
+    m_display_unit = unit;
+    if (!m_items.isEmpty()) {
+        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {BalanceRole});
+    }
+}
+
+void WalletListModel::setWalletInfo(const QString& name, qint64 balance, int keySchemeKind)
 {
     if (name.isEmpty()) {
         return;
@@ -224,7 +235,7 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
     case ErrorMessageRole:
         return (m_load_error.first == item.name) ? m_load_error.second : QString();
     case BalanceRole:
-        return item.balance;
+        return item.balance ? QmlBitcoinUnits::format(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
     case KeySchemeKindRole:
         return item.keySchemeKind;
     default:

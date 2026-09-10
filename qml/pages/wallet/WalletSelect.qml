@@ -129,7 +129,9 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
-                        return "₿ " + balance
+                        return optionsModel.displayUnit === 0
+                            ? optionsModel.displayUnitLabelForAmount(0) + " " + balance
+                            : balance + " " + optionsModel.displayUnitLabel
                     case WalletListModel.Closed:
                     default:
                         return qsTr("Closed")

@@ -13,6 +13,8 @@
 #include <QSet>
 #include <QString>
 
+#include <optional>
+
 namespace interfaces {
 class Node;
 }
@@ -56,7 +58,8 @@ Q_SIGNALS:
 public Q_SLOTS:
     void listWalletDir();
     void setWalletLoadState(const QString& name, LoadState state, const QString& error = {});
-    void setWalletInfo(const QString& name, const QString& balance, int keySchemeKind);
+    void setDisplayUnit(int unit);
+    void setWalletInfo(const QString& name, qint64 balance, int keySchemeKind);
     void refreshDisplayNames();
 
 private:
@@ -64,7 +67,7 @@ private:
         QString name;
         QString format;
         bool from_wallet_dir{false};
-        QString balance;
+        std::optional<qint64> balance;
         int keySchemeKind{0};   // 0 == WalletQmlModel::KeyScheme::SingleKey
     };
 
@@ -75,6 +78,7 @@ private:
     void emitTransientStateChanged();
     int rowForName(const QString& name) const;
 
+    int m_display_unit{0};
     QList<Item> m_items;
     QSet<QString> m_open_wallet_names;
     QString m_loading_wallet;
