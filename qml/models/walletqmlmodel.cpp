@@ -511,7 +511,7 @@ QString WalletQmlModel::balance() const
     if (!m_wallet) {
         return "0";
     }
-    return QmlBitcoinUnits::format(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), m_wallet->getBalance());
+    return QmlBitcoinUnits::formatForDisplay(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), m_wallet->getBalance());
 }
 
 qint64 WalletQmlModel::balanceSatoshi() const

@@ -13,6 +13,7 @@
 #include <wallet/types.h>
 
 #include <QSettings>
+#include <QLocale>
 
 namespace {
 class FakeWalletLoader : public interfaces::WalletLoader
@@ -473,7 +474,7 @@ void WalletListModelTests::balancesFollowDisplayUnitAcrossWalletRefreshes()
     model.setWalletInfo("Charlie", 13900000000LL, 0);
     model.setWalletInfo("Other", 1, 0);
     const auto amount = [&model](int row) {
-        return model.data(model.index(row, 0), WalletListModel::BalanceRole).toString().remove(QChar(0x2009));
+        return model.data(model.index(row, 0), WalletListModel::BalanceRole).toString().remove(QLocale().groupSeparator());
     };
     QCOMPARE(amount(0), QStringLiteral("139.00000000"));
     QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
