@@ -11,8 +11,11 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUrl>
+
+#include <ctime>
 
 namespace {
 struct ActivityRow {
@@ -107,6 +110,15 @@ qint64 TimestampForLocalDate(const QDate& date)
     return QDateTime(date, QTime(12, 0)).toSecsSinceEpoch();
 }
 
+void TzSet()
+{
+#ifdef Q_OS_WIN
+    _tzset();
+#else
+    tzset();
+#endif
+}
+
 ActivityRow MakeRow(QString label, int type, qint64 timestamp, QString txid = {}, QString address = {})
 {
     return ActivityRow{
@@ -141,6 +153,7 @@ private Q_SLOTS:
     void searchMatchesLabelAddressAndTxid();
     void filtersByDateBuckets();
     void filtersByCustomDateRange();
+    void customRangeHandlesDstGapDayBoundaries();
     void rejectsInvalidCustomRange();
     void appliesCustomRangeWithOneNotification();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
@@ -444,6 +457,54 @@ void ActivityFilterProxyModelTests::filtersByCustomDateRange()
     QVERIFY(ContainsLabel(proxy, "On end"));   // upper bound inclusive (whole day)
     QVERIFY(!ContainsLabel(proxy, "Before"));
     QVERIFY(!ContainsLabel(proxy, "After"));
+}
+
+void ActivityFilterProxyModelTests::customRangeHandlesDstGapDayBoundaries()
+{
+    // America/Sao_Paulo entered daylight saving at midnight on 2018-11-04:
+    // clocks jumped from 00:00 to 01:00, so that day has no midnight.
+    // QDateTime{date, QTime(0, 0)} is invalid for it and compares before
+    // every valid time, which silently broke both range boundaries; the
+    // date's startOfDay() is the correct first instant. In a zone without
+    // the gap this degenerates to an ordinary range check and still passes.
+    const QByteArray previous_tz = qgetenv("TZ");
+    qputenv("TZ", "America/Sao_Paulo");
+    TzSet();
+    const auto restore_tz = qScopeGuard([&previous_tz] {
+        if (previous_tz.isEmpty()) {
+            qunsetenv("TZ");
+        } else {
+            qputenv("TZ", previous_tz);
+        }
+        TzSet();
+    });
+
+    const QDate gap_day{2018, 11, 4};
+
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day.addDays(-1))),
+        MakeRow("On gap day", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day)),
+        MakeRow("After", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day.addDays(1))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // A range starting on the gap day must still exclude earlier rows.
+    QVERIFY(proxy.applyCustomRange(gap_day.toString(Qt::ISODate),
+                                   gap_day.addDays(1).toString(Qt::ISODate)));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(!ContainsLabel(proxy, "Before"));
+    QVERIFY(ContainsLabel(proxy, "On gap day"));
+    QVERIFY(ContainsLabel(proxy, "After"));
+
+    // A range whose exclusive upper bound lands on the gap day (inclusive
+    // end date the day before) must not collapse to rejecting every row.
+    QVERIFY(proxy.applyCustomRange(gap_day.addDays(-1).toString(Qt::ISODate),
+                                   gap_day.addDays(-1).toString(Qt::ISODate)));
+    QCOMPARE(proxy.rowCount(), 1);
+    QVERIFY(ContainsLabel(proxy, "Before"));
 }
 
 void ActivityFilterProxyModelTests::rejectsInvalidCustomRange()

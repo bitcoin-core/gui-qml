@@ -356,11 +356,14 @@ bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
         break;
     case CustomRange: {
         const QDateTime row_time = QDateTime::fromSecsSinceEpoch(timestamp);
-        if (m_range_start.isValid() && row_time < QDateTime(m_range_start, QTime(0, 0))) {
+        // startOfDay() instead of midnight: when daylight saving skips
+        // midnight, QDateTime{date, QTime(0, 0)} is invalid and compares
+        // before every valid time, breaking both bounds.
+        if (m_range_start.isValid() && row_time < m_range_start.startOfDay()) {
             return false;
         }
         // The end date is inclusive, so accept the whole of that day.
-        if (m_range_end.isValid() && row_time >= QDateTime(m_range_end.addDays(1), QTime(0, 0))) {
+        if (m_range_end.isValid() && row_time >= m_range_end.addDays(1).startOfDay()) {
             return false;
         }
         return true;
@@ -369,8 +372,8 @@ bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
         return true;
     }
 
-    const QDateTime start_of_range{start_date, QTime(0, 0)};
-    const QDateTime end_of_range{end_date, QTime(0, 0)};
+    const QDateTime start_of_range = start_date.startOfDay();
+    const QDateTime end_of_range = end_date.startOfDay();
     const QDateTime row_time = QDateTime::fromSecsSinceEpoch(timestamp);
     return row_time >= start_of_range && row_time < end_of_range;
 }
