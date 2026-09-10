@@ -58,7 +58,6 @@ Item {
     property color selectionColor:    Theme.color.orange
     property color selectedTextColor: Theme.color.white
     property string searchText: ""
-    readonly property string normalizedSearchText: searchText.toLowerCase()
     readonly property int searchResultCount: _searchMatches.length
     property int currentSearchResultIndex: -1
     property var _searchMatches: []
@@ -122,23 +121,22 @@ Item {
 
     function rebuildSearchMatches(resetCurrent) {
         const matches = []
-        if (root.normalizedSearchText.length > 0) {
+        if (root.searchText.length > 0) {
+            const pattern = root.searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+            const expression = new RegExp(pattern, "gi")
             for (let row = 0; row < rowRepeater.count; ++row) {
                 const item = rowRepeater.itemAt(row)
                 if (!item || !item.contentEditor) continue
                 const editor = item.contentEditor
                 const plainText = editor.getText(0, editor.length)
-                const normalized = plainText.toLowerCase()
-                let offset = 0
-                while (offset <= normalized.length - root.normalizedSearchText.length) {
-                    const matchOffset = normalized.indexOf(root.normalizedSearchText, offset)
-                    if (matchOffset < 0) break
+                expression.lastIndex = 0
+                let match
+                while ((match = expression.exec(plainText)) !== null) {
                     matches.push({
                         row: row,
-                        start: matchOffset,
-                        end: matchOffset + root.searchText.length
+                        start: match.index,
+                        end: match.index + match[0].length
                     })
-                    offset = matchOffset + Math.max(1, root.normalizedSearchText.length)
                 }
             }
         }
@@ -336,7 +334,7 @@ Item {
                         text: rowRoot.rowContent
                         readOnly: true
                         selectByMouse: true
-                        persistentSelection: root.normalizedSearchText.length > 0
+                        persistentSelection: root.searchText.length > 0
                         textFormat: root.contentTextFormat
                         wrapMode: Text.WrapAnywhere
                         font.family: root.fontFamily
@@ -382,7 +380,7 @@ Item {
         // While searching, navigation owns the viewport position. Otherwise a
         // content relayout can pull the view back to the bottom immediately
         // after applyCurrentSearchMatch() scrolls to the active occurrence.
-        enabled: root.autoScrollToBottom && root.normalizedSearchText.length === 0
+        enabled: root.autoScrollToBottom && root.searchText.length === 0
         function onContentHeightChanged() {
             root.scrollToBottom()
         }

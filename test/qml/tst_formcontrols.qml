@@ -322,18 +322,18 @@ TestCase {
         compare(picker.currentValue, "dark")
     }
 
-    function test_outlineButtonSupportsEmbeddedAppearance() {
+    function test_outlineButtonSupportsOnSurfaceAppearance() {
         const button = createTemporaryObject(outlineButtonComponent, host)
         verify(button !== null)
         const background = findChild(button, "exampleOutlineButtonBackground")
         verify(background !== null)
 
-        compare(button.embedded, false)
+        compare(button.isOnSurface, false)
         compare(background.color, Qt.rgba(0, 0, 0, 0))
         compare(background.border.width, 1)
         compare(background.border.color, Theme.color.neutral2)
 
-        button.embedded = true
+        button.isOnSurface = true
         tryCompare(background, "color", Theme.color.neutral2)
         compare(background.border.width, 0)
 

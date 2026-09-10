@@ -60,24 +60,75 @@ TestCase {
         compare(field.background.color, Theme.color.neutral2)
         compare(field.background.radius, 5)
         compare(field.placeholderText, "Find output")
+        compare(searchBar.placeholder, "Find output")
+        compare(searchBar.showsSearchIcon, true)
+        compare(searchBar.showsCancel, true)
         compare(searchIcon.source.toString(), "image://images/search")
         compare(searchIcon.size, 14)
         verify(searchIcon.x < field.leftPadding)
         compare(clearButton.visible, false)
+
+        testWindow.requestActivate()
+        tryCompare(testWindow, "active", true)
+        field.forceActiveFocus()
+        tryCompare(field, "activeFocus", true)
+        compare(field.background.border.width, 0)
 
         searchBar.text = "needle"
         compare(field.text, "needle")
         compare(clearButton.visible, true)
         compare(clearButton.width, 14)
         compare(clearButton.height, 14)
-        compare(clearButton.contentItem.size, 6)
-        compare(clearButton.contentItem.strokeWidth, 1.5)
-        compare(clearButton.background.border.color, Theme.color.neutral4)
-        compare(clearButton.contentItem.strokeColor, Theme.color.neutral4)
-        compare(clearButton.background.radius, clearButton.width / 2)
-        mouseClick(clearButton)
+        compare(clearButton.contentItem.source.toString(),
+                "qrc:/icons/cross-circle-filled")
+        compare(clearButton.contentItem.size, 12)
+        compare(clearButton.contentItem.color, Theme.color.neutral6)
+        compare(clearButton.background, null)
+        const cancelSpy = signalSpy.createObject(searchBar, {
+            target: searchBar,
+            signalName: "cancelRequested"
+        })
+        verify(cancelSpy.valid)
+        mousePress(clearButton)
+        compare(clearButton.pressed, true)
+        compare(clearButton.contentItem.color, Theme.color.neutral4)
+        mouseRelease(clearButton)
+        compare(cancelSpy.count, 1)
         compare(searchBar.text, "")
         compare(clearButton.visible, false)
+
+        searchBar.text = "hidden cancel"
+        searchBar.showsCancel = false
+        compare(clearButton.visible, false)
+        searchBar.showsCancel = true
+        compare(clearButton.visible, true)
+    }
+
+    function test_search_submission_and_configuration() {
+        const searchBar = createSearchBar()
+        const field = searchBar.inputField
+        const searchIcon = findChild(searchBar, "sharedSearchIcon")
+        const searchSpy = signalSpy.createObject(searchBar, {
+            target: searchBar,
+            signalName: "searchRequested"
+        })
+        verify(searchSpy.valid)
+
+        searchBar.placeholder = "Search records"
+        compare(field.placeholderText, "Search records")
+        searchBar.showsSearchIcon = false
+        compare(searchIcon.visible, false)
+        compare(field.leftPadding, 10)
+        searchBar.showsSearchIcon = true
+        searchBar.searchIconSize = 16
+        compare(searchIcon.visible, true)
+        compare(searchIcon.size, 16)
+
+        searchBar.text = "status"
+        field.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        compare(searchSpy.count, 1)
+        compare(searchSpy.signalArguments[0][0], "status")
     }
 
     function test_optional_navigation_buttons() {

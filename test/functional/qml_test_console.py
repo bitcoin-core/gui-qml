@@ -258,8 +258,9 @@ def test_autocomplete_popup_hidden_no_match(gui):
     print("\n── test_autocomplete_popup_hidden_no_match ─────────────────────")
 
     gui.set_text("consoleInput", "zzzznotacommand")
-    visible = gui.get_property("consoleAutocompletePopup", "visible")
-    assert visible == False, f"Expected popup hidden for no-match input, got {visible}"
+    gui.wait_for_property(
+        "consoleAutocompletePopup", "visible", False, timeout_ms=3000
+    )
     print("  PASSED: autocomplete popup hidden for non-matching input")
     gui.set_text("consoleInput", "")
 

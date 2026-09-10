@@ -18,8 +18,8 @@ Button {
         }
     }
 
-    property bool bold: false
-    property bool embedded: false
+    property bool bold: true
+    property bool isOnSurface: false
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -60,12 +60,12 @@ Button {
         id: bg
         objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         implicitHeight: 46
-        color: root.embedded
+        color: root.isOnSurface
             ? (root.hovered || root.down ? Theme.color.neutral3 : Theme.color.neutral2)
             : "transparent"
         radius: 5
         border {
-            width: root.embedded ? 0 : 1
+            width: root.isOnSurface ? 0 : 1
             color: Theme.color.neutral2
 
             Behavior on color {

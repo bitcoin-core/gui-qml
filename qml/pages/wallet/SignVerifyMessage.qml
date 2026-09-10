@@ -177,7 +177,7 @@ SettingsPage {
 
                     OutlineButton {
                         objectName: "signMessageClearButton"
-                        embedded: true
+                        isOnSurface: true
                         Layout.preferredWidth: 140
                         text: qsTr("Clear all")
                         onClicked: root.clearSignForm()
@@ -280,7 +280,7 @@ SettingsPage {
 
                     OutlineButton {
                         objectName: "verifyMessageClearButton"
-                        embedded: true
+                        isOnSurface: true
                         Layout.preferredWidth: 140
                         text: qsTr("Clear all")
                         onClicked: root.clearVerifyForm()

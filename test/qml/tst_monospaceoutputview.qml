@@ -119,6 +119,30 @@ TestCase {
         compare(output.count, 3)
     }
 
+    function test_search_preserves_original_offsets_data() {
+        return [
+            { tag: "unicode-prefix", text: '"İstanbul savings"', query: "savings", expected: "savings" },
+            { tag: "case-insensitive", text: '"İstanbul SAVINGS"', query: "savings", expected: "SAVINGS" },
+            { tag: "literal-metacharacters", text: "prefix .*+?^${}()|[]\\ suffix", query: ".*+?^${}()|[]\\", expected: ".*+?^${}()|[]\\" }
+        ]
+    }
+
+    function test_search_preserves_original_offsets(data) {
+        const output = createTemporaryObject(outputComponent, testWindow.contentItem, {
+            listModel: [{ content: data.text }]
+        })
+        verify(output !== null)
+        tryCompare(output, "count", 1)
+        const content = findChild(output, "searchOutput_content_0")
+        verify(content !== null)
+
+        output.searchText = data.query
+        tryCompare(output, "searchResultCount", 1)
+        compare(content.selectedText, data.expected)
+        compare(content.selectionStart, data.text.indexOf(data.expected))
+        compare(content.selectionEnd, data.text.indexOf(data.expected) + data.expected.length)
+    }
+
     function test_search_navigation_owns_scroll_position() {
         const output = createOutput()
         output.height = 30
