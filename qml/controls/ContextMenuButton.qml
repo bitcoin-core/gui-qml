@@ -18,12 +18,14 @@ AbstractButton {
     property url iconSource
     property int role: ContextMenuButton.Normal
     property bool autoClose: true
+    property color textColor: Theme.color.neutral8
+    property color hoverTextColor: Theme.color.neutral9
     property color hoverBackgroundColor: Theme.color.neutral3
 
     readonly property bool _destructive: role === ContextMenuButton.Destructive
     readonly property bool _highlighted: enabled && (hovered || down || visualFocus)
-    readonly property color _idleColor: _destructive ? Theme.color.red : Theme.color.neutral8
-    readonly property color _hoverColor: _destructive ? Theme.color.red : Theme.color.neutral9
+    readonly property color _idleColor: _destructive ? Theme.color.red : root.textColor
+    readonly property color _hoverColor: _destructive ? Theme.color.red : root.hoverTextColor
 
     signal triggered()
 

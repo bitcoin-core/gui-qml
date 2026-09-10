@@ -15,9 +15,73 @@ Popup {
     objectName: "walletSelectPopup"
 
     property alias model: listView.model
-    implicitHeight: layout.height + arrow.height + 11
-    implicitWidth: 250
-    clip: true
+    property real verticalOffset: 0
+    property var activeContextMenu: null
+    implicitWidth: 360
+    implicitHeight: layout.implicitHeight + 2 * padding
+    padding: 6
+    focus: true
+    dim: true
+    transformOrigin: Popup.TopLeft
+    y: verticalOffset
+
+    // Keep the trigger clickable while dimming the rest of the window.
+    Overlay.modeless: Rectangle {
+        color: Qt.rgba(0, 0, 0, 0.5)
+        Behavior on opacity {
+            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+        }
+    }
+
+    enter: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            property: "verticalOffset"
+            from: -12
+            to: 0
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            property: "scale"
+            from: 0.96
+            to: 1
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+    }
+
+    exit: Transition {
+        NumberAnimation {
+            property: "opacity"
+            from: 1
+            to: 0
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+        NumberAnimation {
+            property: "verticalOffset"
+            from: 0
+            to: -12
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+        NumberAnimation {
+            property: "scale"
+            from: 1
+            to: 0.96
+            duration: 250
+            easing.type: Easing.InCubic
+        }
+    }
+
+    signal walletSettingsRequested(string name, string format)
 
     signal addWallet()
     signal closeWalletRequested(string name)
@@ -40,66 +104,50 @@ Popup {
         // stays visible until the user picks again.
     }
 
-    background: Item {
-        anchors.fill: parent
-        Rectangle {
-            id: tooltipBg
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
-            radius: 5
-            border.width: 1
-            width: parent.width
-            height: parent.height - arrow.height - 1
-            anchors.top: arrow.bottom
-            anchors.horizontalCenter: root.horizontalCenter
-            anchors.topMargin: -1
-        }
-        Image {
-            id: arrow
-            source: Theme.image.tooltipArrow
-            width: 22
-            height: 10
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.top: parent.top
-        }
+    background: Rectangle {
+        color: Theme.color.neutral1
+        border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        border.width: 1
+        radius: 5
     }
 
     ButtonGroup {
         id: buttonGroup
     }
 
-    ColumnLayout {
+    contentItem: ColumnLayout {
         id: layout
-        width: 220
-        anchors.topMargin: arrow.height
-        CoreText {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 220
-            Layout.preferredHeight: 30
-            id: label
-            text: qsTr("Wallets")
-            visible: listView.count > 0
-            bold: true
-            color: Theme.color.neutral9
-            font.pixelSize: 14
-            topPadding: 10
-            bottomPadding: 5
-        }
-
+        spacing: 0
         ListView {
             objectName: "walletSelectList"
-            Layout.preferredWidth: 220
-            Layout.preferredHeight: Math.min(listView.count * 54, 300)
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(listView.contentHeight, 384)
             id: listView
-            interactive: true
+            interactive: root.activeContextMenu === null
             clip: true
-            spacing: 2
-            ScrollBar.vertical: ScrollBar { }
+            spacing: 0
+            ScrollBar.vertical: ScrollBar {
+                enabled: listView.interactive
+                interactive: listView.interactive
+            }
             model: walletListModel
+            section.property: "walletSection"
+            section.criteria: ViewSection.FullString
+            section.delegate: CoreText {
+                required property string section
+                objectName: "walletSelectSection_" + section
+                width: listView.width
+                height: 34
+                leftPadding: 10
+                text: section === "open" ? qsTr("Open wallets") : qsTr("Closed wallets")
+                horizontalAlignment: Text.AlignLeft
+                font: Theme.text.caption.font
+                color: Theme.color.neutral6
+            }
 
             delegate: ItemDelegate {
                 id: delegate
+                required property int index;
                 required property string name;
                 required property string displayName;
                 required property string format;
@@ -109,6 +157,7 @@ Popup {
                 required property int keySchemeKind;
 
                 readonly property string iconSource: {
+                    if (loadState !== WalletListModel.Open) return "image://images/wallet"
                     const filled = delegate.checked
                     if (keySchemeKind === WalletQmlModel.WatchOnly) {
                         return filled ? "image://images/visible-filled" : "image://images/visible"
@@ -116,12 +165,8 @@ Popup {
                     if (keySchemeKind === WalletQmlModel.MultiKey) {
                         return filled ? "image://images/two-keys-filled" : "image://images/two-keys"
                     }
-                    // Single-key, or Closed (type unknown until loaded).
                     return filled ? "image://images/key-filled" : "image://images/key"
                 }
-                readonly property real dimmedOpacity:
-                    loadState === WalletListModel.Closed ? 0.5 : 1.0
-
                 readonly property string statusText: {
                     switch (loadState) {
                     case WalletListModel.Loading:
@@ -134,19 +179,18 @@ Popup {
                             : balance + " " + optionsModel.displayUnitLabel
                     case WalletListModel.Closed:
                     default:
-                        return qsTr("Closed")
+                        return ""
                     }
                 }
                 readonly property color statusColor: {
                     if (loadState === WalletListModel.LoadError) return Theme.color.red
-                    if (loadState === WalletListModel.Open && (delegate.checked || delegate.hovered)) return Theme.color.orange
-                    return Theme.color.neutral7
+                    return delegate.checked ? Theme.color.orange : Theme.color.neutral6
                 }
 
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
-                width: 220
-                height: 52
-                checked: walletController.selectedWallet.name == name
+                width: listView.width
+                height: loadState === WalletListModel.Open ? 64 : 48
+                checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
                 enabled: !walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
                 leftPadding: 10
@@ -155,8 +199,16 @@ Popup {
                 bottomPadding: 0
 
                 background: Rectangle {
-                    radius: 5
-                    color: delegate.hovered ? Theme.color.neutral2 : "transparent"
+                    radius: 6
+                    color: delegate.hovered || delegate.visualFocus ? Theme.color.neutral3
+                        : delegate.checked ? Theme.color.neutral2 : "transparent"
+                    Rectangle {
+                        visible: delegate.loadState === WalletListModel.Open
+                            && delegate.index > 0 && !delegate.checked && !delegate.hovered
+                        width: parent.width
+                        height: 1
+                        color: Theme.color.neutral2
+                    }
                 }
 
                 HoverHandler {
@@ -164,25 +216,23 @@ Popup {
                 }
 
                 contentItem: RowLayout {
-                    spacing: 8
+                    spacing: 10
 
                     Icon {
                         Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        size: 30
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        size: 24
                         source: delegate.iconSource
-                        color: delegate.checked || delegate.hovered
+                        color: delegate.checked
                             ? Theme.color.orange
-                            : Theme.color.neutral8
-                        opacity: delegate.dimmedOpacity
+                            : Theme.color.neutral6
                     }
 
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
-                        spacing: 1
-                        opacity: delegate.dimmedOpacity
+                        spacing: 3
 
                         CoreText {
                             id: nameText
@@ -190,11 +240,10 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.displayName
                             horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 14
-                            bold: true
-                            color: delegate.checked || delegate.hovered
+                            font: Theme.text.menuItem.font
+                            color: delegate.checked
                                 ? Theme.color.orange
-                                : Theme.color.neutral9
+                                : (delegate.hovered ? Theme.color.neutral9 : Theme.color.neutral8)
                             wrap: false
                             elide: Text.ElideRight
 
@@ -212,7 +261,7 @@ Popup {
                                 }
                                 contentItem: CoreText {
                                     text: nameTooltip.text
-                                    color: Theme.color.neutral9
+                                    color: (delegate.hovered ? Theme.color.neutral9 : Theme.color.neutral8)
                                     font.pixelSize: 13
                                     horizontalAlignment: Text.AlignLeft
                                     wrapMode: Text.WordWrap
@@ -226,7 +275,8 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.statusText
                             horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 12
+                            font: delegate.loadState === WalletListModel.Open
+                                ? Theme.text.monoCaption.font : Theme.text.caption.font
                             color: delegate.statusColor
                             wrap: false
                             elide: Text.ElideRight
@@ -234,22 +284,116 @@ Popup {
                         }
                     }
 
-                    IconButton {
-                        id: closeButton
-                        objectName: "walletSelectClose_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
-                        visible: delegate.loadState === WalletListModel.Open
-                        enabled: visible && !walletController.walletLoadInProgress
-                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        Layout.preferredWidth: 24
-                        Layout.preferredHeight: 24
-                        size: 24
-                        iconSource: "image://images/cross-filled"
-                        iconColor: delegate.hovered ? Theme.color.orange : Theme.color.neutral7
-                        hoverColor: Theme.color.orange
-                        activeColor: iconColor
+                    Item {
+                        Layout.preferredWidth: 58
+                        Layout.preferredHeight: 36
 
-                        onClicked: root.closeLoadedWallet(delegate.name)
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: delegate.checked
+                            width: 20
+                            height: 20
+                            radius: width / 2
+                            color: Theme.color.orange
+                            Icon {
+                                anchors.centerIn: parent
+                                size: 14
+                                source: "image://images/check-bold"
+                                color: Theme.color.neutral0
+                            }
+                        }
+
+                        IconButton {
+                            id: actionsButton
+                            objectName: "walletSelectActions_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: delegate.loadState !== WalletListModel.Loading
+                            enabled: visible && !walletController.walletLoadInProgress
+                            size: 24
+                            iconSize: 18
+                            iconSource: "image://images/ellipsis"
+                            iconColor: Theme.color.neutral6
+                            hoverColor: Theme.color.neutral9
+                            Accessible.name: qsTr("Actions for %1").arg(delegate.displayName)
+                            background: Rectangle {
+                                radius: 6
+                                color: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
+                            }
+                            onClicked: actionsMenu.visible ? actionsMenu.close() : actionsMenu.open()
+
+                            ContextMenu {
+                                id: actionsMenu
+                                onVisibleChanged: {
+                                    if (visible) {
+                                        if (root.activeContextMenu && root.activeContextMenu !== actionsMenu) {
+                                            root.activeContextMenu.close()
+                                        }
+                                        root.activeContextMenu = actionsMenu
+                                        listView.cancelFlick()
+                                    } else if (root.activeContextMenu === actionsMenu) {
+                                        root.activeContextMenu = null
+                                    }
+                                }
+                                Component.onDestruction: {
+                                    if (root.activeContextMenu === actionsMenu) root.activeContextMenu = null
+                                }
+                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                                backgroundColor: Theme.color.neutral2
+                                // Close immediately before the owning row can be removed or reordered.
+                                exit: null
+                                objectName: "walletSelectActionsMenu_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                                y: actionsButton.height
+                                x: actionsButton.width - width
+                                ContextMenuButton {
+                                    objectName: "walletSelectOpen_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                                    visible: delegate.loadState === WalletListModel.Closed || delegate.loadState === WalletListModel.LoadError
+                                    text: qsTr("Open wallet")
+                                    iconSource: "image://images/arrow-diagonal-square"
+                                    onTriggered: {
+                                        actionsMenu.close()
+                                        delegate.clicked()
+                                    }
+                                }
+                                ContextMenuButton {
+                                    objectName: "walletSelectSettings_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                                    visible: delegate.loadState === WalletListModel.Open
+                                    text: qsTr("Wallet settings")
+                                    iconSource: "image://images/gear"
+                                    onTriggered: {
+                                        actionsMenu.close()
+                                        root.close()
+                                        root.walletSettingsRequested(delegate.name, delegate.format)
+                                    }
+                                }
+                                ContextMenuButton {
+                                    objectName: "walletSelectClose_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
+                                    visible: delegate.loadState === WalletListModel.Open
+                                    text: qsTr("Close wallet")
+                                    iconSource: "image://images/cross"
+                                    onTriggered: {
+                                        actionsMenu.close()
+                                        root.closeLoadedWallet(delegate.name)
+                                    }
+                                }
+                            }
+                        }
+
+                        BusyIndicator {
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 24
+                            height: 24
+                            running: delegate.loadState === WalletListModel.Loading
+                            visible: running
+                        }
                     }
+                }
+
+                Connections {
+                    target: root
+                    function onAboutToHide() { actionsMenu.close() }
                 }
 
                 onClicked: {
@@ -266,15 +410,18 @@ Popup {
             }
         }
 
-        AddWalletButton {
-            id: addWallet
+        ContextMenuDivider {
+            horizontalInset: 0
+            verticalMargin: 3
+        }
+        ContextMenuButton {
             objectName: "walletSelectAddWalletButton"
+            text: qsTr("Add wallet")
+            textColor: Theme.color.orange
+            hoverTextColor: Theme.color.orange
+            iconSource: "image://images/plus-filled"
             enabled: !walletController.walletLoadInProgress
-
-            Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 220
-            Layout.preferredHeight: 30
-            onClicked: {
+            onTriggered: {
                 root.addWallet()
                 root.close()
             }

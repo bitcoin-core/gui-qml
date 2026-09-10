@@ -425,7 +425,7 @@ void WalletListModelTests::setWalletInfoUpdatesBalanceAndKeySchemeRolesForRowOnl
     QCOMPARE(model.data(model.index(0, 0), WalletListModel::BalanceRole).toString(), QString{"0.00167930"});
     QCOMPARE(model.data(model.index(0, 0), WalletListModel::KeySchemeKindRole).toInt(), 2);
     QCOMPARE(model.data(model.index(1, 0), WalletListModel::BalanceRole).toString(), QString{});
-    QCOMPARE(model.data(model.index(1, 0), WalletListModel::KeySchemeKindRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::KeySchemeKindRole).toInt(), -1);
 
     // No-op when nothing changed.
     model.setWalletInfo("alpha_wallet", 167930, /*keySchemeKind=*/2);
@@ -459,7 +459,7 @@ void WalletListModelTests::listWalletDirPreservesBalanceAndKeySchemeAcrossRebuil
 
     const int beta_row = 1 - alpha_row;
     QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::BalanceRole).toString(), QString{});
-    QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::KeySchemeKindRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::KeySchemeKindRole).toInt(), -1);
 }
 
 void WalletListModelTests::balancesFollowDisplayUnitAcrossWalletRefreshes()

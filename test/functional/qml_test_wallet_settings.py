@@ -171,6 +171,7 @@ def close_wallet_from_selector(gui, wallet_name):
         open_wallet_selector(gui)
     gui.settle()
     deadline = time.time() + 5
+    gui.click(f"walletSelectActions_{sanitize_object_suffix(wallet_name)}")
     object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
     while True:
         try:

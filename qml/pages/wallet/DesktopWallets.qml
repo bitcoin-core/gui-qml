@@ -33,7 +33,7 @@ Page {
         if (!walletController.initialized) {
             return
         }
-        if (walletSelect.opened) {
+        if (walletSelect.visible) {
             walletSelect.close()
             return
         }
@@ -118,8 +118,9 @@ Page {
         id: navBar
         leftItem: WalletBadge {
             objectName: "walletBadge"
-            implicitWidth: 175
-            implicitHeight: 46
+            implicitHeight: 48
+            checked: walletSelect.visible
+            walletType: walletController.selectedWallet.keyScheme
             text: walletController.selectedWallet.displayName
             balance: walletController.selectedWallet.balance
             balanceSatoshi: walletController.selectedWallet.balanceSatoshi
@@ -135,12 +136,17 @@ Page {
             WalletSelect {
                 id: walletSelect
                 model: walletListModel
-                closePolicy: Popup.CloseOnPressOutside
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
+                width: Math.max(360, parent.width)
                 x: 0
-                y: parent.height
+                y: parent.height + 2 + verticalOffset
 
                 onAddWallet: {
                     root.addWallet()
+                }
+                onWalletSettingsRequested: (name, format) => {
+                    walletController.setSelectedWallet(name, format)
+                    root.openSettingsRoute("wallet")
                 }
                 onCloseWalletRequested: (name) => {
                     closeConfirmationPopup.walletName = name
@@ -267,7 +273,7 @@ Page {
             }
         }
         background: Rectangle {
-            color: Theme.color.neutral4
+            color: Theme.color.neutral2
             anchors.bottom: navBar.bottom
             anchors.bottomMargin: 4
             height: 1

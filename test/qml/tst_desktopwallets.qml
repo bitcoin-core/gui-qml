@@ -9,6 +9,7 @@ import "../../qml/pages/wallet"
 TestCase {
     name: "DesktopWallets"
     when: windowShown
+    visible: true
     width: 900
     height: 600
 
@@ -45,19 +46,25 @@ TestCase {
         const popup = findChild(page, "walletSelectPopup")
         const badge = findChild(page, "walletBadge")
 
+        verify(waitForItemPolished(page))
         compare(walletListModel.listWalletDirCalls, 0)
 
-        badge.clicked()
+        mouseClick(badge, badge.width / 2, badge.height / 2)
         compare(walletListModel.listWalletDirCalls, 1)
         tryCompare(popup, "opened", true)
 
-        badge.clicked()
+        mouseClick(badge, badge.width / 2, badge.height / 2)
         compare(walletListModel.listWalletDirCalls, 1)
         tryCompare(popup, "opened", false)
+        tryCompare(popup, "visible", false)
 
-        badge.clicked()
+        mouseClick(badge, badge.width / 2, badge.height / 2)
         compare(walletListModel.listWalletDirCalls, 2)
         tryCompare(popup, "opened", true)
+
+        mouseClick(page, page.width - 10, page.height - 10)
+        tryCompare(popup, "visible", false)
+        compare(walletListModel.listWalletDirCalls, 2)
     }
 
     function test_explicit_open_wallet_selection_refreshes_wallet_list() {
