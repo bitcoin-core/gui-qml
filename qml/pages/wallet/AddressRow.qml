@@ -94,7 +94,7 @@ AbstractButton {
                 font: Theme.text.description.font
                 readOnly: !root.canEditLabel
                 activeFocusOnPress: root.canEditLabel
-                focusPolicy: root.canEditLabel ? Qt.StrongFocus : Qt.NoFocus
+                activeFocusOnTab: root.canEditLabel
                 selectByMouse: root.canEditLabel
                 hoverEnabled: root.canEditLabel && AppMode.isDesktop
                 leftPadding: 8
