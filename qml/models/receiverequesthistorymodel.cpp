@@ -115,7 +115,10 @@ void ReceiveRequestHistoryModel::setEntries(std::vector<QmlRecentRequestEntry>&&
     m_entries = std::move(entries);
     std::sort(m_entries.begin(), m_entries.end(),
               [](const QmlRecentRequestEntry& a, const QmlRecentRequestEntry& b) {
-                  return a.date > b.date;
+                  // Tie-break equal dates on the id so requests created in
+                  // the same second keep a deterministic newest-first order.
+                  if (a.date != b.date) return a.date > b.date;
+                  return a.id > b.id;
               });
     endResetModel();
     Q_EMIT countChanged();
