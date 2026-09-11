@@ -2796,7 +2796,8 @@ public:
         RequestIdRole,
         TimestampRole,
         NetAmountSatRole,
-        OutputIndexRole
+        OutputIndexRole,
+        IsUsedAddressRequestRole
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -2810,6 +2811,16 @@ public:
     QVariant data(const QModelIndex& index, int role) const override
     {
         if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
+        if (index.row() == m_used_request_row) {
+            switch (role) {
+            case IsPendingRequestRole: return true;
+            case IsUsedAddressRequestRole: return true;
+            case TxidRole: return QString{};
+            case RequestIdRole: return QStringLiteral("used-req-1");
+            default: break;
+            }
+        }
+        if (role == IsUsedAddressRequestRole) return false;
         if (index.row() == 0) {
             switch (role) {
             case AddressRole: return QStringLiteral("bcrt1qreceiveaddress");
@@ -2876,6 +2887,7 @@ public:
             {TimestampRole, "timestamp"},
             {NetAmountSatRole, "netAmountSat"},
             {OutputIndexRole, "outputIndex"},
+            {IsUsedAddressRequestRole, "isUsedAddressRequest"},
         };
     }
 
@@ -2917,6 +2929,17 @@ public:
         Q_EMIT countChanged();
     }
 
+    // Marks one row as a used-address payment request (-1 for none), so tests
+    // can cover the paid-request rendering path in the Activity delegate.
+    Q_INVOKABLE void setUsedAddressRequestRowForTest(int row)
+    {
+        if (m_used_request_row == row) return;
+        beginResetModel();
+        m_used_request_row = row;
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
 Q_SIGNALS:
     void countChanged();
 
@@ -2942,6 +2965,7 @@ private:
     }
 
     int m_count{2};
+    int m_used_request_row{-1};
 };
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
@@ -2951,6 +2975,9 @@ class MockActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
+    Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
+    Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
+    Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
@@ -2959,7 +2986,8 @@ public:
         Today,
         ThisWeek,
         ThisMonth,
-        ThisYear
+        ThisYear,
+        CustomRange
     };
     Q_ENUM(DateFilter)
 
@@ -2969,6 +2997,7 @@ public:
         Sent,
         SentToSelf,
         Mined,
+        Other,
         PaymentRequest
     };
     Q_ENUM(TypeFilter)
@@ -3059,6 +3088,55 @@ public:
         Q_EMIT displayUnitChanged();
     }
 
+    qint64 minAmount() const { return m_min_amount; }
+    void setMinAmount(qint64 min_amount)
+    {
+        const qint64 normalized = min_amount < 0 ? -1 : min_amount;
+        if (m_min_amount == normalized) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_min_amount = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+        Q_EMIT minAmountChanged();
+        Q_EMIT countChanged();
+    }
+
+    QDate rangeStart() const { return m_range_start; }
+    QDate rangeEnd() const { return m_range_end; }
+
+    Q_INVOKABLE bool applyCustomRange(const QString& start_iso, const QString& end_iso)
+    {
+        const QDate start = QDate::fromString(start_iso, Qt::ISODate);
+        const QDate end = QDate::fromString(end_iso, Qt::ISODate);
+        if (!start.isValid() || !end.isValid() || start > end) return false;
+
+        const bool range_changed = start != m_range_start || end != m_range_end;
+        const bool filter_changed = m_date_filter != CustomRange;
+        if (!range_changed && !filter_changed) return true;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        beginFilterChange();
+#endif
+        m_range_start = start;
+        m_range_end = end;
+        m_date_filter = CustomRange;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+        endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+        invalidateFilter();
+#endif
+
+        if (range_changed) Q_EMIT rangeChanged();
+        if (filter_changed) Q_EMIT dateFilterChanged();
+        Q_EMIT countChanged();
+        return true;
+    }
+
     int count() const { return rowCount(); }
 
     Q_INVOKABLE bool exportCsv(const QString& path) const
@@ -3082,6 +3160,8 @@ Q_SIGNALS:
     void dateFilterChanged();
     void typeFilterChanged();
     void displayUnitChanged();
+    void minAmountChanged();
+    void rangeChanged();
     void countChanged();
 
 private:
@@ -3089,6 +3169,9 @@ private:
     DateFilter m_date_filter{DateAll};
     TypeFilter m_type_filter{TypeAll};
     int m_display_unit{0};
+    qint64 m_min_amount{-1};
+    QDate m_range_start;
+    QDate m_range_end;
 };
 
 class MockDesktopWindowBehaviorModel : public QObject

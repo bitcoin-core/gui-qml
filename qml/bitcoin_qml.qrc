@@ -63,6 +63,7 @@
         <file>controls/ContextMenuDivider.qml</file>
         <file>controls/ContextMenuPicker.qml</file>
         <file>controls/ContextMenuToggle.qml</file>
+        <file>controls/ActivityCalendar.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/DropdownButton.qml</file>
         <file>controls/CoreCheckBox.qml</file>

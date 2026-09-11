@@ -155,6 +155,74 @@ void ActivityFilterProxyModel::setDisplayUnit(int display_unit)
     Q_EMIT displayUnitChanged();
 }
 
+CAmount ActivityFilterProxyModel::minAmount() const
+{
+    return m_min_amount;
+}
+
+void ActivityFilterProxyModel::setMinAmount(CAmount min_amount)
+{
+    // Anything below zero clears the filter; amounts are always non-negative.
+    const CAmount normalized = min_amount < 0 ? -1 : min_amount;
+    if (m_min_amount == normalized) return;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+    m_min_amount = normalized;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+    invalidateFilter();
+#endif
+    Q_EMIT minAmountChanged();
+    Q_EMIT countChanged();
+}
+
+QDate ActivityFilterProxyModel::rangeStart() const
+{
+    return m_range_start;
+}
+
+QDate ActivityFilterProxyModel::rangeEnd() const
+{
+    return m_range_end;
+}
+
+bool ActivityFilterProxyModel::applyCustomRange(const QString& start_iso, const QString& end_iso)
+{
+    const QDate start = QDate::fromString(start_iso, Qt::ISODate);
+    const QDate end = QDate::fromString(end_iso, Qt::ISODate);
+    // Reject a half-picked or inverted range outright: filtering on one would
+    // silently show nothing, which reads as a broken filter rather than a
+    // rejected input.
+    if (!start.isValid() || !end.isValid() || start > end) return false;
+
+    const bool range_changed = start != m_range_start || end != m_range_end;
+    const bool filter_changed = m_date_filter != CustomRange;
+    if (!range_changed && !filter_changed) return true;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+    m_range_start = start;
+    m_range_end = end;
+    m_date_filter = CustomRange;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
+    invalidateFilter();
+#endif
+
+    // Both dates and the date filter move together, so the view refilters once
+    // instead of passing through the intermediate half-applied ranges two
+    // separate setters would have published.
+    if (range_changed) Q_EMIT rangeChanged();
+    if (filter_changed) Q_EMIT dateFilterChanged();
+    Q_EMIT countChanged();
+    return true;
+}
+
 int ActivityFilterProxyModel::count() const
 {
     return rowCount();
@@ -167,6 +235,14 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     const QModelIndex source_index = sourceModel()->index(source_row, 0, source_parent);
     if (!source_index.isValid()) return false;
 
+    // A payment request whose address already has a real transaction is only
+    // surfaced under the Payment request filter; everywhere else it is hidden so
+    // it does not duplicate that address's real transaction row.
+    if (source_index.data(ActivityListModel::IsUsedAddressRequestRole).toBool()
+        && m_type_filter != PaymentRequest) {
+        return false;
+    }
+
     if (!dateMatches(source_index.data(ActivityListModel::TimestampRole).toLongLong())) {
         return false;
     }
@@ -174,6 +250,15 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     const TypeFilter row_type = filterTypeForIndex(source_index);
     if (m_type_filter != TypeAll && row_type != m_type_filter) {
         return false;
+    }
+
+    if (m_min_amount >= 0) {
+        const CAmount net_amount = source_index.data(ActivityListModel::NetAmountSatRole).toLongLong();
+        // Compare absolute value so a send and a receive of the same size both
+        // pass a threshold, matching the Qt Widgets amount filter.
+        if (qAbs(net_amount) < m_min_amount) {
+            return false;
+        }
     }
 
     const QString search = m_search_text.trimmed();
@@ -214,9 +299,10 @@ ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::filterTypeForInde
         return Mined;
     case Transaction::SendToAddress:
     case Transaction::SendToOther:
+        return Sent;
     case Transaction::Other:
     default:
-        return Sent;
+        return Other;
     }
 }
 
@@ -268,12 +354,26 @@ bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
         start_date = QDate(current_date.year(), 1, 1);
         end_date = start_date.addYears(1);
         break;
+    case CustomRange: {
+        const QDateTime row_time = QDateTime::fromSecsSinceEpoch(timestamp);
+        // startOfDay() instead of midnight: when daylight saving skips
+        // midnight, QDateTime{date, QTime(0, 0)} is invalid and compares
+        // before every valid time, breaking both bounds.
+        if (m_range_start.isValid() && row_time < m_range_start.startOfDay()) {
+            return false;
+        }
+        // The end date is inclusive, so accept the whole of that day.
+        if (m_range_end.isValid() && row_time >= m_range_end.addDays(1).startOfDay()) {
+            return false;
+        }
+        return true;
+    }
     case DateAll:
         return true;
     }
 
-    const QDateTime start_of_range{start_date, QTime(0, 0)};
-    const QDateTime end_of_range{end_date, QTime(0, 0)};
+    const QDateTime start_of_range = start_date.startOfDay();
+    const QDateTime end_of_range = end_date.startOfDay();
     const QDateTime row_time = QDateTime::fromSecsSinceEpoch(timestamp);
     return row_time >= start_of_range && row_time < end_of_range;
 }

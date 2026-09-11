@@ -11,8 +11,11 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QFile>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUrl>
+
+#include <ctime>
 
 namespace {
 struct ActivityRow {
@@ -26,6 +29,7 @@ struct ActivityRow {
     qint64 timestamp{0};
     QString txid;
     bool pending_request{false};
+    bool used_address_request{false};
     qlonglong net_amount_sat{0};
 };
 
@@ -63,6 +67,8 @@ public:
             return row.pending_request ? QString{} : row.txid;
         case ActivityListModel::IsPendingRequestRole:
             return row.pending_request;
+        case ActivityListModel::IsUsedAddressRequestRole:
+            return row.used_address_request;
         case ActivityListModel::NetAmountSatRole:
             return row.net_amount_sat;
         default:
@@ -83,6 +89,7 @@ public:
             {ActivityListModel::TimestampRole, "timestamp"},
             {ActivityListModel::TxIdRole, "txid"},
             {ActivityListModel::IsPendingRequestRole, "isPendingRequest"},
+            {ActivityListModel::IsUsedAddressRequestRole, "isUsedAddressRequest"},
             {ActivityListModel::NetAmountSatRole, "netAmountSat"},
         };
     }
@@ -101,6 +108,15 @@ private:
 qint64 TimestampForLocalDate(const QDate& date)
 {
     return QDateTime(date, QTime(12, 0)).toSecsSinceEpoch();
+}
+
+void TzSet()
+{
+#ifdef Q_OS_WIN
+    _tzset();
+#else
+    tzset();
+#endif
 }
 
 ActivityRow MakeRow(QString label, int type, qint64 timestamp, QString txid = {}, QString address = {})
@@ -136,7 +152,13 @@ class ActivityFilterProxyModelTests : public QObject
 private Q_SLOTS:
     void searchMatchesLabelAddressAndTxid();
     void filtersByDateBuckets();
+    void filtersByCustomDateRange();
+    void customRangeHandlesDstGapDayBoundaries();
+    void rejectsInvalidCustomRange();
+    void appliesCustomRangeWithOneNotification();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
+    void usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter();
+    void filtersByMinimumAmount();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
@@ -242,11 +264,12 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
     QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Received"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Sent);
-    QCOMPARE(proxy.rowCount(), 2);
-    QVERIFY(ContainsLabel(proxy, "Sent"));
-    QVERIFY(ContainsLabel(proxy, "Other"));
-    QVERIFY(!ContainsLabel(proxy, "Self"));
-    QVERIFY(!ContainsLabel(proxy, "Request"));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Sent"});
+
+    proxy.setTypeFilter(ActivityFilterProxyModel::Other);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Other"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::SentToSelf);
     QCOMPARE(proxy.rowCount(), 1);
@@ -259,6 +282,44 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
     proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
     QCOMPARE(proxy.rowCount(), 1);
     QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Request"});
+}
+
+void ActivityFilterProxyModelTests::usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter()
+{
+    // A request whose address already has a real transaction is materialized so
+    // the Payment request filter can surface it, but it must stay hidden in the
+    // default view so it does not duplicate that address's real row.
+    ActivityRow received = MakeRow("Received", Transaction::RecvWithAddress, 30, "tx-received");
+    ActivityRow pending = MakeRow("Pending", Transaction::RecvWithAddress, 20);
+    pending.pending_request = true;
+    ActivityRow used = MakeRow("Used", Transaction::RecvWithAddress, 10);
+    used.pending_request = true;
+    used.used_address_request = true;
+
+    TestActivityListModel source;
+    source.setRows({received, pending, used});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // Default view (all types): the used-address request is hidden.
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Received"));
+    QVERIFY(ContainsLabel(proxy, "Pending"));
+    QVERIFY(!ContainsLabel(proxy, "Used"));
+
+    // Payment request filter: both requests show, the real transaction does not.
+    proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Pending"));
+    QVERIFY(ContainsLabel(proxy, "Used"));
+    QVERIFY(!ContainsLabel(proxy, "Received"));
+
+    // Any other type filter still hides the used-address request.
+    proxy.setTypeFilter(ActivityFilterProxyModel::Received);
+    QCOMPARE(proxy.rowCount(), 1);
+    QVERIFY(ContainsLabel(proxy, "Received"));
+    QVERIFY(!ContainsLabel(proxy, "Used"));
 }
 
 void ActivityFilterProxyModelTests::sortsByTimestampDescending()
@@ -369,6 +430,173 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     QVERIFY(csv.contains("\"true\""));
 
     QVERIFY(!proxy.exportCsv(temp_dir.filePath("missing/activity.csv")));
+}
+
+void ActivityFilterProxyModelTests::filtersByCustomDateRange()
+{
+    const QDate start{2025, 6, 10};
+    const QDate end{2025, 6, 20};
+
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(start.addDays(-1))),
+        MakeRow("On start", Transaction::RecvWithAddress, TimestampForLocalDate(start)),
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+        MakeRow("On end", Transaction::RecvWithAddress, TimestampForLocalDate(end)),
+        MakeRow("After", Transaction::RecvWithAddress, TimestampForLocalDate(end.addDays(1))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QVERIFY(proxy.applyCustomRange(start.toString(Qt::ISODate), end.toString(Qt::ISODate)));
+    QCOMPARE(proxy.dateFilter(), ActivityFilterProxyModel::CustomRange);
+
+    QCOMPARE(proxy.rowCount(), 3);
+    QVERIFY(ContainsLabel(proxy, "On start")); // lower bound inclusive
+    QVERIFY(ContainsLabel(proxy, "Inside"));
+    QVERIFY(ContainsLabel(proxy, "On end"));   // upper bound inclusive (whole day)
+    QVERIFY(!ContainsLabel(proxy, "Before"));
+    QVERIFY(!ContainsLabel(proxy, "After"));
+}
+
+void ActivityFilterProxyModelTests::customRangeHandlesDstGapDayBoundaries()
+{
+    // America/Sao_Paulo entered daylight saving at midnight on 2018-11-04:
+    // clocks jumped from 00:00 to 01:00, so that day has no midnight.
+    // QDateTime{date, QTime(0, 0)} is invalid for it and compares before
+    // every valid time, which silently broke both range boundaries; the
+    // date's startOfDay() is the correct first instant. In a zone without
+    // the gap this degenerates to an ordinary range check and still passes.
+    const QByteArray previous_tz = qgetenv("TZ");
+    qputenv("TZ", "America/Sao_Paulo");
+    TzSet();
+    const auto restore_tz = qScopeGuard([&previous_tz] {
+        if (previous_tz.isEmpty()) {
+            qunsetenv("TZ");
+        } else {
+            qputenv("TZ", previous_tz);
+        }
+        TzSet();
+    });
+
+    const QDate gap_day{2018, 11, 4};
+
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day.addDays(-1))),
+        MakeRow("On gap day", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day)),
+        MakeRow("After", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day.addDays(1))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // A range starting on the gap day must still exclude earlier rows.
+    QVERIFY(proxy.applyCustomRange(gap_day.toString(Qt::ISODate),
+                                   gap_day.addDays(1).toString(Qt::ISODate)));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(!ContainsLabel(proxy, "Before"));
+    QVERIFY(ContainsLabel(proxy, "On gap day"));
+    QVERIFY(ContainsLabel(proxy, "After"));
+
+    // A range whose exclusive upper bound lands on the gap day (inclusive
+    // end date the day before) must not collapse to rejecting every row.
+    QVERIFY(proxy.applyCustomRange(gap_day.addDays(-1).toString(Qt::ISODate),
+                                   gap_day.addDays(-1).toString(Qt::ISODate)));
+    QCOMPARE(proxy.rowCount(), 1);
+    QVERIFY(ContainsLabel(proxy, "Before"));
+}
+
+void ActivityFilterProxyModelTests::rejectsInvalidCustomRange()
+{
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    // An unparseable, empty, or inverted range leaves the model untouched: the
+    // previous filter keeps applying rather than collapsing to an empty list.
+    QVERIFY(!proxy.applyCustomRange("not-a-date", "2025-06-20"));
+    QVERIFY(!proxy.applyCustomRange("2025-06-10", ""));
+    QVERIFY(!proxy.applyCustomRange("2025-06-20", "2025-06-10"));
+
+    QCOMPARE(proxy.dateFilter(), ActivityFilterProxyModel::DateAll);
+    QVERIFY(!proxy.rangeStart().isValid());
+    QVERIFY(!proxy.rangeEnd().isValid());
+    QCOMPARE(proxy.rowCount(), 1);
+
+    // A single-day range is not inverted and is accepted.
+    QVERIFY(proxy.applyCustomRange("2025-06-15", "2025-06-15"));
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void ActivityFilterProxyModelTests::appliesCustomRangeWithOneNotification()
+{
+    TestActivityListModel source;
+    source.setRows({
+        MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
+    });
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    QSignalSpy range_spy(&proxy, &ActivityFilterProxyModel::rangeChanged);
+    QSignalSpy date_filter_spy(&proxy, &ActivityFilterProxyModel::dateFilterChanged);
+    QSignalSpy count_spy(&proxy, &ActivityFilterProxyModel::countChanged);
+
+    // Setting both ends and the date filter together notifies once, not once
+    // per end, so no observer sees a half-applied range.
+    QVERIFY(proxy.applyCustomRange("2025-06-10", "2025-06-20"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // Re-applying the same range is a no-op and stays silent.
+    QVERIFY(proxy.applyCustomRange("2025-06-10", "2025-06-20"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // A rejected range notifies nothing either.
+    QVERIFY(!proxy.applyCustomRange("2025-06-20", "2025-06-10"));
+    QCOMPARE(range_spy.count(), 1);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 1);
+
+    // Moving only the range while the filter is already CustomRange notifies
+    // the range but not the filter.
+    QVERIFY(proxy.applyCustomRange("2025-06-11", "2025-06-21"));
+    QCOMPARE(range_spy.count(), 2);
+    QCOMPARE(date_filter_spy.count(), 1);
+    QCOMPARE(count_spy.count(), 2);
+}
+
+void ActivityFilterProxyModelTests::filtersByMinimumAmount()
+{
+    ActivityRow small = MakeRow("Small", Transaction::RecvWithAddress, 10);
+    small.net_amount_sat = 50'000;
+    ActivityRow big_receive = MakeRow("Big receive", Transaction::RecvWithAddress, 20);
+    big_receive.net_amount_sat = 200'000;
+    ActivityRow big_send = MakeRow("Big send", Transaction::SendToAddress, 30);
+    big_send.net_amount_sat = -200'000;
+
+    TestActivityListModel source;
+    source.setRows({small, big_receive, big_send});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+
+    proxy.setMinAmount(100'000);
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Big receive"));
+    QVERIFY(ContainsLabel(proxy, "Big send")); // absolute value matches the threshold
+    QVERIFY(!ContainsLabel(proxy, "Small"));
+
+    proxy.setMinAmount(-1); // clearing restores every row
+    QCOMPARE(proxy.rowCount(), 3);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

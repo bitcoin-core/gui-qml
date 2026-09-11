@@ -9,7 +9,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import urlparse
 
 from qml_test_harness import dump_qml_tree
@@ -189,10 +189,12 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
 
         gui.click("activityDateFilterButton")
+        gui.wait_for_property("activityDateFilterPopup", "opened", True, timeout_ms=5000)
         checkpoints.checkpoint("date filter menu opened", gui)
         gui.click("activityDateToday")
 
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         checkpoints.checkpoint("type filter menu opened", gui)
         gui.click("activityTypeMined")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
@@ -212,6 +214,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.click("activityExportResultCloseButton")
 
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("Today and Payment request filters applied", gui)
@@ -257,7 +260,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.wait_for_property(
             "activityEmptyStateDescription",
             "text",
-            "Try changing your search, date, or type filters.",
+            "Try changing your search, date, type, or amount filters.",
             timeout_ms=10000,
         )
         checkpoints.checkpoint("filtered-empty Activity state shown", gui)
@@ -271,6 +274,121 @@ def run_test(save_screenshots=False, screenshot_root=None):
         assert type_filter in (0, "TypeAll"), f"Type filter was not reset: {type_filter!r}"
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
         checkpoints.checkpoint("search controls closed and filters reset", gui)
+
+        # Re-open the filter controls to exercise the amount and custom-range
+        # filters from a clean, fully reset state.
+        gui.click("activitySearchToggle")
+        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+
+        # Minimum amount filter. The display unit is sats here, so a 100000 sat
+        # (0.001 BTC) minimum keeps the 50 BTC mined row and drops the 0.0001
+        # BTC (10000 sat) payment request.
+        gui.click("activityAmountFilterButton")
+        gui.wait_for_property("activityAmountFilterPopup", "opened", True, timeout_ms=5000)
+        checkpoints.checkpoint("amount filter menu opened", gui)
+        gui.set_text("activityMinAmountField", "100000")
+        gui.click("activityMinAmountApply")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        checkpoints.checkpoint("minimum amount filter applied", gui)
+
+        min_amount_export_path = os.path.join(harness.tmpdir, "activity-min-amount.csv")
+        min_amount_csv = _export_activity_csv(gui, min_amount_export_path)
+        assert '"Mined"' in min_amount_csv, f"Min-amount export missing mined row: {min_amount_csv!r}"
+        assert '"Payment request"' not in min_amount_csv, f"Min-amount export kept request row: {min_amount_csv!r}"
+        gui.click("activityExportResultCloseButton")
+
+        gui.click("activityAmountFilterButton")
+        gui.wait_for_property("activityAmountFilterPopup", "opened", True, timeout_ms=5000)
+        gui.click("activityMinAmountReset")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        checkpoints.checkpoint("minimum amount filter cleared", gui)
+
+        # Custom date range via the calendar picker. Navigate one month back
+        # and pick a window there; it is entirely in the past, so today's rows
+        # drop out of the list.
+        gui.click("activityDateFilterButton")
+        gui.wait_for_property("activityDateFilterPopup", "opened", True, timeout_ms=5000)
+        gui.click("activityDateCustomRange")
+        checkpoints.checkpoint("custom date range calendar revealed", gui)
+        gui.click("calendarPrev")
+        gui.settle()
+
+        # Read the displayed month back from the calendar instead of predicting
+        # it from Python's clock: the GUI clock decides which month one Prev
+        # step lands on, so deriving the target days from the shown month keeps
+        # them valid even across a month rollover mid-test. calMonth is 0-based.
+        shown_month = date(gui.get_property("activityCalendar", "calYear"),
+                           gui.get_property("activityCalendar", "calMonth") + 1, 1)
+        assert shown_month < date.today().replace(day=1), \
+            f"Calendar did not navigate to a past month: showing {shown_month.isoformat()}"
+        from_day = shown_month.replace(day=10).isoformat()
+        to_day = shown_month.replace(day=20).isoformat()
+        gui.wait_for_object(f"calendarDay_{from_day}", timeout_ms=5000)
+
+        gui.click(f"calendarDay_{from_day}")
+        gui.click(f"calendarDay_{to_day}")
+        gui.click("activityDateRangeApply")
+        gui.wait_for_property("activityFilterProxyModel", "count", 0, timeout_ms=10000)
+        date_filter = gui.get_property("activityFilterProxyModel", "dateFilter")
+        assert date_filter in (6, "CustomRange"), f"Custom range was not applied: {date_filter!r}"
+        checkpoints.checkpoint("past custom range excludes today's rows", gui)
+
+        gui.click("activityDateFilterButton")
+        gui.wait_for_property("activityDateFilterPopup", "opened", True, timeout_ms=5000)
+        gui.click("activityDateRangeReset")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        cleared_date_filter = gui.get_property("activityFilterProxyModel", "dateFilter")
+        assert cleared_date_filter in (0, "DateAll"), f"Custom range reset failed: {cleared_date_filter!r}"
+        checkpoints.checkpoint("custom date range cleared", gui)
+
+        # Issue #726: paying a pending request's address keeps the request under
+        # the Payment request filter as a used-address request, with no reload,
+        # and surfaces the real transaction as its own row in the default view.
+        # Toggle the controls to guarantee a clean, popup-free starting state.
+        gui.click("activitySearchToggle")
+        gui.wait_for_property("activitySearchToggle", "checked", False, timeout_ms=5000)
+        gui.click("activitySearchToggle")
+        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypePaymentRequest")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        checkpoints.checkpoint("pending request shown under Payment request filter", gui)
+
+        # Mine a block to the request address to fulfill the pending request live.
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, payment_request_address])
+
+        # The address now has its own mined transaction row; waiting on it is the
+        # synchronization point for the live fulfillment.
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypeMined")
+        gui.set_text("activitySearchField", payment_request_address)
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
+        checkpoints.checkpoint("request address gained its own mined transaction row", gui)
+
+        # The request itself is still surfaced under the Payment request filter,
+        # now as a used-address request, without a reload. Before the live
+        # fulfillment fix it dropped out of the filter until the wallet reloaded.
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypePaymentRequest")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        used_request_export_path = os.path.join(harness.tmpdir, "activity-used-request.csv")
+        used_request_csv = _export_activity_csv(gui, used_request_export_path)
+        assert '"Payment request"' in used_request_csv, f"Fulfilled request left the Payment request filter: {used_request_csv!r}"
+        assert '"Alice"' in used_request_csv, f"Used-address request missing its label: {used_request_csv!r}"
+        assert f'"{payment_request_address}"' in used_request_csv, f"Used-address request missing its address: {used_request_csv!r}"
+        gui.click("activityExportResultCloseButton")
+        checkpoints.checkpoint("fulfilled request stays a used-address request under the filter", gui)
+
+        # In the default view the request is hidden, so it does not duplicate the
+        # real transaction to its address; only the two mined rows remain.
+        gui.set_text("activitySearchField", "")
+        gui.click("activityTypeFilterButton")
+        gui.click("activityTypeAll")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        checkpoints.checkpoint("used-address request hidden from the default Activity view", gui)
 
         txid, expected_amount = _activity_transaction_row(gui)
         gui.click(f"activityItem_{txid}")
