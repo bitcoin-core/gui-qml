@@ -1034,7 +1034,7 @@ PageStack {
                 bottomPadding: 0
                 color: Theme.color.neutral9
                 placeholderTextColor: Theme.color.neutral7
-                font.family: "BitcoinCoreSans"
+                font.family: Theme.text.family
                 font.pixelSize: 15
                 verticalAlignment: TextInput.AlignVCenter
                 selectByMouse: true
