@@ -273,6 +273,8 @@ TestCase {
         compare(noteField.text, "")
         compare(noteField.placeholderText, "Add a note to self")
         compare(noteField.readOnly, false)
+        compare(noteField.activeFocusOnPress, true)
+        compare(noteField.activeFocusOnTab, true)
         compare(noteFocusBorder.border.color, Theme.color.orange)
         compare(noteField.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(addressLabel.address, "bcrt1qexampleaddress")
@@ -346,6 +348,11 @@ TestCase {
         compare(editRequestCount, 1)
         verify(discardedDraft)
         verify(findObject(row, "addressRowMenuButton") === null)
+
+        row.canEditLabel = false
+        compare(noteField.readOnly, true)
+        compare(noteField.activeFocusOnPress, false)
+        compare(noteField.activeFocusOnTab, false)
     }
 
     function test_addressList_preservesPendingNotesAcrossRefresh() {
