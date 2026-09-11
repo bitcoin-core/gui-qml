@@ -169,6 +169,10 @@ void ActivityListModel::reload()
 {
     beginResetModel();
     m_transactions.clear();
+    // The pending set is rebuilt with the rows; a stale member left behind
+    // would route a later payment through the fulfillment path against
+    // rows that are no longer pending.
+    m_pending_request_addresses.clear();
     refreshWallet();
     endResetModel();
 }
