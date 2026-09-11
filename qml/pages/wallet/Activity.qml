@@ -346,6 +346,8 @@ PageStack {
                         objectName: "activityExportButton"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
+                        //: Accessibility label for the control that exports the Activity list to a CSV file.
+                        Accessible.name: qsTr("Export activity")
                         iconSource: "qrc:/icons/file"
                         iconColor: hovered || pressed ? Theme.color.orange : Theme.color.neutral7
                         activeColor: Theme.color.orange
@@ -369,6 +371,8 @@ PageStack {
                         Layout.preferredHeight: 30
                         checkable: true
                         checked: root.filtersVisible
+                        //: Accessibility label for the control that shows or hides the Activity search and filter row.
+                        Accessible.name: qsTr("Search and filter activity")
                         iconSource: "qrc:/icons/search"
                         iconColor: Theme.color.neutral7
                         activeColor: Theme.color.orange
