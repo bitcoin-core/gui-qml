@@ -353,6 +353,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
 
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("pending request shown under Payment request filter", gui)
@@ -363,6 +364,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         # The address now has its own mined transaction row; waiting on it is the
         # synchronization point for the live fulfillment.
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypeMined")
         gui.set_text("activitySearchField", payment_request_address)
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
@@ -372,6 +374,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         # now as a used-address request, without a reload. Before the live
         # fulfillment fix it dropped out of the filter until the wallet reloaded.
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         used_request_export_path = os.path.join(harness.tmpdir, "activity-used-request.csv")
@@ -386,6 +389,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         # real transaction to its address; only the two mined rows remain.
         gui.set_text("activitySearchField", "")
         gui.click("activityTypeFilterButton")
+        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypeAll")
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
         checkpoints.checkpoint("used-address request hidden from the default Activity view", gui)
