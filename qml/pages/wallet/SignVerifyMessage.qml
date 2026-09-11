@@ -20,6 +20,9 @@ Page {
     property var signVerifyModel: wallet ? wallet.signVerifyMessageModel : null
     property string verifyResultText: ""
     property bool verifyResultSuccess: false
+    property int initialTab: SignVerifyMessage.SignTab
+
+    enum Tabs { SignTab, VerifyTab }
 
     signal back
 
@@ -105,6 +108,7 @@ Page {
                 }
 
                 NavigationTab {
+                    id: verifyTabButton
                     objectName: "verifyMessageTab"
                     text: qsTr("Verify Message")
                     Layout.fillWidth: true
@@ -415,6 +419,14 @@ Page {
                 height: 1
                 color: Theme.color.neutral5
             }
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.initialTab === SignVerifyMessage.VerifyTab) {
+            verifyTabButton.checked = true
+        } else {
+            signTabButton.checked = true
         }
     }
 }

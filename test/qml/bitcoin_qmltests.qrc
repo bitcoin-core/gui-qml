@@ -16,6 +16,7 @@
         <file>tst_createtypeselector.qml</file>
         <file>tst_createwalletwizard.qml</file>
         <file>tst_debuglogoutputview.qml</file>
+        <file>tst_desktopmenuactions.qml</file>
         <file>tst_desktopwallets.qml</file>
         <file>tst_dropdownbutton.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>

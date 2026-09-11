@@ -14,7 +14,10 @@
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
         <file>components/DebugLogOutputView.qml</file>
+        <file>components/DesktopMenuActions.qml</file>
+        <file>components/DesktopNativeMenuBar.qml</file>
         <file>components/MempoolInformationRows.qml</file>
+        <file>components/MenuCommand.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>

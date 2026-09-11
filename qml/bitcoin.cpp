@@ -117,12 +117,9 @@ Q_IMPORT_PLUGIN(QtQuick2WindowPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls1Plugin)
 Q_IMPORT_PLUGIN(QmlFolderListModelPlugin)
 Q_IMPORT_PLUGIN(QmlSettingsPlugin)
-#if QT_VERSION < QT_VERSION_CHECK(6, 5, 0)
-// The AppFolderDialog compatibility type falls back to Qt.labs.platform.
-Q_IMPORT_PLUGIN(QtLabsPlatformPlugin)
-#endif
 Q_IMPORT_PLUGIN(QtQuickLayoutsPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2Plugin)
+Q_IMPORT_PLUGIN(QtLabsPlatformPlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2BasicStylePlugin)
 Q_IMPORT_PLUGIN(QtQuickControls2BasicStyleImplPlugin)
 Q_IMPORT_PLUGIN(QtQuickTemplates2Plugin)

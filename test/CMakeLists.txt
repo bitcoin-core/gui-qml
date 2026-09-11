@@ -114,6 +114,7 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_qml_plugins(bitcoinqml_qmltests)
   target_link_libraries(bitcoinqml_qmltests PRIVATE
+    Qt6::LabsPlatformplugin
     Qt6::qtquickdialogsplugin
   )
   if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)

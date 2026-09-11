@@ -157,6 +157,27 @@ Page {
         pageContainer.push(addressListPage)
     }
 
+    function openWalletPassword(updating) {
+        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        root.selectSection("wallet", true)
+        pageContainer.push(walletPasswordPage, { "updating": updating })
+    }
+
+    function openSignVerifyMessage(initialTab) {
+        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        root.selectSection("wallet", true)
+        pageContainer.push(signVerifyPage, { "initialTab": initialTab })
+    }
+
+    function startWalletBackup() {
+        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        root.selectSection("wallet", true)
+        const walletSettingsPage = pageContainer.currentItem
+        if (walletSettingsPage && typeof walletSettingsPage.startBackup === "function") {
+            walletSettingsPage.startBackup()
+        }
+    }
+
     background: null
     padding: 0
 

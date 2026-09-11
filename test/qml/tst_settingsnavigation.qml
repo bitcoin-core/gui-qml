@@ -355,8 +355,9 @@ TestCase {
         compare(setPasswordRow.title, "Set password")
         setPasswordRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
-        const setPasswordPage = findChild(view, "walletPasswordSettingsPage")
+        const setPasswordPage = view.pageContainer.currentItem
         verify(setPasswordPage !== null)
+        compare(setPasswordPage.objectName, "walletPasswordSettingsPage")
         compare(setPasswordPage.updating, false)
 
         view.selectSection("display")
@@ -373,8 +374,9 @@ TestCase {
         compare(updatePasswordRow.title, "Update password")
         updatePasswordRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
-        const updatePasswordPage = findChild(view, "walletPasswordSettingsPage")
+        const updatePasswordPage = view.pageContainer.currentItem
         verify(updatePasswordPage !== null)
+        compare(updatePasswordPage.objectName, "walletPasswordSettingsPage")
         compare(updatePasswordPage.updating, true)
     }
 

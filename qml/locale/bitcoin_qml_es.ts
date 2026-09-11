@@ -2766,4 +2766,212 @@ Si lo encuentras útil, por favor contribuye.
         <translation type="unfinished">Cerrar ventana</translation>
     </message>
 </context>
+<context>
+    <name>DesktopMenuActions</name>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="27"/>
+        <source>&amp;File</source>
+        <translation type="unfinished">&amp;Archivo</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="28"/>
+        <source>&amp;Edit</source>
+        <translation type="unfinished">&amp;Editar</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="29"/>
+        <source>&amp;View</source>
+        <translation type="unfinished">&amp;Ver</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="30"/>
+        <source>&amp;Window</source>
+        <translation type="unfinished">Ve&amp;ntana</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="31"/>
+        <source>&amp;Help</source>
+        <translation type="unfinished">A&amp;yuda</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="61"/>
+        <source>&amp;Add Wallet…</source>
+        <translation type="unfinished">&amp;Añadir cartera…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="67"/>
+        <source>Close Wallet…</source>
+        <translation type="unfinished">Cerrar cartera…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="73"/>
+        <source>&amp;Backup Wallet…</source>
+        <translation type="unfinished">&amp;Copia de seguridad de la cartera…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="79"/>
+        <source>Open &amp;URI…</source>
+        <translation type="unfinished">Abrir &amp;URI…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="85"/>
+        <source>Sign &amp;message…</source>
+        <translation type="unfinished">Firmar &amp;mensaje…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="91"/>
+        <source>&amp;Verify message…</source>
+        <translation type="unfinished">&amp;Verificar mensaje…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="97"/>
+        <source>&amp;Load PSBT from file…</source>
+        <translation type="unfinished">&amp;Cargar PSBT desde archivo…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="103"/>
+        <source>E&amp;xit</source>
+        <translation type="unfinished">&amp;Salir</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="104"/>
+        <source>Ctrl+Q</source>
+        <translation type="unfinished">Ctrl+Q</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="110"/>
+        <source>&amp;Settings…</source>
+        <translation type="unfinished">&amp;Configuración…</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="116"/>
+        <source>&amp;Undo</source>
+        <translation type="unfinished">&amp;Deshacer</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="122"/>
+        <source>&amp;Redo</source>
+        <translation type="unfinished">&amp;Rehacer</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="128"/>
+        <source>&amp;Copy</source>
+        <translation type="unfinished">&amp;Copiar</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="134"/>
+        <source>&amp;Paste</source>
+        <translation type="unfinished">&amp;Pegar</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="140"/>
+        <source>&amp;Minimize</source>
+        <translation type="unfinished">&amp;Minimizar</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="141"/>
+        <source>Ctrl+M</source>
+        <translation type="unfinished">Ctrl+M</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="146"/>
+        <source>Zoom</source>
+        <translation type="unfinished">Zoom</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="152"/>
+        <source>Main Window</source>
+        <translation type="unfinished">Ventana principal</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="158"/>
+        <source>&amp;Node</source>
+        <translation type="unfinished">&amp;Nodo</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="159"/>
+        <source>Ctrl+0</source>
+        <translation type="unfinished">Ctrl+0</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="164"/>
+        <source>&amp;Activity</source>
+        <translation type="unfinished">&amp;Actividad</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="165"/>
+        <source>Ctrl+1</source>
+        <translation type="unfinished">Ctrl+1</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="171"/>
+        <source>&amp;Send</source>
+        <translation type="unfinished">&amp;Enviar</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="172"/>
+        <source>Ctrl+2</source>
+        <translation type="unfinished">Ctrl+2</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="178"/>
+        <source>&amp;Receive</source>
+        <translation type="unfinished">&amp;Recibir</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="179"/>
+        <source>Ctrl+3</source>
+        <translation type="unfinished">Ctrl+3</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="185"/>
+        <source>Information</source>
+        <translation type="unfinished">Información</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="186"/>
+        <source>Ctrl+I</source>
+        <translation type="unfinished">Ctrl+I</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="191"/>
+        <source>Console</source>
+        <translation type="unfinished">Consola</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="192"/>
+        <source>Ctrl+T</source>
+        <translation type="unfinished">Ctrl+T</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="197"/>
+        <source>Network Traffic</source>
+        <translation type="unfinished">Tráfico de red</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="198"/>
+        <source>Ctrl+N</source>
+        <translation type="unfinished">Ctrl+N</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="203"/>
+        <source>Peers</source>
+        <translation type="unfinished">Pares</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="204"/>
+        <source>Ctrl+P</source>
+        <translation type="unfinished">Ctrl+P</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="210"/>
+        <source>RPC Documentation</source>
+        <translation type="unfinished">Documentación RPC</translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="215"/>
+        <source>&amp;About Bitcoin Core</source>
+        <translation type="unfinished">&amp;Acerca de Bitcoin Core</translation>
+    </message>
+</context>
 </TS>
