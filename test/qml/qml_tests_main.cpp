@@ -2789,14 +2789,14 @@ public:
         StatusRole,
         TypeRole,
         TxidRole,
-        CanBumpRole,
         ReplacesTxidRole,
         ReplacedByTxidRole,
         IsPendingRequestRole,
         RequestIdRole,
         TimestampRole,
         NetAmountSatRole,
-        OutputIndexRole
+        OutputIndexRole,
+        CountsForBalanceRole
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -2820,7 +2820,6 @@ public:
             case StatusRole: return MockTransaction::Confirmed;
             case TypeRole: return MockTransaction::RecvWithAddress;
             case TxidRole: return QStringLiteral("aaaa");
-            case CanBumpRole: return false;
             case ReplacesTxidRole: return QString{};
             case ReplacedByTxidRole: return QString{};
             case IsPendingRequestRole: return false;
@@ -2828,6 +2827,7 @@ public:
             case TimestampRole: return 1767225600;
             case NetAmountSatRole: return 1000000;
             case OutputIndexRole: return 0;
+            case CountsForBalanceRole: return true;
             default: return {};
             }
         }
@@ -2845,7 +2845,6 @@ public:
         case StatusRole: return MockTransaction::Unconfirmed;
         case TypeRole: return MockTransaction::SendToAddress;
         case TxidRole: return QStringLiteral("bbbb");
-        case CanBumpRole: return true;
         case ReplacesTxidRole: return QString{};
         case ReplacedByTxidRole: return QString{};
         case IsPendingRequestRole: return false;
@@ -2853,6 +2852,7 @@ public:
         case TimestampRole: return 1767312000;
         case NetAmountSatRole: return first_send_output ? -200000 : -100000;
         case OutputIndexRole: return first_send_output ? 1 : 2;
+        case CountsForBalanceRole: return false;
         default: return {};
         }
     }
@@ -2868,7 +2868,6 @@ public:
             {StatusRole, "status"},
             {TypeRole, "type"},
             {TxidRole, "txid"},
-            {CanBumpRole, "canBump"},
             {ReplacesTxidRole, "replacesTxid"},
             {ReplacedByTxidRole, "replacedByTxid"},
             {IsPendingRequestRole, "isPendingRequest"},
@@ -2876,6 +2875,7 @@ public:
             {TimestampRole, "timestamp"},
             {NetAmountSatRole, "netAmountSat"},
             {OutputIndexRole, "outputIndex"},
+            {CountsForBalanceRole, "countsForBalance"},
         };
     }
 
@@ -2928,7 +2928,9 @@ private:
         return {
             {"txid", data(model_index, TxidRole)},
             {"outputIndex", data(model_index, OutputIndexRole)},
-            {"canBump", data(model_index, CanBumpRole)},
+            // Bump eligibility is only read when details open, mirroring
+            // the real model, which exposes no per-row role for it.
+            {"canBump", row != 0},
             {"replacedByTxid", data(model_index, ReplacedByTxidRole)},
             {"amount", data(model_index, AmountRole)},
             {"date", data(model_index, DateRole)},

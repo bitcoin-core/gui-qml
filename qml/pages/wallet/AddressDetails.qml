@@ -20,6 +20,7 @@ ColumnLayout {
     property string category
     property string scriptType
     property bool used
+    property bool hasPaymentRequest: false
 
     signal closeRequested
     signal copyAddressRequested
@@ -102,9 +103,14 @@ ColumnLayout {
         }
 
         ContinueButton {
+            objectName: "addressDetailsRequestButton"
             Layout.fillWidth: true
-            text: qsTr("Create payment request")
-            visible: root.category === "single-use" && !root.used
+            text: root.hasPaymentRequest
+                //: Opens the payment request already saved for this address in the editor
+                ? qsTr("Edit payment request")
+                //: Starts a new payment request for this address
+                : qsTr("Create payment request")
+            visible: root.category === "single-use" && (!root.used || root.hasPaymentRequest)
             backgroundColor: Theme.color.orange
             backgroundHoverColor: Theme.color.orangeLight1
             backgroundPressedColor: Theme.color.orangeLight2

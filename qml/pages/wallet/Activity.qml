@@ -440,11 +440,11 @@ PageStack {
                         required property int status
                         required property int type
                         required property string txid
-                        required property bool canBump
                         required property string replacedByTxid
                         required property bool isPendingRequest
                         required property string requestId
                         required property int outputIndex
+                        required property bool countsForBalance
 
                         HoverHandler {
                             cursorShape: Qt.PointingHandCursor
@@ -457,8 +457,10 @@ PageStack {
                                 walletController.selectedWallet.loadPaymentRequestDetail(delegate.requestId)
                                 stackView.push(paymentRequestDetailPage)
                             } else {
-                                var page = stackView.push(detailsPage)
-                                page.showTransaction.connect(stackView.navigateToTransaction)
+                                // Details come from the model's invokable, which
+                                // reads bump eligibility once on open; a row role
+                                // would query the wallet on every delegate paint.
+                                stackView.navigateToTransaction(delegate.txid, delegate.outputIndex)
                             }
                         }
 
@@ -476,10 +478,12 @@ PageStack {
                             transactionType: delegate.type
                             transactionStatus: delegate.status
                             isPendingRequest: delegate.isPendingRequest
+                            countsForBalance: delegate.countsForBalance
                         }
 
                         contentItem: RowLayout {
                             Icon {
+                                objectName: delegate.txid !== "" ? "activityItemIcon_" + delegate.txid : "activityItemIcon_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.margins: 6
                                 source: transactionVisuals.iconSource
@@ -501,16 +505,19 @@ PageStack {
                             }
 
                             CoreText {
+                                objectName: delegate.txid !== "" ? "activityItemDate_" + delegate.txid : "activityItemDate_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.preferredWidth: 110
                                 Layout.margins: 6
                                 wrap: false
-                                text: delegate.date
+                                //: Shown in place of the date for a transaction that has no confirmations yet
+                                text: transactionVisuals.zeroConf ? qsTr("Pending") : delegate.date
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                             }
 
                             CoreText {
+                                objectName: delegate.txid !== "" ? "activityItemAmount_" + delegate.txid : "activityItemAmount_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.preferredWidth: 140
                                 Layout.margins: 6
@@ -519,26 +526,6 @@ PageStack {
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                                 color: transactionVisuals.amountColor
-                            }
-
-                            Component {
-                                id: detailsPage
-                                ActivityDetails {
-                                    txid: delegate.txid
-                                    outputIndex: delegate.outputIndex
-                                    canBump: delegate.canBump
-                                    replacedByTxid: delegate.replacedByTxid
-                                    amount: delegate.amount
-                                    date: delegate.date
-                                    depth: delegate.depth
-                                    type: delegate.type
-                                    status: delegate.status
-                                    address: delegate.address
-                                    label: delegate.label
-                                    paymentRequests: walletController.selectedWallet
-                                        ? walletController.selectedWallet.receiveRequests.matchingEntriesForAddress(delegate.address)
-                                        : []
-                                }
                             }
 
                             Component {

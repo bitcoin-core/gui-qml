@@ -117,6 +117,55 @@ def create_payment_request_from_first_unused_address(gui, expected_address):
     )
 
 
+def commit_payment_request(gui):
+    gui.set_text("requestPaymentAmountInput", "0.25")
+    before = gui.get_property("requestHistoryCount", "count")
+    gui.click("requestPaymentGenerateButton")
+    gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
+
+
+def edit_existing_request_from_address_details(gui, expected_address):
+    """The details action for an address with a saved request edits it in place."""
+    open_address_list_from_settings(gui)
+    gui.wait_for_property("addressListView", "count", lambda count: count > 0, timeout_ms=10000)
+    row_count = gui.get_property("addressListView", "count")
+    for row in range(row_count):
+        if gui.get_list_item_property("addressListView", row, "address") == expected_address:
+            gui.click_list_item("addressListView", row, "addressRowMenuButton")
+            break
+    else:
+        raise AssertionError(f"Expected address {expected_address!r} in address list")
+
+    gui.wait_for_property("addressRowDetailsButton", "visible", True, timeout_ms=5000)
+    gui.click("addressRowDetailsButton")
+    gui.wait_for_property("addressDetailsView", "address", expected_address, timeout_ms=5000)
+    gui.wait_for_property("addressDetailsRequestButton", "visible", True, timeout_ms=5000)
+    button_text = gui.get_text("addressDetailsRequestButton")
+    assert button_text == "Edit payment request", (
+        f"Expected edit action for an address with a saved request, got {button_text!r}"
+    )
+    gui.click("addressDetailsRequestButton")
+    gui.settle()
+
+    # The editor holds the saved request in its update state: the amount is
+    # locked and committing updates in place instead of duplicating.
+    wait_for_text(gui, "requestPaymentLabelInput", ADDRESS_LABEL)
+    generate_text = gui.get_text("requestPaymentGenerateButton")
+    assert "Update payment request" in generate_text, (
+        f"Expected update state for the saved request, got {generate_text!r}"
+    )
+    assert gui.get_property("requestPaymentAmountInput", "enabled") is False, (
+        "The amount of a saved request must not be editable"
+    )
+    before = gui.get_property("requestHistoryCount", "count")
+    gui.click("requestPaymentGenerateButton")
+    gui.settle()
+    after = gui.get_property("requestHistoryCount", "count")
+    assert after == before, (
+        f"Updating a request must not create a duplicate: history went {before} -> {after}"
+    )
+
+
 def run_test():
     harness = WalletFlowHarness("qml_addresses", port_offset=70)
     try:
@@ -127,6 +176,8 @@ def run_test():
         new_address = create_labeled_receive_address(harness)
         open_address_list_from_settings(gui)
         create_payment_request_from_first_unused_address(gui, new_address)
+        commit_payment_request(gui)
+        edit_existing_request_from_address_details(gui, new_address)
         print("Address list receive integration flow passed.")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve GUI context on failures

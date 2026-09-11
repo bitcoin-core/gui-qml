@@ -10,6 +10,7 @@
 #include <wallet/types.h>
 
 #include <QDateTime>
+#include <QLocale>
 
 namespace {
     const int RecommendedNumConfirmations = 6;
@@ -74,16 +75,21 @@ QString Transaction::dateTimeString() const
         return hours == 1 ? tr("1 hour ago") : tr("%1 hours ago").arg(hours);
     }
 
+    // QLocale() is the system locale, which the in-app language setting does
+    // not change; Core's Widgets GUI formats its dates the same way.
     int currentYear = QDate::currentDate().year();
     if (dateTime.date().year() == currentYear) {
-        return dateTime.toString("MMMM d");
+        //: Qt date format pattern for a current-year date; translators may reorder the fields for their locale
+        return QLocale().toString(dateTime, tr("MMMM d"));
     } else {
-        return dateTime.toString("MMMM d, yyyy");
+        //: Qt date format pattern for a date in an earlier year; translators may reorder the fields for their locale
+        return QLocale().toString(dateTime, tr("MMMM d, yyyy"));
     }
 }
 
 void Transaction::updateStatus(const interfaces::WalletTxStatus& wtx, int num_blocks, int64_t block_time)
 {
+    countsForBalance = wtx.is_trusted && !(wtx.blocks_to_maturity > 0);
     depth = wtx.depth_in_main_chain;
     if (type == Generated) {
         if (wtx.blocks_to_maturity > 0)

@@ -49,6 +49,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QThread>
 #include <QVariantList>
 
 #include <algorithm>
@@ -878,6 +879,21 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
         return false;
     }
 
+    // A request already saved for this address is edited, not duplicated:
+    // a second request on the same address would strand one of the rows
+    // once a payment arrives.
+    if (m_receive_requests) {
+        const QVariantList existing = m_receive_requests->matchingEntriesForAddress(address);
+        if (!existing.isEmpty()) {
+            const QString request_id = existing.first().toMap().value(QStringLiteral("requestId")).toString();
+            if (!loadPaymentRequest(request_id)) {
+                return false;
+            }
+            m_current_payment_request->setIsEditing(true);
+            return true;
+        }
+    }
+
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
     m_current_payment_request->setLabel(getAddressLabel(address));
@@ -937,9 +953,20 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     if (!is_update) {
         m_current_payment_request->setCreated(request_entry.date);
     }
+    // A saved request's expected amount is immutable (#847). The editor
+    // disables the field, but the model is the guard: an update keeps the
+    // stored amount no matter what the in-memory request holds.
+    CAmount request_amount{m_current_payment_request->amount()->satoshi()};
+    if (is_update && m_receive_requests) {
+        if (const auto existing = m_receive_requests->entryById(request_id_text)) {
+            request_amount = existing->recipient.amount;
+            m_current_payment_request->amount()->setSatoshi(request_amount);
+        }
+    }
+
     request_entry.recipient.address = m_current_payment_request->address().toStdString();
     request_entry.recipient.label = m_current_payment_request->label().toStdString();
-    request_entry.recipient.amount = m_current_payment_request->amount()->satoshi();
+    request_entry.recipient.amount = request_amount;
     request_entry.recipient.message = m_current_payment_request->message().toStdString();
     request_entry.recipient.noteSelf = m_current_payment_request->noteSelf().toStdString();
 
@@ -1322,8 +1349,17 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(Tr
     if (!m_wallet) {
         return nullptr;
     }
-    return m_wallet->handleTransactionChanged([fn = std::move(fn)](const Txid& txid, ChangeType status) {
-        fn(txid.ToUint256(), status);
+    return m_wallet->handleTransactionChanged([this, fn = std::move(fn)](const Txid& txid, ChangeType status) {
+        const uint256 hash{txid.ToUint256()};
+        if (QThread::currentThread() == thread()) {
+            fn(hash, status);
+            return;
+        }
+        // The core fires this on a node thread, and the subscribing models
+        // (row inserts, moves) may only be touched on the GUI thread, so
+        // queue the delivery there. The Widgets transaction table marshals
+        // this notification the same way.
+        QMetaObject::invokeMethod(this, [fn, hash, status] { fn(hash, status); }, Qt::QueuedConnection);
     });
 }
 

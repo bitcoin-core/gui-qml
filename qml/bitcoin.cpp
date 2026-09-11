@@ -574,6 +574,38 @@ int QmlGuiMain(int argc, char* argv[])
                     wallet_controller->initialize();
                 }
             });
+        // Refresh per-row confirmation status when a new block arrives, the
+        // QML counterpart of the Widgets numBlocksChanged refresh; data()
+        // itself stays a pure read. While blocks are still syncing the
+        // per-tip refresh is skipped (it would run an O(n) wallet sweep per
+        // connected block); one refresh when the sync completes catches the
+        // list up, mirroring the Widgets throttle of tip updates during IBD.
+        // A newly selected wallet is refreshed as well, since only the
+        // selected wallet's list follows the per-block refresh.
+        const auto refresh_activity_statuses = [controller = wallet_controller.get(), &node_model] {
+            WalletQmlModel* wallet = controller->selectedWallet();
+            if (wallet && wallet->activityListModel()) {
+                // Pass the height being refreshed to, so the model can tell a
+                // read taken before the wallet processed that block from one
+                // that is simply up to date.
+                wallet->activityListModel()->refreshStatuses(node_model.blockTipHeight());
+            }
+        };
+        QObject::connect(&node_model, &NodeModel::blockTipHeightChanged,
+                         wallet_controller.get(), [&node_model, refresh_activity_statuses] {
+                             if (node_model.blockSyncActive()) {
+                                 return;
+                             }
+                             refresh_activity_statuses();
+                         });
+        QObject::connect(&node_model, &NodeModel::blockSyncActiveChanged,
+                         wallet_controller.get(), [&node_model, refresh_activity_statuses] {
+                             if (!node_model.blockSyncActive()) {
+                                 refresh_activity_statuses();
+                             }
+                         });
+        QObject::connect(wallet_controller.get(), &WalletQmlController::selectedWalletChanged,
+                         wallet_controller.get(), refresh_activity_statuses);
     }
 #endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);

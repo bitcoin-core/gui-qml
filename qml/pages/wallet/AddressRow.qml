@@ -26,7 +26,16 @@ Item {
     required property bool canCreatePaymentRequest
 
     property alias menu: rowMenu
+    // Resolved when the menu opens rather than bound per row: the lookup walks
+    // the request model, which is work no list delegate should do while
+    // scrolling, and a binding would not see requests saved in the meantime.
+    property bool hasPaymentRequest: false
+    // A single-use address offers the request action while it is unused, and
+    // keeps it afterwards if a saved request is still there to edit.
+    readonly property bool offersPaymentRequestAction:
+        root.category === "single-use" && (!root.isUsed || root.hasPaymentRequest)
 
+    signal menuAboutToOpen(string address)
     signal editLabelRequested(string address, string label)
     signal createPaymentRequestRequested(string address)
     signal detailsRequested(string address, string label, string amount, bool hasAmount, string category, string scriptType, bool used)
@@ -107,6 +116,7 @@ Item {
             const pos = menuButton.mapToItem(Overlay.overlay, menuButton.width, menuButton.height)
             rowMenu.x = Math.max(12, Math.min(pos.x - rowMenu.width, Overlay.overlay.width - rowMenu.width - 12))
             rowMenu.y = Math.max(12, Math.min(pos.y, Overlay.overlay.height - rowMenu.height - 12))
+            root.menuAboutToOpen(root.address)
             rowMenu.open()
         }
     }
@@ -120,8 +130,14 @@ Item {
 
         ContextMenuButton {
             objectName: "addressRowCreatePaymentRequestButton"
-            text: qsTr("Create payment request")
-            visible: root.category === "single-use" && !root.isUsed
+            text: root.hasPaymentRequest
+                //: Opens the payment request already saved for this address in the editor
+                ? qsTr("Edit payment request")
+                //: Starts a new payment request for this address
+                : qsTr("Create payment request")
+            // Matches the address details button, which also keeps the action
+            // for a used address that still has a saved request.
+            visible: root.offersPaymentRequestAction
             enabled: root.address !== ""
             onTriggered: root.createPaymentRequestRequested(root.address)
         }
