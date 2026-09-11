@@ -34,6 +34,9 @@ function(add_windows_deploy_target)
       COMMAND ${CMAKE_STRIP} $<TARGET_FILE:bitcoin-util> -o release/$<TARGET_FILE_NAME:bitcoin-util>
       COMMAND ${CMAKE_STRIP} $<TARGET_FILE:test_bitcoin> -o release/$<TARGET_FILE_NAME:test_bitcoin>
       COMMAND ${CMAKE_COMMAND} -D BIN_DIR=release -D LIBEXEC_DIR=release -P GenerateWindowsInstaller.cmake
+      DEPENDS
+        bitcoin bitcoin-qt bitcoind bitcoin-cli bitcoin-tx bitcoin-wallet bitcoin-util test_bitcoin
+        ${PROJECT_BINARY_DIR}/GenerateWindowsInstaller.cmake
     )
     add_custom_target(deploy DEPENDS ${PROJECT_BINARY_DIR}/bitcoin-win64-setup.exe)
   endif()
@@ -58,17 +61,39 @@ function(add_macos_deploy_target)
       COMMAND ${CMAKE_COMMAND} -E rename ${macos_app}/Contents/MacOS/bin/$<TARGET_FILE_NAME:bitcoin-qt> ${macos_app}/Contents/MacOS/Bitcoin-Qt
       COMMAND ${CMAKE_COMMAND} -E rm -rf ${macos_app}/Contents/MacOS/bin
       COMMAND ${CMAKE_COMMAND} -E rm -rf ${macos_app}/Contents/MacOS/share
+      DEPENDS bitcoin-qt
       VERBATIM
     )
 
     set(macos_zip "bitcoin-macos-app")
     if(CMAKE_HOST_APPLE)
-      add_custom_command(
-        OUTPUT ${PROJECT_BINARY_DIR}/${macos_zip}.zip
-        COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus ${macos_app} -translations-dir=${QT_TRANSLATIONS_DIR} -zip=${macos_zip}
-        DEPENDS ${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Bitcoin-Qt
-        VERBATIM
-      )
+      get_target_property(qt_core_type Qt6::Core TYPE)
+      if(qt_core_type STREQUAL "SHARED_LIBRARY")
+        get_target_property(qt_core_location Qt6::Core LOCATION)
+        get_filename_component(qt_library_dir "${qt_core_location}" DIRECTORY)
+        get_target_property(qt_core_framework Qt6::Core FRAMEWORK)
+        if(qt_core_framework)
+          get_filename_component(qt_library_dir "${qt_library_dir}/../../.." ABSOLUTE)
+        endif()
+        # QML imports and their plugins must be deployed along with the Qt
+        # frameworks. Use the deployment tool from the selected Qt installation.
+        add_custom_command(
+          OUTPUT ${PROJECT_BINARY_DIR}/${macos_zip}.zip
+          COMMAND ${CMAKE_COMMAND} -E rm -rf dist/${macos_app}
+          COMMAND ${CMAKE_COMMAND} -E copy_directory ${macos_app} dist/${macos_app}
+          COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/contrib/macdeploy/deploy_qml.py $<TARGET_FILE:Qt6::macdeployqt> ${qt_library_dir} ${PROJECT_SOURCE_DIR}/src/qml dist/${macos_app}
+          COMMAND ${CMAKE_COMMAND} -E chdir dist ${CMAKE_COMMAND} -E tar cf ../${macos_zip}.zip --format=zip ${macos_app}
+          DEPENDS ${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Bitcoin-Qt ${PROJECT_SOURCE_DIR}/contrib/macdeploy/deploy_qml.py
+          VERBATIM
+        )
+      else()
+        add_custom_command(
+          OUTPUT ${PROJECT_BINARY_DIR}/${macos_zip}.zip
+          COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus ${macos_app} -translations-dir=${QT_TRANSLATIONS_DIR} -zip=${macos_zip}
+          DEPENDS ${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Bitcoin-Qt
+          VERBATIM
+        )
+      endif()
       add_custom_target(deploydir
         DEPENDS ${PROJECT_BINARY_DIR}/${macos_zip}.zip
       )
@@ -96,6 +121,7 @@ function(add_macos_deploy_target)
           OUTPUT ${PROJECT_BINARY_DIR}/dist/${macos_zip}.zip
           WORKING_DIRECTORY dist
           COMMAND ${PROJECT_SOURCE_DIR}/cmake/script/macos_zip.sh ${ZIP_EXECUTABLE} ${macos_zip}.zip
+          DEPENDS ${PROJECT_BINARY_DIR}/dist/${macos_app}/Contents/MacOS/Bitcoin-Qt
           VERBATIM
         )
         add_custom_target(deploy

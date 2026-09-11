@@ -6,6 +6,8 @@
 
 import platform
 
+from test_framework.gui_util import MINIMAL_PLATFORM_STDERR
+
 from test_framework.test_framework import (
     BitcoinTestFramework,
     SkipTest,
@@ -15,7 +17,8 @@ from test_framework.test_framework import (
 class GuiTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
-        self.extra_args = [["-server"]]
+        # This test exercises node startup, so bypass the interactive onboarding.
+        self.extra_args = [["-server", "-qml_onboarded=1"]]
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_gui()
@@ -27,12 +30,15 @@ class GuiTest(BitcoinTestFramework):
             raise SkipTest("bitcoin-gui test not supported on Windows")
 
     def setup_nodes(self):
+        self.extra_args[0].append(f"-test-settings-dir={self.options.tmpdir}/qml-settings")
         self.extra_init = [{"use_gui": True, "ipcbind": True}]
         super().setup_nodes()
 
     def run_test(self):
         self.log.info("Test that bitcoin-gui starts up and can be stopped via RPC")
-        self.stop_node(0)
+        # Qt's minimal platform lacks application fonts and a native tray.
+        # Permit only these warnings; other startup or shutdown errors still fail.
+        self.stop_node(0, expected_stderr=MINIMAL_PLATFORM_STDERR)
 
 
 if __name__ == "__main__":

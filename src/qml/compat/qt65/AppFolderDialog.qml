@@ -1,0 +1,3 @@
+import QtQuick.Dialogs
+
+FolderDialog { }

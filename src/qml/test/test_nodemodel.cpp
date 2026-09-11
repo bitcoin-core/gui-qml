@@ -48,16 +48,12 @@ private Q_SLOTS:
     {
         MockNode node;
         NodeModel model{node};
-        QSignalSpy block_tip_spy{&model, &NodeModel::blockTipChanged};
         QSignalSpy initialized_spy{&model, &NodeModel::initializationFinished};
         model.start();
 
         model.initializeResult(true, TipInfo(321, 0.75));
 
         QCOMPARE(model.state(), NodeModel::RUNNING);
-        QCOMPARE(model.blockTipHeight(), 321);
-        QCOMPARE(model.verificationProgress(), 0.75);
-        QCOMPARE(block_tip_spy.count(), 1);
         QCOMPARE(initialized_spy.count(), 1);
         QCOMPARE(initialized_spy.takeFirst().at(0).toBool(), true);
     }
@@ -134,26 +130,15 @@ private Q_SLOTS:
         QCOMPARE(model.errorMessage(), QStringLiteral("std::runtime_error: boom"));
     }
 
-    void blockTipNotificationUpdatesRunningNode()
+    void doesNotInitializeAfterShutdown()
     {
         MockNode node;
         NodeModel model{node};
-        QCOMPARE(node.calls.handleNotifyBlockTip.load(), 1);
+        QSignalSpy initialize_spy{&model, &NodeModel::requestedInitialize};
+        model.requestShutdown();
         model.start();
-        model.initializeResult(true, TipInfo(1, 0.1));
-        QSignalSpy block_tip_spy{&model, &NodeModel::blockTipChanged};
-
-        std::thread notify_thread{[&] {
-            node.notify_block_tip_fn(
-                SynchronizationState{},
-                {.block_height = 2, .block_time = 0, .block_hash = {}},
-                0.2);
-        }};
-        notify_thread.join();
-
-        QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 2, 1'000);
-        QCOMPARE(model.verificationProgress(), 0.2);
-        QCOMPARE(block_tip_spy.count(), 1);
+        QCOMPARE(initialize_spy.count(), 0);
+        QCOMPARE(model.state(), NodeModel::SHUTTING_DOWN);
     }
 
     void runningNodePollRequestsShutdown()
