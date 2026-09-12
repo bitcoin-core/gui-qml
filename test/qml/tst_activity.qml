@@ -20,6 +20,7 @@ TestCase {
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
         testActivityListModel.setCountForTest(2)
         testActivityListModel.setUsedAddressRequestRowForTest(-1)
+        testActivityListModel.setLabelOverrideForTest("")
         nodeModel.setBlockSyncActiveForTest(false)
         nodeModel.verificationProgress = 1.0
         walletController.openReceiveRequests = 0
@@ -180,6 +181,24 @@ TestCase {
         compare(page.currentItem.txid, "bbbb")
         page.pop()
         tryCompare(page, "depth", 1)
+    }
+
+    function test_details_page_refreshes_when_returning_to_top_of_stack() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+        page.navigateToTransaction("aaaa")
+        tryCompare(page, "depth", 2)
+        compare(page.currentItem.label, "salary")
+
+        // The label changes while another page covers this one (the address
+        // book sync from a request edit does exactly this); popping back
+        // must show the current value, not the snapshot from push time.
+        page.push(activityDetailsComponent, detailsProperties("tx-other"))
+        tryCompare(page, "depth", 3)
+        testActivityListModel.setLabelOverrideForTest("renamed")
+        page.pop()
+        tryCompare(page, "depth", 2)
+        tryCompare(page.currentItem, "label", "renamed")
     }
 
     function test_zero_conf_row_shows_pending_cue() {

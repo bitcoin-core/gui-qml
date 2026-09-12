@@ -34,6 +34,33 @@ Page {
     property var paymentRequests: []
     readonly property int paymentRequestCount: root.paymentRequests ? root.paymentRequests.length : 0
 
+    // The page is pushed with a snapshot of the transaction, and the wallet
+    // tabs keep this stack alive, so anything that changes while another
+    // page covers it (an address book label syncing through a request edit,
+    // a new confirmation) only reaches the model. Re-read the snapshot
+    // whenever the page returns to the top of the stack.
+    StackView.onActivating: root.refreshDetails()
+
+    function refreshDetails() {
+        if (root.txid === "" || !walletController.selectedWallet) return
+        const details = walletController.selectedWallet.activityListModel.transactionDetails(
+            root.txid, root.outputIndex)
+        if (Object.keys(details).length === 0) return
+        root.canBump = details.canBump
+        root.replacedByTxid = details.replacedByTxid
+        root.amount = details.amount
+        root.date = details.date
+        root.depth = details.depth
+        root.type = details.type
+        root.status = details.status
+        root.address = details.address
+        root.label = details.label
+        root.paymentRequests = details.paymentRequests
+        if (details.countsForBalance !== undefined) {
+            root.countsForBalance = details.countsForBalance
+        }
+    }
+
     ActivityTransactionVisuals {
         id: transactionVisuals
         transactionType: root.type

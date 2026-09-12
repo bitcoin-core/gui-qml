@@ -2950,6 +2950,7 @@ public:
     QVariant data(const QModelIndex& index, int role) const override
     {
         if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
+        if (role == LabelRole && !m_label_override.isEmpty()) return m_label_override;
         if (index.row() == m_used_request_row) {
             switch (role) {
             case IsPendingRequestRole: return true;
@@ -3080,6 +3081,14 @@ public:
         Q_EMIT countChanged();
     }
 
+    Q_INVOKABLE void setLabelOverrideForTest(const QString& label)
+    {
+        m_label_override = label;
+        if (rowCount() > 0) {
+            Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {LabelRole});
+        }
+    }
+
 Q_SIGNALS:
     void countChanged();
 
@@ -3108,6 +3117,7 @@ private:
 
     int m_count{2};
     int m_used_request_row{-1};
+    QString m_label_override;
 };
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
