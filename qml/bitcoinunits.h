@@ -8,6 +8,7 @@
 #include <consensus/amount.h>
 
 #include <QString>
+#include <QLocale>
 
 class QmlBitcoinUnits
 {
@@ -27,6 +28,10 @@ public:
 
     static QString format(Unit unit, CAmount amount, bool plussign = false,
                           SeparatorStyle separators = SeparatorStyle::STANDARD);
+    // Localized presentation only. Keep format() for canonical decimal strings
+    // consumed by amount entry, exports, and payment URIs.
+    static QString formatForDisplay(Unit unit, CAmount amount, bool plussign = false,
+                                    const QLocale& locale = QLocale());
     static Unit fromDisplayUnit(int display_unit);
     static QString label(Unit unit);
     static QString displayLabel(Unit unit, CAmount amount);

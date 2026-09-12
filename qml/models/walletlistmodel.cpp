@@ -6,6 +6,8 @@
 
 #include <interfaces/node.h>
 
+#include <qml/bitcoinunits.h>
+
 #include <QSettings>
 
 #include <algorithm>
@@ -43,7 +45,7 @@ void WalletListModel::listWalletDir()
     QList<Item> updated_items;
     for (const auto& [path, format] : m_node.walletLoader().listWalletDir()) {
         const QString name = QString::fromStdString(path);
-        Item item{name, QString::fromStdString(format), true, {}, 0};
+        Item item{name, QString::fromStdString(format), true, {}, -1};
         const auto previous = previous_items.constFind(name);
         if (previous != previous_items.constEnd()) {
             item.balance = previous->balance;
@@ -57,7 +59,7 @@ void WalletListModel::listWalletDir()
             return item.name == wallet_name;
         });
         if (!has_wallet) {
-            Item item{wallet_name, QString(), false, {}, 0};
+            Item item{wallet_name, QString(), false, {}, -1};
             const auto previous = previous_items.constFind(wallet_name);
             if (previous != previous_items.constEnd()) {
                 item.balance = previous->balance;
@@ -141,7 +143,7 @@ void WalletListModel::setWalletLoadState(const QString& name, LoadState state, c
 
     QList<Item> updated_items{m_items};
     if (loaded && m_wallet_dir_loaded && rowForName(name) == -1) {
-        updated_items.append({name, QString(), false, {}, 0});
+        updated_items.append({name, QString(), false, {}, -1});
     } else if (!loaded) {
         updated_items.erase(std::remove_if(updated_items.begin(), updated_items.end(), [&](const Item& item) {
             return item.name == name && !item.from_wallet_dir;
@@ -164,7 +166,16 @@ void WalletListModel::setWalletLoadState(const QString& name, LoadState state, c
     }
 }
 
-void WalletListModel::setWalletInfo(const QString& name, const QString& balance, int keySchemeKind)
+void WalletListModel::setDisplayUnit(int unit)
+{
+    if (m_display_unit == unit) return;
+    m_display_unit = unit;
+    if (!m_items.isEmpty()) {
+        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {BalanceRole});
+    }
+}
+
+void WalletListModel::setWalletInfo(const QString& name, qint64 balance, int keySchemeKind)
 {
     if (name.isEmpty()) {
         return;
@@ -224,7 +235,9 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
     case ErrorMessageRole:
         return (m_load_error.first == item.name) ? m_load_error.second : QString();
     case BalanceRole:
-        return item.balance;
+        return item.balance ? QmlBitcoinUnits::formatForDisplay(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
+    case WalletSectionRole:
+        return m_open_wallet_names.contains(item.name) ? QStringLiteral("open") : QStringLiteral("closed");
     case KeySchemeKindRole:
         return item.keySchemeKind;
     default:
@@ -242,6 +255,7 @@ QHash<int, QByteArray> WalletListModel::roleNames() const
     roles[ErrorMessageRole] = "errorMessage";
     roles[BalanceRole] = "balance";
     roles[KeySchemeKindRole] = "keySchemeKind";
+    roles[WalletSectionRole] = "walletSection";
     return roles;
 }
 
@@ -299,7 +313,7 @@ void WalletListModel::updateLoadStateForAllRows()
 
     const QModelIndex first = index(0, 0);
     const QModelIndex last = index(rowCount() - 1, 0);
-    Q_EMIT dataChanged(first, last, {LoadStateRole, ErrorMessageRole});
+    Q_EMIT dataChanged(first, last, {LoadStateRole, ErrorMessageRole, WalletSectionRole});
 }
 
 void WalletListModel::emitTransientStateChanged()

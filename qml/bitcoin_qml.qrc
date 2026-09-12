@@ -184,6 +184,7 @@
     <qresource prefix="/icons">
         <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
         <file alias="alert-filled">res/icons/alert-filled.png</file>
+        <file alias="arrow-diagonal-square">res/icons/arrow-diagonal-square.png</file>
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
@@ -196,6 +197,7 @@
         <file alias="caret-down-medium-filled">res/icons/caret-down-medium-filled.png</file>
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
+        <file alias="check-bold">res/icons/check-bold.png</file>
         <file alias="check">res/icons/check.png</file>
         <file alias="copy">res/icons/copy.png</file>
         <file alias="circle-file">res/icons/circle-file.png</file>

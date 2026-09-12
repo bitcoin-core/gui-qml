@@ -186,7 +186,7 @@ def case_selector_loads_closed_wallet(harness, checkpoints):
         f"Expected loadState=Closed ({LOAD_STATE_CLOSED}) before click, got {closed_state}"
     )
     closed_text = gui.get_text(status_object)
-    assert "Closed" in closed_text, f"Expected 'Closed' status, got {closed_text!r}"
+    assert not closed_text, f"Expected no status for a closed wallet, got {closed_text!r}"
     # The selector popup must be open before the click — confirms our test setup.
     assert gui.get_property("walletSelectPopup", "opened") is True
     checkpoints.checkpoint("closed wallet listed in selector", gui)
@@ -207,7 +207,7 @@ def case_selector_loads_closed_wallet(harness, checkpoints):
     )
     checkpoints.checkpoint("badge reflects newly loaded wallet", gui)
 
-    # Reopen the selector — the wallet now reports Open with a balance prefix.
+    # Reopen the selector — the wallet now reports Open with a balance and unit.
     open_wallet_selector(gui)
     gui.settle()
     open_state = gui.get_property(row_object, "loadState")
@@ -215,8 +215,8 @@ def case_selector_loads_closed_wallet(harness, checkpoints):
         f"Expected loadState=Open ({LOAD_STATE_OPEN}) after load, got {open_state}"
     )
     open_text = gui.get_text(status_object)
-    assert open_text.startswith("₿"), (
-        f"Expected status line to start with '₿ <balance>' once loaded, got {open_text!r}"
+    assert open_text.startswith("₿ "), (
+        f"Expected status line to start with '₿ ' once loaded, got {open_text!r}"
     )
     checkpoints.checkpoint("loaded wallet shows balance in selector", gui)
 
@@ -311,7 +311,7 @@ def case_selector_skips_load_for_already_open_wallet(harness, checkpoints):
     process = start_node(harness.bitcoind_binary, harness.gui_datadir, harness.gui_rpc_port)
     try:
         for name in (wallet_a, wallet_b):
-            rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": name})
+            rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": name, "disable_private_keys": name == wallet_b})
     finally:
         stop_node(process, harness.gui_rpc_port)
     checkpoints.checkpoint("two managed wallets prepared")
@@ -347,6 +347,40 @@ def case_selector_skips_load_for_already_open_wallet(harness, checkpoints):
     assert gui.get_property(row_a, "loadState") == LOAD_STATE_OPEN
     loaded = rpc_call(harness.gui_rpc_port, "listwallets")
     assert set(loaded) == {wallet_a, wallet_b}, f"Unexpected open set: {loaded}"
+
+    # Actions target their own row without selecting it until Settings is chosen.
+    suffix_b = sanitize_object_suffix(wallet_b)
+    gui.click(f"walletSelectActions_{suffix_b}")
+    gui.wait_for_object(f"walletSelectSettings_{suffix_b}", timeout_ms=5000)
+    assert gui.get_property("walletBadge", "text") == wallet_a
+    gui.click(f"walletSelectSettings_{suffix_b}")
+    gui.wait_for_property("walletBadge", "text", wallet_b, timeout_ms=5000)
+    gui.wait_for_property("desktopWalletSettingsTabButton", "checked", True, timeout_ms=5000)
+    checkpoints.checkpoint("row actions open the correct wallet settings", gui)
+
+    open_wallet_selector(gui)
+    gui.click(f"walletSelectActions_{suffix_b}")
+    gui.click(f"walletSelectClose_{suffix_b}")
+    gui.wait_for_property("walletCloseConfirmationPopup", "opened", True, timeout_ms=5000)
+    assert set(rpc_call(harness.gui_rpc_port, "listwallets")) == {wallet_a, wallet_b}
+    gui.click("walletCloseConfirmationCancelButton")
+    assert set(rpc_call(harness.gui_rpc_port, "listwallets")) == {wallet_a, wallet_b}
+
+    open_wallet_selector(gui)
+    gui.click(f"walletSelectActions_{suffix_b}")
+    gui.click(f"walletSelectClose_{suffix_b}")
+    gui.wait_for_property("walletCloseConfirmationPopup", "opened", True, timeout_ms=5000)
+    gui.click("walletCloseConfirmationConfirmButton")
+    gui.wait_for_property("walletBadge", "text", wallet_a, timeout_ms=5000)
+    assert rpc_call(harness.gui_rpc_port, "listwallets") == [wallet_a]
+    checkpoints.checkpoint("selected wallet unloads only after confirmation", gui)
+    open_wallet_selector(gui)
+    row_b = f"walletSelectItem_{suffix_b}"
+    assert gui.get_property(row_b, "loadState") == LOAD_STATE_CLOSED
+    assert gui.get_property(row_b, "iconSource") == "image://images/wallet"
+    gui.wait_for_property(f"walletSelectActionsMenu_{suffix_b}", "visible", False, timeout_ms=5000)
+    checkpoints.checkpoint("closed wallet uses generic wallet icon", gui)
+
 
 
 def run_case(case_name, port_offset, case_body, save_screenshots=False, screenshot_root=None):

@@ -865,6 +865,14 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
 
 public:
+    enum class KeyScheme {
+        SingleKey = 0,
+        WatchOnly,
+        MultiKey,
+        ExternalSigner,
+    };
+    Q_ENUM(KeyScheme)
+
     QString m_name{QStringLiteral("testwallet")};
     QString m_balance{QStringLiteral("1.00000000 BTC")};
     QObject* m_activity_list_model{nullptr};
@@ -2589,6 +2597,7 @@ public:
         ErrorMessageRole,
         BalanceRole,
         KeySchemeKindRole,
+        WalletSectionRole,
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -2606,6 +2615,7 @@ public:
         if (role == LoadStateRole) return m_wallet_load_states.at(index.row());
         if (role == ErrorMessageRole) return QString{};
         if (role == BalanceRole) return QString{};
+        if (role == WalletSectionRole) return m_wallet_load_states.at(index.row()) == 1 ? QStringLiteral("open") : QStringLiteral("closed");
         if (role == KeySchemeKindRole) return 0;
         return {};
     }
@@ -2620,6 +2630,7 @@ public:
             {ErrorMessageRole, "errorMessage"},
             {BalanceRole, "balance"},
             {KeySchemeKindRole, "keySchemeKind"},
+            {WalletSectionRole, "walletSection"},
         };
     }
 
@@ -2653,7 +2664,7 @@ public:
         if (row < 0 || m_wallet_load_states.at(row) == state) return;
         m_wallet_load_states[row] = state;
         const QModelIndex changed_index = index(row, 0);
-        Q_EMIT dataChanged(changed_index, changed_index, {LoadStateRole});
+        Q_EMIT dataChanged(changed_index, changed_index, {LoadStateRole, WalletSectionRole});
     }
 
 Q_SIGNALS:
