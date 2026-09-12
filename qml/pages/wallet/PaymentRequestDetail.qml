@@ -140,7 +140,8 @@ Page {
 
                 DetailEditRow {
                     visible: root.request !== null && root.request.label !== ""
-                    label: qsTr("Your name")
+                    //: The request's label: shared with the payer and kept as the address book label.
+                    label: qsTr("Label")
                     value: root.request ? root.request.label : ""
                     onEditClicked: root.editRequest()
                 }

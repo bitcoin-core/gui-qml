@@ -87,7 +87,8 @@ AbstractButton {
                 implicitHeight: 30
                 text: root.pendingLabel
                 placeholderText: root.canEditLabel
-                    ? qsTr("Add a note to self")
+                    //: Placeholder shown when an address has no label yet.
+                    ? qsTr("Add label...")
                     : qsTr("Change address")
                 placeholderTextColor: Theme.color.neutral6
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7

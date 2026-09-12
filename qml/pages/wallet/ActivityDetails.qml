@@ -204,7 +204,8 @@ Page {
                 id: labelTextInput
                 Layout.fillWidth: true
                 Layout.bottomMargin: 20
-                labelText: qsTr("Note to self")
+                //: The transaction's label from the address book.
+                labelText: qsTr("Label")
                 visible: root.label != ""
                 enabled: false
                 text: root.label

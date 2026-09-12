@@ -184,6 +184,34 @@ TestCase {
         verify(nameInput.enabled)
     }
 
+    function test_request_field_names_and_visibility_hints() {
+        const page = createTemporaryObject(requestPaymentComponent, this)
+        verify(page !== null)
+        page.request = testPaymentRequest
+
+        // One name for the one synced datum: the payer-visible label. The
+        // visibility distinction sits behind a small info button per field.
+        const labelField = findChild(page, "requestPaymentLabelInput")
+        verify(labelField !== null)
+        compare(labelField.labelText, "Label")
+        compare(labelField.hintText, "Visible to the payer and saved as this address's label.")
+
+        const messageField = findChild(page, "requestPaymentMessageInput")
+        verify(messageField !== null)
+        compare(messageField.hintText, "Visible to the payer.")
+
+        const noteField = findChild(page, "requestPaymentNoteSelfInput")
+        verify(noteField !== null)
+        compare(noteField.hintText, "Only you can see this.")
+
+        // The info buttons exist and announce their hint to assistive tech.
+        const labelHintButton = findChild(page, "requestPaymentLabelHint")
+        verify(labelHintButton !== null)
+        compare(labelHintButton.Accessible.name, labelField.hintText)
+        verify(findChild(page, "requestPaymentMessageHint") !== null)
+        verify(findChild(page, "requestPaymentNoteSelfHint") !== null)
+    }
+
     Component {
         id: paymentRequestDetailComponent
 

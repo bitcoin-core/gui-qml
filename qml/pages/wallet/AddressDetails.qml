@@ -99,11 +99,13 @@ ColumnLayout {
             objectName: "addressDetailsNoteRow"
             visible: root.canEditLabel
             Layout.fillWidth: true
-            title: qsTr("Note")
+            //: The address book label of this address, shared with a payment request as its label.
+            title: qsTr("Label")
             fieldObjectName: "addressDetailsNoteField"
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
-            placeholderText: qsTr("Add a note to self")
+            //: Placeholder shown when an address has no label yet.
+            placeholderText: qsTr("Add label...")
             enabled: root.canEditLabel
             readOnly: !root.canEditLabel
             errorText: root.noteErrorText

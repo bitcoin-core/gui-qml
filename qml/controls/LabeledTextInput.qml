@@ -21,6 +21,11 @@ Item {
     property alias inputActiveFocus: input.activeFocus
     property bool interceptPaste: false
     property string paymentUriRestoreText: ""
+    // Optional field explanation, offered behind a small info button next to
+    // the label (tooltip on hover, press on touch). Only shown while the
+    // field is editable, where the explanation matters.
+    property string hintText: ""
+    property alias hintButtonObjectName: hintButton.objectName
 
     signal iconClicked
     signal textEdited
@@ -74,6 +79,40 @@ Item {
         lineHeightMode: Text.FixedHeight
     }
 
+    IconButton {
+        id: hintButton
+        visible: root.hintText.length > 0 && input.enabled
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: iconContainer.left
+        iconSource: "image://images/info-filled"
+        iconColor: hovered || pressed ? Theme.color.neutral9 : Theme.color.neutral7
+        size: 24
+        iconSize: 16
+        Accessible.name: root.hintText
+
+        ToolTip {
+            id: hintTooltip
+            text: root.hintText
+            visible: hintButton.hovered || hintButton.pressed
+            delay: 100
+            padding: 8
+            background: Rectangle {
+                color: Theme.color.neutral0
+                border.color: Theme.color.neutral4
+                border.width: 1
+                radius: 5
+            }
+            contentItem: CoreText {
+                text: hintTooltip.text
+                color: Theme.color.neutral9
+                font.pixelSize: 13
+                horizontalAlignment: Text.AlignLeft
+                wrapMode: Text.WordWrap
+                width: Math.min(implicitWidth, 260)
+            }
+        }
+    }
+
     TextField {
         id: input
         property bool syncingFromModel: false
@@ -95,7 +134,7 @@ Item {
         }
 
         anchors.left: label.right
-        anchors.right: iconContainer.left
+        anchors.right: hintButton.visible ? hintButton.left : iconContainer.left
         anchors.verticalCenter: parent.verticalCenter
         leftPadding: 0
         font: Theme.text.body.font

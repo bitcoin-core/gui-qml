@@ -25,7 +25,8 @@ ContextMenu {
     dim: false
 
     ContextMenuButton {
-        text: qsTr("Add name")
+        //: Menu entry that opens the request editor on its label field.
+        text: qsTr("Add label")
         visible: !root.hasLabel
         onTriggered: root.addName()
     }

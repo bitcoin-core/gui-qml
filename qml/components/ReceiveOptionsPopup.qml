@@ -30,7 +30,8 @@ ContextMenu {
     ContextMenuToggle {
         id: nameToggle
         objectName: "receiveOptionsNameToggle"
-        text: qsTr("Name")
+        //: Toggle for the request label field: shared with the payer and kept as the address book label.
+        text: qsTr("Label")
         checked: true
     }
 
