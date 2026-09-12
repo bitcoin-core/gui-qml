@@ -21,6 +21,7 @@ class PeerStatsUtilTests : public QObject
 private Q_SLOTS:
     void connectionType_toQString();
     void network_toQString();
+    void transport_toQString();
     void formatDuration();
     void formatPeerAge();
     void formatServices();
@@ -43,6 +44,13 @@ void PeerStatsUtilTests::network_toQString()
     QCOMPARE(PeerStatsUtil::NetworkToQString(NET_IPV6), QString("IPv6"));
     QCOMPARE(PeerStatsUtil::NetworkToQString(NET_ONION), QString("Onion"));
     QCOMPARE(PeerStatsUtil::NetworkToQString(NET_I2P), QString("I2P"));
+}
+
+void PeerStatsUtilTests::transport_toQString()
+{
+    QCOMPARE(PeerStatsUtil::TransportToQString(TransportProtocolType::DETECTING), QString("detecting"));
+    QCOMPARE(PeerStatsUtil::TransportToQString(TransportProtocolType::V1), QString("v1"));
+    QCOMPARE(PeerStatsUtil::TransportToQString(TransportProtocolType::V2), QString("v2"));
 }
 
 void PeerStatsUtilTests::formatDuration()

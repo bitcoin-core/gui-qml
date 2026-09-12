@@ -88,12 +88,18 @@ class MockPeerDetailsModel : public QObject
     Q_PROPERTY(QString address MEMBER m_address CONSTANT)
     Q_PROPERTY(QString addressLocal MEMBER m_address_local CONSTANT)
     Q_PROPERTY(QString type MEMBER m_type CONSTANT)
+    Q_PROPERTY(QString network MEMBER m_network CONSTANT)
+    Q_PROPERTY(QString transport MEMBER m_transport CONSTANT)
+    Q_PROPERTY(QString sessionId MEMBER m_session_id CONSTANT)
     Q_PROPERTY(QString permission MEMBER m_permission CONSTANT)
     Q_PROPERTY(QString version MEMBER m_version CONSTANT)
     Q_PROPERTY(QString userAgent MEMBER m_user_agent CONSTANT)
     Q_PROPERTY(QString services MEMBER m_services CONSTANT)
     Q_PROPERTY(bool transactionRelay MEMBER m_transaction_relay CONSTANT)
     Q_PROPERTY(bool addressRelay MEMBER m_address_relay CONSTANT)
+    Q_PROPERTY(bool highBandwidth MEMBER m_high_bandwidth CONSTANT)
+    Q_PROPERTY(QString addressesProcessed MEMBER m_addresses_processed CONSTANT)
+    Q_PROPERTY(QString addressesRateLimited MEMBER m_addresses_rate_limited CONSTANT)
     Q_PROPERTY(QString mappedAS MEMBER m_mapped_as CONSTANT)
     Q_PROPERTY(QString startingHeight MEMBER m_starting_height CONSTANT)
     Q_PROPERTY(QString syncedHeaders MEMBER m_synced_headers CONSTANT)
@@ -115,12 +121,18 @@ public:
     QString m_address{QStringLiteral("127.0.0.1:8333")};
     QString m_address_local{QStringLiteral("127.0.0.1:18444")};
     QString m_type{QStringLiteral("Outbound Full Relay")};
+    QString m_network{QStringLiteral("IPv4")};
+    QString m_transport{QStringLiteral("v2")};
+    QString m_session_id{QStringLiteral("043604a60a54b3f5")};
     QString m_permission{QStringLiteral("N/A")};
     QString m_version{QStringLiteral("70016")};
     QString m_user_agent{QStringLiteral("/Satoshi:test/")};
     QString m_services{QStringLiteral("NETWORK|WITNESS")};
     bool m_transaction_relay{true};
     bool m_address_relay{false};
+    bool m_high_bandwidth{true};
+    QString m_addresses_processed{QStringLiteral("1076")};
+    QString m_addresses_rate_limited{QStringLiteral("0")};
     QString m_mapped_as{QStringLiteral("N/A")};
     QString m_starting_height{QStringLiteral("100")};
     QString m_synced_headers{QStringLiteral("200")};
@@ -2448,8 +2460,27 @@ class MockPeerListModelProxy : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
+    Q_PROPERTY(bool sortAscending MEMBER m_sort_ascending NOTIFY sortAscendingChanged)
+    Q_PROPERTY(QString searchText MEMBER m_search_text NOTIFY searchTextChanged)
+    Q_PROPERTY(QStringList directionFilters MEMBER m_direction_filters NOTIFY directionFiltersChanged)
+    Q_PROPERTY(QStringList connectionTypeFilters MEMBER m_connection_type_filters NOTIFY connectionTypeFiltersChanged)
+    Q_PROPERTY(QStringList networkFilters MEMBER m_network_filters NOTIFY networkFiltersChanged)
+    Q_PROPERTY(QStringList transportFilters MEMBER m_transport_filters NOTIFY transportFiltersChanged)
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
+    enum Roles {
+        NodeIdRole = Qt::UserRole,
+        AddressRole,
+        SubversionRole,
+        DirectionRole,
+        ConnectionTypeRole,
+        NetworkRole,
+        TransportRole,
+        SentRole,
+        ReceivedRole,
+    };
+
     QString sortBy() const { return m_sort_by; }
     void setSortBy(const QString& value)
     {
@@ -2461,22 +2492,84 @@ public:
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
     {
         Q_UNUSED(parent);
-        return 0;
+        return m_peer_count;
     }
 
     QVariant data(const QModelIndex& index, int role) const override
     {
-        Q_UNUSED(index);
-        Q_UNUSED(role);
-        return {};
+        if (!index.isValid() || index.row() < 0 || index.row() >= m_peer_count) return {};
+        switch (role) {
+        case NodeIdRole: return index.row();
+        case AddressRole: return QStringLiteral("127.0.0.1:8333");
+        case SubversionRole: return QStringLiteral("/Satoshi:test/");
+        case DirectionRole: return QStringLiteral("Outbound");
+        case ConnectionTypeRole: return QStringLiteral("Full relay");
+        case NetworkRole: return QStringLiteral("IPv4");
+        case TransportRole: return QStringLiteral("v2");
+        case SentRole: return QStringLiteral("1 kB");
+        case ReceivedRole: return QStringLiteral("2 kB");
+        default: return {};
+        }
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {
+            {NodeIdRole, "nodeId"},
+            {AddressRole, "address"},
+            {SubversionRole, "subversion"},
+            {DirectionRole, "direction"},
+            {ConnectionTypeRole, "connectionType"},
+            {NetworkRole, "network"},
+            {TransportRole, "transport"},
+            {SentRole, "sent"},
+            {ReceivedRole, "received"},
+        };
+    }
+
+    Q_INVOKABLE void setPeerCountForTest(int count)
+    {
+        if (m_peer_count == count) return;
+        beginResetModel();
+        m_peer_count = std::max(0, count);
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
+    Q_INVOKABLE QObject* peerDetailsAt(int row) const
+    {
+        return row >= 0 && row < m_peer_count ? m_peer_details : nullptr;
+    }
+
+    void setPeerDetailsForTest(QObject* peer_details) { m_peer_details = peer_details; }
+
+    Q_INVOKABLE int indexOfNodeId(qint64 node_id) const
+    {
+        Q_UNUSED(node_id);
+        return -1;
     }
 
 Q_SIGNALS:
     void sortByChanged(const QString& roleName);
+    void sortAscendingChanged();
+    void searchTextChanged();
+    void directionFiltersChanged();
+    void connectionTypeFiltersChanged();
+    void networkFiltersChanged();
+    void transportFiltersChanged();
+    void countChanged();
     void dataChanged(int startIndex, int endIndex);
 
 private:
+    int m_peer_count{0};
+    QObject* m_peer_details{nullptr};
     QString m_sort_by{QStringLiteral("nodeId")};
+    bool m_sort_ascending{true};
+    QString m_search_text;
+    QStringList m_direction_filters;
+    QStringList m_connection_type_filters;
+    QStringList m_network_filters;
+    QStringList m_transport_filters;
 };
 
 class MockBanListModel : public QAbstractListModel
@@ -3480,6 +3573,8 @@ public Q_SLOTS:
         static MockPeerListModelProxy peer_list_model_proxy;
         static MockBanListModel ban_list_model;
         static MockPeerDetailsModel peer_details_model;
+        QQmlEngine::setObjectOwnership(&peer_details_model, QQmlEngine::CppOwnership);
+        peer_list_model_proxy.setPeerDetailsForTest(&peer_details_model);
         static MockWalletQmlModelTransaction wallet_transaction;
         static MockPaymentRequest payment_request;
         static MockSendRecipient send_recipient;

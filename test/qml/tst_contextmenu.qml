@@ -29,6 +29,17 @@ TestCase {
     }
 
     Component {
+        id: titledMenuComponent
+
+        ContextMenu {
+            x: 20
+            y: 20
+            title: "Section"
+            ContextMenuButton { text: "Action" }
+        }
+    }
+
+    Component {
         id: menuWithButtonComponent
 
         ContextMenu {
@@ -88,6 +99,13 @@ TestCase {
         const menu = openMenu(emptyMenuComponent)
         compare(menu.implicitWidth, menu.minMenuWidth)
         compare(menu.background.color, Theme.color.neutral1)
+    }
+
+    function test_section_title_uses_bold_caption_typography() {
+        const menu = openMenu(titledMenuComponent)
+        compare(menu.titleItem.font.pixelSize, Theme.text.captionStrong.pixelSize)
+        compare(menu.titleItem.font.styleName, "Semi Bold")
+        compare(menu.titleItem.lineHeight, Theme.text.captionStrong.lineHeight)
     }
 
     function test_escape_closes_focused_menu() {

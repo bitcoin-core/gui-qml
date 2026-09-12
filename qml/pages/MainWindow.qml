@@ -507,29 +507,11 @@ ApplicationWindow {
             }
             Component {
                 id: peersPage
-                Peers {
+                PeersView {
                     onBack: {
                         nodeStack.pop()
                         peerTableModel.stopAutoRefresh()
                     }
-                    onPeerSelected: (peerDetails) => {
-                        nodeStack.push(peerDetailsPage, {"details": peerDetails})
-                    }
-                    onBannedPeers: {
-                        nodeStack.push(bannedPeersPage)
-                    }
-                }
-            }
-            Component {
-                id: peerDetailsPage
-                PeerDetails {
-                    onBack: nodeStack.pop()
-                }
-            }
-            Component {
-                id: bannedPeersPage
-                BannedPeers {
-                    onBack: nodeStack.pop()
                 }
             }
         }

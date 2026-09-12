@@ -5,6 +5,7 @@
         <file>components/AddressLabel.qml</file>
         <file>components/AlertAction.qml</file>
         <file>components/AlertPopup.qml</file>
+        <file>components/BannedPeersPopup.qml</file>
         <file>components/BitcoinAddressDisplayField.qml</file>
         <file>components/BitcoinAddressInputField.qml</file>
         <file>components/BitcoinAmountDisplayField.qml</file>
@@ -48,6 +49,7 @@
         <file>components/TotalBytesIndicator.qml</file>
         <file>components/DetailEditRow.qml</file>
         <file>components/PaymentDetailOptionsPopup.qml</file>
+        <file>components/PeerActionsMenu.qml</file>
         <file>components/QRCodePopup.qml</file>
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/Tooltip.qml</file>
@@ -87,6 +89,7 @@
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
         <file>controls/NavigationTab.qml</file>
+        <file>controls/NavigationSplitView.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
         <file>controls/OutlineButton.qml</file>
@@ -101,6 +104,7 @@
         <file>controls/qmldir</file>
         <file>controls/SendOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>
+        <file>controls/SizeClass.qml</file>
         <file>controls/Setting.qml</file>
         <file>controls/SettingsHeader.qml</file>
         <file>controls/SettingsPage.qml</file>
@@ -117,11 +121,11 @@
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
-        <file>pages/node/BannedPeers.qml</file>
         <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/Peers.qml</file>
+        <file>pages/node/PeersView.qml</file>
         <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>

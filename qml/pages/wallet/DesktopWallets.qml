@@ -375,29 +375,9 @@ Page {
                 showNetworkIndicator: false
             }
         }
-        PageStack {
-            id: peersStack
-            initialItem: Peers {
-                showBackButton: false
-                onPeerSelected: (peerDetails) => {
-                    peersStack.push(peerDetailsComp, {"details": peerDetails})
-                }
-                onBannedPeers: {
-                    peersStack.push(bannedPeersComp)
-                }
-            }
-            Component {
-                id: peerDetailsComp
-                PeerDetails {
-                    onBack: peersStack.pop()
-                }
-            }
-            Component {
-                id: bannedPeersComp
-                BannedPeers {
-                    onBack: peersStack.pop()
-                }
-            }
+        PeersView {
+            showHeader: false
+            showBackButton: false
         }
         Item {
             Loader {

@@ -20,11 +20,17 @@ class PeerDetailsModel : public QObject
     Q_PROPERTY(QString address READ address NOTIFY dataChanged)
     Q_PROPERTY(QString addressLocal READ addressLocal NOTIFY dataChanged)
     Q_PROPERTY(QString type READ type NOTIFY dataChanged)
+    Q_PROPERTY(QString network READ network NOTIFY dataChanged)
+    Q_PROPERTY(QString transport READ transport NOTIFY dataChanged)
+    Q_PROPERTY(QString sessionId READ sessionId NOTIFY dataChanged)
     Q_PROPERTY(QString version READ version NOTIFY dataChanged)
     Q_PROPERTY(QString userAgent READ userAgent NOTIFY dataChanged)
     Q_PROPERTY(QString services READ services NOTIFY dataChanged)
     Q_PROPERTY(bool transactionRelay READ transactionRelay NOTIFY dataChanged)
     Q_PROPERTY(bool addressRelay READ addressRelay NOTIFY dataChanged)
+    Q_PROPERTY(bool highBandwidth READ highBandwidth NOTIFY dataChanged)
+    Q_PROPERTY(QString addressesProcessed READ addressesProcessed NOTIFY dataChanged)
+    Q_PROPERTY(QString addressesRateLimited READ addressesRateLimited NOTIFY dataChanged)
     Q_PROPERTY(QString startingHeight READ startingHeight NOTIFY dataChanged)
     Q_PROPERTY(QString syncedHeaders READ syncedHeaders NOTIFY dataChanged)
     Q_PROPERTY(QString syncedBlocks READ syncedBlocks NOTIFY dataChanged)
@@ -49,11 +55,17 @@ public:
     QString address() const { return QString::fromStdString(m_combinedStats->nodeStats.m_addr_name); }
     QString addressLocal() const { return QString::fromStdString(m_combinedStats->nodeStats.addrLocal); }
     QString type() const { return PeerStatsUtil::ConnectionTypeToQString(m_combinedStats->nodeStats.m_conn_type, /*prepend_direction=*/true); }
+    QString network() const { return PeerStatsUtil::NetworkToQString(m_combinedStats->nodeStats.m_network); }
+    QString transport() const { return PeerStatsUtil::TransportToQString(m_combinedStats->nodeStats.m_transport_type); }
+    QString sessionId() const { return QString::fromStdString(m_combinedStats->nodeStats.m_session_id); }
     QString version() const { return QString::number(m_combinedStats->nodeStats.nVersion); }
     QString userAgent() const { return QString::fromStdString(m_combinedStats->nodeStats.cleanSubVer); }
     QString services() const { return PeerStatsUtil::FormatServicesStr(m_combinedStats->nodeStateStats.their_services); }
     bool transactionRelay() const { return m_combinedStats->nodeStateStats.m_relay_txs; }
     bool addressRelay() const { return m_combinedStats->nodeStateStats.m_addr_relay_enabled; }
+    bool highBandwidth() const { return m_combinedStats->nodeStats.m_bip152_highbandwidth_to || m_combinedStats->nodeStats.m_bip152_highbandwidth_from; }
+    QString addressesProcessed() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_processed); }
+    QString addressesRateLimited() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_rate_limited); }
     QString startingHeight() const { return tr("N/A"); }
     QString syncedHeaders() const { return QString::number(m_combinedStats->nodeStateStats.nSyncHeight); }
     QString syncedBlocks() const { return QString::number(m_combinedStats->nodeStateStats.nCommonHeight); }

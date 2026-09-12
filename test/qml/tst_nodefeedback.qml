@@ -130,6 +130,15 @@ TestCase {
         compare(message.font.pixelSize, Theme.text.description.pixelSize)
         compare(message.lineHeight, Theme.text.description.lineHeight)
 
+        const surface = findChild(popup, "alertPopupSurface")
+        verify(surface !== null)
+        compare(surface.color, Theme.color.neutral1)
+        compare(surface.border.color, Theme.color.neutral2)
+        compare(surface.radius, 10)
+        compare(popup.dim, true)
+        verify(popup.enter !== null)
+        verify(popup.exit !== null)
+
         compare(popup.visibleActions.length, 2)
         compare(popup.visibleActions[1].buttonObjectName, "alertDeleteButton")
         const deleteButton = waitForChild(testWindow.contentItem, "alertDeleteButton")
