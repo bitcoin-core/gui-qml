@@ -679,7 +679,10 @@ PageStack {
                     id: exportResultPopup
                     objectName: "activityExportResultPopup"
                     modal: true
-                    anchors.centerIn: parent
+                    // Center in the window overlay, not the declaring item,
+                    // which sits below the page header and skews the popup
+                    // off the vertical center (the QR popup does the same).
+                    anchors.centerIn: Overlay.overlay
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                     padding: 20
                     width: Math.min(420, root.width - 40)
