@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/components"
 
@@ -11,6 +12,13 @@ TestCase {
     when: windowShown
     width: 800
     height: 700
+
+    Window {
+        id: presentationWindow
+        width: 800
+        height: 700
+        visible: false
+    }
 
     QtObject {
         id: nodeModelMock
@@ -21,6 +29,7 @@ TestCase {
         property int maxNumOutboundPeers: 10
         property int remainingSyncTime: 0
         property real verificationProgress: 0
+        property bool initialSyncComplete: false
         property bool headerSyncActive: false
         property bool headerPresync: false
         property real headerSyncProgress: 0
@@ -35,8 +44,13 @@ TestCase {
 
     QtObject {
         id: chainModelMock
-        property var timeRatioList: [0.25, 0.0]
-        property string currentNetworkName: "REGTEST"
+        property string networkName: "REGTEST"
+    }
+
+    QtObject {
+        id: blockClockModelMock
+        property real currentTimeFraction: 0.25
+        property var blockTimeFractions: []
     }
 
     Component {
@@ -46,6 +60,7 @@ TestCase {
             parentHeight: 600
             nodeModelRef: nodeModelMock
             chainModelRef: chainModelMock
+            blockClockModelRef: blockClockModelMock
             networkStatusModelRef: networkStatusModelMock
         }
     }
@@ -55,9 +70,11 @@ TestCase {
         MiniBlockClock {
             iconSize: 18
             pageSelected: true
+            nodeModelRef: nodeModelMock
             paused: true
             faulted: false
             networkStatusModelRef: networkStatusModelMock
+            blockClockModelRef: blockClockModelMock
         }
     }
 
@@ -69,14 +86,16 @@ TestCase {
         nodeModelMock.maxNumOutboundPeers = 10
         nodeModelMock.remainingSyncTime = 0
         nodeModelMock.verificationProgress = 0
+        nodeModelMock.initialSyncComplete = false
         nodeModelMock.headerSyncActive = false
         nodeModelMock.headerPresync = false
         nodeModelMock.headerSyncProgress = 0
         nodeModelMock.pause = false
         nodeModelMock.faulted = false
         networkStatusModelMock.networkOffline = false
-        chainModelMock.timeRatioList = [0.25, 0.0]
-        chainModelMock.currentNetworkName = "REGTEST"
+        chainModelMock.networkName = "REGTEST"
+        blockClockModelMock.currentTimeFraction = 0.25
+        blockClockModelMock.blockTimeFractions = []
     }
 
     function createClock(properties) {
@@ -159,6 +178,7 @@ TestCase {
         compare(clock.state, "IBD")
         compare(clock.header, "38%")
         compare(clock.subText, "Syncing headers")
+        compare(findChild(clock, "blockClockDial").syncProgress, 0.375)
     }
 
     function test_header_presync_subtext() {
@@ -176,11 +196,38 @@ TestCase {
         compare(clock.subText, "Pre-syncing headers")
     }
 
+    function test_header_presync_subtext_fits_inside_dial() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.headerSyncActive = true
+        nodeModelMock.headerPresync = true
+        nodeModelMock.headerSyncProgress = 0.25
+
+        for (const parentWidth of [600, 120]) {
+            const clock = createClock({parentWidth})
+            const subText = findChild(clock, "blockClockSubText")
+
+            verify(subText !== null)
+            compare(subText.text, "Pre-syncing headers")
+            tryVerify(function() {
+                return subText.paintedWidth <= subText.width
+            }, 1000)
+            verify(!subText.truncated,
+                   "text was truncated at requested pixel size " + subText.font.pixelSize +
+                   ", resolved pixel size " + subText.fontInfo.pixelSize +
+                   ", width " + subText.width +
+                   ", painted width " + subText.paintedWidth)
+        }
+    }
+
     function test_blockclock_state() {
         resetMocks()
         nodeModelMock.numPeers = 1
         nodeModelMock.numOutboundPeers = 1
-        nodeModelMock.verificationProgress = 1.0
+        nodeModelMock.initialSyncComplete = true
+        // Completion is authoritative even when the progress estimate has not
+        // reached the old UI threshold.
+        nodeModelMock.verificationProgress = 0.75
         nodeModelMock.blockTipHeight = 123456
 
         const clock = createClock()
@@ -188,6 +235,69 @@ TestCase {
         compare(clock.state, "BLOCKCLOCK")
         compare(clock.header, Number(nodeModelMock.blockTipHeight).toLocaleString(Qt.locale(), "f", 0))
         compare(clock.subText, "Blocktime")
+    }
+
+    function test_core_ibd_state_overrides_rounded_verification_completion() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.initialSyncComplete = false
+        nodeModelMock.verificationProgress = 0.9999
+
+        const clock = createClock()
+        const dial = findChild(clock, "blockClockDial")
+
+        compare(clock.state, "IBD")
+        compare(clock.synced, false)
+        compare(clock.header, "99.9%")
+        compare(dial.synced, false)
+        compare(dial.syncProgress, 0.9999)
+    }
+
+    function test_startup_catch_up_uses_reported_progress() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.initialSyncComplete = false
+        nodeModelMock.verificationProgress = 0.90
+
+        const clock = createClock()
+        const dial = findChild(clock, "blockClockDial")
+
+        compare(clock.state, "IBD")
+        compare(clock.header, "90%")
+        compare(dial.syncProgress, 0.90)
+    }
+
+    function test_core_completion_allows_empty_current_period_history() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.initialSyncComplete = true
+        nodeModelMock.verificationProgress = 0.75
+        nodeModelMock.blockTipHeight = 123456
+        blockClockModelMock.blockTimeFractions = []
+
+        const clock = createClock()
+        const dial = findChild(clock, "blockClockDial")
+
+        compare(clock.state, "BLOCKCLOCK")
+        compare(clock.synced, true)
+        compare(dial.synced, true)
+        compare(dial.blockTimeFractions.length, 0)
+    }
+
+    function test_core_completion_transition_updates_clock_state() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 1.0
+
+        const clock = createClock()
+        compare(clock.state, "IBD")
+        compare(clock.header, "99.9%")
+
+        nodeModelMock.initialSyncComplete = true
+        wait(0)
+
+        compare(clock.state, "BLOCKCLOCK")
+        compare(clock.synced, true)
     }
 
     function test_pause_state() {
@@ -268,6 +378,29 @@ TestCase {
         compare(miniClock.showPausedState, false)
     }
 
+    function test_mini_clock_uses_core_sync_completion() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 0.9999
+        const miniClock = createMiniBlockClock()
+        const dial = findChild(miniClock, "miniBlockClockDial")
+        miniClock.pageSelected = false
+        miniClock.paused = false
+        wait(0)
+
+        verify(dial !== null)
+        compare(miniClock.showIbdState, true)
+        compare(miniClock.showClockState, false)
+        compare(dial.syncProgress, 0.9999)
+
+        nodeModelMock.initialSyncComplete = true
+        wait(0)
+
+        compare(miniClock.showIbdState, false)
+        compare(miniClock.showClockState, true)
+        compare(dial.synced, true)
+    }
+
     function test_error_state_overrides_and_disables_toggle() {
         resetMocks()
         nodeModelMock.numPeers = 1
@@ -322,6 +455,8 @@ TestCase {
         compare(clock.formatProgressPercentage(0.51), "0.5%")
         compare(clock.formatProgressPercentage(0.051), "0.05%")
         compare(clock.formatProgressPercentage(0.001), "0%")
+        compare(clock.formatProgressPercentage(99.99, false), "99.9%")
+        compare(clock.formatProgressPercentage(100, true), "100%")
     }
 
     function test_hidden_network_indicator_removes_extra_height() {
@@ -336,5 +471,98 @@ TestCase {
         verify(indicator !== null)
         verify(!indicator.visible)
         compare(clock.height, clock.width)
+    }
+
+    function test_inactive_clock_retains_latest_model_snapshot_without_animations() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 0.5
+        nodeModelMock.remainingSyncTime = 0
+        presentationWindow.visible = true
+        const clock = createTemporaryObject(blockClockComponent, presentationWindow.contentItem)
+        verify(clock !== null)
+        wait(0)
+        const dial = findChild(clock, "blockClockDial")
+        const estimatingAnimation = findChild(clock, "blockClockEstimatingAnimation")
+        const peers = findChild(clock, "blockClockPeersIndicator")
+        verify(dial !== null)
+        verify(estimatingAnimation !== null)
+        verify(peers !== null)
+        compare(clock.renderingActive, true)
+        compare(clock.visible, true)
+        compare(clock.windowVisible, true)
+        compare(clock.presentationActive, true)
+        compare(clock.estimating, true)
+        tryCompare(estimatingAnimation, "running", true)
+
+        clock.renderingActive = false
+        compare(dial.renderingActive, false)
+        compare(peers.active, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        blockClockModelMock.currentTimeFraction = 0.75
+        blockClockModelMock.blockTimeFractions = [0.1, 0.2, 0.4]
+        compare(dial.currentTimeFraction, 0.75)
+        compare(dial.blockTimeFractions.length, 3)
+
+        clock.renderingActive = true
+        compare(dial.renderingActive, true)
+        compare(dial.currentTimeFraction, 0.75)
+        compare(dial.blockTimeFractions.length, 3)
+
+        clock.visible = false
+        compare(clock.presentationActive, false)
+        compare(dial.renderingActive, false)
+        compare(peers.active, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        clock.visible = true
+        compare(clock.presentationActive, true)
+        compare(dial.renderingActive, true)
+        compare(peers.active, true)
+        tryCompare(estimatingAnimation, "running", true)
+        presentationWindow.visible = false
+    }
+
+    function test_hidden_window_suspends_clock_presentations() {
+        resetMocks()
+        nodeModelMock.numPeers = 1
+        nodeModelMock.verificationProgress = 0.5
+        nodeModelMock.remainingSyncTime = 0
+        presentationWindow.visible = true
+
+        const clock = createTemporaryObject(blockClockComponent, presentationWindow.contentItem)
+        verify(clock !== null)
+        const miniClock = createTemporaryObject(miniBlockClockComponent, presentationWindow.contentItem)
+        verify(miniClock !== null)
+        const dial = findChild(clock, "blockClockDial")
+        const miniDial = findChild(miniClock, "miniBlockClockDial")
+        const estimatingAnimation = findChild(clock, "blockClockEstimatingAnimation")
+        const peers = findChild(clock, "blockClockPeersIndicator")
+        verify(dial !== null)
+        verify(miniDial !== null)
+        verify(estimatingAnimation !== null)
+        verify(peers !== null)
+        tryCompare(clock, "presentationActive", true)
+        tryCompare(miniClock, "presentationActive", true)
+        compare(miniDial.renderingActive, true)
+        tryCompare(estimatingAnimation, "running", true)
+
+        presentationWindow.visible = false
+        tryCompare(clock, "presentationActive", false)
+        tryCompare(miniClock, "presentationActive", false)
+        compare(dial.renderingActive, false)
+        compare(miniDial.renderingActive, false)
+        compare(peers.presentationActive, false)
+        tryCompare(estimatingAnimation, "running", false)
+
+        presentationWindow.visible = true
+        tryCompare(clock, "presentationActive", true)
+        tryCompare(miniClock, "presentationActive", true)
+        compare(dial.renderingActive, true)
+        compare(miniDial.renderingActive, true)
+        compare(peers.presentationActive, true)
+        tryCompare(estimatingAnimation, "running", true)
+        presentationWindow.visible = false
     }
 }

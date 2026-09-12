@@ -250,12 +250,14 @@ Page {
                 ButtonGroup.group: navigationTabs
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
+                    renderingActive: root.visible
                 }
 
                 Tooltip {
                     id: blockClockTooltip
+                    objectName: "blockClockTooltip"
                     property var syncState: Utils.formatRemainingSyncTime(nodeModel.remainingSyncTime)
-                    property bool synced: nodeModel.verificationProgress > 0.999
+                    property bool synced: nodeModel.initialSyncComplete
                     property bool paused: nodeModel.pause
                     property bool connected: nodeModel.numPeers > 0
                     property bool faulted: nodeModel.faulted
@@ -373,6 +375,7 @@ Page {
                 parentHeight: blockClockTab.height
                 anchors.centerIn: blockClockTab
                 showNetworkIndicator: false
+                renderingActive: root.visible && blockClockTabButton.checked
             }
         }
         PageStack {

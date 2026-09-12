@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 
 import org.bitcoincore.qt 1.0
 
@@ -17,9 +18,17 @@ Item {
     property real parentWidth: 600
     property real parentHeight: 600
     property bool showNetworkIndicator: true
+    // Backing models remain current while false; only presentation work stops.
+    property bool renderingActive: true
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
+    readonly property bool windowVisible: root.Window.window !== null &&
+        root.Window.window.visible &&
+        root.Window.window.visibility !== Window.Hidden &&
+        root.Window.window.visibility !== Window.Minimized
+    readonly property bool presentationActive: root.renderingActive && root.visible && root.windowVisible
 
     width: dial.width
     height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
@@ -27,10 +36,15 @@ Item {
     property alias header: mainText.text
     property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
-    property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
-    property bool synced: root.nodeModelRef !== null && root.nodeModelRef.verificationProgress > 0.999
-    property bool headerSyncActive: root.nodeModelRef !== null && root.nodeModelRef.headerSyncActive
-    property string syncProgress: formatProgressPercentage((root.headerSyncActive ? root.nodeModelRef.headerSyncProgress : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)) * 100)
+    readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
+    // Completion is latched after Core leaves IBD and the active chain catches
+    // the best known header. verificationProgress only renders ongoing sync.
+    readonly property bool synced: root.nodeModelRef !== null && root.nodeModelRef.initialSyncComplete
+    readonly property bool headerSyncActive: root.nodeModelRef !== null && root.nodeModelRef.headerSyncActive
+    readonly property real syncProgressFraction: root.headerSyncActive
+        ? root.nodeModelRef.headerSyncProgress
+        : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
+    readonly property string syncProgress: formatProgressPercentage(root.syncProgressFraction * 100, root.synced)
     property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
     property var syncState: Utils.formatRemainingSyncTime(root.nodeModelRef !== null ? root.nodeModelRef.remainingSyncTime : 0)
     property string syncTime: syncState.text
@@ -47,20 +61,23 @@ Item {
 
     BlockClockDial {
         id: dial
+        objectName: "blockClockDial"
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
         width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width
         penWidth: dial.width / 50
-        timeRatioList: root.chainModelRef !== null ? root.chainModelRef.timeRatioList : []
-        verificationProgress: root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0
+        currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
+        blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
+        syncProgress: root.syncProgressFraction
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
         synced: root.synced
         backgroundColor: Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
+        renderingActive: root.presentationActive
 
         Behavior on backgroundColor {
             ColorAnimation { duration: 150 }
@@ -97,50 +114,50 @@ Item {
         }
     }
 
+    TextMetrics {
+        id: subTextMetrics
+        font.family: "BitcoinCoreSans"
+        font.styleName: "Semi Bold"
+        font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
+        text: subText.text
+    }
+
     Label {
         id: subText
+        objectName: "blockClockSubText"
         anchors.top: mainText.bottom
         property bool estimating: root.estimating
         anchors.horizontalCenter: root.horizontalCenter
+        width: dial.width * (4/5)
+        horizontalAlignment: Text.AlignHCenter
         font.family: "BitcoinCoreSans"
         font.styleName: "Semi Bold"
-        font.pixelSize: dial.width * (9/100)
+        readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
+        readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
+        font.pixelSize: subText.desiredTextWidth > subText.width
+            ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
+            : subText.desiredPixelSize
+        elide: Text.ElideRight
         color: Theme.color.neutral4
 
-        Component.onCompleted: {
-            colorChanged.connect(function() {
-                if (!subText.estimating) {
-                    themeChange.restart();
-                }
-            });
-
-            estimatingChanged.connect(function() {
-                if (subText.estimating) {
-                    estimatingTime.start();
-                } else {
-                    estimatingTime.stop();
-                }
-            });
-
-            subText.estimatingChanged();
-        }
-
-        ColorAnimation on color{
-            id: themeChange
-            target: subText
-            duration: 150
+        Behavior on color {
+            enabled: !subText.estimating
+            ColorAnimation { duration: 150 }
         }
 
         SequentialAnimation {
             id: estimatingTime
+            objectName: "blockClockEstimatingAnimation"
+            running: root.presentationActive && subText.estimating
             loops: Animation.Infinite
-            ColorAnimation { target: subText; property: "color"; from: subText.color; to: Theme.color.neutral6; duration: 1000 }
-            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: subText.color; duration: 1000 }
+            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
+            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }
         }
 
     }
 
     PeersIndicator {
+        objectName: "blockClockPeersIndicator"
         anchors.top: subText.bottom
         anchors.topMargin: dial.width / 10
         anchors.horizontalCenter: root.horizontalCenter
@@ -149,6 +166,7 @@ Item {
         indicatorDimensions: dial.width * (3/200)
         indicatorSpacing: dial.width / 40
         paused: root.paused || root.faulted
+        active: root.presentationActive
     }
 
     NetworkIndicator {
@@ -271,7 +289,14 @@ Item {
     ]
 
 
-    function formatProgressPercentage(progress) {
+    function formatProgressPercentage(progress, complete) {
+        if (complete === true) {
+            return "100%"
+        }
+        // Never present an estimate as complete while initial sync is pending.
+        if (progress >= 99.9) {
+            return "99.9%"
+        }
         if (progress >= 1) {
             return Math.round(progress) + "%"
         } else if (progress >= 0.1) {

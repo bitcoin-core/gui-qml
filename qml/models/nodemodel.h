@@ -8,11 +8,13 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <clientversion.h>
+#include <qml/models/syncprogresstracker.h>
 
 #include <deque>
 #include <memory>
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QStringList>
 #include <QString>
 #include <QVariantList>
@@ -46,8 +48,12 @@ class NodeModel : public QObject
     Q_PROPERTY(double mempoolMaxUsageMB READ mempoolMaxUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
     Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable CONSTANT)
-    Q_PROPERTY(int remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
+    Q_PROPERTY(qint64 remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
+    /** Estimated chain-verification progress used only for progress presentation. */
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
+    /** True once startup synchronization completes; remains true for this node session. */
+    Q_PROPERTY(bool initialSyncComplete READ initialSyncComplete NOTIFY initialSyncCompleteChanged)
+    /** True while Core reports initial block download through initialization or tip notifications. */
     Q_PROPERTY(bool blockSyncActive READ blockSyncActive NOTIFY blockSyncActiveChanged)
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
@@ -85,10 +91,11 @@ public:
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
     void setMempoolInfoPollingActive(bool active);
     bool mempoolInformationAvailable() const { return m_mempool_information_available; }
-    int remainingSyncTime() const { return m_remaining_sync_time; }
+    qint64 remainingSyncTime() const { return m_remaining_sync_time; }
     void setRemainingSyncTime(double new_progress);
     double verificationProgress() const { return m_verification_progress; }
     void setVerificationProgress(double new_progress);
+    bool initialSyncComplete() const { return m_initial_sync_complete; }
     bool blockSyncActive() const { return m_block_sync_active; }
     bool headerSyncActive() const { return m_header_sync_active; }
     bool headerPresync() const { return m_header_presync; }
@@ -145,6 +152,7 @@ Q_SIGNALS:
     void requestedInitialize();
     void requestedShutdown();
     void verificationProgressChanged();
+    void initialSyncCompleteChanged();
     void blockSyncActiveChanged();
     void headerSyncChanged();
     void pauseChanged(bool new_pause);
@@ -153,8 +161,10 @@ Q_SIGNALS:
     void warningsChanged();
     void runtimeDialogChanged();
 
-    void setTimeRatioList(int new_time);
-    void setTimeRatioListInitial();
+    /** Active-chain block timestamp changed; consumers may update timelines. */
+    void blockTipTimeChanged(qint64 block_time);
+    /** Chain initialization succeeded and history-dependent models may load. */
+    void chainStateReady();
     void nodeInitialized();
     void bannedListChanged();
 
@@ -189,7 +199,7 @@ private:
     double m_mempool_max_usage_mb{0.0};
     bool m_mempool_info_polling_active{false};
     bool m_mempool_information_available{true};
-    int m_remaining_sync_time{0};
+    qint64 m_remaining_sync_time{0};
     double m_verification_progress{0.0};
     bool m_block_sync_active{false};
     bool m_pause{false};
@@ -205,6 +215,7 @@ private:
     int m_header_tip_height{0};
     int64_t m_header_tip_time{0};
     bool m_node_ready{false};
+    bool m_initial_sync_complete{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
     bool m_runtime_dialogs_enabled{false};
@@ -220,7 +231,8 @@ private:
 
     int m_shutdown_polling_timer_id{0};
 
-    QVector<QPair<int, double>> m_block_process_time;
+    SyncProgressTracker m_sync_progress_tracker;
+    QElapsedTimer m_sync_progress_clock;
 
     interfaces::Node& m_node;
     QObject* m_mempool_info_worker{nullptr};
@@ -250,8 +262,10 @@ private:
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();
     void setWarnings(const QString& warnings);
+    void setNodeReady(bool ready);
     void setBlockSyncActive(bool active);
     void setHeaderSyncState(int height, int64_t block_time, bool presync);
+    void maybeCompleteInitialSync();
     void showRuntimeMessageBox(const QString& message, unsigned int style);
     bool showRuntimeQuestion(const QString& message, unsigned int style);
     bool showRuntimeDialogOnGuiThread(const QString& message, unsigned int style, bool question);

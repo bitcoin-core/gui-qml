@@ -40,6 +40,7 @@
 #include <qml/models/banlistmodel.h>
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
+#include <qml/models/blockclockmodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
@@ -601,9 +602,11 @@ int QmlGuiMain(int argc, char* argv[])
     AndroidNotifier android_notifier{node_model};
 #endif
 
-    ChainModel chain_model{*chain};
-    chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
-    setupChainQSettings(&app, chain_model.currentNetworkName());
+    ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
+    BlockClockModel block_clock_model{[chain = chain.get()](qint64 period_start, qint64 period_end) {
+        return LoadBlockClockHistory(*chain, period_start, period_end);
+    }};
+    setupChainQSettings(&app, chain_model.networkName());
     // Settings reset must happen before model instantiation so the models
     // read clean defaults from QSettings.
     if (gArgs.IsArgSet("-resetguisettings")) {
@@ -613,8 +616,8 @@ int QmlGuiMain(int argc, char* argv[])
         settings.remove(QStringLiteral("fMinimizeOnClose"));
     }
 
-    QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
-    QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
+    QObject::connect(&node_model, &NodeModel::blockTipTimeChanged, &block_clock_model, &BlockClockModel::recordBlockTime);
+    QObject::connect(&node_model, &NodeModel::chainStateReady, &block_clock_model, &BlockClockModel::initializeHistory);
 
 
     DesktopWindowBehaviorModel desktop_window_behavior_model;
@@ -648,6 +651,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("networkStatusModel", &network_status_model);
     engine->rootContext()->setContextProperty("nodeModel", &node_model);
     engine->rootContext()->setContextProperty("chainModel", &chain_model);
+    engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

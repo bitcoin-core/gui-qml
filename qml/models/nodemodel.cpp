@@ -97,6 +97,7 @@ QVariant InformationRow(const QString& label, const QString& value)
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_sync_progress_clock.start();
     m_mempool_information_available = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
     initializeMempoolInfoPolling();
     refreshPeerCounts();
@@ -126,6 +127,7 @@ void NodeModel::setBlockTipHeight(int new_height)
     if (new_height != m_block_tip_height) {
         m_block_tip_height = new_height;
         Q_EMIT blockTipHeightChanged();
+        maybeCompleteInitialSync();
     }
 }
 
@@ -251,38 +253,21 @@ void NodeModel::applyMempoolInfo(const MempoolInfo& info)
 
 void NodeModel::setRemainingSyncTime(double new_progress)
 {
-    int currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
-
-    // keep a vector of samples of verification progress at height
-    m_block_process_time.push_front(qMakePair(currentTime, new_progress));
-
-    // show progress speed if we have more than one sample
-    if (m_block_process_time.size() >= 2) {
-        double progressDelta = 0;
-        int timeDelta = 0;
-        int remainingMSecs = 0;
-        double remainingProgress = 1.0 - new_progress;
-        for (int i = 1; i < m_block_process_time.size(); i++) {
-            QPair<int, double> sample = m_block_process_time[i];
-
-            // take first sample after 500 seconds or last available one
-            if (sample.first < (currentTime - 500 * 1000) || i == m_block_process_time.size() - 1) {
-                progressDelta = m_block_process_time[0].second - sample.second;
-                timeDelta = m_block_process_time[0].first - sample.first;
-                remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
-                break;
-            }
-        }
-        if (remainingMSecs > 0 && m_block_process_time.count() % 1000 == 0) {
-            m_remaining_sync_time = remainingMSecs;
-
+    if (new_progress >= 1.0) {
+        m_sync_progress_tracker.reset();
+        if (m_remaining_sync_time != 0) {
+            m_remaining_sync_time = 0;
             Q_EMIT remainingSyncTimeChanged();
         }
-        static const int MAX_SAMPLES = 5000;
-        if (m_block_process_time.count() > MAX_SAMPLES) {
-            m_block_process_time.remove(1, m_block_process_time.count() - 1);
-        }
+        return;
     }
+
+    const std::optional<int64_t> estimate{
+        m_sync_progress_tracker.addSample(m_sync_progress_clock.elapsed(), new_progress)};
+    if (!estimate || *estimate == m_remaining_sync_time) return;
+
+    m_remaining_sync_time = *estimate;
+    Q_EMIT remainingSyncTimeChanged();
 }
 void NodeModel::setVerificationProgress(double new_progress)
 {
@@ -294,6 +279,14 @@ void NodeModel::setVerificationProgress(double new_progress)
     }
 }
 
+void NodeModel::setNodeReady(bool ready)
+{
+    if (m_node_ready == ready) return;
+
+    m_node_ready = ready;
+    maybeCompleteInitialSync();
+}
+
 void NodeModel::setBlockSyncActive(bool active)
 {
     if (m_block_sync_active == active) {
@@ -302,6 +295,7 @@ void NodeModel::setBlockSyncActive(bool active)
 
     m_block_sync_active = active;
     Q_EMIT blockSyncActiveChanged();
+    maybeCompleteInitialSync();
 }
 
 void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
@@ -313,16 +307,33 @@ void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
     const bool active{height > 0 && estimate_headers_left > HEADER_HEIGHT_DELTA_SYNC};
     const double progress{active ? 1.0 * height / (height + estimate_headers_left) : 0.0};
 
-    if (m_header_sync_active == active &&
-        m_header_presync == presync &&
-        m_header_sync_progress == progress) {
+    if (m_header_sync_active != active ||
+        m_header_presync != presync ||
+        m_header_sync_progress != progress) {
+        m_header_sync_active = active;
+        m_header_presync = presync;
+        m_header_sync_progress = progress;
+        Q_EMIT headerSyncChanged();
+    }
+    maybeCompleteInitialSync();
+}
+
+void NodeModel::maybeCompleteInitialSync()
+{
+    if (m_initial_sync_complete ||
+        !m_node_ready ||
+        m_block_sync_active ||
+        m_header_sync_active ||
+        m_header_presync ||
+        m_block_tip_height < m_header_tip_height) {
         return;
     }
 
-    m_header_sync_active = active;
-    m_header_presync = presync;
-    m_header_sync_progress = progress;
-    Q_EMIT headerSyncChanged();
+    // Completion is a startup transition. Once the active chain has caught up
+    // to the best known header, a subsequently announced block must not return
+    // the clock to its initial-sync presentation while that block is fetched.
+    m_initial_sync_complete = true;
+    Q_EMIT initialSyncCompleteChanged();
 }
 
 void NodeModel::setPause(bool new_pause)
@@ -450,16 +461,18 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         }
     } else {
         m_startup_error_messages.clear();
-        m_node_ready = true;
         m_runtime_dialogs_enabled = true;
         refreshWarnings();
         showStartupWarnings();
         setBlockTipHeight(tip_info.block_height);
         setVerificationProgress(tip_info.verification_progress);
-        setBlockSyncActive(tip_info.block_height > 0 && m_node.isInitialBlockDownload());
+        // Core's IBD result is authoritative. Verification progress remains an
+        // estimate for display and must not decide when initial sync completes.
+        setBlockSyncActive(m_node.isInitialBlockDownload());
         setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
+        setNodeReady(true);
         refreshMempoolInfo();
-        Q_EMIT setTimeRatioListInitial();
+        Q_EMIT chainStateReady();
     }
     Q_EMIT nodeInitialized();
 }
@@ -506,9 +519,9 @@ void NodeModel::ConnectToBlockTipSignal()
             QMetaObject::invokeMethod(this, [this, state, block_height = tip.block_height, block_time = tip.block_time, verification_progress] {
                 setBlockTipHeight(block_height);
                 setVerificationProgress(verification_progress);
-                setBlockSyncActive(block_height > 0 && state != SynchronizationState::POST_INIT);
+                setBlockSyncActive(state != SynchronizationState::POST_INIT);
 
-                Q_EMIT setTimeRatioList(block_time);
+                Q_EMIT blockTipTimeChanged(block_time);
             }, Qt::QueuedConnection);
         });
 }

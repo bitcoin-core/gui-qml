@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 
 import org.bitcoincore.qt 1.0
 
@@ -14,12 +15,20 @@ Item {
 
     property real iconSize: 18
     property bool pageSelected: false
-    property bool connected: nodeModel.numPeers > 0
-    property bool synced: nodeModel.verificationProgress > 0.999
-    property bool paused: nodeModel.pause
-    property bool faulted: nodeModel.faulted
+    property bool renderingActive: true
+    property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
+    readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
+    readonly property bool synced: root.nodeModelRef !== null && root.nodeModelRef.initialSyncComplete
+    property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
+    property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property var networkStatusModelRef: typeof networkStatusModel !== "undefined" ? networkStatusModel : null
+    property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
     property bool offline: networkStatusModelRef !== null && networkStatusModelRef.networkOffline
+    readonly property bool windowVisible: root.Window.window !== null &&
+        root.Window.window.visible &&
+        root.Window.window.visibility !== Window.Hidden &&
+        root.Window.window.visibility !== Window.Minimized
+    readonly property bool presentationActive: root.renderingActive && root.visible && root.windowVisible
 
     readonly property bool showOfflineState: !root.faulted && root.offline
     readonly property bool showPausedState: root.paused && !root.faulted && !root.offline
@@ -40,16 +49,16 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    readonly property var fullDialTimeRatioList: [1.0, 0.0]
-
     BlockClockDial {
         id: dial
+        objectName: "miniBlockClockDial"
         visible: root.showConnectingState || root.showIbdState || root.showClockState
         anchors.fill: parent
         penWidth: root.strokeWidth
         connectingAnimationDelayMs: 0
-        timeRatioList: root.pageSelected ? root.fullDialTimeRatioList : chainModel.timeRatioList
-        verificationProgress: root.pageSelected ? 1.0 : nodeModel.verificationProgress
+        currentTimeFraction: root.pageSelected ? 1.0 : (root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0)
+        blockTimeFractions: []
+        syncProgress: root.pageSelected ? 1.0 : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
         connected: root.pageSelected || root.connected
         synced: root.pageSelected || root.synced
         paused: false
@@ -60,6 +69,7 @@ Item {
         backgroundColor: Theme.color.neutral3
         timeTickColor: "transparent"
         confirmationColors: Theme.color.confirmationColors
+        renderingActive: root.presentationActive
     }
 
     Item {

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Window 2.15
 import "../controls"
 
 Row {
@@ -10,6 +11,12 @@ Row {
     required property int numOutboundPeers
     required property int maxNumOutboundPeers
     required property bool paused
+    required property bool active
+    readonly property bool windowVisible: root.Window.window !== null &&
+        root.Window.window.visible &&
+        root.Window.window.visibility !== Window.Hidden &&
+        root.Window.window.visibility !== Window.Minimized
+    readonly property bool presentationActive: root.active && root.visible && root.windowVisible
     property int size: 5
     property real indicatorDimensions: 3
     property real indicatorSpacing: 5
@@ -28,7 +35,7 @@ Row {
             Behavior on opacity { OpacityAnimator { duration: 150 } }
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
-                running: numOutboundPeers === 0 && index === 0 && !root.paused
+                running: root.presentationActive && numOutboundPeers === 0 && index === 0 && !root.paused
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
             }

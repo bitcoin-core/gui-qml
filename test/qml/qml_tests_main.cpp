@@ -2135,12 +2135,27 @@ class MockChainModel : public QObject
     Q_OBJECT
     Q_PROPERTY(int assumedChainstateSize MEMBER m_assumed_chainstate_size CONSTANT)
     Q_PROPERTY(int assumedBlockchainSize MEMBER m_assumed_blockchain_size CONSTANT)
-    Q_PROPERTY(QVariantList timeRatioList MEMBER m_time_ratio_list CONSTANT)
+    Q_PROPERTY(QString networkName MEMBER m_network_name CONSTANT)
 
 public:
     int m_assumed_chainstate_size{12};
     int m_assumed_blockchain_size{610};
-    QVariantList m_time_ratio_list{0.1, 0.2, 0.4, 0.8};
+    QString m_network_name{QStringLiteral("REGTEST")};
+};
+
+class MockBlockClockModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal currentTimeFraction MEMBER m_current_time_fraction NOTIFY currentTimeFractionChanged)
+    Q_PROPERTY(QList<qreal> blockTimeFractions MEMBER m_block_time_fractions NOTIFY blockTimeFractionsChanged)
+
+public:
+    qreal m_current_time_fraction{0.25};
+    QList<qreal> m_block_time_fractions{0.1, 0.2};
+
+Q_SIGNALS:
+    void currentTimeFractionChanged();
+    void blockTimeFractionsChanged();
 };
 
 class MockNodeModel : public QObject
@@ -2152,6 +2167,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(int numOutboundPeers MEMBER m_num_outbound_peers NOTIFY numOutboundPeersChanged)
     Q_PROPERTY(int maxNumOutboundPeers MEMBER m_max_num_outbound_peers NOTIFY maxNumOutboundPeersChanged)
     Q_PROPERTY(double verificationProgress MEMBER m_verification_progress NOTIFY verificationProgressChanged)
+    Q_PROPERTY(bool initialSyncComplete MEMBER m_initial_sync_complete NOTIFY initialSyncCompleteChanged)
     Q_PROPERTY(int remainingSyncTime MEMBER m_remaining_sync_time NOTIFY remainingSyncTimeChanged)
     Q_PROPERTY(bool headerSyncActive MEMBER m_header_sync_active NOTIFY headerSyncChanged)
     Q_PROPERTY(bool blockSyncActive MEMBER m_block_sync_active NOTIFY blockSyncActiveChanged)
@@ -2186,6 +2202,7 @@ public:
     int m_num_outbound_peers{0};
     int m_max_num_outbound_peers{8};
     double m_verification_progress{0.0};
+    bool m_initial_sync_complete{false};
     int m_remaining_sync_time{0};
     bool m_header_sync_active{false};
     bool m_block_sync_active{false};
@@ -2331,6 +2348,7 @@ Q_SIGNALS:
     void numOutboundPeersChanged();
     void maxNumOutboundPeersChanged();
     void verificationProgressChanged();
+    void initialSyncCompleteChanged();
     void remainingSyncTimeChanged();
     void headerSyncChanged();
     void blockSyncActiveChanged();
@@ -3473,6 +3491,7 @@ public Q_SLOTS:
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
+        static MockBlockClockModel block_clock_model;
         static MockNodeModel node_model;
         static MockPeerTableModel peer_table_model;
         static MockNetworkTrafficTower network_traffic_tower;
@@ -3537,6 +3556,7 @@ public Q_SLOTS:
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);
         engine->rootContext()->setContextProperty(QStringLiteral("nodeModel"), &node_model);
         engine->rootContext()->setContextProperty(QStringLiteral("peerTableModel"), &peer_table_model);
         engine->rootContext()->setContextProperty(QStringLiteral("networkTrafficTower"), &network_traffic_tower);

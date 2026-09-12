@@ -34,6 +34,20 @@ TestCase {
     }
 
     Component {
+        id: nodeRunnerStackComponent
+        PageStack {
+            width: 640
+            height: 520
+            initialItem: NodeRunner {}
+        }
+    }
+
+    Component {
+        id: emptyPageComponent
+        Page { background: null }
+    }
+
+    Component {
         id: warningsPopupComponent
         NodeWarningsPopup {}
     }
@@ -184,6 +198,26 @@ TestCase {
         const settingsCenterY = settingsButton.mapToItem(runner, 0, settingsButton.height / 2).y
         verify(Math.abs(warningCenterY - settingsCenterY) <= 0.5)
         verify(Math.abs(infoCenterY - settingsCenterY) <= 0.5)
+    }
+
+    function test_node_runner_clock_follows_stack_visibility() {
+        const stack = createTemporaryObject(nodeRunnerStackComponent, testWindow.contentItem)
+        verify(stack !== null)
+        const runner = findChild(stack, "nodeRunner")
+        const clock = findChild(stack, "blockClock")
+        verify(runner !== null)
+        verify(clock !== null)
+        tryCompare(clock, "renderingActive", true)
+
+        stack.push(emptyPageComponent)
+        tryCompare(stack, "depth", 2)
+        tryCompare(runner, "visible", false, 1000)
+        tryCompare(clock, "renderingActive", false)
+
+        stack.pop()
+        tryCompare(stack, "depth", 1)
+        tryCompare(runner, "visible", true, 1000)
+        tryCompare(clock, "renderingActive", true)
     }
 
     function test_warning_popup_lists_current_warnings() {
