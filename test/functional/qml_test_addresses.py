@@ -165,6 +165,13 @@ def edit_existing_request_from_address_details(gui, expected_address):
         f"Updating a request must not create a duplicate: history went {before} -> {after}"
     )
 
+    # Returning to settings lands back on the Addresses page, not the
+    # settings root: the trip to the request editor must not pop the
+    # settings navigation stack.
+    gui.click("desktopWalletSettingsTabButton")
+    gui.wait_for_property("desktopWalletSettingsTabButton", "checked", True, timeout_ms=5000)
+    gui.wait_for_property("addressListPage", "visible", True, timeout_ms=10000)
+
 
 def run_test():
     harness = WalletFlowHarness("qml_addresses", port_offset=70)

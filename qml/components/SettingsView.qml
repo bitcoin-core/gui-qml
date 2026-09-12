@@ -247,7 +247,15 @@ Page {
                     model: root.sections
                     groupTitles: root.groupTitles
                     currentSectionId: root.selectedSectionId
-                    onSectionActivated: function(sectionId) { root.selectSection(sectionId) }
+                    onSectionActivated: function(sectionId) {
+                        // Re-selecting the current section from the sidebar
+                        // returns to its root; pushed sub-pages such as the
+                        // address list otherwise survive tab round trips.
+                        if (sectionId === root.selectedSectionId) {
+                            pageContainer.resetSection(sectionId)
+                        }
+                        root.selectSection(sectionId)
+                    }
                 }
 
                 NavButton {
@@ -309,10 +317,10 @@ Page {
 
         WalletPages.AddressList {
             onBack: pageContainer.pop()
-            onReceiveRequested: {
-                pageContainer.pop()
-                root.receiveRequested()
-            }
+            // Keep the Addresses page on the stack: leaving for the request
+            // editor and returning to settings should land back here, not on
+            // the settings root.
+            onReceiveRequested: root.receiveRequested()
         }
     }
 
