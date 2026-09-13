@@ -9,6 +9,7 @@
         <file>tst_contextmenupicker.qml</file>
         <file>tst_contextmenu.qml</file>
         <file>tst_contextmenutoggle.qml</file>
+        <file>tst_copybutton.qml</file>
         <file>tst_corecheckbox.qml</file>
         <file>tst_createbackup.qml</file>
         <file>tst_createname.qml</file>

@@ -59,73 +59,15 @@ Control {
                 elide: Text.ElideRight
             }
 
-            Button {
+            CopyButton {
                 id: copyButton
                 objectName: root.copyButtonObjectName.length > 0
                     ? root.copyButtonObjectName
                     : root.objectName.length > 0 ? root.objectName + "CopyButton" : ""
                 visible: root.showCopyButton
                 enabled: root.enabled && root.copyButtonEnabled
-                text: root.copyButtonText
-                implicitWidth: copyContent.implicitWidth + 12
-                implicitHeight: 28
-                hoverEnabled: true
-                padding: 0
-
-                HoverHandler {
-                    cursorShape: Qt.PointingHandCursor
-                }
-
-                contentItem: Item {
-                    implicitWidth: copyContent.implicitWidth
-                    implicitHeight: copyContent.implicitHeight
-
-                    Row {
-                        id: copyContent
-                        anchors.centerIn: parent
-                        spacing: 3
-
-                        Icon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: "image://images/copy"
-                            color: !copyButton.enabled
-                                ? Theme.color.neutral4
-                                : copyButton.hovered || copyButton.pressed
-                                    ? Theme.color.orange
-                                    : Theme.color.neutral7
-                            size: 18
-                            width: 18
-                            height: 18
-                            hoverEnabled: false
-                        }
-
-                        CoreText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: copyButton.text
-                            color: !copyButton.enabled
-                                ? Theme.color.neutral4
-                                : copyButton.hovered || copyButton.pressed
-                                    ? Theme.color.orange
-                                    : Theme.color.neutral8
-                            font: Theme.text.caption.font
-                            lineHeight: Theme.text.caption.lineHeight
-                            lineHeightMode: Text.FixedHeight
-                        }
-                    }
-                }
-
-                background: Rectangle {
-                    color: copyButton.hovered || copyButton.pressed
-                        ? Theme.color.neutral3
-                        : "transparent"
-                    radius: 7
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
-                }
-
-                onClicked: root.copyRequested()
+                copyText: root.copyButtonText
+                onCopyRequested: root.copyRequested()
             }
         }
 
