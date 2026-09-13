@@ -28,6 +28,9 @@ AbstractButton {
     readonly property string displayAddress: isTruncated ? truncatedAddress(address) : address
     readonly property string formattedText: formatAddressRichText(displayAddress)
     readonly property bool showCopiedStatus: copiedResetTimer.running
+    readonly property real naturalWidth: Math.max(
+        Math.ceil(fullAddressMetrics.advanceWidth), copiedRow.implicitWidth
+    ) + leftPadding + rightPadding
 
     signal copied()
 
