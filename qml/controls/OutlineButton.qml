@@ -9,8 +9,17 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     hoverEnabled: AppMode.isDesktop
+    scale: enabled && down ? 0.98 : 1.0
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: 100
+            easing.type: Easing.OutCubic
+        }
+    }
 
     property bool bold: false
+    property bool embedded: false
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -49,16 +58,23 @@ Button {
     }
     background: Rectangle {
         id: bg
+        objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         implicitHeight: 46
-        color: "transparent"
+        color: root.embedded
+            ? (root.hovered || root.down ? Theme.color.neutral3 : Theme.color.neutral2)
+            : "transparent"
         radius: 5
         border {
-            width: 1
+            width: root.embedded ? 0 : 1
             color: Theme.color.neutral6
 
             Behavior on color {
                 ColorAnimation { duration: 150 }
             }
+        }
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
         }
     }
 

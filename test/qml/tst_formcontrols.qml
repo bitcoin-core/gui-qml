@@ -97,6 +97,26 @@ TestCase {
     }
 
     Component {
+        id: outlineButtonComponent
+
+        OutlineButton {
+            objectName: "exampleOutlineButton"
+            width: 140
+            height: 46
+            text: "Cancel"
+        }
+    }
+
+    Component {
+        id: continueButtonComponent
+
+        ContinueButton {
+            text: "Continue"
+            enabled: false
+        }
+    }
+
+    Component {
         id: designSystemPageComponent
 
         SettingsDesignSystem {
@@ -171,6 +191,31 @@ TestCase {
     }
 
     Component {
+        id: labeledTextFieldComponent
+
+        LabeledTextField {
+            objectName: "exampleLabeledTextField"
+            width: 480
+            label: "Username"
+            fieldObjectName: "exampleLabeledTextFieldInput"
+            placeholderText: "Enter username..."
+        }
+    }
+
+    Component {
+        id: passwordTextFieldComponent
+
+        PasswordTextField {
+            objectName: "examplePasswordTextField"
+            width: 480
+            label: "Password"
+            fieldObjectName: "examplePasswordTextFieldInput"
+            visibilityToggleObjectName: "examplePasswordTextFieldToggle"
+            placeholderText: "Enter password..."
+        }
+    }
+
+    Component {
         id: bodyRowComponent
 
         FormRow {
@@ -191,6 +236,7 @@ TestCase {
         tryVerify(function() { return row.loadedTrailingItem !== null })
         compare(row.loadedTrailingItem.objectName, "exampleSwitch")
         compare(row.loadedTrailingItem.enabled, true)
+        compare(row.dividerColor, Theme.color.neutral2)
 
         row.enabled = false
         compare(row.loadedTrailingItem.enabled, false)
@@ -266,6 +312,53 @@ TestCase {
 
         compare(activatedValue, "light")
         compare(picker.currentValue, "dark")
+    }
+
+    function test_outlineButtonSupportsEmbeddedAppearance() {
+        const button = createTemporaryObject(outlineButtonComponent, host)
+        verify(button !== null)
+        const background = findChild(button, "exampleOutlineButtonBackground")
+        verify(background !== null)
+
+        compare(button.embedded, false)
+        compare(background.color, Qt.rgba(0, 0, 0, 0))
+        compare(background.border.width, 1)
+
+        button.embedded = true
+        tryCompare(background, "color", Theme.color.neutral2)
+        compare(background.border.width, 0)
+
+        button.down = true
+        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(button, "scale", 0.98)
+
+        button.down = false
+        tryCompare(button, "scale", 1.0)
+    }
+
+    function test_continueButtonKeepsPrimaryColorWhenDisabled() {
+        const button = createTemporaryObject(continueButtonComponent, host)
+        verify(button !== null)
+
+        compare(button.enabled, false)
+        compare(button.background.color, Theme.color.orange)
+        compare(button.textColor, Theme.color.white)
+        compare(button.opacity, 0.4)
+
+        button.down = true
+        compare(button.background.color, Theme.color.orange)
+        compare(button.textColor, Theme.color.white)
+        compare(button.scale, 1.0)
+
+        button.enabled = true
+        tryCompare(button.background, "color", Theme.color.orangeLight2)
+        compare(button.textColor, Theme.color.white)
+        compare(button.opacity, 1.0)
+        tryCompare(button, "scale", 0.98)
+
+        button.down = false
+        tryCompare(button.background, "color", Theme.color.orange)
+        tryCompare(button, "scale", 1.0)
     }
 
     function test_designSystemPageShowsGenericControlExamples() {
@@ -383,6 +476,46 @@ TestCase {
         keyClick(Qt.Key_Enter)
         tryCompare(row.field, "activeFocus", false)
         compare(acceptedCount, 2)
+    }
+
+    function test_labeledTextFieldOwnsLabelSurfaceAndReturnBehavior() {
+        const control = createTemporaryObject(labeledTextFieldComponent, host)
+        verify(control !== null)
+        const label = findChild(control, "exampleLabeledTextFieldLabel")
+        const field = findChild(control, "exampleLabeledTextFieldInput")
+        verify(label !== null)
+        verify(field !== null)
+        compare(label.text, "Username")
+        compare(field.placeholderText, "Enter username...")
+        compare(field.background.radius, 10)
+        compare(field.background.color, Theme.color.neutral1)
+        compare(field.background.border.width, 0)
+
+        field.forceActiveFocus()
+        tryCompare(field.background.border, "width", 2)
+        tryCompare(field.background.border, "color", Theme.color.orange)
+        keyClick(Qt.Key_Return)
+        tryCompare(field, "activeFocus", false)
+        compare(field.background.border.width, 0)
+    }
+
+    function test_passwordTextFieldComposesSecureEntryAndVisibilityToggle() {
+        const control = createTemporaryObject(passwordTextFieldComponent, host)
+        verify(control !== null)
+        const field = findChild(control, "examplePasswordTextFieldInput")
+        const toggle = findChild(control, "examplePasswordTextFieldToggle")
+        verify(field !== null)
+        verify(toggle !== null)
+        compare(control.passwordVisible, false)
+        compare(field.echoMode, TextInput.Password)
+
+        toggle.clicked()
+        compare(control.passwordVisible, true)
+        compare(field.echoMode, TextInput.Normal)
+
+        toggle.clicked()
+        compare(control.passwordVisible, false)
+        compare(field.echoMode, TextInput.Password)
     }
 
     function test_formRowAcceptsFullWidthBodyContent() {

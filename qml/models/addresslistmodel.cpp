@@ -41,8 +41,10 @@ QString ScriptTypeName(const CTxDestination& destination)
 
 QString DisplayAmount(CAmount amount)
 {
-    if (amount == 0) return QStringLiteral("₿ 0.0");
-    return QStringLiteral("₿ ") + QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, amount);
+    QString value{QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, amount)};
+    while (value.endsWith(QLatin1Char('0'))) value.chop(1);
+    if (value.endsWith(QLatin1Char('.'))) value.chop(1);
+    return QStringLiteral("₿ ") + value;
 }
 } // namespace
 

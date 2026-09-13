@@ -10,10 +10,13 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
-Page {
+SettingsPage {
     id: root
     objectName: "addressListPage"
-    background: null
+    title: qsTr("Addresses")
+    backButtonObjectName: "addressListBackButton"
+    maximumContentWidth: 840
+    contentSpacing: 16
 
     property WalletQmlModel wallet: walletController.selectedWallet
     property AddressListModel addressModel: wallet.addressListModel
@@ -25,8 +28,8 @@ Page {
     property string selectedScriptType: ""
     property bool selectedUsed: false
     property string errorText: ""
+    property var pendingNotesByAddress: ({})
 
-    signal back
     signal receiveRequested
 
     function openMenuAt(menu, item) {
@@ -52,18 +55,48 @@ Page {
         root.errorText = qsTr("This address is no longer available.");
     }
 
-    header: SettingsHeader {
-        title: qsTr("Addresses")
-        backButtonObjectName: "addressListBackButton"
-        onBack: root.back()
-        rightItem: IconButton {
-            objectName: "addressesMenuButton"
-            iconSource: "image://images/ellipsis"
-            iconColor: Theme.color.neutral9
-            size: 28
-            onClicked: {
-                root.openMenuAt(pageMenu, this);
-            }
+    function pendingNote(address, fallbackLabel) {
+        const note = root.pendingNotesByAddress[address]
+        return note === undefined ? fallbackLabel : note
+    }
+
+    function updatePendingNote(address, note) {
+        const notes = {}
+        for (const key in root.pendingNotesByAddress) {
+            notes[key] = root.pendingNotesByAddress[key]
+        }
+        notes[address] = note
+        root.pendingNotesByAddress = notes
+    }
+
+    function clearPendingNote(address) {
+        const notes = {}
+        for (const key in root.pendingNotesByAddress) {
+            if (key !== address) notes[key] = root.pendingNotesByAddress[key]
+        }
+        root.pendingNotesByAddress = notes
+    }
+
+    function updateAddressLabel(address, label) {
+        root.errorText = ""
+        if (root.addressModel.setAddressLabel(address, label)) {
+            if (root.selectedAddress === address) root.selectedLabel = label
+            root.clearPendingNote(address)
+            return true
+        }
+        root.clearPendingNote(address)
+        root.addressModel.refresh()
+        root.errorText = qsTr("This address is no longer available.")
+        return false
+    }
+
+    rightItem: IconButton {
+        objectName: "addressesMenuButton"
+        iconSource: "image://images/ellipsis"
+        iconColor: Theme.color.neutral9
+        size: 28
+        onClicked: {
+            root.openMenuAt(pageMenu, this);
         }
     }
 
@@ -85,59 +118,14 @@ Page {
     }
 
     Popup {
-        id: labelPopup
-        objectName: "addressLabelPopup"
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(420, root.width - 40)
-        modal: true
-        focus: true
-        leftPadding: 40
-        rightPadding: 40
-        topPadding: 30
-        bottomPadding: 30
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle {
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
-            radius: 10
-        }
-        contentItem: ColumnLayout {
-            spacing: 16
-
-            Header {
-                Layout.fillWidth: true
-                header: qsTr("Note to self")
-                headerBold: true
-                center: false
-            }
-            CoreTextField {
-                id: labelInput
-                objectName: "addressLabelInput"
-                Layout.fillWidth: true
-                placeholderText: qsTr("Add note...")
-            }
-            ContinueButton {
-                objectName: "addressLabelSaveButton"
-                Layout.fillWidth: true
-                text: qsTr("Save")
-                onClicked: {
-                    root.errorText = "";
-                    if (addressModel.setAddressLabel(root.selectedAddress, labelInput.text)) {
-                        labelPopup.close();
-                    } else {
-                        labelPopup.close();
-                        addressModel.refresh();
-                        root.errorText = qsTr("This address is no longer available.");
-                    }
-                }
-            }
-        }
-    }
-
-    Popup {
         id: detailsPopup
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(560, root.width - 40)
+        objectName: "addressDetailsPopup"
+        readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
+        property real verticalOffset: 0
+        parent: Overlay.overlay
+        x: parent ? Math.round((parent.width - width) / 2) : 0
+        y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
+        width: Math.min(640, root.width - 40)
         modal: true
         focus: true
         leftPadding: 40
@@ -145,12 +133,52 @@ Page {
         topPadding: 30
         bottomPadding: 30
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        enter: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                property: "verticalOffset"
+                from: -30
+                to: 0
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        exit: Transition {
+            NumberAnimation {
+                property: "opacity"
+                from: 1
+                to: 0
+                duration: 250
+                easing.type: Easing.InCubic
+            }
+            NumberAnimation {
+                property: "verticalOffset"
+                from: 0
+                to: -30
+                duration: 250
+                easing.type: Easing.InCubic
+            }
+        }
+
+        Overlay.modal: Rectangle {
+            color: detailsPopup.modalOverlayColor
+            opacity: detailsPopup.opacity
+        }
         background: Rectangle {
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
+            color: Theme.color.neutral1
+            border.color: Theme.color.neutral3
             radius: 10
         }
         contentItem: AddressDetails {
+            id: addressDetails
             address: root.selectedAddress
             label: root.selectedLabel
             amount: root.selectedAmount
@@ -159,91 +187,100 @@ Page {
             scriptType: root.selectedScriptType
             used: root.selectedUsed
             onCloseRequested: detailsPopup.close()
-            onCopyAddressRequested: Clipboard.setText(root.selectedAddress)
             onCreatePaymentRequestRequested: {
                 root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
             }
-        }
-    }
-
-    ScrollView {
-        anchors.fill: parent
-        clip: true
-        contentWidth: width
-
-        ColumnLayout {
-            width: Math.min(520, parent.width)
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 26
-
-            SegmentedPicker {
-                Layout.fillWidth: true
-                Layout.topMargin: 28
-                model: addressModel.categoryOptions
-                currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
-                onSelected: (index, option) => {
-                    root.errorText = "";
-                    addressModel.category = option.value;
-                }
-            }
-
-            CoreText {
-                Layout.fillWidth: true
-                visible: root.errorText.length > 0
-                text: root.errorText
-                color: Theme.color.red
-                font: Theme.text.description.font
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            CoreText {
-                Layout.fillWidth: true
-                visible: addressModel.count === 0
-                text: {
-                    if (addressModel.category === AddressListModel.Change) {
-                        return qsTr("No current change addresses.");
-                    }
-                    return addressModel.showUsed ? qsTr("No single-use addresses.") : qsTr("No unused single-use addresses.");
-                }
-                color: Theme.color.neutral6
-                font: Theme.text.body.font
-                horizontalAlignment: Text.AlignLeft
-            }
-
-            ListView {
-                id: addressList
-                objectName: "addressListView"
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(contentHeight, root.height - 230)
-                clip: true
-                model: addressModel
-                spacing: 0
-
-                delegate: AddressRow {
-                    width: addressList.width
-                    onEditLabelRequested: (address, label) => {
-                        root.selectedAddress = address;
-                        root.selectedLabel = label;
-                        labelInput.text = label;
-                        labelPopup.open();
-                    }
-                    onCreatePaymentRequestRequested: (address) => {
-                        root.selectedAddress = address;
-                        root.createPaymentRequestFromSelected(undefined);
-                    }
-                    onDetailsRequested: (address, label, amount, hasAmount, category, scriptType, used) => {
-                        root.selectedAddress = address;
-                        root.selectedLabel = label;
-                        root.selectedAmount = amount;
-                        root.selectedHasAmount = hasAmount;
-                        root.selectedCategory = category;
-                        root.selectedScriptType = scriptType;
-                        root.selectedUsed = used;
-                        detailsPopup.open();
-                    }
+            onEditLabelRequested: (address, label) => {
+                if (root.updateAddressLabel(address, label)) {
+                    root.selectedLabel = label;
+                    noteErrorText = "";
+                } else {
+                    noteErrorText = qsTr("This address is no longer available.");
                 }
             }
         }
     }
 
+    PageHeading {
+        objectName: "addressListIntroduction"
+        Layout.fillWidth: true
+        descriptionTextFormat: Text.StyledText
+        description: qsTr("View addresses generated by this wallet.") + "<br><br>"
+            + qsTr("<b>Single-use</b> addresses are intended for receiving one payment; avoiding address reuse helps protect your privacy.") + "<br>"
+            + qsTr("<b>Change</b> addresses are created and managed automatically when you send bitcoin, receiving any remaining amount back into your wallet.")
+    }
+
+    SegmentedPicker {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 360
+        Layout.alignment: Qt.AlignHCenter
+        implicitHeight: 36
+        model: addressModel.categoryOptions
+        currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
+        onSelected: (index, option) => {
+            root.errorText = "";
+            addressModel.category = option.value;
+        }
+    }
+
+    CoreText {
+        Layout.fillWidth: true
+        visible: root.errorText.length > 0
+        text: root.errorText
+        color: Theme.color.red
+        font: Theme.text.description.font
+        horizontalAlignment: Text.AlignLeft
+    }
+
+    CoreText {
+        Layout.fillWidth: true
+        visible: addressModel.count === 0
+        text: {
+            if (addressModel.category === AddressListModel.Change) {
+                return qsTr("No current change addresses.");
+            }
+            return addressModel.showUsed ? qsTr("No single-use addresses.") : qsTr("No unused single-use addresses.");
+        }
+        color: Theme.color.neutral6
+        font: Theme.text.description.font
+        horizontalAlignment: Text.AlignLeft
+    }
+
+    FormSection {
+        objectName: "addressListSection"
+        visible: addressModel.count > 0
+        Layout.fillWidth: true
+
+        ListView {
+            id: addressList
+            objectName: "addressListView"
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight, Math.max(76, root.height - 230))
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            reuseItems: true
+            model: addressModel
+            spacing: 0
+
+            delegate: AddressRow {
+                width: ListView.view.width
+                pendingLabel: root.pendingNote(address, label)
+                showDivider: index < addressList.count - 1
+                onNoteDraftEdited: (address, label) => root.updatePendingNote(address, label)
+                onNoteDraftDiscarded: (address) => root.clearPendingNote(address)
+                onEditLabelRequested: (address, label) => root.updateAddressLabel(address, label)
+                onDetailsRequested: (address, label, amount, hasAmount, category, scriptType, used) => {
+                    root.selectedAddress = address;
+                    root.selectedLabel = root.pendingNote(address, label);
+                    root.selectedAmount = amount;
+                    root.selectedHasAmount = hasAmount;
+                    root.selectedCategory = category;
+                    root.selectedScriptType = scriptType;
+                    root.selectedUsed = used;
+                    addressDetails.resetNoteEditor();
+                    detailsPopup.open();
+                }
+            }
+        }
+    }
 }

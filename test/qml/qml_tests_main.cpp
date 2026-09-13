@@ -273,13 +273,33 @@ public:
     QString ellipsesAddress() const { return m_address; }
     Q_INVOKABLE int setAddress(const QString& address, int cursorPosition = 0)
     {
-        if (m_address != address) {
-            m_address = address;
+        const auto is_address_char = [](const QChar c) {
+            const ushort ch = c.unicode();
+            return (ch >= '0' && ch <= '9') ||
+                   (ch >= 'a' && ch <= 'z') ||
+                   (ch >= 'A' && ch <= 'Z' && ch != 'I' && ch != 'O');
+        };
+
+        QString sanitized;
+        const int address_size = static_cast<int>(address.size());
+        sanitized.reserve(std::min(address_size, 90));
+        const int input_cursor = std::clamp(cursorPosition, 0, address_size);
+        int sanitized_cursor{0};
+        for (int i = 0; i < address_size && sanitized.size() < 90; ++i) {
+            if (!is_address_char(address.at(i))) continue;
+            sanitized += address.at(i);
+            if (i < input_cursor) ++sanitized_cursor;
+        }
+
+        if (m_address != sanitized) {
+            m_address = sanitized;
             Q_EMIT addressChanged();
             Q_EMIT formattedAddressChanged();
             Q_EMIT ellipsesAddressChanged();
+        } else if (address != sanitized) {
+            Q_EMIT formattedAddressChanged();
         }
-        return cursorPosition;
+        return sanitized_cursor;
     }
 
 Q_SIGNALS:
@@ -288,7 +308,7 @@ Q_SIGNALS:
     void ellipsesAddressChanged();
 
 private:
-    QString m_address{QStringLiteral("bcrt1qsendtoaddress")};
+    QString m_address;
 };
 
 class MockAddressListModel : public QObject
@@ -298,6 +318,7 @@ class MockAddressListModel : public QObject
     Q_PROPERTY(QVariantList categoryOptions READ categoryOptions CONSTANT)
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
 
 public:
     enum Category {
@@ -332,7 +353,7 @@ public:
     }
 
     Q_INVOKABLE void refresh() {}
-    Q_INVOKABLE bool setAddressLabel(const QString&, const QString&) { return false; }
+    Q_INVOKABLE bool setAddressLabel(const QString&, const QString&) { return m_set_address_label_succeeds; }
     Q_INVOKABLE QString addressAt(int) const { return {}; }
 
 Q_SIGNALS:
@@ -343,6 +364,7 @@ Q_SIGNALS:
 private:
     Category m_category{SingleUse};
     bool m_show_used{false};
+    bool m_set_address_label_succeeds{false};
 };
 
 class MockPaymentRequest : public QObject
@@ -492,6 +514,11 @@ class MockSendRecipient : public QObject
     Q_PROPERTY(bool isValid MEMBER m_is_valid NOTIFY isValidChanged)
 
 public:
+    MockSendRecipient()
+    {
+        m_address.setAddress(QStringLiteral("bcrt1qsendtoaddress"));
+    }
+
     MockBitcoinAddress m_address{};
     QString m_address_error;
     MockBitcoinAmount m_amount{};

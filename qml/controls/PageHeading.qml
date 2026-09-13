@@ -16,6 +16,7 @@ Control {
     property int contentSpacing: 16
     property var titleTextStyle: Theme.text.headline
     property var descriptionTextStyle: Theme.text.description
+    property int descriptionTextFormat: Text.AutoText
 
     Accessible.name: title
     Accessible.description: description
@@ -56,6 +57,7 @@ Control {
                 lineHeight: root.descriptionTextStyle.lineHeight
                 lineHeightMode: Text.FixedHeight
                 horizontalAlignment: Text.AlignHCenter
+                textFormat: root.descriptionTextFormat
                 wrap: true
             }
         }

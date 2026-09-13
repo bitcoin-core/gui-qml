@@ -63,10 +63,8 @@ def run_test():
         open_address_list_from_settings(gui)
         row = _address_row_index(gui, request_address)
         assert gui.get_list_item_property("addressListView", row, "label") == ORIGINAL_LABEL
-        gui.click_list_item("addressListView", row, "addressRowNoteButton")
-        gui.wait_for_object("addressLabelInput", timeout_ms=5000)
-        gui.set_text("addressLabelInput", NEW_LABEL)
-        gui.click("addressLabelSaveButton")
+        gui.click_list_item("addressListView", row, "addressRowNoteField")
+        gui.set_text("addressRowNoteField", NEW_LABEL)
         gui.settle()
 
         # Surface 1: the Addresses page reflects the edit.
