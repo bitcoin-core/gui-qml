@@ -97,7 +97,6 @@ if(ENABLE_IPC)
       bitcoin_ipc
       $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
   )
-  qt6_import_qml_plugins(bitcoin-gui)
   import_plugins(bitcoin-gui)
   install_binary_component(bitcoin-gui INTERNAL)
 endif()
