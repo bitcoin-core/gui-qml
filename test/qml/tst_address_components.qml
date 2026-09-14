@@ -524,6 +524,11 @@ TestCase {
         let closed = false
         details.closeRequested.connect(function() { closed = true })
         const closeButton = findObject(details, "addressDetailsCloseButton")
+        const closeButtonBackground = findObject(details, "addressDetailsCloseButtonBackground")
+        verify(closeButton !== null)
+        verify(closeButtonBackground !== null)
+        compare(closeButtonBackground.color, Theme.color.neutral2)
+        compare(closeButtonBackground.radius, closeButtonBackground.width / 2)
         if (closeButton !== null) {
             closeButton.clicked()
             verify(closed)

@@ -59,6 +59,7 @@
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AddWalletButton.qml</file>
         <file>controls/CaretRightIcon.qml</file>
+        <file>controls/CloseButton.qml</file>
         <file>controls/ContextMenu.qml</file>
         <file>controls/ContextMenuButton.qml</file>
         <file>controls/ContextMenuDivider.qml</file>

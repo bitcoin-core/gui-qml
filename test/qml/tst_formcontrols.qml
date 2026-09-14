@@ -117,6 +117,14 @@ TestCase {
     }
 
     Component {
+        id: closeButtonComponent
+
+        CloseButton {
+            objectName: "exampleCloseButton"
+        }
+    }
+
+    Component {
         id: designSystemPageComponent
 
         SettingsDesignSystem {
@@ -325,15 +333,6 @@ TestCase {
         compare(background.border.width, 1)
         compare(background.border.color, Theme.color.neutral2)
 
-        mouseMove(button, button.width / 2, button.height / 2)
-        tryCompare(background.border, "color", Theme.color.neutral9)
-
-        mousePress(button, button.width / 2, button.height / 2)
-        tryCompare(background.border, "color", Theme.color.neutral9)
-        mouseRelease(button, button.width / 2, button.height / 2)
-        mouseMove(host, host.width - 1, host.height - 1)
-        tryCompare(background.border, "color", Theme.color.neutral2)
-
         button.embedded = true
         tryCompare(background, "color", Theme.color.neutral2)
         compare(background.border.width, 0)
@@ -369,6 +368,34 @@ TestCase {
         button.down = false
         tryCompare(button.background, "color", Theme.color.orange)
         tryCompare(button, "scale", 1.0)
+    }
+
+    function test_closeButtonInteractionStates() {
+        const button = createTemporaryObject(closeButtonComponent, host)
+        verify(button !== null)
+        const background = findChild(button, "exampleCloseButtonBackground")
+        const icon = findChild(button, "exampleCloseButtonIcon")
+        verify(background !== null)
+        verify(icon !== null)
+
+        mouseMove(host, host.width - 1, host.height - 1)
+        compare(button.width, 30)
+        compare(button.height, 30)
+        compare(button.scale, 1.0)
+        compare(background.radius, 15)
+        tryCompare(background, "color", Theme.color.neutral2)
+        compare(icon.size, 10)
+        compare(icon.color, Theme.color.neutral6)
+        compare(button.backgroundHoverColor, Theme.color.neutral3)
+        compare(button.backgroundPressedColor, Theme.color.neutral3)
+
+        button.down = true
+        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(button, "scale", 0.95)
+
+        button.down = false
+        tryCompare(button, "scale", 1.0)
+        tryCompare(background, "color", Theme.color.neutral2)
     }
 
     function test_designSystemPageShowsGenericControlExamples() {

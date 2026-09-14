@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 import "../../controls"
@@ -53,17 +52,9 @@ ColumnLayout {
             center: false
         }
 
-        Icon {
+        CloseButton {
             objectName: "addressDetailsCloseButton"
-            source: "image://images/cross"
-            color: Theme.color.neutral8
-            size: 10
-            enabled: true
-            padding: 0
             onClicked: root.closeRequested()
-            HoverHandler {
-                cursorShape: Qt.PointingHandCursor
-            }
         }
     }
 
