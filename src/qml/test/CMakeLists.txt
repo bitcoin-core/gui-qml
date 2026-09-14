@@ -45,7 +45,6 @@ if(qt_qml_test_lib_type STREQUAL "STATIC_LIBRARY")
 endif()
 
 import_plugins(test_bitcoin-qt)
-qt6_import_qml_plugins(test_bitcoin-qt)
 
 add_test(NAME test_bitcoin-qt
   COMMAND test_bitcoin-qt --suite=unit
