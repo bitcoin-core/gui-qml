@@ -9,7 +9,16 @@ import org.bitcoincore.qt 1.0
 
 Button {
     id: root
-    hoverEnabled: AppMode.isDesktop
+    hoverEnabled: enabled && AppMode.isDesktop
+    opacity: enabled ? 1.0 : 0.4
+    scale: enabled && down ? 0.98 : 1.0
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: 100
+            easing.type: Easing.OutCubic
+        }
+    }
 
     property color textColor: Theme.color.white
     property color textHoverColor: textColor
@@ -69,19 +78,13 @@ Button {
 
         states: [
             State {
-                name: "DISABLED"; when: !root.enabled
-                PropertyChanges { target: bg; color: Theme.color.neutral2 }
-                PropertyChanges { target: bg; border.color: Theme.color.neutral2 }
-                PropertyChanges { target: root; textColor: Theme.color.neutral5 }
-            },
-            State {
-                name: "PRESSED"; when: root.pressed
+                name: "PRESSED"; when: root.enabled && root.down
                 PropertyChanges { target: bg; color: backgroundPressedColor }
                 PropertyChanges { target: bg; border.color: borderPressedColor }
                 PropertyChanges { target: root; textColor: textPressedColor }
             },
             State {
-                name: "HOVER"; when: root.hovered
+                name: "HOVER"; when: root.enabled && root.hovered
                 PropertyChanges { target: bg; color: backgroundHoverColor }
                 PropertyChanges { target: bg; border.color: borderHoverColor }
                 PropertyChanges { target: root; textColor: textHoverColor }
@@ -93,7 +96,7 @@ Button {
         }
 
         FocusBorder {
-            visible: root.visualFocus
+            visible: root.enabled && root.visualFocus
         }
     }
 }

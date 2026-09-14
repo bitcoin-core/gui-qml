@@ -9,6 +9,7 @@
         <file>tst_contextmenupicker.qml</file>
         <file>tst_contextmenu.qml</file>
         <file>tst_contextmenutoggle.qml</file>
+        <file>tst_copybutton.qml</file>
         <file>tst_corecheckbox.qml</file>
         <file>tst_createbackup.qml</file>
         <file>tst_createname.qml</file>
@@ -35,6 +36,7 @@
         <file>tst_rightcontenticon.qml</file>
         <file>tst_sendoptionspopup.qml</file>
         <file>tst_send.qml</file>
+        <file>tst_signverifymessage.qml</file>
         <file>tst_setting.qml</file>
         <file>tst_settingsheader.qml</file>
         <file>tst_settingsnavigation.qml</file>

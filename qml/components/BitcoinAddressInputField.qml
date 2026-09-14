@@ -16,8 +16,15 @@ ColumnLayout {
     property string errorText: ""
     property string labelText: qsTr("Send to")
     property bool enabled: true
+    property bool embedded: false
+    property bool showLabel: true
+    property var textStyle: Theme.text.monoBody
     property alias inputObjectName: addressInput.objectName
     property bool interceptPaste: false
+    property alias inputText: addressInput.text
+    property alias placeholderText: addressInput.placeholderText
+    property alias readOnly: addressInput.readOnly
+    readonly property alias field: addressInput
 
     signal textChanged()
     signal editingFinished()
@@ -53,11 +60,12 @@ ColumnLayout {
     Item {
         id: inputRow
         Layout.fillWidth: true
-        implicitHeight: Math.max(56, addressInput.height + 16)
+        implicitHeight: root.embedded ? Math.max(52, addressInput.height) : Math.max(56, addressInput.height + 16)
 
         CoreText {
             id: label
-            width: 128
+            visible: root.showLabel
+            width: visible ? 128 : 0
             anchors.left: parent.left
             anchors.verticalCenter: addressInput.verticalCenter
             horizontalAlignment: Text.AlignLeft
@@ -88,8 +96,6 @@ ColumnLayout {
                 syncFromAddress()
                 return true
             }
-
-            objectName: root.inputObjectName
             anchors.left: label.right
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
@@ -98,15 +104,20 @@ ColumnLayout {
             text: ""
             Component.onCompleted: syncFromAddress()
             wrapMode: Text.WrapAnywhere
-            leftPadding: 0
-            topPadding: 0
-            rightPadding: 0
-            bottomPadding: 0
-            height: Math.max(contentHeight, 32)
-            font: Theme.text.monoBody.font
+            leftPadding: root.embedded ? 16 : 0
+            topPadding: root.embedded ? 14 : 0
+            rightPadding: root.embedded ? 16 : 0
+            bottomPadding: root.embedded ? 14 : 0
+            height: root.embedded ? Math.max(52, contentHeight + topPadding + bottomPadding) : Math.max(contentHeight, 32)
+            font: root.textStyle.font
             color: Theme.color.neutral9
             placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-            background: Item {}
+            background: Rectangle {
+                color: root.embedded ? Theme.color.neutral2 : "transparent"
+                radius: root.embedded ? 10 : 0
+                border.width: root.embedded && addressInput.activeFocus ? 2 : 0
+                border.color: Theme.color.orange
+            }
             selectByMouse: true
 
             Keys.onPressed: (event) => {

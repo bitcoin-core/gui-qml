@@ -138,7 +138,7 @@ void AddressListModelTests::receiveAddressesHideUsedUntilEnabled()
 
     QCOMPARE(model->rowCount(), 1);
     QCOMPARE(model->data(model->index(0), AddressListModel::LabelRole).toString(), QStringLiteral("unused"));
-    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("₿ 0.0"));
+    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("₿ 0"));
     QCOMPARE(model->data(model->index(0), AddressListModel::HasAmountRole).toBool(), false);
 
     model->setShowUsed(true);
@@ -170,13 +170,14 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
     const CTxDestination receive{TestDestination(10)};
     const CTxDestination change{TestDestination(11)};
     const CTxDestination spent_change{TestDestination(12)};
-    const interfaces::WalletTx change_tx{WalletTxFor({receive, change, spent_change}, {COIN, 2 * COIN, 3 * COIN}, {false, true, true})};
+    const CAmount change_amount{2 * COIN + COIN / 4};
+    const interfaces::WalletTx change_tx{WalletTxFor({receive, change, spent_change}, {COIN, change_amount, 3 * COIN}, {false, true, true})};
     const Txid txid{change_tx.tx->GetHash()};
     wallet->m_addresses = {
         {receive, true, wallet::AddressPurpose::RECEIVE, "receive"},
     };
     interfaces::WalletTxOut change_out;
-    change_out.txout = CTxOut{2 * COIN, GetScriptForDestination(change)};
+    change_out.txout = CTxOut{change_amount, GetScriptForDestination(change)};
     change_out.time = 0;
 
     TestAddressWallet* wallet_ptr{wallet.get()};
@@ -189,8 +190,23 @@ void AddressListModelTests::changeAddressesComeFromUnspentChangeOutputs()
     QCOMPARE(model->rowCount(), 1);
     QCOMPARE(model->data(model->index(0), AddressListModel::AddressRole).toString(), QString::fromStdString(EncodeDestination(change)));
     QCOMPARE(model->data(model->index(0), AddressListModel::CategoryRole).toString(), QStringLiteral("change"));
-    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("₿ 2.00000000"));
+    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("₿ 2.25"));
     QCOMPARE(model->data(model->index(0), AddressListModel::HasAmountRole).toBool(), true);
+
+    QSignalSpy data_changed{model, &QAbstractItemModel::dataChanged};
+
+    wallet_model.setDisplayUnit(1);
+    QCOMPARE(data_changed.count(), 1);
+    QCOMPARE(model->data(model->index(0), AddressListModel::CurrentBalanceRole).toString(), QStringLiteral("2250.00000"));
+    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("2250 mBTC"));
+
+    wallet_model.setDisplayUnit(2);
+    QCOMPARE(data_changed.count(), 2);
+    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("2\u2009250\u2009000 bits"));
+
+    wallet_model.setDisplayUnit(3);
+    QCOMPARE(data_changed.count(), 3);
+    QCOMPARE(model->data(model->index(0), AddressListModel::DisplayAmountRole).toString(), QStringLiteral("225\u2009000\u2009000 sats"));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
