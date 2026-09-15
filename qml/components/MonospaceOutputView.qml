@@ -322,7 +322,8 @@ Item {
                         lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
                         lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
                         color: rowRoot.effectiveLeftColumnColor
-                        Layout.preferredWidth: root.leftColumnWidth > 0 ? root.leftColumnWidth : leftMetrics.width
+                        Layout.minimumWidth: Math.ceil(Math.max(leftMetrics.width, implicitWidth))
+                        Layout.preferredWidth: Math.max(root.leftColumnWidth, Layout.minimumWidth)
                         Layout.alignment: Qt.AlignTop
                         wrapMode: Text.NoWrap
                     }

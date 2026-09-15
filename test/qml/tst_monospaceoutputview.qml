@@ -119,6 +119,11 @@ TestCase {
         compare(output.count, 3)
     }
 
+    Component {
+        id: regressionModelComponent
+        ListModel {}
+    }
+
     function test_search_preserves_original_offsets_data() {
         return [
             { tag: "unicode-prefix", text: '"İstanbul savings"', query: "savings", expected: "savings" },
@@ -128,13 +133,17 @@ TestCase {
     }
 
     function test_search_preserves_original_offsets(data) {
+        const model = createTemporaryObject(regressionModelComponent, testWindow.contentItem)
+        verify(model !== null)
+        model.append({ content: data.text })
         const output = createTemporaryObject(outputComponent, testWindow.contentItem, {
-            listModel: [{ content: data.text }]
+            listModel: model
         })
         verify(output !== null)
         tryCompare(output, "count", 1)
         const content = findChild(output, "searchOutput_content_0")
         verify(content !== null)
+        compare(content.getText(0, content.length), data.text)
 
         output.searchText = data.query
         tryCompare(output, "searchResultCount", 1)

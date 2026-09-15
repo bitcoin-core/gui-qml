@@ -124,8 +124,14 @@ def assert_console_entry_geometry(gui, index, row_width):
     gui.wait_for_property(row_name, "visible", True, timeout_ms=3000)
     assert_close(gui.get_property(row_name, "width"), row_width, f"console entry {index} row width")
     assert_close(gui.get_property(left_name, "x"), 0, f"console entry {index} time x")
-    assert_close(gui.get_property(left_name, "width"), 60, f"console entry {index} time width")
-    assert_close(gui.get_property(content_name, "x"), 80, f"console entry {index} content x")
+    text_width = gui.get_property(left_name, "contentWidth")
+    time_width = gui.wait_for_property(left_name, "width", lambda width: width >= max(60, text_width),
+                                       timeout_ms=3000)
+    assert time_width >= text_width, f"Timestamp width {text_width} exceeds column width {time_width}"
+    content_x = gui.wait_for_property(content_name, "x", lambda x: abs(x - time_width - 20) <= 1,
+                                      timeout_ms=3000)
+    assert_close(content_x, time_width + 20,
+                 f"console entry {index} content x")
 
 
 def test_console_output_rows_match_design(gui):
@@ -177,6 +183,22 @@ def test_console_output_rows_match_design(gui):
     assert gui.get_property("rpcConsole", "currentSearchResultIndex") == 0
     gui.set_text("rpcConsoleSearchField", "")
     gui.wait_for_property("rpcConsole", "searchResultCount", 0, timeout_ms=3000)
+
+    original_size = gui.get_property("rpcConsole", "outputFontPixelSize")
+    minimum_size = gui.get_property("rpcConsole", "minimumOutputFontPixelSize")
+    maximum_size = gui.get_property("rpcConsole", "maximumOutputFontPixelSize")
+    for size in range(original_size, minimum_size, -1):
+        gui.click("consoleFontDecreaseButton")
+    for size in range(minimum_size, maximum_size + 1):
+        gui.wait_for_property("rpcConsole", "outputFontPixelSize", size, timeout_ms=3000)
+        gui.wait_for_property(f"consoleOutputArea_left_{request_index}", "font.pixelSize",
+                              size, timeout_ms=3000)
+        assert_console_entry_geometry(gui, request_index, column_width)
+        assert_console_entry_geometry(gui, reply_index, column_width)
+        if size < maximum_size:
+            gui.click("consoleFontIncreaseButton")
+    for size in range(maximum_size, original_size, -1):
+        gui.click("consoleFontDecreaseButton")
     print("  PASSED: console output entry geometry, timestamps, and categories match design")
 
 
