@@ -60,4 +60,12 @@ TestCase {
         verify(button !== null)
         compare(button.role, ContextMenuButton.Destructive)
     }
+
+    function test_selected_uses_context_menu_selection_style() {
+        const button = createTemporaryObject(normalComponent, host)
+        verify(button !== null)
+
+        button.selected = true
+        compare(button.background.color, Theme.color.neutral3)
+    }
 }
