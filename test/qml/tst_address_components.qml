@@ -275,6 +275,31 @@ TestCase {
         tryCompare(background, "opacity", 1)
     }
 
+    function test_addressLabel_passive_mode_does_not_copy_or_highlight() {
+        let copiedText = "unchanged"
+        const clipboard = { setText: function(value) { copiedText = value } }
+        const label = createTemporaryObject(addressLabelComponent, host,
+            {interactive: false, truncated: true, clipboard: clipboard, width: 400})
+        verify(label !== null)
+        compare(label.displayAddress, "abcdefgh…mnopqrst")
+        verify(label.displayWidth < label.naturalWidth)
+
+        mouseMove(label, label.width / 2, label.height / 2)
+        compare(findObject(label, "referenceAddressLabelBackground").opacity, 0)
+        mouseClick(label, label.width / 2, label.height / 2)
+        label.copy()
+        compare(copiedText, "unchanged")
+        compare(label.showCopiedStatus, false)
+        compare(label.focusPolicy, Qt.NoFocus)
+
+        label.interactive = true
+        waitForRendering(label)
+        tryCompare(label, "enabled", true)
+        mouseClick(label, label.width / 2, label.height / 2)
+        compare(copiedText, label.address)
+        compare(label.showCopiedStatus, true)
+    }
+
     function test_row_uses_display_amount_and_emits_actions() {
         const row = createTemporaryObject(rowComponent, host)
         verify(row !== null)

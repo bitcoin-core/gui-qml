@@ -166,6 +166,11 @@
         <file>pages/settings/WalletSectionPage.qml</file>
         <file>pages/settings/WindowBehaviorSettingsPage.qml</file>
         <file>pages/wallet/Activity.qml</file>
+        <file>pages/wallet/ActivityList.qml</file>
+        <file>pages/wallet/ActivityListPage.qml</file>
+        <file>pages/wallet/ActivityRow.qml</file>
+        <file>pages/wallet/ActivityIcon.qml</file>
+        <file>pages/wallet/ActivityRequestBadge.qml</file>
         <file>pages/wallet/ActivityDetails.qml</file>
         <file>pages/wallet/ActivityTransactionVisuals.qml</file>
         <file>pages/wallet/AddressList.qml</file>
@@ -202,6 +207,14 @@
         <file alias="arrow-diagonal-square">res/icons/arrow-diagonal-square.png</file>
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
+        <file alias="activity-send">res/icons/activity-send.png</file>
+        <file alias="activity-receive">res/icons/activity-receive.png</file>
+        <file alias="activity-multiple">res/icons/activity-multiple.png</file>
+        <file alias="activity-payment-request">res/icons/activity-payment-request.png</file>
+        <file alias="activity-consolidation">res/icons/activity-consolidation.png</file>
+        <file alias="activity-split">res/icons/activity-split.png</file>
+        <file alias="activity-internal">res/icons/activity-internal.png</file>
+        <file alias="activity-invoice">res/icons/activity-invoice.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>

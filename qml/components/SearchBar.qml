@@ -109,7 +109,7 @@ Control {
 
             background: Rectangle {
                 color: Theme.color.neutral2
-                radius: 5
+                radius: 10
                 border.width: 0
             }
 

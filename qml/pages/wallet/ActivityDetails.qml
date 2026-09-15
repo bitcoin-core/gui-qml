@@ -206,7 +206,7 @@ Page {
                 Layout.bottomMargin: 20
                 //: The transaction's label from the address book.
                 labelText: qsTr("Label")
-                visible: root.label != ""
+                visible: root.label.trim().length > 0
                 enabled: false
                 text: root.label
             }
