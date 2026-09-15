@@ -25,6 +25,9 @@ class ActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
     Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int transactionCount READ transactionCount NOTIFY countChanged)
+    Q_PROPERTY(int requestCount READ requestCount NOTIFY countChanged)
+    Q_PROPERTY(GroupBy groupBy READ groupBy WRITE setGroupBy NOTIFY groupByChanged)
 
 public:
     enum DateFilter {
@@ -44,13 +47,21 @@ public:
         SentToSelf,
         Mined,
         Other,
-        PaymentRequest
+        PaymentRequest,
+        Multiple,
+        Consolidation,
+        Split
     };
     Q_ENUM(TypeFilter)
+
+    enum GroupBy { Month, Day };
+    Q_ENUM(GroupBy)
+    enum SectionRole { SectionKeyRole = Qt::UserRole + 200, SectionLabelRole, DateTimeLabelRole };
 
     explicit ActivityFilterProxyModel(QObject* parent = nullptr);
 
     QHash<int, QByteArray> roleNames() const override;
+    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     void setSourceModel(QAbstractItemModel* source_model) override;
 
     QString searchText() const;
@@ -81,6 +92,10 @@ public:
     Q_INVOKABLE bool applyCustomRange(const QString& start_iso, const QString& end_iso);
 
     int count() const;
+    int transactionCount() const;
+    int requestCount() const;
+    GroupBy groupBy() const { return m_group_by; }
+    void setGroupBy(GroupBy group_by);
 
     Q_INVOKABLE bool exportCsv(const QString& path) const;
 
@@ -92,6 +107,7 @@ Q_SIGNALS:
     void minAmountChanged();
     void rangeChanged();
     void countChanged();
+    void groupByChanged();
 
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
@@ -99,6 +115,8 @@ protected:
 
 private:
     TypeFilter filterTypeForIndex(const QModelIndex& source_index) const;
+    bool groupedSource() const;
+    bool groupedTypeMatches(const QModelIndex& source_index) const;
     QString exportTypeLabelForIndex(const QModelIndex& proxy_index) const;
     bool dateMatches(qint64 timestamp) const;
     QString normalizedExportPath(const QString& path) const;
@@ -110,6 +128,7 @@ private:
     CAmount m_min_amount{-1};
     QDate m_range_start;
     QDate m_range_end;
+    GroupBy m_group_by{Month};
 };
 
 #endif // BITCOIN_QML_MODELS_ACTIVITYFILTERPROXYMODEL_H

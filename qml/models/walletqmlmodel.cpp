@@ -469,6 +469,7 @@ WalletQmlModel::~WalletQmlModel()
     }
     delete m_fee_estimation_worker;
     delete m_activity_list_model;
+    delete m_transaction_activity_model;
     delete m_address_list_model;
     delete m_coins_list_model;
     delete m_send_recipients;
@@ -480,6 +481,14 @@ WalletQmlModel::~WalletQmlModel()
     if (m_current_transaction) {
         delete m_current_transaction;
     }
+}
+
+TransactionActivityModel* WalletQmlModel::transactionActivityModel()
+{
+    // Instantiate when the new screen first asks for it. The legacy screen
+    // retains its own model until the Activity.qml migration is complete.
+    if (!m_transaction_activity_model) m_transaction_activity_model = new TransactionActivityModel(this);
+    return m_transaction_activity_model;
 }
 
 void WalletQmlModel::setNode(interfaces::Node* node)
@@ -2383,8 +2392,9 @@ void WalletQmlModel::subscribeToWalletSignals()
             Q_EMIT addressListChanged();
         }, Qt::QueuedConnection);
     });
-    m_handler_transaction_changed = handleTransactionChanged([this](const uint256&, ChangeType) {
-        QMetaObject::invokeMethod(this, [this] {
+    m_handler_transaction_changed = handleTransactionChanged([this](const uint256& txid, ChangeType change) {
+        QMetaObject::invokeMethod(this, [this, txid, change] {
+            Q_EMIT transactionChanged(QString::fromStdString(txid.ToString()), change);
             Q_EMIT balanceChanged();
             Q_EMIT sendAmountExhaustsBalanceChanged();
         }, Qt::QueuedConnection);

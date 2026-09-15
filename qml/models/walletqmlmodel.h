@@ -14,6 +14,7 @@
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/signverifymessagemodel.h>
+#include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
@@ -71,6 +72,7 @@ private:
     Q_PROPERTY(qint64 balanceSatoshi READ balanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(bool hasExternalSigner READ hasExternalSigner CONSTANT)
     Q_PROPERTY(ActivityListModel* activityListModel READ activityListModel CONSTANT)
+    Q_PROPERTY(TransactionActivityModel* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(AddressListModel* addressListModel READ addressListModel CONSTANT)
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
@@ -126,6 +128,7 @@ public:
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
 
     ActivityListModel* activityListModel() const { return m_activity_list_model; }
+    TransactionActivityModel* transactionActivityModel();
     AddressListModel* addressListModel() const { return m_address_list_model; }
     BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
@@ -259,6 +262,9 @@ Q_SIGNALS:
     void walletUnloaded();
     void settingsErrorChanged();
     void addressListChanged();
+    // Forwarded on the GUI thread; models must not read wallet state from the
+    // Core callback while it holds the wallet lock.
+    void transactionChanged(const QString& txid, int change);
 
 private:
     enum class CurrentTransactionSource {
@@ -292,6 +298,7 @@ private:
     std::unique_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
     ActivityListModel* m_activity_list_model{nullptr};
+    TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
     BumpTransactionModel* m_bump_transaction_model{nullptr};
     CoinsListModel* m_coins_list_model{nullptr};

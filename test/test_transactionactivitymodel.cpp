@@ -1,0 +1,705 @@
+// Copyright (c) 2026 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <qml/models/activityfilterproxymodel.h>
+#include <qml/models/transactionactivitymodel.h>
+#include <qml/models/walletqmlmodel.h>
+#include <test/mocks/mockwallet.h>
+
+#include <core_io.h>
+#include <key_io.h>
+#include <script/solver.h>
+
+#include <QAbstractItemModelTester>
+#include <QFile>
+#include <QPersistentModelIndex>
+#include <QTemporaryDir>
+#include <QtTest/QtTest>
+
+#include <thread>
+
+namespace {
+using Model = TransactionActivityModel;
+using Proxy = ActivityFilterProxyModel;
+
+struct Output { CAmount amount; bool mine; bool change{false}; unsigned char key{1}; };
+
+interfaces::WalletTx MakeTx(const std::vector<std::pair<CAmount, bool>>& inputs,
+                          const std::vector<Output>& outputs, qint64 time = 1'789'200'000)
+{
+    interfaces::WalletTx wtx{};
+    CMutableTransaction tx;
+    for (const auto& [amount, mine] : inputs) {
+        tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{uint8_t(tx.vin.size() + 1)}), 0});
+        wtx.txin_is_mine.push_back(mine);
+        if (mine) wtx.debit += amount;
+    }
+    for (const auto& output : outputs) {
+        uint160 key;
+        key.begin()[0] = output.key;
+        const CTxDestination address{PKHash{key}};
+        tx.vout.emplace_back(output.amount, GetScriptForDestination(address));
+        wtx.txout_address.push_back(address);
+        wtx.txout_address_is_mine.push_back(output.mine);
+        wtx.txout_is_mine.push_back(output.mine);
+        wtx.txout_is_change.push_back(output.change);
+        if (output.mine) wtx.credit += output.amount;
+        if (output.change) wtx.change += output.amount;
+    }
+    wtx.tx = MakeTransactionRef(tx);
+    wtx.time = time;
+    return wtx;
+}
+
+QString Id(const interfaces::WalletTx& tx) { return QString::fromStdString(tx.tx->GetHash().ToString()); }
+QString Address(const interfaces::WalletTx& tx, int output = 0) { return QString::fromStdString(EncodeDestination(tx.txout_address[output])); }
+qint64 Time(int month, int day, int hour = 12) { return QDateTime(QDate(2026, month, day), QTime(hour, 3)).toSecsSinceEpoch(); }
+
+QmlRecentRequestEntry Request(int id, const QString& address, const QString& label = "Rent", CAmount amount = 50'000)
+{
+    QmlRecentRequestEntry entry;
+    entry.id = id;
+    entry.date = QDateTime::fromSecsSinceEpoch(Time(9, 11, 9));
+    entry.recipient.address = address.toStdString();
+    entry.recipient.label = label.toStdString();
+    entry.recipient.amount = amount;
+    return entry;
+}
+
+class ActivityWallet : public StubWallet
+{
+public:
+    std::map<Txid, interfaces::WalletTx> transactions;
+    std::map<Txid, interfaces::WalletTxStatus> statuses;
+    std::map<std::string, std::string> labels;
+    std::vector<TransactionChangedFn> callbacks;
+    bool busy{false};
+    bool snapshot_on_worker{false};
+    uint256 tip{1};
+    int status_reads{0};
+    int label_reads{0};
+    int snapshots{0};
+
+    void put(const interfaces::WalletTx& tx, int depth = 6)
+    {
+        transactions[tx.tx->GetHash()] = tx;
+        auto& status = statuses[tx.tx->GetHash()];
+        status = {};
+        status.depth_in_main_chain = depth;
+        status.is_in_main_chain = depth > 0;
+    }
+    void notify(const interfaces::WalletTx& tx, ChangeType change)
+    {
+        for (const auto& callback : callbacks) callback(tx.tx->GetHash(), change);
+    }
+    std::set<interfaces::WalletTx> getWalletTxs() override
+    {
+        std::set<interfaces::WalletTx> result;
+        for (const auto& [id, tx] : transactions) result.insert(tx);
+        return result;
+    }
+    interfaces::WalletTx getWalletTx(const Txid& id) override
+    {
+        ++snapshots;
+        snapshot_on_worker |= QThread::currentThread() != qApp->thread();
+        const auto it = transactions.find(id);
+        return it == transactions.end() ? interfaces::WalletTx{} : it->second;
+    }
+    bool tryGetTxStatus(const Txid& id, interfaces::WalletTxStatus& status, int& height, int64_t& time) override
+    {
+        ++status_reads;
+        if (busy || !statuses.count(id)) return false;
+        status = statuses.at(id);
+        height = 100;
+        time = 1'789'200'000;
+        return true;
+    }
+    bool tryGetBalances(interfaces::WalletBalances&, uint256& hash) override
+    {
+        if (busy) return false;
+        hash = tip;
+        return true;
+    }
+    bool getAddress(const CTxDestination& address, std::string* label, wallet::AddressPurpose*) override
+    {
+        ++label_reads;
+        if (!labels.count(EncodeDestination(address))) return false;
+        *label = labels.at(EncodeDestination(address));
+        return true;
+    }
+    bool transactionCanBeBumped(const Txid&) override { return true; }
+    std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn callback) override
+    {
+        callbacks.push_back(std::move(callback));
+        return {};
+    }
+};
+
+struct Fixture {
+    ActivityWallet* state;
+    std::unique_ptr<WalletQmlModel> wallet;
+    Fixture()
+    {
+        auto backend = std::make_unique<ActivityWallet>();
+        state = backend.get();
+        wallet = std::make_unique<WalletQmlModel>(std::move(backend));
+    }
+    Model* model() { return wallet->transactionActivityModel(); }
+    void request(const QmlRecentRequestEntry& request) { wallet->receiveRequests()->prependOrReplace(request); }
+};
+
+QModelIndex Find(const QAbstractItemModel& model, const QString& txid)
+{
+    for (int i = 0; i < model.rowCount(); ++i) {
+        const auto index = model.index(i, 0);
+        if (index.data(Model::TxidRole).toString() == txid) return index;
+    }
+    return {};
+}
+} // namespace
+
+class TransactionActivityModelTests : public QObject
+{
+    Q_OBJECT
+private Q_SLOTS:
+    void copiesRawTransactionAndPublicPaymentRequest();
+    void exposesParentsAndActionsWithoutAllocatingFees();
+    void filtersWholeTransactionsAndExportsParentImpact();
+    void groupsPendingMonthsAndDaysAndCountsParents();
+    void groupsTransactionsInPendingUntilFirstConfirmation();
+    void movesReplacedBatchToHistoryAndKeepsReplacementPending();
+    void associatesRequestsPerOutputAndUpdatesLive();
+    void usesPrivateRequestNotesWithoutChangingStoredData();
+    void restoresRequestsOnConflictAbandonmentReplacementAndDeletion();
+    void sharesAddressAssociationsWithoutDuplicatingParents();
+    void preservesStatusWhenBusyAndRetries();
+    void refreshesOnWalletTipAndSameHeightReorg();
+    void queuesWalletNotificationsAndRetainsStableIndexes();
+    void handlesInternalAndMinedTypes();
+    void recognizesSelfSendToPaymentRequest_data();
+    void recognizesSelfSendToPaymentRequest();
+};
+
+void TransactionActivityModelTests::copiesRawTransactionAndPublicPaymentRequest()
+{
+    Fixture f;
+    const auto tx = MakeTx({{100'000, true}}, {{99'000, false}});
+    f.state->put(tx);
+    auto request = Request(1, Address(tx), "Public label", 10'000);
+    request.recipient.message = "Public message";
+    request.recipient.noteSelf = "Private note";
+    f.request(request);
+    const auto* model = f.model();
+    QCOMPARE(model->rawTransaction(Id(tx)), QString::fromStdString(EncodeHexTx(*tx.tx)));
+    QVERIFY(model->rawTransaction("missing").isEmpty());
+    const auto uri = model->paymentRequestUri("1");
+    QCOMPARE(uri, ReceiveRequestHistoryModel::BuildBitcoinUri(Address(tx), 10'000, "Public label", "Public message"));
+    QVERIFY(!uri.contains("Private"));
+    QVERIFY(model->paymentRequestUri("missing").isEmpty());
+}
+
+void TransactionActivityModelTests::exposesParentsAndActionsWithoutAllocatingFees()
+{
+    Fixture f;
+    const auto batch = MakeTx({{120'000, true}}, {{60'000, false}, {40'000, false, false, 2}, {19'000, true, true, 3}});
+    f.state->put(batch);
+    f.state->labels[Address(batch).toStdString()] = "Robert";
+    f.state->labels[Address(batch, 1).toStdString()] = "Elisabeth";
+    auto* source = f.model();
+    QAbstractItemModelTester tester(source, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    QCOMPARE(source->rowCount(), 1);
+    QCOMPARE(source->transactionCount(), 1);
+    QCOMPARE(source->requestCount(), 0);
+    const auto row = source->index(0);
+    QCOMPARE(row.data(Model::ActivityTypeRole).toInt(), int(Model::Multiple));
+    QCOMPARE(row.data(Model::NetAmountSatRole).toLongLong(), -101'000);
+    QCOMPARE(row.data(Model::FeeSatRole).toLongLong(), 1'000);
+    QVERIFY(row.data(Model::FeeKnownRole).toBool());
+    QCOMPARE(row.data(Model::AmountRole).toString(), QString("0.00101000 BTC"));
+    QVERIFY(row.data(Model::AddressRole).toString().isEmpty());
+    const auto actions = row.data(Model::ActionsRole).toList();
+    QCOMPARE(actions.size(), 2);
+    QCOMPARE(actions[0].toMap().value("label").toString(), QString("Robert"));
+    QCOMPARE(actions[0].toMap().value("amountSat").toLongLong(), 60'000);
+    QCOMPARE(actions[1].toMap().value("amountSat").toLongLong(), 40'000);
+    QCOMPARE(actions[1].toMap().value("outputIndex").toInt(), 1);
+    QVERIFY(actions[0].toMap().value("actionId") != actions[1].toMap().value("actionId"));
+
+    const int reads = f.state->status_reads + f.state->label_reads + f.state->snapshots;
+    for (auto role : source->roleNames().keys()) source->data(row, role);
+    QCOMPARE(source->transactionDetails(Id(batch)).value("actions").toList(), actions);
+    QCOMPARE(f.state->status_reads + f.state->label_reads + f.state->snapshots, reads);
+    f.wallet->setDisplayUnit(3);
+    QVERIFY(row.data(Model::AmountRole).toString().endsWith(" sat"));
+    QVERIFY(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString().endsWith(" sat"));
+    QCOMPARE(row.data(Model::NetAmountSatRole).toLongLong(), -101'000);
+}
+
+void TransactionActivityModelTests::filtersWholeTransactionsAndExportsParentImpact()
+{
+    Fixture f;
+    const auto mixed = MakeTx({{100'000, true}, {50'000, false}}, {{120'000, false}, {29'000, true, true, 2}}, Time(8, 12, 22));
+    f.state->put(mixed);
+    f.state->labels[Address(mixed, 1).toStdString()] = "Savings";
+    Proxy proxy;
+    proxy.setSourceModel(f.model());
+    QAbstractItemModelTester tester(&proxy, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    proxy.setSearchText("savings");
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(Model::ActionCountRole).toInt(), 2);
+    QVERIFY(!proxy.index(0, 0).data(Model::FeeKnownRole).toBool());
+    QVERIFY(!proxy.index(0, 0).data(Model::FeeSatRole).isValid());
+    const auto actions = proxy.index(0, 0).data(Model::ActionsRole).toList();
+    QCOMPARE(actions[0].toMap().value("source").toInt(), int(Model::WalletInputs));
+    QCOMPARE(actions[0].toMap().value("inputs").toList().size(), 1);
+    QCOMPARE(actions[1].toMap().value("amount").toString(), QString("+0.00029000 BTC"));
+    for (auto type : {Proxy::Sent, Proxy::Received, Proxy::Multiple}) {
+        proxy.setTypeFilter(type);
+        QCOMPARE(proxy.rowCount(), 1);
+        QCOMPARE(proxy.index(0, 0).data(Model::ActionsRole).toList(), actions);
+    }
+    proxy.setMinAmount(71'001);
+    QCOMPARE(proxy.rowCount(), 0);
+    proxy.setMinAmount(71'000);
+    QCOMPARE(proxy.rowCount(), 1);
+    QVERIFY(proxy.applyCustomRange("2026-08-12", "2026-08-12"));
+    QCOMPARE(proxy.rowCount(), 1);
+    QTemporaryDir dir;
+    const auto path = dir.filePath("activity.csv");
+    QVERIFY(proxy.exportCsv(path));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto csv = file.readAll();
+    QCOMPARE(csv.count('\n'), 2); // Header plus one transaction, not two actions.
+    QVERIFY(csv.contains("Multiple actions"));
+    QVERIFY(csv.contains("-0.00071000"));
+    proxy.setTypeFilter(Proxy::Mined);
+    QCOMPARE(proxy.rowCount(), 0);
+}
+
+void TransactionActivityModelTests::groupsPendingMonthsAndDaysAndCountsParents()
+{
+    Fixture f;
+    const auto incoming = MakeTx({{50'000, false}}, {{49'000, true}}, Time(8, 12));
+    const auto august = MakeTx({{90'000, true}}, {{40'000, false}, {49'000, false, false, 2}}, Time(8, 13));
+    const auto september = MakeTx({{30'000, true}}, {{29'000, false}}, Time(9, 14));
+    f.state->put(incoming, 0);
+    f.state->put(august);
+    f.state->put(september, 0);
+    f.request(Request(1, "unpaid-address"));
+    Proxy proxy;
+    proxy.setSourceModel(f.model());
+    QCOMPARE(proxy.count(), 4);
+    QCOMPARE(proxy.transactionCount(), 3);
+    QCOMPARE(proxy.requestCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+    QCOMPARE(proxy.index(1, 0).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+    QCOMPARE(proxy.index(2, 0).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+    QCOMPARE(proxy.index(0, 0).data(Model::TxidRole).toString(), Id(september));
+    QCOMPARE(proxy.index(3, 0).data(Proxy::SectionKeyRole).toString(), QString("2026-08"));
+    proxy.setGroupBy(Proxy::Day);
+    QCOMPARE(Find(proxy, Id(august)).data(Proxy::SectionKeyRole).toString(), QString("2026-08-13"));
+    QCOMPARE(Find(proxy, Id(august)).data(Proxy::DateTimeLabelRole).toString(), QLocale().toString(QDateTime::fromSecsSinceEpoch(august.time), "h:mm AP"));
+    QCOMPARE(Find(proxy, Id(incoming)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+    QVERIFY(Find(proxy, Id(incoming)).data(Proxy::DateTimeLabelRole).toString().contains("12"));
+    f.state->statuses[incoming.tx->GetHash()].depth_in_main_chain = 1;
+    f.model()->refreshStatuses();
+    QCOMPARE(Find(proxy, Id(incoming)).data(Proxy::SectionKeyRole).toString(), QString("2026-08-12"));
+    QCOMPARE(proxy.index(0, 0).data(Model::TxidRole).toString(), Id(september));
+    proxy.setTypeFilter(Proxy::Sent);
+    QCOMPARE(proxy.transactionCount(), 2);
+    QCOMPARE(proxy.requestCount(), 0);
+    QCOMPARE(proxy.count(), 2); // The batch's two children count as one.
+}
+
+void TransactionActivityModelTests::groupsTransactionsInPendingUntilFirstConfirmation()
+{
+    Fixture f;
+    const std::vector<interfaces::WalletTx> transactions{
+        MakeTx({{100'000, false}}, {{99'000, true, false, 5}}, Time(9, 15)), // Receive.
+        MakeTx({{100'000, true}}, {{99'000, false}}, Time(9, 15)), // Single send.
+        MakeTx({{120'000, true}}, {{60'000, false}, {40'000, false, false, 2}, {19'000, true, true, 3}}, Time(9, 15)), // Batch.
+        MakeTx({{50'000, true}, {50'000, true}}, {{99'000, true}}, Time(9, 15)), // Consolidation.
+        MakeTx({{100'000, true}}, {{49'000, true}, {50'000, true, false, 2}}, Time(9, 15)), // Split.
+        MakeTx({{100'000, true}}, {{99'000, true, false, 4}}, Time(9, 15)), // Internal transfer.
+    };
+    for (const auto& tx : transactions) f.state->put(tx, 0);
+    auto* source = f.model();
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    QCOMPARE(proxy.transactionCount(), int(transactions.size()));
+
+    for (const int depth : {0, 1, 2, 5, 6, 0}) {
+        for (const auto& tx : transactions) f.state->statuses[tx.tx->GetHash()].depth_in_main_chain = depth;
+        source->refreshStatuses();
+        for (const auto& tx : transactions) {
+            const auto row = Find(proxy, Id(tx));
+            QCOMPARE(row.data(Model::IsPendingRole).toBool(), depth == 0);
+            QCOMPARE(row.data(Proxy::SectionKeyRole).toString(), depth == 0 ? QString("pending") : QString("2026-09"));
+        }
+    }
+}
+
+void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplacementPending()
+{
+    Fixture f;
+    auto original = MakeTx({{120'000, true}},
+        {{60'000, false}, {40'000, false, false, 2}, {19'000, true, true, 3}}, Time(9, 15));
+    auto replacement = MakeTx({{120'000, true}},
+        {{60'000, false}, {40'000, false, false, 2}, {18'000, true, true, 3}}, Time(9, 15, 13));
+    f.state->put(original, 0);
+    auto* source = f.model();
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    QCOMPARE(Find(proxy, Id(original)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+
+    original.value_map["replaced_by_txid"] = Id(replacement).toStdString();
+    replacement.value_map["replaces_txid"] = Id(original).toStdString();
+    f.state->put(original, 0);
+    f.state->notify(original, CT_UPDATED);
+    f.state->put(replacement, 0);
+    f.state->notify(replacement, CT_NEW);
+    QTRY_COMPARE(proxy.transactionCount(), 2);
+    QVERIFY(Find(proxy, Id(original)).data(Model::IsInactiveRole).toBool());
+    QVERIFY(!Find(proxy, Id(original)).data(Model::IsPendingRole).toBool());
+    QCOMPARE(Find(proxy, Id(original)).data(Proxy::SectionKeyRole).toString(), QString("2026-09"));
+    QCOMPARE(Find(proxy, Id(replacement)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+    QCOMPARE(proxy.index(0, 0).data(Model::TxidRole).toString(), Id(replacement));
+    QCOMPARE(Find(proxy, Id(replacement)).data(Model::ActionCountRole).toInt(), 2);
+    proxy.setGroupBy(Proxy::Day);
+    QCOMPARE(Find(proxy, Id(original)).data(Proxy::SectionKeyRole).toString(), QString("2026-09-15"));
+    QCOMPARE(Find(proxy, Id(replacement)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
+
+    f.state->statuses[replacement.tx->GetHash()].depth_in_main_chain = 1;
+    source->refreshStatuses();
+    QCOMPARE(Find(proxy, Id(replacement)).data(Proxy::SectionKeyRole).toString(), QString("2026-09-15"));
+}
+
+void TransactionActivityModelTests::associatesRequestsPerOutputAndUpdatesLive()
+{
+    Fixture f;
+    const auto tx = MakeTx({{120'000, false}}, {{50'000, true}, {69'000, true, false, 2}});
+    auto request = Request(1, Address(tx), "Public name");
+    request.recipient.noteSelf = "Rent";
+    f.request(request);
+    auto* source = f.model();
+    QAbstractItemModelTester tester(source, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    QCOMPARE(source->requestCount(), 1);
+    f.state->put(tx, 0);
+    f.state->notify(tx, CT_NEW);
+    QTRY_COMPARE(source->transactionCount(), 1);
+    QCOMPARE(source->requestCount(), 0);
+    auto actions = Find(*source, Id(tx)).data(Model::ActionsRole).toList();
+    QCOMPARE(actions[0].toMap().value("paymentRequests").toList().size(), 1);
+    QVERIFY(actions[1].toMap().value("paymentRequests").toList().isEmpty());
+    QCOMPARE(actions[0].toMap().value("label").toString(), QString("Rent"));
+    QCOMPARE(source->transactionDetails(Id(tx)).value("paymentRequests").toList().size(), 1);
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    proxy.setTypeFilter(Proxy::PaymentRequest);
+    QCOMPARE(proxy.rowCount(), 1); // Paid request is represented by its transaction.
+    request.recipient.noteSelf = "September rent";
+    f.request(request);
+    proxy.setSearchText("September rent");
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(Find(*source, Id(tx)).data(Model::ActionsRole).toList()[0].toMap().value("label").toString(), QString("September rent"));
+    QVERIFY(f.wallet->receiveRequests()->removeByRequestId("1"));
+    QCOMPARE(proxy.rowCount(), 0);
+    QVERIFY(!Find(*source, Id(tx)).data(Model::HasPaymentRequestRole).toBool());
+    QCOMPARE(source->rowCount(), 1);
+}
+
+void TransactionActivityModelTests::usesPrivateRequestNotesWithoutChangingStoredData()
+{
+    Fixture f;
+    const auto tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    f.state->labels[Address(tx).toStdString()] = "Address book name";
+    auto request = Request(1, Address(tx), "Public request name");
+    f.request(request);
+    auto* source = f.model();
+    QVERIFY(source->index(0).data(Model::LabelRole).toString().isEmpty());
+
+    request.recipient.noteSelf = "Private September rent";
+    f.request(request);
+    QCOMPARE(source->index(0).data(Model::LabelRole).toString(), QString("Private September rent"));
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    proxy.setSearchText("Private September");
+    QCOMPARE(proxy.rowCount(), 1);
+
+    f.state->put(tx);
+    source->reload();
+    QCOMPARE(source->requestCount(), 0);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(source->transactionDetails(Id(tx)).value("label").toString(), QString("Private September rent"));
+
+    // Clearing a note must not revive the public name or address-book label.
+    request.recipient.noteSelf.clear();
+    f.request(request);
+    QCOMPARE(proxy.rowCount(), 0);
+    const auto details = source->transactionDetails(Id(tx));
+    QVERIFY(details.value("label").toString().isEmpty());
+    QVERIFY(details.value("actions").toList()[0].toMap().value("label").toString().isEmpty());
+    source->refreshStatuses();
+    source->reload();
+    const auto stored = f.wallet->receiveRequests()->entryById("1");
+    QVERIFY(stored.has_value());
+    QVERIFY(stored->recipient.noteSelf.empty());
+    QCOMPARE(stored->recipient.label, std::string("Public request name"));
+    QCOMPARE(f.state->labels.at(Address(tx).toStdString()), std::string("Address book name"));
+    proxy.setSearchText("Public request name");
+    QCOMPARE(proxy.rowCount(), 1); // Public metadata remains searchable.
+
+    Fixture unnamed;
+    unnamed.state->put(tx);
+    unnamed.state->labels[Address(tx).toStdString()] = "Public address name";
+    QVERIFY(unnamed.model()->transactionDetails(Id(tx)).value("label").toString().isEmpty());
+}
+
+void TransactionActivityModelTests::restoresRequestsOnConflictAbandonmentReplacementAndDeletion()
+{
+    Fixture f;
+    auto tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    f.state->put(tx, 0);
+    f.request(Request(1, Address(tx)));
+    auto* source = f.model();
+    QCOMPARE(source->requestCount(), 0);
+    auto& status = f.state->statuses[tx.tx->GetHash()];
+    status.depth_in_main_chain = -1;
+    source->refreshStatuses();
+    QCOMPARE(source->requestCount(), 1);
+    QVERIFY(Find(*source, Id(tx)).data(Model::IsInactiveRole).toBool());
+    QVERIFY(!Find(*source, Id(tx)).data(Model::IsPendingRole).toBool());
+    status.depth_in_main_chain = 0;
+    status.is_abandoned = true;
+    source->refreshStatuses();
+    QCOMPARE(source->requestCount(), 1);
+    QCOMPARE(Find(*source, Id(tx)).data(Model::StatusRole).toInt(), int(Transaction::Abandoned));
+    status.is_abandoned = false;
+    source->refreshStatuses();
+    QCOMPARE(source->requestCount(), 0);
+
+    auto replacement = MakeTx({{50'000, false}}, {{48'000, true}});
+    tx.value_map["replaced_by_txid"] = Id(replacement).toStdString();
+    f.state->put(tx, 0);
+    f.state->notify(tx, CT_UPDATED);
+    QTRY_COMPARE(source->requestCount(), 1);
+    QCOMPARE(Find(*source, Id(tx)).data(Model::ReplacedByTxidRole).toString(), Id(replacement));
+    replacement.value_map["replaces_txid"] = Id(tx).toStdString();
+    f.state->put(replacement, 0);
+    f.state->notify(replacement, CT_NEW);
+    QTRY_COMPARE(source->transactionCount(), 2);
+    QCOMPARE(source->requestCount(), 0);
+    QCOMPARE(Find(*source, Id(replacement)).data(Model::ReplacesTxidRole).toString(), Id(tx));
+    f.state->transactions.erase(replacement.tx->GetHash());
+    f.state->statuses.erase(replacement.tx->GetHash());
+    f.state->notify(replacement, CT_DELETED);
+    QTRY_COMPARE(source->transactionCount(), 1);
+    QCOMPARE(source->requestCount(), 1);
+    source->reload();
+    QCOMPARE(source->requestCount(), 1);
+    // The original can win a race (or confirm after a reorg). Historical RBF
+    // metadata must not override its current confirmed state.
+    f.state->statuses[tx.tx->GetHash()].depth_in_main_chain = 1;
+    source->refreshStatuses();
+    QCOMPARE(source->requestCount(), 0);
+    QVERIFY(!Find(*source, Id(tx)).data(Model::IsInactiveRole).toBool());
+}
+
+void TransactionActivityModelTests::sharesAddressAssociationsWithoutDuplicatingParents()
+{
+    Fixture f;
+    const auto tx = MakeTx({{100'000, false}}, {{50'000, true}, {49'000, true}});
+    f.state->put(tx);
+    f.request(Request(1, Address(tx), "First"));
+    f.request(Request(2, Address(tx), "Second", 0));
+    auto* source = f.model();
+    QCOMPARE(source->rowCount(), 1);
+    QCOMPARE(source->transactionDetails(Id(tx)).value("paymentRequests").toList().size(), 2);
+    for (const auto& action : source->index(0).data(Model::ActionsRole).toList()) {
+        QCOMPARE(action.toMap().value("paymentRequests").toList().size(), 2);
+    }
+    // Match policy is address-based, including partial/unspecified amounts and
+    // several requests for a reused address; it makes no one-to-one claim.
+    f.wallet->receiveRequests()->setEntries({Request(3, "another-address", "New request", 100)});
+    QCOMPARE(source->requestCount(), 1);
+    QVERIFY(!Find(*source, Id(tx)).data(Model::HasPaymentRequestRole).toBool());
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    proxy.setTypeFilter(Proxy::PaymentRequest);
+    proxy.setMinAmount(101);
+    QCOMPARE(proxy.rowCount(), 0);
+    proxy.setMinAmount(100);
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void TransactionActivityModelTests::preservesStatusWhenBusyAndRetries()
+{
+    Fixture f;
+    const auto tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    f.state->put(tx, 2);
+    f.request(Request(1, Address(tx)));
+    auto* source = f.model();
+    const QPersistentModelIndex row{Find(*source, Id(tx))};
+    f.state->busy = true;
+    source->refreshStatuses();
+    source->reload();
+    QCOMPARE(row.data(Model::DepthRole).toInt(), 2);
+    QCOMPARE(row.data(Model::StatusRole).toInt(), int(Transaction::Confirming));
+    QCOMPARE(source->requestCount(), 0);
+    f.state->statuses[tx.tx->GetHash()].depth_in_main_chain = 6;
+    f.state->busy = false;
+    QTRY_COMPARE(row.data(Model::DepthRole).toInt(), 6);
+    QVERIFY(!row.data(Model::IsPendingRole).toBool());
+
+    Fixture unknown;
+    unknown.state->put(tx);
+    unknown.state->busy = true;
+    auto* uninitialized = unknown.model();
+    QVERIFY(!uninitialized->index(0).data(Model::StatusKnownRole).toBool());
+    QVERIFY(!uninitialized->index(0).data(Model::IsInactiveRole).toBool());
+    unknown.state->busy = false;
+    QTRY_VERIFY(uninitialized->index(0).data(Model::StatusKnownRole).toBool());
+}
+
+void TransactionActivityModelTests::refreshesOnWalletTipAndSameHeightReorg()
+{
+    Fixture f;
+    const auto tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    f.state->put(tx, 5);
+    auto* source = f.model();
+    f.state->statuses[tx.tx->GetHash()].depth_in_main_chain = 6;
+    QTRY_COMPARE(source->index(0).data(Model::DepthRole).toInt(), 6);
+    f.state->statuses[tx.tx->GetHash()].depth_in_main_chain = 0;
+    f.state->tip = uint256{2}; // Same height, different wallet-processed block.
+    QTRY_COMPARE(source->index(0).data(Model::DepthRole).toInt(), 0);
+    QVERIFY(source->index(0).data(Model::IsPendingRole).toBool());
+}
+
+void TransactionActivityModelTests::queuesWalletNotificationsAndRetainsStableIndexes()
+{
+    Fixture f;
+    auto* source = f.model();
+    QAbstractItemModelTester tester(source, QAbstractItemModelTester::FailureReportingMode::QtTest);
+    const auto tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    f.state->put(tx, 2);
+    std::thread notify([&] { f.state->notify(tx, CT_NEW); });
+    notify.join();
+    QCOMPARE(source->rowCount(), 0);
+    QTRY_COMPARE(source->rowCount(), 1);
+    QVERIFY(!f.state->snapshot_on_worker);
+    const QPersistentModelIndex row{source->index(0)};
+    const auto id = row.data(Model::IdRole);
+    QSignalSpy resets(source, &QAbstractItemModel::modelReset);
+    QSignalSpy changes(source, &QAbstractItemModel::dataChanged);
+    source->reload();
+    QCOMPARE(resets.count(), 0);
+    QCOMPARE(changes.count(), 0);
+    f.state->labels[Address(tx).toStdString()] = "Updated label";
+    Q_EMIT f.wallet->addressListChanged();
+    QVERIFY(row.data(Model::LabelRole).toString().isEmpty());
+    QVERIFY(row.data(Model::SearchTextRole).toString().contains("Updated label"));
+    QVERIFY(changes.count() > 0);
+    QCOMPARE(row.data(Model::IdRole), id);
+    f.request(Request(1, "unpaid-address"));
+    QVERIFY(row.isValid());
+    QCOMPARE(row.data(Model::IdRole), id);
+    source->reload();
+    QCOMPARE(source->rowCount(), 2);
+    f.state->transactions.clear();
+    f.state->statuses.clear();
+    source->reload();
+    QVERIFY(!row.isValid());
+    QCOMPARE(source->requestCount(), 1);
+}
+
+void TransactionActivityModelTests::recognizesSelfSendToPaymentRequest_data()
+{
+    QTest::addColumn<bool>("multiple_inputs");
+    QTest::newRow("single-input") << false;
+    QTest::newRow("multiple-inputs") << true;
+}
+
+void TransactionActivityModelTests::recognizesSelfSendToPaymentRequest()
+{
+    QFETCH(bool, multiple_inputs);
+    Fixture f;
+    const std::vector<std::pair<CAmount, bool>> inputs = multiple_inputs
+        ? std::vector<std::pair<CAmount, bool>>{{60'000, true}, {40'000, true}}
+        : std::vector<std::pair<CAmount, bool>>{{100'000, true}};
+    const auto tx = MakeTx(inputs, {{39'000, true, true}, {60'000, true, false, 2}});
+    auto request = Request(1, Address(tx, 1), "Public label", 60'000);
+    request.recipient.noteSelf = "Personal savings";
+    f.request(request);
+    f.state->put(tx);
+    auto* model = f.model();
+    const auto row = Find(*model, Id(tx));
+    QVERIFY(row.isValid());
+    QCOMPARE(row.data(Model::ActivityTypeRole).toInt(), int(Model::InternalTransfer));
+    QCOMPARE(row.data(Model::TypeRole).toInt(), int(Transaction::SendToSelf));
+    QCOMPARE(row.data(Model::NetAmountSatRole).toLongLong(), -1'000);
+    QCOMPARE(row.data(Model::LabelRole).toString(), QString("Personal savings"));
+    QCOMPARE(row.data(Model::AddressRole).toString(), Address(tx, 1));
+    QCOMPARE(model->requestCount(), 0);
+    QVERIFY(row.data(Model::HasPaymentRequestRole).toBool());
+    const auto actions = row.data(Model::ActionsRole).toList();
+    QCOMPARE(actions.size(), 1);
+    QCOMPARE(actions[0].toMap().value("outputIndex").toInt(), 1);
+    QCOMPARE(actions[0].toMap().value("amountSat").toLongLong(), 60'000);
+    QCOMPARE(actions[0].toMap().value("direction").toInt(), int(Model::InternalAction));
+    QVERIFY(actions[0].toMap().value("hasPaymentRequest").toBool());
+    Proxy proxy;
+    proxy.setSourceModel(model);
+    proxy.setTypeFilter(Proxy::Split);
+    QCOMPARE(proxy.rowCount(), 0);
+    proxy.setTypeFilter(Proxy::Consolidation);
+    QCOMPARE(proxy.rowCount(), 0);
+    proxy.setTypeFilter(Proxy::SentToSelf);
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void TransactionActivityModelTests::handlesInternalAndMinedTypes()
+{
+    Fixture f;
+    const auto consolidation = MakeTx({{50'000, true}, {50'000, true}}, {{99'000, true}});
+    const auto split = MakeTx({{100'000, true}}, {{50'000, true}, {49'000, true, false, 2}});
+    const auto internal = MakeTx({{60'000, true}}, {{59'000, true}});
+    auto mined = MakeTx({{0, false}}, {{312'500'000, true}});
+    mined.is_coinbase = true;
+    for (const auto& tx : {consolidation, split, internal, mined}) f.state->put(tx);
+    f.state->statuses[mined.tx->GetHash()].blocks_to_maturity = 94;
+    Proxy proxy;
+    proxy.setSourceModel(f.model());
+    proxy.setTypeFilter(Proxy::SentToSelf);
+    QCOMPARE(proxy.rowCount(), 3);
+    QVERIFY(Find(proxy, Id(consolidation)).isValid());
+    QVERIFY(Find(proxy, Id(split)).isValid());
+    QVERIFY(Find(proxy, Id(internal)).isValid());
+    QVERIFY(!Find(proxy, Id(mined)).isValid());
+    proxy.setTypeFilter(Proxy::Consolidation);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(Model::NetAmountSatRole).toLongLong(), -1'000);
+    QCOMPARE(proxy.index(0, 0).data(Model::ActionsRole).toList()[0].toMap().value("amountSat").toLongLong(), 99'000);
+    QVERIFY(proxy.index(0, 0).data(Model::LabelRole).toString().isEmpty());
+    proxy.setTypeFilter(Proxy::Split);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(Model::ActionCountRole).toInt(), 2);
+    QVERIFY(proxy.index(0, 0).data(Model::LabelRole).toString().isEmpty());
+    proxy.setTypeFilter(Proxy::Mined);
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.index(0, 0).data(Model::StatusRole).toInt(), int(Transaction::Immature));
+    QCOMPARE(proxy.index(0, 0).data(Model::BlocksToMaturityRole).toInt(), 94);
+    f.state->statuses[mined.tx->GetHash()].is_in_main_chain = false;
+    f.model()->refreshStatuses();
+    QCOMPARE(proxy.index(0, 0).data(Model::StatusRole).toInt(), int(Transaction::NotAccepted));
+    QVERIFY(proxy.index(0, 0).data(Model::IsInactiveRole).toBool());
+}
+
+#ifdef BITCOINQML_NO_TEST_MAIN
+#include <test/qt_test_registry.h>
+BITCOINQML_REGISTER_QT_TEST(TransactionActivityModelTests)
+#else
+QTEST_MAIN(TransactionActivityModelTests)
+#endif
+#include "test_transactionactivitymodel.moc"

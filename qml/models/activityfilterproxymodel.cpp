@@ -7,10 +7,12 @@
 #include <qml/bitcoinunits.h>
 #include <qml/models/activitylistmodel.h>
 #include <qml/models/transaction.h>
+#include <qml/models/transactionactivitymodel.h>
 
 #include <QDate>
 #include <QDateTime>
 #include <QFile>
+#include <QLocale>
 #include <QStringList>
 #include <QTextStream>
 #include <QTime>
@@ -71,7 +73,41 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
 
 QHash<int, QByteArray> ActivityFilterProxyModel::roleNames() const
 {
-    return sourceModel() ? sourceModel()->roleNames() : QHash<int, QByteArray>{};
+    auto roles = sourceModel() ? sourceModel()->roleNames() : QHash<int, QByteArray>{};
+    if (groupedSource()) {
+        roles.insert(SectionKeyRole, "sectionKey");
+        roles.insert(SectionLabelRole, "sectionLabel");
+        roles.insert(DateTimeLabelRole, "dateTimeLabel");
+    }
+    return roles;
+}
+
+bool ActivityFilterProxyModel::groupedSource() const
+{
+    return qobject_cast<TransactionActivityModel*>(sourceModel()) != nullptr;
+}
+
+QVariant ActivityFilterProxyModel::data(const QModelIndex& index, int role) const
+{
+    if (groupedSource() && index.isValid() && index.model() == this &&
+        (role == SectionKeyRole || role == SectionLabelRole || role == DateTimeLabelRole)) {
+        const bool pending = QSortFilterProxyModel::data(index, TransactionActivityModel::IsPendingRole).toBool();
+        const auto date = QDateTime::fromSecsSinceEpoch(QSortFilterProxyModel::data(index, TransactionActivityModel::TimestampRole).toLongLong());
+        if (role == DateTimeLabelRole) {
+            return QLocale().toString(date, m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
+        }
+        if (role == SectionKeyRole) return pending ? QStringLiteral("pending") : date.toString(m_group_by == Day ? "yyyy-MM-dd" : "yyyy-MM");
+        return pending ? tr("Pending") : QLocale().toString(date.date(), m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
+    }
+    return QSortFilterProxyModel::data(index, role);
+}
+
+void ActivityFilterProxyModel::setGroupBy(GroupBy group_by)
+{
+    if (m_group_by == group_by) return;
+    m_group_by = group_by;
+    if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionKeyRole, SectionLabelRole, DateTimeLabelRole});
+    Q_EMIT groupByChanged();
 }
 
 void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* source_model)
@@ -241,6 +277,45 @@ int ActivityFilterProxyModel::count() const
     return rowCount();
 }
 
+int ActivityFilterProxyModel::requestCount() const
+{
+    int requests{0};
+    for (int row = 0; row < rowCount(); ++row) requests += index(row, 0).data(TransactionActivityModel::IsPendingRequestRole).toBool();
+    return requests;
+}
+
+int ActivityFilterProxyModel::transactionCount() const
+{
+    return rowCount() - requestCount();
+}
+
+bool ActivityFilterProxyModel::groupedTypeMatches(const QModelIndex& source_index) const
+{
+    if (m_type_filter == TypeAll) return true;
+    if (m_type_filter == PaymentRequest) return source_index.data(TransactionActivityModel::HasPaymentRequestRole).toBool();
+    if (source_index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) return false;
+
+    const auto type = static_cast<TransactionActivityModel::ActivityType>(source_index.data(TransactionActivityModel::ActivityTypeRole).toInt());
+    switch (m_type_filter) {
+    case Multiple: return type == TransactionActivityModel::Multiple;
+    case Consolidation: return type == TransactionActivityModel::Consolidation;
+    case Split: return type == TransactionActivityModel::Split;
+    case SentToSelf: return type == TransactionActivityModel::InternalTransfer || type == TransactionActivityModel::Consolidation || type == TransactionActivityModel::Split;
+    case Mined: return type == TransactionActivityModel::Mined;
+    case Other: return type == TransactionActivityModel::Other;
+    case Received:
+    case Sent: {
+        if (type == TransactionActivityModel::Mined) return false;
+        const int direction = m_type_filter == Received ? TransactionActivityModel::ReceiveAction : TransactionActivityModel::SendAction;
+        for (const auto& action : source_index.data(TransactionActivityModel::ActionsRole).toList()) {
+            if (action.toMap().value("direction").toInt() == direction) return true;
+        }
+        return false;
+    }
+    default: return false;
+    }
+}
+
 bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const
 {
     if (!sourceModel()) return false;
@@ -256,17 +331,17 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
-    if (!dateMatches(source_index.data(ActivityListModel::TimestampRole).toLongLong())) {
+    if (!dateMatches(source_index.data(TransactionActivityModel::TimestampRole).toLongLong())) {
         return false;
     }
 
-    const TypeFilter row_type = filterTypeForIndex(source_index);
-    if (m_type_filter != TypeAll && row_type != m_type_filter) {
+    if (groupedSource() ? !groupedTypeMatches(source_index)
+                        : m_type_filter != TypeAll && filterTypeForIndex(source_index) != m_type_filter) {
         return false;
     }
 
     if (m_min_amount >= 0) {
-        const CAmount net_amount = source_index.data(ActivityListModel::NetAmountSatRole).toLongLong();
+        const CAmount net_amount = source_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
         // Compare absolute value so a send and a receive of the same size both
         // pass a threshold, matching the Qt Widgets amount filter.
         if (qAbs(net_amount) < m_min_amount) {
@@ -276,10 +351,12 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
 
     const QString search = m_search_text.trimmed();
     if (!search.isEmpty()) {
-        const QString address = source_index.data(ActivityListModel::AddressRole).toString();
-        const QString label = source_index.data(ActivityListModel::LabelRole).toString();
-        const QString txid = source_index.data(ActivityListModel::TxIdRole).toString();
-        if (!address.contains(search, Qt::CaseInsensitive) &&
+        const QString address = source_index.data(TransactionActivityModel::AddressRole).toString();
+        const QString label = source_index.data(TransactionActivityModel::LabelRole).toString();
+        const QString txid = source_index.data(TransactionActivityModel::TxidRole).toString();
+        const QString children = groupedSource() ? source_index.data(TransactionActivityModel::SearchTextRole).toString() : QString{};
+        if (!children.contains(search, Qt::CaseInsensitive) &&
+            !address.contains(search, Qt::CaseInsensitive) &&
             !label.contains(search, Qt::CaseInsensitive) &&
             !txid.contains(search, Qt::CaseInsensitive)) {
             return false;
@@ -299,18 +376,26 @@ bool ActivityFilterProxyModel::lessThan(const QModelIndex& left_index, const QMo
     if (const auto* model = qobject_cast<const ActivityListModel*>(sourceModel())) {
         return model->rowSortsBefore(right_index.row(), left_index.row());
     }
-    const qint64 left_timestamp = sourceModel()->data(left_index, ActivityListModel::TimestampRole).toLongLong();
-    const qint64 right_timestamp = sourceModel()->data(right_index, ActivityListModel::TimestampRole).toLongLong();
+    if (groupedSource()) {
+        const bool left_pending = left_index.data(TransactionActivityModel::IsPendingRole).toBool();
+        const bool right_pending = right_index.data(TransactionActivityModel::IsPendingRole).toBool();
+        if (left_pending != right_pending) return !left_pending;
+    }
+    const qint64 left_timestamp = sourceModel()->data(left_index, TransactionActivityModel::TimestampRole).toLongLong();
+    const qint64 right_timestamp = sourceModel()->data(right_index, TransactionActivityModel::TimestampRole).toLongLong();
+    if (groupedSource() && left_timestamp == right_timestamp) {
+        return left_index.data(TransactionActivityModel::IdRole).toString() < right_index.data(TransactionActivityModel::IdRole).toString();
+    }
     return left_timestamp < right_timestamp;
 }
 
 ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::filterTypeForIndex(const QModelIndex& source_index) const
 {
-    if (source_index.data(ActivityListModel::IsPendingRequestRole).toBool()) {
+    if (source_index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) {
         return PaymentRequest;
     }
 
-    switch (source_index.data(ActivityListModel::TypeRole).toInt()) {
+    switch (source_index.data(TransactionActivityModel::TypeRole).toInt()) {
     case Transaction::RecvWithAddress:
     case Transaction::RecvFromOther:
         return Received;
@@ -329,11 +414,20 @@ ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::filterTypeForInde
 
 QString ActivityFilterProxyModel::exportTypeLabelForIndex(const QModelIndex& proxy_index) const
 {
-    if (proxy_index.data(ActivityListModel::IsPendingRequestRole).toBool()) {
+    if (proxy_index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) {
         return tr("Payment request");
     }
 
-    switch (proxy_index.data(ActivityListModel::TypeRole).toInt()) {
+    if (groupedSource()) {
+        switch (proxy_index.data(TransactionActivityModel::ActivityTypeRole).toInt()) {
+        case TransactionActivityModel::Multiple: return tr("Multiple actions");
+        case TransactionActivityModel::Consolidation: return tr("Consolidation");
+        case TransactionActivityModel::Split: return tr("Split");
+        default: break;
+        }
+    }
+
+    switch (proxy_index.data(TransactionActivityModel::TypeRole).toInt()) {
     case Transaction::RecvWithAddress:
     case Transaction::RecvFromOther:
         return tr("Received");
@@ -431,20 +525,20 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
 
     for (int row = 0; row < rowCount(); ++row) {
         const QModelIndex proxy_index = index(row, 0);
-        const qint64 timestamp = proxy_index.data(ActivityListModel::TimestampRole).toLongLong();
-        const auto status = static_cast<Transaction::Status>(proxy_index.data(ActivityListModel::StatusRole).toInt());
+        const qint64 timestamp = proxy_index.data(TransactionActivityModel::TimestampRole).toLongLong();
+        const auto status = static_cast<Transaction::Status>(proxy_index.data(TransactionActivityModel::StatusRole).toInt());
         const bool confirmed = status == Transaction::Confirming || status == Transaction::Confirmed;
-        const CAmount amount = proxy_index.data(ActivityListModel::NetAmountSatRole).toLongLong();
-        const bool pending_request = proxy_index.data(ActivityListModel::IsPendingRequestRole).toBool();
+        const CAmount amount = proxy_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
+        const bool pending_request = proxy_index.data(TransactionActivityModel::IsPendingRequestRole).toBool();
 
         WriteCsvRow(stream, {
             confirmed ? QStringLiteral("true") : QStringLiteral("false"),
             QDateTime::fromSecsSinceEpoch(timestamp).toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")),
             exportTypeLabelForIndex(proxy_index),
-            GuardedCsvText(proxy_index.data(ActivityListModel::LabelRole).toString()),
-            GuardedCsvText(proxy_index.data(ActivityListModel::AddressRole).toString()),
+            GuardedCsvText(proxy_index.data(TransactionActivityModel::LabelRole).toString()),
+            GuardedCsvText(proxy_index.data(TransactionActivityModel::AddressRole).toString()),
             QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
-            pending_request ? QString{} : proxy_index.data(ActivityListModel::TxIdRole).toString(),
+            pending_request ? QString{} : proxy_index.data(TransactionActivityModel::TxidRole).toString(),
         });
     }
 
