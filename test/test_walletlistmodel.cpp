@@ -68,8 +68,12 @@ class WalletListModelTests : public QObject
 {
     Q_OBJECT
 
+private:
+    QLocale m_previous_locale;
+
 private Q_SLOTS:
     void init();
+    void cleanup();
     void listWalletDirMapsNameAndLoadStateRoles();
     void listWalletDirRemovesMissingEntries();
     void listWalletDirSortsCaseInsensitivelyAndPreservesDuplicateRows();
@@ -85,13 +89,22 @@ private Q_SLOTS:
     void listWalletDirPreservesBalanceAndKeySchemeAcrossRebuilds();
     void walletDirLoadedFlipsAfterFirstList();
     void balancesFollowDisplayUnitAcrossWalletRefreshes();
+    void balancesUseGermanLocale();
 };
 
 void WalletListModelTests::init()
 {
+    m_previous_locale = QLocale();
+    // Use decimal points unless a test explicitly selects another locale.
+    QLocale::setDefault(QLocale::c());
     QSettings settings;
     settings.remove("walletDisplayNames");
     settings.sync();
+}
+
+void WalletListModelTests::cleanup()
+{
+    QLocale::setDefault(m_previous_locale);
 }
 
 void WalletListModelTests::listWalletDirMapsNameAndLoadStateRoles()
@@ -494,6 +507,33 @@ void WalletListModelTests::balancesFollowDisplayUnitAcrossWalletRefreshes()
     model.setDisplayUnit(0);
     QCOMPARE(amount(0), QStringLiteral("139.00000000"));
     QCOMPARE(amount(1), QStringLiteral("0.00000001"));
+}
+
+void WalletListModelTests::balancesUseGermanLocale()
+{
+    QLocale::setDefault(QLocale{"de_DE"});
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    ConfigureExpectedWalletLoader(node, loader);
+    WalletListModel model{node};
+    model.listWalletDir();
+    model.setWalletInfo("alpha_wallet", 123456789, 0);
+    const auto amount = [&model] {
+        return model.data(model.index(0, 0), WalletListModel::BalanceRole).toString();
+    };
+
+    QCOMPARE(amount(), QStringLiteral("1,23456789"));
+    model.setDisplayUnit(1);
+    QCOMPARE(amount(), QStringLiteral("1.234,56789"));
+    model.setDisplayUnit(2);
+    QCOMPARE(amount(), QStringLiteral("1.234.567,89"));
+    model.setDisplayUnit(3);
+    QCOMPARE(amount(), QStringLiteral("123.456.789"));
+    model.setDisplayUnit(0);
+    model.listWalletDir();
+    QCOMPARE(amount(), QStringLiteral("1,23456789"));
 }
 
 void WalletListModelTests::walletDirLoadedFlipsAfterFirstList()

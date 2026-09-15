@@ -29,6 +29,8 @@
 #include <wallet/types.h>
 
 #include <QFile>
+#include <QLocale>
+#include <QScopeGuard>
 #include <QSemaphore>
 #include <QSettings>
 #include <QSignalSpy>
@@ -1523,6 +1525,10 @@ void WalletQmlModelTests::scheduleFeeEstimates_invalidatesStalePreviewState()
 
 void WalletQmlModelTests::transactionChangedEmitsBalanceChanged()
 {
+    const QLocale previous_locale;
+    const auto restore_locale = qScopeGuard([previous_locale] { QLocale::setDefault(previous_locale); });
+    QLocale::setDefault(QLocale::c());
+
     auto wallet = std::make_unique<MockWallet>();
     auto* wallet_ptr = wallet.get();
 

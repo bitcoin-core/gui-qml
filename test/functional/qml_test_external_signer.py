@@ -151,11 +151,11 @@ def wait_for_wallet_balance(port, wallet_name):
     )
 
 
-def wait_for_wallet_badge_balance(gui, expected_balance):
+def wait_for_wallet_badge_balance(gui, expected_satoshis):
     wait_until(
-        lambda: gui.get_property("walletBadge", "balance") == expected_balance,
+        lambda: gui.get_property("walletBadge", "balanceSatoshi") == expected_satoshis,
         timeout=30,
-        description=f"wallet badge balance {expected_balance}",
+        description=f"wallet badge balance {expected_satoshis} satoshis",
     )
 
 
@@ -518,7 +518,7 @@ def run_test(args):
         checkpoints.checkpoint("signed mock PSBT prepared", harness.driver)
         select_wallet(harness.driver, wallet_name)
         checkpoints.checkpoint("external signer wallet reselected", harness.driver)
-        wait_for_wallet_badge_balance(harness.driver, "50.00000000")
+        wait_for_wallet_badge_balance(harness.driver, 5_000_000_000)
         checkpoints.checkpoint("wallet badge balance updated", harness.driver)
 
         harness.restart_gui(cwd=harness.tmpdir)
@@ -527,7 +527,7 @@ def run_test(args):
         assert {"fingerprint": "00000001", "name": "trezor_t"} in signers
         wait_for_wallet(harness.driver, wallet_name)
         wait_for_wallet_balance(harness.gui_rpc_port, wallet_name)
-        wait_for_wallet_badge_balance(harness.driver, "50.00000000")
+        wait_for_wallet_badge_balance(harness.driver, 5_000_000_000)
         checkpoints.checkpoint("wallet badge balance restored after restart", harness.driver)
 
         harness.update_gui_settings({"signer": no_signer_path})
@@ -536,7 +536,7 @@ def run_test(args):
         assert rpc_call(harness.gui_rpc_port, "enumeratesigners")["signers"] == []
         wait_for_wallet(harness.driver, wallet_name)
         wait_for_wallet_balance(harness.gui_rpc_port, wallet_name)
-        wait_for_wallet_badge_balance(harness.driver, "50.00000000")
+        wait_for_wallet_badge_balance(harness.driver, 5_000_000_000)
         checkpoints.checkpoint("wallet badge balance confirmed without signer", harness.driver)
 
         open_external_signer_review(harness.driver, destination_address, "0.50000000")
@@ -561,7 +561,7 @@ def run_test(args):
         assert {"fingerprint": "00000001", "name": "trezor_t"} in signers
         wait_for_wallet(harness.driver, wallet_name)
         wait_for_wallet_balance(harness.gui_rpc_port, wallet_name)
-        wait_for_wallet_badge_balance(harness.driver, "50.00000000")
+        wait_for_wallet_badge_balance(harness.driver, 5_000_000_000)
         checkpoints.checkpoint("wallet badge balance confirmed after signer restore", harness.driver)
 
         open_external_signer_review(harness.driver, destination_address, "0.50000000")
