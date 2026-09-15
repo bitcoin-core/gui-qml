@@ -131,7 +131,7 @@ void WalletQmlController::publishWalletInfo(WalletQmlModel* wallet_model)
     if (!wallet_model) return;
     Q_EMIT walletInfoChanged(
         wallet_model->name(),
-        wallet_model->balance(),
+        wallet_model->balanceSatoshi(),
         static_cast<int>(wallet_model->keySchemeKind()));
 }
 

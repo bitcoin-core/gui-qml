@@ -13,6 +13,7 @@
 #include <wallet/types.h>
 
 #include <QSettings>
+#include <QLocale>
 
 namespace {
 class FakeWalletLoader : public interfaces::WalletLoader
@@ -67,8 +68,12 @@ class WalletListModelTests : public QObject
 {
     Q_OBJECT
 
+private:
+    QLocale m_previous_locale;
+
 private Q_SLOTS:
     void init();
+    void cleanup();
     void listWalletDirMapsNameAndLoadStateRoles();
     void listWalletDirRemovesMissingEntries();
     void listWalletDirSortsCaseInsensitivelyAndPreservesDuplicateRows();
@@ -83,13 +88,23 @@ private Q_SLOTS:
     void setWalletInfoUpdatesBalanceAndKeySchemeRolesForRowOnly();
     void listWalletDirPreservesBalanceAndKeySchemeAcrossRebuilds();
     void walletDirLoadedFlipsAfterFirstList();
+    void balancesFollowDisplayUnitAcrossWalletRefreshes();
+    void balancesUseGermanLocale();
 };
 
 void WalletListModelTests::init()
 {
+    m_previous_locale = QLocale();
+    // Use decimal points unless a test explicitly selects another locale.
+    QLocale::setDefault(QLocale::c());
     QSettings settings;
     settings.remove("walletDisplayNames");
     settings.sync();
+}
+
+void WalletListModelTests::cleanup()
+{
+    QLocale::setDefault(m_previous_locale);
 }
 
 void WalletListModelTests::listWalletDirMapsNameAndLoadStateRoles()
@@ -408,7 +423,7 @@ void WalletListModelTests::setWalletInfoUpdatesBalanceAndKeySchemeRolesForRowOnl
     model.listWalletDir();
 
     QSignalSpy data_changed_spy(&model, &QAbstractItemModel::dataChanged);
-    model.setWalletInfo("alpha_wallet", "0.00 167 930", /*keySchemeKind=*/2);
+    model.setWalletInfo("alpha_wallet", 167930, /*keySchemeKind=*/2);
 
     QCOMPARE(data_changed_spy.count(), 1);
     const QList<QVariant> args = data_changed_spy.takeFirst();
@@ -420,13 +435,13 @@ void WalletListModelTests::setWalletInfoUpdatesBalanceAndKeySchemeRolesForRowOnl
     QVERIFY(roles.contains(WalletListModel::BalanceRole));
     QVERIFY(roles.contains(WalletListModel::KeySchemeKindRole));
 
-    QCOMPARE(model.data(model.index(0, 0), WalletListModel::BalanceRole).toString(), QString{"0.00 167 930"});
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::BalanceRole).toString(), QString{"0.00167930"});
     QCOMPARE(model.data(model.index(0, 0), WalletListModel::KeySchemeKindRole).toInt(), 2);
     QCOMPARE(model.data(model.index(1, 0), WalletListModel::BalanceRole).toString(), QString{});
-    QCOMPARE(model.data(model.index(1, 0), WalletListModel::KeySchemeKindRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::KeySchemeKindRole).toInt(), -1);
 
     // No-op when nothing changed.
-    model.setWalletInfo("alpha_wallet", "0.00 167 930", /*keySchemeKind=*/2);
+    model.setWalletInfo("alpha_wallet", 167930, /*keySchemeKind=*/2);
     QCOMPARE(data_changed_spy.count(), 0);
 }
 
@@ -442,7 +457,7 @@ void WalletListModelTests::listWalletDirPreservesBalanceAndKeySchemeAcrossRebuil
 
     WalletListModel model{node, nullptr};
     model.listWalletDir();
-    model.setWalletInfo("alpha_wallet", "1.23", /*keySchemeKind=*/1);
+    model.setWalletInfo("alpha_wallet", 123000000, /*keySchemeKind=*/1);
 
     // Rebuild with the same wallet still present plus a new one.
     loader.wallet_dir_entries = {
@@ -452,12 +467,73 @@ void WalletListModelTests::listWalletDirPreservesBalanceAndKeySchemeAcrossRebuil
     model.listWalletDir();
 
     const int alpha_row = model.data(model.index(0, 0), WalletListModel::NameRole).toString() == "alpha_wallet" ? 0 : 1;
-    QCOMPARE(model.data(model.index(alpha_row, 0), WalletListModel::BalanceRole).toString(), QString{"1.23"});
+    QCOMPARE(model.data(model.index(alpha_row, 0), WalletListModel::BalanceRole).toString(), QString{"1.23000000"});
     QCOMPARE(model.data(model.index(alpha_row, 0), WalletListModel::KeySchemeKindRole).toInt(), 1);
 
     const int beta_row = 1 - alpha_row;
     QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::BalanceRole).toString(), QString{});
-    QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::KeySchemeKindRole).toInt(), 0);
+    QCOMPARE(model.data(model.index(beta_row, 0), WalletListModel::KeySchemeKindRole).toInt(), -1);
+}
+
+void WalletListModelTests::balancesFollowDisplayUnitAcrossWalletRefreshes()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"Charlie", "sqlite"}, {"Other", "sqlite"}};
+    ConfigureExpectedWalletLoader(node, loader);
+    WalletListModel model{node};
+    model.listWalletDir();
+    model.setWalletInfo("Charlie", 13900000000LL, 0);
+    model.setWalletInfo("Other", 1, 0);
+    const auto amount = [&model](int row) {
+        return model.data(model.index(row, 0), WalletListModel::BalanceRole).toString().remove(QLocale().groupSeparator());
+    };
+    QCOMPARE(amount(0), QStringLiteral("139.00000000"));
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+    model.setDisplayUnit(3);
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(changed.at(0).at(1).value<QModelIndex>().row(), 1);
+    QCOMPARE(amount(0), QStringLiteral("13900000000"));
+    QCOMPARE(amount(1), QStringLiteral("1"));
+    // Switching wallets republishes metadata and reopening the selector rebuilds rows.
+    model.setWalletInfo("Charlie", 13900000000LL, 0);
+    model.listWalletDir();
+    QCOMPARE(amount(0), QStringLiteral("13900000000"));
+    model.setDisplayUnit(1);
+    QCOMPARE(amount(0), QStringLiteral("139000.00000"));
+    model.setDisplayUnit(2);
+    QCOMPARE(amount(0), QStringLiteral("139000000.00"));
+    model.setDisplayUnit(0);
+    QCOMPARE(amount(0), QStringLiteral("139.00000000"));
+    QCOMPARE(amount(1), QStringLiteral("0.00000001"));
+}
+
+void WalletListModelTests::balancesUseGermanLocale()
+{
+    QLocale::setDefault(QLocale{"de_DE"});
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    ConfigureExpectedWalletLoader(node, loader);
+    WalletListModel model{node};
+    model.listWalletDir();
+    model.setWalletInfo("alpha_wallet", 123456789, 0);
+    const auto amount = [&model] {
+        return model.data(model.index(0, 0), WalletListModel::BalanceRole).toString();
+    };
+
+    QCOMPARE(amount(), QStringLiteral("1,23456789"));
+    model.setDisplayUnit(1);
+    QCOMPARE(amount(), QStringLiteral("1.234,56789"));
+    model.setDisplayUnit(2);
+    QCOMPARE(amount(), QStringLiteral("1.234.567,89"));
+    model.setDisplayUnit(3);
+    QCOMPARE(amount(), QStringLiteral("123.456.789"));
+    model.setDisplayUnit(0);
+    model.listWalletDir();
+    QCOMPARE(amount(), QStringLiteral("1,23456789"));
 }
 
 void WalletListModelTests::walletDirLoadedFlipsAfterFirstList()

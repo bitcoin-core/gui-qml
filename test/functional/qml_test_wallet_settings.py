@@ -15,7 +15,7 @@ from datetime import datetime
 
 from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
-from qml_wallet_test_lib import WalletFlowHarness, find_bitcoind, rpc_call, wait_for_rpc
+from qml_wallet_test_lib import WalletFlowHarness, find_bitcoind, open_wallet_selector, rpc_call, wait_for_rpc
 
 
 WALLET_PASSWORD = "correct horse battery staple"
@@ -151,14 +151,6 @@ def open_wallet_settings(gui):
     gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
-def open_wallet_selector(gui):
-    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
-    if gui.get_property("walletSelectPopup", "opened") is True:
-        return
-    gui.click("walletBadge")
-    gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
-
-
 def select_wallet(gui, wallet_name):
     open_wallet_selector(gui)
     item_name = f"walletSelectItem_{sanitize_object_suffix(wallet_name)}"
@@ -171,6 +163,7 @@ def close_wallet_from_selector(gui, wallet_name):
         open_wallet_selector(gui)
     gui.settle()
     deadline = time.time() + 5
+    gui.click(f"walletSelectActions_{sanitize_object_suffix(wallet_name)}")
     object_name = f"walletSelectClose_{sanitize_object_suffix(wallet_name)}"
     while True:
         try:

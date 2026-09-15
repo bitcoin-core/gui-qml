@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 from qml_test_harness import dump_qml_tree
-from qml_wallet_test_lib import WalletFlowHarness, find_legacy_bitcoind, rpc_call
+from qml_wallet_test_lib import WalletFlowHarness, find_legacy_bitcoind, open_wallet_selector, rpc_call
 
 
 WALLET_PASSWORD = "correct horse battery staple"
@@ -119,11 +119,6 @@ def verify_legacy_wallet_warning(gui_rpc_port, wallet_name):
         LEGACY_MIGRATION_WARNING
     ], f"Expected migration warning for {wallet_name}, got {legacy_entry}"
     print(f"[qml_test_wallet_migration] legacy wallet dir entry: {legacy_entry}")
-
-
-def open_wallet_selector(gui):
-    gui.click("walletBadge")
-    gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
 
 
 def select_wallet_for_migration(gui, wallet_name):

@@ -23,6 +23,17 @@ RPC_USER = "qmlwallettest"
 RPC_PASS = "qmlwallettestpass"
 
 
+def open_wallet_selector(gui):
+    gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
+    if gui.get_property("walletSelectPopup", "opened") is True:
+        return
+    # opened becomes false before the exit transition finishes. The badge
+    # toggles on visible, so wait until a click will reopen the selector.
+    gui.wait_for_property("walletSelectPopup", "visible", False, timeout_ms=5000)
+    gui.click("walletBadge")
+    gui.wait_for_property("walletSelectPopup", "opened", True, timeout_ms=5000)
+
+
 def find_bitcoind():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     default = os.path.join(repo_root, "build", "bin", "bitcoind")
