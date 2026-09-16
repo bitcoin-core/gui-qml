@@ -79,6 +79,7 @@
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>
         <file>controls/FilterButton.qml</file>
+        <file>controls/RangeSlider.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>

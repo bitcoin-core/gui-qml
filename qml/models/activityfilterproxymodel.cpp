@@ -9,6 +9,8 @@
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
 
+#include <algorithm>
+
 #include <QDate>
 #include <QDateTime>
 #include <QFile>
@@ -69,6 +71,9 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
     connect(this, &QAbstractItemModel::rowsRemoved, this, &ActivityFilterProxyModel::countChanged);
     connect(this, &QAbstractItemModel::modelReset, this, &ActivityFilterProxyModel::countChanged);
     connect(this, &QAbstractItemModel::layoutChanged, this, &ActivityFilterProxyModel::countChanged);
+    connect(this, &ActivityFilterProxyModel::countChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
+    connect(this, &QAbstractItemModel::dataChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
+    connect(this, &ActivityFilterProxyModel::displayUnitChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
 }
 
 QHash<int, QByteArray> ActivityFilterProxyModel::roleNames() const
@@ -114,7 +119,23 @@ void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* source_model)
 {
     if (sourceModel() == source_model) return;
 
+    for (const auto& connection : m_source_connections) disconnect(connection);
+    m_source_connections.clear();
     QSortFilterProxyModel::setSourceModel(source_model);
+    if (source_model) {
+        m_source_connections << connect(source_model, &QAbstractItemModel::modelReset, this, &ActivityFilterProxyModel::updateAvailableMaxAmount);
+        m_source_connections << connect(source_model, &QAbstractItemModel::rowsInserted, this, &ActivityFilterProxyModel::updateAvailableMaxAmount);
+        m_source_connections << connect(source_model, &QAbstractItemModel::rowsRemoved, this, &ActivityFilterProxyModel::updateAvailableMaxAmount);
+        m_source_connections << connect(source_model, &QAbstractItemModel::dataChanged, this,
+            [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+                if (roles.isEmpty() || roles.contains(TransactionActivityModel::NetAmountSatRole) || roles.contains(TransactionActivityModel::IsPendingRequestRole)) updateAvailableMaxAmount();
+            });
+        m_source_connections << connect(source_model, &QObject::destroyed, this, [this] {
+            m_available_max_amount = 0;
+            Q_EMIT availableMaxAmountChanged();
+        });
+    }
+    updateAvailableMaxAmount();
     sort(0, Qt::DescendingOrder);
     Q_EMIT countChanged();
 }
@@ -169,25 +190,34 @@ void ActivityFilterProxyModel::setDateFilter(DateFilter date_filter)
 
 ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::typeFilter() const
 {
-    return m_type_filter;
+    return m_type_filters.isEmpty() ? TypeAll : static_cast<TypeFilter>(m_type_filters.first());
 }
 
 void ActivityFilterProxyModel::setTypeFilter(TypeFilter type_filter)
 {
-    if (m_type_filter == type_filter) return;
+    setTypeFilters(type_filter == TypeAll ? QList<int>{} : QList<int>{type_filter});
+}
+
+void ActivityFilterProxyModel::setTypeFilters(const QList<int>& types)
+{
+    QList<int> normalized;
+    for (int type : types) {
+        if (type > TypeAll && type <= Split && !normalized.contains(type)) normalized.append(type);
+    }
+    std::sort(normalized.begin(), normalized.end());
+    if (m_type_filters == normalized) return;
 
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     beginFilterChange();
 #endif
-
-    m_type_filter = type_filter;
-
+    m_type_filters = normalized;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     endFilterChange(QSortFilterProxyModel::Direction::Rows);
 #else
     invalidateFilter();
 #endif
     Q_EMIT typeFilterChanged();
+    Q_EMIT typeFiltersChanged();
     Q_EMIT countChanged();
 }
 
@@ -211,21 +241,53 @@ CAmount ActivityFilterProxyModel::minAmount() const
 
 void ActivityFilterProxyModel::setMinAmount(CAmount min_amount)
 {
-    // Anything below zero clears the filter; amounts are always non-negative.
-    const CAmount normalized = min_amount < 0 ? -1 : min_amount;
-    if (m_min_amount == normalized) return;
+    setAmountRange(min_amount, m_max_amount);
+}
 
+void ActivityFilterProxyModel::setMaxAmount(CAmount max_amount)
+{
+    setAmountRange(m_min_amount, max_amount);
+}
+
+bool ActivityFilterProxyModel::setAmountRange(qint64 minimum, qint64 maximum)
+{
+    // Negative bounds are unset; an inverted range must not hide all activity.
+    minimum = minimum < 0 ? -1 : minimum;
+    maximum = maximum < 0 ? -1 : maximum;
+    if (minimum >= 0 && maximum >= 0 && minimum > maximum) return false;
+    const bool min_changed = m_min_amount != minimum;
+    const bool max_changed = m_max_amount != maximum;
+    if (!min_changed && !max_changed) return true;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     beginFilterChange();
 #endif
-    m_min_amount = normalized;
+    m_min_amount = minimum;
+    m_max_amount = maximum;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
     endFilterChange(QSortFilterProxyModel::Direction::Rows);
 #else
     invalidateFilter();
 #endif
-    Q_EMIT minAmountChanged();
+    if (min_changed) Q_EMIT minAmountChanged();
+    if (max_changed) Q_EMIT maxAmountChanged();
     Q_EMIT countChanged();
+    return true;
+}
+
+void ActivityFilterProxyModel::updateAvailableMaxAmount()
+{
+    CAmount maximum{0};
+    if (sourceModel()) {
+        for (int row = 0; row < sourceModel()->rowCount(); ++row) {
+            const auto index = sourceModel()->index(row, 0);
+            if (!index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) {
+                maximum = std::max(maximum, CAmount(qAbs(index.data(TransactionActivityModel::NetAmountSatRole).toLongLong())));
+            }
+        }
+    }
+    if (m_available_max_amount == maximum) return;
+    m_available_max_amount = maximum;
+    Q_EMIT availableMaxAmountChanged();
 }
 
 QDate ActivityFilterProxyModel::rangeStart() const
@@ -289,14 +351,36 @@ int ActivityFilterProxyModel::transactionCount() const
     return rowCount() - requestCount();
 }
 
-bool ActivityFilterProxyModel::groupedTypeMatches(const QModelIndex& source_index) const
+CAmount ActivityFilterProxyModel::pendingBalanceSat() const
 {
-    if (m_type_filter == TypeAll) return true;
-    if (m_type_filter == PaymentRequest) return source_index.data(TransactionActivityModel::HasPaymentRequestRole).toBool();
+    CAmount total{0};
+    if (!groupedSource()) return total;
+    for (int row = 0; row < rowCount(); ++row) {
+        const auto item = index(row, 0);
+        if (item.data(TransactionActivityModel::IsPendingRole).toBool()
+            && !item.data(TransactionActivityModel::IsPendingRequestRole).toBool()) {
+            total += item.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
+        }
+    }
+    return total;
+}
+
+QString ActivityFilterProxyModel::pendingBalance() const
+{
+    const auto amount = pendingBalanceSat();
+    const auto unit = QmlBitcoinUnits::fromDisplayUnit(m_display_unit);
+    return QmlBitcoinUnits::formatForDisplay(unit, amount, true) + QLatin1Char(' ')
+        + QmlBitcoinUnits::displayLabel(unit, amount);
+}
+
+bool ActivityFilterProxyModel::groupedTypeMatches(const QModelIndex& source_index, TypeFilter filter) const
+{
+    if (filter == TypeAll) return true;
+    if (filter == PaymentRequest) return source_index.data(TransactionActivityModel::HasPaymentRequestRole).toBool();
     if (source_index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) return false;
 
     const auto type = static_cast<TransactionActivityModel::ActivityType>(source_index.data(TransactionActivityModel::ActivityTypeRole).toInt());
-    switch (m_type_filter) {
+    switch (filter) {
     case Multiple: return type == TransactionActivityModel::Multiple;
     case Consolidation: return type == TransactionActivityModel::Consolidation;
     case Split: return type == TransactionActivityModel::Split;
@@ -306,7 +390,7 @@ bool ActivityFilterProxyModel::groupedTypeMatches(const QModelIndex& source_inde
     case Received:
     case Sent: {
         if (type == TransactionActivityModel::Mined) return false;
-        const int direction = m_type_filter == Received ? TransactionActivityModel::ReceiveAction : TransactionActivityModel::SendAction;
+        const int direction = filter == Received ? TransactionActivityModel::ReceiveAction : TransactionActivityModel::SendAction;
         for (const auto& action : source_index.data(TransactionActivityModel::ActionsRole).toList()) {
             if (action.toMap().value("direction").toInt() == direction) return true;
         }
@@ -327,7 +411,7 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     // surfaced under the Payment request filter; everywhere else it is hidden so
     // it does not duplicate that address's real transaction row.
     if (source_index.data(ActivityListModel::IsUsedAddressRequestRole).toBool()
-        && m_type_filter != PaymentRequest) {
+        && !m_type_filters.contains(PaymentRequest)) {
         return false;
     }
 
@@ -335,19 +419,18 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
         return false;
     }
 
-    if (groupedSource() ? !groupedTypeMatches(source_index)
-                        : m_type_filter != TypeAll && filterTypeForIndex(source_index) != m_type_filter) {
-        return false;
+    if (!m_type_filters.isEmpty()) {
+        const bool matches = std::any_of(m_type_filters.cbegin(), m_type_filters.cend(), [&](int type) {
+            return groupedSource() ? groupedTypeMatches(source_index, static_cast<TypeFilter>(type))
+                                   : filterTypeForIndex(source_index) == type;
+        });
+        if (!matches) return false;
     }
 
-    if (m_min_amount >= 0) {
-        const CAmount net_amount = source_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
-        // Compare absolute value so a send and a receive of the same size both
-        // pass a threshold, matching the Qt Widgets amount filter.
-        if (qAbs(net_amount) < m_min_amount) {
-            return false;
-        }
-    }
+    // Parent wallet impact includes the fee. Treat equal sends and receives
+    // alike and retain every child when its parent passes the inclusive range.
+    const auto amount = qAbs(source_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong());
+    if ((m_min_amount >= 0 && amount < m_min_amount) || (m_max_amount >= 0 && amount > m_max_amount)) return false;
 
     const QString search = m_search_text.trimmed();
     if (!search.isEmpty()) {

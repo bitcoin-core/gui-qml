@@ -214,6 +214,7 @@ private Q_SLOTS:
     void filtersWholeTransactionsAndExportsParentImpact();
     void groupsPendingMonthsAndDaysAndCountsParents();
     void groupsTransactionsInPendingUntilFirstConfirmation();
+    void totalsPendingWalletImpactWithoutRequests();
     void movesReplacedBatchToHistoryAndKeepsReplacementPending();
     void associatesRequestsPerOutputAndUpdatesLive();
     void usesPrivateRequestNotesWithoutChangingStoredData();
@@ -371,6 +372,13 @@ void TransactionActivityModelTests::filtersWholeTransactionsAndExportsParentImpa
         QCOMPARE(proxy.rowCount(), 1);
         QCOMPARE(proxy.index(0, 0).data(Model::ActionsRole).toList(), actions);
     }
+    proxy.setTypeFilters({Proxy::Sent, Proxy::Received, Proxy::Multiple});
+    QCOMPARE(proxy.rowCount(), 1); // Matching several selected types never duplicates a parent.
+    QCOMPARE(proxy.index(0, 0).data(Model::ActionsRole).toList(), actions);
+    QVERIFY(proxy.setAmountRange(71'000, 71'000));
+    QCOMPARE(proxy.rowCount(), 1); // Use the net parent amount, not a child output.
+    QCOMPARE(proxy.index(0, 0).data(Model::ActionsRole).toList(), actions);
+    proxy.setMaxAmount(-1);
     proxy.setMinAmount(71'001);
     QCOMPARE(proxy.rowCount(), 0);
     proxy.setMinAmount(71'000);
@@ -451,6 +459,51 @@ void TransactionActivityModelTests::groupsTransactionsInPendingUntilFirstConfirm
             QCOMPARE(row.data(Proxy::SectionKeyRole).toString(), depth == 0 ? QString("pending") : QString("2026-09"));
         }
     }
+}
+
+void TransactionActivityModelTests::totalsPendingWalletImpactWithoutRequests()
+{
+    Fixture f;
+    const auto receive = MakeTx({{50'000, false}}, {{49'000, true}}, Time(9, 15));
+    const auto batch = MakeTx({{120'000, true}},
+        {{60'000, false}, {40'000, false, false, 2}, {19'000, true, true, 3}}, Time(9, 15));
+    const auto confirmed = MakeTx({{20'000, false}}, {{19'000, true, false, 4}}, Time(9, 15));
+    f.state->put(receive, 0);
+    f.state->put(batch, 0);
+    f.state->put(confirmed, 1);
+    f.request(Request(1, "unpaid-address", "Invoice", 1'000'000));
+    auto* source = f.model();
+    Proxy proxy;
+    proxy.setSourceModel(source);
+    QSignalSpy changed(&proxy, &Proxy::pendingBalanceChanged);
+    QCOMPARE(proxy.pendingBalanceSat(), -52'000); // Includes the batch fee, once.
+    proxy.setDisplayUnit(3);
+    QCOMPARE(proxy.pendingBalance(), QLocale().toString(qint64{-52'000}) + " sats");
+    QVERIFY(!changed.empty());
+
+    proxy.setTypeFilter(Proxy::Received);
+    QCOMPARE(proxy.pendingBalanceSat(), 49'000);
+    QCOMPARE(proxy.pendingBalance(), QLocale().positiveSign() + QLocale().toString(qint64{49'000}) + " sats");
+    proxy.setTypeFilter(Proxy::PaymentRequest);
+    QCOMPARE(proxy.pendingBalanceSat(), 0);
+    proxy.setTypeFilter(Proxy::TypeAll);
+    QCOMPARE(proxy.pendingBalanceSat(), -52'000);
+
+    changed.clear();
+    f.state->statuses[batch.tx->GetHash()].depth_in_main_chain = 1;
+    source->refreshStatuses();
+    QCOMPARE(proxy.pendingBalanceSat(), 49'000);
+    QVERIFY(!changed.empty());
+    f.state->statuses[receive.tx->GetHash()].depth_in_main_chain = 1;
+    source->refreshStatuses();
+    QCOMPARE(proxy.pendingBalanceSat(), 0);
+
+    // A same-height reorg returns the outgoing impact to pending.
+    f.state->statuses[batch.tx->GetHash()].depth_in_main_chain = 0;
+    source->refreshStatuses();
+    QCOMPARE(proxy.pendingBalanceSat(), -101'000);
+    proxy.setSourceModel(nullptr);
+    QCOMPARE(proxy.pendingBalanceSat(), 0);
 }
 
 void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplacementPending()

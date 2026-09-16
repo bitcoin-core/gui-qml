@@ -101,6 +101,12 @@ public:
         endResetModel();
     }
 
+    void setAmount(int row, qint64 amount)
+    {
+        m_rows[row].net_amount_sat = amount;
+        Q_EMIT dataChanged(index(row, 0), index(row, 0), {ActivityListModel::NetAmountSatRole});
+    }
+
 private:
     QList<ActivityRow> m_rows;
 };
@@ -159,6 +165,9 @@ private Q_SLOTS:
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
     void usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter();
     void filtersByMinimumAmount();
+    void combinesTypeSelections();
+    void filtersByInclusiveAmountRange();
+    void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
@@ -638,6 +647,93 @@ void ActivityFilterProxyModelTests::exportsCsvNeutralizesFormulaInjection()
     // ...while the numeric amount column keeps its minus sign untouched.
     QVERIFY(csv.contains("\"-1.23456789\""));
     QVERIFY(csv.contains("\"bc1qplain\""));
+}
+
+void ActivityFilterProxyModelTests::combinesTypeSelections()
+{
+    auto request = MakeRow("Request", Transaction::Other, 40);
+    request.pending_request = true;
+    request.used_address_request = true;
+    TestActivityListModel source;
+    source.setRows({MakeRow("Receive", Transaction::RecvWithAddress, 10),
+                    MakeRow("Send", Transaction::SendToAddress, 20),
+                    MakeRow("Mined", Transaction::Generated, 30), request});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    proxy.setTypeFilters({ActivityFilterProxyModel::Sent, ActivityFilterProxyModel::Received, ActivityFilterProxyModel::Sent});
+    QCOMPARE(proxy.rowCount(), 2);
+    QCOMPARE(proxy.typeFilters().size(), 2);
+    QVERIFY(ContainsLabel(proxy, "Send"));
+    QVERIFY(ContainsLabel(proxy, "Receive"));
+    proxy.setTypeFilters({ActivityFilterProxyModel::Sent, ActivityFilterProxyModel::PaymentRequest});
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Request"));
+    proxy.setTypeFilters({});
+    QCOMPARE(proxy.typeFilter(), ActivityFilterProxyModel::TypeAll);
+    QCOMPARE(proxy.rowCount(), 3); // The used request is hidden again.
+    proxy.setTypeFilter(ActivityFilterProxyModel::Mined); // Legacy single selection still works.
+    QCOMPARE(proxy.typeFilters(), QList<int>{ActivityFilterProxyModel::Mined});
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void ActivityFilterProxyModelTests::filtersByInclusiveAmountRange()
+{
+    auto send = MakeRow("Send", Transaction::SendToAddress, 10);
+    auto receive = MakeRow("Receive", Transaction::RecvWithAddress, 20);
+    auto larger = MakeRow("Larger", Transaction::RecvWithAddress, 30);
+    send.net_amount_sat = -200;
+    receive.net_amount_sat = 200;
+    larger.net_amount_sat = 201;
+    TestActivityListModel source;
+    source.setRows({send, receive, larger});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QVERIFY(proxy.setAmountRange(200, 200));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Send"));
+    QVERIFY(ContainsLabel(proxy, "Receive"));
+    QVERIFY(!proxy.setAmountRange(201, 200));
+    QCOMPARE(proxy.minAmount(), 200);
+    QCOMPARE(proxy.maxAmount(), 200);
+    QVERIFY(proxy.setAmountRange(-1, 200));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(proxy.setAmountRange(-1, -1));
+    QCOMPARE(proxy.rowCount(), 3);
+    QVERIFY(proxy.setAmountRange(0, 0));
+    QCOMPARE(proxy.rowCount(), 0);
+}
+
+void ActivityFilterProxyModelTests::availableMaximumUsesUnfilteredTransactionsAndUpdates()
+{
+    auto send = MakeRow("Send", Transaction::SendToAddress, 10);
+    auto receive = MakeRow("Receive", Transaction::RecvWithAddress, 20);
+    auto request = MakeRow("Request", Transaction::Other, 30);
+    send.net_amount_sat = -500;
+    receive.net_amount_sat = 200;
+    request.pending_request = true;
+    request.net_amount_sat = 9000;
+    TestActivityListModel source;
+    source.setRows({send, receive, request});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    proxy.setSearchText("Receive");
+    QVERIFY(proxy.setAmountRange(0, 300));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    source.setAmount(0, -700);
+    QCOMPARE(proxy.availableMaxAmount(), 700);
+    source.setRows({receive, request});
+    QCOMPARE(proxy.availableMaxAmount(), 200);
+    TestActivityListModel other;
+    proxy.setSourceModel(&other);
+    QCOMPARE(proxy.availableMaxAmount(), 0);
+    source.setRows({send}); // A previous wallet must no longer affect the range.
+    QCOMPARE(proxy.availableMaxAmount(), 0);
+    other.setRows({send});
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    proxy.setSourceModel(nullptr);
+    QCOMPARE(proxy.availableMaxAmount(), 0);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

@@ -38,6 +38,7 @@
         <file>tst_requestpayment.qml</file>
         <file>tst_rightcontenticon.qml</file>
         <file>tst_searchbar.qml</file>
+        <file>tst_rangeslider.qml</file>
         <file>tst_sendoptionspopup.qml</file>
         <file>tst_send.qml</file>
         <file>tst_signverifymessage.qml</file>

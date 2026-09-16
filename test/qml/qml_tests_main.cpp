@@ -3303,13 +3303,18 @@ class MockActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
+    Q_PROPERTY(QList<int> typeFilters READ typeFilters WRITE setTypeFilters NOTIFY typeFiltersChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
+    Q_PROPERTY(qint64 maxAmount READ maxAmount WRITE setMaxAmount NOTIFY maxAmountChanged)
+    Q_PROPERTY(qint64 availableMaxAmount READ availableMaxAmount NOTIFY availableMaxAmountChanged)
     Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
     Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int transactionCount READ transactionCount NOTIFY countChanged)
     Q_PROPERTY(int requestCount READ requestCount NOTIFY countChanged)
+    Q_PROPERTY(qint64 pendingBalanceSat READ pendingBalanceSat NOTIFY pendingBalanceChanged)
+    Q_PROPERTY(QString pendingBalance READ pendingBalance NOTIFY pendingBalanceChanged)
     Q_PROPERTY(GroupBy groupBy READ groupBy WRITE setGroupBy NOTIFY groupByChanged)
 
 public:
@@ -3361,6 +3366,25 @@ public:
         return count;
     }
     int transactionCount() const { return rowCount() - requestCount(); }
+    qint64 pendingBalanceSat() const
+    {
+        qint64 total{0};
+        if (!grouped()) return total;
+        for (int i = 0; i < rowCount(); ++i) {
+            const auto row = mapToSource(index(i, 0));
+            if (namedData(row, "isPending").toBool() && !namedData(row, "isPendingRequest").toBool()) {
+                total += namedData(row, "netAmountSat").toLongLong();
+            }
+        }
+        return total;
+    }
+    QString pendingBalance() const
+    {
+        MockBitcoinAmount amount;
+        amount.setUnit(static_cast<MockBitcoinAmount::Unit>(m_display_unit));
+        amount.setSatoshi(pendingBalanceSat());
+        return (pendingBalanceSat() > 0 ? QStringLiteral("+") : QString{}) + amount.displayWithUnit();
+    }
 
     explicit MockActivityFilterProxyModel(QObject* parent = nullptr)
         : QSortFilterProxyModel(parent)
@@ -3369,6 +3393,9 @@ public:
         connect(this, &QAbstractItemModel::rowsRemoved, this, &MockActivityFilterProxyModel::countChanged);
         connect(this, &QAbstractItemModel::modelReset, this, &MockActivityFilterProxyModel::countChanged);
         connect(this, &QAbstractItemModel::layoutChanged, this, &MockActivityFilterProxyModel::countChanged);
+        connect(this, &MockActivityFilterProxyModel::countChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
+        connect(this, &QAbstractItemModel::dataChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
+        connect(this, &MockActivityFilterProxyModel::displayUnitChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
     }
 
     QHash<int, QByteArray> roleNames() const override
@@ -3398,7 +3425,16 @@ public:
     void setSourceModel(QAbstractItemModel* source_model) override
     {
         if (sourceModel() == source_model) return;
+        for (const auto& connection : m_source_connections) disconnect(connection);
+        m_source_connections.clear();
         QSortFilterProxyModel::setSourceModel(source_model);
+        if (source_model) {
+            m_source_connections << connect(source_model, &QAbstractItemModel::modelReset, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::rowsInserted, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::rowsRemoved, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::dataChanged, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+        }
+        Q_EMIT availableMaxAmountChanged();
         if (grouped()) sort(0, Qt::DescendingOrder);
         Q_EMIT countChanged();
     }
@@ -3441,22 +3477,16 @@ public:
         Q_EMIT countChanged();
     }
 
-    TypeFilter typeFilter() const { return m_type_filter; }
-    void setTypeFilter(TypeFilter type_filter)
+    TypeFilter typeFilter() const { return m_type_filters.isEmpty() ? TypeAll : static_cast<TypeFilter>(m_type_filters.first()); }
+    QList<int> typeFilters() const { return m_type_filters; }
+    void setTypeFilter(TypeFilter type) { setTypeFilters(type == TypeAll ? QList<int>{} : QList<int>{type}); }
+    void setTypeFilters(const QList<int>& types)
     {
-        if (m_type_filter == type_filter) return;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        beginFilterChange();
-#endif
-        m_type_filter = type_filter;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-        invalidateFilter();
-#endif
+        if (m_type_filters == types) return;
+        m_type_filters = types;
+        invalidate();
         Q_EMIT typeFilterChanged();
+        Q_EMIT typeFiltersChanged();
         Q_EMIT countChanged();
     }
 
@@ -3469,21 +3499,28 @@ public:
     }
 
     qint64 minAmount() const { return m_min_amount; }
-    void setMinAmount(qint64 min_amount)
+    qint64 maxAmount() const { return m_max_amount; }
+    void setMinAmount(qint64 value) { setAmountRange(value, m_max_amount); }
+    void setMaxAmount(qint64 value) { setAmountRange(m_min_amount, value); }
+    Q_INVOKABLE bool setAmountRange(qint64 minimum, qint64 maximum)
     {
-        const qint64 normalized = min_amount < 0 ? -1 : min_amount;
-        if (m_min_amount == normalized) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        beginFilterChange();
-#endif
-        m_min_amount = normalized;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-        invalidateFilter();
-#endif
+        if (minimum >= 0 && maximum >= 0 && minimum > maximum) return false;
+        m_min_amount = minimum < 0 ? -1 : minimum;
+        m_max_amount = maximum < 0 ? -1 : maximum;
+        invalidate();
         Q_EMIT minAmountChanged();
+        Q_EMIT maxAmountChanged();
         Q_EMIT countChanged();
+        return true;
+    }
+    qint64 availableMaxAmount() const
+    {
+        qint64 result{0};
+        if (sourceModel()) for (int i = 0; i < sourceModel()->rowCount(); ++i) {
+            const auto row = sourceModel()->index(i, 0);
+            if (!namedData(row, "isPendingRequest").toBool()) result = qMax(result, qAbs(namedData(row, "netAmountSat").toLongLong()));
+        }
+        return result;
     }
 
     QDate rangeStart() const { return m_range_start; }
@@ -3525,6 +3562,28 @@ public:
         return true;
     }
 
+    bool matchesTypes(const QModelIndex& row) const
+    {
+        using Model = MockTransactionActivityModel;
+        if (m_type_filters.isEmpty()) return true;
+        const bool request = namedData(row, "isPendingRequest").toBool();
+        const int kind = namedData(row, "activityType").toInt();
+        for (int type : m_type_filters) {
+            if (type == PaymentRequest && (request || namedData(row, "hasPaymentRequest").toBool())) return true;
+            if (request) continue;
+            if ((type == Multiple && kind == Model::Multiple) || (type == Consolidation && kind == Model::Consolidation)
+                || (type == Split && kind == Model::Split) || (type == Mined && kind == Model::Mined)
+                || (type == Other && kind == Model::Other) || (type == SentToSelf && (kind == Model::InternalTransfer || kind == Model::Consolidation || kind == Model::Split))) return true;
+            if (type == Sent || type == Received) {
+                if ((type == Sent && kind == Model::Send) || (type == Received && kind == Model::Receive)) return true;
+                for (const auto& action : namedData(row, "actions").toList()) {
+                    if (action.toMap().value("direction").toInt() == (type == Sent ? Model::SendAction : Model::ReceiveAction)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override
     {
@@ -3534,13 +3593,14 @@ protected:
             for (const auto& action : namedData(row, "actions").toList()) search += action.toMap().value("label").toString() + action.toMap().value("address").toString();
             return search.contains(m_search_text.trimmed(), Qt::CaseInsensitive)
                 && (m_min_amount < 0 || qAbs(namedData(row, "netAmountSat").toLongLong()) >= m_min_amount)
-                && m_type_filter == TypeAll && m_date_filter == DateAll;
+                && (m_max_amount < 0 || qAbs(namedData(row, "netAmountSat").toLongLong()) <= m_max_amount)
+                && matchesTypes(row) && m_date_filter == DateAll;
         }
         Q_UNUSED(source_row);
         Q_UNUSED(source_parent);
         return m_search_text.trimmed().isEmpty() &&
             m_date_filter == DateAll &&
-            m_type_filter == TypeAll;
+            m_type_filters.isEmpty();
     }
 
     bool lessThan(const QModelIndex& left, const QModelIndex& right) const override
@@ -3555,20 +3615,26 @@ Q_SIGNALS:
     void searchTextChanged();
     void dateFilterChanged();
     void typeFilterChanged();
+    void typeFiltersChanged();
     void displayUnitChanged();
     void minAmountChanged();
+    void maxAmountChanged();
+    void availableMaxAmountChanged();
     void rangeChanged();
     void countChanged();
 
     void groupByChanged();
+    void pendingBalanceChanged();
 
 private:
     QString m_search_text;
     GroupBy m_group_by{Month};
     DateFilter m_date_filter{DateAll};
-    TypeFilter m_type_filter{TypeAll};
+    QList<int> m_type_filters;
+    QList<QMetaObject::Connection> m_source_connections;
     int m_display_unit{0};
     qint64 m_min_amount{-1};
+    qint64 m_max_amount{-1};
     QDate m_range_start;
     QDate m_range_end;
 };

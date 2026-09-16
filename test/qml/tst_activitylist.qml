@@ -301,6 +301,48 @@ TestCase {
         compare(testWalletModel.lastLoadedPaymentRequestDetailId, "invoice")
     }
 
+    function test_pending_balance_excludes_requests_and_updates_with_transactions() {
+        const fixture = rows()
+        fixture[0].netAmountSat = 111000
+        for (const i of [0, 3]) {
+            fixture[i].depth = 0
+            fixture[i].status = Transaction.Unconfirmed
+            fixture[i].isPending = true
+        }
+        testTransactionActivityModel.setRows(fixture)
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        proxy.displayUnit = BitcoinAmount.SAT
+        let total = findChild(page, "activityPendingBalance")
+        verify(total !== null)
+        compare(proxy.pendingBalanceSat, 10000)
+        compare(total.text, "+10000 sats")
+        compare(total.color, Theme.color.green)
+        verify(waitForRendering(page))
+        fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset, 0.1)
+        compare(findChild(findChild(page, "activityRequest_invoice"), "activityRowAmount").color, Theme.color.neutral7)
+
+        findChild(page, "activitySearchField").text = "Robert"
+        tryCompare(proxy, "pendingBalanceSat", -101000)
+        total = findChild(page, "activityPendingBalance")
+        compare(total.text, "-101000 sats")
+        tryCompare(total, "color", Theme.color.neutral9)
+        findChild(page, "activitySearchField").text = ""
+        tryCompare(proxy, "pendingBalanceSat", 10000)
+        fixture[3].depth = 1
+        fixture[3].isPending = false
+        testTransactionActivityModel.setRows(fixture)
+        tryCompare(proxy, "pendingBalanceSat", 111000)
+        fixture[0].depth = 1
+        fixture[0].isPending = false
+        testTransactionActivityModel.setRows(fixture)
+        tryCompare(proxy, "pendingBalanceSat", 0)
+        compare(findChild(page, "activityPendingBalance").visible, false)
+        page.width = 390
+        verify(waitForRendering(page))
+        tryCompare(findChild(findChild(page, "activityRequest_invoice"), "activityRowCompactAmount"), "color", Theme.color.neutral7)
+    }
+
     function test_child_search_keeps_whole_transaction_and_clear_restores_rows() {
         const page = createPage()
         const search = findChild(page, "activitySearchField")
@@ -310,7 +352,7 @@ TestCase {
         const batch = findRow(page, "batch")
         verify(findChild(batch, "activityAction_robert") !== null)
         waitForRendering(page)
-        mouseClick(findChild(page, "activityClearFiltersButton"))
+        mouseClick(findChild(page, "activityClearSearchButton"))
         tryCompare(list, "count", rows().length)
         compare(search.text, "")
     }
@@ -399,9 +441,15 @@ TestCase {
         const proxy = findChild(page, "activityFilterProxyModel")
         mouseClick(findChild(page, "activityAmountFilterButton"))
         tryCompare(findChild(page, "activityAmountFilterPopup"), "opened", true)
-        findChild(page, "activityMinAmountField").text = "0.5"
-        mouseClick(findChild(page, "activityMinAmountApply"))
+        const slider = findChild(page, "activityAmountRangeSlider")
+        compare(slider.minValue, 0)
+        compare(slider.maxValue, 312500000)
+        slider.setValues(50000000, 200000000)
+        page.currentItem.applyAmountRange()
         compare(proxy.minAmount, 50000000)
+        compare(proxy.maxAmount, 200000000)
+        compare(findChild(page, "activityAmountFilterButton").text, "Amount")
+        verify(findChild(page, "activityAmountFilterButton").active)
         page.currentItem.clearFilters()
         findChild(page, "activitySearchField").text = "no such transaction"
         tryCompare(findChild(page, "activityEmptyStateTitle"), "text", "No activity matches your filters.")
@@ -426,6 +474,26 @@ TestCase {
         fixture.label = "Personal savings"
         testTransactionActivityModel.setRows([fixture])
         compare(findRow(page, "self").displayLabel, "Personal savings")
+    }
+
+    function test_sent_to_yourself_filter_includes_all_internal_categories() {
+        const fixture = rows()
+        fixture.push(row({activityId: "tx:self", txid: "self", label: "", netAmountSat: -1000,
+            activityType: TransactionActivityModel.InternalTransfer, type: Transaction.SendToSelf,
+            actions: [action("self", "", "0.00060000 BTC", TransactionActivityModel.InternalAction)]}))
+        testTransactionActivityModel.setRows(fixture)
+        const page = createPage()
+        mouseClick(findChild(page, "activityTypeFilterButton"))
+        const menu = findChild(page, "activityTypeFilterPopup")
+        tryCompare(menu, "opened", true)
+        compare(findChild(menu.contentItem, "activityTypeConsolidation"), null)
+        compare(findChild(menu.contentItem, "activityTypeSplit"), null)
+        const sentToSelf = findChild(menu.contentItem, "activityTypeSentToSelf")
+        compare(sentToSelf.text, "Sent to yourself")
+        mouseClick(sentToSelf)
+        tryCompare(findChild(page, "activityListView"), "count", 3)
+        for (const txid of ["self", "consolidation", "split"])
+            verify(findRow(page, txid) !== null)
     }
 
     function test_special_types_and_compact_layout() {
@@ -493,7 +561,9 @@ TestCase {
         const types = findChild(page, "activityTypeFilterPopup")
         tryCompare(types, "opened", true)
         mouseClick(findChild(types.contentItem, "activityTypeMultiple"))
-        compare(proxy.typeFilter, ActivityFilterProxyModel.Multiple)
+        compare(proxy.typeFilters, [ActivityFilterProxyModel.Multiple])
+        compare(types.opened, true)
+        types.close()
         tryCompare(types, "visible", false)
 
         mouseClick(findChild(page, "activityDateFilterButton"))
@@ -518,6 +588,161 @@ TestCase {
         tryCompare(page, "depth", 2)
         walletController.setSelectedWallet("another-wallet")
         tryCompare(page, "depth", 1)
+    }
+
+    function test_filter_button_animates_and_reserves_space() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const button = findChild(page, "activityTypeFilterButton")
+        const badge = findChild(page, "activityActiveFiltersButton")
+        const initialX = button.x
+        proxy.typeFilters = [ActivityFilterProxyModel.Sent]
+        tryVerify(function() { return badge.opacity > 0 && badge.opacity < 1 })
+        verify(badge.scale < 1)
+        tryCompare(badge, "opacity", 1)
+        compare(badge.scale, 1)
+        verify(button.x > initialX)
+        const expandedX = button.x
+        proxy.typeFilters = []
+        tryVerify(function() { return badge.opacity > 0 && badge.opacity < 1 })
+        verify(badge.visible)
+        compare(badge.count, 1)
+        tryVerify(function() { return button.x < expandedX })
+        tryCompare(badge, "visible", false)
+        tryCompare(button, "x", initialX)
+    }
+
+    function test_multiselect_types_and_counted_clear_menu() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const button = findChild(page, "activityTypeFilterButton")
+        const badge = findChild(page, "activityActiveFiltersButton")
+        compare(button.text, "Activity")
+        compare(findChild(page, "activityDateFilterButton").text, "Date")
+        compare(findChild(page, "activityAmountFilterButton").text, "Amount")
+        tryCompare(badge, "visible", false)
+        mouseClick(button)
+        const menu = findChild(page, "activityTypeFilterPopup")
+        tryCompare(menu, "opened", true)
+        const all = findChild(menu.contentItem, "activityTypeAll")
+        const sent = findChild(menu.contentItem, "activityTypeSent")
+        const sentToSelf = findChild(menu.contentItem, "activityTypeSentToSelf")
+        verify(all.selected)
+        compare(all.text, "All activity")
+        mouseClick(sent)
+        mouseClick(sentToSelf)
+        compare(menu.opened, true)
+        verify(sent.selected && sentToSelf.selected && !all.selected)
+        compare(proxy.typeFilters.length, 2)
+        compare(badge.count, 1)
+        compare(button.background.color, Theme.color.orange)
+        compare(findChild(button, "dropdownButtonCaret").color, Theme.color.neutral9)
+        compare(badge.background.color, Theme.color.orange)
+        verify(findRow(page, "batch") !== null)
+        verify(findRow(page, "consolidation") !== null)
+        verify(findRow(page, "split") !== null)
+        mouseClick(sent)
+        mouseClick(sentToSelf)
+        verify(all.selected)
+        compare(button.active, false)
+        tryCompare(badge, "visible", false)
+        mouseClick(sent)
+        mouseClick(sentToSelf)
+        mouseClick(all)
+        compare(proxy.typeFilters.length, 0)
+        verify(!sent.selected && !sentToSelf.selected)
+        mouseClick(sent)
+        menu.close()
+        tryCompare(menu, "visible", false)
+        proxy.dateFilter = ActivityFilterProxyModel.ThisYear
+        proxy.setAmountRange(0, 200000)
+        compare(badge.count, 3)
+        findChild(page, "activitySearchField").text = "Robert"
+        compare(badge.count, 3) // Search is independent of the three filter categories.
+        waitForRendering(page)
+        mouseClick(badge)
+        const clearMenu = findChild(page, "activityClearFiltersMenu")
+        tryCompare(clearMenu, "opened", true)
+        const clear = findChild(clearMenu.contentItem, "activityClearFiltersAction")
+        compare(clear.role, ContextMenuButton.Destructive)
+        mouseClick(clear)
+        tryCompare(badge, "visible", false)
+        compare(proxy.typeFilters.length, 0)
+        compare(proxy.dateFilter, ActivityFilterProxyModel.DateAll)
+        compare(proxy.minAmount, -1)
+        compare(proxy.maxAmount, -1)
+        compare(proxy.searchText, "Robert")
+    }
+
+    function test_date_presets_are_single_selection_and_custom_range_activates() {
+        const page = createPage()
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const button = findChild(page, "activityDateFilterButton")
+        mouseClick(button)
+        const menu = findChild(page, "activityDateFilterPopup")
+        tryCompare(menu, "opened", true)
+        compare(findChild(menu.contentItem, "activityDateAll"), null)
+        mouseClick(findChild(menu.contentItem, "activityDateToday"))
+        tryCompare(menu, "visible", false)
+        verify(button.active)
+        mouseClick(button)
+        tryCompare(menu, "opened", true)
+        verify(findChild(menu.contentItem, "activityDateToday").selected)
+        mouseClick(findChild(menu.contentItem, "activityDateThisYear"))
+        tryCompare(menu, "visible", false)
+        mouseClick(button)
+        tryCompare(menu, "opened", true)
+        verify(!findChild(menu.contentItem, "activityDateToday").selected)
+        verify(findChild(menu.contentItem, "activityDateThisYear").selected)
+        mouseClick(findChild(menu.contentItem, "activityDateCustomRange"))
+        const calendar = findChild(page, "activityCalendar")
+        calendar.seed(new Date(2026, 8, 1), new Date(2026, 8, 15))
+        mouseClick(findChild(page, "activityDateRangeApply"))
+        compare(proxy.dateFilter, ActivityFilterProxyModel.CustomRange)
+        verify(button.active)
+        compare(button.text, "Date")
+    }
+
+    function test_amount_slider_updates_live_and_resets() {
+        const page = createPage({width: 390})
+        const proxy = findChild(page, "activityFilterProxyModel")
+        const button = findChild(page, "activityAmountFilterButton")
+        mouseClick(button)
+        const menu = findChild(page, "activityAmountFilterPopup")
+        tryCompare(menu, "opened", true)
+        const slider = findChild(page, "activityAmountRangeSlider")
+        const handle = slider.second.handle
+        const start = handle.mapToItem(slider, handle.width / 2, handle.height / 2)
+        mousePress(slider, start.x, start.y)
+        mouseMove(slider, slider.width * 0.6, start.y, 100)
+        mouseRelease(slider, slider.width * 0.6, start.y)
+        verify(proxy.maxAmount > 0 && proxy.maxAmount < 312500000)
+        verify(button.active)
+        compare(findChild(page, "activityActiveFiltersButton").count, 1)
+        compare(slider.maxValue, 312500000) // Filtering must not shrink the available range.
+        const maximum = proxy.maxAmount
+        menu.close()
+        tryCompare(menu, "visible", false)
+        mouseClick(button)
+        tryCompare(menu, "opened", true)
+        compare(Math.round(slider.upperValue), maximum)
+        compare(findChild(page, "activityAmountReset"), null)
+        slider.setValues(0, slider.maxValue)
+        slider.second.moved()
+        compare(button.active, false)
+        compare(slider.lowerValue, 0)
+        compare(slider.upperValue, slider.maxValue)
+        testTransactionActivityModel.setRows([])
+        tryCompare(slider, "maxValue", 0)
+        compare(slider.enabled, false)
+        menu.close()
+        testTransactionActivityModel.setRows(rows())
+        proxy.setAmountRange(100, 500)
+        proxy.typeFilters = [ActivityFilterProxyModel.Sent]
+        walletController.setSelectedWalletObject(null)
+        tryCompare(proxy, "minAmount", -1)
+        compare(proxy.maxAmount, -1)
+        compare(proxy.typeFilters.length, 0)
     }
 
     function test_scrolls_from_page_side_margins_data() {

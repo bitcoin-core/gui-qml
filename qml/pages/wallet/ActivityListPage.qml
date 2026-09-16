@@ -17,10 +17,10 @@ Page {
     property bool exportSucceeded: true
     property bool ready: false
     readonly property bool activitySourceEmpty: !wallet || wallet.transactionActivityModel.count === 0
-    readonly property bool activityFiltersActive: activityFilterProxy.searchText.trim().length > 0
-        || activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
-        || activityFilterProxy.typeFilter !== ActivityFilterProxyModel.TypeAll
-        || activityFilterProxy.minAmount >= 0
+    readonly property bool typeFilterActive: activityFilterProxy.typeFilters.length > 0
+    readonly property bool dateFilterActive: activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
+    readonly property bool amountFilterActive: activityFilterProxy.minAmount >= 0 || activityFilterProxy.maxAmount >= 0
+    readonly property int activeFilterCount: Number(typeFilterActive) + Number(dateFilterActive) + Number(amountFilterActive)
     readonly property real pageSidePadding: width < 640 ? 16 : 40
     readonly property real activityContentWidth: Math.max(0, Math.min(1100, width - pageSidePadding * 2))
     readonly property real activitySideInset: (width - activityContentWidth) / 2
@@ -31,17 +31,21 @@ Page {
     background: Rectangle { color: Theme.color.neutral0 }
     padding: 0
     Component.onCompleted: ready = true
-    onWalletChanged: if (ready) { activityRowMenu.close(); clearFilters() }
+    onWalletChanged: if (ready) {
+        activityRowMenu.close()
+        clearFilters()
+        activityFilterProxy.searchText = ""
+        searchField.text = ""
+    }
 
     function clearFilters() {
-        activityFilterProxy.searchText = ""
         activityFilterProxy.dateFilter = ActivityFilterProxyModel.DateAll
-        activityFilterProxy.typeFilter = ActivityFilterProxyModel.TypeAll
-        activityFilterProxy.minAmount = -1
-        searchField.text = ""
+        activityFilterProxy.typeFilters = []
+        activityFilterProxy.setAmountRange(-1, -1)
         datePopup.close()
         typePopup.close()
         amountPopup.close()
+        clearFiltersMenu.close()
     }
 
     function countText() {
@@ -92,60 +96,6 @@ Page {
         exportResultPopup.open()
     }
 
-    function dateFilterText() {
-        switch (activityFilterProxy.dateFilter) {
-        case ActivityFilterProxyModel.Today:
-            return qsTr("Today")
-        case ActivityFilterProxyModel.ThisWeek:
-            return qsTr("This week")
-        case ActivityFilterProxyModel.ThisMonth:
-            return qsTr("This month")
-        case ActivityFilterProxyModel.ThisYear:
-            return qsTr("This year")
-        case ActivityFilterProxyModel.CustomRange:
-            //: Activity date filter option for a user-picked start and end date.
-            return qsTr("Custom range")
-        default:
-            return qsTr("All dates")
-        }
-    }
-
-    function amountFilterText() {
-        if (activityFilterProxy.minAmount >= 0) {
-            //: Activity amount filter button: shows the active minimum with its unit, e.g. "≥ 0.50000000 ₿".
-            return qsTr("≥ %1").arg(amountFormatter.displayWithUnit)
-        }
-        //: Activity amount filter button default: no minimum amount is set.
-        return qsTr("Amount")
-    }
-
-    // Placeholder and input mask for the minimum amount field, per
-    // display unit. The integer digits keep any accepted value below
-    // MAX_MONEY (2.1e15 sat) and within the JS exact integer range for
-    // the display round trip.
-    //
-    // The unit is a BitcoinAmount.Unit value, compared by number rather
-    // than by name: QML only exposes enum values whose name begins with
-    // a capital letter, so BitcoinAmount.mBTC and BitcoinAmount.uBTC
-    // read as undefined here and every comparison against them is false.
-    function minAmountPlaceholder(unit) {
-        switch (unit) {
-        case 3: return "0"           // SAT
-        case 2: return "0.00"        // uBTC (bits)
-        case 1: return "0.00000"     // mBTC
-        default: return "0.00000000" // BTC
-        }
-    }
-
-    function minAmountPattern(unit) {
-        switch (unit) {
-        case 3: return /^[0-9]{0,15}$/                    // SAT
-        case 2: return /^[0-9]{0,13}(\.[0-9]{0,2})?$/     // uBTC (bits)
-        case 1: return /^[0-9]{0,10}(\.[0-9]{0,5})?$/     // mBTC
-        default: return /^[0-9]{0,8}(\.[0-9]{0,8})?$/     // BTC
-        }
-    }
-
     // A filter popup right-aligns to its button, but a wide popup on a
     // button near the left edge (the date preset menu, sized for the
     // calendar) would spill past the page. Clamp x so the popup stays
@@ -172,43 +122,21 @@ Page {
             : null
     }
 
-    function applyMinAmount() {
-        var trimmed = minAmountField.text.trim()
-        if (trimmed.length === 0) {
-            activityFilterProxy.minAmount = -1
-            amountPopup.close()
-            return
-        }
-        amountParser.unit = optionsModel.displayUnit
-        amountParser.display = trimmed
-        var sats = amountParser.satoshi
-        activityFilterProxy.minAmount = sats > 0 ? sats : -1
-        amountPopup.close()
+    function toggleActivityType(value) {
+        const selected = Array.from(activityFilterProxy.typeFilters)
+        const index = selected.indexOf(value)
+        if (index < 0) selected.push(value)
+        else selected.splice(index, 1)
+        activityFilterProxy.typeFilters = selected
     }
 
-    function typeFilterText() {
-        switch (activityFilterProxy.typeFilter) {
-        case ActivityFilterProxyModel.Received:
-            return qsTr("Received")
-        case ActivityFilterProxyModel.Sent:
-            return qsTr("Sent")
-        case ActivityFilterProxyModel.SentToSelf:
-            return qsTr("Sent to yourself")
-        case ActivityFilterProxyModel.Mined:
-            return qsTr("Mined")
-        case ActivityFilterProxyModel.Multiple: return qsTr("Multiple actions")
-        case ActivityFilterProxyModel.Consolidation: return qsTr("Consolidation")
-        case ActivityFilterProxyModel.Split: return qsTr("Split")
-        case ActivityFilterProxyModel.Other:
-            //: Activity type filter option for transactions that are not received, sent, sent to yourself, or mined.
-            return qsTr("Other")
-        case ActivityFilterProxyModel.PaymentRequest:
-            return qsTr("Payment request")
-        default:
-            return qsTr("All activity")
-        }
+    function applyAmountRange() {
+        const lower = Math.round(amountSlider.lowerValue)
+        const upper = Math.round(amountSlider.upperValue)
+        if (lower === 0 && upper === activityFilterProxy.availableMaxAmount)
+            activityFilterProxy.setAmountRange(-1, -1)
+        else activityFilterProxy.setAmountRange(lower, upper)
     }
-
 
     ActivityFilterProxyModel {
         id: activityFilterProxy
@@ -218,11 +146,15 @@ Page {
         groupBy: activitySettings.activityGrouping === "day" ? ActivityFilterProxyModel.Day : ActivityFilterProxyModel.Month
     }
     BitcoinAmount {
-        id: amountFormatter
+        id: lowerAmountFormatter
         unit: optionsModel.displayUnit
-        satoshi: Math.max(0, activityFilterProxy.minAmount)
+        satoshi: Math.round(amountSlider.lowerValue)
     }
-    BitcoinAmount { id: amountParser }
+    BitcoinAmount {
+        id: upperAmountFormatter
+        unit: optionsModel.displayUnit
+        satoshi: Math.round(amountSlider.upperValue)
+    }
     AppSettings {
         id: activitySettings
         property string activityGrouping: "month"
@@ -335,38 +267,63 @@ Page {
             Layout.preferredHeight: childrenRect.height
             Layout.bottomMargin: 24
             spacing: 12
+            Item {
+                id: activeFiltersSlot
+                property real reveal: root.activeFilterCount > 0 ? 1 : 0
+                property int displayedCount: root.activeFilterCount
+                // Retain the last count while the button animates out.
+                Connections {
+                    target: root
+                    function onActiveFilterCountChanged() {
+                        if (root.activeFilterCount > 0) activeFiltersSlot.displayedCount = root.activeFilterCount
+                    }
+                }
+                visible: reveal > 0
+                width: Math.max(0, (activeFiltersButton.implicitWidth + filters.spacing) * reveal - filters.spacing)
+                height: activeFiltersButton.height
+                Behavior on reveal {
+                    NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                }
+                FilterButton {
+                    id: activeFiltersButton
+                    objectName: "activityActiveFiltersButton"
+                    enabled: root.activeFilterCount > 0
+                    opacity: activeFiltersSlot.reveal
+                    scale: 0.8 + 0.2 * activeFiltersSlot.reveal
+                    transformOrigin: Item.Left
+                    active: true
+                    count: activeFiltersSlot.displayedCount
+                    size: typeFilterButton.height
+                    iconSize: 20
+                    text: count === 1 ? qsTr("1 active filter") : qsTr("%1 active filters").arg(count)
+                    onClicked: clearFiltersMenu.opened ? clearFiltersMenu.close() : clearFiltersMenu.open()
+                }
+            }
             DropdownButton {
                 id: typeFilterButton
                 objectName: "activityTypeFilterButton"
-                text: root.typeFilterText()
+                text: qsTr("Activity")
+                active: root.typeFilterActive
                 opened: typePopup.visible
                 onClicked: typePopup.opened ? typePopup.close() : typePopup.open()
             }
             DropdownButton {
                 id: dateFilterButton
                 objectName: "activityDateFilterButton"
-                text: root.dateFilterText()
+                text: qsTr("Date")
+                active: root.dateFilterActive
                 opened: datePopup.visible
                 onClicked: datePopup.opened ? datePopup.close() : datePopup.open()
             }
             DropdownButton {
                 id: amountFilterButton
                 objectName: "activityAmountFilterButton"
-                text: root.amountFilterText()
+                text: qsTr("Amount")
+                active: root.amountFilterActive
                 opened: amountPopup.visible
                 onClicked: amountPopup.opened ? amountPopup.close() : amountPopup.open()
             }
-            TextButton {
-                objectName: "activityClearFiltersButton"
-                visible: root.activityFiltersActive
-                height: typeFilterButton.height
-                topPadding: 0
-                bottomPadding: 0
-                text: qsTr("Clear filters")
-                textSize: 13
-                textColor: Theme.color.neutral7
-                onClicked: root.clearFilters()
-            }
+
         }
 
         Item {
@@ -386,20 +343,35 @@ Page {
                 section.property: "sectionLabel"
                 section.criteria: ViewSection.FullString
                 section.delegate: Item {
+                    id: sectionHeader
                     required property string section
+                    readonly property bool isPending: section === qsTranslate("ActivityFilterProxyModel", "Pending")
                     width: listView.width
                     height: 56
-                    CoreText {
-                        objectName: "activitySectionTitle"
+                    RowLayout {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.leftMargin: root.activitySideInset
                         anchors.rightMargin: root.activitySideInset
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 12
-                        text: parent.section
-                        font: Theme.text.subheading.font
-                        horizontalAlignment: Text.AlignLeft
+                        spacing: 12
+                        CoreText {
+                            objectName: "activitySectionTitle"
+                            Layout.fillWidth: true
+                            text: sectionHeader.section
+                            font: Theme.text.subheading.font
+                            horizontalAlignment: Text.AlignLeft
+                        }
+                        CoreText {
+                            objectName: sectionHeader.isPending ? "activityPendingBalance" : ""
+                            visible: sectionHeader.isPending && activityFilterProxy.pendingBalanceSat !== 0
+                            text: visible ? activityFilterProxy.pendingBalance : ""
+                            font: Theme.text.subheading.font
+                            color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.green
+                                : activityFilterProxy.pendingBalanceSat < 0 ? Theme.color.neutral9 : Theme.color.neutral7
+                            horizontalAlignment: Text.AlignRight
+                        }
                     }
                 }
                 delegate: Item {
@@ -469,12 +441,6 @@ Page {
                     text: root.emptyActivityDescription()
                     font: Theme.text.description.font
                     color: Theme.color.neutral7
-                }
-                TextButton {
-                    visible: root.activityFiltersActive
-                    Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Clear filters")
-                    onClicked: root.clearFilters()
                 }
             }
 
@@ -705,23 +671,25 @@ Page {
             objectNameRole: "objectName"
             currentValue: activityFilterProxy.dateFilter
             model: [
-                { text: qsTr("All"),          value: ActivityFilterProxyModel.DateAll,     objectName: "activityDateAll" },
                 { text: qsTr("Today"),        value: ActivityFilterProxyModel.Today,       objectName: "activityDateToday" },
                 { text: qsTr("This week"),    value: ActivityFilterProxyModel.ThisWeek,    objectName: "activityDateThisWeek" },
                 { text: qsTr("This month"),   value: ActivityFilterProxyModel.ThisMonth,   objectName: "activityDateThisMonth" },
-                { text: qsTr("This year"),    value: ActivityFilterProxyModel.ThisYear,    objectName: "activityDateThisYear" },
-                //: Activity date filter menu entry that opens the custom start/end date calendar.
-                { text: qsTr("Custom range"), value: ActivityFilterProxyModel.CustomRange, objectName: "activityDateCustomRange" }
+                { text: qsTr("This year"),    value: ActivityFilterProxyModel.ThisYear,    objectName: "activityDateThisYear" }
             ]
             onActivated: function(value) {
-                if (value === ActivityFilterProxyModel.CustomRange) {
-                    datePopup.dateCustomExpanded = true
-                    return
-                }
                 activityFilterProxy.dateFilter = value
                 datePopup.dateCustomExpanded = false
                 datePopup.close()
             }
+        }
+
+        ContextMenuDivider { visible: !datePopup.dateCustomExpanded }
+        ContextMenuPicker {
+            visible: !datePopup.dateCustomExpanded
+            objectNameRole: "objectName"
+            currentValue: activityFilterProxy.dateFilter
+            model: [{ text: qsTr("Custom range"), value: ActivityFilterProxyModel.CustomRange, objectName: "activityDateCustomRange" }]
+            onActivated: datePopup.dateCustomExpanded = true
         }
 
         ColumnLayout {
@@ -827,9 +795,16 @@ Page {
 
         ContextMenuPicker {
             objectNameRole: "objectName"
-            currentValue: activityFilterProxy.typeFilter
+            currentValue: root.typeFilterActive ? -1 : ActivityFilterProxyModel.TypeAll
+            model: [{ text: qsTr("All activity"), value: ActivityFilterProxyModel.TypeAll, objectName: "activityTypeAll" }]
+            onActivated: activityFilterProxy.typeFilters = []
+        }
+        ContextMenuDivider {}
+        ContextMenuPicker {
+            objectNameRole: "objectName"
+            multiSelect: true
+            selectedValues: activityFilterProxy.typeFilters
             model: [
-                { text: qsTr("All"),              value: ActivityFilterProxyModel.TypeAll,        objectName: "activityTypeAll" },
                 { text: qsTr("Received"),         value: ActivityFilterProxyModel.Received,       objectName: "activityTypeReceived" },
                 { text: qsTr("Sent"),             value: ActivityFilterProxyModel.Sent,           objectName: "activityTypeSent" },
                 { text: qsTr("Sent to yourself"), value: ActivityFilterProxyModel.SentToSelf,     objectName: "activityTypeSentToSelf" },
@@ -837,10 +812,7 @@ Page {
                 { text: qsTr("Payment request"),  value: ActivityFilterProxyModel.PaymentRequest, objectName: "activityTypePaymentRequest" },
                 { text: qsTr("Mined"),            value: ActivityFilterProxyModel.Mined,          objectName: "activityTypeMined" }
             ]
-            onActivated: function(value) {
-                activityFilterProxy.typeFilter = value
-                typePopup.close()
-            }
+            onActivated: function(value) { root.toggleActivityType(value) }
         }
     }
 
@@ -849,99 +821,60 @@ Page {
         objectName: "activityAmountFilterPopup"
         parent: amountFilterButton
         y: amountFilterButton.height + 2
-        minMenuWidth: 280
+        implicitWidth: Math.min(320, root.width)
         modal: true
         dim: false
 
+        function seedRange() {
+            const maximum = activityFilterProxy.availableMaxAmount
+            amountSlider.setValues(Math.min(Math.max(0, activityFilterProxy.minAmount), maximum),
+                activityFilterProxy.maxAmount < 0 ? maximum : Math.min(activityFilterProxy.maxAmount, maximum))
+        }
         onAboutToShow: {
             x = root.filterPopupX(amountFilterButton, amountPopup)
-            minAmountField.text = activityFilterProxy.minAmount >= 0 ? amountFormatter.display : ""
-        }
-
-        onOpened: {
-            minAmountField.forceActiveFocus()
+            seedRange()
         }
 
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: 6
-            spacing: 6
+            Layout.margins: 12
+            spacing: 8
 
             CoreText {
-                //: Heading of the Activity amount filter popup.
-                text: qsTr("Minimum amount")
-                color: Theme.color.neutral7
-                font.pixelSize: 13
+                objectName: "activityAmountRangeLabel"
+                Layout.fillWidth: true
+                text: qsTr("%1 to %2").arg(lowerAmountFormatter.display).arg(upperAmountFormatter.displayWithUnit)
+                font: Theme.text.description.font
                 horizontalAlignment: Text.AlignLeft
             }
-
-            RowLayout {
+            RangeSlider {
+                id: amountSlider
+                objectName: "activityAmountRangeSlider"
                 Layout.fillWidth: true
-                spacing: 8
-
-                ActivityFilterInput {
-                    id: minAmountField
-                    objectName: "activityMinAmountField"
-                    //: Accessibility label for the Activity minimum amount filter input.
-                    Accessible.name: qsTr("Minimum amount")
-                    Layout.fillWidth: true
-                    inputMethodHints: Qt.ImhFormattedNumbersOnly
-                    placeholderText: root.minAmountPlaceholder(amountFormatter.unit)
-                    validator: RegularExpressionValidator {
-                        regularExpression: root.minAmountPattern(amountFormatter.unit)
-                    }
-                    onAccepted: root.applyMinAmount()
-                }
-
-                CoreText {
-                    text: amountFormatter.unitLabel
-                    color: Theme.color.neutral7
-                    font.pixelSize: 15
-                }
+                minValue: 0
+                maxValue: activityFilterProxy.availableMaxAmount
+                Accessible.name: qsTr("Activity amount range")
+                first.onMoved: root.applyAmountRange()
+                second.onMoved: root.applyAmountRange()
             }
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 2
-
-                TextButton {
-                    objectName: "activityMinAmountReset"
-                    //: Button that clears the Activity minimum amount filter.
-                    text: qsTr("Reset")
-                    textSize: 15
-                    textColor: Theme.color.neutral7
-                    onClicked: {
-                        minAmountField.text = ""
-                        activityFilterProxy.minAmount = -1
-                        amountPopup.close()
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                TextButton {
-                    objectName: "activityMinAmountApply"
-                    //: Button that applies the Activity minimum amount filter.
-                    text: qsTr("Apply")
-                    textSize: 15
-                    onClicked: root.applyMinAmount()
-                }
-            }
         }
     }
 
-
-    component ActivityFilterInput: TextField {
-        implicitHeight: 40
-        leftPadding: 12
-        rightPadding: 12
-        topPadding: 0
-        bottomPadding: 0
-        color: Theme.color.neutral9
-        placeholderTextColor: Theme.color.neutral7
-        font: Theme.text.description.font
-        verticalAlignment: TextInput.AlignVCenter
-        selectByMouse: true
-        background: Rectangle { color: Theme.color.neutral2; radius: 8 }
+    ContextMenu {
+        id: clearFiltersMenu
+        objectName: "activityClearFiltersMenu"
+        parent: activeFiltersButton
+        y: activeFiltersButton.height + 2
+        minMenuWidth: 180
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(activeFiltersButton, clearFiltersMenu)
+        ContextMenuButton {
+            objectName: "activityClearFiltersAction"
+            text: qsTr("Clear filters")
+            role: ContextMenuButton.Destructive
+            onTriggered: root.clearFilters()
+        }
     }
 }
