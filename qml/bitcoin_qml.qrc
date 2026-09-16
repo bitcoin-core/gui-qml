@@ -55,6 +55,10 @@
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
+        <file>components/TransactionFlow.qml</file>
+        <file>components/TransactionFlowNode.qml</file>
+        <file>components/TransactionFlowRibbon.qml</file>
+        <file>components/TransactionFlowLayout.js</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/LabeledBitcoinAddressField.qml</file>
         <file>components/MultipleRecipientsSummary.qml</file>
