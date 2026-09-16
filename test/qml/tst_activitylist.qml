@@ -425,14 +425,14 @@ TestCase {
         compare(page.currentItem.amount, "0.00101000 BTC")
         compare(page.currentItem.txid, "batch")
         compare(page.currentItem.outputIndex, -1)
-        compare(page.currentItem.label, "") // GUI group headings are never notes.
+        compare(page.currentItem.transactionData.label, "") // GUI group headings are never notes.
         const updated = rows()
         updated[3].depth = 20
         testTransactionActivityModel.setRows(updated)
         tryCompare(page.currentItem, "depth", 20)
         page.navigateToTransaction("batch", 0)
         tryCompare(page, "depth", 2)
-        compare(page.currentItem.amount, "0.00060000 BTC")
+        compare(page.currentItem.amount, "0.00101000 BTC") // The hero always represents the wallet's net impact.
         compare(page.currentItem.outputIndex, 0)
     }
 

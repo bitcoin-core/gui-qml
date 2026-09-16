@@ -56,6 +56,9 @@
         <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
+        <file>components/ConfirmationPill.qml</file>
+        <file>components/TransactionSummary.qml</file>
+        <file>components/TransactionDetailsSection.qml</file>
         <file>components/TransactionFlowNode.qml</file>
         <file>components/TransactionFlowRibbon.qml</file>
         <file>components/TransactionFlowLayout.js</file>
@@ -177,6 +180,7 @@
         <file>pages/wallet/ActivityIcon.qml</file>
         <file>pages/wallet/ActivityRequestBadge.qml</file>
         <file>pages/wallet/ActivityDetails.qml</file>
+        <file>pages/wallet/TransactionDetail.qml</file>
         <file>pages/wallet/ActivityTransactionVisuals.qml</file>
         <file>pages/wallet/AddressList.qml</file>
         <file>pages/wallet/AddressDetails.qml</file>

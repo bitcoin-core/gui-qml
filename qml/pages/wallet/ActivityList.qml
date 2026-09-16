@@ -14,44 +14,26 @@ PageStack {
 
     function detailProperties(txid, outputIndex) {
         if (!wallet) return {}
-        const transaction = wallet.transactionActivityModel.transactionDetails(txid)
+        const transaction = wallet.transactionActivityModel.transactionDetails(txid, true)
         if (!transaction.txid) return {}
-        let action = null
-        if (outputIndex !== undefined && outputIndex >= 0) {
-            for (let i = 0; i < transaction.actions.length; ++i) {
-                if (transaction.actions[i].outputIndex === outputIndex) action = transaction.actions[i]
-            }
-            if (!action) return {}
-        }
         return {
-            txid: transaction.txid,
-            outputIndex: action ? action.outputIndex : -1,
-            label: action ? action.label : transaction.label,
-            address: action ? action.address : transaction.address,
-            amount: action ? action.amount : transaction.amount,
-            date: Qt.formatDateTime(new Date(transaction.timestamp * 1000), "MMM d, yyyy, h:mm AP"),
-            depth: transaction.depth,
-            status: transaction.status,
-            type: action ? action.direction === TransactionActivityModel.ReceiveAction ? Transaction.RecvWithAddress
-                : action.direction === TransactionActivityModel.InternalAction ? Transaction.SendToSelf : Transaction.SendToAddress
-                : transaction.type,
-            canBump: transaction.canBump,
-            replacedByTxid: transaction.isInactive ? transaction.replacedByTxid : "",
-            paymentRequests: action ? action.paymentRequests : transaction.paymentRequests
+            transactionData: transaction,
+            wallet: stackView.wallet,
+            outputIndex: outputIndex === undefined ? -1 : outputIndex
         }
     }
 
     function navigateToTransaction(txid, outputIndex) {
         if (!wallet) return
         let details = detailProperties(txid, outputIndex)
-        if (!details.txid) {
+        if (!details.transactionData) {
             // A send-result link can arrive before the queued wallet update.
             wallet.transactionActivityModel.reload()
             details = detailProperties(txid, outputIndex)
         }
-        if (!details.txid) return
+        if (!details.transactionData) return
         stackView.pop(null)
-        const page = stackView.push("ActivityDetails.qml", details)
+        const page = stackView.push("TransactionDetail.qml", details)
         page.showTransaction.connect(stackView.navigateToTransaction)
     }
 
@@ -59,12 +41,14 @@ PageStack {
         const page = stackView.currentItem
         if (!page || page.objectName !== "activityDetailsPage") return
         const details = detailProperties(page.txid, page.outputIndex)
-        if (!details.txid) {
+        if (!details.transactionData) {
             stackView.pop(null)
             return
         }
         for (const key in details) page[key] = details[key]
     }
+
+    onCurrentItemChanged: refreshOpenDetails()
 
     Connections {
         target: walletController
@@ -73,9 +57,7 @@ PageStack {
     }
     Connections {
         target: stackView.wallet ? stackView.wallet.transactionActivityModel : null
-        function onDataChanged() { stackView.refreshOpenDetails() }
-        function onRowsRemoved() { stackView.refreshOpenDetails() }
-        function onModelReset() { stackView.refreshOpenDetails() }
+        function onTransactionDetailsChanged() { stackView.refreshOpenDetails() }
     }
     Binding {
         target: stackView.wallet

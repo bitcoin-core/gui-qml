@@ -2,6 +2,7 @@
     <qresource prefix="/test/qml">
         <file>tst_activitydetails.qml</file>
         <file>tst_transactionflow.qml</file>
+        <file>tst_transactiondetail.qml</file>
         <file>tst_activity.qml</file>
         <file>tst_activitylist.qml</file>
         <file>tst_address_components.qml</file>

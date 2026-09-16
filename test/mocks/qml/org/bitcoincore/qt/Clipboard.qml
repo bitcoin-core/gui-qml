@@ -11,5 +11,8 @@ QtObject {
     signal dataChanged()
 
     function text() { return currentText }
-    function setText(value) { currentText = value; dataChanged() }
+    function setText(value) {
+        currentText = value
+        dataChanged()
+    }
 }
