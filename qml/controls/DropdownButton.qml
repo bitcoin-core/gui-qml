@@ -12,6 +12,7 @@ AbstractButton {
 
     property string subtitle: ""
     property bool opened: false
+    property bool active: false
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft
@@ -55,7 +56,7 @@ AbstractButton {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
-                color: root.enabled ? root.textColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.white : root.textColor : Theme.color.neutral4
                 horizontalAlignment: root.textAlignment
                 elide: Text.ElideRight
                 wrap: false
@@ -97,7 +98,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: 6
-        color: (root.hovered || root.down || root.visualFocus || root.opened)
+        color: root.active ? Theme.color.orange : (root.hovered || root.down || root.visualFocus || root.opened)
             ? root.hoverBgColor
             : root.defaultBgColor
 

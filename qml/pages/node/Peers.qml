@@ -26,25 +26,21 @@ Page {
     property string pendingContextBanLabel: qsTr("1 hour")
 
     readonly property var directionOptions: [
-        { text: qsTr("All"), value: "" },
         { text: qsTr("Inbound"), value: "inbound" },
         { text: qsTr("Outbound"), value: "outbound" }
     ]
     readonly property var connectionTypeOptions: [
-        { text: qsTr("All"), value: "" },
         { text: qsTr("Full relay"), value: "full-relay" },
         { text: qsTr("Block relay"), value: "block-relay" },
         { text: qsTr("Manual"), value: "manual" }
     ]
     readonly property var networkOptions: [
-        { text: qsTr("All"), value: "" },
         { text: qsTr("IPv4"), value: "ipv4" },
         { text: qsTr("IPv6"), value: "ipv6" },
         { text: qsTr("Onion"), value: "onion" },
         { text: qsTr("I2P"), value: "i2p" }
     ]
     readonly property var transportOptions: [
-        { text: qsTr("All"), value: "" },
         { text: qsTr("v1"), value: "v1" },
         { text: qsTr("v2"), value: "v2" }
     ]
@@ -77,6 +73,7 @@ Page {
 
     AppSettings {
         id: settings
+        objectName: "peerFilterSettings"
         property string peerListSortBy: "nodeId"
         property bool peerListSortAscending: true
         property string peerDirectionFilters: ""
@@ -85,28 +82,64 @@ Page {
         property string peerTransportFilters: ""
     }
 
-    function decodeFilter(value, options) {
-        if (value.length === 0) return []
-        const candidate = value.split(",")[0]
-        for (let i = 0; i < options.length; ++i) {
-            if (options[i].value === candidate) return candidate.length === 0 ? [] : [candidate]
+    function decodeFilter(value, options, singleSelection) {
+        const candidates = value.split(",")
+        const selected = []
+        for (let i = 0; i < candidates.length; ++i) {
+            if (selected.indexOf(candidates[i]) >= 0) continue
+            for (let j = 0; j < options.length; ++j) {
+                if (options[j].value === candidates[i]) {
+                    selected.push(candidates[i])
+                    break
+                }
+            }
+            if (singleSelection && selected.length > 0) return selected
         }
-        return []
+        return selected.length === options.length ? [] : selected
     }
-    function selectedFilter(filters) { return filters.length > 0 ? filters[0] : "" }
+    function filtersFor(group) {
+        if (group === "direction") return peerListModelProxy.directionFilters
+        if (group === "connectionType") return peerListModelProxy.connectionTypeFilters
+        if (group === "network") return peerListModelProxy.networkFilters
+        return peerListModelProxy.transportFilters
+    }
     function validSort(value) {
         for (let i = 0; i < sortOptions.length; ++i) {
             if (sortOptions[i].value === value) return value
         }
         return "nodeId"
     }
-    function setFilter(group, value) {
-        const values = value.length === 0 ? [] : [value]
+    function setFilters(group, values) {
         if (group === "direction") peerListModelProxy.directionFilters = values
         else if (group === "connectionType") peerListModelProxy.connectionTypeFilters = values
         else if (group === "network") peerListModelProxy.networkFilters = values
         else if (group === "transport") peerListModelProxy.transportFilters = values
         storeFilters()
+    }
+    function toggleFilter(group, value, options) {
+        const filters = filtersFor(group)
+        const selected = []
+        for (let i = 0; i < filters.length; ++i) selected.push(filters[i])
+        const index = selected.indexOf(value)
+        if (group === "direction") {
+            setFilters(group, index >= 0 ? [] : [value])
+            return
+        }
+        if (index >= 0) selected.splice(index, 1)
+        else selected.push(value)
+        setFilters(group, selected.length === options.length ? [] : selected)
+    }
+    function clearFilters() {
+        peerListModelProxy.directionFilters = []
+        peerListModelProxy.connectionTypeFilters = []
+        peerListModelProxy.networkFilters = []
+        peerListModelProxy.transportFilters = []
+        storeFilters()
+    }
+    function filterPopupX(button, popup) {
+        const anchorX = button.mapToItem(root, 0, 0).x
+        return Math.max(12 - anchorX, Math.min(button.width - popup.width,
+            root.width - popup.width - anchorX - 12))
     }
     function storeFilters() {
         settings.peerDirectionFilters = peerListModelProxy.directionFilters.join(",")
@@ -115,10 +148,10 @@ Page {
         settings.peerTransportFilters = peerListModelProxy.transportFilters.join(",")
     }
     function filterCount() {
-        return peerListModelProxy.directionFilters.length
-            + peerListModelProxy.connectionTypeFilters.length
-            + peerListModelProxy.networkFilters.length
-            + peerListModelProxy.transportFilters.length
+        return (peerListModelProxy.directionFilters.length > 0 ? 1 : 0)
+            + (peerListModelProxy.connectionTypeFilters.length > 0 ? 1 : 0)
+            + (peerListModelProxy.networkFilters.length > 0 ? 1 : 0)
+            + (peerListModelProxy.transportFilters.length > 0 ? 1 : 0)
     }
     function joinedDetails(values) {
         const present = []
@@ -176,7 +209,7 @@ Page {
         peerListModelProxy.sortAscending = settings.peerListSortAscending
         peerListModelProxy.sortBy = validSort(settings.peerListSortBy)
         settings.peerListSortBy = peerListModelProxy.sortBy
-        peerListModelProxy.directionFilters = decodeFilter(settings.peerDirectionFilters, directionOptions)
+        peerListModelProxy.directionFilters = decodeFilter(settings.peerDirectionFilters, directionOptions, true)
         peerListModelProxy.connectionTypeFilters = decodeFilter(settings.peerConnectionTypeFilters, connectionTypeOptions)
         peerListModelProxy.networkFilters = decodeFilter(settings.peerNetworkFilters, networkOptions)
         peerListModelProxy.transportFilters = decodeFilter(settings.peerTransportFilters, transportOptions)
@@ -245,61 +278,8 @@ Page {
                     Layout.fillWidth: true
                     placeholderText: qsTr("Search peers")
                     accessibleName: qsTr("Search peers")
-                    nextTabItem: filterButton
+                    nextTabItem: sortButton
                     onTextChanged: peerListModelProxy.searchText = text
-                }
-
-                FilterButton {
-                    id: filterButton
-                    objectName: "peerFilterButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    active: root.filterCount() > 0
-                    KeyNavigation.tab: sortButton
-                    KeyNavigation.backtab: searchField.inputField
-                    KeyNavigation.priority: KeyNavigation.BeforeItem
-                    Accessible.name: root.filterCount() > 0
-                        ? qsTr("Filter peers, %1 active").arg(root.filterCount()) : qsTr("Filter peers")
-                    onClicked: filterMenu.open()
-
-                    ContextMenu {
-                        id: filterMenu
-                        objectName: "peerFilterMenu"
-                        y: filterButton.height + 6
-                        x: filterButton.width - width
-                        minMenuWidth: 260
-                        ContextMenuPicker {
-                            title: qsTr("Direction")
-                            model: root.directionOptions
-                            rowHeight: 32
-                            currentValue: root.selectedFilter(peerListModelProxy.directionFilters)
-                            onActivated: (value) => root.setFilter("direction", value)
-                        }
-                        ContextMenuDivider { verticalMargin: 3 }
-                        ContextMenuPicker {
-                            title: qsTr("Connection")
-                            model: root.connectionTypeOptions
-                            rowHeight: 32
-                            currentValue: root.selectedFilter(peerListModelProxy.connectionTypeFilters)
-                            onActivated: (value) => root.setFilter("connectionType", value)
-                        }
-                        ContextMenuDivider { verticalMargin: 3 }
-                        ContextMenuPicker {
-                            title: qsTr("Network")
-                            model: root.networkOptions
-                            rowHeight: 32
-                            currentValue: root.selectedFilter(peerListModelProxy.networkFilters)
-                            onActivated: (value) => root.setFilter("network", value)
-                        }
-                        ContextMenuDivider { verticalMargin: 3 }
-                        ContextMenuPicker {
-                            title: qsTr("Transport")
-                            model: root.transportOptions
-                            rowHeight: 32
-                            currentValue: root.selectedFilter(peerListModelProxy.transportFilters)
-                            onActivated: (value) => root.setFilter("transport", value)
-                        }
-                    }
                 }
 
                 Button {
@@ -309,8 +289,8 @@ Page {
                     Layout.preferredHeight: 40
                     hoverEnabled: AppMode.isDesktop
                     focusPolicy: Qt.StrongFocus
-                    KeyNavigation.tab: listView.count > 0 ? listView.itemAtIndex(0) : null
-                    KeyNavigation.backtab: filterButton
+                    KeyNavigation.tab: filterButton.visible ? filterButton : directionFilterButton
+                    KeyNavigation.backtab: searchField.inputField
                     KeyNavigation.priority: KeyNavigation.BeforeItem
                     Accessible.name: qsTr("Sort peers")
                     background: Rectangle {
@@ -361,6 +341,78 @@ Page {
                 }
             }
 
+            Flow {
+                objectName: "peerFilters"
+                Layout.fillWidth: true
+                Layout.preferredHeight: childrenRect.height
+                spacing: 12
+                FilterButton {
+                    id: filterButton
+                    objectName: "peerFilterButton"
+                    visible: count > 0
+                    active: true
+                    count: root.filterCount()
+                    size: directionFilterButton.height
+                    iconSize: 20
+                    text: qsTr("Filter peers, %1 active").arg(count)
+                    KeyNavigation.tab: directionFilterButton
+                    KeyNavigation.backtab: sortButton
+                    onClicked: clearFiltersMenu.opened ? clearFiltersMenu.close() : clearFiltersMenu.open()
+                }
+                DropdownButton {
+                    id: directionFilterButton
+                    objectName: "peerDirectionFilterButton"
+                    text: qsTr("Direction")
+                    active: peerListModelProxy.directionFilters.length > 0
+                    opened: directionFilterMenu.visible
+                    defaultBgColor: Theme.color.neutral1
+                    caretColor: Theme.color.white
+                    KeyNavigation.tab: connectionTypeFilterButton
+                    KeyNavigation.backtab: filterButton.visible ? filterButton : sortButton
+                    onClicked: directionFilterMenu.opened ? directionFilterMenu.close() : directionFilterMenu.open()
+                }
+                DropdownButton {
+                    id: connectionTypeFilterButton
+                    objectName: "peerConnectionFilterButton"
+                    text: qsTr("Connection")
+                    active: peerListModelProxy.connectionTypeFilters.length > 0
+                    opened: connectionTypeFilterMenu.visible
+                    defaultBgColor: Theme.color.neutral1
+                    caretColor: Theme.color.white
+                    KeyNavigation.tab: networkFilterButton
+                    KeyNavigation.backtab: directionFilterButton
+                    onClicked: connectionTypeFilterMenu.opened ? connectionTypeFilterMenu.close() : connectionTypeFilterMenu.open()
+                }
+                DropdownButton {
+                    id: networkFilterButton
+                    objectName: "peerNetworkFilterButton"
+                    text: qsTr("Network")
+                    active: peerListModelProxy.networkFilters.length > 0
+                    opened: networkFilterMenu.visible
+                    defaultBgColor: Theme.color.neutral1
+                    caretColor: Theme.color.white
+                    KeyNavigation.tab: transportFilterButton
+                    KeyNavigation.backtab: connectionTypeFilterButton
+                    onClicked: networkFilterMenu.opened ? networkFilterMenu.close() : networkFilterMenu.open()
+                }
+                DropdownButton {
+                    id: transportFilterButton
+                    objectName: "peerTransportFilterButton"
+                    text: qsTr("Transport")
+                    active: peerListModelProxy.transportFilters.length > 0
+                    opened: transportFilterMenu.visible
+                    defaultBgColor: Theme.color.neutral1
+                    caretColor: Theme.color.white
+                    KeyNavigation.tab: listView.count > 0 ? listView.itemAtIndex(0) : null
+                    KeyNavigation.backtab: networkFilterButton
+                    onClicked: transportFilterMenu.opened ? transportFilterMenu.close() : transportFilterMenu.open()
+                }
+                add: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
+                    NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: 160 }
+                }
+            }
+
             Rectangle {
                 objectName: "peerListCard"
                 Layout.fillWidth: true
@@ -397,7 +449,7 @@ Page {
                         hoverEnabled: AppMode.isDesktop
                         focusPolicy: Qt.StrongFocus
                         KeyNavigation.backtab: delegate.index === 0
-                            ? sortButton : listView.itemAtIndex(delegate.index - 1)
+                            ? transportFilterButton : listView.itemAtIndex(delegate.index - 1)
                         KeyNavigation.priority: KeyNavigation.BeforeItem
                         onClicked: root.peerSelected(peerListModelProxy.peerDetailsAt(index))
                         MouseArea {
@@ -632,5 +684,114 @@ Page {
     BannedPeersPopup {
         id: bannedPeersPopup
         parent: root.popupParent ? root.popupParent : Overlay.overlay
+    }
+
+    ContextMenu {
+        id: directionFilterMenu
+        objectName: "peerDirectionFilterMenu"
+        parent: directionFilterButton
+        y: directionFilterButton.height + 2
+        minMenuWidth: 200
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(directionFilterButton, directionFilterMenu)
+        ContextMenuPicker {
+            objectName: "peerDirectionFilterPicker"
+            model: root.directionOptions
+            currentValue: peerListModelProxy.directionFilters.length > 0 ? peerListModelProxy.directionFilters[0] : undefined
+            onActivated: (value) => root.toggleFilter("direction", value, root.directionOptions)
+        }
+    }
+
+    ContextMenu {
+        id: connectionTypeFilterMenu
+        objectName: "peerConnectionFilterMenu"
+        parent: connectionTypeFilterButton
+        y: connectionTypeFilterButton.height + 2
+        minMenuWidth: 200
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(connectionTypeFilterButton, connectionTypeFilterMenu)
+        ContextMenuPicker {
+            objectName: "peerConnectionAllPicker"
+            model: [{ text: qsTr("All"), value: "" }]
+            currentValue: peerListModelProxy.connectionTypeFilters.length === 0 ? "" : undefined
+            onActivated: root.setFilters("connectionType", [])
+        }
+        ContextMenuDivider { }
+        ContextMenuPicker {
+            objectName: "peerConnectionFilterPicker"
+            model: root.connectionTypeOptions
+            multiSelect: true
+            selectedValues: peerListModelProxy.connectionTypeFilters
+            onActivated: (value) => root.toggleFilter("connectionType", value, root.connectionTypeOptions)
+        }
+    }
+
+    ContextMenu {
+        id: networkFilterMenu
+        objectName: "peerNetworkFilterMenu"
+        parent: networkFilterButton
+        y: networkFilterButton.height + 2
+        minMenuWidth: 200
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(networkFilterButton, networkFilterMenu)
+        ContextMenuPicker {
+            objectName: "peerNetworkAllPicker"
+            model: [{ text: qsTr("All"), value: "" }]
+            currentValue: peerListModelProxy.networkFilters.length === 0 ? "" : undefined
+            onActivated: root.setFilters("network", [])
+        }
+        ContextMenuDivider { }
+        ContextMenuPicker {
+            objectName: "peerNetworkFilterPicker"
+            model: root.networkOptions
+            multiSelect: true
+            selectedValues: peerListModelProxy.networkFilters
+            onActivated: (value) => root.toggleFilter("network", value, root.networkOptions)
+        }
+    }
+
+    ContextMenu {
+        id: transportFilterMenu
+        objectName: "peerTransportFilterMenu"
+        parent: transportFilterButton
+        y: transportFilterButton.height + 2
+        minMenuWidth: 200
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(transportFilterButton, transportFilterMenu)
+        ContextMenuPicker {
+            objectName: "peerTransportAllPicker"
+            model: [{ text: qsTr("All"), value: "" }]
+            currentValue: peerListModelProxy.transportFilters.length === 0 ? "" : undefined
+            onActivated: root.setFilters("transport", [])
+        }
+        ContextMenuDivider { }
+        ContextMenuPicker {
+            objectName: "peerTransportFilterPicker"
+            model: root.transportOptions
+            multiSelect: true
+            selectedValues: peerListModelProxy.transportFilters
+            onActivated: (value) => root.toggleFilter("transport", value, root.transportOptions)
+        }
+    }
+
+    ContextMenu {
+        id: clearFiltersMenu
+        objectName: "peerClearFiltersMenu"
+        parent: filterButton
+        y: filterButton.height + 2
+        minMenuWidth: 180
+        modal: true
+        dim: false
+        onAboutToShow: x = root.filterPopupX(filterButton, clearFiltersMenu)
+        ContextMenuButton {
+            objectName: "peerClearFiltersAction"
+            text: qsTr("Clear filters")
+            role: ContextMenuButton.Destructive
+            onTriggered: root.clearFilters()
+        }
     }
 }

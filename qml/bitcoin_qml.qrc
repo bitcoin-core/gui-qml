@@ -229,8 +229,6 @@
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
         <file alias="file">res/icons/file.png</file>
-        <file alias="filter">res/icons/filter.png</file>
-        <file alias="filter-active">res/icons/filter-active.png</file>
         <file alias="flip-vertical">res/icons/flip-vertical.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>

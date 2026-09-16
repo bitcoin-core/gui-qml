@@ -289,36 +289,148 @@ TestCase {
     function test_peer_toolbar_tabs_into_list_with_focus_rings() {
         peerListModelProxy.setPeerCountForTest(1)
         const page = createPeersPage()
+        page.clearFilters()
         const search = findChild(page, "peerSearchField")
-        const filter = findChild(page, "peerFilterButton")
         const sort = findChild(page, "peerSortButton")
+        const filter = findChild(page, "peerFilterButton")
         const row = waitForChild(page, "peerListItem_0")
-        const filterRing = findChild(page, "peerFilterButtonFocusBorder")
-        const sortRing = findChild(page, "peerSortButtonFocusBorder")
-        const rowRing = waitForChild(page, "peerListItem_0FocusBorder")
-        verify(search !== null)
-        verify(filter !== null)
-        verify(sort !== null)
-        verify(row !== null)
-        verify(filterRing !== null)
-        verify(sortRing !== null)
-        verify(rowRing !== null)
-
+        compare(filter.visible, false)
         search.forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Tab)
-        tryCompare(filter, "activeFocus", true)
-        compare(filter.visualFocus, true)
-        tryCompare(filterRing, "visible", true)
-
-        keyClick(Qt.Key_Tab)
         tryCompare(sort, "activeFocus", true)
-        compare(sort.visualFocus, true)
-        tryCompare(sortRing, "visible", true)
-
+        const names = ["Direction", "Connection", "Network", "Transport"]
+        for (const name of names) {
+            const button = findChild(page, "peer" + name + "FilterButton")
+            keyClick(Qt.Key_Tab)
+            tryCompare(button, "activeFocus", true)
+            compare(button.visualFocus, true)
+        }
         keyClick(Qt.Key_Tab)
         tryCompare(row, "activeFocus", true)
         compare(row.visualFocus, true)
-        tryCompare(rowRing, "visible", true)
+    }
+
+    function test_filter_direction_is_optional_single_selection() {
+        const page = createPeersPage()
+        page.clearFilters()
+        const button = findChild(page, "peerDirectionFilterButton")
+        const menu = findChild(page, "peerDirectionFilterMenu")
+        const picker = findChild(page, "peerDirectionFilterPicker")
+        const count = findChild(page, "peerFilterButton")
+        button.clicked()
+        tryCompare(menu, "opened", true)
+        compare(page.directionOptions.length, 2)
+        picker.itemAtIndex(0).clicked()
+        compare(peerListModelProxy.directionFilters.join(","), "inbound")
+        compare(button.active, true)
+        compare(count.visible, true)
+        compare(count.count, 1)
+        picker.itemAtIndex(1).clicked()
+        compare(peerListModelProxy.directionFilters.join(","), "outbound")
+        picker.itemAtIndex(1).clicked()
+        compare(peerListModelProxy.directionFilters.length, 0)
+        compare(count.visible, false)
+        menu.close()
+        page.clearFilters()
+    }
+
+    function test_filter_multiple_selection_and_all_data() {
+        return [
+            { tag: "connection", label: "Connection", property: "connectionTypeFilters", options: "connectionTypeOptions" },
+            { tag: "network", label: "Network", property: "networkFilters", options: "networkOptions" },
+            { tag: "transport", label: "Transport", property: "transportFilters", options: "transportOptions" }
+        ]
+    }
+
+    function test_filter_multiple_selection_and_all(data) {
+        const page = createPeersPage()
+        page.clearFilters()
+        const button = findChild(page, "peer" + data.label + "FilterButton")
+        const menu = findChild(page, "peer" + data.label + "FilterMenu")
+        const picker = findChild(page, "peer" + data.label + "FilterPicker")
+        const all = findChild(page, "peer" + data.label + "AllPicker")
+        const count = findChild(page, "peerFilterButton")
+        button.clicked()
+        tryCompare(menu, "opened", true)
+        compare(all.itemAtIndex(0).selected, true)
+        for (let i = 0; i < page[data.options].length; ++i) {
+            picker.itemAtIndex(i).clicked()
+            compare(menu.opened, true)
+            if (i < page[data.options].length - 1) {
+                compare(peerListModelProxy[data.property].length, i + 1)
+                compare(picker.itemAtIndex(i).selected, true)
+                compare(all.itemAtIndex(0).selected, false)
+                compare(count.count, 1)
+            }
+        }
+        compare(peerListModelProxy[data.property].length, 0)
+        compare(all.itemAtIndex(0).selected, true)
+        compare(button.active, false)
+        picker.itemAtIndex(0).clicked()
+        all.itemAtIndex(0).clicked()
+        compare(peerListModelProxy[data.property].length, 0)
+        picker.itemAtIndex(0).clicked()
+        picker.itemAtIndex(0).clicked()
+        compare(all.itemAtIndex(0).selected, true)
+        menu.close()
+        page.clearFilters()
+    }
+
+    function test_filter_count_clear_and_saved_multiselection() {
+        const page = createPeersPage()
+        page.clearFilters()
+        page.setFilters("direction", ["inbound"])
+        page.setFilters("connectionType", ["full-relay", "manual"])
+        page.setFilters("network", ["ipv4", "onion"])
+        page.setFilters("transport", ["v2"])
+        const count = findChild(page, "peerFilterButton")
+        compare(count.count, 4)
+        const settings = findChild(page, "peerFilterSettings")
+        compare(settings.peerConnectionTypeFilters, "full-relay,manual")
+        compare(page.decodeFilter(settings.peerConnectionTypeFilters, page.connectionTypeOptions).join(","), "full-relay,manual")
+        compare(page.decodeFilter("ipv4,garbage,onion,ipv4", page.networkOptions).join(","), "ipv4,onion")
+        compare(page.decodeFilter("v1,v2", page.transportOptions).length, 0)
+        compare(page.decodeFilter("inbound,outbound", page.directionOptions, true).join(","), "inbound")
+        count.clicked()
+        const menu = findChild(page, "peerClearFiltersMenu")
+        tryCompare(menu, "opened", true)
+        findChild(menu, "peerClearFiltersAction").clicked()
+        compare(count.visible, false)
+        compare(settings.peerConnectionTypeFilters, "")
+        compare(peerListModelProxy.directionFilters.length, 0)
+        compare(peerListModelProxy.networkFilters.length, 0)
+        compare(peerListModelProxy.transportFilters.length, 0)
+    }
+
+    function test_filter_buttons_wrap_below_search() {
+        const page = createPeersPage()
+        page.clearFilters()
+        page.setFilters("direction", ["inbound"])
+        const filters = findChild(page, "peerFilters")
+        const search = findChild(page, "peerSearchBar")
+        const count = findChild(page, "peerFilterButton")
+        const direction = findChild(page, "peerDirectionFilterButton")
+        const transport = findChild(page, "peerTransportFilterButton")
+        for (const width of [320, 430, 900]) {
+            page.width = width
+            wait(0)
+            verify(filters.y >= search.parent.y + search.parent.height)
+            compare(count.x, 0)
+            tryVerify(function() { return direction.x >= count.width })
+            for (const name of ["Direction", "Connection", "Network", "Transport"]) {
+                const button = findChild(page, "peer" + name + "FilterButton")
+                tryVerify(function() { return button.x >= 0 && button.x + button.width <= filters.width + 1 })
+            }
+        }
+        page.width = 320
+        tryVerify(function() { return transport.y > direction.y })
+        search.inputField.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Tab)
+        keyClick(Qt.Key_Tab)
+        tryCompare(count, "activeFocus", true)
+        keyClick(Qt.Key_Tab)
+        tryCompare(direction, "activeFocus", true)
+        page.clearFilters()
     }
 
     function test_peer_row_places_traffic_on_its_own_colored_line() {

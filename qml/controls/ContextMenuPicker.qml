@@ -18,6 +18,8 @@ Item {
     property string iconRole: ""
     property string objectNameRole: ""
     property string subtitleObjectNameRole: ""
+    property bool multiSelect: false
+    property var selectedValues: []
     property var currentValue
     property url selectionIconSource: "image://images/check"
     property int iconSize: 18
@@ -102,7 +104,7 @@ Item {
                 property url rowIconSource: root._rowIconSource(rowData)
                 property string subtitleObjectName: root._rowSubtitleObjectName(rowData)
                 objectName: root._rowObjectName(rowData)
-                readonly property bool selected: root.currentValue === rowValue
+                readonly property bool selected: root.multiSelect ? root.selectedValues.indexOf(rowValue) >= 0 : root.currentValue === rowValue
                 readonly property int _textHeight: subtitle !== "" ? root.subtitleRowHeight : root.rowHeight
                 readonly property int _iconHeight: rowIconSource.toString() !== "" ? root.iconSize + 12 : 0
                 readonly property int _effectiveHeight: Math.max(_textHeight, _iconHeight)
