@@ -5,6 +5,7 @@
 #include <qml/models/transactionactivitymodel.h>
 
 #include <qml/bitcoinunits.h>
+#include <qml/models/transactionflow.h>
 #include <qml/models/walletqmlmodel.h>
 
 #include <core_io.h>
@@ -102,6 +103,7 @@ bool TransactionActivityModel::updateStatus(Record& record)
     record.status_known = true;
     record.depth = status.depth_in_main_chain;
     record.blocks_to_maturity = status.blocks_to_maturity;
+    record.block_height = record.depth > 0 ? status.block_height : 0;
     if (record.activity.type == Type::Mined) {
         record.status = !status.is_in_main_chain ? Transaction::NotAccepted
             : status.blocks_to_maturity > 0 ? Transaction::Immature : Transaction::Confirmed;
@@ -118,6 +120,8 @@ bool TransactionActivityModel::updateStatus(Record& record)
 
 void TransactionActivityModel::reload()
 {
+    m_detail_txid.clear();
+    m_detail_flow.clear();
     QMap<QString, Record> records;
     m_retry.clear();
     for (const auto& wtx : m_wallet_model->getWalletTxs()) {
@@ -135,6 +139,8 @@ void TransactionActivityModel::reload()
 
 void TransactionActivityModel::updateTransaction(const QString& txid, int change)
 {
+    m_detail_txid.clear();
+    m_detail_flow.clear();
     m_retry.remove(txid);
     if (change == CT_DELETED) {
         m_transactions.remove(txid);
@@ -145,7 +151,10 @@ void TransactionActivityModel::updateTransaction(const QString& txid, int change
         const auto hash = uint256::FromHex(txid.toStdString());
         if (!hash) return;
         auto activity = TransactionActivity::fromWalletTx(m_wallet_model->getWalletTx(*hash));
-        if (!activity) return;
+        if (!activity) {
+            Q_EMIT transactionDetailsChanged();
+            return;
+        }
         Record record = m_transactions.value(txid);
         record.activity = std::move(*activity);
         updateLabels(record);
@@ -336,15 +345,74 @@ void TransactionActivityModel::rebuildRows()
         endRemoveRows();
     }
     if (old_count != rowCount() || old_requests != requestCount()) Q_EMIT countChanged();
+    Q_EMIT transactionDetailsChanged();
 }
 
-QVariantMap TransactionActivityModel::transactionDetails(const QString& txid) const
+QVariantMap TransactionActivityModel::transactionDetails(const QString& txid, bool include_flow) const
 {
     const auto names = roleNames();
     for (const auto& row : m_rows) {
         if (row.value(TxidRole).toString() != txid || row.value(IsPendingRequestRole).toBool()) continue;
         QVariantMap result;
         for (auto it = names.cbegin(); it != names.cend(); ++it) result.insert(QString::fromUtf8(it.value()), row.value(it.key()));
+        const auto& record = m_transactions[txid];
+        result.insert("blockHeight", record.status_known && record.depth > 0 ? QVariant{record.block_height} : QVariant{});
+        if (!include_flow) return result;
+        if (m_detail_txid != txid) {
+            const auto hash = uint256::FromHex(txid.toStdString());
+            if (!hash || !m_wallet_model->wallet()) return result;
+            const auto wtx = m_wallet_model->getWalletTx(*hash);
+            if (!wtx.tx) return result;
+            // Resolve only from local wallet history. This also works for spent
+            // and conflicted parents; never query an external block explorer.
+            std::map<Txid, CTransactionRef> parents;
+            std::vector<std::optional<CTxOut>> prevouts;
+            if (!wtx.tx->IsCoinBase()) {
+                for (const auto& input : wtx.tx->vin) {
+                    auto [it, inserted] = parents.try_emplace(input.prevout.hash);
+                    if (inserted) it->second = m_wallet_model->wallet()->getTx(input.prevout.hash);
+                    prevouts.push_back(it->second && input.prevout.n < it->second->vout.size()
+                        ? std::optional{it->second->vout[input.prevout.n]} : std::nullopt);
+                }
+            }
+            m_detail_flow = BuildTransactionFlow(wtx, prevouts);
+            m_detail_raw_transaction = QString::fromStdString(EncodeHexTx(*wtx.tx));
+            m_detail_txid = txid;
+        }
+        QVariantMap flow = m_detail_flow;
+        for (const QString& side : {QStringLiteral("inputs"), QStringLiteral("outputs")}) {
+            QVariantList entries;
+            for (const auto& value : flow.value(side).toList()) {
+                QVariantMap entry = value.toMap();
+                const QString address = entry.value("address").toString();
+                const bool output = side == "outputs";
+                const bool mine = entry.value("ownership") == "wallet";
+                const auto requests = output && mine && entry.value("amountSat").toLongLong() > 0
+                    ? m_wallet_model->receiveRequests()->matchingEntriesForAddress(address) : QVariantList{};
+                entry.insert("paymentRequests", requests);
+                entry.insert("label", !requests.isEmpty() ? requests.first().toMap().value("noteSelf").toString()
+                    : !output || !mine ? m_wallet_model->getAddressLabel(address) : QString{});
+                entry.insert("amount", entry.value("amountKnown").toBool()
+                    ? formatAmount(entry.value("amountSat").toLongLong(), false) : QString{});
+                entries.append(entry);
+            }
+            flow.insert(side, entries);
+        }
+        const bool fee_known = flow.value("feeKnown").toBool();
+        const qint64 vsize = flow.value("virtualSize").toLongLong();
+        flow.insert("feeAmount", fee_known ? formatAmount(flow.value("feeSat").toLongLong(), false) : QString{});
+        result.insert("flow", flow);
+        result.insert("rawTransaction", m_detail_raw_transaction);
+        result.insert("virtualSize", vsize);
+        result.insert("size", flow.value("size"));
+        result.insert("weight", flow.value("weight"));
+        result.insert("version", flow.value("version"));
+        result.insert("lockTime", flow.value("lockTime"));
+        result.insert("feeKnown", fee_known);
+        result.insert("feeSat", flow.value("feeSat"));
+        result.insert("feeRateSatPerVb", fee_known && vsize > 0
+            ? QVariant{double(flow.value("feeSat").toLongLong()) / vsize} : QVariant{});
+        result.insert("signalsRbf", flow.value("signalsRbf"));
         return result;
     }
     return {};

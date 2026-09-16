@@ -3071,6 +3071,7 @@ public:
         m_rows = rows;
         endResetModel();
         Q_EMIT countChanged();
+        Q_EMIT transactionDetailsChanged();
     }
     Q_INVOKABLE void reload() {}
     Q_INVOKABLE QString rawTransaction(const QString& txid) const { return transactionDetails(txid).value("rawTransaction").toString(); }
@@ -3079,13 +3080,15 @@ public:
         for (const auto& row : m_rows) if (row.toMap().value("requestId").toString() == request_id) return row.toMap().value("uri").toString();
         return {};
     }
-    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid) const
+    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, bool include_flow = false) const
     {
+        Q_UNUSED(include_flow);
         for (const auto& row : m_rows) if (row.toMap().value("txid").toString() == txid) return row.toMap();
         return {};
     }
 Q_SIGNALS:
     void countChanged();
+    void transactionDetailsChanged();
 private:
     QVariantList m_rows;
 };

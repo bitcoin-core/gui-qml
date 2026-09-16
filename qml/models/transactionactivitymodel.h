@@ -97,11 +97,16 @@ public:
     Q_INVOKABLE void reload();
     // Status reads are cached. A busy wallet never changes a row to failed.
     Q_INVOKABLE void refreshStatuses();
-    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid) const;
+    // The list-compatible snapshot stays cached; full flow resolution is opt-in
+    // for an open detail view and is cached separately from confirmation updates.
+    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, bool include_flow = false) const;
     void setDisplayUnit(int unit);
 
 Q_SIGNALS:
     void countChanged();
+    // Full details can change without changing any high-level activity role
+    // (for example, a previously unknown input's transaction becomes available).
+    void transactionDetailsChanged();
 
 private:
     struct Record {
@@ -110,6 +115,7 @@ private:
         int status{Transaction::Unconfirmed};
         int depth{0};
         int blocks_to_maturity{0};
+        int block_height{0};
         bool status_known{false};
         bool can_bump{false};
     };
@@ -129,6 +135,10 @@ private:
     QList<Row> m_rows;
     QTimer m_timer;
     std::optional<uint256> m_last_tip;
+    // Only the most recently opened transaction needs its full flow cached.
+    mutable QString m_detail_txid;
+    mutable QString m_detail_raw_transaction;
+    mutable QVariantMap m_detail_flow;
 };
 
 #endif // BITCOIN_QML_MODELS_TRANSACTIONACTIVITYMODEL_H

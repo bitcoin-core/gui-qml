@@ -79,6 +79,8 @@ public:
     std::map<std::string, wallet::AddressPurpose> purposes;
     std::optional<interfaces::WalletTx> send_draft;
     CTransactionRef previous_tx;
+    std::map<Txid, CTransactionRef> flow_parents;
+    int parent_reads{0};
     bool external_signer{false};
     int address_writes{0};
     int commits{0};
@@ -113,6 +115,12 @@ public:
         snapshot_on_worker |= QThread::currentThread() != qApp->thread();
         const auto it = transactions.find(id);
         return it == transactions.end() ? interfaces::WalletTx{} : it->second;
+    }
+    CTransactionRef getTx(const Txid& id) override
+    {
+        ++parent_reads;
+        const auto it = flow_parents.find(id);
+        return it == flow_parents.end() ? CTransactionRef{} : it->second;
     }
     bool tryGetTxStatus(const Txid& id, interfaces::WalletTxStatus& status, int& height, int64_t& time) override
     {
@@ -226,6 +234,7 @@ private Q_SLOTS:
     void handlesInternalAndMinedTypes();
     void recognizesSelfSendToPaymentRequest_data();
     void recognizesSelfSendToPaymentRequest();
+    void loadsFlowLazilyAndRefreshesOutputAssociations();
 };
 
 void TransactionActivityModelTests::copiesRawTransactionAndPublicPaymentRequest()
@@ -244,6 +253,81 @@ void TransactionActivityModelTests::copiesRawTransactionAndPublicPaymentRequest(
     QCOMPARE(uri, ReceiveRequestHistoryModel::BuildBitcoinUri(Address(tx), 10'000, "Public label", "Public message"));
     QVERIFY(!uri.contains("Private"));
     QVERIFY(model->paymentRequestUri("missing").isEmpty());
+}
+
+void TransactionActivityModelTests::loadsFlowLazilyAndRefreshesOutputAssociations()
+{
+    Fixture f;
+    const auto tx = MakeTx({{100'000, true}}, {{70'000, false}, {29'000, true, true, 2}});
+    CMutableTransaction parent;
+    parent.vout.emplace_back(100'000, tx.tx->vout[1].scriptPubKey);
+    f.state->flow_parents[tx.tx->vin[0].prevout.hash] = MakeTransactionRef(parent);
+    const QString input_address = Address(tx, 1);
+    f.state->labels[input_address.toStdString()] = "Savings";
+    f.state->put(tx, 2);
+    f.state->statuses[tx.tx->GetHash()].block_height = 100;
+    auto* model = f.model();
+    QVERIFY(!model->transactionDetails(Id(tx)).contains("flow"));
+    QCOMPARE(f.state->parent_reads, 0);
+    auto details = model->transactionDetails(Id(tx), true);
+    QCOMPARE(f.state->parent_reads, 1);
+    QCOMPARE(details.value("rawTransaction").toString(), QString::fromStdString(EncodeHexTx(*tx.tx)));
+    QCOMPARE(model->transactionDetails(Id(tx), true).value("rawTransaction"), details.value("rawTransaction"));
+    QVERIFY(!model->transactionDetails(Id(tx)).contains("rawTransaction"));
+    QCOMPARE(details.value("blockHeight").toInt(), 100);
+    QCOMPARE(details.value("feeSat").toLongLong(), 1'000);
+    QVERIFY(details.value("feeRateSatPerVb").toDouble() > 0);
+    QCOMPARE(details.value("size").toLongLong(), qint64(GetSerializeSize(TX_WITH_WITNESS(*tx.tx))));
+    QCOMPARE(details.value("version").toLongLong(), qint64(tx.tx->version));
+    QCOMPARE(details.value("lockTime").toLongLong(), qint64(tx.tx->nLockTime));
+    QCOMPARE(details.value("weight"), details.value("flow").toMap().value("weight"));
+    QVERIFY(details.value("weight").toLongLong() > 0);
+    QCOMPARE(details.value("flow").toMap().value("outputs").toList().size(), 2);
+    const auto input = details.value("flow").toMap().value("inputs").toList()[0].toMap();
+    QCOMPARE(input.value("address").toString(), input_address);
+    QCOMPARE(input.value("label").toString(), QString("Savings"));
+    QVERIFY(input.value("paymentRequests").toList().isEmpty());
+    QCOMPARE(details.value("actions").toList().size(), 1);
+    model->refreshStatuses();
+    model->transactionDetails(Id(tx), true);
+    QCOMPARE(f.state->parent_reads, 1);
+
+    // Address edits refresh the input title without reloading transaction data.
+    QSignalSpy input_changed(model, &Model::transactionDetailsChanged);
+    f.state->labels[input_address.toStdString()] = "Long-term savings";
+    Q_EMIT f.wallet->addressListChanged();
+    QVERIFY(!input_changed.isEmpty());
+    details = model->transactionDetails(Id(tx), true);
+    QCOMPARE(details.value("flow").toMap().value("inputs").toList()[0].toMap().value("label").toString(),
+        QString("Long-term savings"));
+    QCOMPARE(f.state->parent_reads, 1);
+    f.state->labels[input_address.toStdString()].clear();
+    Q_EMIT f.wallet->addressListChanged();
+    QVERIFY(model->transactionDetails(Id(tx), true).value("flow").toMap().value("inputs").toList()[0].toMap().value("label").toString().isEmpty());
+
+    auto request = Request(91, Address(tx, 1), "Public name");
+    request.recipient.noteSelf = "Private note";
+    QSignalSpy changed(model, &Model::transactionDetailsChanged);
+    f.request(request);
+    QVERIFY(!changed.isEmpty());
+    details = model->transactionDetails(Id(tx), true);
+    auto output = details.value("flow").toMap().value("outputs").toList()[1].toMap();
+    QCOMPARE(output.value("label").toString(), QString("Private note"));
+    QCOMPARE(output.value("paymentRequests").toList().size(), 1);
+    request.recipient.noteSelf.clear();
+    f.request(request);
+    f.wallet->setDisplayUnit(3);
+    output = model->transactionDetails(Id(tx), true).value("flow").toMap().value("outputs").toList()[1].toMap();
+    QVERIFY(output.value("label").toString().isEmpty());
+    QVERIFY(output.value("amount").toString().endsWith(" sat"));
+    QCOMPARE(f.state->parent_reads, 1);
+    QCOMPARE(f.state->address_writes, 0);
+    f.state->notify(tx, CT_UPDATED);
+    QTRY_VERIFY(changed.size() > 2);
+    QCoreApplication::processEvents();
+    model->transactionDetails(Id(tx), true);
+    QCOMPARE(f.state->parent_reads, 2);
+    QVERIFY(model->transactionDetails("not a txid", true).isEmpty());
 }
 
 void TransactionActivityModelTests::exposesParentsAndActionsWithoutAllocatingFees()

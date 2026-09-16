@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/transactionactivity.h>
+#include <qml/models/transactionflow.h>
 
 #include <chainparams.h>
 #include <interfaces/wallet.h>
@@ -86,11 +87,133 @@ private Q_SLOTS:
     void knownZeroFeeDiffersFromUnknownFee();
     void ignoresTransactionsWithoutWalletOwnership();
     void rejectsIncompleteSnapshots();
+    void flowKeepsAllInputsOutputsAndUnknownAmounts();
+    void flowHandlesCoinbaseDataOutputsAndZeroFees();
+    void flowDecodesDataOutputs_data();
+    void flowDecodesDataOutputs();
+    void flowIncludesSerializedTransactionMetadata();
 };
 
 void TransactionActivityTests::initTestCase()
 {
     SelectParams(ChainType::REGTEST);
+}
+
+void TransactionActivityTests::flowKeepsAllInputsOutputsAndUnknownAmounts()
+{
+    const auto tx = MakeWalletTx({{100'000, true}, {50'000, false}},
+        {{49'000, true, true}, {100'000, false}});
+    auto flow = BuildTransactionFlow(tx, {CTxOut{100'000, CScript{}}, std::nullopt});
+    const auto inputs = flow.value("inputs").toList();
+    const auto outputs = flow.value("outputs").toList();
+    QCOMPARE(inputs.size(), 2);
+    QCOMPARE(outputs.size(), 2);
+    QCOMPARE(inputs[0].toMap().value("amountSat").toLongLong(), 100'000);
+    QVERIFY(!inputs[1].toMap().value("amountKnown").toBool());
+    QVERIFY(inputs[1].toMap().value("amountSat").isNull());
+    QCOMPARE(inputs[1].toMap().value("ownership").toString(), QString("external"));
+    QVERIFY(outputs[0].toMap().value("isChange").toBool());
+    QCOMPARE(outputs[1].toMap().value("amountSat").toLongLong(), 100'000);
+    QVERIFY(!flow.value("complete").toBool());
+    QVERIFY(!flow.value("feeKnown").toBool());
+    QVERIFY(flow.value("feeSat").isNull());
+    flow = BuildTransactionFlow(tx, {CTxOut{100'000, CScript{}}, CTxOut{50'000, CScript{}}});
+    QVERIFY(flow.value("complete").toBool());
+    QCOMPARE(flow.value("totalInputSat").toLongLong(), 150'000);
+    QCOMPARE(flow.value("feeSat").toLongLong(), 1'000);
+    QVERIFY(flow.value("virtualSize").toLongLong() > 0);
+
+    // Even when an individual wallet prevout cannot be resolved, its cached
+    // aggregate debit can give us the fee without fabricating input widths.
+    const auto send = MakeWalletTx({{100'000, true}}, {{70'000, false}, {29'000, true, true}});
+    flow = BuildTransactionFlow(send, {});
+    QVERIFY(flow.value("feeKnown").toBool());
+    QCOMPARE(flow.value("feeSat").toLongLong(), 1'000);
+    QVERIFY(!flow.value("complete").toBool());
+    QVERIFY(flow.value("totalInputSat").isNull());
+    QCOMPARE(flow.value("outputs").toList().size(), 2);
+}
+
+void TransactionActivityTests::flowHandlesCoinbaseDataOutputsAndZeroFees()
+{
+    auto tx = MakeWalletTx({{100'000, true}}, {{100'000, false}, {0, false, false, true}});
+    auto flow = BuildTransactionFlow(tx, {CTxOut{100'000, CScript{}}});
+    QVERIFY(flow.value("feeKnown").toBool());
+    QCOMPARE(flow.value("feeSat").toLongLong(), 0);
+    QCOMPARE(flow.value("outputs").toList().size(), 2);
+    QCOMPARE(flow.value("outputs").toList()[1].toMap().value("kind").toString(), QString("data"));
+    tx = MakeWalletTx({{0, false}}, {{50 * COIN, true}}, true);
+    flow = BuildTransactionFlow(tx, {});
+    QVERIFY(flow.value("coinbase").toBool());
+    QVERIFY(flow.value("complete").toBool());
+    QVERIFY(!flow.value("feeKnown").toBool());
+    QCOMPARE(flow.value("inputs").toList()[0].toMap().value("kind").toString(), QString("coinbase"));
+    QCOMPARE(flow.value("totalInputSat").toLongLong(), 50 * COIN);
+    tx.txout_is_mine.clear();
+    QVERIFY(BuildTransactionFlow(tx, {}).isEmpty());
+}
+
+void TransactionActivityTests::flowIncludesSerializedTransactionMetadata()
+{
+    auto wtx = MakeWalletTx({{100'000, true}}, {{99'000, false}});
+    CMutableTransaction tx{*wtx.tx};
+    tx.version = 3;
+    tx.nLockTime = 840'000;
+    tx.vin[0].nSequence = 0xfffffffd;
+    tx.vin[0].scriptWitness.stack = {{0x01, 0x02, 0x03}};
+    tx.vout[0].scriptPubKey = CScript{} << OP_TRUE;
+    wtx.tx = MakeTransactionRef(tx);
+    // 61 stripped bytes + 2 marker/flag bytes + 5 witness bytes.
+    const auto flow = BuildTransactionFlow(wtx, {});
+    QCOMPARE(flow.value("size").toLongLong(), 68);
+    QCOMPARE(flow.value("weight").toLongLong(), 251);
+    QCOMPARE(flow.value("virtualSize").toLongLong(), 63);
+    QCOMPARE(flow.value("version").toLongLong(), 3);
+    QCOMPARE(flow.value("lockTime").toLongLong(), 840'000);
+    QVERIFY(flow.value("signalsRbf").toBool());
+    QVERIFY(!flow.value("complete").toBool());
+}
+
+void TransactionActivityTests::flowDecodesDataOutputs_data()
+{
+    QTest::addColumn<QByteArray>("script_hex");
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<QString>("payload_hex");
+    QTest::newRow("text") << QByteArray{"6a0b48656c6c6f20776f726c64"} << QStringLiteral("Hello world") << QStringLiteral("48656c6c6f20776f726c64");
+    QTest::newRow("unicode") << QByteArray{"6a0841e299a5f09f9492"}
+        << QString::fromUtf8(QByteArray::fromHex("41e299a5f09f9492")) << QStringLiteral("41e299a5f09f9492");
+    QTest::newRow("multiple_pushes") << QByteArray{"6a0548656c6c6f05576f726c64"} << QStringLiteral("Hello\nWorld") << QStringLiteral("48656c6c6f 576f726c64");
+    QTest::newRow("pushdata1") << QByteArray{"6a4c50"} + QByteArray(80, 'x').toHex() << QString(80, 'x') << QString::fromLatin1(QByteArray(80, 'x').toHex());
+    QTest::newRow("newlines") << QByteArray{"6a03610a62"} << QStringLiteral("a\nb") << QStringLiteral("610a62");
+    QTest::newRow("empty") << QByteArray{"6a"} << QStringLiteral("") << QStringLiteral("");
+    QTest::newRow("empty_push") << QByteArray{"6a00"} << QStringLiteral("") << QStringLiteral("");
+    QTest::newRow("binary") << QByteArray{"6a0400ff0102"} << QString{} << QStringLiteral("00ff0102");
+    QTest::newRow("control_character") << QByteArray{"6a03610062"} << QString{} << QStringLiteral("610062");
+    QTest::newRow("invalid_utf8") << QByteArray{"6a02c328"} << QString{} << QStringLiteral("c328");
+    QTest::newRow("truncated_push") << QByteArray{"6a4c054142"} << QString{} << QString{};
+    QTest::newRow("other_opcodes") << QByteArray{"6a51026162"} << QString{} << QString{};
+}
+
+void TransactionActivityTests::flowDecodesDataOutputs()
+{
+    QFETCH(QByteArray, script_hex);
+    QFETCH(QString, text);
+    QFETCH(QString, payload_hex);
+    auto wtx = MakeWalletTx({{100'000, true}}, {{99'000, false}, {0, false, false, true}});
+    CMutableTransaction tx{*wtx.tx};
+    const auto bytes = QByteArray::fromHex(script_hex);
+    tx.vout[1].scriptPubKey = CScript(bytes.begin(), bytes.end());
+    wtx.tx = MakeTransactionRef(tx);
+    const auto outputs = BuildTransactionFlow(wtx, {}).value("outputs").toList();
+    QVERIFY(!outputs[0].toMap().contains("dataType"));
+    const auto data = outputs[1].toMap();
+    QCOMPARE(data.value("kind").toString(), QStringLiteral("data"));
+    QCOMPARE(data.value("dataType").toString(), QStringLiteral("OP_RETURN"));
+    QCOMPARE(data.value("scriptHex").toString(), QString::fromLatin1(script_hex));
+    QCOMPARE(data.contains("dataText"), !text.isNull());
+    QCOMPARE(data.contains("dataHex"), !payload_hex.isNull());
+    if (!text.isNull()) QCOMPARE(data.value("dataText").toString(), text);
+    if (!payload_hex.isNull()) QCOMPARE(data.value("dataHex").toString(), payload_hex);
 }
 
 void TransactionActivityTests::classifiesWalletActivity_data()
