@@ -288,6 +288,7 @@ private:
     bool ensurePaymentRequestDestination();
     bool saveCurrentPaymentRequest();
     bool sendTransactionInternal(std::optional<SecureString> passphrase = std::nullopt);
+    void saveSentRecipientLabels();
     bool unlockForAction(std::optional<SecureString>& passphrase, bool& relock);
     void clearTransactionStatus();
     void setTransactionStatus(const QString& error, bool needs_unlock = false);

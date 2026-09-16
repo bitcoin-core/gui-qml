@@ -4,6 +4,8 @@
 
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/transactionactivitymodel.h>
+#include <qml/models/sendrecipient.h>
+#include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <test/mocks/mockwallet.h>
 
@@ -74,6 +76,12 @@ public:
     std::map<Txid, interfaces::WalletTxStatus> statuses;
     std::map<std::string, std::string> labels;
     std::vector<TransactionChangedFn> callbacks;
+    std::map<std::string, wallet::AddressPurpose> purposes;
+    std::optional<interfaces::WalletTx> send_draft;
+    CTransactionRef previous_tx;
+    bool external_signer{false};
+    int address_writes{0};
+    int commits{0};
     bool busy{false};
     bool snapshot_on_worker{false};
     uint256 tip{1};
@@ -121,12 +129,48 @@ public:
         hash = tip;
         return true;
     }
-    bool getAddress(const CTxDestination& address, std::string* label, wallet::AddressPurpose*) override
+    bool getAddress(const CTxDestination& address, std::string* label, wallet::AddressPurpose* purpose) override
     {
         ++label_reads;
         if (!labels.count(EncodeDestination(address))) return false;
-        *label = labels.at(EncodeDestination(address));
+        if (label) *label = labels.at(EncodeDestination(address));
+        if (purpose) *purpose = purposes[EncodeDestination(address)];
         return true;
+    }
+    bool setAddressBook(const CTxDestination& address, const std::string& label,
+                        const std::optional<wallet::AddressPurpose>& purpose) override
+    {
+        ++address_writes;
+        labels[EncodeDestination(address)] = label;
+        if (purpose) purposes[EncodeDestination(address)] = *purpose;
+        return true;
+    }
+    CAmount getAvailableBalance(const wallet::CCoinControl&) override { return 10 * COIN; }
+    CAmount getBalance() override { return 10 * COIN; }
+    bool privateKeysDisabled() override { return external_signer; }
+    bool hasExternalSigner() override { return external_signer; }
+    util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>&,
+        const wallet::CCoinControl&, bool, std::optional<unsigned int>) override
+    {
+        if (!send_draft) return util::Error{Untranslated("No send draft")};
+        return wallet::CreatedTransactionResult{send_draft->tx, 1'000, 3, FeeCalculation{}};
+    }
+    std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions& options, size_t*,
+                                            PartiallySignedTransaction& psbt, bool& complete) override
+    {
+        complete = options.sign;
+        for (auto& input : psbt.inputs) {
+            input.non_witness_utxo = previous_tx;
+            if (complete) input.final_script_sig = CScript{} << std::vector<unsigned char>{};
+        }
+        return std::nullopt;
+    }
+    void commitTransaction(CTransactionRef tx, interfaces::WalletValueMap, interfaces::WalletOrderForm) override
+    {
+        ++commits;
+        send_draft->tx = std::move(tx);
+        put(*send_draft, 0);
+        notify(*send_draft, CT_NEW);
     }
     bool transactionCanBeBumped(const Txid&) override { return true; }
     std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn callback) override
@@ -165,6 +209,8 @@ class TransactionActivityModelTests : public QObject
 private Q_SLOTS:
     void copiesRawTransactionAndPublicPaymentRequest();
     void exposesParentsAndActionsWithoutAllocatingFees();
+    void savesBatchRecipientNotesWhenSending_data();
+    void savesBatchRecipientNotesWhenSending();
     void filtersWholeTransactionsAndExportsParentImpact();
     void groupsPendingMonthsAndDaysAndCountsParents();
     void groupsTransactionsInPendingUntilFirstConfirmation();
@@ -234,6 +280,72 @@ void TransactionActivityModelTests::exposesParentsAndActionsWithoutAllocatingFee
     QVERIFY(row.data(Model::AmountRole).toString().endsWith(" sat"));
     QVERIFY(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString().endsWith(" sat"));
     QCOMPARE(row.data(Model::NetAmountSatRole).toLongLong(), -101'000);
+}
+
+void TransactionActivityModelTests::savesBatchRecipientNotesWhenSending_data()
+{
+    QTest::addColumn<bool>("externalSigner");
+    QTest::newRow("local-signing") << false;
+    QTest::newRow("external-signing") << true;
+}
+
+void TransactionActivityModelTests::savesBatchRecipientNotesWhenSending()
+{
+    QFETCH(bool, externalSigner);
+    Fixture f;
+    auto batch = MakeTx({{130'000, true}},
+        {{60'000, false}, {40'000, false, false, 2}, {10'000, false, false, 3}, {19'000, true, true, 4}});
+    CMutableTransaction previous;
+    previous.vout.emplace_back(130'000, CScript{} << OP_DROP << OP_TRUE);
+    f.state->previous_tx = MakeTransactionRef(previous);
+    CMutableTransaction spending{*batch.tx};
+    spending.vin[0].prevout = COutPoint{f.state->previous_tx->GetHash(), 0};
+    batch.tx = MakeTransactionRef(spending);
+    f.state->send_draft = batch;
+    f.state->external_signer = externalSigner;
+    const auto second_address = Address(batch, 1).toStdString();
+    f.state->labels[second_address] = "Previous label";
+    f.state->purposes[second_address] = wallet::AddressPurpose::RECEIVE;
+    auto request = Request(1, Address(batch, 1), "Public request name");
+    request.recipient.noteSelf = "Private request note";
+    f.request(request);
+
+    auto* source = f.model();
+    auto* recipients = f.wallet->sendRecipientList();
+    const QStringList notes{QStringLiteral("Robert · September"), QStringLiteral("Elisabeth · September"), QString{}};
+    for (int i = 0; i < notes.size(); ++i) {
+        if (i > 0) recipients->add();
+        auto* recipient = recipients->currentRecipient();
+        recipient->setAddress(Address(batch, i));
+        recipient->setLabel(notes[i]);
+        recipient->amount()->setSatoshi(batch.tx->vout[i].nValue);
+    }
+    QVERIFY2(f.wallet->prepareTransaction(), qPrintable(f.wallet->transactionError()));
+    QCOMPARE(f.state->address_writes, 0); // Reviewing/cancelling must not save notes.
+    if (externalSigner) {
+        QSignalSpy approved(f.wallet.get(), &WalletQmlModel::externalSignerApprovalSucceeded);
+        f.wallet->approveExternalSignerTransaction();
+        QCOMPARE(approved.count(), 1);
+    }
+    // The committed notes belong to the reviewed transaction, not a new draft.
+    recipients->clear();
+    QVERIFY(f.wallet->sendTransaction());
+    QCOMPARE(f.state->commits, 1);
+    QCOMPARE(f.state->address_writes, 2);
+    QCOMPARE(f.state->labels.at(Address(batch).toStdString()), notes[0].toStdString());
+    QCOMPARE(f.state->labels.at(second_address), notes[1].toStdString());
+    QCOMPARE(f.state->purposes.at(Address(batch).toStdString()), wallet::AddressPurpose::SEND);
+    QCOMPARE(f.state->purposes.at(second_address), wallet::AddressPurpose::RECEIVE);
+    QCOMPARE(f.wallet->receiveRequests()->matchingEntriesForAddress(Address(batch, 1)).first().toMap().value("noteSelf").toString(),
+             QStringLiteral("Private request note"));
+
+    const QString txid = Id(*f.state->send_draft);
+    QTRY_VERIFY(Find(*source, txid).isValid());
+    auto actions = Find(*source, txid).data(Model::ActionsRole).toList();
+    QCOMPARE(actions.size(), 3);
+    for (int i = 0; i < notes.size(); ++i) QCOMPARE(actions[i].toMap().value("label").toString(), notes[i]);
+    source->reload();
+    QCOMPARE(Find(*source, txid).data(Model::ActionsRole).toList(), actions);
 }
 
 void TransactionActivityModelTests::filtersWholeTransactionsAndExportsParentImpact()

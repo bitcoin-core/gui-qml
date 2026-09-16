@@ -1947,6 +1947,7 @@ bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphr
         interfaces::WalletValueMap value_map;
         interfaces::WalletOrderForm order_form;
         m_wallet->commitTransaction(signed_tx, value_map, order_form);
+        saveSentRecipientLabels();
         m_current_transaction->setWtx(signed_tx);
         m_current_psbt.reset();
         m_current_transaction_source = CurrentTransactionSource::None;
@@ -1977,11 +1978,33 @@ bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphr
     interfaces::WalletValueMap value_map;
     interfaces::WalletOrderForm order_form;
     m_wallet->commitTransaction(signed_tx, value_map, order_form);
+    saveSentRecipientLabels();
     m_current_transaction_source = CurrentTransactionSource::None;
 
     clearTransactionStatus();
     clearSelectedCoins();
     return true;
+}
+
+void WalletQmlModel::saveSentRecipientLabels()
+{
+    if (m_current_transaction_source != CurrentTransactionSource::SendDraft) return;
+
+    // Activity resolves outgoing notes through the address book, as the Qt
+    // wallet does. Persist only user-provided notes after the transaction is
+    // committed; do not relabel payment requests or write generated headings.
+    for (auto it = m_current_transaction->recipientLabels().cbegin();
+         it != m_current_transaction->recipientLabels().cend(); ++it) {
+        const CTxDestination destination{DecodeDestination(it.key().toStdString())};
+        if (!IsValidDestination(destination)) continue;
+        std::string old_label;
+        const bool exists = m_wallet->getAddress(destination, &old_label, nullptr);
+        const std::string label{it.value().toStdString()};
+        if (exists && old_label == label) continue;
+        // Preserve an existing address's purpose, including owned recipients.
+        m_wallet->setAddressBook(destination, label,
+            exists ? std::nullopt : std::optional{wallet::AddressPurpose::SEND});
+    }
 }
 
 WalletQmlModel::PsbtImportResult WalletQmlModel::importPsbtFromFile(const QString& path)
