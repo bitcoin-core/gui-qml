@@ -68,6 +68,8 @@ private Q_SLOTS:
     void fromWalletTx_mixedDebitKeepsNegativeNetAmount();
     void fromWalletTx_showsIncomingPaymentToChangeAddress();
     void dateTimeString_usedAddressRequestKeepsDate();
+    void updateStatus_setsCountsForBalance();
+    void dateTimeString_localizesMonthNames();
 };
 
 void TransactionTests::initTestCase()
@@ -158,6 +160,42 @@ void TransactionTests::dateTimeString_usedAddressRequestKeepsDate()
     const QString expected_date =
         QDateTime::fromSecsSinceEpoch(500).toString("MMMM d, yyyy");
     QCOMPARE(used.dateTimeString(), expected_date);
+}
+
+void TransactionTests::updateStatus_setsCountsForBalance()
+{
+    Transaction tx{uint256{1}, /*time=*/100};
+    QCOMPARE(tx.countsForBalance, false);
+
+    interfaces::WalletTxStatus status{};
+    status.depth_in_main_chain = 1;
+    status.is_in_main_chain = true;
+    status.is_trusted = true;
+    tx.updateStatus(status, /*num_blocks=*/1, /*block_time=*/0);
+    QCOMPARE(tx.countsForBalance, true);
+
+    status.is_trusted = false;
+    tx.updateStatus(status, /*num_blocks=*/1, /*block_time=*/0);
+    QCOMPARE(tx.countsForBalance, false);
+
+    status.is_trusted = true;
+    status.blocks_to_maturity = 10;
+    tx.updateStatus(status, /*num_blocks=*/1, /*block_time=*/0);
+    QCOMPARE(tx.countsForBalance, false);
+}
+
+void TransactionTests::dateTimeString_localizesMonthNames()
+{
+    const QDateTime past{QDate{2000, 3, 15}, QTime{12, 0}};
+    Transaction tx{uint256{1}, past.toSecsSinceEpoch()};
+
+    const QLocale previous;
+    QLocale::setDefault(QLocale{QLocale::German});
+    const QString localized{tx.dateTimeString()};
+    QLocale::setDefault(previous);
+
+    QVERIFY(localized.contains(QStringLiteral("März")));
+    QVERIFY(localized.contains(QStringLiteral("2000")));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

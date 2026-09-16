@@ -20,6 +20,7 @@ TestCase {
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
         testActivityListModel.setCountForTest(2)
         testActivityListModel.setUsedAddressRequestRowForTest(-1)
+        testActivityListModel.setLabelOverrideForTest("")
         nodeModel.setBlockSyncActiveForTest(false)
         nodeModel.verificationProgress = 1.0
         walletController.openReceiveRequests = 0
@@ -191,6 +192,97 @@ TestCase {
         compare(page.currentItem.txid, "bbbb")
         page.pop()
         tryCompare(page, "depth", 1)
+    }
+
+    function test_details_page_refreshes_when_returning_to_top_of_stack() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+        page.navigateToTransaction("aaaa")
+        tryCompare(page, "depth", 2)
+        compare(page.currentItem.label, "salary")
+
+        // The label changes while another page covers this one (the address
+        // book sync from a request edit does exactly this); popping back
+        // must show the current value, not the snapshot from push time.
+        page.push(activityDetailsComponent, detailsProperties("tx-other"))
+        tryCompare(page, "depth", 3)
+        testActivityListModel.setLabelOverrideForTest("renamed")
+        page.pop()
+        tryCompare(page, "depth", 2)
+        tryCompare(page.currentItem, "label", "renamed")
+    }
+
+    function test_zero_conf_row_shows_pending_cue() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        let pendingDate = null
+        tryVerify(function() {
+            pendingDate = findChild(page, "activityItemDate_bbbb")
+            return pendingDate !== null
+        })
+        compare(pendingDate.text, "Pending")
+        const pendingIcon = findChild(page, "activityItemIcon_bbbb")
+        verify(pendingIcon !== null)
+        compare(String(pendingIcon.source), "qrc:/icons/pending")
+
+        // An amount that does not count for the balance yet loses the
+        // settled-money color.
+        const pendingAmount = findChild(page, "activityItemAmount_bbbb")
+        verify(pendingAmount !== null)
+        compare(pendingAmount.color, Theme.color.neutral7)
+
+        const confirmedDate = findChild(page, "activityItemDate_aaaa")
+        verify(confirmedDate !== null)
+        compare(confirmedDate.text, "2026-01-01 00:00")
+        const confirmedIcon = findChild(page, "activityItemIcon_aaaa")
+        verify(confirmedIcon !== null)
+        compare(String(confirmedIcon.source), "qrc:/icons/triangle-down")
+        const confirmedAmount = findChild(page, "activityItemAmount_aaaa")
+        verify(confirmedAmount !== null)
+        compare(confirmedAmount.color, Theme.color.green)
+    }
+
+    function test_pending_request_amount_is_not_settled_green() {
+        // A saved request has received nothing, so its amount must not carry
+        // the settled-money color a confirmed receive gets.
+        const pending = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Unconfirmed,
+            isPendingRequest: true,
+            countsForBalance: false
+        })
+        verify(pending !== null)
+        compare(pending.amountColor, Theme.color.neutral7)
+        compare(pending.iconColor, Theme.color.purple)
+
+        const settled = createTemporaryObject(transactionVisualsComponent, this, {
+            transactionType: Transaction.RecvWithAddress,
+            transactionStatus: Transaction.Confirmed,
+            isPendingRequest: false,
+            countsForBalance: true
+        })
+        verify(settled !== null)
+        compare(settled.amountColor, Theme.color.green)
+    }
+
+    function test_zero_conf_details_show_pending_confirmation() {
+        const props = detailsProperties("bbbb")
+        props.depth = 0
+        props.status = 0 // MockTransaction.Unconfirmed
+        const page = createTemporaryObject(activityDetailsComponent, this, props)
+        verify(page !== null)
+        const confirmations = findChild(page, "activityDetailsConfirmations")
+        verify(confirmations !== null)
+        compare(confirmations.text, "Pending confirmation")
+    }
+
+    function test_confirmed_details_show_confirmation_count() {
+        const page = createTemporaryObject(activityDetailsComponent, this, detailsProperties("aaaa"))
+        verify(page !== null)
+        const confirmations = findChild(page, "activityDetailsConfirmations")
+        verify(confirmations !== null)
+        compare(confirmations.text, "3 confirmation(s)")
     }
 
     function test_selectedWalletChanged_pops_to_root() {
@@ -441,6 +533,22 @@ TestCase {
         })
         compare(row.isPendingRequest, true)
         compare(row.isUsedAddressRequest, true)
+    }
+
+    function test_zero_amount_request_row_shows_dash_not_zero() {
+        testActivityListModel.setUsedAddressRequestRowForTest(0)
+
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+
+        // A request without an amount must not read as a zero amount; the
+        // row shows the same dash the editor uses for empty locked fields.
+        let amount = null
+        tryVerify(function() {
+            amount = findChild(page, "activityItemAmount_pending_0")
+            return amount !== null
+        })
+        compare(amount.text, "—")
     }
 
     function test_transaction_visuals_keep_request_rows_purple() {

@@ -195,7 +195,7 @@ TestCase {
         verify(findChild(page, "activityDetailsPaymentRequest_1") !== null)
         compare(findChild(page, "activityDetailsPaymentRequestTitle_0").text, "Alice")
         compare(findChild(page, "activityDetailsPaymentRequestTitle_1").text, "Alice duplicate")
-        compare(findChild(page, "activityDetailsPaymentRequestSubtitle_1").text, "No amount - Sat Jan 3 2026")
+        compare(findChild(page, "activityDetailsPaymentRequestSubtitle_1").text, "Any amount - Sat Jan 3 2026")
     }
 
     function test_no_paymentRequests_hides_section() {

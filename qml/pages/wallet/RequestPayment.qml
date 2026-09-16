@@ -228,8 +228,11 @@ Page {
                 accessibleName: qsTr("Payment amount")
                 amount: root.request ? root.request.amount : null
                 errorText: root.request ? root.request.amountError : ""
-                enabled: root.requestIsEditing()
-                placeholderText: root.requestIsEditing()
+                // The expected amount of a saved request cannot be changed,
+                // only a fresh request accepts one (the model enforces this
+                // on commit as well).
+                enabled: root.requestIsEditing() && !root.hasSavedRequest
+                placeholderText: root.requestIsEditing() && !root.hasSavedRequest
                     ? (amountInput.amount ? amountInput.amountInputPlaceholder(amountInput.amount.unit) : "0.00000000")
                     : "—"
                 onInputTextChanged: {
@@ -269,8 +272,13 @@ Page {
                 inputObjectName: "requestPaymentYourNameInput"
                 Layout.fillWidth: true
                 visible: receiveOptionsPopup.showName
-                labelText: qsTr("Name")
-                placeholderText: root.requestIsEditing() ? qsTr("Enter name...") : "—"
+                //: The request's label: shared with the payer through the payment URI and kept as the address book label for the request's address.
+                labelText: qsTr("Label")
+                //: Info tooltip for the request label field. The label travels in the payment URI and is stored as the address book label.
+                hintText: qsTr("Visible to the payer and saved as this address's label.")
+                hintButtonObjectName: "requestPaymentLabelHint"
+                //: Example placeholder for the request label field.
+                placeholderText: root.requestIsEditing() ? qsTr("e.g. March invoice") : "—"
                 enabled: root.requestIsEditing()
                 text: root.requestValue("label")
                 onTextEdited: {
@@ -292,6 +300,9 @@ Page {
                 Layout.fillWidth: true
                 visible: receiveOptionsPopup.showMessage
                 labelText: qsTr("Message")
+                //: Info tooltip for the request message field. The message travels in the payment URI.
+                hintText: qsTr("Visible to the payer.")
+                hintButtonObjectName: "requestPaymentMessageHint"
                 placeholderText: root.requestIsEditing() ? qsTr("Enter message...") : "—"
                 enabled: root.requestIsEditing()
                 text: root.requestValue("message")
@@ -314,6 +325,9 @@ Page {
                 Layout.fillWidth: true
                 visible: receiveOptionsPopup.showNoteSelf
                 labelText: qsTr("Note to self")
+                //: Info tooltip for the private note field of a payment request.
+                hintText: qsTr("Only you can see this.")
+                hintButtonObjectName: "requestPaymentNoteSelfHint"
                 placeholderText: root.requestIsEditing() ? qsTr("Enter private note...") : "—"
                 enabled: root.requestIsEditing()
                 text: root.requestValue("noteSelf")

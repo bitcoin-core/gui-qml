@@ -16,6 +16,7 @@
 #include <QSharedPointer>
 #include <QString>
 
+class QTimer;
 class WalletQmlModel;
 
 class ActivityListModel : public QAbstractListModel
@@ -37,7 +38,6 @@ public:
         TypeRole,
         TxidRole,
         TxIdRole = TxidRole,
-        CanBumpRole,
         ReplacesTxidRole,
         ReplacedByTxidRole,
         TimestampRole,
@@ -45,14 +45,19 @@ public:
         RequestIdRole,
         NetAmountSatRole,
         OutputIndexRole,
-        IsUsedAddressRequestRole
+        IsUsedAddressRequestRole,
+        CountsForBalanceRole
     };
 
     Q_INVOKABLE void reload();
     Q_INVOKABLE QVariantMap firstTransactionDetails(const QString& txid) const;
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const;
+    void refreshStatuses(int chain_height = -1);
+    void refreshLabels();
+    void refreshDates();
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int count() const { return rowCount(); }
+    bool rowSortsBefore(int lhs_row, int rhs_row) const;
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
@@ -72,18 +77,25 @@ Q_SIGNALS:
 private:
     void refreshWallet();
     void addPendingReceiveRequests();
-    void updateTransactionStatus(QSharedPointer<Transaction> tx) const;
+    void removeTransactionRows(const uint256& hash);
+    bool updateTransactionStatus(QSharedPointer<Transaction> tx, int* wallet_height = nullptr) const;
     void updateTransactionLabel(QSharedPointer<Transaction> tx) const;
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
     void updateTransaction(const uint256& hash, const interfaces::WalletTxStatus& wtx,
                            int num_blocks, int64_t block_time);
     QVariantMap transactionDetails(const QSharedPointer<Transaction>& tx) const;
-    int findTransactionIndex(const uint256& hash) const;
+    static bool transactionSortsBefore(const QSharedPointer<Transaction>& a,
+                                       const QSharedPointer<Transaction>& b);
+    int sortedInsertPosition(const QSharedPointer<Transaction>& tx) const;
     int findPendingRequestIndex(const QString& address) const;
     void fulfillPendingRequest(int index, const QSharedPointer<Transaction>& real_tx);
 
     int m_display_unit{0};
+    bool m_status_retry_scheduled{false};
+    int m_status_retry_attempts{0};
+    int m_status_target_height{-1};
+    QTimer* m_date_refresh_timer{nullptr};
     QList<QSharedPointer<Transaction>> m_transactions;
     QSet<QString> m_pending_request_addresses;
     WalletQmlModel* m_wallet_model;

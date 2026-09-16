@@ -346,6 +346,8 @@ PageStack {
                         objectName: "activityExportButton"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
+                        //: Accessibility label for the control that exports the Activity list to a CSV file.
+                        Accessible.name: qsTr("Export activity")
                         iconSource: "qrc:/icons/file"
                         iconColor: hovered || pressed ? Theme.color.orange : Theme.color.neutral7
                         activeColor: Theme.color.orange
@@ -369,6 +371,8 @@ PageStack {
                         Layout.preferredHeight: 30
                         checkable: true
                         checked: root.filtersVisible
+                        //: Accessibility label for the control that shows or hides the Activity search and filter row.
+                        Accessible.name: qsTr("Search and filter activity")
                         iconSource: "qrc:/icons/search"
                         iconColor: Theme.color.neutral7
                         activeColor: Theme.color.orange
@@ -568,12 +572,13 @@ PageStack {
                         required property int status
                         required property int type
                         required property string txid
-                        required property bool canBump
                         required property string replacedByTxid
                         required property bool isPendingRequest
                         required property bool isUsedAddressRequest
                         required property string requestId
                         required property int outputIndex
+                        required property bool countsForBalance
+                        required property double netAmountSat
 
                         HoverHandler {
                             cursorShape: Qt.PointingHandCursor
@@ -586,8 +591,10 @@ PageStack {
                                 walletController.selectedWallet.loadPaymentRequestDetail(delegate.requestId)
                                 stackView.push(paymentRequestDetailPage)
                             } else {
-                                var page = stackView.push(detailsPage)
-                                page.showTransaction.connect(stackView.navigateToTransaction)
+                                // Details come from the model's invokable, which
+                                // reads bump eligibility once on open; a row role
+                                // would query the wallet on every delegate paint.
+                                stackView.navigateToTransaction(delegate.txid, delegate.outputIndex)
                             }
                         }
 
@@ -605,10 +612,12 @@ PageStack {
                             transactionType: delegate.type
                             transactionStatus: delegate.status
                             isPendingRequest: delegate.isPendingRequest
+                            countsForBalance: delegate.countsForBalance
                         }
 
                         contentItem: RowLayout {
                             Icon {
+                                objectName: delegate.txid !== "" ? "activityItemIcon_" + delegate.txid : "activityItemIcon_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.margins: 6
                                 source: transactionVisuals.iconSource
@@ -630,44 +639,33 @@ PageStack {
                             }
 
                             CoreText {
+                                objectName: delegate.txid !== "" ? "activityItemDate_" + delegate.txid : "activityItemDate_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.preferredWidth: 110
                                 Layout.margins: 6
                                 wrap: false
-                                text: delegate.date
+                                //: Shown in place of the date for a transaction that has no confirmations yet
+                                text: transactionVisuals.zeroConf ? qsTr("Pending") : delegate.date
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                             }
 
                             CoreText {
+                                objectName: delegate.txid !== "" ? "activityItemAmount_" + delegate.txid : "activityItemAmount_pending_" + delegate.index
                                 Layout.alignment: Qt.AlignCenter
                                 Layout.preferredWidth: 140
                                 Layout.margins: 6
                                 wrap: false
-                                text: delegate.amount
+                                // A request created without an amount has no number to
+                                // show; a zero would assert an amount that was never
+                                // requested, so use the same dash the editor shows for
+                                // its empty locked fields.
+                                text: delegate.isPendingRequest && delegate.netAmountSat === 0
+                                    ? "—"
+                                    : delegate.amount
                                 font.pixelSize: 15
                                 horizontalAlignment: Text.AlignRight
                                 color: transactionVisuals.amountColor
-                            }
-
-                            Component {
-                                id: detailsPage
-                                ActivityDetails {
-                                    txid: delegate.txid
-                                    outputIndex: delegate.outputIndex
-                                    canBump: delegate.canBump
-                                    replacedByTxid: delegate.replacedByTxid
-                                    amount: delegate.amount
-                                    date: delegate.date
-                                    depth: delegate.depth
-                                    type: delegate.type
-                                    status: delegate.status
-                                    address: delegate.address
-                                    label: delegate.label
-                                    paymentRequests: walletController.selectedWallet
-                                        ? walletController.selectedWallet.receiveRequests.matchingEntriesForAddress(delegate.address)
-                                        : []
-                                }
                             }
 
                             Component {
@@ -682,7 +680,10 @@ PageStack {
                     id: exportResultPopup
                     objectName: "activityExportResultPopup"
                     modal: true
-                    anchors.centerIn: parent
+                    // Center in the window overlay, not the declaring item,
+                    // which sits below the page header and skews the popup
+                    // off the vertical center (the QR popup does the same).
+                    anchors.centerIn: Overlay.overlay
                     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                     padding: 20
                     width: Math.min(420, root.width - 40)
@@ -1037,7 +1038,7 @@ PageStack {
                 bottomPadding: 0
                 color: Theme.color.neutral9
                 placeholderTextColor: Theme.color.neutral7
-                font.family: "BitcoinCoreSans"
+                font.family: Theme.text.family
                 font.pixelSize: 15
                 verticalAlignment: TextInput.AlignVCenter
                 selectByMouse: true

@@ -30,13 +30,42 @@ Page {
     property int depth: 0
     property int type: 0
     property int status: 0
+    property bool countsForBalance: true
     property var paymentRequests: []
     readonly property int paymentRequestCount: root.paymentRequests ? root.paymentRequests.length : 0
+
+    // The page is pushed with a snapshot of the transaction, and the wallet
+    // tabs keep this stack alive, so anything that changes while another
+    // page covers it (an address book label syncing through a request edit,
+    // a new confirmation) only reaches the model. Re-read the snapshot
+    // whenever the page returns to the top of the stack.
+    StackView.onActivating: root.refreshDetails()
+
+    function refreshDetails() {
+        if (root.txid === "" || !walletController.selectedWallet) return
+        const details = walletController.selectedWallet.activityListModel.transactionDetails(
+            root.txid, root.outputIndex)
+        if (Object.keys(details).length === 0) return
+        root.canBump = details.canBump
+        root.replacedByTxid = details.replacedByTxid
+        root.amount = details.amount
+        root.date = details.date
+        root.depth = details.depth
+        root.type = details.type
+        root.status = details.status
+        root.address = details.address
+        root.label = details.label
+        root.paymentRequests = details.paymentRequests
+        if (details.countsForBalance !== undefined) {
+            root.countsForBalance = details.countsForBalance
+        }
+    }
 
     ActivityTransactionVisuals {
         id: transactionVisuals
         transactionType: root.type
         transactionStatus: root.status
+        countsForBalance: root.countsForBalance
     }
 
     background: null
@@ -51,7 +80,8 @@ Page {
     function paymentRequestSubtitle(request) {
         var amount = request && request.amountDisplay && request.amountDisplay.length > 0
             ? request.amountDisplay
-            : qsTr("No amount")
+            //: Shown in place of the amount for a payment request created without one: the payer chooses how much to send.
+            : qsTr("Any amount")
         if (request && request.date && request.date.length > 0) {
             return qsTr("%1 - %2").arg(amount).arg(request.date)
         }
@@ -138,9 +168,13 @@ Page {
             }
 
             CoreText {
+                objectName: "activityDetailsConfirmations"
                 Layout.alignment: Qt.AlignHCenter
                 Layout.bottomMargin: 10
-                text: qsTr("%1 confirmations").arg(root.depth)
+                //: Confirmation state of a transaction that is not yet included in a block
+                text: transactionVisuals.zeroConf ? qsTr("Pending confirmation")
+                                                  //: Number of blocks confirming the transaction
+                                                  : qsTr("%n confirmation(s)", "", root.depth)
                 color: Theme.color.neutral7
                 font.pixelSize: 18
             }
@@ -170,7 +204,8 @@ Page {
                 id: labelTextInput
                 Layout.fillWidth: true
                 Layout.bottomMargin: 20
-                labelText: qsTr("Note to self")
+                //: The transaction's label from the address book.
+                labelText: qsTr("Label")
                 visible: root.label != ""
                 enabled: false
                 text: root.label

@@ -87,6 +87,7 @@ private Q_SLOTS:
     void serializeQmlExtensionDoesNotBreakQtWidgetsFormat();
     void deserializeSkipsMalformed();
     void modelRolesMatchEntry();
+    void setEntriesOrdersSameSecondRequestsById();
     void prependInsertsNewRow();
     void removeByRequestIdRemovesRow();
     void entryByIdLookup();
@@ -228,6 +229,25 @@ void ReceiveRequestHistoryModelTests::modelRolesMatchEntry()
     QCOMPARE(model.data(idx, ReceiveRequestHistoryModel::NoteSelfRole).toString(), QString{"self"});
     QCOMPARE(model.data(idx, ReceiveRequestHistoryModel::AmountSatRole).toLongLong(), qlonglong{10000});
     QVERIFY(model.data(idx, ReceiveRequestHistoryModel::UriRole).toString().startsWith("bitcoin:"));
+}
+
+void ReceiveRequestHistoryModelTests::setEntriesOrdersSameSecondRequestsById()
+{
+    ReceiveRequestHistoryModel model;
+    std::vector<QmlRecentRequestEntry> entries;
+    auto ninth = MakeEntry(9, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", 10000);
+    auto tenth = MakeEntry(10, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", 20000);
+    // Two requests created within the same second: the date alone cannot
+    // order them, so a reload must fall back to the id to keep the same
+    // newest-first order every time.
+    tenth.date = ninth.date;
+    entries.push_back(std::move(ninth));
+    entries.push_back(std::move(tenth));
+    model.setEntries(std::move(entries));
+
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(0), ReceiveRequestHistoryModel::IdRole).toString(), QString{"10"});
+    QCOMPARE(model.data(model.index(1), ReceiveRequestHistoryModel::IdRole).toString(), QString{"9"});
 }
 
 void ReceiveRequestHistoryModelTests::prependInsertsNewRow()

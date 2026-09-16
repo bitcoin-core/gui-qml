@@ -144,6 +144,24 @@ TestCase {
         }
     }
 
+    function test_addressDetails_request_button_edits_existing_request() {
+        const details = createTemporaryObject(detailsComponent, host)
+        verify(details !== null)
+        const button = findObject(details, "addressDetailsCreatePaymentRequestButton")
+        verify(button !== null)
+        compare(button.text, "Create payment request")
+
+        details.hasPaymentRequest = true
+        compare(button.text, "Edit payment request")
+
+        // A used address with a saved request keeps the edit action, while
+        // a used address without one keeps the button hidden.
+        details.used = true
+        tryCompare(button, "visible", true)
+        details.hasPaymentRequest = false
+        tryCompare(button, "visible", false)
+    }
+
     function test_addressLabel_alternates_color_every_four_characters() {
         const label = createTemporaryObject(addressLabelComponent, host)
         verify(label !== null)
@@ -272,7 +290,7 @@ TestCase {
         verify(amountText !== null)
         verify(divider !== null)
         compare(noteField.text, "")
-        compare(noteField.placeholderText, "Add a note to self")
+        compare(noteField.placeholderText, "Add label...")
         compare(noteField.readOnly, false)
         compare(noteField.width, Math.min(350, noteField.parent.width))
         compare(noteField.activeFocusOnPress, true)
@@ -466,7 +484,7 @@ TestCase {
         compare(amountRow.dividerColor, Theme.color.neutral3)
         compare(noteRow.visible, true)
         compare(noteRow.text, "Pizza")
-        compare(noteRow.placeholderText, "Add a note to self")
+        compare(noteRow.placeholderText, "Add label...")
         compare(noteField.text, "Pizza")
         compare(noteField.readOnly, false)
         compare(noteField.background.border.color, Theme.color.orange)
