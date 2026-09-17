@@ -20,7 +20,7 @@ AbstractButton {
     property var subtitleTextStyle: labelTextStyle
     property color textColor: Theme.color.neutral9
     property color subtitleColor: Theme.color.neutral7
-    property color caretColor: Theme.color.orange
+    property color caretColor: Theme.color.neutral9
     property color hoverBgColor: Theme.color.neutral2
     property color defaultBgColor: Theme.color.background
 
@@ -86,7 +86,7 @@ AbstractButton {
                 Layout.preferredHeight: root.caretSize
                 source: root.caretSource
                 size: root.caretSize
-                color: root.enabled ? root.caretColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.white : root.caretColor : Theme.color.neutral4
                 rotation: root.opened ? 180 : 0
 
                 Behavior on rotation {

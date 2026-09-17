@@ -245,6 +245,12 @@ Control {
             pixelSize: 15
             lineHeight: 22
         }
+        readonly property TextStyle menuItemStrong: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 15
+            lineHeight: 22
+        }
 
         // Mono — Roboto Mono Regular
         readonly property TextStyle monoLead: TextStyle {

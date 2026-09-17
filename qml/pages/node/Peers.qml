@@ -306,7 +306,7 @@ Page {
                     }
                     contentItem: Icon {
                         source: "image://images/flip-vertical"
-                        color: Theme.color.neutral8
+                        color: Theme.color.neutral9
                         size: 20
                     }
                     onClicked: sortMenu.open()
@@ -366,7 +366,6 @@ Page {
                     active: peerListModelProxy.directionFilters.length > 0
                     opened: directionFilterMenu.visible
                     defaultBgColor: Theme.color.neutral1
-                    caretColor: Theme.color.white
                     KeyNavigation.tab: connectionTypeFilterButton
                     KeyNavigation.backtab: filterButton.visible ? filterButton : sortButton
                     onClicked: directionFilterMenu.opened ? directionFilterMenu.close() : directionFilterMenu.open()
@@ -378,7 +377,6 @@ Page {
                     active: peerListModelProxy.connectionTypeFilters.length > 0
                     opened: connectionTypeFilterMenu.visible
                     defaultBgColor: Theme.color.neutral1
-                    caretColor: Theme.color.white
                     KeyNavigation.tab: networkFilterButton
                     KeyNavigation.backtab: directionFilterButton
                     onClicked: connectionTypeFilterMenu.opened ? connectionTypeFilterMenu.close() : connectionTypeFilterMenu.open()
@@ -390,7 +388,6 @@ Page {
                     active: peerListModelProxy.networkFilters.length > 0
                     opened: networkFilterMenu.visible
                     defaultBgColor: Theme.color.neutral1
-                    caretColor: Theme.color.white
                     KeyNavigation.tab: transportFilterButton
                     KeyNavigation.backtab: connectionTypeFilterButton
                     onClicked: networkFilterMenu.opened ? networkFilterMenu.close() : networkFilterMenu.open()
@@ -402,7 +399,6 @@ Page {
                     active: peerListModelProxy.transportFilters.length > 0
                     opened: transportFilterMenu.visible
                     defaultBgColor: Theme.color.neutral1
-                    caretColor: Theme.color.white
                     KeyNavigation.tab: listView.count > 0 ? listView.itemAtIndex(0) : null
                     KeyNavigation.backtab: networkFilterButton
                     onClicked: transportFilterMenu.opened ? transportFilterMenu.close() : transportFilterMenu.open()
