@@ -65,7 +65,6 @@ target_link_libraries(bitcoin-qt
     $<TARGET_NAME_IF_EXISTS:bitcoin_wallet>
 )
 
-qt6_import_qml_plugins(bitcoin-qt)
 import_plugins(bitcoin-qt)
 install_binary_component(bitcoin-qt HAS_MANPAGE)
 if(WIN32 AND VCPKG_TARGET_TRIPLET AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.27)
