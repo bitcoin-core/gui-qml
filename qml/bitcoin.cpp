@@ -163,6 +163,7 @@ bool InitErrorMessageBox(
     const bilingual_str& message,
     [[maybe_unused]] unsigned int style)
 {
+    qCritical().noquote() << QString::fromStdString(message.original);
     static AppMode error_app_mode = SetupAppMode();
     static BuildInfo error_build_info;
     static Clipboard error_clipboard;
