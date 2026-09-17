@@ -241,16 +241,20 @@ void SendRecipientsListModel::clearToFront()
         Q_EMIT currentIndexChanged();
     }
 
-    bool count_changed = false;
-    while (m_recipients.size() > 1) {
-        delete m_recipients.at(1);
-        m_recipients.removeAt(1);
-        count_changed = true;
-    }
+    if (m_recipients.size() > 1) {
+        beginRemoveRows(QModelIndex(), 1, m_recipients.size() - 1);
+        const QList<SendRecipient*> removed_recipients{m_recipients.mid(1)};
+        m_recipients.erase(m_recipients.begin() + 1, m_recipients.end());
+        endRemoveRows();
 
-    if (count_changed) {
         Q_EMIT countChanged();
         Q_EMIT validationChanged();
+
+        // Defer deletion so QML bindings on the removed rows release them
+        // before the objects are gone.
+        for (auto* recipient : removed_recipients) {
+            recipient->deleteLater();
+        }
     }
 
     if (m_totalAmount != m_recipients[0]->amount()->satoshi()) {
