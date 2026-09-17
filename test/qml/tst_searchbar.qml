@@ -197,14 +197,15 @@ TestCase {
         tryCompare(searchBar.inputField, "activeFocus", true)
         keyClick(Qt.Key_Tab)
         tryCompare(previousButton, "activeFocus", true)
+        // FocusBorder animates visibility, so wait for both showing and hiding.
         tryCompare(previousFocusBorder, "visible", true)
         compare(previousFocusBorder.border.color, Theme.color.purple)
-        compare(nextFocusBorder.visible, false)
+        tryCompare(nextFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(nextButton, "activeFocus", true)
         tryCompare(nextFocusBorder, "visible", true)
         compare(nextFocusBorder.border.color, Theme.color.purple)
-        compare(previousFocusBorder.visible, false)
+        tryCompare(previousFocusBorder, "visible", false)
 
         // Restore the normal test width before pointer interaction. The
         // constrained width above exists only to exercise layout compression.
