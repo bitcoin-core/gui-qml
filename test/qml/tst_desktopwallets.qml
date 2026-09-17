@@ -33,6 +33,19 @@ TestCase {
         walletListModel.reset()
     }
 
+    function test_leaving_peers_tab_stops_refresh() {
+        const page = createDesktopWallets()
+        const peers = findChild(page, "peersTabButton")
+        const activity = findChild(page, "activityTabButton")
+        verify(peers !== null)
+        verify(activity !== null)
+        peers.checked = true
+        tryCompare(peerTableModel, "autoRefreshActive", true)
+        activity.checked = true
+        tryCompare(peers, "checked", false)
+        tryCompare(peerTableModel, "autoRefreshActive", false)
+    }
+
     function createDesktopWallets() {
         const page = createTemporaryObject(desktopWalletsComponent, this)
         verify(page !== null)

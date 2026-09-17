@@ -184,8 +184,9 @@ Popup {
                 }
                 readonly property color statusColor: {
                     if (loadState === WalletListModel.LoadError) return Theme.color.red
-                    return delegate.checked ? Theme.color.orange : Theme.color.neutral6
+                    return delegate.checked ? Theme.color.orange : Theme.color.neutral9
                 }
+                readonly property color nameColor: delegate.checked ? Theme.color.orange : Theme.color.neutral9
 
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
@@ -224,9 +225,7 @@ Popup {
                         Layout.preferredHeight: 24
                         size: 24
                         source: delegate.iconSource
-                        color: delegate.checked
-                            ? Theme.color.orange
-                            : Theme.color.neutral6
+                        color: delegate.nameColor
                     }
 
                     ColumnLayout {
@@ -240,10 +239,8 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.displayName
                             horizontalAlignment: Text.AlignLeft
-                            font: Theme.text.menuItem.font
-                            color: delegate.checked
-                                ? Theme.color.orange
-                                : (delegate.hovered ? Theme.color.neutral9 : Theme.color.neutral8)
+                            font: Theme.text.menuItemStrong.font
+                            color: delegate.nameColor
                             wrap: false
                             elide: Text.ElideRight
 
@@ -314,7 +311,7 @@ Popup {
                             size: 24
                             iconSize: 18
                             iconSource: "image://images/ellipsis"
-                            iconColor: Theme.color.neutral6
+                            iconColor: delegate.nameColor
                             hoverColor: Theme.color.neutral9
                             Accessible.name: qsTr("Actions for %1").arg(delegate.displayName)
                             background: Rectangle {

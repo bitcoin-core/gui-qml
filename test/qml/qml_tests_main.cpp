@@ -83,31 +83,37 @@ public:
 class MockPeerDetailsModel : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(int nodeId MEMBER m_node_id CONSTANT)
-    Q_PROPERTY(QString rawAddress MEMBER m_raw_address CONSTANT)
-    Q_PROPERTY(QString address MEMBER m_address CONSTANT)
-    Q_PROPERTY(QString addressLocal MEMBER m_address_local CONSTANT)
-    Q_PROPERTY(QString type MEMBER m_type CONSTANT)
-    Q_PROPERTY(QString permission MEMBER m_permission CONSTANT)
-    Q_PROPERTY(QString version MEMBER m_version CONSTANT)
-    Q_PROPERTY(QString userAgent MEMBER m_user_agent CONSTANT)
-    Q_PROPERTY(QString services MEMBER m_services CONSTANT)
-    Q_PROPERTY(bool transactionRelay MEMBER m_transaction_relay CONSTANT)
-    Q_PROPERTY(bool addressRelay MEMBER m_address_relay CONSTANT)
-    Q_PROPERTY(QString mappedAS MEMBER m_mapped_as CONSTANT)
-    Q_PROPERTY(QString startingHeight MEMBER m_starting_height CONSTANT)
-    Q_PROPERTY(QString syncedHeaders MEMBER m_synced_headers CONSTANT)
-    Q_PROPERTY(QString syncedBlocks MEMBER m_synced_blocks CONSTANT)
-    Q_PROPERTY(QString direction MEMBER m_direction CONSTANT)
-    Q_PROPERTY(QString connectionDuration MEMBER m_connection_duration CONSTANT)
-    Q_PROPERTY(QString lastSend MEMBER m_last_send CONSTANT)
-    Q_PROPERTY(QString lastReceived MEMBER m_last_received CONSTANT)
-    Q_PROPERTY(QString bytesSent MEMBER m_bytes_sent CONSTANT)
-    Q_PROPERTY(QString bytesReceived MEMBER m_bytes_received CONSTANT)
-    Q_PROPERTY(QString pingTime MEMBER m_ping_time CONSTANT)
-    Q_PROPERTY(QString pingWait MEMBER m_ping_wait CONSTANT)
-    Q_PROPERTY(QString pingMin MEMBER m_ping_min CONSTANT)
-    Q_PROPERTY(QString timeOffset MEMBER m_time_offset CONSTANT)
+    Q_PROPERTY(int nodeId MEMBER m_node_id NOTIFY dataChanged)
+    Q_PROPERTY(QString rawAddress MEMBER m_raw_address NOTIFY dataChanged)
+    Q_PROPERTY(QString address MEMBER m_address NOTIFY dataChanged)
+    Q_PROPERTY(QString addressLocal MEMBER m_address_local NOTIFY dataChanged)
+    Q_PROPERTY(QString type MEMBER m_type NOTIFY dataChanged)
+    Q_PROPERTY(QString network MEMBER m_network NOTIFY dataChanged)
+    Q_PROPERTY(QString transport MEMBER m_transport NOTIFY dataChanged)
+    Q_PROPERTY(QString sessionId MEMBER m_session_id NOTIFY dataChanged)
+    Q_PROPERTY(QString permission MEMBER m_permission NOTIFY dataChanged)
+    Q_PROPERTY(QString version MEMBER m_version NOTIFY dataChanged)
+    Q_PROPERTY(QString userAgent MEMBER m_user_agent NOTIFY dataChanged)
+    Q_PROPERTY(QString services MEMBER m_services NOTIFY dataChanged)
+    Q_PROPERTY(bool transactionRelay MEMBER m_transaction_relay NOTIFY dataChanged)
+    Q_PROPERTY(bool addressRelay MEMBER m_address_relay NOTIFY dataChanged)
+    Q_PROPERTY(bool highBandwidth MEMBER m_high_bandwidth NOTIFY dataChanged)
+    Q_PROPERTY(QString addressesProcessed MEMBER m_addresses_processed NOTIFY dataChanged)
+    Q_PROPERTY(QString addressesRateLimited MEMBER m_addresses_rate_limited NOTIFY dataChanged)
+    Q_PROPERTY(QString mappedAS MEMBER m_mapped_as NOTIFY dataChanged)
+    Q_PROPERTY(QString startingHeight MEMBER m_starting_height NOTIFY dataChanged)
+    Q_PROPERTY(QString syncedHeaders MEMBER m_synced_headers NOTIFY dataChanged)
+    Q_PROPERTY(QString syncedBlocks MEMBER m_synced_blocks NOTIFY dataChanged)
+    Q_PROPERTY(QString direction MEMBER m_direction NOTIFY dataChanged)
+    Q_PROPERTY(QString connectionDuration MEMBER m_connection_duration NOTIFY dataChanged)
+    Q_PROPERTY(QString lastSend MEMBER m_last_send NOTIFY dataChanged)
+    Q_PROPERTY(QString lastReceived MEMBER m_last_received NOTIFY dataChanged)
+    Q_PROPERTY(QString bytesSent MEMBER m_bytes_sent NOTIFY dataChanged)
+    Q_PROPERTY(QString bytesReceived MEMBER m_bytes_received NOTIFY dataChanged)
+    Q_PROPERTY(QString pingTime MEMBER m_ping_time NOTIFY dataChanged)
+    Q_PROPERTY(QString pingWait MEMBER m_ping_wait NOTIFY dataChanged)
+    Q_PROPERTY(QString pingMin MEMBER m_ping_min NOTIFY dataChanged)
+    Q_PROPERTY(QString timeOffset MEMBER m_time_offset NOTIFY dataChanged)
 
 public:
     int m_node_id{7};
@@ -115,14 +121,20 @@ public:
     QString m_address{QStringLiteral("127.0.0.1:8333")};
     QString m_address_local{QStringLiteral("127.0.0.1:18444")};
     QString m_type{QStringLiteral("Outbound Full Relay")};
-    QString m_permission{QStringLiteral("N/A")};
+    QString m_network{QStringLiteral("IPv4")};
+    QString m_transport{QStringLiteral("v2")};
+    QString m_session_id{QStringLiteral("043604a60a54b3f5")};
+    QString m_permission{};
     QString m_version{QStringLiteral("70016")};
     QString m_user_agent{QStringLiteral("/Satoshi:test/")};
     QString m_services{QStringLiteral("NETWORK|WITNESS")};
     bool m_transaction_relay{true};
     bool m_address_relay{false};
-    QString m_mapped_as{QStringLiteral("N/A")};
-    QString m_starting_height{QStringLiteral("100")};
+    bool m_high_bandwidth{true};
+    QString m_addresses_processed{QStringLiteral("1076")};
+    QString m_addresses_rate_limited{QStringLiteral("0")};
+    QString m_mapped_as{};
+    QString m_starting_height{};
     QString m_synced_headers{QStringLiteral("200")};
     QString m_synced_blocks{QStringLiteral("150")};
     QString m_direction{QStringLiteral("Inbound")};
@@ -132,13 +144,14 @@ public:
     QString m_bytes_sent{QStringLiteral("1.0 MiB")};
     QString m_bytes_received{QStringLiteral("2.0 MiB")};
     QString m_ping_time{QStringLiteral("10 ms")};
-    QString m_ping_wait{QStringLiteral("N/A")};
+    QString m_ping_wait{};
     QString m_ping_min{QStringLiteral("7 ms")};
     QString m_time_offset{QStringLiteral("0 s")};
 
     Q_INVOKABLE void triggerDisconnected() { Q_EMIT disconnected(); }
 
 Q_SIGNALS:
+    void dataChanged();
     void disconnected();
 };
 
@@ -2325,8 +2338,12 @@ class MockNodeModel : public QObject
     Q_PROPERTY(bool banPeerResult MEMBER m_ban_peer_result NOTIFY peerActionStateChanged)
     Q_PROPERTY(int disconnectPeerCalls READ disconnectPeerCalls NOTIFY peerActionCallsChanged)
     Q_PROPERTY(int banPeerCalls READ banPeerCalls NOTIFY peerActionCallsChanged)
+    Q_PROPERTY(int lastDisconnectedNodeId MEMBER m_last_disconnected_node_id NOTIFY peerActionCallsChanged)
+    Q_PROPERTY(QString lastBannedAddress MEMBER m_last_banned_address NOTIFY peerActionCallsChanged)
 
 public:
+    int m_last_disconnected_node_id{-1};
+    QString m_last_banned_address;
     bool m_pause{false};
     int m_num_peers{0};
     int m_num_inbound_peers{0};
@@ -2456,14 +2473,14 @@ public:
     }
     Q_INVOKABLE bool disconnectPeer(int node_id)
     {
-        Q_UNUSED(node_id);
+        m_last_disconnected_node_id = node_id;
         ++m_disconnect_peer_calls;
         Q_EMIT peerActionCallsChanged();
         return m_disconnect_peer_result;
     }
     Q_INVOKABLE bool banPeer(const QString& raw_address, qint64 ban_duration)
     {
-        Q_UNUSED(raw_address);
+        m_last_banned_address = raw_address;
         Q_UNUSED(ban_duration);
         ++m_ban_peer_calls;
         Q_EMIT peerActionCallsChanged();
@@ -2496,11 +2513,12 @@ Q_SIGNALS:
 class MockPeerTableModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool autoRefreshActive MEMBER m_auto_refresh_active NOTIFY autoRefreshActiveChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
 public:
-    Q_INVOKABLE void startAutoRefresh() {}
-    Q_INVOKABLE void stopAutoRefresh() {}
+    Q_INVOKABLE void startAutoRefresh() { m_auto_refresh_active = true; Q_EMIT autoRefreshActiveChanged(); }
+    Q_INVOKABLE void stopAutoRefresh() { m_auto_refresh_active = false; Q_EMIT autoRefreshActiveChanged(); }
     Q_INVOKABLE void refresh()
     {
         ++m_refresh_calls;
@@ -2515,9 +2533,11 @@ public:
 
 Q_SIGNALS:
     void refreshCallsChanged();
+    void autoRefreshActiveChanged();
 
 private:
     int m_refresh_calls{0};
+    bool m_auto_refresh_active{false};
 };
 
 class MockNetworkTrafficTower : public QObject
@@ -2595,8 +2615,27 @@ class MockPeerListModelProxy : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(QString sortBy READ sortBy WRITE setSortBy NOTIFY sortByChanged)
+    Q_PROPERTY(bool sortAscending MEMBER m_sort_ascending NOTIFY sortAscendingChanged)
+    Q_PROPERTY(QString searchText MEMBER m_search_text NOTIFY searchTextChanged)
+    Q_PROPERTY(QStringList directionFilters MEMBER m_direction_filters NOTIFY directionFiltersChanged)
+    Q_PROPERTY(QStringList connectionTypeFilters MEMBER m_connection_type_filters NOTIFY connectionTypeFiltersChanged)
+    Q_PROPERTY(QStringList networkFilters MEMBER m_network_filters NOTIFY networkFiltersChanged)
+    Q_PROPERTY(QStringList transportFilters MEMBER m_transport_filters NOTIFY transportFiltersChanged)
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
 
 public:
+    enum Roles {
+        NodeIdRole = Qt::UserRole,
+        AddressRole,
+        SubversionRole,
+        DirectionRole,
+        ConnectionTypeRole,
+        NetworkRole,
+        TransportRole,
+        SentRole,
+        ReceivedRole,
+    };
+
     QString sortBy() const { return m_sort_by; }
     void setSortBy(const QString& value)
     {
@@ -2608,22 +2647,84 @@ public:
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
     {
         Q_UNUSED(parent);
-        return 0;
+        return m_peer_count;
     }
 
     QVariant data(const QModelIndex& index, int role) const override
     {
-        Q_UNUSED(index);
-        Q_UNUSED(role);
-        return {};
+        if (!index.isValid() || index.row() < 0 || index.row() >= m_peer_count) return {};
+        switch (role) {
+        case NodeIdRole: return index.row();
+        case AddressRole: return QStringLiteral("127.0.0.1:8333");
+        case SubversionRole: return QStringLiteral("/Satoshi:test/");
+        case DirectionRole: return QStringLiteral("Outbound");
+        case ConnectionTypeRole: return QStringLiteral("Full relay");
+        case NetworkRole: return QStringLiteral("IPv4");
+        case TransportRole: return QStringLiteral("v2");
+        case SentRole: return QStringLiteral("1 kB");
+        case ReceivedRole: return QStringLiteral("2 kB");
+        default: return {};
+        }
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {
+            {NodeIdRole, "nodeId"},
+            {AddressRole, "address"},
+            {SubversionRole, "subversion"},
+            {DirectionRole, "direction"},
+            {ConnectionTypeRole, "connectionType"},
+            {NetworkRole, "network"},
+            {TransportRole, "transport"},
+            {SentRole, "sent"},
+            {ReceivedRole, "received"},
+        };
+    }
+
+    Q_INVOKABLE void setPeerCountForTest(int count)
+    {
+        if (m_peer_count == count) return;
+        beginResetModel();
+        m_peer_count = std::max(0, count);
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
+    Q_INVOKABLE QObject* peerDetailsAt(int row) const
+    {
+        return row >= 0 && row < m_peer_count ? m_peer_details : nullptr;
+    }
+
+    void setPeerDetailsForTest(QObject* peer_details) { m_peer_details = peer_details; }
+
+    Q_INVOKABLE int indexOfNodeId(qint64 node_id) const
+    {
+        Q_UNUSED(node_id);
+        return -1;
     }
 
 Q_SIGNALS:
     void sortByChanged(const QString& roleName);
+    void sortAscendingChanged();
+    void searchTextChanged();
+    void directionFiltersChanged();
+    void connectionTypeFiltersChanged();
+    void networkFiltersChanged();
+    void transportFiltersChanged();
+    void countChanged();
     void dataChanged(int startIndex, int endIndex);
 
 private:
+    int m_peer_count{0};
+    QObject* m_peer_details{nullptr};
     QString m_sort_by{QStringLiteral("nodeId")};
+    bool m_sort_ascending{true};
+    QString m_search_text;
+    QStringList m_direction_filters;
+    QStringList m_connection_type_filters;
+    QStringList m_network_filters;
+    QStringList m_transport_filters;
 };
 
 class MockBanListModel : public QAbstractListModel
@@ -3675,6 +3776,12 @@ public Q_SLOTS:
         static MockPeerListModelProxy peer_list_model_proxy;
         static MockBanListModel ban_list_model;
         static MockPeerDetailsModel peer_details_model;
+        static MockPeerDetailsModel other_peer_details_model;
+        other_peer_details_model.m_node_id = 8;
+        other_peer_details_model.m_raw_address = QStringLiteral("192.0.2.1");
+        other_peer_details_model.m_address = QStringLiteral("192.0.2.1:8333");
+        QQmlEngine::setObjectOwnership(&peer_details_model, QQmlEngine::CppOwnership);
+        peer_list_model_proxy.setPeerDetailsForTest(&peer_details_model);
         static MockWalletQmlModelTransaction wallet_transaction;
         static MockPaymentRequest payment_request;
         static MockSendRecipient send_recipient;
@@ -3740,6 +3847,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("peerListModelProxy"), &peer_list_model_proxy);
         engine->rootContext()->setContextProperty(QStringLiteral("banListModel"), &ban_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testPeerDetailsModel"), &peer_details_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("otherPeerDetailsModel"), &other_peer_details_model);
         engine->rootContext()->setContextProperty(QStringLiteral("walletController"), &wallet_controller);
         engine->rootContext()->setContextProperty(QStringLiteral("walletListModel"), &wallet_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);

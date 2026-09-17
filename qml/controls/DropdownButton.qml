@@ -12,6 +12,7 @@ AbstractButton {
 
     property string subtitle: ""
     property bool opened: false
+    property bool active: false
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft
@@ -19,7 +20,7 @@ AbstractButton {
     property var subtitleTextStyle: labelTextStyle
     property color textColor: Theme.color.neutral9
     property color subtitleColor: Theme.color.neutral7
-    property color caretColor: Theme.color.orange
+    property color caretColor: Theme.color.neutral9
     property color hoverBgColor: Theme.color.neutral2
     property color defaultBgColor: Theme.color.background
 
@@ -55,7 +56,7 @@ AbstractButton {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
-                color: root.enabled ? root.textColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.white : root.textColor : Theme.color.neutral4
                 horizontalAlignment: root.textAlignment
                 elide: Text.ElideRight
                 wrap: false
@@ -85,7 +86,7 @@ AbstractButton {
                 Layout.preferredHeight: root.caretSize
                 source: root.caretSource
                 size: root.caretSize
-                color: root.enabled ? root.caretColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.white : root.caretColor : Theme.color.neutral4
                 rotation: root.opened ? 180 : 0
 
                 Behavior on rotation {
@@ -97,7 +98,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: 6
-        color: (root.hovered || root.down || root.visualFocus || root.opened)
+        color: root.active ? Theme.color.orange : (root.hovered || root.down || root.visualFocus || root.opened)
             ? root.hoverBgColor
             : root.defaultBgColor
 

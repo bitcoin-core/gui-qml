@@ -52,6 +52,11 @@ QString NetworkToQString(Network net)
     assert(false);
 }
 
+QString TransportToQString(TransportProtocolType transport)
+{
+    return QString::fromStdString(TransportTypeAsString(transport));
+}
+
 QString FormatDurationStr(std::chrono::nanoseconds dur)
 {
     const auto d{std::chrono::duration_cast<std::chrono::days>(dur)};
@@ -92,7 +97,7 @@ QString FormatServicesStr(quint64 mask)
 QString FormatPingTime(NodeClock::duration ping_time)
 {
     if (ping_time == NodeClock::duration::max() || ping_time == 0us) {
-        return QObject::tr("N/A");
+        return {};
     }
     return QObject::tr("%1 ms").arg(QString::number(Ticks<std::chrono::milliseconds>(ping_time), 10));
 }
