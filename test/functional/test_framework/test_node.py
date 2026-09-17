@@ -282,6 +282,8 @@ class TestNode():
         subp_env = dict(os.environ, LIBC_FATAL_STDERR_="1")
         if self.use_gui:
             subp_env.setdefault("QT_QPA_PLATFORM", "minimal")
+            # Resource URLs are shared by builds from different worktrees.
+            subp_env["QML_DISABLE_DISK_CACHE"] = "1"
             if platform.system() == "Darwin":
                 # QMacStyle assumes a Cocoa platform window, which the minimal platform
                 # does not provide. In particular, painting a QGroupBox can make Qt call
