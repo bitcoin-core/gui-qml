@@ -342,7 +342,7 @@ def test_clear_removes_output_and_keeps_help_footer(gui):
 
 def main():
     args = parse_args()
-    harness = QmlTestHarness(socket_path=args.socket_path, extra_args=["-disablewallet", "-qwindowgeometry", "800x700"])
+    harness = QmlTestHarness(socket_path=args.socket_path, extra_args=["-disablewallet"])
 
     try:
         harness.start()

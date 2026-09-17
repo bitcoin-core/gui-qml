@@ -388,6 +388,12 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     }
     return PreInitOnboardingStatus::COMPLETED;
 }
+
+// Qt gets a synthetic argument list so it never parses the process command line:
+// a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
+// before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
+int qt_argc = 1;
+const char* qt_argv = "bitcoin-core-app";
 } // namespace
 
 
@@ -403,7 +409,7 @@ int QmlGuiMain(int argc, char* argv[])
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
-    QApplication app(argc, argv);
+    QApplication app(qt_argc, const_cast<char**>(&qt_argv));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);

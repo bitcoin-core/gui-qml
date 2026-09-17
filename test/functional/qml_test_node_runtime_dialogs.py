@@ -127,7 +127,7 @@ def close_case(gui, case):
 
 
 def run_test(*, socket_path=None, save_screenshots=False, screenshot_root=None):
-    extra_args = ["-disablewallet", "-qwindowgeometry", "812x665"]
+    extra_args = ["-disablewallet"]
     harness = QmlTestHarness(socket_path=socket_path, extra_args=extra_args)
     try:
         harness.start()
