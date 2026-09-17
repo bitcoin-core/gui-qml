@@ -145,7 +145,7 @@ Rectangle {
                 }
                 contentItem: RowLayout {
                     spacing: 6
-                    Icon { source: "qrc:/icons/activity-payment-request"; color: Theme.color.lavender; size: 16 }
+                    Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.lavender; size: 16 }
                     CoreText {
                         Layout.fillWidth: true
                         text: qsTr("Payment request #%1").arg(modelData.requestId || "")

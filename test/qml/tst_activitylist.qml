@@ -23,6 +23,23 @@ TestCase {
 
     Component { id: pageComponent; ActivityList { width: 1180; height: 950 } }
 
+    Component {
+        id: iconImageComponent
+        Image { width: 24; height: 24; sourceSize: Qt.size(48, 48) }
+    }
+
+    function test_activity_svg_resources_load_data() {
+        return ["activity-send", "activity-receive", "activity-multiple", "activity-payment-request",
+            "activity-consolidation", "activity-split", "activity-internal", "activity-invoice",
+            "check", "coinbase", "file"].map(function(name) { return { tag: name, name: name } })
+    }
+
+    function test_activity_svg_resources_load(data) {
+        const icon = createTemporaryObject(iconImageComponent, this, { source: "qrc:/icons/" + data.name + ".svg" })
+        tryCompare(icon, "status", Image.Ready)
+        verify(icon.paintedWidth > 0 && icon.paintedHeight > 0)
+    }
+
     function action(id, label, amount, direction, address) {
         return {actionId: id, label: label, address: address || "bc1qrecipient42mx9jhyu82sk7la0q4x3g9lr8j0c2s",
             amount: amount, direction: direction, source: TransactionActivityModel.Output,
@@ -171,7 +188,7 @@ TestCase {
         verify(findChild(batch, "activityAction_robert") !== null)
         verify(findChild(batch, "activityAction_elisabeth") !== null)
         const icon = findChild(batch, "activityRowIcon")
-        compare(icon.iconSource.toString(), "qrc:/icons/activity-send")
+        compare(icon.iconSource.toString(), "qrc:/icons/activity-send.svg")
         compare(icon.accent, Theme.color.orange)
         const children = findChild(batch, "activityRowChildren")
         verify(children.height >= findChild(batch, "activityAction_robert").height
@@ -185,7 +202,7 @@ TestCase {
         updated[3].amount = "+0.00101000 BTC"
         testTransactionActivityModel.setRows(updated)
         const incomingIcon = findChild(findRow(page, "batch"), "activityRowIcon")
-        compare(incomingIcon.iconSource.toString(), "qrc:/icons/activity-receive")
+        compare(incomingIcon.iconSource.toString(), "qrc:/icons/activity-receive.svg")
         compare(incomingIcon.accent, Theme.color.green)
     }
 
@@ -285,7 +302,7 @@ TestCase {
         }
         const receive = findRow(page, "receive")
         verify(findChild(receive, "activityRowMetadata").text.endsWith("5 confirmations"))
-        compare(findChild(receive, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-receive")
+        compare(findChild(receive, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-receive.svg")
         verify(!findChild(receive, "activityPendingRing").visible)
         compare(findChild(receive, "activityRowAmount").color, Theme.color.green)
         verify(findChild(receive, "activityRowRequestBadge").visible)
@@ -293,7 +310,7 @@ TestCase {
         verify(request !== null)
         verify(findChild(request, "activityRowMetadata").text.includes("Payment request · Awaiting payment"))
         compare(findChild(request, "activityRowAmount").color, Theme.color.neutral7)
-        compare(findChild(request, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-payment-request")
+        compare(findChild(request, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-payment-request.svg")
         compare(findChild(request, "activityRowIcon").accent, Theme.color.lavender)
         verify(findChild(request, "activityPendingRing").visible)
         mouseClick(findChild(request, "activityRowOpenButton"))
@@ -467,7 +484,7 @@ TestCase {
         const selfSend = findRow(page, "self")
         compare(selfSend.displayLabel, "Sent to yourself")
         compare(selfSend.hasChildren, false)
-        compare(findChild(selfSend, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-internal")
+        compare(findChild(selfSend, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
         compare(findChild(selfSend, "activityRowIcon").accent, Theme.color.purple)
         const purple = Theme.color.purple
         compare(findChild(selfSend, "activityRowIcon").color, Qt.rgba(purple.r, purple.g, purple.b, 64 / 255))
@@ -503,11 +520,11 @@ TestCase {
         verify(findChild(batch, "activityRowCompactAmount").visible)
         verify(!findChild(batch, "activityRowAmount").visible)
         const split = findRow(page, "split")
-        compare(findChild(split, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-split")
+        compare(findChild(split, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-split.svg")
         const mixed = findRow(page, "mixed")
         compare(findChild(findChild(mixed, "activityAction_contribution"), "activityActionLabel").visible, false)
         const mined = findRow(page, "mined")
-        compare(findChild(mined, "activityRowIcon").iconSource.toString(), "qrc:/icons/coinbase")
+        compare(findChild(mined, "activityRowIcon").iconSource.toString(), "qrc:/icons/coinbase.svg")
         const cancelled = findRow(page, "cancelled")
         verify(cancelled.metadata.endsWith("Cancelled"))
         compare(cancelled.amountColor, Theme.color.neutral6)

@@ -170,7 +170,7 @@ TestCase {
         const page = createDetail(snapshot)
         compare(page.actionLabel, data.label)
         if (data.type === TransactionActivityModel.InternalTransfer) {
-            compare(findChild(page, "transactionDetailIcon").iconSource.toString(), "qrc:/icons/activity-internal")
+            compare(findChild(page, "transactionDetailIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
             compare(findChild(page, "transactionDetailIcon").accent, Theme.color.purple)
         }
         compare(findChild(page, "transactionDetailNote"), null)

@@ -17,7 +17,7 @@ Item {
 
     Icon {
         anchors.centerIn: parent
-        source: "qrc:/icons/activity-invoice"
+        source: "qrc:/icons/activity-invoice.svg"
         color: Theme.color.neutral7
         size: 18
     }
@@ -31,7 +31,7 @@ Item {
         color: root.surfaceColor
         Icon {
             anchors.centerIn: parent
-            source: "qrc:/icons/check"
+            source: "qrc:/icons/check.svg"
             color: Theme.color.green
             size: 10
         }

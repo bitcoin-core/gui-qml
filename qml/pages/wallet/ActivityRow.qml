@@ -285,7 +285,7 @@ Item {
                             objectName: "activityActionIcon"
                             readonly property bool internal: childRow.modelData.direction === TransactionActivityModel.InternalAction
                             readonly property bool incoming: childRow.modelData.direction === TransactionActivityModel.ReceiveAction
-                            source: incoming || internal ? "qrc:/icons/activity-receive" : "qrc:/icons/activity-send"
+                            source: incoming || internal ? "qrc:/icons/activity-receive.svg" : "qrc:/icons/activity-send.svg"
                             color: root.isInactive ? Theme.color.neutral6 : internal ? Theme.color.purple
                                 : incoming ? Theme.color.green : Theme.color.orange
                             rotation: internal ? -90 : 0

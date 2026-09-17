@@ -27,14 +27,14 @@ Rectangle {
         return incoming ? Theme.color.green : Theme.color.orange
     }
     readonly property url iconSource: {
-        if (paymentRequest) return "qrc:/icons/activity-payment-request"
+        if (paymentRequest) return "qrc:/icons/activity-payment-request.svg"
         switch (activityType) {
-        case TransactionActivityModel.Consolidation: return "qrc:/icons/activity-consolidation"
-        case TransactionActivityModel.Split: return "qrc:/icons/activity-split"
-        case TransactionActivityModel.InternalTransfer: return "qrc:/icons/activity-internal"
-        case TransactionActivityModel.Mined: return "qrc:/icons/coinbase"
-        case TransactionActivityModel.Other: return "qrc:/icons/file"
-        default: return "qrc:/icons/activity-" + (incoming ? "receive" : "send")
+        case TransactionActivityModel.Consolidation: return "qrc:/icons/activity-consolidation.svg"
+        case TransactionActivityModel.Split: return "qrc:/icons/activity-split.svg"
+        case TransactionActivityModel.InternalTransfer: return "qrc:/icons/activity-internal.svg"
+        case TransactionActivityModel.Mined: return "qrc:/icons/coinbase.svg"
+        case TransactionActivityModel.Other: return "qrc:/icons/file.svg"
+        default: return "qrc:/icons/activity-" + (incoming ? "receive" : "send") + ".svg"
         }
     }
     implicitWidth: 44
