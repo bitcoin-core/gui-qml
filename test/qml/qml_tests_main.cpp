@@ -3038,6 +3038,8 @@ class MockTransactionActivityModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(bool loading MEMBER m_loading NOTIFY countChanged)
+    Q_PROPERTY(QString loadError MEMBER m_load_error NOTIFY countChanged)
 public:
     enum ActivityType { Send, Receive, Multiple, Consolidation, Split, InternalTransfer, Mined, Other };
     Q_ENUM(ActivityType)
@@ -3070,6 +3072,8 @@ public:
         Q_EMIT transactionDetailsChanged();
     }
     Q_INVOKABLE void reload() {}
+    Q_INVOKABLE void requestTransactionDetails(const QString& txid) { m_requested_txid = txid; }
+    Q_INVOKABLE QString requestedTransaction() const { return m_requested_txid; }
     Q_INVOKABLE QString rawTransaction(const QString& txid) const { return transactionDetails(txid).value("rawTransaction").toString(); }
     Q_INVOKABLE QString paymentRequestUri(const QString& request_id) const
     {
@@ -3087,6 +3091,9 @@ Q_SIGNALS:
     void transactionDetailsChanged();
 private:
     QVariantList m_rows;
+    bool m_loading{false};
+    QString m_load_error;
+    QString m_requested_txid;
 };
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel

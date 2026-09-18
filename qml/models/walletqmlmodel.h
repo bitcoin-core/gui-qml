@@ -166,6 +166,8 @@ public:
     Q_INVOKABLE void discardCurrentTransaction();
     PsbtQmlModel* importedPsbt() const { return m_imported_psbt_model; }
     interfaces::Wallet* wallet() const { return m_wallet.get(); }
+    // Background readers retain the interface until their current read finishes.
+    std::shared_ptr<interfaces::Wallet> walletHandle() const { return m_wallet; }
     interfaces::Node* node() const { return m_node; }
     void removeWallet();
 
@@ -293,7 +295,7 @@ private:
     QString persistedReceiveAddressTypeKey() const;
     bool tryImportPsbtToReview(const PartiallySignedTransaction& psbt, PsbtImportResult& result, QString& reason);
 
-    std::unique_ptr<interfaces::Wallet> m_wallet;
+    std::shared_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};

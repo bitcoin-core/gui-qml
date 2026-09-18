@@ -32,12 +32,8 @@ PageStack {
 
     function navigateToTransaction(txid, outputIndex) {
         if (!wallet) return
-        let details = detailProperties(txid, outputIndex)
-        if (!details.transactionData) {
-            // A send-result link can arrive before the queued wallet update.
-            wallet.transactionActivityModel.reload()
-            details = detailProperties(txid, outputIndex)
-        }
+        wallet.transactionActivityModel.requestTransactionDetails(txid)
+        const details = detailProperties(txid, outputIndex)
         if (!details.transactionData) return
         let page
         if (stackView.currentItem && stackView.currentItem.objectName === "activityDetailsPage") {
@@ -62,7 +58,14 @@ PageStack {
         for (const key in details) page[key] = details[key]
     }
 
-    onCurrentItemChanged: refreshOpenDetails()
+    onCurrentItemChanged: {
+        refreshOpenDetails()
+        // Navigation can briefly pop to the list before pushing a new detail.
+        Qt.callLater(function() {
+            if (currentItem && currentItem.objectName === "activityPage" && wallet)
+                wallet.transactionActivityModel.requestTransactionDetails("")
+        })
+    }
 
     Connections {
         target: walletController

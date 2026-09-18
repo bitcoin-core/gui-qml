@@ -88,6 +88,8 @@ private Q_SLOTS:
     void ignoresTransactionsWithoutWalletOwnership();
     void rejectsIncompleteSnapshots();
     void flowKeepsAllInputsOutputsAndUnknownAmounts();
+    void flowPreviewCollapsesOnlyHiddenOutputs_data();
+    void flowPreviewCollapsesOnlyHiddenOutputs();
     void flowHandlesCoinbaseDataOutputsAndZeroFees();
     void flowDecodesDataOutputs_data();
     void flowDecodesDataOutputs();
@@ -97,6 +99,54 @@ private Q_SLOTS:
 void TransactionActivityTests::initTestCase()
 {
     SelectParams(ChainType::REGTEST);
+}
+
+void TransactionActivityTests::flowPreviewCollapsesOnlyHiddenOutputs_data()
+{
+    QTest::addColumn<int>("count");
+    QTest::addColumn<int>("owned");
+    QTest::addColumn<int>("visible");
+    QTest::newRow("below-threshold") << 9 << 2 << 9;
+    QTest::newRow("threshold") << 10 << 2 << 10;
+    QTest::newRow("collapsed") << 11 << 2 << 3;
+    QTest::newRow("large-payment") << 1001 << 1 << 2;
+    QTest::newRow("all-external") << 11 << 0 << 1;
+    QTest::newRow("all-owned") << 11 << 11 << 11;
+    QTest::newRow("single-external") << 11 << 10 << 11;
+}
+
+void TransactionActivityTests::flowPreviewCollapsesOnlyHiddenOutputs()
+{
+    QFETCH(int, count);
+    QFETCH(int, owned);
+    QFETCH(int, visible);
+    std::vector<Output> outputs(count, {1'000, false});
+    for (int i = 0; i < owned; ++i) outputs[i].mine = true;
+    const auto wtx = MakeWalletTx({{count * 1'000 + 500, false}}, outputs);
+    const auto preview = BuildTransactionFlow(wtx, {}, true);
+    const auto entries = preview.value("outputs").toList();
+    QCOMPARE(preview.value("outputCount").toInt(), count);
+    QCOMPARE(entries.size(), visible);
+    qint64 total{0};
+    int wallet_outputs{0};
+    for (const auto& value : entries) {
+        const auto entry = value.toMap();
+        total += entry.value("amountSat").toLongLong();
+        if (entry.value("ownership") == "wallet") {
+            ++wallet_outputs;
+            const auto index = entry.value("index").toInt();
+            QCOMPARE(entry.value("id").toString(), QStringLiteral("output:%1").arg(index));
+            QVERIFY(DecodeDestination(entry.value("address").toString().toStdString()) == wtx.txout_address[index]);
+        }
+        if (entry.value("kind") == "output-group") {
+            QCOMPARE(entry.value("outputCount").toInt(), count - owned);
+            QVERIFY(entry.value("address").toString().isEmpty());
+        }
+    }
+    QCOMPARE(wallet_outputs, owned);
+    QCOMPARE(total, qint64(count) * 1'000);
+    QVERIFY(!preview.value("feeKnown").toBool());
+    QVERIFY(!preview.value("complete").toBool());
 }
 
 void TransactionActivityTests::flowKeepsAllInputsOutputsAndUnknownAmounts()

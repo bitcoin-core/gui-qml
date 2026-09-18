@@ -60,11 +60,15 @@ Page {
     }
 
     function emptyActivityTitle() {
+        if (wallet && wallet.transactionActivityModel.loadError) return qsTr("Activity could not be loaded")
+        if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return qsTr("Loading wallet activity…")
         if (activitySourceEmpty)
             return nodeModel.blockSyncActive ? qsTr("Syncing wallet activity…") : qsTr("No activity yet")
         return qsTr("No activity matches your filters.")
     }
     function emptyActivityDescription() {
+        if (wallet && wallet.transactionActivityModel.loadError) return wallet.transactionActivityModel.loadError
+        if (activitySourceEmpty && wallet && wallet.transactionActivityModel.loading) return ""
         if (activitySourceEmpty)
             return nodeModel.blockSyncActive ? qsTr("Transactions may appear as your wallet catches up.")
                 : qsTr("Your transactions and payment requests will appear here.")
@@ -441,6 +445,12 @@ Page {
                     text: root.emptyActivityDescription()
                     font: Theme.text.description.font
                     color: Theme.color.neutral7
+                }
+                Button {
+                    objectName: "activityRetryButton"
+                    visible: root.wallet && !!root.wallet.transactionActivityModel.loadError
+                    text: qsTr("Try again")
+                    onClicked: root.wallet.transactionActivityModel.reload()
                 }
             }
 

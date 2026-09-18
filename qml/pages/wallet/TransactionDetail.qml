@@ -18,6 +18,8 @@ Page {
     property bool detailsExpanded: false
     onTxidChanged: detailsExpanded = false
     readonly property string txid: transactionData.txid || ""
+    readonly property bool detailsLoading: !!transactionData.detailsLoading
+    readonly property string detailsError: transactionData.detailsError || ""
     readonly property string amount: transactionData.amount || ""
     readonly property int depth: transactionData.depth || 0
     readonly property bool statusKnown: !!transactionData.statusKnown
@@ -123,6 +125,7 @@ Page {
                 spacing: 28
 
                 TransactionSummary {
+                    visible: root.amount.length > 0
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
                     amount: root.amount
@@ -162,6 +165,21 @@ Page {
                     }
                 }
 
+                BusyIndicator {
+                    objectName: "transactionDetailsLoading"
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: root.detailsLoading
+                    running: visible
+                    Accessible.name: qsTr("Loading transaction details")
+                }
+                InfoBanner {
+                    objectName: "transactionDetailsError"
+                    Layout.fillWidth: true
+                    visible: root.detailsError.length > 0
+                    message: root.detailsError
+                    primaryButtonText: qsTr("Try again")
+                    onPrimaryClicked: if (root.wallet) root.wallet.transactionActivityModel.requestTransactionDetails(root.txid)
+                }
                 InfoBanner {
                     objectName: "speedUpBanner"
                     visible: root.canBump

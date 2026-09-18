@@ -54,7 +54,7 @@ QVariantMap DataOutput(const CScript& script)
 }
 
 QVariantMap BuildTransactionFlow(const interfaces::WalletTx& wtx,
-                               const std::vector<std::optional<CTxOut>>& prevouts)
+                               const std::vector<std::optional<CTxOut>>& prevouts, bool collapse_outputs)
 {
     if (!wtx.tx || wtx.txin_is_mine.size() != wtx.tx->vin.size()
         || wtx.txout_is_mine.size() != wtx.tx->vout.size()
@@ -62,12 +62,23 @@ QVariantMap BuildTransactionFlow(const interfaces::WalletTx& wtx,
 
     const auto& tx = *wtx.tx;
     QVariantList inputs, outputs;
-    CAmount total_input{0}, total_output{0};
+    CAmount total_input{0}, total_output{0}, grouped_amount{0};
+    const auto non_wallet_outputs = std::count(wtx.txout_is_mine.begin(), wtx.txout_is_mine.end(), false);
+    const bool group_outputs = collapse_outputs && tx.vout.size() > 10 && non_wallet_outputs > 1;
+    qsizetype group_index{-1};
     bool inputs_known{!tx.vin.empty()};
     for (size_t i{0}; i < tx.vout.size(); ++i) {
         const auto& output = tx.vout[i];
         if (!MoneyRange(output.nValue) || !MoneyRange(total_output + output.nValue)) return {};
         total_output += output.nValue;
+        if (group_outputs && !wtx.txout_is_mine[i]) {
+            grouped_amount += output.nValue;
+            if (group_index < 0) {
+                group_index = outputs.size();
+                outputs.append(QVariantMap{});
+            }
+            continue;
+        }
         QVariantMap entry{
             {"id", QStringLiteral("output:%1").arg(i)}, {"index", int(i)},
             {"kind", output.scriptPubKey.IsUnspendable() ? "data" : "output"},
@@ -77,6 +88,11 @@ QVariantMap BuildTransactionFlow(const interfaces::WalletTx& wtx,
         };
         entry.insert(DataOutput(output.scriptPubKey));
         outputs.append(entry);
+    }
+    if (group_index >= 0) {
+        outputs[group_index] = QVariantMap{{"id", "non-wallet-outputs"}, {"kind", "output-group"},
+            {"outputCount", qint64(non_wallet_outputs)}, {"ownership", "external"},
+            {"amountKnown", true}, {"amountSat", qint64(grouped_amount)}, {"address", ""}};
     }
     const bool coinbase = tx.IsCoinBase();
     if (coinbase) {

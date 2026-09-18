@@ -8,11 +8,15 @@
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivity.h>
 
+#include <QFutureWatcher>
 #include <QAbstractListModel>
 #include <QMap>
+#include <QPromise>
 #include <QSet>
 #include <QTimer>
 #include <QVariantMap>
+
+#include <optional>
 
 class WalletQmlModel;
 
@@ -26,6 +30,8 @@ class WalletQmlModel;
 class TransactionActivityModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
+    Q_PROPERTY(QString loadError READ loadError NOTIFY loadingChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int transactionCount READ transactionCount NOTIFY countChanged)
     Q_PROPERTY(int requestCount READ requestCount NOTIFY countChanged)
@@ -84,6 +90,9 @@ public:
     };
 
     explicit TransactionActivityModel(WalletQmlModel* wallet_model);
+    ~TransactionActivityModel() override;
+    bool loading() const { return m_loading; }
+    QString loadError() const { return m_load_error; }
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
@@ -96,12 +105,14 @@ public:
     Q_INVOKABLE void reload();
     // Status reads are cached. A busy wallet never changes a row to failed.
     Q_INVOKABLE void refreshStatuses();
-    // The list-compatible snapshot stays cached; full flow resolution is opt-in
-    // for an open detail view and is cached separately from confirmation updates.
+    // Both getters use cached state. requestTransactionDetails resolves the
+    // selected transaction on a worker and emits transactionDetailsChanged.
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, bool include_flow = false) const;
+    Q_INVOKABLE void requestTransactionDetails(const QString& txid);
     void setDisplayUnit(int unit);
 
 Q_SIGNALS:
+    void loadingChanged();
     void countChanged();
     // Full details can change without changing any high-level activity role
     // (for example, a previously unknown input's transaction becomes available).
@@ -116,13 +127,35 @@ private:
         int blocks_to_maturity{0};
         int block_height{0};
         bool status_known{false};
-        bool can_bump{false};
+        CTransactionRef transaction;
+        // Compact ownership flags let a detail preview use the cached
+        // transaction without another wallet read or address-book scan.
+        std::vector<bool> inputs_mine, outputs_mine, outputs_change;
     };
     using Row = QMap<int, QVariant>;
 
     void updateTransaction(const QString& txid, int change);
-    bool updateStatus(Record& record);
-    void updateLabels(Record& record);
+    struct Work {
+        bool reload{false}, labels{false}, statuses{false}, poll{false}, details{false};
+        QSet<QString> transactions;
+        bool empty() const { return !reload && !labels && !statuses && !poll && !details && transactions.isEmpty(); }
+        void merge(const Work& other);
+    };
+    struct Snapshot {
+        QMap<QString, Record> records;
+        QSet<QString> retry;
+        std::optional<uint256> tip;
+        QString detail_txid, raw_transaction;
+        QVariantMap flow;
+        QMap<QString, QString> detail_labels;
+        bool can_bump{false}, detail_missing{false}, rows_changed{false}, details_changed{false}, flow_resolved{false};
+    };
+    static bool updateStatus(interfaces::Wallet& wallet, Record& record);
+    static void updateLabels(interfaces::Wallet& wallet, Record& record);
+    static Snapshot readSnapshot(interfaces::Wallet& wallet, Snapshot snapshot, const Work& work, const QPromise<Snapshot>& promise);
+    void schedule();
+    void startWork();
+    void stop();
     void poll();
     void rebuildRows();
     QString formatAmount(CAmount amount, bool receive) const;
@@ -134,10 +167,17 @@ private:
     QList<Row> m_rows;
     QTimer m_timer;
     std::optional<uint256> m_last_tip;
-    // Only the most recently opened transaction needs its full flow cached.
-    mutable QString m_detail_txid;
-    mutable QString m_detail_raw_transaction;
-    mutable QVariantMap m_detail_flow;
+    QString m_detail_txid;
+    QString m_detail_raw_transaction;
+    QVariantMap m_detail_flow;
+    bool m_detail_flow_resolved{false};
+    QMap<QString, QString> m_detail_labels;
+    bool m_detail_can_bump{false}, m_detail_missing{false}, m_details_loading{false};
+    Work m_pending;
+    QFutureWatcher<Snapshot>* m_watcher{nullptr};
+    quint64 m_generation{0}, m_detail_generation{0};
+    bool m_scheduled{false}, m_stopped{false}, m_loading{false};
+    QString m_load_error;
 };
 
 #endif // BITCOIN_QML_MODELS_TRANSACTIONACTIVITYMODEL_H

@@ -100,6 +100,8 @@ TestCase {
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
         nodeModel.setBlockSyncActiveForTest(false)
+        testTransactionActivityModel.loading = false
+        testTransactionActivityModel.loadError = ""
         testTransactionActivityModel.setRows(rows())
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
     }
@@ -451,6 +453,52 @@ TestCase {
         tryCompare(page, "depth", 2)
         compare(page.currentItem.amount, "0.00101000 BTC") // The hero always represents the wallet's net impact.
         compare(page.currentItem.outputIndex, 0)
+    }
+
+    function test_details_open_while_loading_and_refresh_when_ready() {
+        const fixture = rows()
+        fixture[3].detailsLoading = true
+        testTransactionActivityModel.setRows(fixture)
+        const page = createPage()
+        page.navigateToTransaction("batch")
+        tryCompare(page, "depth", 2)
+        verify(page.currentItem.detailsLoading)
+        verify(findChild(page.currentItem, "transactionDetailsLoading").visible)
+        fixture[3].detailsLoading = false
+        fixture[3].detailsError = "Wallet activity could not be loaded. Please try again."
+        testTransactionActivityModel.setRows(fixture)
+        tryCompare(page.currentItem, "detailsLoading", false)
+        verify(findChild(page.currentItem, "transactionDetailsError").visible)
+        fixture[3].detailsError = ""
+        fixture[3].depth = 3
+        testTransactionActivityModel.setRows(fixture)
+        tryCompare(page.currentItem, "depth", 3)
+        verify(!findChild(page.currentItem, "transactionDetailsError").visible)
+    }
+
+    function test_detail_request_survives_navigation_from_payment_request() {
+        const page = createPage()
+        page.currentItem.paymentRequestRequested("invoice")
+        tryCompare(page, "depth", 2)
+        tryCompare(page.currentItem, "objectName", "paymentRequestDetailPage")
+        page.navigateToTransaction("batch")
+        tryCompare(page.currentItem, "txid", "batch")
+        wait(0)
+        compare(testTransactionActivityModel.requestedTransaction(), "batch")
+        page.pop()
+        tryCompare(page, "depth", 1)
+        tryVerify(function() { return testTransactionActivityModel.requestedTransaction() === "" })
+    }
+
+    function test_history_loading_and_failure_states() {
+        testTransactionActivityModel.setRows([])
+        testTransactionActivityModel.loading = true
+        const page = createPage()
+        compare(findChild(page, "activityEmptyStateTitle").text, "Loading wallet activity…")
+        testTransactionActivityModel.loading = false
+        testTransactionActivityModel.loadError = "Please try again."
+        tryCompare(findChild(page, "activityEmptyStateTitle"), "text", "Activity could not be loaded")
+        verify(findChild(page, "activityRetryButton").visible)
     }
 
     function test_amount_filter_and_empty_states() {

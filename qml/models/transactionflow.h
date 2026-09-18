@@ -14,10 +14,13 @@
 
 namespace interfaces { struct WalletTx; }
 
-// Complete input/output data, independent of list actions and presentation.
+// Input/output data, independent of list actions.
 // prevouts is positional and may contain unknown entries. It can also be
 // supplied from a prepared transaction/PSBT when building a send preview.
+// A collapsed preview keeps wallet outputs and totals the other outputs without
+// decoding their addresses or data payloads. The original output count is kept.
 QVariantMap BuildTransactionFlow(const interfaces::WalletTx& tx,
-                               const std::vector<std::optional<CTxOut>>& prevouts);
+                               const std::vector<std::optional<CTxOut>>& prevouts,
+                               bool collapse_outputs = false);
 
 #endif // BITCOIN_QML_MODELS_TRANSACTIONFLOW_H
