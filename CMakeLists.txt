@@ -171,6 +171,21 @@ qt6_add_resources(bitcoinqml "bitcoin_qt_translations"
     PREFIX "/translations"
     FILES ${BITCOIN_QT_QM_FILES}
 )
+
+# RCC-generated translation sources contain trailing whitespace that trips
+# -Wtrailing-whitespace=any (GCC >= 15). Suppress it only for those generated
+# files, mirroring the submodule's handling of its own resources.
+# See: https://bugreports.qt.io/browse/QTBUG-141858.
+get_target_property(warn_flags warn_interface INTERFACE_COMPILE_OPTIONS)
+if("-Wtrailing-whitespace=any" IN_LIST warn_flags)
+    set_source_files_properties(
+        ${CMAKE_CURRENT_BINARY_DIR}/.qt/rcc/qrc_qml_gui_translations.cpp
+        ${CMAKE_CURRENT_BINARY_DIR}/.qt/rcc/qrc_bitcoin_qt_translations.cpp
+        PROPERTIES COMPILE_OPTIONS -Wno-trailing-whitespace
+    )
+endif()
+unset(warn_flags)
+
 add_dependencies(bitcoinqml bitcoin-qt)
 
 # Put it all together
