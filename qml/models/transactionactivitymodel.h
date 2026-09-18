@@ -19,8 +19,7 @@ class WalletQmlModel;
 /** One row per wallet transaction or unpaid request. Actions belong to their
  * transaction and are never independently sorted, filtered or counted.
  *
- * Roles belong to this model. Basic role IDs remain compatible with the
- * previous activity model while its screens are being migrated.
+ * This model owns the roles shared with its filter/export proxy.
  * activityType describes the transaction; each action has its own direction,
  * source, outputIndex (or inputs), amountSat, label and paymentRequests.
  */

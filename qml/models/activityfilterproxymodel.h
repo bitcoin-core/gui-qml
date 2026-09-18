@@ -134,9 +134,7 @@ protected:
     bool lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const override;
 
 private:
-    TypeFilter filterTypeForIndex(const QModelIndex& source_index) const;
-    bool groupedSource() const;
-    bool groupedTypeMatches(const QModelIndex& source_index, TypeFilter type) const;
+    bool typeMatches(const QModelIndex& source_index, TypeFilter type) const;
     void updateAvailableMaxAmount();
     QString exportTypeLabelForIndex(const QModelIndex& proxy_index) const;
     bool dateMatches(qint64 timestamp) const;

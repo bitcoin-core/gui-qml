@@ -5,7 +5,6 @@
 #include <qml/models/activityfilterproxymodel.h>
 
 #include <qml/bitcoinunits.h>
-#include <qml/models/activitylistmodel.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
 
@@ -79,22 +78,15 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
 QHash<int, QByteArray> ActivityFilterProxyModel::roleNames() const
 {
     auto roles = sourceModel() ? sourceModel()->roleNames() : QHash<int, QByteArray>{};
-    if (groupedSource()) {
-        roles.insert(SectionKeyRole, "sectionKey");
-        roles.insert(SectionLabelRole, "sectionLabel");
-        roles.insert(DateTimeLabelRole, "dateTimeLabel");
-    }
+    roles.insert(SectionKeyRole, "sectionKey");
+    roles.insert(SectionLabelRole, "sectionLabel");
+    roles.insert(DateTimeLabelRole, "dateTimeLabel");
     return roles;
-}
-
-bool ActivityFilterProxyModel::groupedSource() const
-{
-    return qobject_cast<TransactionActivityModel*>(sourceModel()) != nullptr;
 }
 
 QVariant ActivityFilterProxyModel::data(const QModelIndex& index, int role) const
 {
-    if (groupedSource() && index.isValid() && index.model() == this &&
+    if (index.isValid() && index.model() == this &&
         (role == SectionKeyRole || role == SectionLabelRole || role == DateTimeLabelRole)) {
         const bool pending = QSortFilterProxyModel::data(index, TransactionActivityModel::IsPendingRole).toBool();
         const auto date = QDateTime::fromSecsSinceEpoch(QSortFilterProxyModel::data(index, TransactionActivityModel::TimestampRole).toLongLong());
@@ -354,7 +346,6 @@ int ActivityFilterProxyModel::transactionCount() const
 CAmount ActivityFilterProxyModel::pendingBalanceSat() const
 {
     CAmount total{0};
-    if (!groupedSource()) return total;
     for (int row = 0; row < rowCount(); ++row) {
         const auto item = index(row, 0);
         if (item.data(TransactionActivityModel::IsPendingRole).toBool()
@@ -373,7 +364,7 @@ QString ActivityFilterProxyModel::pendingBalance() const
         + QmlBitcoinUnits::displayLabel(unit, amount);
 }
 
-bool ActivityFilterProxyModel::groupedTypeMatches(const QModelIndex& source_index, TypeFilter filter) const
+bool ActivityFilterProxyModel::typeMatches(const QModelIndex& source_index, TypeFilter filter) const
 {
     if (filter == TypeAll) return true;
     if (filter == PaymentRequest) return source_index.data(TransactionActivityModel::HasPaymentRequestRole).toBool();
@@ -407,22 +398,13 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
     const QModelIndex source_index = sourceModel()->index(source_row, 0, source_parent);
     if (!source_index.isValid()) return false;
 
-    // A payment request whose address already has a real transaction is only
-    // surfaced under the Payment request filter; everywhere else it is hidden so
-    // it does not duplicate that address's real transaction row.
-    if (source_index.data(ActivityListModel::IsUsedAddressRequestRole).toBool()
-        && !m_type_filters.contains(PaymentRequest)) {
-        return false;
-    }
-
     if (!dateMatches(source_index.data(TransactionActivityModel::TimestampRole).toLongLong())) {
         return false;
     }
 
     if (!m_type_filters.isEmpty()) {
         const bool matches = std::any_of(m_type_filters.cbegin(), m_type_filters.cend(), [&](int type) {
-            return groupedSource() ? groupedTypeMatches(source_index, static_cast<TypeFilter>(type))
-                                   : filterTypeForIndex(source_index) == type;
+            return typeMatches(source_index, static_cast<TypeFilter>(type));
         });
         if (!matches) return false;
     }
@@ -437,7 +419,7 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
         const QString address = source_index.data(TransactionActivityModel::AddressRole).toString();
         const QString label = source_index.data(TransactionActivityModel::LabelRole).toString();
         const QString txid = source_index.data(TransactionActivityModel::TxidRole).toString();
-        const QString children = groupedSource() ? source_index.data(TransactionActivityModel::SearchTextRole).toString() : QString{};
+        const QString children = source_index.data(TransactionActivityModel::SearchTextRole).toString();
         if (!children.contains(search, Qt::CaseInsensitive) &&
             !address.contains(search, Qt::CaseInsensitive) &&
             !label.contains(search, Qt::CaseInsensitive) &&
@@ -451,48 +433,15 @@ bool ActivityFilterProxyModel::filterAcceptsRow(int source_row, const QModelInde
 
 bool ActivityFilterProxyModel::lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const
 {
-    // Delegate to the source model's full ordering (newest first with
-    // deterministic tie-breaks). Comparing the timestamp alone leaves
-    // equal-time rows in arrival order, which diverges from the order a
-    // reload produces. The proxy sorts descending, so returning "left is
-    // less" when the right row sorts in front preserves that order.
-    if (const auto* model = qobject_cast<const ActivityListModel*>(sourceModel())) {
-        return model->rowSortsBefore(right_index.row(), left_index.row());
-    }
-    if (groupedSource()) {
-        const bool left_pending = left_index.data(TransactionActivityModel::IsPendingRole).toBool();
-        const bool right_pending = right_index.data(TransactionActivityModel::IsPendingRole).toBool();
-        if (left_pending != right_pending) return !left_pending;
-    }
+    const bool left_pending = left_index.data(TransactionActivityModel::IsPendingRole).toBool();
+    const bool right_pending = right_index.data(TransactionActivityModel::IsPendingRole).toBool();
+    if (left_pending != right_pending) return !left_pending;
     const qint64 left_timestamp = sourceModel()->data(left_index, TransactionActivityModel::TimestampRole).toLongLong();
     const qint64 right_timestamp = sourceModel()->data(right_index, TransactionActivityModel::TimestampRole).toLongLong();
-    if (groupedSource() && left_timestamp == right_timestamp) {
+    if (left_timestamp == right_timestamp) {
         return left_index.data(TransactionActivityModel::IdRole).toString() < right_index.data(TransactionActivityModel::IdRole).toString();
     }
     return left_timestamp < right_timestamp;
-}
-
-ActivityFilterProxyModel::TypeFilter ActivityFilterProxyModel::filterTypeForIndex(const QModelIndex& source_index) const
-{
-    if (source_index.data(TransactionActivityModel::IsPendingRequestRole).toBool()) {
-        return PaymentRequest;
-    }
-
-    switch (source_index.data(TransactionActivityModel::TypeRole).toInt()) {
-    case Transaction::RecvWithAddress:
-    case Transaction::RecvFromOther:
-        return Received;
-    case Transaction::SendToSelf:
-        return SentToSelf;
-    case Transaction::Generated:
-        return Mined;
-    case Transaction::SendToAddress:
-    case Transaction::SendToOther:
-        return Sent;
-    case Transaction::Other:
-    default:
-        return Other;
-    }
 }
 
 QString ActivityFilterProxyModel::exportTypeLabelForIndex(const QModelIndex& proxy_index) const
@@ -501,30 +450,17 @@ QString ActivityFilterProxyModel::exportTypeLabelForIndex(const QModelIndex& pro
         return tr("Payment request");
     }
 
-    if (groupedSource()) {
-        switch (proxy_index.data(TransactionActivityModel::ActivityTypeRole).toInt()) {
-        case TransactionActivityModel::Multiple: return tr("Multiple actions");
-        case TransactionActivityModel::Consolidation: return tr("Consolidation");
-        case TransactionActivityModel::Split: return tr("Split");
-        default: break;
-        }
+    switch (static_cast<TransactionActivityModel::ActivityType>(proxy_index.data(TransactionActivityModel::ActivityTypeRole).toInt())) {
+    case TransactionActivityModel::Send: return tr("Sent");
+    case TransactionActivityModel::Receive: return tr("Received");
+    case TransactionActivityModel::Multiple: return tr("Multiple actions");
+    case TransactionActivityModel::Consolidation: return tr("Consolidation");
+    case TransactionActivityModel::Split: return tr("Split");
+    case TransactionActivityModel::InternalTransfer: return tr("Sent to yourself");
+    case TransactionActivityModel::Mined: return tr("Mined");
+    case TransactionActivityModel::Other: return tr("Other");
     }
-
-    switch (proxy_index.data(TransactionActivityModel::TypeRole).toInt()) {
-    case Transaction::RecvWithAddress:
-    case Transaction::RecvFromOther:
-        return tr("Received");
-    case Transaction::SendToAddress:
-    case Transaction::SendToOther:
-        return tr("Sent");
-    case Transaction::SendToSelf:
-        return tr("Sent to yourself");
-    case Transaction::Generated:
-        return tr("Mined");
-    case Transaction::Other:
-    default:
-        return tr("Other");
-    }
+    return tr("Other");
 }
 
 bool ActivityFilterProxyModel::dateMatches(qint64 timestamp) const
@@ -596,7 +532,6 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
     }
 
     QTextStream stream(&file);
-    const bool grouped = qobject_cast<TransactionActivityModel*>(sourceModel()) != nullptr;
     QStringList header{
         tr("Confirmed"),
         tr("Date"),
@@ -606,7 +541,7 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
         tr("Amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit)),
         tr("ID"),
     };
-    if (grouped) header << tr("Record") << tr("Action ID") << tr("Status")
+    header << tr("Record") << tr("Action ID") << tr("Status")
                         << tr("Action amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit));
     WriteCsvRow(stream, header);
 
@@ -615,8 +550,7 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
         const qint64 timestamp = proxy_index.data(TransactionActivityModel::TimestampRole).toLongLong();
         const auto status = static_cast<Transaction::Status>(proxy_index.data(TransactionActivityModel::StatusRole).toInt());
         const bool confirmed = status == Transaction::Confirming || status == Transaction::Confirmed;
-        const bool replaced = grouped
-            && !proxy_index.data(TransactionActivityModel::ReplacedByTxidRole).toString().isEmpty()
+        const bool replaced = !proxy_index.data(TransactionActivityModel::ReplacedByTxidRole).toString().isEmpty()
             && (!proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()
                 || proxy_index.data(TransactionActivityModel::DepthRole).toInt() <= 0);
         const CAmount amount = replaced ? 0 : proxy_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
@@ -625,7 +559,7 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
         QString status_label;
         if (pending_request) status_label = tr("Awaiting payment");
         else if (replaced) status_label = tr("Replaced");
-        else if (grouped && !proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()) status_label = tr("Unknown");
+        else if (!proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()) status_label = tr("Unknown");
         else {
             switch (status) {
             case Transaction::Confirmed: status_label = tr("Confirmed"); break;
@@ -647,13 +581,13 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
             QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
             pending_request ? QString{} : proxy_index.data(TransactionActivityModel::TxidRole).toString(),
         };
-        if (grouped) values << (pending_request ? tr("Payment request") : tr("Transaction")) << QString{} << status_label << QString{};
+        values << (pending_request ? tr("Payment request") : tr("Transaction")) << QString{} << status_label << QString{};
         WriteCsvRow(stream, values);
 
         // Keep the wallet impact (including fees) only on the parent. Action
         // amounts describe individual movements and are not wallet balance deltas.
         const auto actions = proxy_index.data(TransactionActivityModel::ActionsRole).toList();
-        if (!grouped || pending_request || actions.size() <= 1) continue;
+        if (pending_request || actions.size() <= 1) continue;
         for (const auto& value : actions) {
             const auto action = value.toMap();
             const int direction = action.value("direction").toInt();

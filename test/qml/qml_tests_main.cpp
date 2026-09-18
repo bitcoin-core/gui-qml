@@ -977,7 +977,6 @@ class MockWalletQmlModel : public QObject
     Q_OBJECT
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
-    Q_PROPERTY(QObject* activityListModel READ activityListModel CONSTANT)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
@@ -1035,7 +1034,6 @@ public:
 
     QString m_name{QStringLiteral("testwallet")};
     QString m_balance{QStringLiteral("1.00000000 BTC")};
-    QObject* m_activity_list_model{nullptr};
     QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
     QObject* m_recipients{nullptr};
@@ -1062,7 +1060,6 @@ public:
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
 
-    QObject* activityListModel() const { return m_activity_list_model; }
     QObject* transactionActivityModel() const { return m_transaction_activity_model; }
     QObject* bumpModel() const { return m_bump_model; }
     QObject* recipients() const { return m_recipients; }
@@ -1134,7 +1131,6 @@ public:
             return 1;
         }
     }
-    void setActivityListModel(QObject* model) { m_activity_list_model = model; }
     void setTransactionActivityModel(QObject* model) { m_transaction_activity_model = model; }
     void setBumpModel(QObject* model) { m_bump_model = model; }
     void setRecipients(QObject* model) { m_recipients = model; }
@@ -3093,213 +3089,6 @@ private:
     QVariantList m_rows;
 };
 
-class MockActivityListModel : public QAbstractListModel
-{
-    Q_OBJECT
-    Q_PROPERTY(int count READ count NOTIFY countChanged)
-
-public:
-    enum Roles {
-        AddressRole = Qt::UserRole + 1,
-        AmountRole,
-        DateRole,
-        DepthRole,
-        LabelRole,
-        StatusRole,
-        TypeRole,
-        TxidRole,
-        ReplacesTxidRole,
-        ReplacedByTxidRole,
-        IsPendingRequestRole,
-        RequestIdRole,
-        TimestampRole,
-        NetAmountSatRole,
-        OutputIndexRole,
-        IsUsedAddressRequestRole,
-        CountsForBalanceRole
-    };
-
-    int rowCount(const QModelIndex& parent = QModelIndex{}) const override
-    {
-        Q_UNUSED(parent);
-        return m_count;
-    }
-
-    int count() const { return m_count; }
-
-    QVariant data(const QModelIndex& index, int role) const override
-    {
-        if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
-        if (role == LabelRole && !m_label_override.isEmpty()) return m_label_override;
-        if (index.row() == m_used_request_row) {
-            switch (role) {
-            case IsPendingRequestRole: return true;
-            case IsUsedAddressRequestRole: return true;
-            case TxidRole: return QString{};
-            case RequestIdRole: return QStringLiteral("used-req-1");
-            case NetAmountSatRole: return 0; // a request created without an amount
-            default: break;
-            }
-        }
-        if (role == IsUsedAddressRequestRole) return false;
-        if (index.row() == 0) {
-            switch (role) {
-            case AddressRole: return QStringLiteral("bcrt1qreceiveaddress");
-            case AmountRole: return QStringLiteral("+0.01000000 BTC");
-            case DateRole: return QStringLiteral("2026-01-01 00:00");
-            case DepthRole: return 3;
-            case LabelRole: return QStringLiteral("salary");
-            case StatusRole: return MockTransaction::Confirmed;
-            case TypeRole: return MockTransaction::RecvWithAddress;
-            case TxidRole: return QStringLiteral("aaaa");
-            case ReplacesTxidRole: return QString{};
-            case ReplacedByTxidRole: return QString{};
-            case IsPendingRequestRole: return false;
-            case RequestIdRole: return QString{};
-            case TimestampRole: return 1767225600;
-            case NetAmountSatRole: return 1000000;
-            case OutputIndexRole: return 0;
-            case CountsForBalanceRole: return true;
-            default: return {};
-            }
-        }
-        const bool first_send_output = index.row() >= 2;
-        switch (role) {
-        case AddressRole: return first_send_output
-                ? QStringLiteral("bcrt1qfirstsendaddress")
-                : QStringLiteral("bcrt1qsecondsendaddress");
-        case AmountRole: return first_send_output
-                ? QStringLiteral("-0.00200000 BTC")
-                : QStringLiteral("-0.00100000 BTC");
-        case DateRole: return QStringLiteral("2026-01-02 00:00");
-        case DepthRole: return 0;
-        case LabelRole: return QStringLiteral("coffee");
-        case StatusRole: return MockTransaction::Unconfirmed;
-        case TypeRole: return MockTransaction::SendToAddress;
-        case TxidRole: return QStringLiteral("bbbb");
-        case ReplacesTxidRole: return QString{};
-        case ReplacedByTxidRole: return QString{};
-        case IsPendingRequestRole: return false;
-        case RequestIdRole: return QString{};
-        case TimestampRole: return 1767312000;
-        case NetAmountSatRole: return first_send_output ? -200000 : -100000;
-        case OutputIndexRole: return first_send_output ? 1 : 2;
-        case CountsForBalanceRole: return false;
-        default: return {};
-        }
-    }
-
-    QHash<int, QByteArray> roleNames() const override
-    {
-        return {
-            {AddressRole, "address"},
-            {AmountRole, "amount"},
-            {DateRole, "date"},
-            {DepthRole, "depth"},
-            {LabelRole, "label"},
-            {StatusRole, "status"},
-            {TypeRole, "type"},
-            {TxidRole, "txid"},
-            {ReplacesTxidRole, "replacesTxid"},
-            {ReplacedByTxidRole, "replacedByTxid"},
-            {IsPendingRequestRole, "isPendingRequest"},
-            {RequestIdRole, "requestId"},
-            {TimestampRole, "timestamp"},
-            {NetAmountSatRole, "netAmountSat"},
-            {OutputIndexRole, "outputIndex"},
-            {IsUsedAddressRequestRole, "isUsedAddressRequest"},
-            {CountsForBalanceRole, "countsForBalance"},
-        };
-    }
-
-    Q_INVOKABLE void reload() {}
-    Q_INVOKABLE QVariantMap firstTransactionDetails(const QString& txid) const
-    {
-        int first_row{-1};
-        int first_output{std::numeric_limits<int>::max()};
-        for (int row = 0; row < rowCount(); ++row) {
-            const QModelIndex model_index = index(row, 0);
-            if (data(model_index, TxidRole).toString() != txid) continue;
-            const int output_index = data(model_index, OutputIndexRole).toInt();
-            if (output_index < first_output) {
-                first_row = row;
-                first_output = output_index;
-            }
-        }
-        return transactionDetailsForRow(first_row);
-    }
-
-    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const
-    {
-        for (int row = 0; row < rowCount(); ++row) {
-            const QModelIndex model_index = index(row, 0);
-            if (data(model_index, TxidRole).toString() == txid
-                && data(model_index, OutputIndexRole).toInt() == output_index) {
-                return transactionDetailsForRow(row);
-            }
-        }
-        return {};
-    }
-
-    Q_INVOKABLE void setCountForTest(int count)
-    {
-        if (m_count == count) return;
-        beginResetModel();
-        m_count = count;
-        endResetModel();
-        Q_EMIT countChanged();
-    }
-
-    // Marks one row as a used-address payment request (-1 for none), so tests
-    // can cover the paid-request rendering path in the Activity delegate.
-    Q_INVOKABLE void setUsedAddressRequestRowForTest(int row)
-    {
-        if (m_used_request_row == row) return;
-        beginResetModel();
-        m_used_request_row = row;
-        endResetModel();
-        Q_EMIT countChanged();
-    }
-
-    Q_INVOKABLE void setLabelOverrideForTest(const QString& label)
-    {
-        m_label_override = label;
-        if (rowCount() > 0) {
-            Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {LabelRole});
-        }
-    }
-
-Q_SIGNALS:
-    void countChanged();
-
-private:
-    QVariantMap transactionDetailsForRow(int row) const
-    {
-        if (row < 0 || row >= rowCount()) return {};
-        const QModelIndex model_index = index(row, 0);
-        return {
-            {"txid", data(model_index, TxidRole)},
-            {"outputIndex", data(model_index, OutputIndexRole)},
-            // Bump eligibility is only read when details open, mirroring
-            // the real model, which exposes no per-row role for it.
-            {"canBump", row != 0},
-            {"replacedByTxid", data(model_index, ReplacedByTxidRole)},
-            {"amount", data(model_index, AmountRole)},
-            {"date", data(model_index, DateRole)},
-            {"depth", data(model_index, DepthRole)},
-            {"type", data(model_index, TypeRole)},
-            {"status", data(model_index, StatusRole)},
-            {"address", data(model_index, AddressRole)},
-            {"label", data(model_index, LabelRole)},
-            {"paymentRequests", QVariantList{}},
-        };
-    }
-
-    int m_count{2};
-    int m_used_request_row{-1};
-    QString m_label_override;
-};
-
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -4014,13 +3803,11 @@ public Q_SLOTS:
         static MockWalletQmlModel wallet_model;
         static MockWalletController wallet_controller;
         static MockWalletListModel wallet_list_model;
-        static MockActivityListModel activity_list_model;
         static MockTransactionActivityModel transaction_activity_model;
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
         recipients_model.setCurrent(&send_recipient);
-        wallet_model.setActivityListModel(&activity_list_model);
         wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
         wallet_model.setRecipients(&recipients_model);
@@ -4080,7 +3867,6 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletTransaction"), &wallet_transaction);
         engine->rootContext()->setContextProperty(QStringLiteral("testPaymentRequest"), &payment_request);
-        engine->rootContext()->setContextProperty(QStringLiteral("testActivityListModel"), &activity_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testTransactionActivityModel"), &transaction_activity_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testSendRecipient"), &send_recipient);
         engine->rootContext()->setContextProperty(QStringLiteral("testAutomationEnabled"), false);

@@ -7,7 +7,6 @@
 
 #include <common/messages.h>
 #include <qml/bitcoinamount.h>
-#include <qml/models/activitylistmodel.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/paymentrequest.h>
 #include <qml/models/psbtqmlmodel.h>
@@ -405,7 +404,6 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, inter
 {
     m_receive_requests = new ReceiveRequestHistoryModel(this);
     reloadReceiveRequests();
-    m_activity_list_model = new ActivityListModel(this);
     m_address_list_model = new AddressListModel(this);
     m_bump_transaction_model = new BumpTransactionModel(m_wallet.get(), this);
     m_bump_transaction_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
@@ -431,7 +429,6 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     : QObject(parent)
     , m_node(node)
 {
-    m_activity_list_model = new ActivityListModel(this);
     m_address_list_model = new AddressListModel(this);
     m_bump_transaction_model = new BumpTransactionModel(nullptr, this);
     m_bump_transaction_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
@@ -468,7 +465,6 @@ WalletQmlModel::~WalletQmlModel()
         m_fee_estimation_thread->wait();
     }
     delete m_fee_estimation_worker;
-    delete m_activity_list_model;
     delete m_transaction_activity_model;
     delete m_address_list_model;
     delete m_coins_list_model;
@@ -485,8 +481,7 @@ WalletQmlModel::~WalletQmlModel()
 
 TransactionActivityModel* WalletQmlModel::transactionActivityModel()
 {
-    // Instantiate when the new screen first asks for it. The legacy screen
-    // retains its own model until the Activity.qml migration is complete.
+    // Instantiate when the activity screen first asks for it.
     if (!m_transaction_activity_model) m_transaction_activity_model = new TransactionActivityModel(this);
     return m_transaction_activity_model;
 }
@@ -1005,22 +1000,6 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
         m_receive_requests->prependOrReplace(request_entry);
     }
 
-    if (m_activity_list_model) {
-        if (is_update) {
-            m_activity_list_model->updateReceiveRequest(
-                m_current_payment_request->id(),
-                m_current_payment_request->label(),
-                m_current_payment_request->amount()->satoshi());
-        } else {
-            m_activity_list_model->addReceiveRequest(
-                m_current_payment_request->address(),
-                m_current_payment_request->label(),
-                m_current_payment_request->amount()->satoshi(),
-                request_entry.date.toSecsSinceEpoch(),
-                m_current_payment_request->id());
-        }
-    }
-
     // Keep the address book label in sync with the request label, so the
     // Addresses page and any other address-book reader reflect an edited
     // request, matching what getNewDestination writes at creation time.
@@ -1118,9 +1097,6 @@ bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
         return false;
     }
     m_receive_requests->removeByRequestId(request_id);
-    if (m_activity_list_model) {
-        m_activity_list_model->removePendingReceiveRequest(request_id);
-    }
     return true;
 }
 
@@ -1310,9 +1286,6 @@ void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, co
             continue;
         }
         m_receive_requests->prependOrReplace(entry);
-        if (m_activity_list_model) {
-            m_activity_list_model->updateReceiveRequest(request_id, label, entry.recipient.amount);
-        }
         // A detail page or editor holding this request would otherwise keep
         // showing its stale copy until reloaded. Skip the editor mid-edit so
         // an unsaved draft is not clobbered.
@@ -2384,9 +2357,6 @@ void WalletQmlModel::setDisplayUnit(int unit)
 {
     if (unit != m_display_unit) {
         m_display_unit = unit;
-        if (m_activity_list_model) {
-            m_activity_list_model->setDisplayUnit(unit);
-        }
         if (m_address_list_model) {
             m_address_list_model->setDisplayUnit(unit);
         }

@@ -38,7 +38,7 @@ struct TransactionAction
 
 /** Transaction-level activity, before labels, requests, status and filtering.
  *
- * This is separate from the legacy Transaction records consumed by Activity.qml.
+ * The interpreter is independent of QML model and view state.
  * Interpret WalletTx directly: those records have already lost mixed-input
  * details and allocated fees to individual outputs.
  */

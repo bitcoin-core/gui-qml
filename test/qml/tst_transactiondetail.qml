@@ -57,6 +57,23 @@ TestCase {
         transactionSpy.target = null
         transactionSpy.clear()
     }
+    function test_speed_up_prompts_for_wallet_password() {
+        testBumpModel.requireUnlock = true
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "opened", true)
+        const updateButton = findChild(overlay, "updateTransactionButton")
+        tryCompare(updateButton, "enabled", true)
+        mouseClick(updateButton)
+        const popup = findChild(overlay, "speedUpPassphrasePopup")
+        tryCompare(popup, "opened", true)
+        compare(findChild(overlay, "speedUpPassphraseErrorText").text, "")
+        popup.close()
+        overlay.close()
+        tryCompare(overlay, "visible", false)
+    }
+
     function createDetail(data, properties) {
         const page = createTemporaryObject(detailComponent, this,
             Object.assign({transactionData: data || transaction()}, properties || {}))

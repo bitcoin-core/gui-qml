@@ -5,7 +5,6 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 
-#include <qml/models/activitylistmodel.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
@@ -71,7 +70,6 @@ private:
     Q_PROPERTY(QString balance READ balance NOTIFY balanceChanged)
     Q_PROPERTY(qint64 balanceSatoshi READ balanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(bool hasExternalSigner READ hasExternalSigner CONSTANT)
-    Q_PROPERTY(ActivityListModel* activityListModel READ activityListModel CONSTANT)
     Q_PROPERTY(TransactionActivityModel* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(AddressListModel* addressListModel READ addressListModel CONSTANT)
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
@@ -127,7 +125,6 @@ public:
     Q_INVOKABLE bool loadPaymentRequestDetail(const QString& request_id);
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
 
-    ActivityListModel* activityListModel() const { return m_activity_list_model; }
     TransactionActivityModel* transactionActivityModel();
     AddressListModel* addressListModel() const { return m_address_list_model; }
     BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
@@ -298,7 +295,6 @@ private:
 
     std::unique_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
-    ActivityListModel* m_activity_list_model{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
     BumpTransactionModel* m_bump_transaction_model{nullptr};

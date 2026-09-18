@@ -173,15 +173,12 @@
         <file>pages/settings/StorageSettingsPage.qml</file>
         <file>pages/settings/WalletSectionPage.qml</file>
         <file>pages/settings/WindowBehaviorSettingsPage.qml</file>
-        <file>pages/wallet/Activity.qml</file>
         <file>pages/wallet/ActivityList.qml</file>
         <file>pages/wallet/ActivityListPage.qml</file>
         <file>pages/wallet/ActivityRow.qml</file>
         <file>pages/wallet/ActivityIcon.qml</file>
         <file>pages/wallet/ActivityRequestBadge.qml</file>
-        <file>pages/wallet/ActivityDetails.qml</file>
         <file>pages/wallet/TransactionDetail.qml</file>
-        <file>pages/wallet/ActivityTransactionVisuals.qml</file>
         <file>pages/wallet/AddressList.qml</file>
         <file>pages/wallet/AddressDetails.qml</file>
         <file>pages/wallet/AddressRow.qml</file>
