@@ -380,7 +380,11 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("sendResultViewTransactionButton")
         gui.wait_for_page("activityDetailsPage", timeout_ms=10000)
         assert gui.get_property("activityDetailsPage", "txid") == txid
-        assert gui.get_property("activityDetailsPage", "outputIndex") == receiver_output_index
+        assert gui.get_property("activityDetailsPage", "outputIndex") == -1
+        gui.wait_for_property("activityDetailsPage", "detailsLoading", False, timeout_ms=10000)
+        flow = gui.get_property("transactionDetailFlow", "flow")
+        receiver_output = next(output for output in flow["outputs"] if output["id"] == f"output:{receiver_output_index}")
+        assert receiver_output["address"] == receiver_address
         checkpoints.checkpoint("view transaction opens the sent activity", gui)
         gui.click("activityDetailsBackButton")
         gui.wait_for_property("activityStack", "depth", 1, timeout_ms=10000)
@@ -389,32 +393,29 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("sendCoinControlButtonText", "text", "Select", timeout_ms=10000)
         checkpoints.checkpoint("coin control selection cleared after send", gui)
         gui.click("activityTabButton")
-        gui.wait_for_property("activitySearchToggle", "visible", True, timeout_ms=10000)
-        gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)
         gui.click("activityTypeFilterButton")
         gui.click("activityTypeSent")
+        gui.invoke("activityTypeFilterPopup", "close")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
         wait_until(
-            lambda: gui.get_list_item_property("activityListView", 0, "amount") != "",
+            lambda: gui.get_property(f"activityItem_{txid}", "amount") != "",
             timeout=10,
             description="sent Activity row delegate",
         )
-        activity_amount_text = gui.get_list_item_property("activityListView", 0, "amount")
+        activity_amount_text = gui.get_property(f"activityItem_{txid}", "amount")
         activity_amount_sats = amount_text_to_sats(activity_amount_text)
-        assert activity_amount_text.startswith("-"), (
-            f"Expected sent Activity amount to display with a minus sign, got {activity_amount_text!r}"
+        assert activity_amount_sats == SEND_AMOUNT_SATS, (
+            f"Expected Activity to show the total sent magnitude, got {activity_amount_text!r}"
         )
-        assert activity_amount_sats < 0, (
-            f"Expected sent Activity amount to parse as negative sats, got "
-            f"{activity_amount_text!r} ({activity_amount_sats} sats)"
-        )
-        checkpoints.checkpoint("sent Activity amount sign verified", gui)
+        assert gui.get_property(f"activityItem_{txid}", "netAmountSat") == -SEND_AMOUNT_SATS
+        assert gui.get_property(f"activityItem_{txid}", "incoming") is False
+        checkpoints.checkpoint("sent Activity amount and outgoing wallet impact verified", gui)
 
         print(
             "Send flow passed: preview totals were correct with include-fee off and on, "
-            "the broadcast fee matched the subtract-fee preview, and Activity showed the "
-            "sent amount as negative."
+            "the broadcast fee matched the subtract-fee preview, and Activity showed "
+            "the outgoing amount with the correct wallet impact."
         )
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context for functional test output

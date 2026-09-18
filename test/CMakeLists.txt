@@ -110,11 +110,16 @@ target_include_directories(bitcoinqml_qmltests
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
+# Pixel assertions need a platform that supports grabbing rendered windows.
+# Keep the focus-sensitive interaction tests on the minimal platform.
+add_test(NAME bitcoinqml_rendering_tests COMMAND bitcoinqml_qmltests -platform offscreen -input :/test/rendering)
+set_tests_properties(bitcoinqml_rendering_tests PROPERTIES ENVIRONMENT "QT_QUICK_BACKEND=software")
+
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_unit_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_qml_plugins(bitcoinqml_unit_tests)
-  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QOffscreenIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
   qt6_import_qml_plugins(bitcoinqml_qmltests)
   target_link_libraries(bitcoinqml_qmltests PRIVATE
     Qt6::LabsPlatformplugin

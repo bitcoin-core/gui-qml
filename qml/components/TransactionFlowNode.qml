@@ -134,6 +134,7 @@ Rectangle {
             model: root.requests
             delegate: AbstractButton {
                 required property var modelData
+                objectName: "transactionFlowRequest_" + modelData.requestId
                 Layout.fillWidth: true
                 implicitHeight: 36
                 enabled: root.interactive

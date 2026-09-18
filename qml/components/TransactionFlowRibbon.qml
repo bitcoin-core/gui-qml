@@ -23,9 +23,9 @@ ShapePath {
     fillGradient: ribbon.proportional ? gradient : null
 
     property LinearGradient gradient: LinearGradient {
-        x1: root.ribbon.startX
+        x1: root.ribbon.startX || 0
         y1: 0
-        x2: root.ribbon.endX
+        x2: root.ribbon.endX || 0
         y2: 0
         GradientStop { position: 0; color: root.sourceColor }
         GradientStop { position: 1; color: root.targetColor }

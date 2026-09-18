@@ -376,7 +376,7 @@ def case_created_wallet_send(harness, checkpoints):
     checkpoints.checkpoint("wallet restarted locked", gui)
 
     gui.click("activityTabButton")
-    gui.wait_for_property("activitySearchToggle", "visible", True, timeout_ms=5000)
+    gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("locked wallet activity visible", gui)
 
     open_send_tab(gui)
@@ -464,7 +464,7 @@ def case_import_encrypted_wallet(harness, checkpoints):
     checkpoints.checkpoint("encrypted wallet imported locked", gui)
 
     gui.click("activityTabButton")
-    gui.wait_for_property("activitySearchToggle", "visible", True, timeout_ms=5000)
+    gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("imported locked wallet activity visible", gui)
 
 

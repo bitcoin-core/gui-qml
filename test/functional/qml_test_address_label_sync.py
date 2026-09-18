@@ -3,7 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Reverse label sync: editing an address label on the Addresses page updates the
-matching payment request and its Activity row, not just the address book."""
+matching payment request and Activity search while preserving private notes."""
 
 import sys
 
@@ -21,6 +21,7 @@ from qml_wallet_test_lib import WalletFlowHarness
 
 ORIGINAL_LABEL = "Alice"
 NEW_LABEL = "Renamed on Addresses page"
+PRIVATE_NOTE = "Private lunch note"
 
 
 def _address_row_index(gui, address):
@@ -38,7 +39,7 @@ def _activity_request_label(gui):
     gui.set_property("activityListView", "currentIndex", 0)
     gui.invoke("activityListView", "forceLayout")
     gui.settle()
-    return gui.get_list_item_property("activityListView", 0, "label")
+    return gui.get_property("activityRequest_1", "label")
 
 
 def run_test():
@@ -49,13 +50,13 @@ def run_test():
         # Save a payment request labelled ORIGINAL_LABEL; creating it also labels
         # its receive address in the address book.
         _open_receive(gui)
-        _create_request(gui, "0.0001", ORIGINAL_LABEL, "pizza")
+        _create_request(gui, "0.0001", ORIGINAL_LABEL, "pizza", note_self=PRIVATE_NOTE)
         request_address = _address_from_bip21(_request_qr_payload(gui))
 
-        # The pending request shows the original label in Activity.
+        # Activity displays the private note, independently of the public name.
         _open_activity(gui)
-        assert _activity_request_label(gui) == ORIGINAL_LABEL, (
-            f"Expected Activity request label {ORIGINAL_LABEL!r}, "
+        assert _activity_request_label(gui) == PRIVATE_NOTE, (
+            f"Expected private Activity note {PRIVATE_NOTE!r}, "
             f"got {_activity_request_label(gui)!r}"
         )
 
@@ -73,12 +74,14 @@ def run_test():
             "Addresses page did not show the edited label"
         )
 
-        # Surface 2: the reverse sync carried the edit to the request's Activity row.
+        # Surface 2: Activity search follows the updated name without changing its private note.
         _open_activity(gui)
+        gui.set_text("activitySearchField", NEW_LABEL)
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         actual = _activity_request_label(gui)
-        assert actual == NEW_LABEL, (
-            "Activity request row did not follow the Addresses-page label edit: "
-            f"expected {NEW_LABEL!r}, got {actual!r}"
+        assert actual == PRIVATE_NOTE, (
+            "Address label edit changed the private Activity note: "
+            f"expected {PRIVATE_NOTE!r}, got {actual!r}"
         )
 
         # Surface 3: the Receive tab kept the request open in its locked editor

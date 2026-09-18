@@ -118,6 +118,11 @@ jobs:
           restore-keys: |
             ${{ matrix.cache-id }}-depends-built-
 
+      - name: Invalidate download stamps from older recipes
+        if: steps.depends-sources-cache.outputs.cache-hit != 'true'
+        # Stamps only identify the main archive and can omit newly added sources.
+        run: rm -rf bitcoin/depends/sources/download-stamps
+
       - name: Build depends
         run: |
           cd bitcoin/depends

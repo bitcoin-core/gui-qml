@@ -152,7 +152,9 @@ ColumnLayout {
                         Instantiator {
                             // Keep paths alive while card measurements change. Replacing
                             // the array model rebuilds every path for each measured card.
-                            model: root.geometry.ribbons.length
+                            // Qt 6.4 retains the previous delegates for a numeric
+                            // model of zero. An empty array clears them correctly.
+                            model: root.geometry.ribbons.length || []
                             delegate: TransactionFlowRibbon {
                                 required property int index
                                 ribbon: root.geometry.ribbons[index] || {}

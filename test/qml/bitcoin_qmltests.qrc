@@ -1,4 +1,7 @@
 <!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/test/rendering">
+        <file>tst_transactionflow_rendering.qml</file>
+    </qresource>
     <qresource prefix="/test/qml">
         <file>tst_transactionflow.qml</file>
         <file>tst_transactiondetail.qml</file>

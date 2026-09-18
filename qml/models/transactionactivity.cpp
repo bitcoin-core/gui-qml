@@ -29,6 +29,14 @@ std::optional<TransactionActivity> TransactionActivity::fromWalletTx(const inter
     activity.timestamp = wtx.time;
     activity.wallet_debit = wtx.debit;
     activity.wallet_credit = wtx.credit;
+    if (wtx.is_coinbase) {
+        // WalletTx::credit excludes immature rewards. Activity still shows
+        // their owned output value while the status explains spendability.
+        activity.wallet_credit = 0;
+        for (size_t i{0}; i < wtx.tx->vout.size(); ++i) {
+            if (wtx.txout_is_mine[i]) activity.wallet_credit += wtx.tx->vout[i].nValue;
+        }
+    }
     if (const auto it = wtx.value_map.find("replaces_txid"); it != wtx.value_map.end()) {
         activity.replaces_txid = QString::fromStdString(it->second);
     }

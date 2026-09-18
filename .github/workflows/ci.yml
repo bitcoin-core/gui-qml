@@ -18,11 +18,14 @@ jobs:
             image: ubuntu-22.04
             # Jammy's default GCC 11 is below Bitcoin Core's GCC 12.1 minimum.
             extra_packages: 'g++-12'
+            svg_package: 'libqt6svg6-dev'
             cmake_options: '-DCMAKE_CXX_COMPILER=g++-12'
           - job_name: 'Ubuntu 24.04, Qt 6.4'
             image: ubuntu-24.04
+            svg_package: 'qt6-svg-dev'
           - job_name: 'Ubuntu 26.04, Qt 6.10'
             image: ubuntu-26.04
+            svg_package: 'qt6-svg-dev'
 
     env:
       BUILD_APP_TESTS: ON
@@ -43,7 +46,7 @@ jobs:
             libsqlite3-dev \
             zlib1g-dev \
             libboost-all-dev \
-            qt6-svg-dev qt6-base-dev \
+            ${{ matrix.svg_package }} qt6-base-dev \
             qt6-base-dev-tools \
             qt6-tools-dev \
             qt6-l10n-tools \

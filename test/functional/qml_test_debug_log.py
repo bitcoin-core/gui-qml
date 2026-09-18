@@ -148,7 +148,7 @@ def test_page_structure(gui):
         (page_width - content_width) / 2,
         "debug log content centering",
     )
-    assert_close(gui.get_property("debugLogOptionsButton", "height"), 36, "options")
+    assert_close(gui.get_property("debugLogOptionsButton", "height"), 40, "options")
     assert gui.get_property("debugLogOptionsButton", "iconSource") == "image://images/ellipsis"
     assert_close(gui.get_property("debugLogSearchField", "height"), 40, "search")
     assert_close(gui.get_property("debugLogTitlesHeader", "height"), 44, "table header")

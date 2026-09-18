@@ -351,6 +351,10 @@ void TransactionActivityTests::classifiesWalletActivity_data()
     QTest::newRow("coinbase-with-multiple-wallet-outputs")
         << MakeWalletTx({{0, false}}, {{100'000'000, true}, {212'500'000, true}}, true)
         << Type::Mined << qint64{312'500'000} << qint64{-1} << 0 << 2 << 0;
+    auto immature = MakeWalletTx({{0, false}}, {{100'000'000, true}, {200'000'000, false}, {12'500'000, true}}, true);
+    immature.credit = 0;
+    QTest::newRow("immature-coinbase-keeps-owned-reward")
+        << immature << Type::Mined << qint64{112'500'000} << qint64{-1} << 0 << 2 << 0;
     QTest::newRow("fee-only-transaction-keeps-parent")
         << MakeWalletTx({{1'000, true}}, {{0, false, false, true}})
         << Type::Other << qint64{-1'000} << qint64{1'000} << 0 << 0 << 0;
