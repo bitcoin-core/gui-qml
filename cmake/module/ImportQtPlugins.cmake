@@ -35,5 +35,8 @@ function(import_plugins target)
         networkinformation
         tls
     )
+    if(NOT ${target} MATCHES "-legacy$")
+      qt6_import_qml_plugins(${target})
+    endif()
   endif()
 endfunction()
