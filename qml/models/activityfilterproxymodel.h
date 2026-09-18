@@ -15,6 +15,8 @@
 #include <QSortFilterProxyModel>
 #include <QString>
 
+#include <optional>
+
 class ActivityFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
@@ -136,6 +138,7 @@ protected:
 private:
     bool typeMatches(const QModelIndex& source_index, TypeFilter type) const;
     void updateAvailableMaxAmount();
+    void invalidatePendingBalance();
     QString exportTypeLabelForIndex(const QModelIndex& proxy_index) const;
     bool dateMatches(qint64 timestamp) const;
     QString normalizedExportPath(const QString& path) const;
@@ -147,6 +150,7 @@ private:
     CAmount m_min_amount{-1};
     CAmount m_max_amount{-1};
     CAmount m_available_max_amount{0};
+    mutable std::optional<CAmount> m_pending_balance;
     QList<QMetaObject::Connection> m_source_connections;
     QDate m_range_start;
     QDate m_range_end;

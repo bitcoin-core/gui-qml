@@ -323,22 +323,50 @@ void TransactionActivityModel::rebuildRows()
     const int old_count = m_rows.size();
     int old_requests{0};
     for (const auto& row : m_rows) old_requests += row.value(IsPendingRequestRole).toBool();
+    int first_changed{-1}, last_changed{-1};
+    QList<int> changed_roles;
+    const auto flush_changes = [&] {
+        if (first_changed < 0) return;
+        Q_EMIT dataChanged(index(first_changed), index(last_changed), changed_roles);
+        first_changed = last_changed = -1;
+        changed_roles.clear();
+    };
     int i{0};
-    for (auto it = rows.cbegin(); it != rows.cend(); ++it, ++i) {
-        while (i < m_rows.size() && m_rows[i].value(IdRole).toString() < it.key()) {
-            beginRemoveRows({}, i, i);
-            m_rows.removeAt(i);
+    for (auto it = rows.cbegin(); it != rows.cend();) {
+        int remove_end = i;
+        while (remove_end < m_rows.size() && m_rows[remove_end].value(IdRole).toString() < it.key()) ++remove_end;
+        if (remove_end > i) {
+            flush_changes();
+            beginRemoveRows({}, i, remove_end - 1);
+            m_rows.erase(m_rows.begin() + i, m_rows.begin() + remove_end);
             endRemoveRows();
         }
         if (i == m_rows.size() || m_rows[i].value(IdRole).toString() != it.key()) {
-            beginInsertRows({}, i, i);
-            m_rows.insert(i, it.value());
+            flush_changes();
+            auto end = it;
+            while (end != rows.cend() && (i == m_rows.size() || end.key() < m_rows[i].value(IdRole).toString())) ++end;
+            const int added = std::distance(it, end);
+            beginInsertRows({}, i, i + added - 1);
+            m_rows.insert(i, added, Row{});
+            while (it != end) m_rows[i++] = (it++).value();
             endInsertRows();
-        } else if (m_rows[i] != it.value()) {
-            m_rows[i] = it.value();
-            Q_EMIT dataChanged(index(i), index(i));
+            continue;
         }
+        if (m_rows[i] != it.value()) {
+            for (auto role = it->cbegin(); role != it->cend(); ++role) {
+                if (m_rows[i].value(role.key()) != role.value() && !changed_roles.contains(role.key())) changed_roles.append(role.key());
+            }
+            for (auto role = m_rows[i].cbegin(); role != m_rows[i].cend(); ++role) {
+                if (!it->contains(role.key()) && !changed_roles.contains(role.key())) changed_roles.append(role.key());
+            }
+            m_rows[i] = it.value();
+            if (first_changed < 0) first_changed = i;
+            last_changed = i;
+        }
+        ++i;
+        ++it;
     }
+    flush_changes();
     if (i < m_rows.size()) {
         beginRemoveRows({}, i, m_rows.size() - 1);
         m_rows.erase(m_rows.begin() + i, m_rows.end());

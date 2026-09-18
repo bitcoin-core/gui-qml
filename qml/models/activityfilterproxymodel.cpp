@@ -70,8 +70,12 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
     connect(this, &QAbstractItemModel::rowsRemoved, this, &ActivityFilterProxyModel::countChanged);
     connect(this, &QAbstractItemModel::modelReset, this, &ActivityFilterProxyModel::countChanged);
     connect(this, &QAbstractItemModel::layoutChanged, this, &ActivityFilterProxyModel::countChanged);
-    connect(this, &ActivityFilterProxyModel::countChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
-    connect(this, &QAbstractItemModel::dataChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
+    connect(this, &ActivityFilterProxyModel::countChanged, this, &ActivityFilterProxyModel::invalidatePendingBalance);
+    connect(this, &QAbstractItemModel::dataChanged, this,
+        [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+            if (roles.isEmpty() || roles.contains(TransactionActivityModel::IsPendingRole)
+                || roles.contains(TransactionActivityModel::NetAmountSatRole) || roles.contains(TransactionActivityModel::IsPendingRequestRole)) invalidatePendingBalance();
+        });
     connect(this, &ActivityFilterProxyModel::displayUnitChanged, this, &ActivityFilterProxyModel::pendingBalanceChanged);
 }
 
@@ -121,6 +125,21 @@ void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* source_model)
         m_source_connections << connect(source_model, &QAbstractItemModel::dataChanged, this,
             [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
                 if (roles.isEmpty() || roles.contains(TransactionActivityModel::NetAmountSatRole) || roles.contains(TransactionActivityModel::IsPendingRequestRole)) updateAvailableMaxAmount();
+                // The proxy's derived roles and custom predicates depend on
+                // several source roles, not just Qt's default DisplayRole.
+                const auto changed = [&roles](int role) { return roles.isEmpty() || roles.contains(role); };
+                if (changed(TransactionActivityModel::TimestampRole) || changed(TransactionActivityModel::IsPendingRole)) {
+                    invalidate();
+                    if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionKeyRole, SectionLabelRole, DateTimeLabelRole});
+                } else if ((!m_search_text.isEmpty() && (changed(TransactionActivityModel::SearchTextRole)
+                        || changed(TransactionActivityModel::AddressRole) || changed(TransactionActivityModel::LabelRole)))
+                    || (!m_type_filters.isEmpty() && (changed(TransactionActivityModel::ActivityTypeRole)
+                        || changed(TransactionActivityModel::ActionsRole) || changed(TransactionActivityModel::HasPaymentRequestRole)
+                        || changed(TransactionActivityModel::TypeRole)))
+                    || ((m_min_amount >= 0 || m_max_amount >= 0) && changed(TransactionActivityModel::NetAmountSatRole))
+                    || changed(TransactionActivityModel::IsPendingRequestRole)) {
+                    invalidateFilter();
+                }
             });
         m_source_connections << connect(source_model, &QObject::destroyed, this, [this] {
             m_available_max_amount = 0;
@@ -343,8 +362,15 @@ int ActivityFilterProxyModel::transactionCount() const
     return rowCount() - requestCount();
 }
 
+void ActivityFilterProxyModel::invalidatePendingBalance()
+{
+    m_pending_balance.reset();
+    Q_EMIT pendingBalanceChanged();
+}
+
 CAmount ActivityFilterProxyModel::pendingBalanceSat() const
 {
+    if (m_pending_balance) return *m_pending_balance;
     CAmount total{0};
     for (int row = 0; row < rowCount(); ++row) {
         const auto item = index(row, 0);
@@ -353,6 +379,7 @@ CAmount ActivityFilterProxyModel::pendingBalanceSat() const
             total += item.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
         }
     }
+    m_pending_balance = total;
     return total;
 }
 
