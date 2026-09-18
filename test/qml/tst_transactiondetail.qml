@@ -205,7 +205,14 @@ TestCase {
         const overlay = findChild(page, "speedUpOverlay")
         tryCompare(overlay, "opened", true)
         verify(overlay.readyToConfirm)
-        overlay.close()
+        compare(overlay.verticalOffset, 0)
+        compare(overlay.background.color, Theme.color.neutral1)
+        compare(overlay.background.border.color, Theme.color.neutral3)
+        compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.neutral2)
+        compare(findChild(overlay.contentItem, "speedUpOriginalFeeRow").value, testBumpModel.oldFee)
+        compare(findChild(overlay.contentItem, "speedUpNewFeeRow").value, testBumpModel.newFee)
+        mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
+        tryCompare(overlay, "visible", false)
     }
     function test_full_width_scroll_and_narrow_layout() {
         const page = createDetail(transaction(), {width: 390, height: 650})

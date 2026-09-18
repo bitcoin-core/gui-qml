@@ -12,6 +12,13 @@ PageStack {
     objectName: "activityStack"
     property var wallet: walletController.selectedWallet
 
+    replaceEnter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
+    }
+    replaceExit: Transition {
+        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.OutCubic }
+    }
+
     function detailProperties(txid, outputIndex) {
         if (!wallet) return {}
         const transaction = wallet.transactionActivityModel.transactionDetails(txid, true)
@@ -32,8 +39,15 @@ PageStack {
             details = detailProperties(txid, outputIndex)
         }
         if (!details.transactionData) return
-        stackView.pop(null)
-        const page = stackView.push("TransactionDetail.qml", details)
+        let page
+        if (stackView.currentItem && stackView.currentItem.objectName === "activityDetailsPage") {
+            // Remove the old detail and insert the new one in the same stack
+            // position, without briefly revealing the list or sliding pages.
+            page = stackView.replace(stackView.currentItem, "TransactionDetail.qml", details, StackView.ReplaceTransition)
+        } else {
+            stackView.pop(null)
+            page = stackView.push("TransactionDetail.qml", details)
+        }
         page.showTransaction.connect(stackView.navigateToTransaction)
     }
 
