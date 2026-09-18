@@ -17,9 +17,11 @@ jobs:
           - job_name: 'Ubuntu 22.04, Qt 6.2'
             image: ubuntu-22.04
             # Jammy's default GCC 11 is below Bitcoin Core's GCC 12.1 minimum.
-            extra_packages: 'g++-12'
+            extra_packages: 'g++-12 xvfb xauth'
             svg_package: 'libqt6svg6-dev'
-            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12'
+            # Qt 6.2's offscreen plugin cannot capture software-rendered images.
+            cmake_options: '-DCMAKE_CXX_COMPILER=g++-12 -DQML_TEST_RENDERING_PLATFORM=xcb'
+            test_wrapper: 'xvfb-run -a'
           - job_name: 'Ubuntu 24.04, Qt 6.4'
             image: ubuntu-24.04
             svg_package: 'qt6-svg-dev'
@@ -79,4 +81,4 @@ jobs:
 
       - name: Run tests
         if: env.BUILD_APP_TESTS == 'ON'
-        run: ctest --test-dir build --output-on-failure
+        run: ${{ matrix.test_wrapper }} ctest --test-dir build --output-on-failure

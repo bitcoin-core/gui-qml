@@ -74,6 +74,7 @@ Rectangle {
             horizontalAlignment: Text.AlignLeft
         }
         AddressLabel {
+            objectName: "transactionFlowAddress_" + root.entry.id
             visible: !!root.entry.address
             Layout.fillWidth: true
             address: root.entry.address || ""

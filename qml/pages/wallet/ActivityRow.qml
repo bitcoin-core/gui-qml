@@ -82,7 +82,7 @@ Item {
 
     MouseArea {
         anchors.fill: parent
-        z: 1
+        z: 2
         acceptedButtons: Qt.RightButton
         onClicked: function(mouse) { root.contextMenuRequested(mouse.x, mouse.y) }
     }
@@ -95,7 +95,7 @@ Item {
         id: rowSurface
         objectName: "activityRowBackground"
         anchors.fill: parent
-        color: parentButton.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
+        color: rowHover.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
         radius: 16
         Rectangle {
             anchors.top: parent.top
@@ -117,6 +117,9 @@ Item {
         id: parentButton
         objectName: "activityRowOpenButton"
         anchors.fill: parent
+        // Keep mouse handling above the passive content: disabled address
+        // controls can still consume hover events on Qt 6.2.
+        z: 1
         padding: 0
         hoverEnabled: AppMode.isDesktop
         focusPolicy: Qt.StrongFocus
@@ -125,7 +128,11 @@ Item {
         Accessible.description: [root.hasAmount ? root.amount : "", root.address, root.metadata,
             root.hasChildren ? qsTr("%1 actions").arg(root.actions.length) : ""].filter(function(value) { return value.length > 0 }).join(". ")
         onClicked: root.activated(root.txid, root.requestId, root.isPendingRequest)
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        HoverHandler {
+            id: rowHover
+            enabled: AppMode.isDesktop
+            cursorShape: Qt.PointingHandCursor
+        }
         background: Item {
             FocusBorder {
                 visible: parentButton.visualFocus
@@ -140,7 +147,6 @@ Item {
 
     Item {
         id: parentContent
-        parent: parentButton
         readonly property real topPadding: root.isCompact ? 6 : root.hasChildren ? 18 : 8
         readonly property real bottomPadding: root.isCompact ? 6 : 8
         width: parent.width
@@ -254,7 +260,6 @@ Item {
 
     Column {
         id: childrenColumn
-        parent: parentButton
         objectName: "activityRowChildren"
         anchors.top: parentContent.bottom
         width: parent.width

@@ -59,6 +59,7 @@
         <file>components/ConfirmationPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
+        <file>components/TransactionDetailsGrid.qml</file>
         <file>components/TransactionFlowNode.qml</file>
         <file>components/TransactionFlowRibbon.qml</file>
         <file>components/TransactionFlowLayout.js</file>

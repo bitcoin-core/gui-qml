@@ -382,9 +382,9 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         assert gui.get_property("activityDetailsPage", "txid") == txid
         assert gui.get_property("activityDetailsPage", "outputIndex") == -1
         gui.wait_for_property("activityDetailsPage", "detailsLoading", False, timeout_ms=10000)
-        flow = gui.get_property("transactionDetailFlow", "flow")
-        receiver_output = next(output for output in flow["outputs"] if output["id"] == f"output:{receiver_output_index}")
-        assert receiver_output["address"] == receiver_address
+        receiver_output = f"transactionFlowAddress_output:{receiver_output_index}"
+        gui.wait_for_property(receiver_output, "address", receiver_address, timeout_ms=10000)
+        assert gui.get_property(receiver_output, "visible") is True
         checkpoints.checkpoint("view transaction opens the sent activity", gui)
         gui.click("activityDetailsBackButton")
         gui.wait_for_property("activityStack", "depth", 1, timeout_ms=10000)
