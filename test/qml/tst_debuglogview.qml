@@ -315,7 +315,7 @@ TestCase {
         tryCompare(inactiveFilterIcon, "scale", 1)
         tryCompare(activeFilterIcon, "opacity", 0)
         tryCompare(activeFilterIcon, "scale", filterButton.minimizedIconScale)
-        compare(inactiveFilterIcon.color, Theme.color.neutral6)
+        tryCompare(inactiveFilterIcon, "color", Theme.color.neutral6)
         compare(reopenedAllOption.selected, true)
         compare(reopenedWarningsAndErrorsOption.selected, false)
     }

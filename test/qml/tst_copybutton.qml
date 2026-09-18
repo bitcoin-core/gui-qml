@@ -93,7 +93,8 @@ TestCase {
     }
 
     function test_clickShowsCopiedThenResets() {
-        const button = createButton({ "resetInterval": 300 })
+        // Hold the copied state until its visual assertions have completed.
+        const button = createButton({ "resetInterval": 60000 })
         const copyIcon = findChild(button, "copyButtonCopyIcon")
         const copiedIcon = findChild(button, "copyButtonCopiedIcon")
         const copyText = findChild(button, "copyButtonCopyText")
@@ -110,7 +111,9 @@ TestCase {
         tryCompare(copyText, "opacity", 0)
         tryCompare(copiedText, "opacity", 1)
 
-        tryCompare(button, "copied", false, 500)
+        // Re-arm the running timer only after checking the copied appearance.
+        button.resetInterval = 1
+        tryCompare(button, "copied", false)
         compare(button.text, "Copy")
         tryCompare(copyIcon, "opacity", 1)
         tryCompare(copiedIcon, "opacity", 0)

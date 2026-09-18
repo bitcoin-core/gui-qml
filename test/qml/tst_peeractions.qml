@@ -523,7 +523,7 @@ TestCase {
         compare(nodeModel.disconnectPeerCalls, 1)
         compare(peerTableModel.refreshCalls, 1)
         tryCompare(confirmation, "opened", false)
-        wait(300)
+        tryCompare(confirmation, "visible", false)
     }
 
     function test_right_click_peer_row_uses_ban_confirmation() {
@@ -548,7 +548,7 @@ TestCase {
         compare(peerTableModel.refreshCalls, 1)
         compare(banListModel.refreshCalls, 1)
         tryCompare(confirmation, "opened", false)
-        wait(300)
+        tryCompare(confirmation, "visible", false)
     }
 
     function test_split_view_alert_is_centered_in_peers_container() {
@@ -570,7 +570,7 @@ TestCase {
         compare(confirmation.y, Math.round((page.height - confirmation.height) / 2))
         confirmation.close()
         tryCompare(confirmation, "opened", false)
-        wait(300)
+        tryCompare(confirmation, "visible", false)
     }
 
     function test_empty_wide_view_hides_details_and_explains_empty_state() {
