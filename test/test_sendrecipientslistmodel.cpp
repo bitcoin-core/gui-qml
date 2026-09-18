@@ -22,6 +22,8 @@ class SendRecipientsListModelTests : public QObject
 
 private Q_SLOTS:
     void clearKeepsCurrentRecipientValidForQmlBindings();
+    void clearToFrontReportsRemovedRows();
+    void clearToFrontDetachesRecipientsBeforeDestroyingThem();
     void unitChangesApplyToEveryRecipient();
 };
 
@@ -67,6 +69,68 @@ void SendRecipientsListModelTests::clearKeepsCurrentRecipientValidForQmlBindings
     QVERIFY(observer->property("address").toString().isEmpty());
     QVERIFY(observer->property("label").toString().isEmpty());
     QCOMPARE(observer->property("amount").value<QObject*>(), recipients.currentRecipient()->amount());
+}
+
+void SendRecipientsListModelTests::clearToFrontReportsRemovedRows()
+{
+    SendRecipientsListModel recipients;
+    recipients.add();
+    recipients.add();
+    QCOMPARE(recipients.rowCount(), 3);
+
+    QSignalSpy about_to_be_removed{&recipients, &QAbstractItemModel::rowsAboutToBeRemoved};
+    QSignalSpy removed{&recipients, &QAbstractItemModel::rowsRemoved};
+    QSignalSpy count_changed{&recipients, &SendRecipientsListModel::countChanged};
+
+    recipients.clearToFront();
+
+    QCOMPARE(recipients.rowCount(), 1);
+    QCOMPARE(count_changed.size(), 1);
+    QCOMPARE(about_to_be_removed.size(), 1);
+    QCOMPARE(about_to_be_removed.at(0).at(1).toInt(), 1);
+    QCOMPARE(about_to_be_removed.at(0).at(2).toInt(), 2);
+    QCOMPARE(removed.size(), 1);
+    QCOMPARE(removed.at(0).at(1).toInt(), 1);
+    QCOMPARE(removed.at(0).at(2).toInt(), 2);
+
+    recipients.clearToFront();
+
+    QCOMPARE(about_to_be_removed.size(), 1);
+    QCOMPARE(removed.size(), 1);
+    QCOMPARE(count_changed.size(), 1);
+}
+
+void SendRecipientsListModelTests::clearToFrontDetachesRecipientsBeforeDestroyingThem()
+{
+    SendRecipientsListModel recipients;
+    recipients.add();
+    recipients.add();
+
+    const QList<SendRecipient*> removed_recipients{recipients.recipients().mid(1)};
+    QCOMPARE(removed_recipients.size(), 2);
+
+    int destroyed_count = 0;
+    bool destroyed_recipient_still_listed = false;
+    for (auto* recipient : removed_recipients) {
+        QObject::connect(recipient, &QObject::destroyed, &recipients, [&](QObject* object) {
+            ++destroyed_count;
+            for (auto* listed : recipients.recipients()) {
+                if (static_cast<QObject*>(listed) == object) {
+                    destroyed_recipient_still_listed = true;
+                }
+            }
+        });
+    }
+
+    recipients.clearToFront();
+    QCOMPARE(destroyed_count, 0);
+
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    QCOMPARE(destroyed_count, 2);
+    QVERIFY(!destroyed_recipient_still_listed);
+    QCOMPARE(recipients.count(), 1);
+    QCOMPARE(recipients.currentRecipient(), recipients.recipients().at(0));
 }
 
 void SendRecipientsListModelTests::unitChangesApplyToEveryRecipient()
