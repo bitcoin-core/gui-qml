@@ -596,7 +596,8 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
     }
 
     QTextStream stream(&file);
-    WriteCsvRow(stream, {
+    const bool grouped = qobject_cast<TransactionActivityModel*>(sourceModel()) != nullptr;
+    QStringList header{
         tr("Confirmed"),
         tr("Date"),
         tr("Type"),
@@ -604,17 +605,40 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
         tr("Address"),
         tr("Amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit)),
         tr("ID"),
-    });
+    };
+    if (grouped) header << tr("Record") << tr("Action ID") << tr("Status")
+                        << tr("Action amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit));
+    WriteCsvRow(stream, header);
 
     for (int row = 0; row < rowCount(); ++row) {
         const QModelIndex proxy_index = index(row, 0);
         const qint64 timestamp = proxy_index.data(TransactionActivityModel::TimestampRole).toLongLong();
         const auto status = static_cast<Transaction::Status>(proxy_index.data(TransactionActivityModel::StatusRole).toInt());
         const bool confirmed = status == Transaction::Confirming || status == Transaction::Confirmed;
-        const CAmount amount = proxy_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
+        const bool replaced = grouped
+            && !proxy_index.data(TransactionActivityModel::ReplacedByTxidRole).toString().isEmpty()
+            && (!proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()
+                || proxy_index.data(TransactionActivityModel::DepthRole).toInt() <= 0);
+        const CAmount amount = replaced ? 0 : proxy_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
         const bool pending_request = proxy_index.data(TransactionActivityModel::IsPendingRequestRole).toBool();
 
-        WriteCsvRow(stream, {
+        QString status_label;
+        if (pending_request) status_label = tr("Awaiting payment");
+        else if (replaced) status_label = tr("Replaced");
+        else if (grouped && !proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()) status_label = tr("Unknown");
+        else {
+            switch (status) {
+            case Transaction::Confirmed: status_label = tr("Confirmed"); break;
+            case Transaction::Confirming: status_label = tr("Confirming"); break;
+            case Transaction::Unconfirmed: status_label = tr("Unconfirmed"); break;
+            case Transaction::Conflicted: status_label = tr("Conflicted"); break;
+            case Transaction::Abandoned: status_label = tr("Abandoned"); break;
+            case Transaction::Immature: status_label = tr("Immature"); break;
+            case Transaction::NotAccepted: status_label = tr("Not accepted"); break;
+            }
+        }
+
+        QStringList values{
             confirmed ? QStringLiteral("true") : QStringLiteral("false"),
             QDateTime::fromSecsSinceEpoch(timestamp).toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")),
             exportTypeLabelForIndex(proxy_index),
@@ -622,7 +646,30 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
             GuardedCsvText(proxy_index.data(TransactionActivityModel::AddressRole).toString()),
             QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
             pending_request ? QString{} : proxy_index.data(TransactionActivityModel::TxidRole).toString(),
-        });
+        };
+        if (grouped) values << (pending_request ? tr("Payment request") : tr("Transaction")) << QString{} << status_label << QString{};
+        WriteCsvRow(stream, values);
+
+        // Keep the wallet impact (including fees) only on the parent. Action
+        // amounts describe individual movements and are not wallet balance deltas.
+        const auto actions = proxy_index.data(TransactionActivityModel::ActionsRole).toList();
+        if (!grouped || pending_request || actions.size() <= 1) continue;
+        for (const auto& value : actions) {
+            const auto action = value.toMap();
+            const int direction = action.value("direction").toInt();
+            const CAmount action_amount = action.value("amountSat").toLongLong();
+            WriteCsvRow(stream, {
+                values[0], values[1],
+                direction == TransactionActivityModel::SendAction ? tr("Sent")
+                    : direction == TransactionActivityModel::ReceiveAction ? tr("Received") : tr("Internal"),
+                GuardedCsvText(action.value("label").toString()),
+                GuardedCsvText(action.value("address").toString()),
+                QString{}, values[6], tr("Action"), GuardedCsvText(action.value("actionId").toString()), status_label,
+                QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit),
+                    direction == TransactionActivityModel::SendAction ? -action_amount : action_amount,
+                    false, QmlBitcoinUnits::SeparatorStyle::NEVER),
+            });
+        }
     }
 
     file.close();

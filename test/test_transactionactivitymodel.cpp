@@ -220,6 +220,7 @@ private Q_SLOTS:
     void savesBatchRecipientNotesWhenSending_data();
     void savesBatchRecipientNotesWhenSending();
     void filtersWholeTransactionsAndExportsParentImpact();
+    void exportsBatchActionsWithoutDuplicatingFees();
     void groupsPendingMonthsAndDaysAndCountsParents();
     void groupsTransactionsInPendingUntilFirstConfirmation();
     void totalsPendingWalletImpactWithoutRequests();
@@ -475,11 +476,50 @@ void TransactionActivityModelTests::filtersWholeTransactionsAndExportsParentImpa
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const auto csv = file.readAll();
-    QCOMPARE(csv.count('\n'), 2); // Header plus one transaction, not two actions.
+    QCOMPARE(csv.count('\n'), 4); // Header, parent wallet impact, and both actions.
+    QVERIFY(csv.contains("Action amount (BTC)"));
+    QVERIFY(csv.contains("-0.00100000"));
+    QVERIFY(csv.contains("0.00029000"));
+    QCOMPARE(csv.count("-0.00071000"), 1);
+    QVERIFY(csv.contains(Address(mixed, 1).toUtf8()));
     QVERIFY(csv.contains("Multiple actions"));
     QVERIFY(csv.contains("-0.00071000"));
     proxy.setTypeFilter(Proxy::Mined);
     QCOMPARE(proxy.rowCount(), 0);
+}
+
+void TransactionActivityModelTests::exportsBatchActionsWithoutDuplicatingFees()
+{
+    Fixture f;
+    const auto batch = MakeTx({{100'000, true}}, {{40'000, false}, {59'000, false, false, 2}}, Time(8, 12));
+    f.state->put(batch);
+    f.state->labels[Address(batch, 0).toStdString()] = "=Bob";
+    f.state->labels[Address(batch, 1).toStdString()] = "Alice, savings";
+    Proxy proxy;
+    proxy.setSourceModel(f.model());
+    proxy.setDisplayUnit(3);
+    proxy.setSearchText("Alice"); // Export every action of the matching transaction.
+    QTemporaryDir dir;
+    const auto path = dir.filePath("batch.csv");
+    QVERIFY(proxy.exportCsv(path));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto csv = file.readAll();
+    QCOMPARE(csv.count('\n'), 4);
+    QVERIFY(csv.contains("Action amount (sat)"));
+    QVERIFY(csv.contains("\"'=Bob\""));
+    QVERIFY(csv.contains("\"Alice, savings\""));
+    QVERIFY(csv.contains(Address(batch, 0).toUtf8()));
+    QVERIFY(csv.contains(Address(batch, 1).toUtf8()));
+    const auto lines = csv.split('\n');
+    // The parent carries the 1,000 sat fee once. Child Amount cells are empty;
+    // their separate Action amount cells contain only the recipient amounts.
+    QVERIFY(lines[1].contains("\"-100000\""));
+    QVERIFY(lines[2].endsWith("\"-40000\""));
+    QVERIFY(lines[3].endsWith("\"-59000\""));
+    const QByteArray empty_amount_and_id = "\",\"\",\"" + Id(batch).toUtf8();
+    QVERIFY(lines[2].contains(empty_amount_and_id));
+    QVERIFY(lines[3].contains(empty_amount_and_id));
 }
 
 void TransactionActivityModelTests::groupsPendingMonthsAndDaysAndCountsParents()
@@ -620,9 +660,36 @@ void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplaceme
     QCOMPARE(Find(proxy, Id(original)).data(Proxy::SectionKeyRole).toString(), QString("2026-09-15"));
     QCOMPARE(Find(proxy, Id(replacement)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
 
+    QTemporaryDir dir;
+    const auto path = dir.filePath("replaced.csv");
+    proxy.setDisplayUnit(3);
+    QVERIFY(proxy.exportCsv(path));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto csv = file.readAll();
+    QVERIFY(csv.contains("\"Status\""));
+    const QByteArray original_parent = "\"0\",\"" + Id(original).toUtf8() + "\",\"Transaction\",\"\",\"Replaced\"";
+    const QByteArray replacement_parent = "\"-102000\",\"" + Id(replacement).toUtf8() + "\",\"Transaction\",\"\",\"Unconfirmed\"";
+    QVERIFY(csv.contains(original_parent));
+    QVERIFY(csv.contains(replacement_parent));
+    QCOMPARE(csv.count("\"Replaced\""), 3); // Parent and both historical actions.
+    QVERIFY(csv.contains("\"Replaced\",\"-60000\""));
+    QVERIFY(!csv.contains("\"-101000\""));
+    file.close();
+
     f.state->statuses[replacement.tx->GetHash()].depth_in_main_chain = 1;
     source->refreshStatuses();
     QCOMPARE(Find(proxy, Id(replacement)).data(Proxy::SectionKeyRole).toString(), QString("2026-09-15"));
+
+    // An original that confirms must not be zeroed by stale replacement metadata.
+    f.state->statuses[original.tx->GetHash()].depth_in_main_chain = 6;
+    source->refreshStatuses();
+    QVERIFY(proxy.exportCsv(path));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const auto confirmed_csv = file.readAll();
+    const QByteArray confirmed_parent = "\"-101000\",\"" + Id(original).toUtf8() + "\",\"Transaction\",\"\",\"Confirmed\"";
+    QVERIFY(confirmed_csv.contains(confirmed_parent));
+    QVERIFY(!confirmed_csv.contains("\"Replaced\""));
 }
 
 void TransactionActivityModelTests::associatesRequestsPerOutputAndUpdatesLive()
