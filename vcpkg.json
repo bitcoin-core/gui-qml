@@ -22,12 +22,11 @@
             "gui",
             "network",
             "png",
-            "testlib",
-            "widgets"
+            "testlib"
           ]
         },
-        "qttools",
-        "libqrencode"
+        "qtdeclarative",
+        "qttools"
       ]
     },
     "tests": {
