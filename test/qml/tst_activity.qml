@@ -598,4 +598,82 @@ TestCase {
         compare(calendar.startIso, "2025-06-10")
         compare(calendar.endIso, "2025-06-20")
     }
+
+    function createCollapsedActivity() {
+        const page = createTemporaryObject(activityComponent, this)
+        verify(page !== null)
+        const searchToggle = findChild(page, "activitySearchToggle")
+        verify(searchToggle !== null)
+        if (searchToggle.checked) {
+            searchToggle.clicked()
+            tryCompare(searchToggle, "checked", false)
+        }
+        return page
+    }
+
+    // Issue #851: the header's icon-only buttons say nothing about what they do
+    // until they are clicked, so each carries a hover tooltip.
+    function test_activity_header_icons_have_tooltips() {
+        const page = createCollapsedActivity()
+
+        const exportTooltip = findChild(page, "activityExportButtonTooltip")
+        verify(exportTooltip !== null)
+        compare(exportTooltip.text, "Export activity to CSV")
+        verify(exportTooltip.below)
+        verify(!exportTooltip.active)
+
+        const searchTooltip = findChild(page, "activitySearchToggleTooltip")
+        verify(searchTooltip !== null)
+        compare(searchTooltip.text, "Search and filter activity")
+
+        // The search toggle is the one header icon that changes meaning.
+        const searchToggle = findChild(page, "activitySearchToggle")
+        searchToggle.clicked()
+        tryCompare(searchTooltip, "text", "Hide search and filters")
+
+        searchToggle.clicked()
+        tryCompare(searchTooltip, "text", "Search and filter activity")
+    }
+
+    // With the filters open, filterRow follows activityHeader inside pageHeader,
+    // so without stacking the header's tooltips are painted over by the filter
+    // row and only the arrow shows.
+    function test_activity_header_stacks_above_the_filter_row() {
+        const page = createCollapsedActivity()
+
+        const searchToggle = findChild(page, "activitySearchToggle")
+        searchToggle.clicked()
+        tryCompare(searchToggle, "checked", true)
+
+        const headerRow = findChild(page, "activityHeaderRow")
+        const filterRow = findChild(page, "activityFilterRow")
+        verify(headerRow !== null)
+        verify(filterRow !== null)
+        verify(headerRow.z > filterRow.z)
+
+        // The filter row sits directly below the header row, and the bubble
+        // hangs down past the header into that band, so the stacking above is
+        // load-bearing rather than theoretical.
+        verify(filterRow.y >= headerRow.y + headerRow.height)
+        const tooltip = findChild(page, "activityExportButtonTooltip")
+        verify(tooltip !== null)
+        tooltip.shown = true
+        verify(tooltip.item !== null)
+        verify(tooltip.mapToItem(headerRow, 0, tooltip.height).y > headerRow.height)
+    }
+
+    function test_activity_header_stacks_above_the_transaction_list() {
+        const page = createCollapsedActivity()
+
+        const header = findChild(page, "activityPageHeader")
+        verify(header !== null)
+        verify(header.z > 0)
+
+        const tooltip = findChild(page, "activityExportButtonTooltip")
+        tooltip.shown = true
+        verify(tooltip.item !== null)
+
+        const bottomInHeader = tooltip.mapToItem(header, 0, tooltip.height).y
+        verify(bottomInHeader > header.height)
+    }
 }

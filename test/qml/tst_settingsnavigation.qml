@@ -636,6 +636,82 @@ TestCase {
         tryCompare(rpcConsole, "tabActive", false)
     }
 
+    // Issue #862: the RPC console's tool icons gave no hint of what they do.
+    // #877 replaced the old input-row icons with the search carets and the font
+    // stepper; each now shows its accessible name on hover.
+    function test_rpcConsoleToolIconsHaveTooltips() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+        verify(findChild(view, "rpcConsole") !== null)
+
+        const expected = {
+            "consoleFontDecreaseButtonTooltip": "Decrease console text size",
+            "consoleFontIncreaseButtonTooltip": "Increase console text size",
+            "rpcConsoleSearchPreviousButtonTooltip": "Previous search result",
+            "rpcConsoleSearchNextButtonTooltip": "Next search result"
+        }
+        for (const name in expected) {
+            const tooltip = findChild(view, name)
+            verify(tooltip !== null, name + " is missing")
+            compare(tooltip.text, expected[name])
+            verify(!tooltip.active, name + " must stay hidden until hovered")
+        }
+    }
+
+    // The settings page clips its content, so a bubble that runs past the page
+    // edge is not just cut off, it disappears. The font stepper sits hard
+    // against the right edge of the toolbar, so it is the one at risk.
+    function test_rpcConsoleToolTooltipStaysInsideTheClippingPage() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+
+        const page = findChild(view, "rpcConsoleSettingsPage")
+        verify(page !== null)
+        tryVerify(function() { return page.width > 0 })
+
+        const tooltip = findChild(view, "consoleFontIncreaseButtonTooltip")
+        verify(tooltip !== null)
+        tooltip.shown = true
+        verify(tooltip.item !== null)
+
+        // Derive the bubble's real edges from whichever layout Tooltip is using,
+        // so this fails if the bubble is ever recentered on the button.
+        const bubbleRight = tooltip.item.centerBubbleOnArrow
+            ? tooltip.width
+            : tooltip.width / 2 + tooltip.item.arrowWidth / 2
+              + tooltip.item.arrowHorizontalInset
+        const bubbleLeft = bubbleRight - tooltip.width
+        const leftInPage = tooltip.mapToItem(page, bubbleLeft, 0).x
+        const rightInPage = tooltip.mapToItem(page, bubbleRight, 0).x
+
+        verify(leftInPage >= 0)
+        verify(rightInPage <= page.width)
+    }
+
+    // The toolbar's tooltips hang down into the console, which is a later sibling
+    // in the page layout and would otherwise paint over them.
+    function test_rpcConsoleToolbarStacksAboveTheConsole() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("rpc-console")
+
+        const toolbar = findChild(view, "rpcConsoleToolbar")
+        const rpcConsole = findChild(view, "rpcConsole")
+        verify(toolbar !== null)
+        verify(rpcConsole !== null)
+        verify(toolbar.z > rpcConsole.z)
+
+        // The bubble really does reach into the console's band, so the stacking
+        // above is load-bearing rather than theoretical.
+        const tooltip = findChild(view, "consoleFontIncreaseButtonTooltip")
+        verify(tooltip !== null)
+        tooltip.shown = true
+        verify(tooltip.item !== null)
+        verify(tooltip.mapToItem(rpcConsole, 0, tooltip.height).y > 0)
+    }
+
     function test_displayPageUsesInlineGenericPickers() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
