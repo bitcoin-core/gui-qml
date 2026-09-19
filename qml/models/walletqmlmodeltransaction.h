@@ -11,6 +11,7 @@
 #include <consensus/amount.h>
 #include <primitives/transaction.h>
 
+#include <QMap>
 
 class WalletQmlModelTransaction : public QObject
 {
@@ -34,6 +35,7 @@ public:
     QString total() const;
     QString label() const;
     QString txid() const;
+    const QMap<QString, QString>& recipientLabels() const { return m_recipient_labels; }
 
     CTransactionRef& getWtx();
     void setWtx(const CTransactionRef&);
@@ -58,6 +60,8 @@ private:
 
     QString m_address;
     QString m_label;
+    // Keep the reviewed notes even if the send form is edited or reset later.
+    QMap<QString, QString> m_recipient_labels;
     CAmount m_amount;
     CAmount m_fee;
     BitcoinAmount* m_amount_amount;

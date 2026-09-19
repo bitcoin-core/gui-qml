@@ -23,6 +23,7 @@ Rectangle {
     property string message: ""
     property string messageObjectName: ""
     property string primaryButtonText: ""
+    property bool primaryButtonOutlined: false
     property string dismissButtonText: ""
     property bool showsCloseButton: false
     property int bannerLayout: InfoBanner.Layout.Horizontal
@@ -125,13 +126,9 @@ Rectangle {
                 onClicked: root.dismissClicked()
             }
 
-            ContinueButton {
-                objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
+            Loader {
                 visible: root.primaryButtonText !== ""
-                text: root.primaryButtonText
-                leftPadding: 20
-                rightPadding: 20
-                onClicked: root.primaryClicked()
+                sourceComponent: root.primaryButtonOutlined ? outlinedPrimaryButton : filledPrimaryButton
             }
         }
     }
@@ -188,16 +185,32 @@ Rectangle {
                     onClicked: root.dismissClicked()
                 }
 
-                ContinueButton {
-                    objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
+                Loader {
                     visible: root.primaryButtonText !== ""
-                    text: root.primaryButtonText
                     Layout.maximumWidth: 200
-                    leftPadding: 30
-                    rightPadding: 30
-                    onClicked: root.primaryClicked()
+                    sourceComponent: root.primaryButtonOutlined ? outlinedPrimaryButton : filledPrimaryButton
                 }
             }
+        }
+    }
+
+    Component {
+        id: filledPrimaryButton
+        ContinueButton {
+            objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
+            text: root.primaryButtonText
+            leftPadding: root.bannerLayout === InfoBanner.Layout.Vertical ? 30 : 20
+            rightPadding: leftPadding
+            onClicked: root.primaryClicked()
+        }
+    }
+
+    Component {
+        id: outlinedPrimaryButton
+        OutlineButton {
+            objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
+            text: root.primaryButtonText
+            onClicked: root.primaryClicked()
         }
     }
 }

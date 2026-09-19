@@ -58,7 +58,7 @@ TestCase {
         compare(searchBar.padding, 0)
         compare(searchBar.background.radius, 8)
         compare(field.background.color, Theme.color.neutral2)
-        compare(field.background.radius, 5)
+        compare(field.background.radius, 10)
         compare(field.placeholderText, "Find output")
         compare(searchBar.placeholder, "Find output")
         compare(searchBar.showsSearchIcon, true)

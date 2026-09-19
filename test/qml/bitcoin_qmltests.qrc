@@ -1,7 +1,11 @@
 <!DOCTYPE RCC><RCC version="1.0">
+    <qresource prefix="/test/rendering">
+        <file>tst_transactionflow_rendering.qml</file>
+    </qresource>
     <qresource prefix="/test/qml">
-        <file>tst_activitydetails.qml</file>
-        <file>tst_activity.qml</file>
+        <file>tst_transactionflow.qml</file>
+        <file>tst_transactiondetail.qml</file>
+        <file>tst_activitylist.qml</file>
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
         <file>tst_contextmenubutton.qml</file>
@@ -37,6 +41,7 @@
         <file>tst_requestpayment.qml</file>
         <file>tst_rightcontenticon.qml</file>
         <file>tst_searchbar.qml</file>
+        <file>tst_rangeslider.qml</file>
         <file>tst_sendoptionspopup.qml</file>
         <file>tst_send.qml</file>
         <file>tst_signverifymessage.qml</file>

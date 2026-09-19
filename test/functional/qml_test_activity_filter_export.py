@@ -85,6 +85,8 @@ def _export_activity_csv(gui, path):
     except FileNotFoundError:
         pass
     gui.set_text("activityExportPathField", path)
+    gui.click("activityMoreButton")
+    gui.wait_for_property("activityMoreMenu", "opened", True, timeout_ms=5000)
     gui.click("activityExportButton")
     _wait_for_file(path)
     gui.wait_for_property("activityExportResultTitle", "text", "Export complete", timeout_ms=10000)
@@ -115,25 +117,25 @@ def _mine_to_gui_wallet(harness):
     )
     blocks = rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, address])
     assert len(blocks) == 1, f"Expected one generated block, got {blocks!r}"
-    return address
+    block = rpc_call(harness.gui_rpc_port, "getblock", [blocks[0]])
+    return address, block["tx"][0]
 
 
-def _set_activity_search_visible(gui, visible):
-    if gui.get_property("activitySearchToggle", "checked") != visible:
-        gui.click("activitySearchToggle")
-    gui.wait_for_property("activitySearchToggle", "checked", visible, timeout_ms=5000)
+def _set_activity_types(gui, *types):
+    gui.click("activityTypeFilterButton")
+    gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
+    gui.click("activityTypeAll")
+    for object_name in types:
+        gui.click(object_name)
+    gui.invoke("activityTypeFilterPopup", "close")
+    gui.wait_for_property("activityTypeFilterPopup", "opened", False, timeout_ms=5000)
 
 
-def _activity_transaction_row(gui):
-    row_count = int(gui.get_property("activityListView", "count"))
-    for row in range(row_count):
-        gui.set_property("activityListView", "currentIndex", row)
-        gui.invoke("activityListView", "forceLayout")
-        gui.settle()
-        txid = gui.get_list_item_property("activityListView", row, "txid")
-        if txid:
-            return txid, gui.get_list_item_property("activityListView", row, "amount")
-    raise AssertionError("Expected Activity list to contain a transaction row")
+def _clear_activity_filters(gui):
+    gui.click("activityActiveFiltersButton")
+    gui.wait_for_property("activityClearFiltersMenu", "opened", True, timeout_ms=5000)
+    gui.click("activityClearFiltersAction")
+    gui.wait_for_property("activityPage", "activeFilterCount", 0, timeout_ms=5000)
 
 
 def run_test(save_screenshots=False, screenshot_root=None):
@@ -154,10 +156,12 @@ def run_test(save_screenshots=False, screenshot_root=None):
         source_empty_description = gui.get_property("activityEmptyStateDescription", "text")
         assert source_empty_title in (
             "No activity yet",
-            "Syncing wallet activity...",
+            "Syncing wallet activity…",
+            "Loading wallet activity…",
         ), f"Unexpected source-empty Activity title: {source_empty_title!r}"
         assert source_empty_description in (
-            "Once you send or receive bitcoin, your transactions will appear here.",
+            "Your transactions and payment requests will appear here.",
+            "",
             "Transactions may appear as your wallet catches up.",
         ), f"Unexpected source-empty Activity description: {source_empty_description!r}"
         checkpoints.checkpoint(f"source-empty Activity state shown: {source_empty_title}", gui)
@@ -165,12 +169,12 @@ def run_test(save_screenshots=False, screenshot_root=None):
         _open_receive(gui)
         checkpoints.checkpoint("receive page opened", gui)
 
-        _create_request(gui, "0.0001", "Alice", "pizza")
+        _create_request(gui, "0.0001", "Alice", "pizza", note_self="Lunch payment")
         payment_request_uri = _request_qr_payload(gui)
         payment_request_address = _address_from_bip21(payment_request_uri)
         checkpoints.checkpoint("payment request created", gui)
 
-        mined_address = _mine_to_gui_wallet(harness)
+        mined_address, mined_txid = _mine_to_gui_wallet(harness)
         assert mined_address != payment_request_address, "Mined row should not consume the pending request row"
         checkpoints.checkpoint("block mined to wallet address", gui)
 
@@ -178,8 +182,8 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=20000)
         checkpoints.checkpoint("Activity shows payment request and mined rows", gui)
 
-        _set_activity_search_visible(gui, True)
-        checkpoints.checkpoint("Activity search controls opened", gui)
+        gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=5000)
+        checkpoints.checkpoint("Activity search is visible", gui)
 
         gui.set_text("activitySearchField", payment_request_address)
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
@@ -193,10 +197,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         checkpoints.checkpoint("date filter menu opened", gui)
         gui.click("activityDateToday")
 
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("type filter menu opened", gui)
-        gui.click("activityTypeMined")
+        _set_activity_types(gui, "activityTypeMined")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("Today and Mined filters applied", gui)
 
@@ -204,18 +205,21 @@ def run_test(save_screenshots=False, screenshot_root=None):
         mined_csv = _export_activity_csv(gui, mined_export_path)
         checkpoints.checkpoint("mined Activity row exported to CSV", gui)
 
-        expected_btc_header = '"Confirmed","Date","Type","Label","Address","Amount (BTC)","ID"\n'
-        expected_sat_header = '"Confirmed","Date","Type","Label","Address","Amount (sat)","ID"\n'
+        expected_btc_header = '"Confirmed","Date","Type","Label","Address","Amount (BTC)","ID","Record","Action ID","Status","Action amount (BTC)"\n'
+        expected_sat_header = '"Confirmed","Date","Type","Label","Address","Amount (sat)","ID","Record","Action ID","Status","Action amount (sat)"\n'
         assert mined_csv.startswith(expected_btc_header), f"Unexpected mined CSV header: {mined_csv!r}"
         assert '"Mined"' in mined_csv, f"Missing mined type: {mined_csv!r}"
-        assert '"Mining reward"' in mined_csv, f"Missing mined label: {mined_csv!r}"
+        assert '"Immature"' in mined_csv, f"Missing immature status: {mined_csv!r}"
         assert '"50.00000000"' in mined_csv, f"Missing mined amount: {mined_csv!r}"
         assert '"Payment request"' not in mined_csv, f"Mined export included request row: {mined_csv!r}"
         gui.click("activityExportResultCloseButton")
 
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityTypePaymentRequest")
+        _set_activity_types(gui, "activityTypeMined", "activityTypePaymentRequest")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        assert gui.get_property("activityTypeMined", "selected") is True
+        assert gui.get_property("activityTypePaymentRequest", "selected") is True
+        checkpoints.checkpoint("multiple Activity types selected together", gui)
+        _set_activity_types(gui, "activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("Today and Payment request filters applied", gui)
 
@@ -243,7 +247,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
 
         assert csv.startswith(expected_sat_header), f"Unexpected CSV header: {csv!r}"
         assert '"Payment request"' in csv, f"Missing payment request type: {csv!r}"
-        assert '"Alice"' in csv, f"Missing request label: {csv!r}"
+        assert '"Lunch payment"' in csv, f"Missing private request note: {csv!r}"
         assert f'"{payment_request_address}"' in csv, f"Missing request address: {csv!r}"
         assert '"10000"' in csv, f"Missing amount: {csv!r}"
         assert '"Mined"' not in csv, f"Payment request export included mined row: {csv!r}"
@@ -265,21 +269,16 @@ def run_test(save_screenshots=False, screenshot_root=None):
         )
         checkpoints.checkpoint("filtered-empty Activity state shown", gui)
 
-        gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", False, timeout_ms=5000)
+        _clear_activity_filters(gui)
+        # Clearing filters preserves the independent search query.
+        assert gui.get_property("activityFilterProxyModel", "searchText") == "not-present"
+        gui.click("activityClearSearchButton")
         gui.wait_for_property("activityFilterProxyModel", "searchText", "", timeout_ms=5000)
+        assert gui.get_property("activityTypeAll", "selected") is True
         date_filter = gui.get_property("activityFilterProxyModel", "dateFilter")
-        type_filter = gui.get_property("activityFilterProxyModel", "typeFilter")
         assert date_filter in (0, "DateAll"), f"Date filter was not reset: {date_filter!r}"
-        assert type_filter in (0, "TypeAll"), f"Type filter was not reset: {type_filter!r}"
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
-        checkpoints.checkpoint("search controls closed and filters reset", gui)
-
-        # Re-open the filter controls to exercise the amount and custom-range
-        # filters from a clean, fully reset state.
-        gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
-        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        checkpoints.checkpoint("filters and search cleared", gui)
 
         # Minimum amount filter. The display unit is sats here, so a 100000 sat
         # (0.001 BTC) minimum keeps the 50 BTC mined row and drops the 0.0001
@@ -287,8 +286,9 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.click("activityAmountFilterButton")
         gui.wait_for_property("activityAmountFilterPopup", "opened", True, timeout_ms=5000)
         checkpoints.checkpoint("amount filter menu opened", gui)
-        gui.set_text("activityMinAmountField", "100000")
-        gui.click("activityMinAmountApply")
+        gui.set_property("activityAmountRangeSlider", "lowerValue", 100000)
+        gui.invoke("activityPage", "applyAmountRange")
+        gui.invoke("activityAmountFilterPopup", "close")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("minimum amount filter applied", gui)
 
@@ -298,9 +298,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         assert '"Payment request"' not in min_amount_csv, f"Min-amount export kept request row: {min_amount_csv!r}"
         gui.click("activityExportResultCloseButton")
 
-        gui.click("activityAmountFilterButton")
-        gui.wait_for_property("activityAmountFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityMinAmountReset")
+        _clear_activity_filters(gui)
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
         checkpoints.checkpoint("minimum amount filter cleared", gui)
 
@@ -331,7 +329,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         gui.click("activityDateRangeApply")
         gui.wait_for_property("activityFilterProxyModel", "count", 0, timeout_ms=10000)
         date_filter = gui.get_property("activityFilterProxyModel", "dateFilter")
-        assert date_filter in (6, "CustomRange"), f"Custom range was not applied: {date_filter!r}"
+        assert date_filter in (5, "CustomRange"), f"Custom range was not applied: {date_filter!r}"
         checkpoints.checkpoint("past custom range excludes today's rows", gui)
 
         gui.click("activityDateFilterButton")
@@ -342,19 +340,12 @@ def run_test(save_screenshots=False, screenshot_root=None):
         assert cleared_date_filter in (0, "DateAll"), f"Custom range reset failed: {cleared_date_filter!r}"
         checkpoints.checkpoint("custom date range cleared", gui)
 
-        # Issue #726: paying a pending request's address keeps the request under
-        # the Payment request filter as a used-address request, with no reload,
-        # and surfaces the real transaction as its own row in the default view.
-        # Toggle the controls to guarantee a clean, popup-free starting state.
-        gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", False, timeout_ms=5000)
-        gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        # Fulfillment replaces the pending request with a transaction that
+        # retains the request association in both the list and type filter.
+        gui.invoke("activityDateFilterPopup", "close")
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
 
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityTypePaymentRequest")
+        _set_activity_types(gui, "activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         checkpoints.checkpoint("pending request shown under Payment request filter", gui)
 
@@ -363,39 +354,35 @@ def run_test(save_screenshots=False, screenshot_root=None):
 
         # The address now has its own mined transaction row; waiting on it is the
         # synchronization point for the live fulfillment.
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityTypeMined")
+        _set_activity_types(gui, "activityTypeMined")
         gui.set_text("activitySearchField", payment_request_address)
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=20000)
         checkpoints.checkpoint("request address gained its own mined transaction row", gui)
 
-        # The request itself is still surfaced under the Payment request filter,
-        # now as a used-address request, without a reload. Before the live
-        # fulfillment fix it dropped out of the filter until the wallet reloaded.
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityTypePaymentRequest")
+        # The Payment request filter now finds the fulfilling transaction,
+        # rather than a separate used-address request row.
+        _set_activity_types(gui, "activityTypePaymentRequest")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         used_request_export_path = os.path.join(harness.tmpdir, "activity-used-request.csv")
         used_request_csv = _export_activity_csv(gui, used_request_export_path)
-        assert '"Payment request"' in used_request_csv, f"Fulfilled request left the Payment request filter: {used_request_csv!r}"
-        assert '"Alice"' in used_request_csv, f"Used-address request missing its label: {used_request_csv!r}"
+        assert '"Mined"' in used_request_csv, f"Missing fulfilling transaction: {used_request_csv!r}"
+        assert '"Payment request"' not in used_request_csv, f"Fulfilled request duplicated: {used_request_csv!r}"
+        assert '"Lunch payment"' in used_request_csv, f"Fulfilled transaction missing its request note: {used_request_csv!r}"
         assert f'"{payment_request_address}"' in used_request_csv, f"Used-address request missing its address: {used_request_csv!r}"
         gui.click("activityExportResultCloseButton")
-        checkpoints.checkpoint("fulfilled request stays a used-address request under the filter", gui)
+        checkpoints.checkpoint("fulfilled request links to its transaction under the filter", gui)
 
-        # In the default view the request is hidden, so it does not duplicate the
-        # real transaction to its address; only the two mined rows remain.
+        # The default view also contains only the two mined transactions.
         gui.set_text("activitySearchField", "")
-        gui.click("activityTypeFilterButton")
-        gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
-        gui.click("activityTypeAll")
+        _set_activity_types(gui)
         gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
-        checkpoints.checkpoint("used-address request hidden from the default Activity view", gui)
+        checkpoints.checkpoint("fulfilled request has no duplicate Activity row", gui)
 
-        txid, expected_amount = _activity_transaction_row(gui)
-        gui.click(f"activityItem_{txid}")
+        gui.set_text("activitySearchField", mined_txid)
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        gui.wait_for_property(f"activityItem_{mined_txid}", "visible", True, timeout_ms=10000)
+        expected_amount = gui.get_property(f"activityItem_{mined_txid}", "amount")
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
         gui.wait_for_page("activityDetailsPage", timeout_ms=10000)
         actual_amount = gui.get_property("activityDetailsPage", "amount")
         assert actual_amount == expected_amount, (

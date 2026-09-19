@@ -110,6 +110,7 @@ def _import_wallet_backup(gui, backup_path, wallet_name):
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=30000)
     gui.click("importWalletSuccessOverviewButton")
     gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)
+    gui.settle()
 
 
 def _import_wallet(harness):
@@ -207,7 +208,7 @@ def _assert_receive_option_rows(gui, *, show_name, show_message, show_note_self,
 
 def _open_activity(gui):
     gui.click("activityTabButton")
-    gui.wait_for_property("activitySearchToggle", "visible", True, timeout_ms=10000)
+    gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)
 
 
 def _address_from_bip21(uri):
@@ -225,11 +226,13 @@ def _mine_to_address(harness, address):
     return block["tx"][0]
 
 
-def _create_request(gui, amount, label, message):
+def _create_request(gui, amount, label, message, note_self=None):
     """Fill the form and click Generate QR. Stays on the same page (lock-on-generate)."""
     gui.set_text("requestPaymentAmountInput", amount)
     gui.set_text("requestPaymentYourNameInput", label)
     gui.set_text("requestPaymentMessageInput", message)
+    if note_self is not None:
+        gui.set_text("requestPaymentNoteSelfInput", note_self)
     before = gui.get_property("requestHistoryCount", "count")
     gui.click("requestPaymentGenerateButton")
     gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
@@ -309,10 +312,12 @@ def run_test():
         _open_activity(gui)
         activity_item_name = f"activityItem_{txid}"
         gui.wait_for_property(activity_item_name, "visible", True, timeout_ms=30000)
-        gui.click(activity_item_name)
-        gui.wait_for_property("activityDetailsPaymentRequestsSection", "visible", True, timeout_ms=10000)
-        gui.wait_for_property("activityDetailsPaymentRequest_0", "visible", True, timeout_ms=10000)
-        gui.click("activityDetailsPaymentRequest_0")
+        gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_page("activityDetailsPage", timeout_ms=10000)
+        gui.wait_for_object("transactionFlowRequest_1", timeout_ms=10000)
+        gui.wait_for_property("transactionFlowRequest_1", "visible", True, timeout_ms=10000)
+        gui.click("transactionFlowRequest_1")
         gui.wait_for_page("paymentRequestDetailPage", timeout_ms=10000)
         gui.wait_for_property("paymentRequestDetailEdit", "visible", True, timeout_ms=10000)
         gui.click("paymentRequestDetailEdit")
@@ -322,13 +327,12 @@ def run_test():
         gui.wait_for_page("paymentRequestDetailPage", timeout_ms=10000)
         gui.wait_for_property("paymentRequestDetailBack", "visible", True, timeout_ms=10000)
         gui.click("paymentRequestDetailBack")
-        gui.wait_for_property("activityDetailsPaymentRequestsSection", "visible", True, timeout_ms=10000)
-        gui.wait_for_property("activityDetailsPaymentRequest_0", "visible", True, timeout_ms=10000)
-        gui.click("activityDetailsPaymentRequest_0")
+        gui.wait_for_property("transactionFlowRequest_1", "visible", True, timeout_ms=10000)
+        gui.click("transactionFlowRequest_1")
         gui.wait_for_page("paymentRequestDetailPage", timeout_ms=10000)
         _select_wallet(gui, SECOND_WALLET_NAME)
         gui.click("activityTabButton")
-        gui.wait_for_property("activitySearchToggle", "visible", True, timeout_ms=10000)
+        gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)
         print("[qml_receive_requests] fulfilled transaction links to payment request detail")
 
         # Restart and verify persistence
@@ -382,9 +386,9 @@ def run_test():
         # The unpaid second request shows as a pending row in Activity.
         request2_address = _address_from_bip21(qr_code2)
         _open_activity(gui)
-        gui.wait_for_property("activityItem_pending_0", "visible", True, timeout_ms=10000)
-        pending_date = gui.get_text("activityItemDate_pending_0")
-        assert pending_date == "Pending receive", f"Expected pending request cue, got {pending_date!r}"
+        gui.wait_for_property("activityRequest_2", "visible", True, timeout_ms=10000)
+        pending_metadata = gui.get_property("activityRequest_2", "metadata")
+        assert "Awaiting payment" in pending_metadata, f"Expected pending request cue, got {pending_metadata!r}"
         print("[qml_receive_requests] unpaid request shows a pending activity row")
 
         # Fund a miner wallet on the GUI node so the request can be paid with
@@ -402,50 +406,42 @@ def run_test():
         _open_activity(gui)
         activity_count = gui.get_property("activityListView", "count")
 
-        # Paying the request inserts the transaction as its own row while the
-        # request row flips to a used-address request, which the default view
-        # hides, so the visible row count stays the same: one request row out,
-        # one transaction row in.
+        # Paying the request replaces its pending row with a transaction that
+        # links back to the request, leaving the visible row count unchanged.
         txid2 = rpc_call(harness.gui_rpc_port, "sendtoaddress",
                          [request2_address, 0.005], wallet=MINER_WALLET_NAME)
         gui.wait_for_property(f"activityItem_{txid2}", "visible", True, timeout_ms=30000)
         assert gui.get_property("activityListView", "count") == activity_count, \
             "the used request must leave the default view as the payment's own row arrives"
-        date_text = gui.get_text(f"activityItemDate_{txid2}")
-        assert date_text == "Pending", f"Zero-conf row should read Pending, got {date_text!r}"
-        icon_source = str(gui.get_property(f"activityItemIcon_{txid2}", "source"))
-        assert icon_source.endswith("/pending"), f"Zero-conf row should use the pending icon, got {icon_source!r}"
+        metadata = gui.get_property(f"activityItem_{txid2}", "metadata")
+        assert "Unconfirmed" in metadata, f"Missing unconfirmed status: {metadata!r}"
+        assert gui.get_property(f"activityItem_{txid2}", "depth") == 0
         print("[qml_receive_requests] zero-conf payment arrived as its own row with the Pending cue")
 
         # A new block confirms the payment and the row leaves the Pending
         # state without any page change.
         rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining_address])
         wait_until(
-            lambda: gui.get_text(f"activityItemDate_{txid2}") != "Pending",
+            lambda: gui.get_property(f"activityItem_{txid2}", "depth") > 0,
             timeout=30,
             description="zero-conf row to confirm after a block",
         )
         print("[qml_receive_requests] confirmation cleared the Pending state")
 
-        # The paid request was not consumed: it survives as a used-address
-        # request, reachable under the Payment request type filter.
+        # Fulfilled requests stay reachable through their transactions under
+        # the Payment request filter, without creating duplicate request rows.
         gui.click("activityTypeFilterButton")
         gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypePaymentRequest")
-        gui.wait_for_property("activityFilterProxyModel", "count",
-                              lambda count: count >= 1, timeout_ms=10000)
-
-        def _used_request_row_shown():
-            for row in range(gui.get_property("activityListView", "count")):
-                if gui.get_list_item_property("activityListView", row, "isUsedAddressRequest"):
-                    return True
-            return False
-
-        wait_until(_used_request_row_shown, timeout=20,
-                   description="the paid request to show as a used-address request row")
+        gui.invoke("activityTypeFilterPopup", "close")
+        gui.wait_for_property("activityFilterProxyModel", "count", 2, timeout_ms=10000)
+        for paid_txid in (txid, txid2):
+            gui.wait_for_property(f"activityItem_{paid_txid}", "hasPaymentRequest", True, timeout_ms=10000)
+            assert not gui.get_property(f"activityItem_{paid_txid}", "isPendingRequest")
         gui.click("activityTypeFilterButton")
         gui.wait_for_property("activityTypeFilterPopup", "opened", True, timeout_ms=5000)
         gui.click("activityTypeAll")
+        gui.invoke("activityTypeFilterPopup", "close")
         print("[qml_receive_requests] paid request remains reachable under the Payment request filter")
 
         print("[qml_receive_requests] PASSED")

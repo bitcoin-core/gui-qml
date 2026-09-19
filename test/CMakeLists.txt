@@ -36,7 +36,8 @@ add_executable(bitcoinqml_unit_tests
   test_addresslistmodel.cpp
   test_receiverequesthistorymodel.cpp
   test_transaction.cpp
-  test_activitylistmodel.cpp
+  test_transactionactivity.cpp
+  test_transactionactivitymodel.cpp
   test_activityfilterproxymodel.cpp
   test_qtinfolog.cpp
   test_qtmessagefilter.cpp
@@ -99,6 +100,7 @@ target_link_libraries(bitcoinqml_qmltests
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickTest
+    Qt6::Svg
 )
 
 target_include_directories(bitcoinqml_qmltests
@@ -108,11 +110,25 @@ target_include_directories(bitcoinqml_qmltests
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
+# Pixel assertions need a platform that supports grabbing rendered windows.
+# Keep the focus-sensitive interaction tests on the minimal platform.
 get_target_property(qt_lib_type Qt6::Core TYPE)
+set(qml_test_rendering_platform_default offscreen)
+if(APPLE AND qt_lib_type STREQUAL "STATIC_LIBRARY" AND NOT TARGET Qt6::QOffscreenIntegrationPlugin)
+  # The macOS depends build disables FreeType, so Qt omits the offscreen plugin.
+  set(qml_test_rendering_platform_default cocoa)
+endif()
+set(QML_TEST_RENDERING_PLATFORM ${qml_test_rendering_platform_default} CACHE STRING "Qt platform plugin for rendering tests")
+add_test(NAME bitcoinqml_rendering_tests COMMAND bitcoinqml_qmltests -platform ${QML_TEST_RENDERING_PLATFORM} -input :/test/rendering)
+set_tests_properties(bitcoinqml_rendering_tests PROPERTIES ENVIRONMENT "QT_QUICK_BACKEND=software")
+
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_unit_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_qml_plugins(bitcoinqml_unit_tests)
-  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin)
+  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+  if(TARGET Qt6::QOffscreenIntegrationPlugin)
+    qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QOffscreenIntegrationPlugin)
+  endif()
   qt6_import_qml_plugins(bitcoinqml_qmltests)
   target_link_libraries(bitcoinqml_qmltests PRIVATE
     Qt6::LabsPlatformplugin
