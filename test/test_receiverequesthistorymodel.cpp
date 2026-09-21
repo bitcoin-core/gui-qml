@@ -83,6 +83,7 @@ private Q_SLOTS:
     void buildUriPreservesBech32Case();
     void buildUriUrlEncodesParams();
     void serializeRoundTripWithQmlExtension();
+    void serializePaymentReceivedExtension();
     void serializeBaseEntryMatchesQtWidgetsFormat();
     void serializeQmlExtensionDoesNotBreakQtWidgetsFormat();
     void deserializeSkipsMalformed();
@@ -152,6 +153,28 @@ void ReceiveRequestHistoryModelTests::serializeRoundTripWithQmlExtension()
     QCOMPARE(out.recipient.message, std::string{"lunch"});
     QCOMPARE(out.recipient.noteSelf, std::string{"personal note"});
     QCOMPARE(out.date.toSecsSinceEpoch(), entry_in.date.toSecsSinceEpoch());
+}
+
+void ReceiveRequestHistoryModelTests::serializePaymentReceivedExtension()
+{
+    for (const std::string& note : {std::string{}, std::string{"Private"}}) {
+        auto entry = MakeEntry(7, "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2", 50000, "Alice", "lunch", note);
+        entry.payment_received = true;
+        const std::string blob = ReceiveRequestHistoryModel::SerializeEntry(entry);
+        const auto restored = ReceiveRequestHistoryModel::DeserializeEntries({blob});
+        QCOMPARE(restored.size(), size_t{1});
+        QVERIFY(restored.front().payment_received);
+        QCOMPARE(restored.front().recipient.noteSelf, note);
+        std::vector<uint8_t> bytes(blob.begin(), blob.end());
+        DataStream stream{bytes};
+        QtWidgetsRecentRequestEntry widgets_entry;
+        stream >> widgets_entry;
+        QCOMPARE(widgets_entry.recipient.amount, entry.recipient.amount);
+        QCOMPARE(widgets_entry.recipient.address, entry.recipient.address);
+        ReceiveRequestHistoryModel history;
+        history.prependOrReplace(restored.front());
+        QVERIFY(history.index(0).data(ReceiveRequestHistoryModel::UriRole).toString().isEmpty());
+    }
 }
 
 void ReceiveRequestHistoryModelTests::serializeBaseEntryMatchesQtWidgetsFormat()

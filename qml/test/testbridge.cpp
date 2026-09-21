@@ -320,6 +320,11 @@ QObject* TestBridge::findObjectByName(const QString& name) const
         if (item && item->isVisible()) return obj;
     }
 
+    // Popups are QObjects rather than QQuickItems. Multiple pages may own
+    // the same shared modal component; prefer the one that is currently open.
+    for (QObject* obj : matches) {
+        if (obj->property("visible").toBool()) return obj;
+    }
     // Fall back to the first match.
     return matches.first();
 }

@@ -59,6 +59,7 @@ QVariant ReceiveRequestHistoryModel::dataForEntry(const QmlRecentRequestEntry& e
     case AmountDisplayRole:
         return FormatAmountBtc(entry.recipient.amount);
     case UriRole:
+        if (entry.payment_received) return QString{};
         return BuildBitcoinUri(QString::fromStdString(entry.recipient.address),
                                entry.recipient.amount,
                                QString::fromStdString(entry.recipient.label),
@@ -81,6 +82,7 @@ QVariantMap ReceiveRequestHistoryModel::entryMap(const QmlRecentRequestEntry& en
         {QStringLiteral("amountSat"), dataForEntry(entry, AmountSatRole)},
         {QStringLiteral("amountDisplay"), dataForEntry(entry, AmountDisplayRole)},
         {QStringLiteral("uri"), dataForEntry(entry, UriRole)},
+        {QStringLiteral("paymentReceived"), entry.payment_received},
     };
 }
 
@@ -202,7 +204,8 @@ int64_t ReceiveRequestHistoryModel::maxId() const
 // bitcoin/src/qt/sendcoinsrecipient.h: version 1, Qt's unsigned timestamp, and
 // no QML-only fields inside the prefix.
 //
-// QML currently persists noteSelf as an optional trailing string. Released
+// QML persists noteSelf as an optional trailing string, followed by an optional
+// payment-received flag. Released
 // bitcoin-qt builds ignore trailing bytes after RecentRequestEntry, while QML
 // reads the extension when present. If Qt Widgets gains noteSelf support, move
 // this to an explicit shared contract instead of changing the prefix ad hoc.
@@ -218,6 +221,7 @@ std::vector<QmlRecentRequestEntry> ReceiveRequestHistoryModel::DeserializeEntrie
             ss >> entry;
             if (!ss.empty()) {
                 ss >> entry.recipient.noteSelf;
+                if (!ss.empty()) ss >> entry.payment_received;
             }
         } catch (const std::ios_base::failure& e) {
             qWarning() << "ReceiveRequestHistoryModel: skipping malformed receive request entry:" << e.what();
@@ -235,8 +239,9 @@ std::string ReceiveRequestHistoryModel::SerializeEntry(const QmlRecentRequestEnt
 {
     DataStream ss{};
     ss << entry;
-    if (!entry.recipient.noteSelf.empty()) {
+    if (!entry.recipient.noteSelf.empty() || entry.payment_received) {
         ss << entry.recipient.noteSelf;
+        if (entry.payment_received) ss << entry.payment_received;
     }
     return ss.str();
 }

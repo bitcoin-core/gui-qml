@@ -5,6 +5,7 @@
 """End-to-end GUI test for wallet address list receive integration."""
 
 import sys
+from qml_test_receive import _edit_field
 import time
 
 from qml_driver import QmlDriverError
@@ -111,18 +112,17 @@ def create_payment_request_from_first_unused_address(gui, expected_address):
     gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
     gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
-    wait_for_text(gui, "requestPaymentLabelInput", ADDRESS_LABEL)
-    address = gui.get_property("requestPaymentAddressText", "address")
-    assert address == expected_address, (
-        f"Expected receive view address {expected_address!r}, got {address!r}"
-    )
+    gui.wait_for_property("requestPaymentLabelRow", "value", ADDRESS_LABEL)
+    assert gui.get_property("receivingAddressText", "address") == expected_address
 
 
 def commit_payment_request(gui):
-    gui.set_text("requestPaymentAmountInput", "0.25")
+    _edit_field(gui, "amount", "0.25")
     before = gui.get_property("requestHistoryCount", "count")
     gui.click("requestPaymentGenerateButton")
     gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
+    gui.wait_for_property("paymentRequestModal", "opened", True)
+    gui.click("paymentRequestModalClose")
 
 
 def edit_existing_request_from_address_details(gui, expected_address):
@@ -147,23 +147,15 @@ def edit_existing_request_from_address_details(gui, expected_address):
     gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
 
-    # The editor holds the saved request in its update state: the amount is
-    # locked and committing updates in place instead of duplicating.
-    wait_for_text(gui, "requestPaymentLabelInput", ADDRESS_LABEL)
-    generate_text = gui.get_text("requestPaymentGenerateButton")
-    assert "Update payment request" in generate_text, (
-        f"Expected update state for the saved request, got {generate_text!r}"
-    )
-    assert gui.get_property("requestPaymentAmountInput", "enabled") is False, (
-        "The amount of a saved request must not be editable"
-    )
+    gui.wait_for_property("paymentRequestModal", "opened", True)
+    gui.wait_for_property("requestPaymentLabelRow", "value", ADDRESS_LABEL)
+    assert gui.get_property("requestPaymentAddressText", "address") == expected_address
     before = gui.get_property("requestHistoryCount", "count")
-    gui.click("requestPaymentGenerateButton")
-    gui.settle()
-    after = gui.get_property("requestHistoryCount", "count")
-    assert after == before, (
-        f"Updating a request must not create a duplicate: history went {before} -> {after}"
-    )
+    _edit_field(gui, "amount", "0.5")
+    assert gui.get_property("requestHistoryCount", "count") == before
+    assert gui.get_property("requestPaymentAddressText", "address") == expected_address
+    gui.click("requestPaymentUpdateButton")
+    gui.wait_for_property("paymentRequestModal", "visible", False)
 
     # Returning to settings lands back on the Addresses page, not the
     # settings root: the trip to the request editor must not pop the

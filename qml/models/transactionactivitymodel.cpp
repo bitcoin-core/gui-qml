@@ -671,7 +671,7 @@ QString TransactionActivityModel::rawTransaction(const QString& txid) const
 QString TransactionActivityModel::paymentRequestUri(const QString& request_id) const
 {
     const auto entry = m_wallet_model->receiveRequests()->entryById(request_id);
-    if (!entry) return {};
+    if (!entry || entry->payment_received) return {};
     return ReceiveRequestHistoryModel::BuildBitcoinUri(QString::fromStdString(entry->recipient.address),
         entry->recipient.amount, QString::fromStdString(entry->recipient.label), QString::fromStdString(entry->recipient.message));
 }

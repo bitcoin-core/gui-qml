@@ -359,7 +359,7 @@ Page {
                 root.navigateToTransaction(txid)
             }
         }
-        RequestPayment {
+        ReceivePage {
             onAddressHistoryRequested: {
                 root.openSettingsRoute("addresses")
             }

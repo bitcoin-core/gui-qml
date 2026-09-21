@@ -31,6 +31,8 @@ class PaymentRequest : public QObject
     Q_PROPERTY(QString createdIso READ createdIso NOTIFY createdIsoChanged)
     Q_PROPERTY(bool hasPaymentInfo READ hasPaymentInfo NOTIFY qrPayloadChanged)
     Q_PROPERTY(bool isEditing READ isEditing WRITE setIsEditing NOTIFY isEditingChanged)
+    Q_PROPERTY(bool paymentReceived READ paymentReceived NOTIFY paymentReceivedChanged)
+    Q_PROPERTY(qint64 receivedAmountSatoshi READ receivedAmountSatoshi NOTIFY receivedAmountChanged)
 
 public:
     explicit PaymentRequest(QObject* parent = nullptr);
@@ -75,6 +77,10 @@ public:
 
     bool isEditing() const;
     void setIsEditing(bool editing);
+    bool paymentReceived() const { return m_payment_received; }
+    void setPaymentReceived(bool received);
+    qint64 receivedAmountSatoshi() const { return m_received_amount; }
+    void setReceivedAmountSatoshi(qint64 amount);
 
     Q_INVOKABLE void clear();
     Q_INVOKABLE void edit();
@@ -92,6 +98,8 @@ Q_SIGNALS:
     void qrPayloadChanged();
     void createdIsoChanged();
     void isEditingChanged();
+    void paymentReceivedChanged();
+    void receivedAmountChanged();
 
 private:
     static QString FormatAddress(const QString& address);
@@ -108,6 +116,8 @@ private:
     QString m_unlock_error;
     QDateTime m_created;
     bool m_is_editing{true};
+    bool m_payment_received{false};
+    qint64 m_received_amount{0};
 };
 
 #endif // BITCOIN_QML_MODELS_PAYMENTREQUEST_H

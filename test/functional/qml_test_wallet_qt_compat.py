@@ -15,6 +15,7 @@ import time
 from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call
+from qml_test_receive import _create_request
 
 
 COMPAT_VERSION = "31.0"
@@ -138,22 +139,6 @@ def launch_bitcoin_qt(bitcoin_qt, harness):
     return subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
-def set_receive_options(gui):
-    gui.click("receiveOptionsButton")
-    gui.wait_for_property("receiveOptionsPopup", "opened", True, timeout_ms=5000)
-    for toggle_name in (
-        "receiveOptionsNameToggle",
-        "receiveOptionsMessageToggle",
-        "receiveOptionsNoteSelfToggle",
-        "receiveOptionsAddressTypeToggle",
-    ):
-        if not bool(gui.get_property(toggle_name, "checked")):
-            gui.click(toggle_name)
-            gui.wait_for_property(toggle_name, "checked", True, timeout_ms=5000)
-    gui.click("receiveOptionsButton")
-    gui.wait_for_property("receiveOptionsPopup", "opened", False, timeout_ms=5000)
-
-
 def create_unencrypted_wallet(gui, wallet_name):
     try:
         gui.wait_for_property("createWalletButton", "visible", True, timeout_ms=1000)
@@ -179,21 +164,8 @@ def create_unencrypted_wallet(gui, wallet_name):
 def create_full_payment_request(gui):
     gui.click("receiveTabButton")
     gui.wait_for_page("requestPaymentPage", timeout_ms=10000)
-    set_receive_options(gui)
-
-    gui.wait_for_property("requestPaymentYourNameInput", "visible", True, timeout_ms=5000)
-    gui.wait_for_property("requestPaymentMessageInput", "visible", True, timeout_ms=5000)
-    gui.wait_for_property("requestPaymentNoteSelfInput", "visible", True, timeout_ms=5000)
-    gui.wait_for_property("receiveAddressTypePicker", "visible", True, timeout_ms=5000)
-
-    before = gui.get_property("requestHistoryCount", "count")
-    gui.set_text("requestPaymentAmountInput", REQUEST_AMOUNT)
-    gui.set_text("requestPaymentYourNameInput", REQUEST_LABEL)
-    gui.set_text("requestPaymentMessageInput", REQUEST_MESSAGE)
-    gui.set_text("requestPaymentNoteSelfInput", REQUEST_NOTE_SELF)
-    gui.click("requestPaymentGenerateButton")
-    gui.wait_for_property("requestHistoryCount", "count", before + 1, timeout_ms=20000)
-    gui.wait_for_property("requestPaymentTitle", "text", "Payment request #1", timeout_ms=10000)
+    _create_request(gui, REQUEST_AMOUNT, REQUEST_LABEL, REQUEST_MESSAGE, REQUEST_NOTE_SELF)
+    gui.wait_for_property("requestPaymentTitle", "text", "Payment request", timeout_ms=10000)
 
 
 def run_test():

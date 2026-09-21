@@ -76,6 +76,7 @@ private:
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
     Q_PROPERTY(SignVerifyMessageModel* signVerifyMessageModel READ signVerifyMessageModel CONSTANT)
     Q_PROPERTY(PaymentRequest* currentPaymentRequest READ currentPaymentRequest CONSTANT)
+    Q_PROPERTY(PaymentRequest* receivingAddress READ receivingAddress CONSTANT)
     Q_PROPERTY(PaymentRequest* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
@@ -123,6 +124,7 @@ public:
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id);
     Q_INVOKABLE bool loadPaymentRequest(const QString& request_id);
     Q_INVOKABLE bool loadPaymentRequestDetail(const QString& request_id);
+    Q_INVOKABLE bool updatePaymentRequest(const QString& request_id, qint64 amount, const QString& label, const QString& message, const QString& note);
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
 
     TransactionActivityModel* transactionActivityModel();
@@ -132,6 +134,10 @@ public:
     SendRecipientsListModel* sendRecipientList() const { return m_send_recipients; }
     SignVerifyMessageModel* signVerifyMessageModel() const { return m_sign_verify_message_model; }
     PaymentRequest* currentPaymentRequest() const { return m_current_payment_request; }
+    PaymentRequest* receivingAddress() const { return m_receiving_address; }
+    Q_INVOKABLE bool ensureReceivingAddress(bool next = false, const QString& address_type = {});
+    Q_INVOKABLE bool ensureReceivingAddressWithPassphrase(const QString& passphrase, bool next = false, const QString& address_type = {});
+    Q_INVOKABLE bool commitReceivingPaymentRequest();
     PaymentRequest* detailPaymentRequest() const { return m_detail_payment_request; }
     ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
@@ -285,7 +291,11 @@ private:
     void refreshSecurityState();
     bool prepareTransactionInternal(std::optional<SecureString> passphrase);
     bool ensurePaymentRequestDestination();
-    bool saveCurrentPaymentRequest();
+    bool savePaymentRequest(PaymentRequest* request);
+    void refreshReceiveRequestPayments();
+    void recordReceiveRequestPayment(const interfaces::WalletTx& tx);
+    CAmount receivedPaymentRequestAmount(const QString& address) const;
+    void updateReceivedPaymentRequestAmounts();
     bool sendTransactionInternal(std::optional<SecureString> passphrase = std::nullopt);
     void saveSentRecipientLabels();
     bool unlockForAction(std::optional<SecureString>& passphrase, bool& relock);
@@ -304,8 +314,11 @@ private:
     SendRecipientsListModel* m_send_recipients{nullptr};
     SignVerifyMessageModel* m_sign_verify_message_model{nullptr};
     PaymentRequest* m_current_payment_request{nullptr};
+    PaymentRequest* m_receiving_address{nullptr};
     PaymentRequest* m_detail_payment_request{nullptr};
     ReceiveRequestHistoryModel* m_receive_requests{nullptr};
+    // Derived from wallet transactions, rebuilt on load and replaced per txid on updates.
+    std::map<Txid, std::map<QString, CAmount>> m_receive_request_payments;
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
     std::unique_ptr<PartiallySignedTransaction> m_current_psbt;

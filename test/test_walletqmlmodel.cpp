@@ -195,6 +195,16 @@ void SetValidRecipient(WalletQmlModel& model,
 class FakePasswordWallet : public StubWallet
 {
 public:
+    std::function<std::set<interfaces::WalletTx>()> get_wallet_txs_fn;
+    std::set<interfaces::WalletTx> getWalletTxs() override { return get_wallet_txs_fn ? get_wallet_txs_fn() : std::set<interfaces::WalletTx>{}; }
+    std::map<Txid, interfaces::WalletTxStatus> transaction_statuses;
+    interfaces::WalletTx getWalletTxDetails(const Txid& txid, interfaces::WalletTxStatus& status,
+                                          interfaces::WalletOrderForm&, bool&, int&) override
+    {
+        status = transaction_statuses[txid];
+        return {};
+    }
+
     bool encrypted{true};
     bool locked{true};
     bool private_keys_disabled{false};
@@ -335,8 +345,9 @@ public:
         return true;
     }
     bool delAddressBook(const CTxDestination&) override { return true; }
-    bool getAddress(const CTxDestination&, std::string* name, wallet::AddressPurpose*) override
+    bool getAddress(const CTxDestination&, std::string* name, wallet::AddressPurpose* purpose) override
     {
+        if (purpose) *purpose = wallet::AddressPurpose::RECEIVE;
         if (name) {
             *name = get_address_label;
         }
@@ -531,7 +542,10 @@ private Q_SLOTS:
     void transactionChangedEmitsBalanceChanged();
     void setCurrentPaymentRequestAddressUsesAddressListLabel();
     void commitPaymentRequestUsesSelectedAddressType();
-    void updateKeepsStoredPaymentRequestAmount();
+    void updateChangesUnpaidPaymentRequestAmount();
+    void paymentArrivalLocksRequestAndPreservesNote();
+    void paymentRequestTracksActualReceivedAmount();
+    void requestDetailEditsPreserveReceiveDraft();
     void setCurrentPaymentRequestAddressEditsExistingRequest();
     void usePaymentRequestAsTemplatePreservesAddressType();
     void commitPaymentRequestOnLockedWalletSignalsNeedsUnlock();
@@ -539,6 +553,8 @@ private Q_SLOTS:
     void commitPaymentRequestWithPassphraseWrongPasswordSurfacesError();
     void availableReceiveAddressTypesHideUnavailableTaproot();
     void receiveAddressTypeDefaultPersistsPerWallet();
+    void receivingAddressIsStableUntilRotatedOrPaid();
+    void receivingAddressCreationAndRequestPersistenceAreSeparate();
     void removeReceiveRequestRemovesPendingActivityRow();
     void editedReceiveRequestNameShownInActivityMetadata();
     void editedRequestSyncsAddressBookLabel();
@@ -693,26 +709,100 @@ void WalletQmlModelTests::availableReceiveAddressTypesHideUnavailableTaproot()
 
 void WalletQmlModelTests::receiveAddressTypeDefaultPersistsPerWallet()
 {
-    QSettings settings;
-    settings.remove("receiveAddressTypes/fake-wallet");
-    settings.sync();
-
-    auto [wallet, model] = MakePasswordWalletModel();
+    MockNode node;
+    common::SettingsValue preferences{UniValue::VOBJ};
+    preferences.pushKV("other-wallet", "legacy");
+    node.SetPersistentSetting("qml_receive_address_types", preferences);
+    node.update_rw_setting_fn = [&node](const auto& key, const auto& value) {
+        node.SetPersistentSetting(key, value);
+    };
+    auto [wallet, model] = MakePasswordWalletModel(&node);
     wallet->default_address_type = OutputType::BECH32;
-
-    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32m"));
 
     model->setDefaultReceiveAddressType("p2sh-segwit");
     QCOMPARE(model->defaultReceiveAddressType(), QString("p2sh-segwit"));
+    const auto saved = node.getPersistentSetting("qml_receive_address_types");
+    QCOMPARE(saved["fake-wallet"].get_str(), std::string("p2sh-segwit"));
+    QCOMPARE(saved["other-wallet"].get_str(), std::string("legacy"));
+    auto [restored_wallet, restored_model] = MakePasswordWalletModel(&node);
+    QCOMPARE(restored_model->defaultReceiveAddressType(), QString("p2sh-segwit"));
 
+    model->setDefaultReceiveAddressType("invalid");
+    QCOMPARE(model->defaultReceiveAddressType(), QString("p2sh-segwit"));
     model->setDefaultReceiveAddressType("bech32m");
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32m"));
-
     wallet->taproot_enabled = false;
     QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+    node.SetPersistentSetting("qml_receive_address_types", "malformed");
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+    model->setDefaultReceiveAddressType("legacy");
+    QCOMPARE(model->defaultReceiveAddressType(), QString("legacy"));
+}
 
+void WalletQmlModelTests::receivingAddressIsStableUntilRotatedOrPaid()
+{
+    QSettings settings;
     settings.remove("receiveAddressTypes/fake-wallet");
-    settings.sync();
+    MockNode node;
+    node.update_rw_setting_fn = [&node](const auto& key, const auto& value) {
+        node.SetPersistentSetting(key, value);
+    };
+    auto [wallet, model] = MakePasswordWalletModel(&node);
+    QVERIFY(model->ensureReceivingAddress());
+    QCOMPARE(wallet->new_destination_types.back(), OutputType::BECH32M);
+    const auto address = model->receivingAddress()->address();
+    QVERIFY(!address.isEmpty());
+    QVERIFY(model->ensureReceivingAddress());
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+    QVERIFY(model->ensureReceivingAddress(true));
+    QCOMPARE(wallet->get_new_destination_calls, 2);
+    QVERIFY(model->ensureReceivingAddress(false, "bech32"));
+    QCOMPARE(wallet->new_destination_types.back(), OutputType::BECH32);
+    QCOMPARE(model->defaultReceiveAddressType(), QString("bech32"));
+
+    CMutableTransaction incoming;
+    incoming.vout.emplace_back(1, GetScriptForDestination(model->receivingAddress()->destination()));
+    interfaces::WalletTx payment{};
+    payment.tx = MakeTransactionRef(incoming);
+    payment.txout_is_mine = {true};
+    wallet->get_wallet_txs_fn = [payment] { return std::set<interfaces::WalletTx>{payment}; };
+    model->currentPaymentRequest()->setLabel("Too late");
+    QVERIFY(!model->commitReceivingPaymentRequest());
+    QVERIFY(model->receivingAddress()->paymentReceived());
+    QCOMPARE(model->receiveRequests()->count(), 0);
+    QVERIFY(model->ensureReceivingAddress());
+    QCOMPARE(wallet->get_new_destination_calls, 4);
+    QCOMPARE(wallet->set_address_receive_request_calls, 0);
+    settings.remove("receiveAddressTypes/fake-wallet");
+}
+
+void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSeparate()
+{
+    QSettings settings;
+    settings.remove("receiveAddressTypes/fake-wallet");
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(model->ensureReceivingAddress());
+    const auto address = model->receivingAddress()->address();
+    QCOMPARE(model->receiveRequests()->count(), 0);
+    // Reopening the wallet restores its unused receiving address without
+    // consuming another key or saving a payment request.
+    auto [restored_wallet, restored_model] = MakePasswordWalletModel();
+    restored_wallet->get_address_result = true;
+    QVERIFY(restored_model->ensureReceivingAddress());
+    QCOMPARE(restored_model->receivingAddress()->address(), address);
+    QCOMPARE(restored_wallet->get_new_destination_calls, 0);
+    QVERIFY(!model->commitReceivingPaymentRequest());
+    model->currentPaymentRequest()->setNoteSelf("Only a private note");
+    QVERIFY(model->commitReceivingPaymentRequest());
+    QCOMPARE(model->currentPaymentRequest()->address(), address);
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+    QCOMPARE(model->receiveRequests()->count(), 1);
+    model->currentPaymentRequest()->clear();
+    QVERIFY(model->ensureReceivingAddress());
+    QCOMPARE(model->receivingAddress()->address(), address);
+    QCOMPARE(wallet->get_new_destination_calls, 1);
+    settings.remove("receiveAddressTypes/fake-wallet");
 }
 
 void WalletQmlModelTests::feeTargetIndex_mapsStandardTargets()
@@ -1517,7 +1607,7 @@ void WalletQmlModelTests::commitPaymentRequestUsesSelectedAddressType()
     QCOMPARE(wallet->new_destination_labels.front(), std::string{"typed receive"});
 }
 
-void WalletQmlModelTests::updateKeepsStoredPaymentRequestAmount()
+void WalletQmlModelTests::updateChangesUnpaidPaymentRequestAmount()
 {
     auto [wallet, model] = MakePasswordWalletModel();
 
@@ -1527,17 +1617,147 @@ void WalletQmlModelTests::updateKeepsStoredPaymentRequestAmount()
     const QString request_id{model->currentPaymentRequest()->id()};
     QVERIFY(!request_id.isEmpty());
 
-    // Even if the in-memory request is tampered with, an update must keep
-    // the stored amount; only the other fields follow the editor.
+    // Unpaid public fields can change without generating another address.
     model->currentPaymentRequest()->amount()->setSatoshi(999999);
     model->currentPaymentRequest()->setLabel(QStringLiteral("second"));
     QVERIFY(model->commitPaymentRequest());
 
     const auto entry = model->receiveRequests()->entryById(request_id);
     QVERIFY(entry.has_value());
-    QCOMPARE(entry->recipient.amount, CAmount{1000});
+    QCOMPARE(entry->recipient.amount, CAmount{999999});
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("second"));
-    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{1000});
+    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{999999});
+}
+
+void WalletQmlModelTests::paymentArrivalLocksRequestAndPreservesNote()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    auto* request = model->currentPaymentRequest();
+    request->setLabel("Original");
+    request->setMessage("Public message");
+    request->amount()->setSatoshi(10000);
+    QVERIFY(model->commitPaymentRequest());
+    const QString id = request->id();
+    const QString address = request->address();
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QVERIFY(!model->detailPaymentRequest()->paymentReceived());
+
+    // Even a partial unconfirmed payment locks the request; no status/depth
+    // lookup is required. Detect it at save time before queued UI callbacks.
+    CMutableTransaction incoming;
+    incoming.vout.emplace_back(1, GetScriptForDestination(request->destination()));
+    interfaces::WalletTx payment{};
+    payment.tx = MakeTransactionRef(incoming);
+    payment.txout_is_mine = {true};
+    wallet->get_wallet_txs_fn = [payment] { return std::set<interfaces::WalletTx>{payment}; };
+    QVERIFY(!model->updatePaymentRequest(id, 20000, "Changed", "Changed", ""));
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{1});
+    QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
+    QVERIFY(model->transactionActivityModel()->paymentRequestUri(id).isEmpty());
+    auto entry = model->receiveRequests()->entryById(id);
+    QVERIFY(entry->payment_received);
+    QCOMPARE(entry->recipient.amount, CAmount{10000});
+    QCOMPARE(entry->recipient.label, std::string{"Original"});
+    QCOMPARE(entry->recipient.message, std::string{"Public message"});
+    QVERIFY(model->updatePaymentRequest(id, 10000, "Original", "Public message", "Private receipt"));
+    QCOMPARE(model->detailPaymentRequest()->noteSelf(), QStringLiteral("Private receipt"));
+    QCOMPARE(model->detailPaymentRequest()->address(), address);
+
+    // Losing a transaction/reorg must never restore sharing after observation.
+    wallet->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
+    QVERIFY(!model->updatePaymentRequest(id, 10000, "Changed", "Public message", ""));
+    const auto blobs = std::vector<std::string>{ReceiveRequestHistoryModel::SerializeEntry(*model->receiveRequests()->entryById(id))};
+    QVERIFY(ReceiveRequestHistoryModel::DeserializeEntries(blobs).front().payment_received);
+}
+
+void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    auto* request = model->currentPaymentRequest();
+    request->amount()->setSatoshi(10000);
+    QVERIFY(model->commitPaymentRequest());
+    const QString id = request->id();
+    const auto script = GetScriptForDestination(request->destination());
+
+    CMutableTransaction first;
+    first.vout.emplace_back(100, script);
+    first.vout.emplace_back(41, script);
+    first.vout.emplace_back(5000, CScript{} << OP_RETURN);
+    interfaces::WalletTx first_payment{};
+    first_payment.tx = MakeTransactionRef(first);
+    first_payment.txout_is_mine = {true, true, false};
+    CMutableTransaction second;
+    second.vout.emplace_back(200, script);
+    interfaces::WalletTx second_payment{};
+    second_payment.tx = MakeTransactionRef(second);
+    second_payment.txout_is_mine = {true};
+    wallet->get_wallet_txs_fn = [first_payment, second_payment] {
+        return std::set<interfaces::WalletTx>{first_payment, second_payment};
+    };
+
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->amount()->satoshi(), qint64{10000});
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
+    QCOMPARE(request->receivedAmountSatoshi(), qint64{341});
+    // Rebuilding the transaction snapshot must not count a payment twice.
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
+
+    // An unconfirmed original with replacement metadata must not contribute
+    // to the total. If it later confirms, the historical marker is ignored.
+    first_payment.value_map["replaced_by_txid"] = second_payment.tx->GetHash().ToString();
+    wallet->get_wallet_txs_fn = [first_payment, second_payment] {
+        return std::set<interfaces::WalletTx>{first_payment, second_payment};
+    };
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{200});
+    QCOMPARE(request->receivedAmountSatoshi(), qint64{200});
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
+    wallet->transaction_statuses[first_payment.tx->GetHash()].depth_in_main_chain = 1;
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
+
+    wallet->transaction_statuses[second_payment.tx->GetHash()].is_abandoned = true;
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{141});
+    wallet->transaction_statuses[first_payment.tx->GetHash()].depth_in_main_chain = -1;
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{0});
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
+
+    model->detailPaymentRequest()->clear();
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{0});
+}
+
+void WalletQmlModelTests::requestDetailEditsPreserveReceiveDraft()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(model->commitPaymentRequest());
+    const QString id = model->currentPaymentRequest()->id();
+    const QString address = model->currentPaymentRequest()->address();
+    const auto created = model->currentPaymentRequest()->created();
+    model->currentPaymentRequest()->clear();
+    model->currentPaymentRequest()->setLabel("Unrelated draft");
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QVERIFY(model->updatePaymentRequest(id, 49000, "Coffee & cake", "Thank you", "Private"));
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("Unrelated draft"));
+    QVERIFY(model->currentPaymentRequest()->address().isEmpty());
+    QCOMPARE(model->detailPaymentRequest()->address(), address);
+    QCOMPARE(model->detailPaymentRequest()->created(), created);
+    QVERIFY(model->detailPaymentRequest()->qrPayload().contains("amount=0.00049000"));
+    QVERIFY(model->detailPaymentRequest()->qrPayload().contains("label=Coffee%20%26%20cake"));
+    QVERIFY(!model->detailPaymentRequest()->qrPayload().contains("Private"));
+    QVERIFY(model->updatePaymentRequest(id, 0, "", "", ""));
+    QCOMPARE(model->detailPaymentRequest()->qrPayload(), "bitcoin:" + address);
+    QVERIFY(!model->updatePaymentRequest(id, -1, "", "", ""));
+    QVERIFY(!model->updatePaymentRequest(id, MAX_MONEY + 1, "", "", ""));
+    QCOMPARE(wallet->get_new_destination_calls, 1);
 }
 
 void WalletQmlModelTests::setCurrentPaymentRequestAddressEditsExistingRequest()

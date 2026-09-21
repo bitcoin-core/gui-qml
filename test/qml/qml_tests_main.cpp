@@ -510,9 +510,13 @@ class MockPaymentRequest : public QObject
     Q_PROPERTY(QString unlockError MEMBER m_unlock_error NOTIFY unlockErrorChanged)
     Q_PROPERTY(QString createdIso MEMBER m_created_iso NOTIFY createdIsoChanged)
     Q_PROPERTY(QString qrPayload READ qrPayload NOTIFY addressChanged)
+    Q_PROPERTY(bool paymentReceived MEMBER m_payment_received NOTIFY paymentReceivedChanged)
+    Q_PROPERTY(qint64 receivedAmountSatoshi MEMBER m_received_amount NOTIFY receivedAmountChanged)
     Q_PROPERTY(bool isEditing MEMBER m_is_editing NOTIFY isEditingChanged)
 
 public:
+    bool m_payment_received{false};
+    qint64 m_received_amount{0};
     QString m_id;
     QString m_amount_error;
     QString m_label;
@@ -528,9 +532,13 @@ public:
 
     QObject* amount() { return &m_amount; }
     QString addressFormatted() const { return m_address; }
-    QString qrPayload() const { return m_address.isEmpty() ? QString{} : QStringLiteral("bitcoin:") + m_address; }
+    QString qrPayload() const { return m_address.isEmpty() || m_payment_received ? QString{} : QStringLiteral("bitcoin:") + m_address; }
     Q_INVOKABLE void clear()
     {
+        m_payment_received = false;
+        m_received_amount = 0;
+        Q_EMIT receivedAmountChanged();
+        Q_EMIT paymentReceivedChanged();
         m_id.clear();
         m_amount_error.clear();
         m_label.clear();
@@ -565,6 +573,8 @@ public:
     }
 
 Q_SIGNALS:
+    void paymentReceivedChanged();
+    void receivedAmountChanged();
     void idChanged();
     void amountErrorChanged();
     void labelChanged();
@@ -986,6 +996,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool currentTransactionCanBroadcast MEMBER m_current_transaction_can_broadcast NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString currentTransactionReviewMessage MEMBER m_current_transaction_review_message NOTIFY currentTransactionChanged)
     Q_PROPERTY(QObject* currentPaymentRequest READ currentPaymentRequest CONSTANT)
+    Q_PROPERTY(QObject* receivingAddress READ receivingAddress CONSTANT)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(MockAddressListModel* addressListModel READ addressListModel CONSTANT)
@@ -1022,6 +1033,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastLoadedPaymentRequestDetailId MEMBER m_last_loaded_payment_request_detail_id NOTIFY lastLoadedPaymentRequestDetailIdChanged)
     Q_PROPERTY(QString lastTemplateRequestId MEMBER m_last_template_request_id NOTIFY lastTemplateRequestIdChanged)
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
+    Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
 
 public:
     enum class KeyScheme {
@@ -1049,11 +1061,13 @@ public:
     QString m_last_loaded_payment_request_detail_id;
     QString m_last_template_request_id;
     QString m_last_removed_request_id;
+    bool m_remove_receive_request_result{true};
     QString m_saved_payment_request_label;
     QString m_saved_payment_request_message;
     QString m_saved_payment_request_note_self;
     QString m_saved_payment_request_amount_display;
     QString m_saved_payment_request_address_type;
+    QString m_saved_payment_request_address;
     int m_target_blocks{2};
     bool m_prepare_transaction_result{true};
     bool m_current_transaction_can_send{true};
@@ -1066,7 +1080,35 @@ public:
     QObject* coinsListModel() const { return m_coins_list_model; }
     QObject* currentTransaction() const { return m_current_transaction; }
     QObject* currentPaymentRequest() const { return m_current_payment_request; }
-    QObject* detailPaymentRequest() const { return m_current_payment_request; }
+    MockPaymentRequest m_receiving_address;
+    QObject* receivingAddress() { return &m_receiving_address; }
+    int m_receiving_sequence{0};
+    Q_INVOKABLE bool ensureReceivingAddress(bool next = false, const QString& type = {})
+    {
+        const QString selected = type.isEmpty() ? m_default_receive_address_type : type;
+        if (next || m_receiving_address.m_address.isEmpty() || m_receiving_address.m_payment_received || selected != m_receiving_address.m_address_type) {
+            m_receiving_address.clear();
+            m_receiving_address.m_address = QStringLiteral("bcrt1qreceivingaddress%1").arg(++m_receiving_sequence);
+            m_receiving_address.m_address_type = selected;
+            m_default_receive_address_type = selected;
+            Q_EMIT m_receiving_address.addressChanged();
+            Q_EMIT m_receiving_address.addressTypeChanged();
+        }
+        return true;
+    }
+    Q_INVOKABLE bool ensureReceivingAddressWithPassphrase(const QString&, bool next = false, const QString& type = {})
+    { return ensureReceivingAddress(next, type); }
+    Q_INVOKABLE QString receiveAddressTypeLabel(const QString& type) const { return type; }
+    Q_INVOKABLE bool commitReceivingPaymentRequest()
+    {
+        auto* request = qobject_cast<MockPaymentRequest*>(m_current_payment_request);
+        if (!request || m_receiving_address.m_payment_received || m_receiving_address.m_address.isEmpty()) return false;
+        request->m_address = m_receiving_address.m_address;
+        request->m_address_type = m_receiving_address.m_address_type;
+        return commitPaymentRequest();
+    }
+    MockPaymentRequest m_detail_payment_request;
+    QObject* detailPaymentRequest() { return &m_detail_payment_request; }
     QObject* receiveRequests() { return &m_receive_requests; }
     MockAddressListModel* addressListModel() { return &m_address_list_model; }
     Q_INVOKABLE QVariantList availableReceiveAddressTypes() const
@@ -1150,16 +1192,18 @@ public:
     {
         m_last_loaded_payment_request_detail_id = request_id;
         Q_EMIT lastLoadedPaymentRequestDetailIdChanged();
-        auto* request = qobject_cast<MockPaymentRequest*>(m_current_payment_request);
+        auto* request = &m_detail_payment_request;
+        request->clear();
         if (!request) return false;
         request->m_id = request_id;
-        request->m_label = QStringLiteral("Alice");
-        request->m_message = QStringLiteral("Coffee");
-        request->m_note_self = QStringLiteral("Counter");
-        request->m_address = QStringLiteral("bcrt1qrequestaddress0000000000000000000000");
+        request->m_label = request_id == "1" ? m_saved_payment_request_label : QStringLiteral("Alice");
+        request->m_message = request_id == "1" ? m_saved_payment_request_message : QStringLiteral("Coffee");
+        request->m_note_self = request_id == "1" ? m_saved_payment_request_note_self : QStringLiteral("Counter");
+        request->m_address = request_id == "1" ? m_saved_payment_request_address : QStringLiteral("bcrt1qrequestaddress0000000000000000000000");
         request->m_created_iso = QStringLiteral("2026-01-02T00:00:00Z");
         request->m_is_editing = false;
-        request->m_amount.m_display = QStringLiteral("0.00100000");
+        request->m_amount.m_display = request_id == "1" ? m_saved_payment_request_amount_display : QStringLiteral("0.00100000");
+        request->m_address_type = m_saved_payment_request_address_type;
         request->m_amount.m_unit = MockBitcoinAmount::BTC;
         Q_EMIT request->idChanged();
         Q_EMIT request->labelChanged();
@@ -1289,11 +1333,23 @@ public:
         m_saved_payment_request_amount_display = request->m_amount.m_display;
         m_saved_payment_request_address_type = request->m_address_type;
         request->m_id = QStringLiteral("1");
-        request->m_address = QStringLiteral("bcrt1qrequestaddress0000000000000000000000");
+        if (request->m_address.isEmpty()) request->m_address = QStringLiteral("bcrt1qrequestaddress0000000000000000000000");
+        m_saved_payment_request_address = request->m_address;
         request->m_is_editing = false;
         Q_EMIT request->idChanged();
         Q_EMIT request->addressChanged();
         Q_EMIT request->isEditingChanged();
+        return true;
+    }
+    Q_INVOKABLE bool updatePaymentRequest(const QString& id, qint64 amount, const QString& label, const QString& message, const QString& note)
+    {
+        auto* request = &m_detail_payment_request;
+        if (request->m_id != id) return false;
+        if (request->m_payment_received && (amount != request->m_amount.satoshi() || label != request->m_label || message != request->m_message)) return false;
+        request->m_amount.setSatoshi(amount);
+        request->setProperty("label", label);
+        request->setProperty("message", message);
+        request->setProperty("noteSelf", note);
         return true;
     }
     Q_INVOKABLE bool commitPaymentRequestWithPassphrase(const QString&)
@@ -1359,6 +1415,7 @@ public:
     }
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id)
     {
+        if (!m_remove_receive_request_result) return false;
         m_last_removed_request_id = request_id;
         Q_EMIT lastRemovedRequestIdChanged();
         return true;
@@ -1397,6 +1454,7 @@ Q_SIGNALS:
     void lastLoadedPaymentRequestDetailIdChanged();
     void lastTemplateRequestIdChanged();
     void lastRemovedRequestIdChanged();
+    void removeReceiveRequestResultChanged();
 
 private:
     void setTransactionStatus(const QString& error, bool needs_unlock)

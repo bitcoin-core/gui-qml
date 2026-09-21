@@ -52,6 +52,10 @@
         <file>components/PaymentDetailOptionsPopup.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/QRCodePopup.qml</file>
+        <file>components/PaymentRequestCard.qml</file>
+        <file>components/PaymentRequestModal.qml</file>
+        <file>components/ReceivingAddressCard.qml</file>
+        <file>components/PaymentRequestField.qml</file>
         <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
@@ -199,6 +203,7 @@
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/PaymentRequestDetail.qml</file>
         <file>pages/wallet/RequestPayment.qml</file>
+        <file>pages/wallet/ReceivePage.qml</file>
         <file>pages/wallet/Send.qml</file>
         <file>pages/wallet/SendResult.qml</file>
         <file>pages/wallet/SendReview.qml</file>
@@ -214,6 +219,7 @@
         <file alias="arrow-diagonal-square">res/icons/arrow-diagonal-square.png</file>
         <file alias="arrow-down">res/icons/arrow-down.png</file>
         <file alias="arrow-up">res/icons/arrow-up.png</file>
+        <file alias="arrow-up-down.svg">res/src/arrow-up-down.svg</file>
         <file alias="activity-send.svg">res/src/activity-send.svg</file>
         <file alias="activity-receive.svg">res/src/activity-receive.svg</file>
         <file alias="activity-multiple.svg">res/src/activity-multiple.svg</file>
@@ -221,6 +227,8 @@
         <file alias="activity-consolidation.svg">res/src/activity-consolidation.svg</file>
         <file alias="activity-split.svg">res/src/activity-split.svg</file>
         <file alias="activity-internal.svg">res/src/activity-internal.svg</file>
+        <file alias="globe.svg">res/src/globe.svg</file>
+        <file alias="lock.fill.svg">res/src/lock.fill.svg</file>
         <file alias="activity-invoice.svg">res/src/activity-invoice.svg</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>

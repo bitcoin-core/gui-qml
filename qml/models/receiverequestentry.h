@@ -38,6 +38,8 @@ struct QmlRecentRequestEntry
     int64_t id{0};
     QDateTime date;
     QmlReceiveRequestRecipient recipient;
+    // QML extension: once used, this address must never be offered for sharing again.
+    bool payment_received{false};
 
     SERIALIZE_METHODS(QmlRecentRequestEntry, obj)
     {

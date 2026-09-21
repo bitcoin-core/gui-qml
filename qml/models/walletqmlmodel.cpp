@@ -37,6 +37,7 @@
 #include <qml/bitcoinunits.h>
 #include <script/solver.h>
 #include <support/allocators/secure.h>
+#include <univalue.h>
 #include <util/result.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
@@ -418,6 +419,7 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, inter
     m_sign_verify_message_model = new SignVerifyMessageModel(m_wallet.get(), this);
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
     m_current_payment_request = new PaymentRequest(this);
+    m_receiving_address = new PaymentRequest(this);
     m_detail_payment_request = new PaymentRequest(this);
     m_imported_psbt_model = new PsbtQmlModel(m_wallet.get(), m_node, this);
     initializeFeeEstimator();
@@ -443,6 +445,7 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     m_sign_verify_message_model = new SignVerifyMessageModel(nullptr, this);
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
     m_current_payment_request = new PaymentRequest(this);
+    m_receiving_address = new PaymentRequest(this);
     m_detail_payment_request = new PaymentRequest(this);
     m_receive_requests = new ReceiveRequestHistoryModel(this);
     m_imported_psbt_model = new PsbtQmlModel(nullptr, m_node, this);
@@ -817,8 +820,12 @@ QVariantList WalletQmlModel::availableReceiveAddressTypes() const
 QString WalletQmlModel::defaultReceiveAddressType() const
 {
     const QVariantList available_types = availableReceiveAddressTypes();
-    QSettings settings;
-    const QString saved_type{settings.value(persistedReceiveAddressTypeKey()).toString()};
+    QString saved_type;
+    if (m_node) {
+        const auto preferences = m_node->getPersistentSetting("qml_receive_address_types");
+        const auto& value = preferences[name().toStdString()];
+        if (value.isStr()) saved_type = QString::fromStdString(value.get_str());
+    }
     for (const QVariant& item : available_types) {
         const QVariantMap type{item.toMap()};
         if (type.value(QStringLiteral("id")).toString() == saved_type) {
@@ -826,14 +833,7 @@ QString WalletQmlModel::defaultReceiveAddressType() const
         }
     }
 
-    const QString core_default{m_wallet ? OutputTypeId(m_wallet->getDefaultAddressType()) : QString()};
-    for (const QVariant& item : available_types) {
-        const QVariantMap type{item.toMap()};
-        if (type.value(QStringLiteral("id")).toString() == core_default) {
-            return core_default;
-        }
-    }
-
+    // The list starts with Taproot, falling back to SegWit when unavailable.
     return available_types.empty()
         ? QString{}
         : available_types.front().toMap().value(QStringLiteral("id")).toString();
@@ -844,9 +844,11 @@ void WalletQmlModel::setDefaultReceiveAddressType(const QString& address_type)
     for (const QVariant& item : availableReceiveAddressTypes()) {
         const QVariantMap type{item.toMap()};
         if (type.value(QStringLiteral("id")).toString() == address_type) {
-            QSettings settings;
-            settings.setValue(persistedReceiveAddressTypeKey(), address_type);
-            settings.sync();
+            if (!m_node) return;
+            auto preferences = m_node->getPersistentSetting("qml_receive_address_types");
+            if (!preferences.isObject()) preferences = common::SettingsValue{UniValue::VOBJ};
+            preferences.pushKV(name().toStdString(), address_type.toStdString());
+            m_node->updateRwSetting("qml_receive_address_types", preferences);
             return;
         }
     }
@@ -903,7 +905,80 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
     m_current_payment_request->setLabel(getAddressLabel(address));
     m_current_payment_request->setIsEditing(false);
     m_current_payment_request->setIsEditing(true);
+    // The explicit Receive action in Addresses must keep the chosen address.
+    m_receiving_address->clear();
+    m_receiving_address->setDestination(destination);
+    QSettings settings;
+    settings.setValue(persistedReceiveAddressTypeKey() + QStringLiteral("/address"), address);
     return true;
+}
+
+bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_type)
+{
+    if (!m_wallet || !m_receiving_address) return false;
+    auto* receiving = m_receiving_address;
+    const QString type = address_type.isEmpty() ? defaultReceiveAddressType() : address_type;
+    const auto available = availableReceiveAddressTypes();
+    if (std::none_of(available.begin(), available.end(), [&](const QVariant& item) {
+        return item.toMap().value(QStringLiteral("id")).toString() == type;
+    })) return false;
+
+    QSettings settings;
+    const QString key = persistedReceiveAddressTypeKey() + QStringLiteral("/address");
+    if (receiving->address().isEmpty() && !next) {
+        const auto destination = DecodeDestination(settings.value(key).toString().toStdString());
+        // Restore only an address belonging to this wallet's receive address book.
+        wallet::AddressPurpose purpose{};
+        if (IsValidDestination(destination) && m_wallet->getAddress(destination, nullptr, &purpose)
+            && purpose == wallet::AddressPurpose::RECEIVE) receiving->setDestination(destination);
+    }
+    if (!receiving->address().isEmpty()) {
+        for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
+        const bool same_type = address_type.isEmpty() || OutputTypeIdFromDestination(receiving->destination()) == type;
+        if (!next && !receiving->paymentReceived() && same_type) return true;
+    }
+    const auto parsed = ParseOutputType(type.toStdString());
+    if (!parsed) return false;
+    const auto destination = m_wallet->getNewDestination(*parsed, "");
+    if (!destination || !IsValidDestination(*destination)) {
+        receiving->setNeedsUnlock(m_wallet->isCrypted() && m_wallet->isLocked());
+        return false;
+    }
+    receiving->clear();
+    receiving->setDestination(*destination);
+    settings.setValue(key, receiving->address());
+    settings.sync();
+    setDefaultReceiveAddressType(type);
+    return true;
+}
+
+bool WalletQmlModel::ensureReceivingAddressWithPassphrase(const QString& passphrase, bool next, const QString& address_type)
+{
+    if (!m_wallet || !m_receiving_address) return false;
+    auto secure_passphrase = QmlUtil::SecureStringFromQString(passphrase);
+    const auto result = TryUnlockWithPassphrase(*m_wallet, secure_passphrase);
+    if (result == WalletUnlockResult::IncorrectPassphrase) {
+        m_receiving_address->setUnlockError(tr("The wallet password you entered was incorrect."));
+        return false;
+    }
+    const bool relock = result == WalletUnlockResult::UnlockedNowRelockRequired;
+    if (relock) refreshSecurityState();
+    WalletRelockGuard guard{*m_wallet, [this] { refreshSecurityState(); }, relock};
+    return ensureReceivingAddress(next, address_type);
+}
+
+bool WalletQmlModel::commitReceivingPaymentRequest()
+{
+    if (!m_wallet || !m_receiving_address || !m_current_payment_request) return false;
+    if (!m_current_payment_request->id().isEmpty()) return false;
+    // Reconcile before committing: never silently attach a draft to a different
+    // address if a payment landed while the user was filling out the form.
+    for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
+    if (m_receiving_address->address().isEmpty() || m_receiving_address->paymentReceived()) return false;
+    if (m_current_payment_request->amount()->satoshi() == 0 && m_current_payment_request->label().trimmed().isEmpty()
+        && m_current_payment_request->message().trimmed().isEmpty() && m_current_payment_request->noteSelf().trimmed().isEmpty()) return false;
+    m_current_payment_request->setDestination(m_receiving_address->destination());
+    return savePaymentRequest(m_current_payment_request);
 }
 
 bool WalletQmlModel::ensurePaymentRequestDestination()
@@ -934,15 +1009,15 @@ bool WalletQmlModel::ensurePaymentRequestDestination()
     return true;
 }
 
-bool WalletQmlModel::saveCurrentPaymentRequest()
+bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
 {
-    if (!m_wallet || !m_current_payment_request) {
+    if (!m_wallet || !request) {
         return false;
     }
 
-    const bool is_update = !m_current_payment_request->id().isEmpty();
+    const bool is_update = !request->id().isEmpty();
     const QString request_id_text = is_update
-        ? m_current_payment_request->id()
+        ? request->id()
         : QString::number(nextPaymentRequestId());
 
     bool parse_ok{false};
@@ -963,29 +1038,38 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
 
     QmlRecentRequestEntry request_entry;
     request_entry.id = request_id;
-    request_entry.date = is_update ? m_current_payment_request->created() : QDateTime::currentDateTime();
+    request_entry.date = is_update ? request->created() : QDateTime::currentDateTime();
     if (!is_update) {
-        m_current_payment_request->setCreated(request_entry.date);
+        request->setCreated(request_entry.date);
     }
-    // A saved request's expected amount is immutable (#847). The editor
-    // disables the field, but the model is the guard: an update keeps the
-    // stored amount no matter what the in-memory request holds.
-    CAmount request_amount{m_current_payment_request->amount()->satoshi()};
-    if (is_update && m_receive_requests) {
-        if (const auto existing = m_receive_requests->entryById(request_id_text)) {
-            request_amount = existing->recipient.amount;
-            m_current_payment_request->amount()->setSatoshi(request_amount);
+    if (!MoneyRange(request->amount()->satoshi())) return false;
+    if (is_update) {
+        // Reconcile before saving too: a payment may have arrived while an
+        // inline editor was open, before its queued notification was delivered.
+        const CAmount edited_amount = request->amount()->satoshi();
+        const std::string edited_label = request->label().toStdString();
+        const std::string edited_message = request->message().toStdString();
+        refreshReceiveRequestPayments();
+        const auto existing = m_receive_requests->entryById(request_id_text);
+        if (!existing || request->address().toStdString() != existing->recipient.address) return false;
+        request_entry.payment_received = existing->payment_received;
+        if (existing->payment_received &&
+            (edited_amount != existing->recipient.amount ||
+             edited_label != existing->recipient.label ||
+             edited_message != existing->recipient.message)) {
+            return false;
         }
+        request_entry.date = existing->date;
     }
 
-    request_entry.recipient.address = m_current_payment_request->address().toStdString();
-    request_entry.recipient.label = m_current_payment_request->label().toStdString();
-    request_entry.recipient.amount = request_amount;
-    request_entry.recipient.message = m_current_payment_request->message().toStdString();
-    request_entry.recipient.noteSelf = m_current_payment_request->noteSelf().toStdString();
+    request_entry.recipient.address = request->address().toStdString();
+    request_entry.recipient.label = request->label().toStdString();
+    request_entry.recipient.amount = request->amount()->satoshi();
+    request_entry.recipient.message = request->message().toStdString();
+    request_entry.recipient.noteSelf = request->noteSelf().toStdString();
 
     const bool saved = m_wallet->setAddressReceiveRequest(
-        m_current_payment_request->destination(),
+        request->destination(),
         request_id_text.toStdString(),
         ReceiveRequestHistoryModel::SerializeEntry(request_entry));
     if (!saved) {
@@ -993,7 +1077,7 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     }
 
     if (!is_update) {
-        m_current_payment_request->setId(static_cast<unsigned int>(request_id));
+        request->setId(static_cast<unsigned int>(request_id));
     }
 
     if (m_receive_requests) {
@@ -1010,16 +1094,16 @@ bool WalletQmlModel::saveCurrentPaymentRequest()
     // alone: Core supports multiple requests per address with their own
     // labels, so saving this request must not fan its label out to sibling
     // requests the way an Addresses page edit deliberately does.
-    const QString request_label = m_current_payment_request->label();
+    const QString request_label = request->label();
     const bool label_edited = !previous_label.has_value() || request_label != *previous_label;
-    if (label_edited && !request_label.isEmpty() && request_label != getAddressLabel(m_current_payment_request->address())) {
-        writeAddressBookLabel(m_current_payment_request->address(), request_label);
+    if (label_edited && !request_label.isEmpty() && request_label != getAddressLabel(request->address())) {
+        writeAddressBookLabel(request->address(), request_label);
     }
 
-    m_current_payment_request->setIsEditing(false);
+    request->setIsEditing(false);
 
-    if (m_detail_payment_request && m_detail_payment_request->id() == m_current_payment_request->id()) {
-        loadPaymentRequestDetail(m_current_payment_request->id());
+    if (m_detail_payment_request && m_detail_payment_request->id() == request->id()) {
+        loadPaymentRequestDetail(request->id());
     }
 
     return true;
@@ -1031,13 +1115,14 @@ bool WalletQmlModel::commitPaymentRequest()
         return false;
     }
 
+    if (!MoneyRange(m_current_payment_request->amount()->satoshi())) return false;
     if (!ensurePaymentRequestDestination()) {
         if (m_wallet->isCrypted() && m_wallet->isLocked()) {
             m_current_payment_request->setNeedsUnlock(true);
         }
         return false;
     }
-    return saveCurrentPaymentRequest();
+    return savePaymentRequest(m_current_payment_request);
 }
 
 bool WalletQmlModel::commitPaymentRequestWithPassphrase(const QString& passphrase)
@@ -1063,10 +1148,11 @@ bool WalletQmlModel::commitPaymentRequestWithPassphrase(const QString& passphras
     }
     WalletRelockGuard relock_guard{*m_wallet, [this] { refreshSecurityState(); }, need_relock};
 
+    if (!MoneyRange(m_current_payment_request->amount()->satoshi())) return false;
     if (!ensurePaymentRequestDestination()) {
         return false;
     }
-    if (!saveCurrentPaymentRequest()) {
+    if (!savePaymentRequest(m_current_payment_request)) {
         return false;
     }
 
@@ -1084,6 +1170,7 @@ void WalletQmlModel::reloadReceiveRequests()
     }
     m_receive_requests->setEntries(
         ReceiveRequestHistoryModel::DeserializeEntries(m_wallet->getAddressReceiveRequests()));
+    refreshReceiveRequestPayments();
 }
 
 bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
@@ -1103,6 +1190,7 @@ bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
 bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
 {
     if (!m_current_payment_request || !m_receive_requests) return false;
+    refreshReceiveRequestPayments();
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry) return false;
     if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
@@ -1118,6 +1206,8 @@ bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
     m_current_payment_request->amount()->setSatoshi(entry->recipient.amount);
     m_current_payment_request->setId(static_cast<unsigned int>(entry->id));
     m_current_payment_request->setCreated(entry->date);
+    m_current_payment_request->setReceivedAmountSatoshi(receivedPaymentRequestAmount(m_current_payment_request->address()));
+    m_current_payment_request->setPaymentReceived(entry->payment_received);
     m_current_payment_request->setIsEditing(false);
     return true;
 }
@@ -1125,6 +1215,7 @@ bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
 bool WalletQmlModel::loadPaymentRequestDetail(const QString& request_id)
 {
     if (!m_detail_payment_request || !m_receive_requests) return false;
+    refreshReceiveRequestPayments();
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry) return false;
     if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
@@ -1140,8 +1231,107 @@ bool WalletQmlModel::loadPaymentRequestDetail(const QString& request_id)
     m_detail_payment_request->amount()->setSatoshi(entry->recipient.amount);
     m_detail_payment_request->setId(static_cast<unsigned int>(entry->id));
     m_detail_payment_request->setCreated(entry->date);
+    m_detail_payment_request->setReceivedAmountSatoshi(receivedPaymentRequestAmount(m_detail_payment_request->address()));
+    m_detail_payment_request->setPaymentReceived(entry->payment_received);
     m_detail_payment_request->setIsEditing(false);
     return true;
+}
+
+bool WalletQmlModel::updatePaymentRequest(const QString& request_id, qint64 amount,
+                                        const QString& label, const QString& message, const QString& note)
+{
+    if (!m_wallet || !m_receive_requests || !MoneyRange(amount)) return false;
+    const auto entry = m_receive_requests->entryById(request_id);
+    if (!entry || entry->id <= 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
+    PaymentRequest edited;
+    edited.setId(static_cast<unsigned int>(entry->id));
+    edited.setDestination(DecodeDestination(entry->recipient.address));
+    edited.setCreated(entry->date);
+    edited.amount()->setSatoshi(amount);
+    edited.setLabel(label);
+    edited.setMessage(message);
+    edited.setNoteSelf(note);
+    if (!savePaymentRequest(&edited)) return false;
+    // The Receive draft is independent of the modal's saved request.
+    if (m_current_payment_request->id() == request_id) loadPaymentRequest(request_id);
+    return true;
+}
+
+void WalletQmlModel::refreshReceiveRequestPayments()
+{
+    m_receive_request_payments.clear();
+    if (!m_wallet || !m_receive_requests || m_receive_requests->count() == 0) return;
+    for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
+    updateReceivedPaymentRequestAmounts();
+}
+
+void WalletQmlModel::recordReceiveRequestPayment(const interfaces::WalletTx& tx)
+{
+    if (!m_wallet || !m_receive_requests || !tx.tx) return;
+    auto& received = m_receive_request_payments[tx.tx->GetHash()];
+    received.clear();
+    for (size_t i = 0; i < tx.tx->vout.size(); ++i) {
+        const auto& output = tx.tx->vout[i];
+        if (output.nValue <= 0 || i >= tx.txout_is_mine.size() || !tx.txout_is_mine[i]) continue;
+        CTxDestination destination;
+        if (!ExtractDestination(output.scriptPubKey, destination)) continue;
+        const QString address = QString::fromStdString(EncodeDestination(destination));
+        if (m_receiving_address && address == m_receiving_address->address()) {
+            m_receiving_address->setPaymentReceived(true);
+        }
+        const auto requests = m_receive_requests->entriesForAddress(address);
+        if (requests.empty()) continue;
+        received[address] += output.nValue;
+        for (auto entry : requests) {
+            if (entry.payment_received) continue;
+            entry.payment_received = true;
+            const QString id = QString::number(entry.id);
+            // Keep the in-memory lock even if persistence fails. A later load
+            // also reconciles against wallet transactions before sharing.
+            m_wallet->setAddressReceiveRequest(destination, id.toStdString(),
+                ReceiveRequestHistoryModel::SerializeEntry(entry));
+            m_receive_requests->prependOrReplace(entry);
+            for (auto* held : {m_current_payment_request, m_detail_payment_request}) {
+                if (!held || held->id() != id) continue;
+                held->setPaymentReceived(true);
+                held->amount()->setSatoshi(entry.recipient.amount);
+                held->setLabel(QString::fromStdString(entry.recipient.label));
+                held->setMessage(QString::fromStdString(entry.recipient.message));
+            }
+        }
+    }
+    if (!received.empty()) {
+        interfaces::WalletTxStatus status{};
+        interfaces::WalletOrderForm order_form;
+        bool in_mempool{false};
+        int num_blocks{0};
+        m_wallet->getWalletTxDetails(tx.tx->GetHash(), status, order_form, in_mempool, num_blocks);
+        // Keep the address-reuse lock, but do not count replaced, conflicted,
+        // or abandoned payments in the amount that was actually received.
+        const auto replacement = tx.value_map.find("replaced_by_txid");
+        const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty()
+            && status.depth_in_main_chain <= 0;
+        if (replaced || status.depth_in_main_chain < 0 || status.is_abandoned) received.clear();
+    }
+    if (received.empty()) m_receive_request_payments.erase(tx.tx->GetHash());
+}
+
+CAmount WalletQmlModel::receivedPaymentRequestAmount(const QString& address) const
+{
+    CAmount total{0};
+    for (const auto& [txid, received] : m_receive_request_payments) {
+        if (const auto it = received.find(address); it != received.end()) total += it->second;
+    }
+    return total;
+}
+
+void WalletQmlModel::updateReceivedPaymentRequestAmounts()
+{
+    for (auto* request : {m_current_payment_request, m_detail_payment_request}) {
+        if (request && !request->id().isEmpty()) {
+            request->setReceivedAmountSatoshi(receivedPaymentRequestAmount(request->address()));
+        }
+    }
 }
 
 void WalletQmlModel::usePaymentRequestAsTemplate(const QString& request_id)
@@ -1234,7 +1424,7 @@ bool WalletQmlModel::setAddressLabel(const QString& address, const QString& labe
     // Keep any payment request for this address in step with the edited label,
     // so editing it on the Addresses page also updates the request and its
     // Activity row instead of letting them diverge. This is the reverse of
-    // saveCurrentPaymentRequest, which writes an edited request label back to
+    // savePaymentRequest, which writes an edited request label back to
     // the address book (through writeAddressBookLabel alone: that direction
     // must not rewrite sibling requests on the same address).
     syncPaymentRequestLabelToAddress(address, label);
@@ -1271,7 +1461,9 @@ void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, co
         return;
     }
 
+    refreshReceiveRequestPayments();
     for (QmlRecentRequestEntry entry : m_receive_requests->entriesForAddress(address)) {
+        if (entry.payment_received) continue;
         // Already in step: nothing to re-store.
         if (QString::fromStdString(entry.recipient.label) == label) {
             continue;
@@ -2387,6 +2579,9 @@ void WalletQmlModel::subscribeToWalletSignals()
     });
     m_handler_transaction_changed = handleTransactionChanged([this](const uint256& txid, ChangeType change) {
         QMetaObject::invokeMethod(this, [this, txid, change] {
+            m_receive_request_payments.erase(Txid::FromUint256(txid));
+            if (change != CT_DELETED) recordReceiveRequestPayment(getWalletTx(txid));
+            updateReceivedPaymentRequestAmounts();
             Q_EMIT transactionChanged(QString::fromStdString(txid.ToString()), change);
             Q_EMIT balanceChanged();
             Q_EMIT sendAmountExhaustsBalanceChanged();

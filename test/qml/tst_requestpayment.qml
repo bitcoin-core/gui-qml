@@ -5,26 +5,30 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls/utils.js" as Utils
 import "../../qml/pages/wallet"
 
 TestCase {
     name: "RequestPayment"
     when: windowShown
+    visible: true
     width: 900
     height: 700
 
     Component {
         id: requestPaymentComponent
 
-        RequestPayment {}
+        ReceivePage {}
     }
 
     function init() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
         testPaymentRequest.clear()
         testWalletModel.lastCommitAddressType = ""
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
+        testWalletModel.removeReceiveRequestResult = true
         walletController.closePaymentRequestDetailRequests = 0
     }
 
@@ -166,370 +170,269 @@ TestCase {
         compare(field.acceptableInput, false)
     }
 
-    function test_amount_locked_when_updating_saved_request() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
+
+    function createPage() {
+        const page = createTemporaryObject(requestPaymentComponent, this, { width: 900, height: 900, wallet: testWalletModel })
         verify(page !== null)
-        page.request = testPaymentRequest
-
-        const amountInput = findChild(page, "requestPaymentAmountInput")
-        verify(amountInput !== null)
-        verify(amountInput.enabled)
-
-        testPaymentRequest.id = "7"
-        testPaymentRequest.isEditing = true
-        compare(amountInput.enabled, false)
-
-        const nameInput = findChild(page, "requestPaymentYourNameInput")
-        verify(nameInput !== null)
-        verify(nameInput.enabled)
+        tryVerify(function() { return testWalletModel.receivingAddress.address !== "" })
+        return page
+    }
+    function createRequest(page) {
+        const card = page.draftCard
+        if (!card.hasFields) editField(card, "requestPaymentYourNameInput", "Request")
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        return page.requestModal.card
     }
 
-    function test_request_field_names_and_visibility_hints() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.request = testPaymentRequest
-
-        // One name for the one synced datum: the payer-visible label. The
-        // visibility distinction sits behind a small info button per field.
-        const labelField = findChild(page, "requestPaymentLabelInput")
-        verify(labelField !== null)
-        compare(labelField.labelText, "Label")
-        compare(labelField.hintText, "Visible to the payer and saved as this address's label.")
-
-        const messageField = findChild(page, "requestPaymentMessageInput")
-        verify(messageField !== null)
-        compare(messageField.hintText, "Visible to the payer.")
-
-        const noteField = findChild(page, "requestPaymentNoteSelfInput")
-        verify(noteField !== null)
-        compare(noteField.hintText, "Only you can see this.")
-
-        // The info buttons exist and announce their hint to assistive tech.
-        const labelHintButton = findChild(page, "requestPaymentLabelHint")
-        verify(labelHintButton !== null)
-        compare(labelHintButton.Accessible.name, labelField.hintText)
-        verify(findChild(page, "requestPaymentMessageHint") !== null)
-        verify(findChild(page, "requestPaymentNoteSelfHint") !== null)
+    function test_address_ready_before_request_and_create_requires_fields() {
+        const page = createPage()
+        const address = testWalletModel.receivingAddress.address
+        compare(testPaymentRequest.id, "")
+        verify(findChild(page, "receivingAddressQRImage").visible)
+        compare(findChild(page, "receivingAddressQRImage").code, address)
+        const button = findChild(page.draftCard, "requestPaymentGenerateButton")
+        verify(!button.enabled)
+        page.draftCard.createRequest()
+        compare(testPaymentRequest.id, "")
+        editField(page.draftCard, "requestPaymentNoteSelfInput", "Private note")
+        verify(button.enabled)
+        const card = createRequest(page)
+        compare(card.saved, true)
+        compare(findChild(card, "paymentRequestStatus").text, "Awaiting payment")
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        compare(testWalletModel.receivingAddress.address, address)
+        compare(testPaymentRequest.id, "")
     }
 
-    Component {
-        id: paymentRequestDetailComponent
-
-        PaymentRequestDetail {}
-    }
-
-    function test_saved_request_without_amount_shows_plain_any_amount_text() {
-        // A saved request's amount is fixed, so the detail page must not
-        // offer an "Add amount" path into an editor whose amount field is
-        // locked; a request without an amount states that the payer picks it.
-        testPaymentRequest.clear()
-        testPaymentRequest.id = "7"
-        const page = createTemporaryObject(paymentRequestDetailComponent, this,
-                                           { request: testPaymentRequest })
-        verify(page !== null)
-        const anyAmount = findChild(page, "paymentRequestDetailAnyAmount")
-        verify(anyAmount !== null)
-        compare(anyAmount.text, "Any amount")
-    }
-
-    function test_amountInput_keeps_user_draft_while_model_display_updates() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const amountInput = findChild(page, "requestPaymentAmountInput")
-        verify(amountInput !== null)
-
-        amountInput.text = ""
-        amountInput.forceActiveFocus()
-        verify(amountInput.activeFocus)
-        keyClick("1")
-
-        compare(amountInput.text, "1")
-        compare(testPaymentRequest.amount.display, "1.00000000")
-    }
-
-    function test_amountInput_allows_editing_whole_part_before_decimal() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const amountInput = findChild(page, "requestPaymentAmountInput")
-        verify(amountInput !== null)
-
-        amountInput.text = "0.00000000"
-        amountInput.cursorPosition = 1
-        amountInput.forceActiveFocus()
-        verify(amountInput.activeFocus)
-        keyClick("1")
-
-        compare(amountInput.text, "01.00000000")
-        compare(testPaymentRequest.amount.display, "1.00000000")
-
-        amountInput.focus = false
-        wait(0)
-        compare(amountInput.activeFocus, false)
-        compare(amountInput.text, "1.00000000")
-    }
-
-    function test_amountInput_rejects_extra_decimal_digits_while_editing() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const amountInput = findChild(page, "requestPaymentAmountInput")
-        verify(amountInput !== null)
-
-        testPaymentRequest.amount.display = "0.12345678"
-        tryCompare(amountInput, "text", "0.12345678")
-        amountInput.cursorPosition = amountInput.text.length
-        amountInput.forceActiveFocus()
-        verify(amountInput.activeFocus)
-        keyClick("9")
-
-        compare(amountInput.text, "0.12345678")
-        compare(testPaymentRequest.amount.display, "0.12345678")
-
-        amountInput.focus = false
-        wait(0)
-        compare(amountInput.activeFocus, false)
-        compare(amountInput.text, "0.12345678")
-    }
-
-    function test_amountInput_rejects_extra_decimal_points_while_editing() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const amountInput = findChild(page, "requestPaymentAmountInput")
-        verify(amountInput !== null)
-
-        testPaymentRequest.amount.display = "1.20000000"
-        amountInput.text = "1.2"
-        amountInput.cursorPosition = amountInput.text.length
-        amountInput.forceActiveFocus()
-        verify(amountInput.activeFocus)
-        keyClick(".")
-
-        compare(amountInput.text, "1.2")
-        compare(testPaymentRequest.amount.display, "1.20000000")
-    }
-
-    function test_addressTypeSelection_passes_selected_type_to_generation() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const addressTypeToggle = findChild(page, "receiveOptionsAddressTypeToggle")
-        verify(addressTypeToggle !== null)
-        addressTypeToggle.checked = true
-
-        const picker = findChild(page, "receiveAddressTypePicker")
-        verify(picker !== null)
-        compare(page.showAddressTypeSelector, true)
-        page.selectedReceiveAddressType = "p2sh-segwit"
-        compare(picker.selectedLabel, "Base58 (P2SH-SegWit)")
-
-        const generateButton = findChild(page, "requestPaymentGenerateButton")
-        verify(generateButton !== null)
-        generateButton.clicked()
-
-        compare(testPaymentRequest.addressType, "p2sh-segwit")
+    function test_next_address_and_type_selection_rotate_without_request() {
+        const page = createPage()
+        const receiving = findChild(page, "receivingAddressCard")
+        const first = testWalletModel.receivingAddress.address
+        receiving.ensureAddress(true, "")
+        verify(testWalletModel.receivingAddress.address !== first)
+        receiving.ensureAddress(false, "p2sh-segwit")
+        compare(testWalletModel.receivingAddress.addressType, "p2sh-segwit")
+        compare(testPaymentRequest.id, "")
+        const card = createRequest(page)
         compare(testWalletModel.lastCommitAddressType, "p2sh-segwit")
     }
 
-    function test_addressTypePicker_highlight_is_tight_to_label() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
+    function test_qr_context_menus_close_when_address_is_no_longer_shareable() {
+        const page = createPage()
+        const receivingArea = findChild(page, "receivingAddressQRContextArea")
+        const receivingMenu = findChild(page, "receivingAddressQRContextMenu")
+        mouseClick(receivingArea, 20, 20, Qt.RightButton)
+        tryCompare(receivingMenu, "opened", true)
+        compare(findChild(page, "receivingAddressQRContextCopy").text, "Copy QR code")
+        compare(findChild(page, "receivingAddressQRContextSave").text, "Save QR code")
+        findChild(page, "receivingAddressCard").ensureAddress(true, "")
+        tryCompare(receivingMenu, "visible", false)
 
-        const addressTypeToggle = findChild(page, "receiveOptionsAddressTypeToggle")
-        verify(addressTypeToggle !== null)
-        addressTypeToggle.checked = true
-
-        const picker = findChild(page, "receiveAddressTypePicker")
-        verify(picker !== null)
-        page.selectedReceiveAddressType = "p2sh-segwit"
-
-        tryVerify(function() { return picker.width > 0 })
-        verify(picker.width < 300)
-        compare(picker.height, 30)
-        compare(picker.selectedLabel, "Base58 (P2SH-SegWit)")
+        const card = createRequest(page)
+        const requestMenu = findChild(card, "requestPaymentQRContextMenu")
+        mouseClick(findChild(card, "requestPaymentQRContextArea"), 20, 20, Qt.RightButton)
+        tryCompare(requestMenu, "opened", true)
+        compare(findChild(card, "requestPaymentQRContextCopy").text, "Copy QR code")
+        compare(findChild(card, "requestPaymentQRContextSave").text, "Save QR code")
+        card.request.paymentReceived = true
+        tryCompare(requestMenu, "visible", false)
+        verify(!findChild(card, "requestPaymentQRContextArea").enabled)
     }
 
-    function test_createdRequestOptions_include_template_and_delete_actions() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
+    function test_saved_request_unit_toggle_does_not_enable_update() {
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "0.001")
+        const card = createRequest(page)
+        const amount = card.request.amount.satoshi
+        const button = findChild(card, "requestPaymentUpdateButton")
+        const icon = findChild(card, "requestPaymentAmountUnitIcon")
+        tryCompare(icon, "width", 12)
+        tryCompare(icon, "height", 12)
+        verify(!button.enabled)
+        card.toggleAmountUnit()
+        compare(optionsModel.displayUnit, BitcoinAmount.SAT)
+        compare(card.request.amount.satoshi, amount)
+        verify(!button.enabled)
+        tryCompare(icon, "width", 12)
+        tryCompare(icon, "height", 12)
+        card.toggleAmountUnit()
+        compare(optionsModel.displayUnit, BitcoinAmount.BTC)
+        compare(card.request.amount.satoshi, amount)
+        verify(!button.enabled)
+    }
 
-        testWalletModel.commitPaymentRequest()
+    function editField(card, objectName, text) {
+        const input = findChild(card, objectName)
+        input.forceActiveFocus()
+        input.text = text
+        input.textEdited()
+        return input
+    }
 
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        compare(popup.showRequestActions, true)
-        popup.open()
-        tryCompare(popup, "opened", true)
+    function test_fields_save_explicitly_without_changing_address() {
+        const card = createRequest(createPage())
+        const address = card.request.address
+        const input = editField(card, "requestPaymentYourNameInput", "Friday coffee")
+        findChild(card, "requestPaymentMessageInput").forceActiveFocus()
+        compare(card.request.label, "Request")
+        verify(card.saveFields())
+        compare(card.request.label, "Friday coffee")
+        compare(card.request.address, address)
+        verify(card.sharing)
+        verify(findChild(card, "requestPaymentQRImage").visible)
+        editField(card, "requestPaymentYourNameInput", "")
+        findChild(card, "requestPaymentMessageInput").forceActiveFocus()
+        verify(card.saveFields())
+        compare(card.request.label, "")
+    }
 
-        const templateButton = findChild(page, "receiveOptionsUseAsTemplateButton")
-        verify(templateButton !== null)
-        verify(templateButton.visible)
+    function test_closing_modal_discards_unsaved_field() {
+        const page = createPage()
+        const card = createRequest(page)
+        editField(card, "requestPaymentMessageInput", "Saved on close")
+        const request = card.request
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        compare(request.message, "")
+    }
 
-        templateButton.clicked()
-        compare(testWalletModel.lastTemplateRequestId, "1")
+    function test_received_payment_freezes_fields_and_hides_sharing() {
+        const card = createRequest(createPage())
+        const message = editField(card, "requestPaymentMessageInput", "Uncommitted message")
+        card.request.receivedAmountSatoshi = 141
+        card.request.paymentReceived = true
+        compare(card.request.message, "")
+        compare(message.text, "")
+        verify(!card.sharing)
+        verify(!findChild(card, "requestPaymentQRPlaceholder").visible)
+        const summary = findChild(card, "requestPaymentReceivedSummary")
+        verify(summary.visible)
+        compare(summary.amountValue, "0.00000141")
+        verify(!findChild(card, "requestPaymentReceivedIcon").dashed)
+        findChild(card, "paymentRequestMoreButton").clicked()
+        const menu = findChild(card, "paymentRequestMoreMenu")
+        tryCompare(menu, "opened", true)
+        verify(!findChild(card, "requestPaymentCopyQRMenuButton").visible)
+        verify(!findChild(card, "requestPaymentSaveQRMenuButton").visible)
+        verify(findChild(card, "requestPaymentDeleteMenuButton").visible)
+        menu.close()
+        verify(!findChild(card, "requestPaymentAddressText").interactive)
+        verify(!findChild(card, "requestPaymentAmountInput").enabled)
+        verify(!findChild(card, "requestPaymentYourNameInput").enabled)
+        verify(!message.enabled)
+        const note = editField(card, "requestPaymentNoteSelfInput", "Received, thank you")
+        note.editingFinished()
+        verify(card.saveFields())
+        compare(card.request.noteSelf, "Received, thank you")
+    }
+
+    function test_payment_arrival_preserves_private_note_draft() {
+        const card = createRequest(createPage())
+        const note = editField(card, "requestPaymentNoteSelfInput", "Keep this draft")
+        card.request.paymentReceived = true
+        compare(note.text, "Keep this draft")
+        verify(note.enabled)
+        note.editingFinished()
+        verify(card.saveFields())
+        compare(card.request.noteSelf, "Keep this draft")
+    }
+
+    function test_amount_input_rejects_invalid_characters_and_preserves_precision() {
+        const card = createRequest(createPage())
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const input = editField(card, "requestPaymentAmountInput", "0.12345678")
+        input.cursorPosition = input.text.length
+        keyClick("9")
+        compare(input.text, "0.12345678")
+        keyClick(".")
+        keyClick("x")
+        compare(input.text, "0.12345678")
+        input.editingFinished()
+        verify(card.saveFields())
+        compare(card.request.amount.satoshi, 12345678)
+        compare(input.text, "0.12345678")
+    }
+
+    function test_unit_toggle_updates_app_without_converting_edited_text() {
+        const page = createPage()
+        const card = createRequest(page)
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const input = editField(card, "requestPaymentAmountInput", "12")
+        findChild(card, "requestPaymentAmountUnitToggle").clicked()
+        compare(card.amountUnit, BitcoinAmount.SAT)
+        compare(optionsModel.displayUnit, BitcoinAmount.SAT)
+        compare(page.draftCard.amountUnit, BitcoinAmount.SAT)
+        compare(input.text, "12")
+        verify(card.saveFields())
+        compare(card.request.amount.satoshi, 12)
+        findChild(card, "requestPaymentAmountUnitToggle").clicked()
+        compare(input.text, "0.00000012")
+        verify(!findChild(card, "requestPaymentUpdateButton").enabled)
+        compare(card.request.amount.satoshi, 12)
+        compare(optionsModel.displayUnit, BitcoinAmount.BTC)
+        compare(page.draftCard.amountUnit, BitcoinAmount.BTC)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        compare(card.amountUnit, BitcoinAmount.SAT)
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_fractional_sats_and_out_of_range_amounts_never_save() {
+        const page = createPage()
+        const card = page.draftCard
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        editField(card, "requestPaymentAmountInput", "1.5")
+        card.createRequest()
+        compare(card.request.id, "")
+        verify(card.errorText.length > 0)
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        editField(card, "requestPaymentAmountInput", "21000000.00000001")
+        card.createRequest()
+        compare(card.request.id, "")
+        editField(card, "requestPaymentAmountInput", "21000000.00000000")
+        verify(card.saveFields())
+        compare(card.request.amount.satoshi, 2100000000000000)
+    }
+
+    function test_delete_menu_closes_modal_and_clears_matching_request() {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        verify(findChild(card, "requestPaymentCopyQRMenuButton").visible)
+        verify(findChild(card, "requestPaymentSaveQRMenuButton").visible)
+        findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        tryCompare(page.requestModal, "visible", false)
+        compare(testWalletModel.lastRemovedRequestId, requestId)
+        compare(card.request.id, "")
         compare(testPaymentRequest.id, "")
-        compare(testPaymentRequest.address, "")
-        compare(testPaymentRequest.isEditing, true)
+        verify(page.draftCard.visible)
     }
 
-    function test_viewAddressHistoryOption_emits_navigation_request() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        let addressHistoryRequests = 0
-        page.addressHistoryRequested.connect(function() {
-            ++addressHistoryRequests
-        })
-
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        const viewHistoryButton = findChild(page, "receiveOptionsViewAddressHistoryButton")
-        verify(viewHistoryButton !== null)
-        verify(viewHistoryButton.enabled)
-
-        viewHistoryButton.clicked()
-        compare(addressHistoryRequests, 1)
-        tryCompare(popup, "opened", false)
+    function test_delete_failure_preserves_request_and_modal() {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        testWalletModel.removeReceiveRequestResult = false
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        verify(page.requestModal.opened)
+        compare(card.request.id, requestId)
+        compare(testWalletModel.lastRemovedRequestId, "")
+        verify(card.errorText.length > 0)
     }
 
-    function test_createdRequestDeleteAction_removes_and_clears_request() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        testWalletModel.commitPaymentRequest()
-
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        const deleteButton = findChild(page, "receiveOptionsDeleteFromHistoryButton")
-        verify(deleteButton !== null)
-        verify(deleteButton.visible)
-
-        deleteButton.clicked()
-        compare(testWalletModel.lastRemovedRequestId, "1")
-        compare(walletController.closePaymentRequestDetailRequests, 1)
-        compare(testPaymentRequest.id, "")
-        compare(testPaymentRequest.address, "")
-        compare(testPaymentRequest.isEditing, true)
-    }
-
-    function test_editingRequestTemplateAction_cancels_edit_and_fills_template() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        testPaymentRequest.label = "Alice"
-        testPaymentRequest.message = "Coffee"
-        testPaymentRequest.noteSelf = "Counter"
-        testPaymentRequest.addressType = "p2sh-segwit"
-        testPaymentRequest.amount.display = "0.00200000"
-        testWalletModel.commitPaymentRequest()
-        testPaymentRequest.edit()
-        testPaymentRequest.label = "Unsaved name"
-        testPaymentRequest.message = "Unsaved message"
-        testPaymentRequest.noteSelf = "Unsaved note"
-        testPaymentRequest.amount.display = "0.00300000"
-
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        compare(popup.showRequestActions, true)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        const templateButton = findChild(page, "receiveOptionsUseAsTemplateButton")
-        verify(templateButton !== null)
-        verify(templateButton.visible)
-
-        templateButton.clicked()
-        compare(testWalletModel.lastTemplateRequestId, "1")
-        compare(testPaymentRequest.id, "")
-        compare(testPaymentRequest.address, "")
-        compare(testPaymentRequest.isEditing, true)
-        compare(testPaymentRequest.label, "Alice")
-        compare(testPaymentRequest.message, "Coffee")
-        compare(testPaymentRequest.noteSelf, "Counter")
-        compare(testPaymentRequest.addressType, "p2sh-segwit")
-        compare(page.selectedReceiveAddressType, "p2sh-segwit")
-        compare(testPaymentRequest.amount.display, "0.00200000")
-    }
-
-    function test_lockedEditorNameFollowsExternalLabelChange() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        const nameField = findChild(page, "requestPaymentYourNameInput")
-        verify(nameField !== null)
-
-        // Typing replaces the field's declarative binding, like a real session.
-        nameField.text = "Alice"
-        testPaymentRequest.label = "Alice"
-        testWalletModel.commitPaymentRequest()
-        compare(nameField.text, "Alice")
-
-        // An Addresses page edit reverse-syncs the held request's label while
-        // the form is locked; the field must follow.
-        testPaymentRequest.label = "Bob"
-        compare(nameField.text, "Bob")
-
-        // Mid-edit, an external label change must not clobber the draft.
-        testPaymentRequest.edit()
-        nameField.text = "Unsaved draft"
-        testPaymentRequest.label = "Carol"
-        compare(nameField.text, "Unsaved draft")
-    }
-
-    function test_editingRequestDeleteAction_removes_and_clears_request() {
-        const page = createTemporaryObject(requestPaymentComponent, this)
-        verify(page !== null)
-        page.wallet = testWalletModel
-        page.request = testPaymentRequest
-
-        testWalletModel.commitPaymentRequest()
-        testPaymentRequest.edit()
-
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        compare(popup.showRequestActions, true)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        const deleteButton = findChild(page, "receiveOptionsDeleteFromHistoryButton")
-        verify(deleteButton !== null)
-        verify(deleteButton.visible)
-
-        deleteButton.clicked()
-        compare(testWalletModel.lastRemovedRequestId, "1")
-        compare(walletController.closePaymentRequestDetailRequests, 1)
-        compare(testPaymentRequest.id, "")
-        compare(testPaymentRequest.address, "")
-        compare(testPaymentRequest.isEditing, true)
+    function test_history_button_requests_navigation() {
+        const page = createPage()
+        let requests = 0
+        page.addressHistoryRequested.connect(function() { ++requests })
+        findChild(page, "receiveMoreButton").clicked()
+        tryCompare(findChild(page, "receiveMoreMenu"), "opened", true)
+        findChild(page, "requestPaymentHistoryButton").clicked()
+        tryCompare(findChild(page, "receiveMoreMenu"), "opened", false)
+        compare(requests, 1)
     }
 }
