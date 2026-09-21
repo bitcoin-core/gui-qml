@@ -99,13 +99,13 @@ ColumnLayout {
             objectName: "addressDetailsNoteRow"
             visible: root.canEditLabel
             Layout.fillWidth: true
-            //: The address book label of this address, shared with a payment request as its label.
-            title: qsTr("Label")
+            //: Private address note, also used as the payment request's note to self.
+            title: qsTr("Note to self")
             fieldObjectName: "addressDetailsNoteField"
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
-            //: Placeholder shown when an address has no label yet.
-            placeholderText: qsTr("Add label...")
+            //: Placeholder shown when an address has no private note yet.
+            placeholderText: qsTr("Add note...")
             enabled: root.canEditLabel
             readOnly: !root.canEditLabel
             errorText: root.noteErrorText
@@ -139,11 +139,11 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: 24
         text: root.hasPaymentRequest
-            //: Opens the payment request already saved for this address in the editor
-            ? qsTr("Edit payment request")
+            //: Opens the payment request already saved for this address
+            ? qsTr("View payment request")
             //: Starts a new payment request for this address
             : qsTr("Create payment request")
-        visible: root.category === "single-use" && (!root.used || root.hasPaymentRequest)
+        visible: root.category === "single-use" && !root.used
         backgroundColor: Theme.color.orange
         backgroundHoverColor: Theme.color.orangeLight1
         backgroundPressedColor: Theme.color.orangeLight2

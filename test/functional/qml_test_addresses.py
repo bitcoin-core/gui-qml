@@ -112,7 +112,7 @@ def create_payment_request_from_first_unused_address(gui, expected_address):
     gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
     gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
-    gui.wait_for_property("requestPaymentLabelRow", "value", ADDRESS_LABEL)
+    gui.wait_for_property("requestPaymentNoteRow", "value", ADDRESS_LABEL)
     assert gui.get_property("receivingAddressText", "address") == expected_address
 
 
@@ -141,14 +141,16 @@ def edit_existing_request_from_address_details(gui, expected_address):
     gui.wait_for_property("addressDetails", "address", expected_address, timeout_ms=5000)
     gui.wait_for_property("addressDetailsCreatePaymentRequestButton", "visible", True, timeout_ms=5000)
     button_text = gui.get_text("addressDetailsCreatePaymentRequestButton")
-    assert button_text == "Edit payment request", (
-        f"Expected edit action for an address with a saved request, got {button_text!r}"
+    assert button_text == "View payment request", (
+        f"Expected view action for an address with a saved request, got {button_text!r}"
     )
     gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
 
+    gui.wait_for_property("activityTabButton", "checked", True)
+    gui.wait_for_property("activityStack", "depth", 1)
     gui.wait_for_property("paymentRequestModal", "opened", True)
-    gui.wait_for_property("requestPaymentLabelRow", "value", ADDRESS_LABEL)
+    gui.wait_for_property("requestPaymentNoteRow", "value", ADDRESS_LABEL)
     assert gui.get_property("requestPaymentAddressText", "address") == expected_address
     before = gui.get_property("requestHistoryCount", "count")
     _edit_field(gui, "amount", "0.5")

@@ -19,6 +19,7 @@ Page {
     signal doneClicked()
     signal selectWalletRequested()
     signal receiveRequested()
+    signal paymentRequestRequested(string requestId)
 
     property bool showDoneButton: true
     property string selectedSectionId: ""
@@ -318,9 +319,10 @@ Page {
         WalletPages.AddressList {
             onBack: pageContainer.pop()
             // Keep the Addresses page on the stack: leaving for the request
-            // editor and returning to settings should land back here, not on
+            // view and returning to settings should land back here, not on
             // the settings root.
             onReceiveRequested: root.receiveRequested()
+            onPaymentRequestRequested: function(requestId) { root.paymentRequestRequested(requestId) }
         }
     }
 

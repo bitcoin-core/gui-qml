@@ -192,7 +192,7 @@ public:
     bool writeAddressBookLabel(const QString& address, const QString& label);
     // Propagate an edited address book label to any payment request saved for
     // that address (the reverse of the request-save address book sync).
-    void syncPaymentRequestLabelToAddress(const QString& address, const QString& label);
+    void syncPaymentRequestNoteToAddress(const QString& address, const QString& label);
     std::vector<interfaces::WalletAddress> getAddresses() const;
     std::map<QString, CAmount> addressBalances() const;
     std::set<QString> usedAddresses() const;

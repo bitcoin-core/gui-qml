@@ -31,6 +31,7 @@ SettingsPage {
     property string errorText: ""
     property var pendingNotesByAddress: ({})
 
+    signal paymentRequestRequested(string requestId)
     signal receiveRequested
 
     function openMenuAt(menu, item) {
@@ -42,6 +43,13 @@ SettingsPage {
 
     function createPaymentRequestFromSelected(closeAction) {
         root.errorText = "";
+        const requests = wallet && wallet.receiveRequests
+            ? wallet.receiveRequests.matchingEntriesForAddress(root.selectedAddress) : [];
+        if (requests.length > 0) {
+            if (closeAction) closeAction();
+            root.paymentRequestRequested(requests[0].requestId);
+            return;
+        }
         if (wallet && wallet.setCurrentPaymentRequestAddress(root.selectedAddress)) {
             if (closeAction) {
                 closeAction();

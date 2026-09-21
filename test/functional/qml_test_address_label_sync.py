@@ -3,7 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Reverse label sync: editing an address label on the Addresses page updates the
-matching payment request and Activity search while preserving private notes."""
+matching payment request and Activity search without changing public payment metadata."""
 
 import sys
 
@@ -47,11 +47,12 @@ def run_test():
     try:
         gui = _import_wallet(harness)
 
-        # Save a payment request labelled ORIGINAL_LABEL; creating it also labels
-        # its receive address in the address book.
+        # The private request note becomes the address label; the public name
+        # stays in the payment URI.
         _open_receive(gui)
         _create_request(gui, "0.0001", ORIGINAL_LABEL, "pizza", note_self=PRIVATE_NOTE)
-        request_address = _address_from_bip21(_request_qr_payload(gui))
+        original_uri = _request_qr_payload(gui)
+        request_address = _address_from_bip21(original_uri)
 
         # Activity displays the private note, independently of the public name.
         _open_activity(gui)
@@ -63,7 +64,7 @@ def run_test():
         # Edit the label on the Addresses page.
         open_address_list_from_settings(gui)
         row = _address_row_index(gui, request_address)
-        assert gui.get_list_item_property("addressListView", row, "label") == ORIGINAL_LABEL
+        assert gui.get_list_item_property("addressListView", row, "label") == PRIVATE_NOTE
         gui.click_list_item("addressListView", row, "addressRowNoteField")
         gui.set_text("addressRowNoteField", NEW_LABEL)
         gui.settle()
@@ -74,22 +75,24 @@ def run_test():
             "Addresses page did not show the edited label"
         )
 
-        # Surface 2: Activity search follows the updated name without changing its private note.
+        # Surface 2: Activity follows the updated private note.
         _open_activity(gui)
         gui.set_text("activitySearchField", NEW_LABEL)
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=10000)
         actual = _activity_request_label(gui)
-        assert actual == PRIVATE_NOTE, (
-            "Address label edit changed the private Activity note: "
-            f"expected {PRIVATE_NOTE!r}, got {actual!r}"
+        assert actual == NEW_LABEL, (
+            "Address label edit did not update the private Activity note: "
+            f"expected {NEW_LABEL!r}, got {actual!r}"
         )
 
-        # Surface 3: reopening the saved request shows the synced label in
-        # the shared modal while leaving Activity underneath.
+        # Surface 3: the note is synced, while public metadata and the URI
+        # remain unchanged.
         gui.click_list_item("activityListView", 0, "activityRowOpenButton")
         gui.wait_for_property("paymentRequestModal", "opened", True)
-        assert gui.get_property("requestPaymentLabelRow", "value") == NEW_LABEL
-        assert gui.get_property("requestPaymentNoteRow", "value") == PRIVATE_NOTE
+        assert gui.get_property("requestPaymentLabelRow", "value") == ORIGINAL_LABEL
+        assert gui.get_property("requestPaymentNoteRow", "value") == NEW_LABEL
+
+        assert _request_qr_payload(gui) == original_uri
 
         print("Address label reverse-sync flow passed.")
         return 0

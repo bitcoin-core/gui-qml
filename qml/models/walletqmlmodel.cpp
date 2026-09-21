@@ -902,7 +902,7 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
 
     m_current_payment_request->clear();
     m_current_payment_request->setDestination(destination);
-    m_current_payment_request->setLabel(getAddressLabel(address));
+    m_current_payment_request->setNoteSelf(getAddressLabel(address));
     m_current_payment_request->setIsEditing(false);
     m_current_payment_request->setIsEditing(true);
     // The explicit Receive action in Addresses must keep the chosen address.
@@ -1007,7 +1007,7 @@ bool WalletQmlModel::ensurePaymentRequestDestination()
         }
         output_type = *parsed_type;
     }
-    const auto destination{m_wallet->getNewDestination(output_type, m_current_payment_request->label().toStdString())};
+    const auto destination{m_wallet->getNewDestination(output_type, m_current_payment_request->noteSelf().toStdString())};
     if (!destination || !IsValidDestination(destination.value())) {
         return false;
     }
@@ -1035,13 +1035,13 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
         return false;
     }
 
-    // Capture the stored label before this save replaces the entry, so the
-    // address book sync below can tell a label edit from a save that only
+    // Capture the stored private note before this save replaces the entry, so the
+    // address book sync below can tell a note edit from a save that only
     // touched other fields (amount, message).
-    std::optional<QString> previous_label;
+    std::optional<QString> previous_note;
     if (is_update && m_receive_requests) {
         if (const auto previous_entry = m_receive_requests->entryById(request_id_text)) {
-            previous_label = QString::fromStdString(previous_entry->recipient.label);
+            previous_note = QString::fromStdString(previous_entry->recipient.noteSelf);
         }
     }
 
@@ -1093,20 +1093,14 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
         m_receive_requests->prependOrReplace(request_entry);
     }
 
-    // Keep the address book label in sync with the request label, so the
-    // Addresses page and any other address-book reader reflect an edited
-    // request, matching what getNewDestination writes at creation time.
-    // Only write when this edit actually changed the request label: a save
-    // that only touched the amount or message must not re-assert the request
-    // label over one set independently on the Addresses page, and an empty
-    // request label must never clear such a label. Write the address book
-    // alone: Core supports multiple requests per address with their own
-    // labels, so saving this request must not fan its label out to sibling
-    // requests the way an Addresses page edit deliberately does.
-    const QString request_label = request->label();
-    const bool label_edited = !previous_label.has_value() || request_label != *previous_label;
-    if (label_edited && !request_label.isEmpty() && request_label != getAddressLabel(request->address())) {
-        writeAddressBookLabel(request->address(), request_label);
+    // Address book labels are private. Never copy public payment metadata
+    // into them, or fan a request's note out to other requests on the address.
+    const QString note = request->noteSelf();
+    const bool note_edited = !previous_note.has_value() || note != *previous_note;
+    const QString address_label = getAddressLabel(request->address());
+    if (note_edited && note != address_label &&
+        (!note.isEmpty() || (previous_note && address_label == *previous_note))) {
+        writeAddressBookLabel(request->address(), note);
     }
 
     request->setIsEditing(false);
@@ -1435,13 +1429,9 @@ bool WalletQmlModel::setAddressLabel(const QString& address, const QString& labe
         return false;
     }
 
-    // Keep any payment request for this address in step with the edited label,
-    // so editing it on the Addresses page also updates the request and its
-    // Activity row instead of letting them diverge. This is the reverse of
-    // savePaymentRequest, which writes an edited request label back to
-    // the address book (through writeAddressBookLabel alone: that direction
-    // must not rewrite sibling requests on the same address).
-    syncPaymentRequestLabelToAddress(address, label);
+    // Address labels and request notes are private; public request fields
+    // must remain unchanged when an address is renamed.
+    syncPaymentRequestNoteToAddress(address, label);
     return true;
 }
 
@@ -1464,7 +1454,7 @@ bool WalletQmlModel::writeAddressBookLabel(const QString& address, const QString
     return m_wallet->setAddressBook(destination, label.toStdString(), purpose);
 }
 
-void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, const QString& label)
+void WalletQmlModel::syncPaymentRequestNoteToAddress(const QString& address, const QString& label)
 {
     if (!m_wallet || !m_receive_requests) {
         return;
@@ -1477,12 +1467,11 @@ void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, co
 
     refreshReceiveRequestPayments();
     for (QmlRecentRequestEntry entry : m_receive_requests->entriesForAddress(address)) {
-        if (entry.payment_received) continue;
         // Already in step: nothing to re-store.
-        if (QString::fromStdString(entry.recipient.label) == label) {
+        if (QString::fromStdString(entry.recipient.noteSelf) == label) {
             continue;
         }
-        entry.recipient.label = label.toStdString();
+        entry.recipient.noteSelf = label.toStdString();
         const QString request_id{QString::number(entry.id)};
         // Only mirror the new label into the in-memory models once it is
         // persisted; a failed write must not leave them showing a label the
@@ -1496,11 +1485,11 @@ void WalletQmlModel::syncPaymentRequestLabelToAddress(const QString& address, co
         // showing its stale copy until reloaded. Skip the editor mid-edit so
         // an unsaved draft is not clobbered.
         if (m_detail_payment_request && m_detail_payment_request->id() == request_id) {
-            m_detail_payment_request->setLabel(label);
+            m_detail_payment_request->setNoteSelf(label);
         }
         if (m_current_payment_request && m_current_payment_request->id() == request_id &&
             !m_current_payment_request->isEditing()) {
-            m_current_payment_request->setLabel(label);
+            m_current_payment_request->setNoteSelf(label);
         }
     }
 }

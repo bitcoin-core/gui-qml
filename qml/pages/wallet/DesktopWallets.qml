@@ -425,6 +425,10 @@ Page {
                     showDoneButton: false
                     onSelectWalletRequested: root.openWalletSelection()
                     onReceiveRequested: receiveTabButton.checked = true
+                    onPaymentRequestRequested: function(requestId) {
+                        root.openActivity()
+                        activityPage.openPaymentRequest(requestId)
+                    }
                 }
             }
         }

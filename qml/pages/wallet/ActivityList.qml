@@ -20,6 +20,11 @@ PageStack {
         NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.OutCubic }
     }
 
+    function openPaymentRequest(requestId) {
+        stackView.pop(null)
+        paymentRequestModal.openRequest(requestId)
+    }
+
     function detailProperties(txid, outputIndex) {
         if (!wallet) return {}
         const transaction = wallet.transactionActivityModel.transactionDetails(txid, true)
