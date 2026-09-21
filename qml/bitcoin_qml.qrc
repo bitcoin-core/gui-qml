@@ -49,14 +49,12 @@
         <file>components/ToastPopup.qml</file>
         <file>components/TotalBytesIndicator.qml</file>
         <file>components/DetailEditRow.qml</file>
-        <file>components/PaymentDetailOptionsPopup.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/QRCodePopup.qml</file>
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestModal.qml</file>
         <file>components/ReceivingAddressCard.qml</file>
         <file>components/PaymentRequestField.qml</file>
-        <file>components/ReceiveOptionsPopup.qml</file>
         <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
@@ -201,8 +199,6 @@
         <file>pages/wallet/WatchOnlyIntro.qml</file>
         <file>pages/wallet/WatchOnlyXpub.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
-        <file>pages/wallet/PaymentRequestDetail.qml</file>
-        <file>pages/wallet/RequestPayment.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
         <file>pages/wallet/Send.qml</file>
         <file>pages/wallet/SendResult.qml</file>
