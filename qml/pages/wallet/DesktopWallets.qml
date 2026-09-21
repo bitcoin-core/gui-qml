@@ -360,6 +360,10 @@ Page {
             }
         }
         ReceivePage {
+            onPaymentRequestCreated: {
+                activityPage.pop(null)
+                root.openActivity()
+            }
             onAddressHistoryRequested: {
                 root.openSettingsRoute("addresses")
             }

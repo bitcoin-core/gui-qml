@@ -21,21 +21,30 @@ Page {
     readonly property alias requestModal: requestModal
     readonly property alias draftCard: card
     signal addressHistoryRequested()
+    signal paymentRequestCreated()
     background: Rectangle { color: Theme.color.neutral0 }
     padding: 0
+
+    function prepareReceivingAddress() {
+        const type = root.request && !root.request.id && root.wallet && root.wallet.receivingAddress.address === ""
+            ? root.request.addressType.toLowerCase() : ""
+        receivingCard.ensureAddress(false, type)
+    }
 
     // The Addresses page may bring an existing request into Receive.
     // Saved requests always use the same modal, including this entry point.
     onVisibleChanged: {
         if (visible) Qt.callLater(function() {
-            if (root.visible) receivingCard.ensureAddress(false, "")
+            if (root.visible) root.prepareReceivingAddress()
             if (root.visible && root.request && root.request.id && !requestModal.visible) {
                 root.presentedRequest = root.request
                 requestModal.openRequest(root.request.id)
             }
         })
     }
-    Component.onCompleted: Qt.callLater(function() { if (root.visible) receivingCard.ensureAddress(false, "") })
+    Component.onCompleted: Qt.callLater(function() {
+        if (root.visible) root.prepareReceivingAddress()
+    })
 
     Item {
         objectName: "requestHistoryCount"
@@ -64,7 +73,9 @@ Page {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Receive bitcoin")
-                    font: Theme.text.title.font
+                    font: Theme.text.headline.font
+                    lineHeight: Theme.text.headline.lineHeight
+                    lineHeightMode: Text.FixedHeight
                     horizontalAlignment: Text.AlignLeft
                 }
                 OverflowMenuButton {
@@ -123,8 +134,8 @@ Page {
                     enabled: walletController.initialized
                     onCreated: function(requestId) {
                         root.presentedRequest = root.request
-                        const start = card.mapToItem(Overlay.overlay, 0, 0)
-                        requestModal.openRequest(requestId, start.y)
+                        root.paymentRequestCreated()
+                        requestModal.openRequest(requestId)
                     }
                 }
             }
@@ -137,10 +148,17 @@ Page {
             if (root.presentedRequest && root.request === root.presentedRequest) root.request.clear()
             root.presentedRequest = null
             card.resetFields()
+            if (root.visible) root.prepareReceivingAddress()
         }
     }
     Connections {
         target: walletController
+        function onOpenReceiveRequested() {
+            Qt.callLater(function() {
+                card.resetFields()
+                if (root.visible) root.prepareReceivingAddress()
+            })
+        }
         function onSelectedWalletChanged() {
             requestModal.close()
             if (root.request) root.request.clear()

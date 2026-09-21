@@ -202,7 +202,8 @@ TestCase {
         compare(findChild(card, "paymentRequestStatus").text, "Awaiting payment")
         page.requestModal.close()
         tryCompare(page.requestModal, "visible", false)
-        compare(testWalletModel.receivingAddress.address, address)
+        verify(testWalletModel.receivingAddress.address !== "")
+        verify(testWalletModel.receivingAddress.address !== address)
         compare(testPaymentRequest.id, "")
     }
 
@@ -241,6 +242,30 @@ TestCase {
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)
     }
 
+    function test_primary_action_returns_to_copy_after_update() {
+        const page = createPage()
+        const card = createRequest(page)
+        const copy = findChild(card, "requestPaymentCopyButton")
+        const update = findChild(card, "requestPaymentUpdateButton")
+        verify(copy.visible)
+        verify(!update.visible)
+        editField(card, "requestPaymentYourNameInput", "Hal")
+        verify(!copy.visible)
+        verify(update.visible)
+        update.clicked()
+        compare(card.request.label, "Hal")
+        verify(page.requestModal.opened)
+        verify(copy.visible)
+        verify(!update.visible)
+        card.request.paymentReceived = true
+        verify(!copy.visible)
+        editField(card, "requestPaymentNoteSelfInput", "Received")
+        verify(update.visible)
+        update.clicked()
+        verify(!copy.visible)
+        verify(!update.visible)
+    }
+
     function test_saved_request_unit_toggle_does_not_enable_update() {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "0.001")
@@ -261,6 +286,43 @@ TestCase {
         compare(optionsModel.displayUnit, BitcoinAmount.BTC)
         compare(card.request.amount.satoshi, amount)
         verify(!button.enabled)
+    }
+
+    function test_update_requires_at_least_one_detail() {
+        const card = createRequest(createPage())
+        editField(card, "requestPaymentAmountInput", "")
+        editField(card, "requestPaymentMessageInput", "")
+        editField(card, "requestPaymentNoteSelfInput", "")
+        editField(card, "requestPaymentYourNameInput", "   ")
+        verify(!findChild(card, "requestPaymentUpdateButton").enabled)
+        verify(!card.saveFields())
+        compare(card.request.label, "Request")
+        editField(card, "requestPaymentNoteSelfInput", "Keep privately")
+        verify(findChild(card, "requestPaymentUpdateButton").enabled)
+        verify(card.saveFields())
+        compare(card.request.noteSelf, "Keep privately")
+    }
+
+    function test_request_again_prefills_without_saving_data() {
+        return [{tag: "unpaid", paid: false}, {tag: "paid", paid: true}]
+    }
+    function test_request_again_prefills_without_saving(data) {
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentNoteSelfInput", "Lunch with Hal")
+        const card = createRequest(page)
+        const id = card.request.id
+        card.request.paymentReceived = data.paid
+        const opened = walletController.openReceiveRequests
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        findChild(card, "requestPaymentAgainMenuButton").clicked()
+        tryCompare(page.requestModal, "visible", false)
+        tryCompare(walletController, "openReceiveRequests", opened + 1)
+        compare(testWalletModel.lastTemplateRequestId, id)
+        compare(testPaymentRequest.id, "")
+        compare(testPaymentRequest.noteSelf, "Lunch with Hal")
+        tryCompare(findChild(page.draftCard, "requestPaymentNoteSelfInput"), "text", "Lunch with Hal")
+        tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
     }
 
     function editField(card, objectName, text) {
@@ -284,8 +346,8 @@ TestCase {
         verify(findChild(card, "requestPaymentQRImage").visible)
         editField(card, "requestPaymentYourNameInput", "")
         findChild(card, "requestPaymentMessageInput").forceActiveFocus()
-        verify(card.saveFields())
-        compare(card.request.label, "")
+        verify(!card.saveFields())
+        compare(card.request.label, "Friday coffee")
     }
 
     function test_closing_modal_discards_unsaved_field() {

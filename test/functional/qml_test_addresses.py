@@ -155,6 +155,10 @@ def edit_existing_request_from_address_details(gui, expected_address):
     assert gui.get_property("requestHistoryCount", "count") == before
     assert gui.get_property("requestPaymentAddressText", "address") == expected_address
     gui.click("requestPaymentUpdateButton")
+    gui.wait_for_property("requestPaymentCopyButton", "visible", True)
+    assert gui.get_property("paymentRequestModal", "opened")
+    assert not gui.get_property("requestPaymentUpdateButton", "visible")
+    gui.click("paymentRequestModalClose")
     gui.wait_for_property("paymentRequestModal", "visible", False)
 
     # Returning to settings lands back on the Addresses page, not the

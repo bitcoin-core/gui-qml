@@ -104,6 +104,8 @@ TestCase {
         testTransactionActivityModel.loadError = ""
         testTransactionActivityModel.setRows(rows())
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
+        testWalletModel.lastRemovedRequestId = ""
+        testWalletModel.removeReceiveRequestResult = true
     }
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
@@ -161,6 +163,8 @@ TestCase {
         compare(copyId.visible, !data.request)
         compare(copyRaw.visible, !data.request)
         compare(copyRequest.visible, data.request)
+        compare(findChild(menu.contentItem, "activityDeletePaymentRequest").visible, data.request)
+        compare(findChild(menu.contentItem, "activityDeletePaymentRequestDivider").visible, data.request)
         if (data.request) {
             mouseClick(copyRequest)
             compare(Clipboard.text(), "bitcoin:bc1qexample?amount=0.0001&label=Invoice")
@@ -175,6 +179,30 @@ TestCase {
             compare(Clipboard.text(), "02000000abcdef")
         }
         tryCompare(menu, "visible", false)
+        compare(page.depth, 1)
+    }
+
+    function test_right_click_delete_request_data() {
+        return [{tag: "success", succeeds: true}, {tag: "failure", succeeds: false}]
+    }
+    function test_right_click_delete_request(data) {
+        testWalletModel.removeReceiveRequestResult = data.succeeds
+        const page = createPage()
+        const item = findChild(page, "activityRequest_invoice")
+        mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
+        const menu = findChild(page, "activityRowContextMenu")
+        tryCompare(menu, "opened", true)
+        const button = findChild(menu.contentItem, "activityDeletePaymentRequest")
+        compare(button.role, ContextMenuButton.Destructive)
+        mouseClick(button)
+        if (data.succeeds) {
+            tryCompare(menu, "visible", false)
+            compare(testWalletModel.lastRemovedRequestId, "invoice")
+        } else {
+            verify(menu.opened)
+            compare(testWalletModel.lastRemovedRequestId, "")
+            verify(findChild(menu.contentItem, "activityDeletePaymentRequestError").visible)
+        }
         compare(page.depth, 1)
     }
 
@@ -316,7 +344,8 @@ TestCase {
         compare(findChild(request, "activityRowIcon").accent, Theme.color.lavender)
         verify(findChild(request, "activityPendingRing").visible)
         mouseClick(findChild(request, "activityRowOpenButton"))
-        tryCompare(page, "depth", 2)
+        tryCompare(findChild(page, "paymentRequestModal"), "opened", true)
+        compare(page.depth, 1)
         compare(testWalletModel.lastLoadedPaymentRequestDetailId, "invoice")
     }
 
@@ -476,18 +505,30 @@ TestCase {
         verify(!findChild(page.currentItem, "transactionDetailsError").visible)
     }
 
-    function test_detail_request_survives_navigation_from_payment_request() {
+    function test_request_modal_preserves_activity_and_transaction_navigation() {
         const page = createPage()
         page.currentItem.paymentRequestRequested("invoice")
-        tryCompare(page, "depth", 2)
-        tryCompare(page.currentItem, "objectName", "paymentRequestDetailPage")
+        const modal = findChild(page, "paymentRequestModal")
+        verify(modal !== null)
+        tryCompare(modal, "opened", true)
+        compare(page.depth, 1)
+        compare(page.currentItem.objectName, "activityPage")
+        modal.close()
+        tryCompare(modal, "visible", false)
         page.navigateToTransaction("batch")
         tryCompare(page.currentItem, "txid", "batch")
-        wait(0)
+        const detail = page.currentItem
+        detail.openPaymentRequestDetail("invoice")
+        const detailModal = findChild(detail, "paymentRequestModal")
+        tryCompare(detailModal, "opened", true)
+        compare(page.depth, 2)
+        compare(page.currentItem, detail)
+        detailModal.close()
+        tryCompare(detailModal, "visible", false)
+        compare(page.currentItem.txid, "batch")
         compare(testTransactionActivityModel.requestedTransaction(), "batch")
         page.pop()
         tryCompare(page, "depth", 1)
-        tryVerify(function() { return testTransactionActivityModel.requestedTransaction() === "" })
     }
 
     function test_history_loading_and_failure_states() {

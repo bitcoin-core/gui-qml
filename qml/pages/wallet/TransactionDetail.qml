@@ -100,10 +100,10 @@ Page {
     }
 
     function openPaymentRequestDetail(requestId) {
-        if (root.wallet && root.StackView.view && requestId && root.wallet.loadPaymentRequestDetail(requestId)) {
-            root.StackView.view.push("PaymentRequestDetail.qml")
-        }
+        if (requestId) paymentRequestModal.openRequest(requestId)
     }
+
+    PaymentRequestModal { id: paymentRequestModal; wallet: root.wallet }
 
     ScrollView {
         id: scroll

@@ -25,6 +25,9 @@ Pane {
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
+    readonly property bool hasDetails: amountInSatoshis(amountInput.text) > 0 || labelInput.text.trim() !== ""
+        || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
+    signal requestAgain(string requestId)
     signal created(string requestId)
     signal closeRequested()
     signal deleted(string requestId)
@@ -79,6 +82,7 @@ Pane {
     }
     function saveFields() {
         if (saved) {
+            if (!hasDetails) { errorText = qsTr("Keep at least one payment detail."); return false }
             const amount = paymentReceived ? request.amount.satoshi : amountInSatoshis(amountInput.text)
             if (amount < 0) { errorText = qsTr("Enter a valid amount."); return false }
             if (!wallet.updatePaymentRequest(request.id, amount,
@@ -221,6 +225,12 @@ Pane {
                         onTriggered: if (root.sharing) saveDialog.open()
                     }
                     ContextMenuDivider { visible: !root.paymentReceived }
+                    ContextMenuButton {
+                        objectName: "requestPaymentAgainMenuButton"
+                        text: qsTr("Request again")
+                        onTriggered: root.requestAgain(root.request.id)
+                    }
+                    ContextMenuDivider {}
                     ContextMenuButton {
                         objectName: "requestPaymentDeleteMenuButton"
                         text: qsTr("Delete payment request")
@@ -527,9 +537,9 @@ Pane {
         }
         CoreText {
             objectName: "requestPaymentError"
-            visible: root.errorText.length > 0
+            visible: root.errorText.length > 0 || (root.saved && root.modified && !root.hasDetails)
             Layout.fillWidth: true
-            text: root.errorText
+            text: root.saved && root.modified && !root.hasDetails ? qsTr("Keep at least one payment detail.") : root.errorText
             color: Theme.color.red
             font: Theme.text.caption.font
             horizontalAlignment: Text.AlignLeft
@@ -546,11 +556,18 @@ Pane {
         }
         ContinueButton {
             objectName: "requestPaymentUpdateButton"
-            visible: root.saved
+            visible: root.saved && root.modified
             Layout.fillWidth: true
-            enabled: root.modified
+            enabled: root.modified && root.hasDetails
             text: qsTr("Update payment request")
-            onClicked: if (root.saveFields()) root.closeRequested()
+            onClicked: root.saveFields()
+        }
+        OutlineButton {
+            objectName: "requestPaymentCopyButton"
+            visible: root.saved && !root.modified && !root.paymentReceived
+            Layout.fillWidth: true
+            text: qsTr("Copy payment request")
+            onClicked: root.copyRequest()
         }
 
     }

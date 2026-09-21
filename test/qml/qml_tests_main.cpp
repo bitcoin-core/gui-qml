@@ -1105,7 +1105,9 @@ public:
         if (!request || m_receiving_address.m_payment_received || m_receiving_address.m_address.isEmpty()) return false;
         request->m_address = m_receiving_address.m_address;
         request->m_address_type = m_receiving_address.m_address_type;
-        return commitPaymentRequest();
+        if (!commitPaymentRequest()) return false;
+        m_receiving_address.clear();
+        return true;
     }
     MockPaymentRequest m_detail_payment_request;
     QObject* detailPaymentRequest() { return &m_detail_payment_request; }
@@ -1392,6 +1394,7 @@ public:
     }
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id)
     {
+        m_receiving_address.clear();
         m_last_template_request_id = request_id;
         Q_EMIT lastTemplateRequestIdChanged();
         auto* request = qobject_cast<MockPaymentRequest*>(m_current_payment_request);

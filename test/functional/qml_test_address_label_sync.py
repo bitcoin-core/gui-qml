@@ -84,15 +84,12 @@ def run_test():
             f"expected {PRIVATE_NOTE!r}, got {actual!r}"
         )
 
-        # Surface 3: the Receive tab kept the request open in its locked editor
-        # the whole time; switching back must show the edited label, not the
-        # stale text the form held when the label was edited elsewhere.
-        _open_receive(gui)
-        editor_label = gui.get_text("requestPaymentYourNameInput")
-        assert editor_label == NEW_LABEL, (
-            "Held-open request editor did not follow the Addresses-page label edit: "
-            f"expected {NEW_LABEL!r}, got {editor_label!r}"
-        )
+        # Surface 3: reopening the saved request shows the synced label in
+        # the shared modal while leaving Activity underneath.
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_property("paymentRequestModal", "opened", True)
+        assert gui.get_property("requestPaymentLabelRow", "value") == NEW_LABEL
+        assert gui.get_property("requestPaymentNoteRow", "value") == PRIVATE_NOTE
 
         print("Address label reverse-sync flow passed.")
         return 0

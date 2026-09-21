@@ -794,14 +794,20 @@ void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSepara
     QCOMPARE(restored_wallet->get_new_destination_calls, 0);
     QVERIFY(!model->commitReceivingPaymentRequest());
     model->currentPaymentRequest()->setNoteSelf("Only a private note");
+    wallet->set_address_receive_request_result = false;
+    QVERIFY(!model->commitReceivingPaymentRequest());
+    QCOMPARE(model->receivingAddress()->address(), address);
+    QVERIFY(settings.contains("receiveAddressTypes/fake-wallet/address"));
+    wallet->set_address_receive_request_result = true;
     QVERIFY(model->commitReceivingPaymentRequest());
     QCOMPARE(model->currentPaymentRequest()->address(), address);
     QCOMPARE(wallet->get_new_destination_calls, 1);
     QCOMPARE(model->receiveRequests()->count(), 1);
+    QVERIFY(model->receivingAddress()->address().isEmpty());
+    QVERIFY(!settings.contains("receiveAddressTypes/fake-wallet/address"));
     model->currentPaymentRequest()->clear();
     QVERIFY(model->ensureReceivingAddress());
-    QCOMPARE(model->receivingAddress()->address(), address);
-    QCOMPARE(wallet->get_new_destination_calls, 1);
+    QCOMPARE(wallet->get_new_destination_calls, 2);
     settings.remove("receiveAddressTypes/fake-wallet");
 }
 
@@ -1627,6 +1633,11 @@ void WalletQmlModelTests::updateChangesUnpaidPaymentRequestAmount()
     QCOMPARE(entry->recipient.amount, CAmount{999999});
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("second"));
     QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{999999});
+    QVERIFY(!model->updatePaymentRequest(request_id, 0, "", "", ""));
+    QVERIFY(!model->updatePaymentRequest(request_id, 0, "  ", "\t", "\n"));
+    QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.amount, CAmount{999999});
+    QVERIFY(model->updatePaymentRequest(request_id, 0, "", "", "Private reminder"));
+    QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.noteSelf, std::string("Private reminder"));
 }
 
 void WalletQmlModelTests::paymentArrivalLocksRequestAndPreservesNote()
@@ -1753,7 +1764,8 @@ void WalletQmlModelTests::requestDetailEditsPreserveReceiveDraft()
     QVERIFY(model->detailPaymentRequest()->qrPayload().contains("amount=0.00049000"));
     QVERIFY(model->detailPaymentRequest()->qrPayload().contains("label=Coffee%20%26%20cake"));
     QVERIFY(!model->detailPaymentRequest()->qrPayload().contains("Private"));
-    QVERIFY(model->updatePaymentRequest(id, 0, "", "", ""));
+    QVERIFY(!model->updatePaymentRequest(id, 0, "", "", ""));
+    QVERIFY(model->updatePaymentRequest(id, 0, "", "", "Private"));
     QCOMPARE(model->detailPaymentRequest()->qrPayload(), "bitcoin:" + address);
     QVERIFY(!model->updatePaymentRequest(id, -1, "", "", ""));
     QVERIFY(!model->updatePaymentRequest(id, MAX_MONEY + 1, "", "", ""));
@@ -1819,8 +1831,14 @@ void WalletQmlModelTests::usePaymentRequestAsTemplatePreservesAddressType()
     model->currentPaymentRequest()->setAddressType(QStringLiteral("p2sh-segwit"));
     QVERIFY(model->commitPaymentRequest());
 
+    QVERIFY(model->ensureReceivingAddress());
+    const int generated = wallet->get_new_destination_calls;
     model->usePaymentRequestAsTemplate(QStringLiteral("1"));
 
+    QVERIFY(model->receivingAddress()->address().isEmpty());
+    QVERIFY(model->currentPaymentRequest()->id().isEmpty());
+    QCOMPARE(wallet->get_new_destination_calls, generated);
+    QCOMPARE(model->receiveRequests()->count(), 1);
     QVERIFY(model->currentPaymentRequest()->address().isEmpty());
     QCOMPARE(model->currentPaymentRequest()->addressType(), QStringLiteral("p2sh-segwit"));
     QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("typed template"));

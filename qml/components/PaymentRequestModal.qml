@@ -14,6 +14,7 @@ Popup {
     property bool reducedMotion: false
     property real verticalOffset: 0
     property string deletedRequestId: ""
+    property string repeatRequestId: ""
     readonly property real centeredY: parent ? Math.max(20, (parent.height - height) / 2) : 0
     readonly property alias card: card
 
@@ -45,8 +46,19 @@ Popup {
         }
         deletedRequestId = ""
         card.resetFields()
+        if (repeatRequestId) {
+            const requestId = repeatRequestId
+            const requestWallet = wallet
+            repeatRequestId = ""
+            // Let the Receive page finish clearing its previous creation draft.
+            Qt.callLater(function() {
+                if (!requestWallet || requestWallet !== root.wallet) return
+                requestWallet.usePaymentRequestAsTemplate(requestId)
+                walletController.requestOpenReceive()
+            })
+        }
     }
-    onWalletChanged: close()
+    onWalletChanged: { repeatRequestId = ""; close() }
 
     Overlay.modal: Rectangle {
         color: Qt.rgba(0, 0, 0, 0.6)
@@ -79,6 +91,10 @@ Popup {
             request: root.wallet ? root.wallet.detailPaymentRequest : null
             modalView: true
             onCloseRequested: root.close()
+            onRequestAgain: function(requestId) {
+                root.repeatRequestId = requestId
+                root.close()
+            }
             onDeleted: function(requestId) {
                 root.deletedRequestId = requestId
                 root.close()

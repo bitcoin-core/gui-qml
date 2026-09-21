@@ -478,6 +478,8 @@ Page {
         property string txid: ""
         property string requestId: ""
         property bool isRequest: false
+        property string deleteError: ""
+        onAboutToShow: deleteError = ""
         ContextMenuButton {
             objectName: "activityCopyTransactionId"
             visible: !activityRowMenu.isRequest
@@ -501,6 +503,39 @@ Page {
                 const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRowMenu.requestId) : ""
                 if (uri.length > 0) Clipboard.setText(uri)
             }
+        }
+        ContextMenuDivider {
+            objectName: "activityDeletePaymentRequestDivider"
+            visible: activityRowMenu.isRequest
+        }
+        ContextMenuButton {
+            objectName: "activityDeletePaymentRequest"
+            visible: activityRowMenu.isRequest
+            text: qsTr("Delete payment request")
+            role: ContextMenuButton.Destructive
+            autoClose: false
+            onTriggered: {
+                const requestId = activityRowMenu.requestId
+                if (!root.wallet || !root.wallet.removeReceiveRequest(requestId)) {
+                    activityRowMenu.deleteError = qsTr("The payment request could not be deleted. Please try again.")
+                    return
+                }
+                for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
+                    if (request && request.id === requestId) request.clear()
+                }
+                activityRowMenu.close()
+            }
+        }
+        CoreText {
+            objectName: "activityDeletePaymentRequestError"
+            visible: activityRowMenu.isRequest && activityRowMenu.deleteError.length > 0
+            Layout.fillWidth: true
+            Layout.maximumWidth: 240
+            Layout.margins: 10
+            text: activityRowMenu.deleteError
+            color: Theme.color.red
+            font: Theme.text.caption.font
+            horizontalAlignment: Text.AlignLeft
         }
     }
 

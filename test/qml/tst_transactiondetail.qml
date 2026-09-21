@@ -208,10 +208,13 @@ TestCase {
         compare(findChild(page, "transactionFlowOutput_1").requests[0].requestId, "paid")
         findChild(page, "transactionDetailFlow").paymentRequestRequested("paid")
         tryCompare(testWalletModel, "lastLoadedPaymentRequestDetailId", "paid")
-        tryCompare(stack, "depth", 3)
+        const modal = findChild(page, "paymentRequestModal")
+        tryCompare(modal, "opened", true)
+        compare(stack.depth, 2)
         testTransactionActivityModel.setRows([Object.assign({}, data, {depth: 6})])
-        stack.pop()
-        tryCompare(stack, "depth", 2)
+        modal.close()
+        tryCompare(modal, "visible", false)
+        compare(stack.depth, 2)
         tryCompare(stack.currentItem, "depth", 6)
     }
     function test_fee_bump_opens_existing_review() {

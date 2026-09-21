@@ -978,7 +978,14 @@ bool WalletQmlModel::commitReceivingPaymentRequest()
     if (m_current_payment_request->amount()->satoshi() == 0 && m_current_payment_request->label().trimmed().isEmpty()
         && m_current_payment_request->message().trimmed().isEmpty() && m_current_payment_request->noteSelf().trimmed().isEmpty()) return false;
     m_current_payment_request->setDestination(m_receiving_address->destination());
-    return savePaymentRequest(m_current_payment_request);
+    if (!savePaymentRequest(m_current_payment_request)) return false;
+    // Reserve this address for the saved request. The next Receive view must
+    // allocate a fresh address, including after restarting the wallet.
+    QSettings settings;
+    settings.remove(persistedReceiveAddressTypeKey() + QStringLiteral("/address"));
+    settings.sync();
+    m_receiving_address->clear();
+    return true;
 }
 
 bool WalletQmlModel::ensurePaymentRequestDestination()
@@ -1016,6 +1023,8 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
     }
 
     const bool is_update = !request->id().isEmpty();
+    if (is_update && request->amount()->satoshi() == 0 && request->label().trimmed().isEmpty()
+        && request->message().trimmed().isEmpty() && request->noteSelf().trimmed().isEmpty()) return false;
     const QString request_id_text = is_update
         ? request->id()
         : QString::number(nextPaymentRequestId());
@@ -1341,6 +1350,11 @@ void WalletQmlModel::usePaymentRequestAsTemplate(const QString& request_id)
     if (!entry) return;
     const CTxDestination destination = DecodeDestination(entry->recipient.address);
 
+    // A repeated request starts with a fresh receiving address, allocated by
+    // the Receive page (including its normal wallet-unlock flow).
+    m_receiving_address->clear();
+    QSettings settings;
+    settings.remove(persistedReceiveAddressTypeKey() + QStringLiteral("/address"));
     m_current_payment_request->clear();
     m_current_payment_request->setLabel(QString::fromStdString(entry->recipient.label));
     m_current_payment_request->setMessage(QString::fromStdString(entry->recipient.message));

@@ -260,6 +260,7 @@ def run_test():
         with open(address_qr_path, "rb") as image:
             assert image.read(8) == b"\x89PNG\r\n\x1a\n"
         _create_request(gui, "0.0001", "Alice", "pizza", note_self="Private lunch note")
+        gui.wait_for_property("activityTabButton", "checked", True)
         original = _request_qr_payload(gui)
         assert "amount=0.00010000" in original and "label=Alice" in original
         assert "message=pizza" in original and "Private" not in original
@@ -290,15 +291,156 @@ def run_test():
         assert gui.get_property("paymentRequestModal", "opened")
 
         # Inline public edits preserve the address and rebuild the BIP21 payload.
+        for field in ("amount", "label", "message", "note"):
+            _edit_field(gui, field, "")
+        assert not gui.get_property("requestPaymentUpdateButton", "enabled")
+        assert gui.get_property("requestPaymentError", "visible")
+        assert _request_qr_payload(gui) == original
+        _edit_field(gui, "message", "pizza")
+        _edit_field(gui, "note", "Private lunch note")
         _edit_field(gui, "amount", "0.0002")
         _edit_field(gui, "label", "Coffee & cake")
         assert _request_qr_payload(gui) == original
         gui.click("requestPaymentUpdateButton")
-        gui.wait_for_property("requestPaymentGenerateButton", "visible", True)
+        gui.wait_for_property("requestPaymentCopyButton", "visible", True)
+        assert gui.get_property("paymentRequestModal", "opened")
+        gui.click("requestPaymentCopyButton")
+        gui.click("paymentRequestModalClose")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+        gui.wait_for_property("activityTabButton", "checked", True)
+        _open_receive(gui)
         assert gui.get_property("requestPaymentQRImage", "code") == ""
+        next_receiving_address = gui.get_property("receivingAddressQRImage", "code")
+        assert next_receiving_address and next_receiving_address != address
 
-        assert gui.get_property("receivingAddressQRImage", "code") == address
-        print("Receive creation flow passed.")
+        # The Activity request opens the same modal without pushing a page.
+        _open_activity(gui)
+        gui.wait_for_property("activityRequest_1", "visible", True)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_property("paymentRequestModal", "opened", True)
+        assert gui.get_property("activityStack", "depth") == 1
+        updated = _request_qr_payload(gui)
+        assert _address_from_bip21(updated) == address
+        assert "amount=0.00020000" in updated and "label=Coffee%20%26%20cake" in updated
+        count = gui.get_property("requestHistoryCount", "count")
+        gui.click("paymentRequestMoreButton")
+        gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+        gui.click("requestPaymentAgainMenuButton")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+        gui.wait_for_property("receiveTabButton", "checked", True)
+        gui.wait_for_property("requestPaymentYourNameInput", "text", "Coffee & cake")
+        assert gui.get_property("requestPaymentMessageInput", "text") == "pizza"
+        assert gui.get_property("requestPaymentNoteSelfInput", "text") == "Private lunch note"
+        assert gui.get_property("receivingAddressQRImage", "code") != address
+        assert gui.get_property("requestHistoryCount", "count") == count
+        for field in ("amount", "label", "message", "note"):
+            _edit_field(gui, field, "")
+
+        # Prepare a miner, then deliver a partial unconfirmed payment while a
+        # public editor is open. Public fields must freeze and all sharing must disappear.
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": MINER_WALLET_NAME})
+        mining_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=MINER_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining_address])
+        _select_wallet(gui, WALLET_NAME)
+        _open_activity(gui)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_property("paymentRequestModal", "opened", True)
+        gui.click("requestPaymentMessageInput")
+        gui.set_property("requestPaymentMessageInput", "text", "Uncommitted public edit")
+        gui.invoke("requestPaymentMessageInput", "textEdited")
+        txid = rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.00001], wallet=MINER_WALLET_NAME)
+        gui.wait_for_property("paymentRequestStatus", "text", "Payment received", timeout_ms=30000)
+        gui.click("paymentRequestMoreButton")
+        gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+        assert gui.get_property("requestPaymentDeleteMenuButton", "visible")
+        for name in ("requestPaymentQRImage", "requestPaymentCopyQRMenuButton", "requestPaymentSaveQRMenuButton"):
+            assert not gui.get_property(name, "visible"), name
+        gui.invoke("paymentRequestMoreMenu", "close")
+        for name in ("requestPaymentAmountInput", "requestPaymentYourNameInput", "requestPaymentMessageInput"):
+            assert not gui.get_property(name, "enabled"), name
+        assert not gui.get_property("requestPaymentAddressText", "interactive")
+        assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00001000"
+        assert not gui.get_property("requestPaymentReceivedIcon", "dashed")
+        # A further payment updates the visible total; confirmation notifications
+        # must not count either transaction twice.
+        rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.00002], wallet=MINER_WALLET_NAME)
+        wait_until(lambda: gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00003000",
+                   description="updated received total")
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining_address])
+        gui.settle()
+        assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00003000"
+        _edit_field(gui, "note", "Partial payment received")
+        gui.save_screenshot(os.path.join(harness.tmpdir, "receive-paid.png"))
+        gui.click("requestPaymentUpdateButton")
+        gui.wait_for_property("requestPaymentUpdateButton", "visible", False)
+        assert not gui.get_property("requestPaymentCopyButton", "visible")
+        gui.click("paymentRequestModalClose")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+
+        # Transaction details reopen the same paid modal and stay underneath.
+        gui.wait_for_property(f"activityItem_{txid}", "visible", True, timeout_ms=30000)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_page("activityDetailsPage")
+        gui.click("transactionFlowRequest_1")
+        gui.wait_for_property("paymentRequestModal", "opened", True)
+        assert gui.get_property("activityStack", "depth") == 2
+        assert gui.get_property("requestPaymentNoteRow", "value") == "Partial payment received"
+        assert gui.get_property("requestPaymentMessageRow", "value") == "pizza"
+        gui.click("paymentRequestModalClose")
+        gui.wait_for_page("activityDetailsPage")
+
+        # Reopening after restart retains the receipt lock and edited note.
+        _stop_gui(harness)
+        _relaunch_gui(harness)
+        gui = harness.driver
+        gui.set_property("appWindow", "width", 1180)
+        gui.set_property("appWindow", "height", 960)
+        _select_wallet(gui, WALLET_NAME)
+        _open_activity(gui)
+        gui.wait_for_property(f"activityItem_{txid}", "visible", True, timeout_ms=30000)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_page("activityDetailsPage")
+        gui.click("transactionFlowRequest_1")
+        gui.wait_for_property("paymentRequestStatus", "text", "Payment received")
+        assert not gui.get_property("requestPaymentQRImage", "visible")
+        assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00003000"
+        assert gui.get_property("requestPaymentNoteRow", "value") == "Partial payment received"
+        gui.click("paymentRequestMoreButton")
+        gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+        gui.click("requestPaymentAgainMenuButton")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+        gui.wait_for_property("receiveTabButton", "checked", True)
+        gui.wait_for_property("requestPaymentNoteSelfInput", "text", "Partial payment received")
+        assert gui.get_property("requestHistoryCount", "count") == 1
+        assert gui.get_property("requestPaymentAmountInput", "enabled")
+        for field in ("amount", "label", "message", "note"):
+            _edit_field(gui, field, "")
+
+        # A payment rotates the receiving address; a private note alone can save a request.
+        _open_receive(gui)
+        assert not gui.get_property("requestPaymentGenerateButton", "enabled")
+        next_address = gui.get_property("receivingAddressQRImage", "code")
+        assert next_address != address
+        _create_request(gui, "", "", "", note_self="Private reminder")
+        blank_uri = _request_qr_payload(gui)
+        assert "?" not in blank_uri
+        assert _address_from_bip21(blank_uri) == next_address
+        # Deleting a request dismisses the modal and leaves a clean Receive draft.
+        count = gui.get_property("requestHistoryCount", "count")
+        gui.click("paymentRequestMoreButton")
+        gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
+        gui.click("requestPaymentDeleteMenuButton")
+        gui.wait_for_property("paymentRequestModal", "visible", False)
+        gui.wait_for_property("requestHistoryCount", "count", count - 1)
+        gui.wait_for_property("activityTabButton", "checked", True)
+        _open_receive(gui)
+        assert gui.get_property("requestPaymentQRImage", "code") == ""
+        gui.click("receiveMoreButton")
+        gui.wait_for_property("receiveMoreMenu", "opened", True)
+        gui.click("requestPaymentHistoryButton")
+        gui.wait_for_property("addressListPage", "visible", True)
+        print(f"[qml_receive_requests] screenshots: {harness.tmpdir}")
+        print("[qml_receive_requests] PASSED")
         return 0
     except Exception as err:  # noqa: BLE001 - preserve failure context
         print(f"\nFAILED [qml_receive_requests]: {err}", file=sys.stderr)
