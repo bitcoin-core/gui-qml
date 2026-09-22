@@ -11,12 +11,13 @@ import "../controls"
 // MonospaceOutputView — a scrollable monospace text display backed by a
 // list model.
 //
-// Architecture: Flickable + Column + Repeater. Column sums child heights
-// exactly (no ListView estimation) so the scrollbar stays stable on long
-// rows. Trade-off: no virtualization — callers must bound the model size.
+// Architecture: ListView, one model row per line of output. Callers must feed
+// it one line per row: a row holding a whole multi-line document defeats
+// virtualization, since the view still has to lay that document out in full to
+// know how tall the row is.
 //
 // The public model property is named "listModel" (not "model") to avoid
-// shadowing the Repeater delegate's implicit "model" context property.
+// shadowing the delegate's implicit "model" context property.
 //
 // Supports two optional side columns around the main content column:
 //   Console:   [timestamp] | [content]
@@ -32,6 +33,10 @@ Item {
 
     property var listModel: null
     property string contentRole: "content"
+    // Role holding the plain-text rendering of contentRole, if the model has
+    // one. Search offsets are in the rendered document's coordinates, so
+    // without it the view has to strip the markup itself (see _plainTextOf).
+    property string plainContentRole: ""
     property string leftColumnRole: ""
     property string rightColumnRole: ""
     property string categoryRole: ""
@@ -61,7 +66,9 @@ Item {
     readonly property int searchResultCount: _searchMatches.length
     property int currentSearchResultIndex: -1
     property var _searchMatches: []
-    property var _selectedSearchEditor: null
+    // The match to highlight, as {row, start, end}, or null. Always assigned a
+    // fresh object so delegates see a change even when two matches share a row.
+    property var _currentMatch: null
     property bool _resetSearchOnRefresh: false
 
     // ── Layout metrics ───────────────────────────────────────────────────
@@ -93,25 +100,31 @@ Item {
 
     // ── Read-only scroll state ────────────────────────────────────────────
 
-    readonly property bool atBottom: flick.contentHeight <= flick.height ||
-                                     flick.contentY + flick.height >= flick.contentHeight - 1
-    readonly property bool atTop:    flick.contentY <= 0
-    readonly property real contentY: flick.contentY
-    readonly property int  count:    rowRepeater.count
+    readonly property bool atBottom: listView.atYEnd
+    readonly property bool atTop:    listView.atYBeginning
+    readonly property real contentY: listView.contentY
+    readonly property int  count:    listView.count
 
     // ── Methods ──────────────────────────────────────────────────────────
 
+    // positionViewAt{End,Beginning}() stop at the last/first row and leave the
+    // margins out of view, so finish the job by hand. The position call still
+    // has to happen first: it creates the end delegates that make contentHeight
+    // exact.
     function scrollToBottom() {
-        if (flick.contentHeight > flick.height) {
-            flick.contentY = flick.contentHeight - flick.height
-        } else {
-            flick.contentY = 0
-        }
-        flick.returnToBounds()
+        listView.positionViewAtEnd()
+        listView.contentY = Math.max(root._minContentY(), root._maxContentY())
     }
     function scrollToTop() {
-        flick.contentY = 0
-        flick.returnToBounds()
+        listView.positionViewAtBeginning()
+        listView.contentY = root._minContentY()
+    }
+
+    function _minContentY() {
+        return listView.originY - listView.topMargin
+    }
+    function _maxContentY() {
+        return listView.originY + listView.contentHeight + listView.bottomMargin - listView.height
     }
 
     function scheduleSearchRefresh(resetCurrent) {
@@ -119,16 +132,35 @@ Item {
         searchRefreshTimer.restart()
     }
 
+    // Plain text of row `index`, in the coordinates the delegate's TextEdit
+    // reports. Falls back to undoing the markup when the model has no plain role.
+    function _plainTextOf(index) {
+        if (!root.listModel || typeof root.listModel.get !== "function") return ""
+        const data = root.listModel.get(index)
+        if (!data) return ""
+        if (root.plainContentRole !== "" && data[root.plainContentRole] !== undefined)
+            return String(data[root.plainContentRole])
+        const markup = String(data[root.contentRole] ?? "")
+        if (root.contentTextFormat === Text.PlainText) return markup
+        return markup.replace(/<br\s*\/?>/gi, "\n")
+                     .replace(/<[^>]*>/g, "")
+                     .replace(/&nbsp;/g, " ")
+                     .replace(/&lt;/g, "<")
+                     .replace(/&gt;/g, ">")
+                     .replace(/&quot;/g, "\"")
+                     .replace(/&#39;/g, "'")
+                     .replace(/&amp;/g, "&")
+    }
+
     function rebuildSearchMatches(resetCurrent) {
         const matches = []
         if (root.searchText.length > 0) {
             const pattern = root.searchText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
             const expression = new RegExp(pattern, "gi")
-            for (let row = 0; row < rowRepeater.count; ++row) {
-                const item = rowRepeater.itemAt(row)
-                if (!item || !item.contentEditor) continue
-                const editor = item.contentEditor
-                const plainText = editor.getText(0, editor.length)
+            // Scan model data, not delegates: off-screen rows have none.
+            for (let row = 0; row < listView.count; ++row) {
+                const plainText = root._plainTextOf(row)
+                if (plainText.length === 0) continue
                 expression.lastIndex = 0
                 let match
                 while ((match = expression.exec(plainText)) !== null) {
@@ -154,32 +186,37 @@ Item {
     }
 
     function applyCurrentSearchMatch() {
-        if (root._selectedSearchEditor) {
-            root._selectedSearchEditor.deselect()
-            root._selectedSearchEditor = null
-        }
         if (root.currentSearchResultIndex < 0
-                || root.currentSearchResultIndex >= root._searchMatches.length) return
+                || root.currentSearchResultIndex >= root._searchMatches.length) {
+            root._currentMatch = null
+            return
+        }
 
         const match = root._searchMatches[root.currentSearchResultIndex]
-        const item = rowRepeater.itemAt(match.row)
+        root._currentMatch = { row: match.row, start: match.start, end: match.end }
+        // Bring the row into existence before asking it where the match sits.
+        listView.positionViewAtIndex(match.row, ListView.Contain)
+        root._scrollToCurrentMatchRect()
+    }
+
+    // Scroll to the occurrence itself, not merely its containing row: a row
+    // wrapped over several visual lines can hold the match well below its top.
+    function _scrollToCurrentMatchRect() {
+        if (!root._currentMatch) return
+        const item = listView.itemAtIndex(root._currentMatch.row)
         if (!item || !item.contentEditor) return
         const editor = item.contentEditor
-        editor.select(match.start, match.end)
-        root._selectedSearchEditor = editor
-
-        // Scroll to the occurrence itself, not merely its containing row. A
-        // console response can span many lines, with the match near the end.
-        const startRect = editor.positionToRectangle(match.start)
-        const endRect = editor.positionToRectangle(Math.max(match.start, match.end - 1))
+        const startRect = editor.positionToRectangle(root._currentMatch.start)
+        const endRect = editor.positionToRectangle(Math.max(root._currentMatch.start,
+                                                            root._currentMatch.end - 1))
         const matchTop = item.y + editor.y + startRect.y
         const matchBottom = item.y + editor.y + endRect.y + endRect.height
-        if (matchTop < flick.contentY) {
-            flick.contentY = Math.max(0, matchTop)
-        } else if (matchBottom > flick.contentY + flick.height) {
-            flick.contentY = Math.max(0, matchBottom - flick.height)
+        if (matchTop < listView.contentY) {
+            listView.contentY = matchTop
+        } else if (matchBottom > listView.contentY + listView.height) {
+            listView.contentY = matchBottom - listView.height
         }
-        flick.returnToBounds()
+        listView.returnToBounds()
     }
 
     function showNextSearchResult() {
@@ -198,6 +235,7 @@ Item {
     }
 
     onSearchTextChanged: scheduleSearchRefresh(true)
+    onListModelChanged: scheduleSearchRefresh(true)
 
     Timer {
         id: searchRefreshTimer
@@ -207,6 +245,35 @@ Item {
             const resetCurrent = root._resetSearchOnRefresh
             root._resetSearchOnRefresh = false
             root.rebuildSearchMatches(resetCurrent)
+        }
+    }
+
+    Connections {
+        target: root.listModel
+        ignoreUnknownSignals: true
+        function onRowsInserted() { root._onRowsChanged() }
+        function onRowsRemoved()  { root._onRowsChanged() }
+        function onModelReset()   { root._onRowsChanged() }
+        function onDataChanged()  { root.scheduleSearchRefresh(false) }
+    }
+
+    function _onRowsChanged() {
+        root.scheduleSearchRefresh(false)
+        if (root.autoScrollToBottom && root.searchText.length === 0) tailTimer.restart()
+    }
+
+    // Following the tail waits for the new rows to be laid out, and ListView
+    // refines its content height as it goes, so settle over two passes.
+    Timer {
+        id: tailTimer
+        interval: 0
+        repeat: false
+        onTriggered: {
+            root.scrollToBottom()
+            Qt.callLater(function() {
+                if (root.autoScrollToBottom && root.searchText.length === 0)
+                    root.scrollToBottom()
+            })
         }
     }
 
@@ -233,13 +300,34 @@ Item {
 
     // ── Layout ───────────────────────────────────────────────────────────
 
-    Flickable {
-        id: flick
+    Component {
+        id: headerWrapper
+        Item {
+            width: listView.width
+            height: headerLoader.height
+            Loader {
+                id: headerLoader
+                x: root.horizontalPadding
+                width: listView.width - (root.horizontalPadding * 2)
+                sourceComponent: root.header
+            }
+        }
+    }
+
+    ListView {
+        id: listView
+        objectName: root.objectName.length > 0 ? root.objectName + "_list" : ""
         anchors.fill: parent
         clip: true
-        contentWidth: width
-        contentHeight: contentColumn.height
+        model: root.listModel
+        spacing: root.rowSpacing
+        topMargin: root.topPadding
+        bottomMargin: root.bottomPadding
         boundsBehavior: Flickable.StopAtBounds
+        header: root.header ? headerWrapper : null
+
+        reuseItems: true
+        cacheBuffer: Math.max(400, height)
 
         ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
@@ -248,142 +336,122 @@ Item {
 
         onContentYChanged: root.scrolled(contentY)
 
-        Column {
-            id: contentColumn
-            objectName: root.objectName.length > 0 ? root.objectName + "_contentColumn" : ""
+        delegate: RowLayout {
+            id: rowRoot
+
+            // `model` is the delegate's implicit context property; marking it
+            // required pins the reference so model[roleName] resolves reliably.
+            required property var model
+            required property int index
+            readonly property string rowContent: rowRoot.model[root.contentRole] ?? ""
+            readonly property int rowCategory: root.categoryRole !== ""
+                                               ? Number(rowRoot.model[root.categoryRole] ?? -1)
+                                               : -1
+            readonly property bool useCategoryColors: root.categoryRole !== ""
+            readonly property color effectiveContentColor: !useCategoryColors
+                                                          ? root.contentColor
+                                                          : rowCategory === root.requestCategory
+                                                            ? root.requestContentColor
+                                                            : rowCategory === root.errorCategory
+                                                              ? root.errorContentColor
+                                                              : rowCategory === root.replyCategory
+                                                                ? root.replyContentColor
+                                                                : root.contentColor
+            readonly property color effectiveLeftColumnColor: !useCategoryColors
+                                                            ? root.leftColumnColor
+                                                            : rowCategory === root.requestCategory
+                                                              ? root.requestLeftColumnColor
+                                                              : rowCategory === root.errorCategory
+                                                                ? root.errorLeftColumnColor
+                                                                : rowCategory === root.replyCategory
+                                                                  ? root.replyLeftColumnColor
+                                                                  : root.leftColumnColor
+            property alias contentEditor: contentTextEditor
+
+            objectName: root.objectName.length > 0 ? root.objectName + "_row_" + index : ""
             x: root.horizontalPadding
-            width: flick.width - (root.horizontalPadding * 2)
-            topPadding: root.topPadding
-            bottomPadding: root.bottomPadding
-            spacing: root.rowSpacing
+            width: listView.width - (root.horizontalPadding * 2)
+            spacing: root.columnSpacing
 
-            Loader {
-                width: contentColumn.width
-                sourceComponent: root.header
-            }
+            Accessible.role: Accessible.ListItem
+            Accessible.name: root.plainContentRole !== ""
+                             ? (rowRoot.model[root.plainContentRole] ?? "")
+                             : rowRoot.rowContent
 
-            Repeater {
-                id: rowRepeater
-                model: root.listModel
+            // Driven from the view rather than applied to a captured editor:
+            // the row holding the match may not exist when the match is found,
+            // and may be recycled away and back while stepping through results.
+            readonly property var currentMatch: root._currentMatch
+            onCurrentMatchChanged: rowRoot.syncSearchSelection()
+            Component.onCompleted: rowRoot.syncSearchSelection()
+            ListView.onReused: rowRoot.syncSearchSelection()
 
-                onItemAdded: root.scheduleSearchRefresh(false)
-                onItemRemoved: root.scheduleSearchRefresh(false)
-
-                delegate: RowLayout {
-                    id: rowRoot
-
-                    // `model` is the Repeater delegate's implicit context
-                    // property; marking it required pins the reference so
-                    // bracket lookup (model[roleName]) resolves reliably.
-                    required property var model
-                    required property int index
-                    readonly property string rowContent: rowRoot.model[root.contentRole] ?? ""
-                    onRowContentChanged: root.scheduleSearchRefresh(false)
-                    readonly property int rowCategory: root.categoryRole !== ""
-                                                       ? Number(rowRoot.model[root.categoryRole] ?? -1)
-                                                       : -1
-                    readonly property bool useCategoryColors: root.categoryRole !== ""
-                    readonly property color effectiveContentColor: !useCategoryColors
-                                                                  ? root.contentColor
-                                                                  : rowCategory === root.requestCategory
-                                                                    ? root.requestContentColor
-                                                                    : rowCategory === root.errorCategory
-                                                                      ? root.errorContentColor
-                                                                      : rowCategory === root.replyCategory
-                                                                        ? root.replyContentColor
-                                                                        : root.contentColor
-                    readonly property color effectiveLeftColumnColor: !useCategoryColors
-                                                                    ? root.leftColumnColor
-                                                                    : rowCategory === root.requestCategory
-                                                                      ? root.requestLeftColumnColor
-                                                                      : rowCategory === root.errorCategory
-                                                                        ? root.errorLeftColumnColor
-                                                                        : rowCategory === root.replyCategory
-                                                                          ? root.replyLeftColumnColor
-                                                                          : root.leftColumnColor
-                    property alias contentEditor: contentTextEditor
-
-                    objectName: root.objectName.length > 0 ? root.objectName + "_row_" + index : ""
-                    width: contentColumn.width
-                    spacing: root.columnSpacing
-
-                    Accessible.role: Accessible.ListItem
-                    Accessible.name: rowContent
-
-                    // Left column (optional)
-                    Text {
-                        objectName: root.objectName.length > 0 ? root.objectName + "_left_" + rowRoot.index : ""
-                        visible: root.leftColumnRole !== ""
-                        text: root.leftColumnRole !== ""
-                              ? (rowRoot.model[root.leftColumnRole] ?? "") : ""
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
-                        lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                        color: rowRoot.effectiveLeftColumnColor
-                        Layout.minimumWidth: Math.ceil(Math.max(leftMetrics.width, implicitWidth))
-                        Layout.preferredWidth: Math.max(root.leftColumnWidth, Layout.minimumWidth)
-                        Layout.alignment: Qt.AlignTop
-                        wrapMode: Text.NoWrap
-                    }
-
-                    // Main content column: TextEdit for per-row select + copy.
-                    TextEdit {
-                        id: contentTextEditor
-                        objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
-                        text: rowRoot.rowContent
-                        readOnly: true
-                        selectByMouse: true
-                        persistentSelection: root.searchText.length > 0
-                        textFormat: root.contentTextFormat
-                        wrapMode: Text.WrapAnywhere
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        color: rowRoot.effectiveContentColor
-                        selectionColor: root.selectionColor
-                        selectedTextColor: root.selectedTextColor
-                        activeFocusOnPress: true
-
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignTop
-                    }
-
-                    // Right column (optional)
-                    Text {
-                        objectName: root.objectName.length > 0 ? root.objectName + "_right_" + rowRoot.index : ""
-                        visible: root.rightColumnRole !== ""
-                        text: root.rightColumnRole !== ""
-                              ? (rowRoot.model[root.rightColumnRole] ?? "") : ""
-                        font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
-                        font.pixelSize: root.fontPixelSize
-                        lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
-                        lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                        color: root.rightColumnColor
-                        Layout.preferredWidth: root.rightColumnWidth > 0 ? root.rightColumnWidth : rightMetrics.width
-                        Layout.alignment: Qt.AlignTop
-                        horizontalAlignment: Text.AlignRight
-                        wrapMode: Text.NoWrap
-                    }
+            function syncSearchSelection() {
+                const match = root._currentMatch
+                if (match && match.row === rowRoot.index) {
+                    contentTextEditor.select(match.start, match.end)
+                } else if (contentTextEditor.selectionStart !== contentTextEditor.selectionEnd) {
+                    contentTextEditor.deselect()
                 }
             }
-        }
-    }
 
-    // Auto-scroll to bottom when content grows. Listening to
-    // onContentHeightChanged (rather than Repeater.onItemAdded) ensures the
-    // Column has already laid out the new delegate, so contentHeight is
-    // accurate and the scroll reaches the true bottom.
-    Connections {
-        target: flick
-        // While searching, navigation owns the viewport position. Otherwise a
-        // content relayout can pull the view back to the bottom immediately
-        // after applyCurrentSearchMatch() scrolls to the active occurrence.
-        enabled: root.autoScrollToBottom && root.searchText.length === 0
-        function onContentHeightChanged() {
-            root.scrollToBottom()
+            // Left column (optional)
+            Text {
+                objectName: root.objectName.length > 0 ? root.objectName + "_left_" + rowRoot.index : ""
+                visible: root.leftColumnRole !== ""
+                text: root.leftColumnRole !== ""
+                      ? (rowRoot.model[root.leftColumnRole] ?? "") : ""
+                font.family: root.fontFamily
+                font.styleName: root.fontStyleName
+                font.pixelSize: root.fontPixelSize
+                lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
+                lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
+                color: rowRoot.effectiveLeftColumnColor
+                Layout.minimumWidth: Math.ceil(Math.max(leftMetrics.width, implicitWidth))
+                Layout.preferredWidth: Math.max(root.leftColumnWidth, Layout.minimumWidth)
+                Layout.alignment: Qt.AlignTop
+                wrapMode: Text.NoWrap
+            }
+
+            // Main content column: TextEdit for per-row select + copy.
+            TextEdit {
+                id: contentTextEditor
+                objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
+                text: rowRoot.rowContent
+                readOnly: true
+                selectByMouse: true
+                persistentSelection: root.searchText.length > 0
+                textFormat: root.contentTextFormat
+                wrapMode: Text.WrapAnywhere
+                font.family: root.fontFamily
+                font.styleName: root.fontStyleName
+                font.pixelSize: root.fontPixelSize
+                color: rowRoot.effectiveContentColor
+                selectionColor: root.selectionColor
+                selectedTextColor: root.selectedTextColor
+                activeFocusOnPress: true
+
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
+            }
+
+            // Right column (optional)
+            Text {
+                objectName: root.objectName.length > 0 ? root.objectName + "_right_" + rowRoot.index : ""
+                visible: root.rightColumnRole !== ""
+                text: root.rightColumnRole !== ""
+                      ? (rowRoot.model[root.rightColumnRole] ?? "") : ""
+                font.family: root.fontFamily
+                font.styleName: root.fontStyleName
+                font.pixelSize: root.fontPixelSize
+                lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
+                lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
+                color: root.rightColumnColor
+                Layout.preferredWidth: root.rightColumnWidth > 0 ? root.rightColumnWidth : rightMetrics.width
+                Layout.alignment: Qt.AlignTop
+                horizontalAlignment: Text.AlignRight
+                wrapMode: Text.NoWrap
+            }
         }
     }
 }
