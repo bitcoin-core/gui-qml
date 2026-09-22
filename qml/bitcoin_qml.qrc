@@ -23,8 +23,11 @@
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>
+        <file>components/SendSection.qml</file>
+        <file>components/SendRecipientEditor.qml</file>
         <file>components/CoinsList.qml</file>
         <file>components/SendCoinSelection.qml</file>
+        <file>components/SendFeeSelection.qml</file>
         <file>components/FeeSelection.qml</file>
         <file>components/MiniBlockClock.qml</file>
         <file>components/MonospaceOutputView.qml</file>
@@ -93,6 +96,7 @@
         <file>controls/ExternalLink.qml</file>
         <file>controls/FilterButton.qml</file>
         <file>controls/RangeSlider.qml</file>
+        <file>controls/Slider.qml</file>
         <file>controls/FocusBorder.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
@@ -105,6 +109,7 @@
         <file>controls/ListRow.qml</file>
         <file>controls/LabeledField.qml</file>
         <file>controls/LabeledTextInput.qml</file>
+        <file>controls/LabeledTextArea.qml</file>
         <file>controls/LabeledTextField.qml</file>
         <file>controls/LabeledTextView.qml</file>
         <file>controls/LabeledCoinControlButton.qml</file>
@@ -128,6 +133,7 @@
         <file>controls/RightContentIcon.qml</file>
         <file>controls/qmldir</file>
         <file>controls/SendOptionsPopup.qml</file>
+        <file>controls/SendCreateOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>
         <file>controls/SizeClass.qml</file>
         <file>controls/Setting.qml</file>
@@ -136,7 +142,9 @@
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/TextButton.qml</file>
+        <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
+        <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
@@ -190,6 +198,7 @@
         <file>pages/wallet/AddressDetails.qml</file>
         <file>pages/wallet/AddressRow.qml</file>
         <file>pages/wallet/CoinSelection.qml</file>
+        <file>pages/wallet/SendCreate.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
@@ -227,6 +236,7 @@
         <file alias="activity-receive.svg">res/src/activity-receive.svg</file>
         <file alias="activity-multiple.svg">res/src/activity-multiple.svg</file>
         <file alias="activity-payment-request.svg">res/src/activity-payment-request.svg</file>
+        <file alias="paste-payment-request.svg">res/src/paste-payment-request.svg</file>
         <file alias="activity-consolidation.svg">res/src/activity-consolidation.svg</file>
         <file alias="activity-split.svg">res/src/activity-split.svg</file>
         <file alias="activity-internal.svg">res/src/activity-internal.svg</file>

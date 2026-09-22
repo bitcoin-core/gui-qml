@@ -439,40 +439,11 @@ Pane {
                     maximumLength: 32
                     validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
                     onEditingFinished: if (!root.saved) root.saveField("amount", this)
-                    unitControl: TextButton {
+                    unitControl: AmountUnitButton {
                         id: unitButton
                         objectName: "requestPaymentAmountUnitToggle"
-                        text: root.amountUnit === BitcoinAmount.SAT ? qsTr("sats")
-                            : root.amountUnit === BitcoinAmount.mBTC ? "mBTC"
-                            : root.amountUnit === BitcoinAmount.uBTC ? qsTr("bits") : "BTC"
-                        textSize: 14
-                        textColor: !enabled ? Theme.color.neutral4
-                            : hovered ? Theme.color.orange : Theme.color.neutral9
-                        bgColor: Theme.color.neutral2
-                        states: []
-                        padding: 6
-                        horizontalPadding: 8
-                        contentItem: RowLayout {
-                            spacing: 4
-                            CoreText {
-                                text: unitButton.text
-                                font: Theme.text.caption.font
-                                color: unitButton.textColor
-                            }
-                            Icon {
-                                objectName: "requestPaymentAmountUnitIcon"
-                                Layout.minimumWidth: 12
-                                Layout.preferredWidth: 12
-                                Layout.maximumWidth: 12
-                                Layout.minimumHeight: 12
-                                Layout.preferredHeight: 12
-                                Layout.maximumHeight: 12
-                                source: "qrc:/icons/arrow-up-down.svg"
-                                size: 12
-                                color: unitButton.textColor
-                            }
-                        }
-                        Accessible.name: qsTr("Change amount unit")
+                        iconObjectName: "requestPaymentAmountUnitIcon"
+                        unit: root.amountUnit
                         onClicked: root.toggleAmountUnit()
                     }
                 }

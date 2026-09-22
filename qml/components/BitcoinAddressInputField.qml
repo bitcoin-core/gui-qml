@@ -14,9 +14,12 @@ ColumnLayout {
 
     property var address
     property string errorText: ""
+    property bool showErrorMessage: true
     property string labelText: qsTr("Send to")
     property bool enabled: true
     property bool embedded: false
+    property bool isOnSurface: false
+    property color surfaceColor: Theme.color.neutral1
     property bool showLabel: true
     property var textStyle: Theme.text.monoBody
     property alias inputObjectName: addressInput.objectName
@@ -113,7 +116,8 @@ ColumnLayout {
             color: Theme.color.neutral9
             placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
             background: Rectangle {
-                color: root.embedded ? Theme.color.neutral2 : "transparent"
+                color: root.isOnSurface ? root.surfaceColor
+                    : root.embedded ? Theme.color.neutral2 : "transparent"
                 radius: root.embedded ? 10 : 0
                 border.width: root.embedded && addressInput.activeFocus ? 2 : 0
                 border.color: Theme.color.orange
@@ -165,7 +169,7 @@ ColumnLayout {
     RowLayout {
         id: addressIssue
         Layout.fillWidth: true
-        visible: root.errorText.length > 0
+        visible: root.showErrorMessage && root.errorText.length > 0
         spacing: 8
         Layout.topMargin: 4
 

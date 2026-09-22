@@ -8,6 +8,8 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 Item {
+    property bool showLabel: true
+    property var textStyle: Theme.text.body
     property alias labelText: label.text
     property alias text: input.text
     property alias inputObjectName: input.objectName
@@ -73,8 +75,9 @@ Item {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignLeft
-        width: 128
-        font: Theme.text.body.font
+        visible: root.showLabel
+        width: visible ? 128 : 0
+        font: root.textStyle.font
         lineHeight: Theme.text.body.lineHeight
         lineHeightMode: Text.FixedHeight
     }

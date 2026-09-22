@@ -902,6 +902,8 @@ void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
         case 4: return CAmount{5'000};
         case 6: return CAmount{3'000};
         case 10: return CAmount{1'000};
+        case 25: return CAmount{500};
+        case 50: return CAmount{200};
         default: return CAmount{0};
         }
     };
@@ -911,7 +913,9 @@ void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
     model->setCustomFeeRate("3");
     QCOMPARE(model->feeTargetBlocks(), 6U);
     model->setCustomFeeRate("0.5");
-    QCOMPARE(model->feeTargetBlocks(), 10U);
+    QCOMPARE(model->feeTargetBlocks(), 25U);
+    model->setCustomFeeRate("0.1");
+    QCOMPARE(model->feeTargetBlocks(), 50U);
     model->setCustomFeeRate("12");
     QCOMPARE(model->feeTargetBlocks(), 2U);
 
@@ -919,9 +923,13 @@ void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
     QCOMPARE(model->feeTargetBlocks(), 3U);
     QCOMPARE(model->customFeeRate(), QStringLiteral("7.000"));
 
+    model->setCustomFeeTarget(50);
+    QCOMPARE(model->feeTargetBlocks(), 50U);
+    QCOMPARE(model->customFeeRate(), QStringLiteral("0.200"));
+
     wallet->get_minimum_fee_fn = [](const wallet::CCoinControl&) { return CAmount{1'000}; };
     model->setCustomFeeRate("2");
-    QCOMPARE(model->feeTargetBlocks(), 3U);
+    QCOMPARE(model->feeTargetBlocks(), 50U);
 }
 
 void WalletQmlModelTests::estimatedFeeForTarget_returnsEmptyWhenUnavailable()

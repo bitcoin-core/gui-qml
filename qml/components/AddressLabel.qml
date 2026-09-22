@@ -16,6 +16,7 @@ AbstractButton {
     property bool truncated: false
     property bool truncateWhenNeeded: false
     property bool embedded: false
+    property bool isOnSurface: false
     property bool interactive: true
     property int leadingCharacterCount: 8
     property int trailingCharacterCount: 8
@@ -190,8 +191,9 @@ AbstractButton {
     background: Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         radius: 5
-        color: root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
-        opacity: root.interactive && (root.hovered || root.down) ? 1 : 0
+        color: root.isOnSurface ? Theme.color.neutral1
+            : root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
+        opacity: root.isOnSurface || (root.interactive && (root.hovered || root.down)) ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation { duration: 150 }

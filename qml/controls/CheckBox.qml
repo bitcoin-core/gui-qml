@@ -20,9 +20,31 @@ Controls.CheckBox {
     focusPolicy: Qt.StrongFocus
     hoverEnabled: AppMode.isDesktop
 
+    onCheckedChanged: {
+        if (checked) {
+            if (animationsEnabled) checkDraw.restart()
+            else indicator.checkProgress = 1
+        } else {
+            checkDraw.stop()
+            indicator.checkProgress = 0
+        }
+    }
+
+    Component.onCompleted: indicator.checkProgress = checked ? 1 : 0
+
+    NumberAnimation {
+        id: checkDraw
+        target: indicator
+        property: "checkProgress"
+        from: 0
+        to: 1
+        duration: 350
+        easing.type: Easing.OutCubic
+    }
+
     indicator: Rectangle {
         id: indicator
-        property real checkProgress: root.checked ? 1 : 0
+        property real checkProgress: 0
 
         implicitWidth: 20
         implicitHeight: 20
@@ -35,14 +57,6 @@ Controls.CheckBox {
         Behavior on color {
             enabled: root.animationsEnabled
             ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on checkProgress {
-            enabled: root.animationsEnabled && root.checked
-            NumberAnimation {
-                duration: 350
-                easing.type: Easing.OutCubic
-            }
         }
 
         Canvas {

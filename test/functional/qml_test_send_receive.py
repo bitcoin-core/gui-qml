@@ -206,28 +206,14 @@ def assert_receiver_output(port, txid, receiver_address, expected_sats):
 
 
 def enable_coin_control_and_select_first_coin(gui, checkpoints):
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", True, timeout_ms=5000)
-    if not gui.get_property("sendOptionsCoinControlToggle", "checked"):
-        gui.click("sendOptionsCoinControlToggle")
-        gui.wait_for_property("sendOptionsCoinControlToggle", "checked", True, timeout_ms=5000)
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", False, timeout_ms=5000)
-    gui.wait_for_property("sendCoinControlButtonText", "text", "Select", timeout_ms=10000)
-
-    gui.click("sendCoinControlButton")
-    gui.wait_for_page("coinSelectionPage", timeout_ms=10000)
+    gui.click("sendSelectInputsButton")
+    gui.wait_for_property("coinSelectionPopup", "opened", True, timeout_ms=10000)
     gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
-    gui.wait_for_property(
-        "coinSelectionTotalSelectedText",
-        "text",
-        lambda text: text != "0.00000000",
-        timeout_ms=10000,
-    )
+    gui.wait_for_property("coinSelectionDoneButton", "enabled", True, timeout_ms=10000)
     checkpoints.checkpoint("one input selected", gui)
     gui.click("coinSelectionDoneButton")
-    gui.wait_for_page("sendPage", timeout_ms=10000)
-    gui.wait_for_property("sendCoinControlButtonText", "text", "1 coin selected", timeout_ms=10000)
+    gui.wait_for_property("coinSelectionPopup", "visible", False, timeout_ms=10000)
+    gui.wait_for_property("sendInputsSelectedText", "text", "1 input selected", timeout_ms=10000)
 
 
 def run_test(*, save_screenshots=False, screenshot_root=None):
@@ -273,40 +259,22 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("sendTabButton")
         gui.wait_for_page("sendPage", timeout_ms=10000)
         checkpoints.checkpoint("send page opened", gui)
-        enable_coin_control_and_select_first_coin(gui, checkpoints)
 
         gui.set_text("sendAddressInput", receiver_address)
         gui.set_text("sendAmountInput", SEND_AMOUNT)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        enable_coin_control_and_select_first_coin(gui, checkpoints)
         checkpoints.checkpoint("send form populated", gui)
         assert_no_fee_preview_label(harness.gui_rpc_port, GUI_WALLET_NAME)
 
-        gui.wait_for_property("feeSelectionControl", "selectedLabel", DEFAULT_FEE_LABEL, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedDuration", DEFAULT_FEE_DURATION, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedTarget", 2, timeout_ms=5000)
+        gui.wait_for_property("feeSelectionControl", "currentTarget", 6, timeout_ms=5000)
+        gui.click("feeSelectionOption2")
+        gui.wait_for_property("feeSelectionControl", "currentTarget", 10, timeout_ms=5000)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        checkpoints.checkpoint("flexible fee selected", gui)
+        estimated_fee_sats = amount_text_to_sats(gui.get_text("sendTotalFeesValue"))
+        assert estimated_fee_sats > 0
 
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown opened", gui)
-        high_fee_option_estimate = wait_for_non_empty_text(gui, "feeSelectionOptionEstimate0")
-        default_fee_option_estimate = wait_for_non_empty_text(gui, "feeSelectionOptionEstimate1")
-        low_fee_option_estimate = wait_for_non_empty_text(gui, f"feeSelectionOptionEstimate{LOW_FEE_OPTION_INDEX}")
-        assert high_fee_option_estimate, "Expected High option estimate to render in the dropdown"
-        assert default_fee_option_estimate, "Expected Default option estimate to render in the dropdown"
-        gui.click(f"feeSelectionOption{LOW_FEE_OPTION_INDEX}")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedIndex", LOW_FEE_OPTION_INDEX, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedLabel", LOW_FEE_LABEL, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedDuration", LOW_FEE_DURATION, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedTarget", LOW_FEE_TARGET_BLOCKS, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionEstimateLabel", "text", low_fee_option_estimate, timeout_ms=20000)
-        checkpoints.checkpoint("low fee option selected", gui)
-
-        estimated_fee_text = gui.get_text("feeSelectionEstimateLabel")
-        estimated_fee_sats = btc_text_to_sats(estimated_fee_text)
-        assert estimated_fee_sats > 0, f"Expected a positive estimated fee, got {estimated_fee_text!r}"
-
-        gui.wait_for_property("feeSelectionControl", "includeFeeInAmount", False, timeout_ms=5000)
         gui.click("sendReviewButton")
         gui.wait_for_page("sendReviewPage", timeout_ms=10000)
         checkpoints.checkpoint("review page with include-fee off", gui)
@@ -322,27 +290,12 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
         checkpoints.checkpoint("returned to send page", gui)
 
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown reopened", gui)
-        gui.click("feeSelectionIncludeFeeToggle")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "includeFeeInAmount", True, timeout_ms=5000)
-        checkpoints.checkpoint("include fee in amount enabled", gui)
-
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown with include fee enabled", gui)
-        gui.click(f"feeSelectionOption{LOW_FEE_OPTION_INDEX}")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedIndex", LOW_FEE_OPTION_INDEX, timeout_ms=5000)
-
-        estimated_fee_with_subtract_text = wait_for_non_empty_text(gui, "feeSelectionEstimateLabel")
-        estimated_fee_with_subtract_sats = btc_text_to_sats(estimated_fee_with_subtract_text)
-        assert estimated_fee_with_subtract_sats > 0, (
-            f"Expected a positive estimated fee with subtract-fee enabled, got "
-            f"{estimated_fee_with_subtract_text!r}"
-        )
+        gui.click("sendDeductFeeCheckbox")
+        gui.wait_for_property("sendDeductFeeCheckbox", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        checkpoints.checkpoint("deduct fee from recipient enabled", gui)
+        estimated_fee_with_subtract_sats = amount_text_to_sats(gui.get_text("sendTotalFeesValue"))
+        assert estimated_fee_with_subtract_sats > 0
 
         gui.click("sendReviewButton")
         gui.wait_for_page("sendReviewPage", timeout_ms=10000)
@@ -390,7 +343,7 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("activityStack", "depth", 1, timeout_ms=10000)
         gui.click("sendTabButton")
         gui.wait_for_page("sendPage", timeout_ms=10000)
-        gui.wait_for_property("sendCoinControlButtonText", "text", "Select", timeout_ms=10000)
+        gui.wait_for_property("sendUseAutomaticInputsButton", "visible", False, timeout_ms=10000)
         checkpoints.checkpoint("coin control selection cleared after send", gui)
         gui.click("activityTabButton")
         gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)

@@ -39,8 +39,11 @@
         <file>tst_rightcontenticon.qml</file>
         <file>tst_searchbar.qml</file>
         <file>tst_rangeslider.qml</file>
+        <file>tst_slider.qml</file>
         <file>tst_sendoptionspopup.qml</file>
         <file>tst_send.qml</file>
+        <file>tst_sendcreate.qml</file>
+        <file>tst_sendfeeselection.qml</file>
         <file>tst_signverifymessage.qml</file>
         <file>tst_setting.qml</file>
         <file>tst_settingsheader.qml</file>

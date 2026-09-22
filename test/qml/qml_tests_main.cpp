@@ -651,6 +651,9 @@ class MockSendRecipient : public QObject
     Q_PROPERTY(QString addressError MEMBER m_address_error NOTIFY addressErrorChanged)
     Q_PROPERTY(QObject* amount READ amount CONSTANT)
     Q_PROPERTY(QString amountError MEMBER m_amount_error NOTIFY amountErrorChanged)
+    Q_PROPERTY(QString paymentRequestLabel MEMBER m_request_label NOTIFY paymentRequestChanged)
+    Q_PROPERTY(QString message MEMBER m_message NOTIFY paymentRequestChanged)
+    Q_PROPERTY(bool hasPaymentRequest MEMBER m_has_request NOTIFY paymentRequestChanged)
     Q_PROPERTY(QString label MEMBER m_label NOTIFY labelChanged)
     Q_PROPERTY(bool subtractFeeFromAmount READ subtractFeeFromAmount WRITE setSubtractFeeFromAmount NOTIFY subtractFeeFromAmountChanged)
     Q_PROPERTY(bool isValid MEMBER m_is_valid NOTIFY isValidChanged)
@@ -666,6 +669,9 @@ public:
     MockBitcoinAmount m_amount{};
     QString m_amount_error;
     QString m_label;
+    QString m_request_label, m_message;
+    bool m_has_request{false};
+    Q_INVOKABLE void applyPaymentRequest(const QString& address, const QString& label, const QString& message) { m_address.setAddress(address); m_request_label = label; m_message = message; m_has_request = true; Q_EMIT paymentRequestChanged(); }
     bool m_subtract_fee_from_amount{false};
     bool m_is_valid{true};
 
@@ -680,6 +686,7 @@ public:
     }
 
 Q_SIGNALS:
+    void paymentRequestChanged();
     void addressErrorChanged();
     void amountErrorChanged();
     void labelChanged();
@@ -701,7 +708,7 @@ public:
     enum Roles {
         AddressRole = Qt::UserRole + 1,
         LabelRole,
-        AmountRole
+        AmountRole, RecipientRole
     };
 
     struct RecipientRow {
@@ -754,9 +761,9 @@ public:
         Q_EMIT currentRecipientChanged();
     }
 
-    void setCurrentIndex(int index)
+    Q_INVOKABLE void setCurrentIndex(int index)
     {
-        const int bounded = std::clamp(index, 1, std::max(1, count()));
+        const int bounded = std::clamp(index + 1, 1, std::max(1, count()));
         if (m_current_index == bounded) return;
         m_current_index = bounded;
         Q_EMIT currentIndexChanged();
@@ -773,6 +780,7 @@ public:
         if (!index.isValid() || index.row() < 0 || index.row() >= count()) return {};
         const RecipientRow& row = m_rows.at(index.row());
         switch (role) {
+        case RecipientRole: return QVariant::fromValue(m_current);
         case AddressRole: return row.address;
         case LabelRole: return row.label;
         case AmountRole: return row.amount;
@@ -783,6 +791,7 @@ public:
     QHash<int, QByteArray> roleNames() const override
     {
         return {
+            {RecipientRole, "recipientObject"},
             {AddressRole, "address"},
             {LabelRole, "label"},
             {AmountRole, "amount"},
@@ -819,9 +828,11 @@ public:
         Q_EMIT currentIndexChanged();
     }
 
-    Q_INVOKABLE void prev() { setCurrentIndex(m_current_index - 1); }
-    Q_INVOKABLE void next() { setCurrentIndex(m_current_index + 1); }
+    Q_INVOKABLE void prev() { setCurrentIndex(m_current_index - 2); }
+    Q_INVOKABLE void next() { setCurrentIndex(m_current_index); }
 
+    Q_INVOKABLE void clear() { clearToFront(); }
+    Q_INVOKABLE void removeAt(int) { remove(); }
     Q_INVOKABLE void remove()
     {
         if (count() <= 1) return;
@@ -855,6 +866,15 @@ private:
 class MockCoinsListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(qint64 totalSelectedSatoshi READ totalSelectedSatoshi NOTIFY selectedCoinsCountChanged)
+    Q_PROPERTY(qint64 totalSatoshi READ totalSatoshi CONSTANT)
+    Q_PROPERTY(qint64 lockedSatoshi READ lockedSatoshi CONSTANT)
+    Q_PROPERTY(int visibleCount READ coinCount NOTIFY coinCountChanged)
+    Q_PROPERTY(QString searchText MEMBER m_search NOTIFY viewChanged)
+    Q_PROPERTY(QString sortBy MEMBER m_sort NOTIFY viewChanged)
+    Q_PROPERTY(QString filter MEMBER m_filter NOTIFY viewChanged)
+    Q_PROPERTY(QString groupBy MEMBER m_group NOTIFY viewChanged)
+    Q_PROPERTY(bool sortDescending MEMBER m_descending NOTIFY viewChanged)
     Q_PROPERTY(int selectedCoinsCount READ selectedCoinsCount NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(int coinCount READ coinCount NOTIFY coinCountChanged)
     Q_PROPERTY(QString totalSelected READ totalSelected NOTIFY totalSelectedChanged)
@@ -867,7 +887,7 @@ public:
         AmountRole,
         LabelRole,
         LockedRole,
-        SelectedRole
+        SelectedRole, DateRole, IdRole, GroupRole, SatoshiRole, GroupFirstRole, GroupLastRole
     };
 
     struct CoinRow {
@@ -899,6 +919,12 @@ public:
         if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
         const CoinRow& row = m_rows.at(index.row());
         switch (role) {
+        case DateRole: return QDateTime::fromSecsSinceEpoch(1700000000);
+        case IdRole: return row.id;
+        case GroupRole: return QStringLiteral("November 2023");
+        case GroupFirstRole: return index.row() == 0;
+        case GroupLastRole: return index.row() == rowCount() - 1;
+        case SatoshiRole: return (index.row() + 1) * 100000;
         case AddressRole: return row.address;
         case AmountRole: return row.amount;
         case LabelRole: return row.label;
@@ -911,6 +937,8 @@ public:
     QHash<int, QByteArray> roleNames() const override
     {
         return {
+            {DateRole, "date"}, {IdRole, "coinId"}, {GroupRole, "groupTitle"}, {SatoshiRole, "amountSatoshi"},
+            {GroupFirstRole, "groupFirst"}, {GroupLastRole, "groupLast"},
             {AddressRole, "address"},
             {AmountRole, "amount"},
             {LabelRole, "label"},
@@ -924,6 +952,13 @@ public:
         return std::count_if(m_rows.begin(), m_rows.end(), [](const CoinRow& row) { return row.selected; });
     }
 
+    qint64 totalSelectedSatoshi() const { qint64 sum = 0; for (size_t i=0;i<m_rows.size();++i) if(m_rows[i].selected) sum += (i+1)*100000; return sum; }
+    qint64 totalSatoshi() const { return 600000; }
+    qint64 lockedSatoshi() const { return 300000; }
+    Q_INVOKABLE void beginSelection() { m_snapshot = m_rows; }
+    Q_INVOKABLE void applySelection() { m_snapshot.clear(); }
+    Q_INVOKABLE void cancelSelection() { if (m_snapshot.empty()) return; beginResetModel(); m_rows=m_snapshot; m_snapshot.clear(); endResetModel(); emitAggregateSignals(); }
+    Q_INVOKABLE bool setCoinsLocked(const QStringList&, bool) { return true; }
     int coinCount() const { return rowCount(); }
 
     QString totalSelected() const
@@ -1004,6 +1039,7 @@ public:
     Q_INVOKABLE void update() {}
 
 Q_SIGNALS:
+    void viewChanged();
     void selectedCoinsCountChanged();
     void coinCountChanged();
     void totalSelectedChanged();
@@ -1019,12 +1055,19 @@ private:
         Q_EMIT changeAmountChanged();
     }
 
-    std::vector<CoinRow> m_rows{};
+    std::vector<CoinRow> m_rows{}, m_snapshot{};
+    QString m_search, m_sort{"date"}, m_filter{"all"}, m_group{"month"};
+    bool m_descending{true};
 };
 
 class MockWalletQmlModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(qint64 estimatedFeeSatoshi READ estimatedFeeSatoshi NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
@@ -1176,6 +1219,14 @@ public:
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
+    qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
+    QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
+    int estimatedInputCount() const { return 1; }
+    qint64 sendTotalSatoshi() const { const auto* r = qobject_cast<MockRecipientsModel*>(m_recipients); const auto* current = r ? qobject_cast<MockSendRecipient*>(r->current()) : nullptr; return r ? r->totalAmountSatoshi() + (current && current->subtractFeeFromAmount() ? 0 : estimatedFeeSatoshi()) : 0; }
+    qint64 availableSendBalanceSatoshi() const { return 1000000; }
+    Q_INVOKABLE void clearSelectedCoins() { if (auto* c = qobject_cast<MockCoinsListModel*>(m_coins_list_model)) c->reset(); }
+    Q_INVOKABLE void useMaximum() {}
+    Q_INVOKABLE void setCustomFeeTarget(int target) { setTargetBlocks(target); setCustomFeeEnabled(true); setCustomFeeRate("2.5"); }
     int targetBlocks() const { return m_target_blocks; }
     QString estimatedFee() const
     {

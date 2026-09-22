@@ -21,6 +21,7 @@ Button {
     property bool bold: true
     property bool isOnSurface: false
     property url iconSource: ""
+    property int iconSize: 20
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
     property string textFontStyleName: textStyle.styleName
@@ -43,7 +44,7 @@ Button {
                 visible: root.iconSource.toString().length > 0
                 source: root.iconSource
                 color: Theme.color.neutral9
-                size: 20
+                size: root.iconSize
             }
             CoreText {
                 id: label

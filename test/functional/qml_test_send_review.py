@@ -186,12 +186,13 @@ def close_send_options(gui):
 
 
 def set_multiple_recipients(gui, enabled):
-    open_send_options(gui)
-    current = gui.get_property("sendOptionsMultipleRecipientsToggle", "checked")
-    if bool(current) != enabled:
-        gui.click("sendOptionsMultipleRecipientsToggle")
-        gui.wait_for_property("sendOptionsMultipleRecipientsToggle", "checked", enabled, timeout_ms=5000)
-    close_send_options(gui)
+    if enabled:
+        if not gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendAddRecipientButton")
+    else:
+        while gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendRemoveRecipient_1")
+    gui.settle()
 
 
 def set_amount_unit(gui, unit_label):
@@ -225,11 +226,11 @@ def prepare_multi_send(gui, first_address, first_amount_btc, second_address, sec
     set_amount_unit(gui, "₿")
     gui.set_text("sendAddressInput", second_address)
     gui.set_text("sendAmountInput", second_amount_btc)
-    gui.click("sendRecipientPrevButton")
+    gui.click("sendEditRecipient_0")
     gui.set_text("sendAddressInput", first_address)
     gui.set_text("sendAmountInput", first_amount_btc)
     gui.set_text("sendNoteInput", "Alice's salary")
-    gui.click("sendRecipientNextButton")
+    gui.click("sendEditRecipient_1")
     set_amount_unit(gui, "sat")
     gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
     gui.click("sendReviewButton")
@@ -358,14 +359,14 @@ def case_invalid_recipients(harness, gui, wallet_name, checkpoints):
     checkpoints.checkpoint("dust amount rejected", gui)
 
     set_multiple_recipients(gui, True)
-    gui.click("sendRecipientPrevButton")
+    gui.click("sendEditRecipient_0")
     set_amount_unit(gui, "₿")
     gui.set_text("sendAddressInput", first_address)
     gui.set_text("sendAmountInput", "0.50000000")
     wait_for_send_error(gui, "Complete every recipient before continuing.")
     checkpoints.checkpoint("empty second recipient rejected", gui)
 
-    gui.click("sendRecipientNextButton")
+    gui.click("sendEditRecipient_1")
     set_amount_unit(gui, "₿")
     gui.set_text("sendAddressInput", first_address)
     gui.set_text("sendAmountInput", "0.25000000")

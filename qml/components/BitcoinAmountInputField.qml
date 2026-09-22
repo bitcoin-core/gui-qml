@@ -14,15 +14,18 @@ ColumnLayout {
 
     property var amount
     property string errorText: ""
+    property bool showErrorMessage: true
     property string labelText: qsTr("Amount")
     property string accessibleName: labelText
     property alias inputObjectName: amountInput.objectName
     property alias unitToggleObjectName: unitToggle.objectName
-    property alias unitLabelObjectName: unitLabel.objectName
+    property alias unitLabelObjectName: unitToggle.labelObjectName
     property alias errorTextObjectName: errorTextLabel.objectName
+    readonly property alias field: amountInput
     property bool enabled: true
     property string placeholderText: root.amount ? root.amountInputPlaceholder(root.amount.unit) : "0.00000000"
     property bool interceptPaste: false
+    property bool showLabel: true
 
     signal inputTextChanged
     signal textEdited
@@ -98,7 +101,8 @@ ColumnLayout {
 
         CoreText {
             id: lbl
-            width: 128
+            visible: root.showLabel
+            width: visible ? 128 : 0
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignLeft
@@ -259,49 +263,16 @@ ColumnLayout {
             }
         }
 
-        Item {
+        AmountUnitButton {
             id: unitToggle
-            width: unitLabel.width + flipIcon.width
-            height: Math.max(unitLabel.height, flipIcon.height)
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             opacity: root.enabled ? 1.0 : 0.5
-
-            function click() {
-                if (!root.enabled || !root.amount) return
+            enabled: root.enabled && !!root.amount
+            unit: root.amount ? root.amount.unit : BitcoinAmount.BTC
+            onClicked: {
                 amountInput.commitAmountText()
                 optionsModel.displayUnit = root.flippedDisplayUnit(root.amount.unit)
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                enabled: root.enabled && root.amount
-                onClicked: {
-                    amountInput.commitAmountText()
-                    optionsModel.displayUnit = root.flippedDisplayUnit(root.amount.unit)
-                }
-            }
-
-            CoreText {
-                id: unitLabel
-                anchors.right: flipIcon.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: root.amount ? root.amount.unitLabel : ""
-                font: Theme.text.body.font
-                lineHeight: Theme.text.body.lineHeight
-                lineHeightMode: Text.FixedHeight
-                color: root.enabled ? Theme.color.neutral7 : Theme.color.neutral4
-            }
-
-            Icon {
-                id: flipIcon
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                source: "image://images/flip-vertical"
-                color: enabled ? Theme.color.neutral8 : Theme.color.neutral4
-                size: 30
             }
         }
     }
@@ -309,7 +280,7 @@ ColumnLayout {
     RowLayout {
         id: errorRow
         Layout.fillWidth: true
-        visible: root.errorText.length > 0
+        visible: root.showErrorMessage && root.errorText.length > 0
 
         Icon {
             source: "image://images/alert-filled"

@@ -112,7 +112,11 @@ TestCase {
         const window = createMain(true)
         const menuActions = findChild(window, "desktopMenuActions")
         const activityTab = findChild(window, "activityTabButton")
-        const noteInput = findChild(window, "sendNoteInput")
+        window.show()
+        menuActions.sendView.trigger()
+        testRecipientsModel.clearToFront()
+        tryVerify(function() { return findChild(window.contentItem, "sendNoteInput") !== null })
+        const noteInput = findChild(window.contentItem, "sendNoteInput")
 
         verify(menuActions !== null)
         verify(activityTab !== null)

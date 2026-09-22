@@ -352,7 +352,7 @@ Page {
         ActivityList {
             id: activityPage
         }
-        Send {
+        SendCreate {
             id: sendPage
             onTransactionPrepared: (multipleRecipientsEnabled) => {
                 root.sendTransaction(multipleRecipientsEnabled)

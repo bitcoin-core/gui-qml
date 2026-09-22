@@ -70,7 +70,7 @@ constexpr unsigned int DEFAULT_STANDARD_FEE_TARGET{6};
 constexpr int FEE_ESTIMATE_DEBOUNCE_MS{250};
 constexpr unsigned int FEE_RATE_BASIS_VBYTES{1000};
 constexpr std::array<unsigned int, 3> STANDARD_FEE_TARGETS{2, DEFAULT_STANDARD_FEE_TARGET, 10};
-constexpr std::array<unsigned int, 5> CUSTOM_FEE_TARGETS{2, 3, 4, 6, 10};
+constexpr std::array<unsigned int, 7> CUSTOM_FEE_TARGETS{2, 3, 4, 6, 10, 25, 50};
 const QRegularExpression CUSTOM_FEE_RATE_PATTERN{QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")};
 
 struct ReceiveRequestPaymentScan {

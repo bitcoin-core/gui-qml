@@ -420,14 +420,13 @@ def prepare_signed_mock_psbt(harness, external_wallet_name, destination_address)
 
 
 def set_multiple_recipients(gui, enabled):
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", True, timeout_ms=5000)
-    current = gui.get_property("sendOptionsMultipleRecipientsToggle", "checked")
-    if bool(current) != enabled:
-        gui.click("sendOptionsMultipleRecipientsToggle")
-        gui.wait_for_property("sendOptionsMultipleRecipientsToggle", "checked", enabled, timeout_ms=5000)
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", False, timeout_ms=5000)
+    if enabled:
+        if not gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendAddRecipientButton")
+    else:
+        while gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendRemoveRecipient_1")
+    gui.settle()
 
 
 def set_amount_unit(gui, unit_label):
