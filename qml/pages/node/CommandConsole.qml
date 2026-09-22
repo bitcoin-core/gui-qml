@@ -125,9 +125,9 @@ Page {
         }
     }
 
-    // Output area — MonospaceOutputView (Flickable + Column + Repeater)
-    // keeps contentHeight exact (no ListView estimation) and gives each
-    // row a TextEdit for single-row select + copy.
+    // Output area — MonospaceOutputView virtualizes the rows and gives each
+    // one a TextEdit for single-row select + copy. The model feeds it one row
+    // per output line.
     MonospaceOutputView {
         id: outputView
         objectName: "consoleOutputArea"
@@ -141,6 +141,7 @@ Page {
 
         listModel: rpcConsoleModel.outputModel
         contentRole: "content"
+        plainContentRole: "plainContent"
         contentTextFormat: Text.RichText
         leftColumnRole: "timestamp"
         leftColumnSample: "00:00:00"
@@ -165,7 +166,8 @@ Page {
         horizontalPadding: 16
         topPadding: 16
         bottomPadding: 16
-        rowSpacing: 5
+        // Rows are single lines, so this is line spacing, not entry spacing.
+        rowSpacing: 0
         columnSpacing: 20
         leftColumnWidth: 60
     }
