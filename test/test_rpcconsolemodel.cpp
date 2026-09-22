@@ -150,6 +150,16 @@ static void submitAndSettle(RpcConsoleModel& model, const QString& command)
     QTRY_VERIFY(!model.executing());
 }
 
+/** Concatenate @p role over rows [first, rowCount): a reply spans many rows. */
+static QString joinRows(QAbstractItemModel* model, int role, int first)
+{
+    QStringList parts;
+    for (int row = first; row < model->rowCount(); ++row) {
+        parts << model->data(model->index(row, 0), role).toString();
+    }
+    return parts.join(QLatin1Char('\n'));
+}
+
 static int roleForName(QAbstractItemModel* model, const QByteArray& name)
 {
     const auto roles = model->roleNames();
@@ -393,17 +403,18 @@ void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
     model.submitCommand("getblockcount");
     QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
 
-    // Process events until the worker thread's CMD_REPLY row is inserted
+    // Process events until the worker thread's CMD_REPLY rows are inserted
     // (or until the 5-second safety timeout expires).
     QVERIFY(spy.wait(5000));
-    QCOMPARE(out->rowCount(), 2);
+    // The reply is a 50,000-'x' line plus the truncation notice on its own line.
+    QCOMPARE(out->rowCount(), 3);
 
     // Look up the content role dynamically — the model's roleNames map
     // "content" to the ContentRole integer.
     int content_role = roleForName(out, "content");
     QVERIFY(content_role != -1);
 
-    const QString reply_html = out->data(out->index(1, 0), content_role).toString();
+    const QString reply_html = joinRows(out, content_role, 1);
 
     // Formatted reply must be well below the raw 100,000-character input.
     QVERIFY2(reply_html.size() < 100'000,
@@ -411,6 +422,12 @@ void RpcConsoleModelTests::outputTruncatedWhenResultTooLong()
     // The truncation notice must appear in the output.
     QVERIFY2(reply_html.contains("truncated"),
              "Expected truncation notice in output");
+
+    // Only the first row of a block is stamped.
+    const int timestamp_role = roleForName(out, "timestamp");
+    QVERIFY(timestamp_role != -1);
+    QCOMPARE(out->data(out->index(1, 0), timestamp_role).toString().size(), 8);
+    QVERIFY(out->data(out->index(2, 0), timestamp_role).toString().isEmpty());
 }
 
 void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
@@ -425,12 +442,13 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     model.submitCommand("getsomething");
     QCOMPARE(out->rowCount(), 1); // CMD_REQUEST arrived synchronously
     QVERIFY(spy.wait(5000));
-    QCOMPARE(out->rowCount(), 2);
+    // One row per line: `{`, three key lines, `}`, after the request row.
+    QCOMPARE(out->rowCount(), 6);
 
     int content_role = roleForName(out, "content");
     QVERIFY(content_role != -1);
 
-    const QString html = out->data(out->index(1, 0), content_role).toString();
+    const QString html = joinRows(out, content_role, 1);
 
     // Real keys are wrapped in a key-colour span that closes immediately
     // after the quoted key — the structural formatter produces literally

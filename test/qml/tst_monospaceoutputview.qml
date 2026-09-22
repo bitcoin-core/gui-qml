@@ -175,6 +175,47 @@ TestCase {
         compare(output.contentY, lastMatchY)
     }
 
+    // Rows outside the viewport have no delegate, so search has to read the
+    // model rather than the instantiated items.
+    function test_search_finds_matches_in_rows_never_instantiated() {
+        const model = createTemporaryObject(regressionModelComponent, testWindow.contentItem)
+        verify(model !== null)
+        for (let i = 0; i < 500; ++i) {
+            model.append({ content: i === 480 ? "needle here" : "row " + i })
+        }
+        const output = createTemporaryObject(outputComponent, testWindow.contentItem, {
+            listModel: model
+        })
+        verify(output !== null)
+        tryCompare(output, "count", 500)
+
+        output.searchText = "needle"
+        tryCompare(output, "searchResultCount", 1)
+        compare(output.currentSearchResultIndex, 0)
+
+        const match = findChild(output, "searchOutput_content_480")
+        verify(match !== null)
+        compare(match.selectedText, "needle")
+    }
+
+    function test_appending_rows_follows_the_tail() {
+        const model = createTemporaryObject(regressionModelComponent, testWindow.contentItem)
+        verify(model !== null)
+        const output = createTemporaryObject(outputComponent, testWindow.contentItem, {
+            listModel: model,
+            autoScrollToBottom: true
+        })
+        verify(output !== null)
+
+        for (let i = 0; i < 300; ++i) model.append({ content: "line " + i })
+        tryCompare(output, "count", 300)
+        tryCompare(output, "atBottom", true)
+
+        const lastRow = findChild(output, "searchOutput_content_299")
+        verify(lastRow !== null)
+        compare(lastRow.getText(0, lastRow.length), "line 299")
+    }
+
     function test_search_scrolls_to_match_inside_multiline_row() {
         const output = createTemporaryObject(multilineOutputComponent,
                                              testWindow.contentItem)
