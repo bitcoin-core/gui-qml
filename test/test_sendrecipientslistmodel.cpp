@@ -25,6 +25,30 @@ private Q_SLOTS:
     void clearToFrontReportsRemovedRows();
     void clearToFrontDetachesRecipientsBeforeDestroyingThem();
     void unitChangesApplyToEveryRecipient();
+    void paymentRequestMetadataStaysSeparateFromPrivateNote() {
+        SendRecipientsListModel recipients;
+        auto* first = recipients.currentRecipient();
+        first->setLabel("Private note");
+        first->applyPaymentRequest("address-one", "Alice", "Lunch");
+        QCOMPARE(first->label(), QString("Private note"));
+        QCOMPARE(first->paymentRequestLabel(), QString("Alice"));
+        QCOMPARE(first->message(), QString("Lunch"));
+        QVERIFY(first->hasPaymentRequest());
+        recipients.add();
+        auto* second = recipients.currentRecipient();
+        second->applyPaymentRequest("address-two", "Bob", "Coffee");
+        recipients.setCurrentIndex(0);
+        QCOMPARE(recipients.currentRecipient(), first);
+        QCOMPARE(first->message(), QString("Lunch"));
+        first->address()->setAddress("edited-address");
+        QVERIFY(!first->hasPaymentRequest());
+        QVERIFY(first->message().isEmpty());
+        QCOMPARE(first->label(), QString("Private note"));
+        recipients.removeAt(0);
+        QCOMPARE(recipients.currentRecipient(), second);
+        QCOMPARE(second->paymentRequestLabel(), QString("Bob"));
+        QCOMPARE(recipients.data(recipients.index(0), SendRecipientsListModel::RecipientRole).value<SendRecipient*>(), second);
+    }
 };
 
 void SendRecipientsListModelTests::clearKeepsCurrentRecipientValidForQmlBindings()

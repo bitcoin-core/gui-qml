@@ -45,6 +45,13 @@ class Node;
 
 class PsbtQmlModel;
 
+struct SendFeePreview {
+    CAmount fee{0};
+    int inputs{0};
+    CAmount rate_per_kvb{0};
+    bool operator==(const SendFeePreview&) const = default;
+};
+
 class WalletQmlModel : public QObject
 {
     Q_OBJECT
@@ -84,6 +91,11 @@ private:
     Q_PROPERTY(bool receiveRequestReconciliationPending READ receiveRequestReconciliationPending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
+    Q_PROPERTY(qint64 estimatedFeeSatoshi READ estimatedFeeSatoshi NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QString estimatedFee READ estimatedFee NOTIFY estimatedFeeChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
@@ -147,6 +159,13 @@ public:
     bool receiveRequestReconciliationApplying() const { return m_receive_reconciliation_applying; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
     QString estimatedFee() const;
+    qint64 estimatedFeeSatoshi() const;
+    QString estimatedFeeRate() const;
+    int estimatedInputCount() const;
+    qint64 sendTotalSatoshi() const;
+    qint64 availableSendBalanceSatoshi() const;
+    Q_INVOKABLE void useMaximum();
+    Q_INVOKABLE void setCustomFeeTarget(unsigned int target);
     CFeeRate dustRelayFee() const;
     bool sendAmountExhaustsBalance() const;
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
@@ -221,7 +240,7 @@ public:
     void unselectCoin(const COutPoint& output);
     bool isSelectedCoin(const COutPoint& output);
     std::vector<COutPoint> listSelectedCoins() const;
-    void clearSelectedCoins();
+    Q_INVOKABLE void clearSelectedCoins();
     unsigned int feeTargetBlocks() const;
     void setFeeTargetBlocks(unsigned int target_blocks);
     void setCustomFeeEnabled(bool enabled);
@@ -286,10 +305,11 @@ private:
 
     void initializeFeeEstimator();
     void requestFeeEstimatesNow();
-    void applyFeeEstimates(const QHash<unsigned int, CAmount>& estimates,
-                           const std::optional<CAmount>& custom_estimate,
+    void applyFeeEstimates(const QHash<unsigned int, SendFeePreview>& estimates,
+                           const std::optional<SendFeePreview>& custom_estimate,
                            quint64 request_id);
     std::optional<CAmount> selectedFeeEstimate() const;
+    std::optional<SendFeePreview> selectedFeePreview() const;
     void clearFeeEstimates();
     unsigned int nextPaymentRequestId() const;
     void subscribeToWalletSignals();
@@ -352,8 +372,8 @@ private:
     QObject* m_fee_estimation_worker{nullptr};
     QThread* m_fee_estimation_thread{nullptr};
     QTimer* m_fee_estimation_timer{nullptr};
-    QHash<unsigned int, CAmount> m_fee_estimates;
-    std::optional<CAmount> m_custom_fee_estimate;
+    QHash<unsigned int, SendFeePreview> m_fee_estimates;
+    std::optional<SendFeePreview> m_custom_fee_estimate;
     QString m_custom_fee_rate;
     quint64 m_fee_estimate_request_id{0};
     int m_fee_estimate_revision{0};

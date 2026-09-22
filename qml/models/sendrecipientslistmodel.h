@@ -24,6 +24,7 @@ class SendRecipientsListModel : public QAbstractListModel
 public:
     enum Roles {
         AddressRole = Qt::UserRole + 1,
+        RecipientRole,
         LabelRole,
         AmountRole,
         MessageRole,
@@ -45,7 +46,8 @@ public:
     Q_INVOKABLE void clearToFront();
 
     int currentIndex() const { return m_current + 1; }
-    void setCurrentIndex(int row);
+    Q_INVOKABLE void setCurrentIndex(int row);
+    Q_INVOKABLE void removeAt(int row);
     SendRecipient* currentRecipient() const;
     int count() const { return m_recipients.size(); }
     QList<SendRecipient*> recipients() const { return m_recipients; }

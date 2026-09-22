@@ -16,6 +16,14 @@
 SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
     : QObject(parent), m_wallet(wallet), m_address(new BitcoinAddress(this)), m_amount(new BitcoinAmount(this))
 {
+    connect(m_address, &BitcoinAddress::addressChanged, this, [this] {
+        if (!m_request_address.isEmpty() && m_request_address != m_address->address()) {
+            m_request_address.clear();
+            m_request_label.clear();
+            setMessage({});
+            Q_EMIT paymentRequestChanged();
+        }
+    });
     connect(m_amount, &BitcoinAmount::amountChanged, this, &SendRecipient::validateAmount);
     connect(m_address, &BitcoinAddress::formattedAddressChanged, this, &SendRecipient::validateAddress);
 }
@@ -109,8 +117,20 @@ CAmount SendRecipient::cAmount() const
     return m_amount->satoshi();
 }
 
+void SendRecipient::applyPaymentRequest(const QString& address, const QString& pay_to, const QString& message)
+{
+    setAddress(address);
+    m_request_address = m_address->address();
+    m_request_label = pay_to;
+    setMessage(message);
+    Q_EMIT paymentRequestChanged();
+}
+
 void SendRecipient::clear()
 {
+    m_request_address.clear();
+    m_request_label.clear();
+    Q_EMIT paymentRequestChanged();
     m_label = "";
     m_message = "";
     setSubtractFeeFromAmount(false);

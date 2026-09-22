@@ -33,6 +33,7 @@ QVariant SendRecipientsListModel::data(const QModelIndex& index, int role) const
 
     const auto& r = m_recipients[index.row()];
     switch (role) {
+    case RecipientRole: return QVariant::fromValue(r);
     case AddressRole: return r->address()->ellipsesAddress();
     case LabelRole: return r->label();
     case AmountRole: return r->amount()->toDisplay();
@@ -47,6 +48,7 @@ QVariant SendRecipientsListModel::data(const QModelIndex& index, int role) const
 QHash<int, QByteArray> SendRecipientsListModel::roleNames() const
 {
     return {
+        {RecipientRole, "recipientObject"},
         {AddressRole, "address"},
         {LabelRole, "label"},
         {AmountRole, "amount"},
@@ -101,20 +103,20 @@ void SendRecipientsListModel::prev()
 
 void SendRecipientsListModel::remove()
 {
-    if (m_recipients.size() == 1) {
-        return;
-    }
-    beginRemoveRows(QModelIndex(), m_current, m_current);
-    if (m_current > 0) {
-        int index_to_remove = m_current;
-        setCurrentIndex(m_current - 1);
-        delete m_recipients.takeAt(index_to_remove);
-    } else {
-        auto removed_recipient = m_recipients.takeAt(m_current);
-        Q_EMIT currentRecipientChanged();
-        delete removed_recipient;
-    }
+    removeAt(m_current);
+}
+
+void SendRecipientsListModel::removeAt(int row)
+{
+    if (m_recipients.size() <= 1 || row < 0 || row >= m_recipients.size()) return;
+    SendRecipient* previous = currentRecipient();
+    beginRemoveRows({}, row, row);
+    auto* removed = m_recipients.takeAt(row);
+    if (row < m_current || m_current >= m_recipients.size()) --m_current;
     endRemoveRows();
+    Q_EMIT currentIndexChanged();
+    if (previous != currentRecipient()) Q_EMIT currentRecipientChanged();
+    removed->deleteLater();
     updateTotalAmount();
     Q_EMIT countChanged();
     Q_EMIT validationChanged();
