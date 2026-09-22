@@ -25,6 +25,7 @@ SettingsPage {
     signal passwordRequested()
     signal signVerifyMessageRequested()
     signal addressesRequested()
+    signal coinsRequested()
 
     function backupFileName() {
         const walletName = root.wallet && root.wallet.name.length > 0
@@ -173,6 +174,15 @@ SettingsPage {
             title: qsTr("Addresses")
             showsDisclosureIndicator: true
             onClicked: root.addressesRequested()
+        }
+
+        ListRow {
+            objectName: "walletCoinsRow"
+            Layout.fillWidth: true
+            //: Opens the wallet's unspent coin browser.
+            title: qsTr("View coins")
+            showsDisclosureIndicator: true
+            onClicked: root.coinsRequested()
         }
 
         ListRow {

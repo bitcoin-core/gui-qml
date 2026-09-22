@@ -8,7 +8,8 @@ QtObject {
     enum Role {
         Normal,
         Cancel,
-        Destructive
+        Destructive,
+        Neutral
     }
 
     property string text: ""

@@ -36,6 +36,28 @@ public:
 class CoinsListModelTests : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void stableIdentitySurvivesReorderAndRejectsRemovedCoin() {
+        auto wallet = std::make_unique<CoinWallet>();
+        auto* source = wallet.get();
+        wallet->add(0, 1000, 1700000000, 1, "First");
+        wallet->add(1, 2000, 1700000010, 2, "Second");
+        WalletQmlModel model{std::move(wallet)};
+        auto* coins = model.coinsListModel();
+        coins->setSortBy("amount");
+        coins->setSortDescending(false);
+        const QString coin_id = coins->data(coins->index(0), CoinsListModel::CoinIdRole).toString();
+
+        coins->setSortDescending(true);
+        QCOMPARE(coins->data(coins->index(0), CoinsListModel::AmountSatoshiRole).toLongLong(), 2000);
+        QVERIFY(coins->toggleCoinSelectionById(coin_id));
+        QCOMPARE(coins->totalSelectedSatoshi(), 1000);
+
+        source->coins.clear();
+        coins->update();
+        QVERIFY(!coins->toggleCoinSelectionById(coin_id));
+        QCOMPARE(coins->selectedCoinsCount(), 0);
+    }
+
     void filteringKeepsHiddenSelectionAndCancelRestoresInputs() {
         auto wallet = std::make_unique<CoinWallet>();
         wallet->add(0, 1000, 1700000000, 1, "Rent");

@@ -31,6 +31,7 @@ Button {
     property color borderPressedColor: "transparent"
     property bool bold: true
     property bool busy: false
+    property int backgroundRadius: 5
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -75,7 +76,7 @@ Button {
         implicitHeight: 46
         color: backgroundColor
         border.color: borderColor
-        radius: 5
+        radius: root.backgroundRadius
 
         states: [
             State {

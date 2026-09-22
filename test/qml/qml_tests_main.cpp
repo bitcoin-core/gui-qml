@@ -876,14 +876,15 @@ public:
         QString label;
         bool locked;
         bool selected;
+        QString id;
     };
 
     MockCoinsListModel()
     {
         m_rows = {
-            {QStringLiteral("bcrt1qcoin1"), QStringLiteral("0.00100000 BTC"), QStringLiteral("utxo-1"), false, false},
-            {QStringLiteral("bcrt1qcoin2"), QStringLiteral("0.00200000 BTC"), QStringLiteral("utxo-2"), false, false},
-            {QStringLiteral("bcrt1qcoin3"), QStringLiteral("0.00300000 BTC"), QStringLiteral(""), true, false},
+            {QStringLiteral("bcrt1qcoin1"), QStringLiteral("0.00100000 BTC"), QStringLiteral("utxo-1"), false, false, QStringLiteral("coin-1")},
+            {QStringLiteral("bcrt1qcoin2"), QStringLiteral("0.00200000 BTC"), QStringLiteral("utxo-2"), false, false, QStringLiteral("coin-2")},
+            {QStringLiteral("bcrt1qcoin3"), QStringLiteral("0.00300000 BTC"), QStringLiteral(""), true, false, QStringLiteral("coin-3")},
         };
     }
 
@@ -948,16 +949,55 @@ public:
         emitAggregateSignals();
     }
 
+    Q_INVOKABLE bool toggleCoinSelectionById(const QString& id)
+    {
+        for (int i = 0; i < rowCount(); ++i) {
+            CoinRow& row = m_rows[static_cast<size_t>(i)];
+            if (row.id != id) continue;
+            row.selected = !row.selected;
+            const QModelIndex model_index = createIndex(i, 0);
+            Q_EMIT dataChanged(model_index, model_index, {SelectedRole});
+            emitAggregateSignals();
+            return true;
+        }
+        return false;
+    }
+
+    Q_INVOKABLE bool isCoinSelected(const QString& id) const
+    {
+        const auto coin = std::find_if(m_rows.begin(), m_rows.end(), [&id](const CoinRow& row) { return row.id == id; });
+        return coin != m_rows.end() && coin->selected;
+    }
+
+    Q_INVOKABLE void prependCoinForTest()
+    {
+        beginInsertRows(QModelIndex{}, 0, 0);
+        m_rows.insert(m_rows.begin(), {QStringLiteral("bcrt1qnewcoin"), QStringLiteral("0.00400000 BTC"),
+                                      QStringLiteral("new-coin"), false, false, QStringLiteral("new-coin")});
+        endInsertRows();
+        Q_EMIT coinCountChanged();
+    }
+
+    Q_INVOKABLE void removeCoinForTest(const QString& id)
+    {
+        const auto coin = std::find_if(m_rows.begin(), m_rows.end(), [&id](const CoinRow& row) { return row.id == id; });
+        if (coin == m_rows.end()) return;
+        const int index = static_cast<int>(std::distance(m_rows.begin(), coin));
+        beginRemoveRows(QModelIndex{}, index, index);
+        m_rows.erase(coin);
+        endRemoveRows();
+        Q_EMIT coinCountChanged();
+    }
+
     Q_INVOKABLE void reset()
     {
-        bool changed{false};
-        for (CoinRow& row : m_rows) {
-            if (!row.selected) continue;
-            row.selected = false;
-            changed = true;
-        }
-        if (!changed) return;
-        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SelectedRole});
+        beginResetModel();
+        m_rows = {
+            {QStringLiteral("bcrt1qcoin1"), QStringLiteral("0.00100000 BTC"), QStringLiteral("utxo-1"), false, false, QStringLiteral("coin-1")},
+            {QStringLiteral("bcrt1qcoin2"), QStringLiteral("0.00200000 BTC"), QStringLiteral("utxo-2"), false, false, QStringLiteral("coin-2")},
+            {QStringLiteral("bcrt1qcoin3"), QStringLiteral("0.00300000 BTC"), QStringLiteral(""), true, false, QStringLiteral("coin-3")},
+        };
+        endResetModel();
         emitAggregateSignals();
     }
 

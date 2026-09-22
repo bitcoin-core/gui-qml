@@ -72,6 +72,7 @@ public:
     Q_INVOKABLE void update();
     Q_INVOKABLE void refreshSelection();
     Q_INVOKABLE void toggleCoinSelection(int index);
+    Q_INVOKABLE bool toggleCoinSelectionById(const QString& coin_id);
     Q_INVOKABLE void beginSelection();
     Q_INVOKABLE void applySelection();
     Q_INVOKABLE void cancelSelection();

@@ -22,6 +22,8 @@ Popup {
 
     modal: true
     dim: true
+    focus: true
+    closePolicy: Popup.NoAutoClose
     padding: 0
     width: parent ? Math.min(parent.width - 40, 360) : 360
     implicitHeight: columnLayout.implicitHeight
@@ -77,8 +79,23 @@ Popup {
         visibleActions = actionStore.data.length > 0 ? actionStore.data : [defaultAction]
     }
 
+    function cancel() {
+        for (let i = 0; i < visibleActions.length; ++i) {
+            const action = visibleActions[i]
+            if (action.role === AlertAction.Cancel || action.role === AlertAction.Neutral) {
+                close()
+                action.triggered()
+                return
+            }
+        }
+        close()
+    }
+
     Component.onCompleted: refreshActions()
-    onOpened: refreshActions()
+    onOpened: {
+        refreshActions()
+        columnLayout.forceActiveFocus()
+    }
 
     background: Rectangle {
         objectName: "alertPopupSurface"
@@ -90,7 +107,14 @@ Popup {
 
     contentItem: ColumnLayout {
         id: columnLayout
+        focus: true
         spacing: 0
+
+        Keys.priority: Keys.BeforeItem
+        Keys.onEscapePressed: function(event) {
+            root.cancel()
+            event.accepted = true
+        }
 
         CoreText {
             objectName: "alertTitle"
@@ -152,18 +176,22 @@ Popup {
                     objectName: alertAction.buttonObjectName
                     width: Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
                     text: alertAction.text
-                    textColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral9 : Theme.color.white
+                    textColor: alertAction.role === AlertAction.Cancel || alertAction.role === AlertAction.Neutral ? Theme.color.neutral9 : Theme.color.white
                     textHoverColor: textColor
                     textPressedColor: textColor
                     backgroundColor: alertAction.role === AlertAction.Cancel
                         ? Theme.color.neutral1
+                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral2
                         : alertAction.role === AlertAction.Destructive ? Theme.color.red : Theme.color.orange
                     backgroundHoverColor: alertAction.role === AlertAction.Cancel
                         ? Theme.color.neutral1
+                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral3
                         : alertAction.role === AlertAction.Destructive ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
                     backgroundPressedColor: alertAction.role === AlertAction.Cancel
                         ? Theme.color.neutral2
+                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral3
                         : alertAction.role === AlertAction.Destructive ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
+                    backgroundRadius: 5
                     borderColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral6 : "transparent"
                     borderHoverColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral9 : "transparent"
                     borderPressedColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral2 : "transparent"

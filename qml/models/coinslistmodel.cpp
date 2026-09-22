@@ -132,9 +132,20 @@ void CoinsListModel::toggleCoinSelection(int row)
 {
     if (!m_wallet_model || row < 0 || row >= rowCount()) return;
     const auto& coin = m_coins[m_visible[row]];
-    if (m_wallet_model->isSelectedCoin(coin.outpoint)) m_wallet_model->unselectCoin(coin.outpoint);
-    else m_wallet_model->selectCoin(coin.outpoint);
+    toggleCoinSelectionById(coin.id());
+}
+
+bool CoinsListModel::toggleCoinSelectionById(const QString& coin_id)
+{
+    if (!m_wallet_model) return false;
+    const auto coin = std::find_if(m_coins.begin(), m_coins.end(), [&coin_id](const Coin& candidate) {
+        return candidate.id() == coin_id;
+    });
+    if (coin == m_coins.end()) return false;
+    if (m_wallet_model->isSelectedCoin(coin->outpoint)) m_wallet_model->unselectCoin(coin->outpoint);
+    else m_wallet_model->selectCoin(coin->outpoint);
     refreshSelection();
+    return true;
 }
 void CoinsListModel::refreshSelection()
 {
