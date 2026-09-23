@@ -164,6 +164,14 @@ QString BitcoinAmount::displayWithUnit() const
     return display.isEmpty() ? QString{} : display + QStringLiteral(" ") + unitLabel();
 }
 
+QString BitcoinAmount::localizedDisplayWithUnit() const
+{
+    if (!m_isSet) return {};
+    const auto unit = ToQmlUnit(m_unit);
+    return QmlBitcoinUnits::formatForDisplay(unit, m_satoshi) + QLatin1Char(' ')
+        + QmlBitcoinUnits::label(unit);
+}
+
 qint64 BitcoinAmount::displayToSats(const QString& sanitized) const
 {
     if (sanitized.isEmpty() || sanitized == ".") return 0;

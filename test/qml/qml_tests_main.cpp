@@ -9,6 +9,7 @@
 #include <QFont>
 #include <QHash>
 #include <QIcon>
+#include <QLocale>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -165,6 +166,7 @@ class MockBitcoinAmount : public QObject
     Q_PROPERTY(qint64 satoshi READ satoshi WRITE setSatoshi NOTIFY amountChanged)
     Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY unitChanged)
     Q_PROPERTY(QString displayWithUnit READ displayWithUnit NOTIFY displayChanged)
+    Q_PROPERTY(QString localizedDisplayWithUnit READ localizedDisplayWithUnit NOTIFY displayChanged)
 
 public:
     enum Unit {
@@ -227,6 +229,18 @@ public:
         Q_EMIT amountChanged();
     }
     QString displayWithUnit() const { return m_display.isEmpty() ? QString{} : m_display + QStringLiteral(" ") + unitLabel(); }
+    QString localizedDisplayWithUnit() const
+    {
+        if (m_display.isEmpty()) return {};
+        const QLocale locale;
+        if (m_unit == SAT) return locale.toString(satoshi()) + QStringLiteral(" sat");
+        const QStringList parts = m_display.split(QLatin1Char('.'));
+        QString formatted = locale.toString(parts.first().toLongLong());
+        if (parts.size() > 1) formatted += locale.decimalPoint() + parts.at(1);
+        const QString label = m_unit == BTC ? QStringLiteral("BTC")
+            : m_unit == mBTC ? QStringLiteral("mBTC") : QStringLiteral("bits");
+        return formatted + QLatin1Char(' ') + label;
+    }
     Q_INVOKABLE void format()
     {
         const QString normalized = normalizedDisplay(m_display);
@@ -1075,6 +1089,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(QObject* currentTransaction READ currentTransaction CONSTANT)
+    Q_PROPERTY(QVariantMap currentTransactionFlow MEMBER m_current_transaction_flow NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool currentTransactionIsImportedPsbt MEMBER m_current_transaction_is_imported_psbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanSend MEMBER m_current_transaction_can_send NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanBroadcast MEMBER m_current_transaction_can_broadcast NOTIFY currentTransactionChanged)
     Q_PROPERTY(QString currentTransactionReviewMessage MEMBER m_current_transaction_review_message NOTIFY currentTransactionChanged)
@@ -1100,6 +1116,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(int scheduleFeeEstimatesCalls READ scheduleFeeEstimatesCalls NOTIFY scheduleFeeEstimatesCallsChanged)
     Q_PROPERTY(int sendTransactionCalls READ sendTransactionCalls NOTIFY sendTransactionCallsChanged)
     Q_PROPERTY(int broadcastCurrentTransactionCalls READ broadcastCurrentTransactionCalls NOTIFY broadcastCurrentTransactionCallsChanged)
+    Q_PROPERTY(QString lastSavedPsbtPath MEMBER m_last_saved_psbt_path NOTIFY lastSavedPsbtPathChanged)
     Q_PROPERTY(int discardCurrentTransactionCalls READ discardCurrentTransactionCalls NOTIFY discardCurrentTransactionCallsChanged)
     Q_PROPERTY(bool isEncrypted MEMBER m_is_encrypted NOTIFY securityStateChanged)
     Q_PROPERTY(bool isLocked MEMBER m_is_locked NOTIFY securityStateChanged)
@@ -1156,8 +1173,11 @@ public:
     int m_target_blocks{2};
     bool m_prepare_transaction_result{true};
     bool m_current_transaction_can_send{true};
+    QVariantMap m_current_transaction_flow;
+    bool m_current_transaction_is_imported_psbt{false};
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
+    QString m_last_saved_psbt_path;
 
     QObject* transactionActivityModel() const { return m_transaction_activity_model; }
     QObject* bumpModel() const { return m_bump_model; }
@@ -1404,6 +1424,12 @@ public:
         Q_EMIT broadcastCurrentTransactionCallsChanged();
         return m_current_transaction_can_broadcast;
     }
+    Q_INVOKABLE QString saveCurrentTransactionAsPsbt(const QString& path)
+    {
+        m_last_saved_psbt_path = path;
+        Q_EMIT lastSavedPsbtPathChanged();
+        return {};
+    }
     Q_INVOKABLE void discardCurrentTransaction()
     {
         ++m_discard_current_transaction_calls;
@@ -1535,6 +1561,7 @@ Q_SIGNALS:
     void broadcastCurrentTransactionCallsChanged();
     void discardCurrentTransactionCallsChanged();
     void currentTransactionChanged();
+    void lastSavedPsbtPathChanged();
     void externalSignerApprovalSucceeded();
     void externalSignerApprovalPartiallySucceeded();
     void externalSignerApprovalFailed(const QString& message, bool signerNotFound);
@@ -1602,6 +1629,9 @@ class MockWalletQmlModelTransaction : public QObject
     Q_PROPERTY(QString fee MEMBER m_fee CONSTANT)
     Q_PROPERTY(QString total MEMBER m_total CONSTANT)
     Q_PROPERTY(QString txid MEMBER m_txid CONSTANT)
+    Q_PROPERTY(QVariantList reviewedRecipients MEMBER m_reviewed_recipients NOTIFY reviewedRecipientsChanged)
+    Q_PROPERTY(int reviewTargetBlocks MEMBER m_review_target_blocks)
+    Q_PROPERTY(QString reviewFeeRate MEMBER m_review_fee_rate)
     Q_PROPERTY(QObject* amountAmount READ amountAmount CONSTANT)
     Q_PROPERTY(QObject* feeAmount READ feeAmount CONSTANT)
     Q_PROPERTY(QObject* totalAmount READ totalAmount CONSTANT)
@@ -1620,6 +1650,9 @@ public:
     QString m_fee{QStringLiteral("0.00001000 BTC")};
     QString m_total{QStringLiteral("0.01001000 BTC")};
     QString m_txid{QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")};
+    QVariantList m_reviewed_recipients;
+    int m_review_target_blocks{6};
+    QString m_review_fee_rate{QStringLiteral("2.5")};
     MockBitcoinAmount m_amount_amount;
     MockBitcoinAmount m_fee_amount;
     MockBitcoinAmount m_total_amount;
@@ -1627,6 +1660,9 @@ public:
     QObject* amountAmount() { return &m_amount_amount; }
     QObject* feeAmount() { return &m_fee_amount; }
     QObject* totalAmount() { return &m_total_amount; }
+
+Q_SIGNALS:
+    void reviewedRecipientsChanged();
 };
 
 class MockWalletController : public QObject

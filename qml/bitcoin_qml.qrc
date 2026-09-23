@@ -64,6 +64,7 @@
         <file>components/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
         <file>components/ConfirmationPill.qml</file>
+        <file>components/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
         <file>components/TransactionDetailsGrid.qml</file>
@@ -199,6 +200,7 @@
         <file>pages/wallet/AddressRow.qml</file>
         <file>pages/wallet/CoinSelection.qml</file>
         <file>pages/wallet/SendCreate.qml</file>
+        <file>pages/wallet/SendComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
@@ -217,6 +219,7 @@
         <file>pages/wallet/Send.qml</file>
         <file>pages/wallet/SendResult.qml</file>
         <file>pages/wallet/SendReview.qml</file>
+        <file>pages/wallet/SendTransactionReview.qml</file>
         <file>pages/wallet/SpeedUpOverlay.qml</file>
         <file>pages/wallet/SignVerifyMessage.qml</file>
         <file>pages/wallet/WalletBadge.qml</file>

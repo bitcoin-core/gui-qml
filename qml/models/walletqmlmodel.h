@@ -90,6 +90,8 @@ private:
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending READ receiveRequestReconciliationPending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
+    Q_PROPERTY(QVariantMap currentTransactionFlow READ currentTransactionFlow NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool currentTransactionIsImportedPsbt READ currentTransactionIsImportedPsbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
     Q_PROPERTY(qint64 estimatedFeeSatoshi READ estimatedFeeSatoshi NOTIFY estimatedFeeChanged)
     Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY estimatedFeeChanged)
@@ -158,6 +160,8 @@ public:
     bool receiveRequestReconciliationPending() const { return m_receive_reconciliation_thread != nullptr || m_receive_reconciliation_applying; }
     bool receiveRequestReconciliationApplying() const { return m_receive_reconciliation_applying; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
+    QVariantMap currentTransactionFlow() const;
+    bool currentTransactionIsImportedPsbt() const { return m_current_transaction_source == CurrentTransactionSource::ImportedPsbt; }
     QString estimatedFee() const;
     qint64 estimatedFeeSatoshi() const;
     QString estimatedFeeRate() const;

@@ -21,6 +21,12 @@ TestCase {
         SendCreate {}
     }
 
+    Component {
+        id: reviewComponent
+
+        SendTransactionReview { wallet: testWalletModel }
+    }
+
     SignalSpy {
         id: transactionPreparedSpy
     }
@@ -34,9 +40,12 @@ TestCase {
         testWalletModel.sendAmountExhaustsBalance = false
         testWalletModel.currentTransactionCanSend = true
         testWalletModel.currentTransactionCanBroadcast = false
+        testWalletModel.currentTransactionIsImportedPsbt = false
         testWalletModel.currentTransactionReviewMessage = ""
         testSendRecipient.address.setAddress("bcrt1qsendtoaddress")
+        testSendRecipient.addressError = ""
         testSendRecipient.amount.display = "0.00000000"
+        testSendRecipient.amountError = ""
         testSendRecipient.label = ""
         testSendRecipient.hasPaymentRequest = false
         testSendRecipient.paymentRequestLabel = ""
@@ -47,6 +56,12 @@ TestCase {
         testRecipientsModel.validationError = ""
         testRecipientsModel.clearToFront()
         testRecipientsModel.totalAmountSatoshi = 0
+        testWalletTransaction.reviewedRecipients = [{
+            address: "bcrt1qsendtoaddress", formattedAddress: "bcrt1qsendtoaddress",
+            label: "recipient-1", amount: "0.00100000 BTC", hasPaymentRequest: false
+        }]
+        testWalletTransaction.reviewTargetBlocks = 6
+        testWalletTransaction.reviewFeeRate = "2.5"
         optionsModel.displayUnit = BitcoinAmount.BTC
         testCoinsListModel.reset()
         Clipboard.currentText = ""
@@ -63,7 +78,7 @@ TestCase {
         page.height = testCase.height
         page.visible = true
 
-        const popup = findChild(page, "reviewOnlyPsbtPopup")
+        const popup = findChild(page, "transactionReviewPopup")
         verify(popup !== null)
 
         testWalletModel.currentTransactionCanSend = false
@@ -71,6 +86,7 @@ TestCase {
         const discardCallsBefore = testWalletModel.discardCurrentTransactionCalls
 
         popup.reviewWallet = testWalletModel
+        popup.importedReview = true
         popup.open()
         tryCompare(popup, "opened", true)
 
@@ -80,25 +96,27 @@ TestCase {
         tryCompare(testWalletModel, "discardCurrentTransactionCalls", discardCallsBefore + 1)
     }
 
-    function test_successful_psbt_broadcast_shows_confirmation() {
+    function test_successful_psbt_broadcast_pushes_send_complete() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
         page.width = testCase.width
         page.height = testCase.height
         page.visible = true
 
-        const reviewPopup = findChild(page, "reviewOnlyPsbtPopup")
-        const successPopup = findChild(page, "psbtBroadcastSuccessPopup")
+        const reviewPopup = findChild(page, "transactionReviewPopup")
+        const reviewStack = findChild(reviewPopup, "sendTransactionReviewStack")
         verify(reviewPopup !== null)
-        verify(successPopup !== null)
+        verify(reviewStack !== null)
 
         testWalletModel.currentTransactionCanSend = false
         testWalletModel.currentTransactionCanBroadcast = true
+        testWalletModel.currentTransactionIsImportedPsbt = true
         reviewPopup.reviewWallet = testWalletModel
+        reviewPopup.importedReview = true
         reviewPopup.open()
         tryCompare(reviewPopup, "opened", true)
 
-        const broadcastButton = findChild(reviewPopup, "sendReviewBroadcastButton")
+        const broadcastButton = findChild(reviewPopup, "sendTransactionReviewSendButton")
         verify(broadcastButton !== null)
         tryCompare(broadcastButton, "visible", true)
         const broadcastCallsBefore = testWalletModel.broadcastCurrentTransactionCalls
@@ -106,11 +124,207 @@ TestCase {
 
         broadcastButton.clicked()
 
-        tryCompare(reviewPopup, "opened", false)
+        tryCompare(reviewStack, "depth", 2)
+        compare(reviewPopup.opened, true)
+        const completePage = findChild(reviewStack, "sendCompletePage")
+        verify(completePage !== null)
+        compare(completePage.targetBlocks, 0)
+        verify(completePage.descriptionText.indexOf("fee rate") >= 0)
         tryCompare(testWalletModel, "broadcastCurrentTransactionCalls", broadcastCallsBefore + 1)
+        findChild(reviewStack, "sendResultDoneButton").clicked()
+        tryCompare(reviewPopup, "opened", false)
         tryCompare(testWalletModel, "discardCurrentTransactionCalls", discardCallsBefore + 1)
-        tryCompare(successPopup, "opened", true)
-        successPopup.close()
+    }
+
+    function test_review_recipient_card_handles_one_and_multiple_recipients() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        const popup = findChild(page, "transactionReviewPopup")
+        verify(popup !== null)
+        page.openTransactionReview()
+        tryCompare(popup, "opened", true)
+
+        const reviewTitle = findChild(popup.contentItem, "sendTransactionReviewTitle")
+        const closeButton = findChild(popup.contentItem, "sendTransactionReviewCloseButton")
+        verify(reviewTitle !== null)
+        verify(closeButton !== null)
+        compare(reviewTitle.text, "Review Transaction")
+        compare(closeButton.size, 45)
+        compare(closeButton.iconSize, 15)
+        const summary = findChild(popup.contentItem, "sendTransactionReviewSummary")
+        compare(summary.amount, testWalletTransaction.total)
+        const icon = findChild(summary, "sendTransactionReviewIcon")
+        verify(icon.pending)
+        verify(icon.dashed)
+        const amountText = findChild(summary, "transactionSummaryAmount")
+        const amountUnit = findChild(summary, "transactionSummaryUnit")
+        tryVerify(function() { return amountText.width > 0 && amountUnit.width > 0 })
+        const amountLeft = amountText.mapToItem(summary, 0, 0).x
+        const unitRight = amountUnit.mapToItem(summary, amountUnit.width, 0).x
+        verify(Math.abs((amountLeft + unitRight) / 2 - summary.width / 2) < 2)
+        compare(findChild(popup.contentItem, "sendTransactionReviewReadyPill").text,
+                "Ready to send")
+        const saveButton = findChild(popup.contentItem, "sendTransactionReviewSaveButton")
+        const sendButton = findChild(popup.contentItem, "sendTransactionReviewSendButton")
+        tryVerify(function() { return saveButton.x < sendButton.x })
+        compare(saveButton.y, sendButton.y)
+
+        const first = findChild(popup.contentItem, "sendTransactionReviewRecipient0")
+        verify(first !== null)
+        const feeSection = findChild(popup.contentItem, "sendTransactionReviewNetworkFee")
+        verify(feeSection !== null)
+        compare(feeSection.visible, true)
+        compare(findChild(feeSection, "sendTransactionReviewTargetBlocks").value, "6 blocks")
+        compare(findChild(feeSection, "sendTransactionReviewFeeRate").value, "2.5 sat/vB")
+        testWalletModel.targetBlocks = 10
+        testWalletModel.customFeeEnabled = true
+        testWalletModel.customFeeRate = "4.2"
+        compare(findChild(feeSection, "sendTransactionReviewTargetBlocks").value, "6 blocks")
+        compare(findChild(feeSection, "sendTransactionReviewFeeRate").value, "2.5 sat/vB")
+        compare(findChild(first, "sendTransactionReviewRecipient0Title").text, "recipient-1")
+        compare(findChild(first, "sendTransactionReviewRecipient0Description").text, "bcrt1qsendtoaddress")
+        testSendRecipient.amount.display = "1234.00000000"
+        compare(findChild(first, "sendTransactionReviewRecipient0Amount").text, "0.00100000 BTC")
+        const requestBadge = findChild(first, "sendTransactionReviewRecipient0RequestBadge")
+        verify(requestBadge !== null)
+        compare(requestBadge.visible, false)
+        const recipientTitle = findChild(first, "sendTransactionReviewRecipient0Title")
+        const titleX = recipientTitle.mapToItem(first, 0, 0).x
+        testSendRecipient.hasPaymentRequest = true
+        compare(requestBadge.visible, false)
+        compare(recipientTitle.mapToItem(first, 0, 0).x, titleX)
+        compare(requestBadge.inactive, true)
+        compare(requestBadge.statusText, "Payment request recipient")
+        testSendRecipient.hasPaymentRequest = false
+
+        testRecipientsModel.add()
+        compare(findChild(popup.contentItem, "sendTransactionReviewRecipient1"), null)
+        testWalletTransaction.reviewedRecipients = testWalletTransaction.reviewedRecipients.concat([{
+            address: "bcrt1qsecondaddress", formattedAddress: "bcrt1qsecondaddress",
+            label: "recipient-2", amount: "0.00200000 BTC", hasPaymentRequest: true
+        }])
+        const second = findChild(popup.contentItem, "sendTransactionReviewRecipient1")
+        verify(second !== null)
+        compare(findChild(second, "sendTransactionReviewRecipient1Title").text, "recipient-2")
+        compare(findChild(popup.contentItem, "sendTransactionReviewRecipient0").showDivider, true)
+        compare(second.showDivider, false)
+        compare(findChild(second, "sendTransactionReviewRecipient1RequestBadge").visible, true)
+        popup.close()
+    }
+
+    function test_review_content_width_matches_activity_detail() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem)
+        verify(review !== null)
+        review.width = 1400
+        review.height = 800
+        review.visible = true
+        const recipients = findChild(review, "sendTransactionReviewRecipients")
+        tryCompare(recipients, "width", 1100)
+        compare(review.header.leftPadding, 150)
+
+        review.width = 390
+        tryCompare(recipients, "width", 358)
+        compare(review.header.leftPadding, 16)
+    }
+
+    function test_imported_psbt_without_signing_keys_only_offers_save() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        testWalletModel.currentTransactionIsImportedPsbt = true
+        testWalletModel.currentTransactionCanSend = false
+        testWalletModel.currentTransactionCanBroadcast = false
+        testWalletModel.currentTransactionReviewMessage = "This wallet cannot sign."
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        tryCompare(popup, "opened", true)
+        compare(findChild(popup, "sendTransactionReviewSendButton").visible, false)
+        compare(findChild(popup, "sendTransactionReviewSaveButton").visible, true)
+        compare(findChild(popup, "sendTransactionReviewWarning").visible, true)
+        compare(findChild(popup, "sendTransactionReviewNetworkFee").visible, false)
+        verify(findChild(popup.contentItem, "sendTransactionReviewReadyPill") === null)
+        popup.close()
+    }
+
+    function test_review_send_pushes_complete_within_modal() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        const reviewStack = findChild(popup, "sendTransactionReviewStack")
+        tryCompare(popup, "opened", true)
+        compare(reviewStack.depth, 1)
+        const sendButton = findChild(popup.contentItem, "sendTransactionReviewSendButton")
+        verify(sendButton !== null)
+        compare(sendButton.visible, true)
+        compare(sendButton.text, "Send transaction")
+        const callsBefore = testWalletModel.sendTransactionCalls
+        sendButton.clicked()
+        tryCompare(reviewStack, "depth", 2)
+        compare(popup.opened, true)
+        const completePage = findChild(reviewStack, "sendCompletePage")
+        verify(completePage !== null)
+        compare(completePage.txid, testWalletTransaction.txid)
+        compare(completePage.targetBlocks, 6)
+        verify(completePage.descriptionText.indexOf("6 blocks") >= 0)
+        compare(testWalletModel.sendTransactionCalls, callsBefore + 1)
+        page.manualCoinSelection = true
+        testCoinsListModel.toggleCoinSelection(0)
+        findChild(reviewStack, "sendResultDoneButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(page.manualCoinSelection, false)
+        compare(testCoinsListModel.selectedCoinsCount, 0)
+    }
+
+    function test_custom_fee_send_uses_generic_confirmation_text() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        testWalletModel.customFeeEnabled = true
+        testWalletModel.customFeeRate = "4.2"
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        const reviewStack = findChild(popup, "sendTransactionReviewStack")
+        tryCompare(popup, "opened", true)
+        findChild(popup.contentItem, "sendTransactionReviewSendButton").clicked()
+        tryCompare(reviewStack, "depth", 2)
+        const completePage = findChild(reviewStack, "sendCompletePage")
+        verify(completePage !== null)
+        compare(completePage.targetBlocks, 0)
+        compare(completePage.descriptionText,
+                "Your transaction was broadcast. Confirmation depends on its fee rate.")
+        popup.close()
+    }
+
+    function test_review_saves_psbt_without_leaving_modal() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        tryCompare(popup, "opened", true)
+        const review = popup.contentItem
+        const path = findChild(review, "sendTransactionReviewSavePsbtPathField")
+        const saveButton = findChild(review, "sendTransactionReviewSaveButton")
+        verify(path !== null)
+        verify(saveButton !== null)
+        path.text = "file:///tmp/review-test.psbt"
+        saveButton.clicked()
+        compare(testWalletModel.lastSavedPsbtPath, "file:///tmp/review-test.psbt")
+        compare(popup.opened, true)
+        popup.close()
     }
 
     function test_send_continue_button_tracks_recipient_validity() {
@@ -215,8 +429,8 @@ TestCase {
         testWalletModel.prepareTransactionResult = true
         continueButton.clicked()
         compare(testWalletModel.prepareTransactionCalls, callsBefore + 3)
-        compare(transactionPreparedSpy.count, 1)
-        compare(transactionPreparedSpy.signalArguments[0][0], false)
+        compare(transactionPreparedSpy.count, 0)
+        tryCompare(findChild(page, "transactionReviewPopup"), "opened", true)
         compare(page.prepareTransactionErrorText, "")
         compare(prepareErrorText.text, "")
     }
@@ -333,6 +547,28 @@ TestCase {
             { tag: "label", inputObjectName: "sendNoteInput" },
             { tag: "amount", inputObjectName: "sendAmountInput" },
         ]
+    }
+
+    function test_plain_address_paste_into_send_field() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+
+        const input = findChild(page, "sendAddressInput")
+        verify(input !== null)
+        const address = "bcrt1q8rcpp66mqmtsw27mx7awa7yfdrpzytumsapkw4"
+        testSendRecipient.address.setAddress("")
+        Clipboard.currentText = address
+        input.forceActiveFocus()
+        verify(input.activeFocus)
+        pasteShortcut()
+
+        compare(testSendRecipient.address.address, address)
+
+        const replacement = "bcrt1qreplacementaddress000000000000000000000"
+        Clipboard.currentText = replacement
+        input.selectAll()
+        pasteShortcut()
+        compare(testSendRecipient.address.address, replacement)
     }
 
     function test_send_payment_uri_paste_applies_from_each_recipient_field(data) {

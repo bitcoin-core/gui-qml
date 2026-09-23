@@ -48,7 +48,20 @@ ColumnLayout {
     }
 
     function paste() {
-        addressInput.paste()
+        const clipboardText = Clipboard.text()
+        if (!clipboardText.length || !addressInput.enabled || addressInput.readOnly) return
+        const selected = addressInput.selectedText.length > 0
+        const start = selected ? addressInput.selectionStart : addressInput.cursorPosition
+        const end = selected ? addressInput.selectionEnd : start
+        const nextText = addressInput.text.slice(0, start) + clipboardText + addressInput.text.slice(end)
+        const cursor = start + clipboardText.length
+        if (root.address) {
+            addressInput.cursorPosition = root.address.setAddress(nextText, cursor)
+            addressInput.syncFromAddress()
+        } else {
+            addressInput.text = nextText
+            addressInput.cursorPosition = cursor
+        }
     }
 
     function syncFromAddress() {

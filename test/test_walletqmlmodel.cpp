@@ -156,9 +156,35 @@ struct WalletModelHarness {
     std::unique_ptr<WalletQmlModel> model;
 };
 
+class ReviewMockWallet : public MockWallet
+{
+public:
+    util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>& recipients,
+        const wallet::CCoinControl& coin_control, bool sign, std::optional<unsigned int> change_pos) override
+    {
+        auto result = MockWallet::createTransaction(recipients, coin_control, sign, change_pos);
+        if (!result) return result;
+        const bool missing_outputs = result->tx->vout.empty();
+        const bool missing_scripts = result->tx->vout.size() == recipients.size()
+            && std::all_of(result->tx->vout.begin(), result->tx->vout.end(), [](const CTxOut& output) {
+                return output.scriptPubKey.empty();
+            });
+        if (missing_outputs || missing_scripts) {
+            CMutableTransaction completed{*result->tx};
+            for (size_t i = 0; i < recipients.size(); ++i) {
+                const CScript script{GetScriptForDestination(recipients[i].dest)};
+                if (missing_outputs) completed.vout.emplace_back(recipients[i].nAmount, script);
+                else completed.vout[i].scriptPubKey = script;
+            }
+            result->tx = MakeTransactionRef(std::move(completed));
+        }
+        return result;
+    }
+};
+
 WalletModelHarness<MockWallet> MakeWalletModel(interfaces::Node* node = nullptr)
 {
-    auto wallet = std::make_unique<MockWallet>();
+    auto wallet = std::make_unique<ReviewMockWallet>();
     MockWallet* const wallet_view{wallet.get()};
 
     wallet_view->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
@@ -400,8 +426,26 @@ public:
         if (!result) {
             return util::Error{util::ErrorString(result)};
         }
+        // Test callbacks often omit output scripts when they only exercise fee
+        // or signing behavior. Supply the requested destinations so review can
+        // verify its snapshot against a transaction-shaped result.
+        CTransactionRef transaction{*result};
+        const bool missing_outputs = transaction->vout.empty();
+        const bool missing_scripts = transaction->vout.size() == recipients.size()
+            && std::all_of(transaction->vout.begin(), transaction->vout.end(), [](const CTxOut& output) {
+                return output.scriptPubKey.empty();
+            });
+        if (missing_outputs || missing_scripts) {
+            CMutableTransaction completed{*transaction};
+            for (size_t i = 0; i < recipients.size(); ++i) {
+                const CScript script{GetScriptForDestination(recipients[i].dest)};
+                if (missing_outputs) completed.vout.emplace_back(recipients[i].nAmount, script);
+                else completed.vout[i].scriptPubKey = script;
+            }
+            transaction = MakeTransactionRef(std::move(completed));
+        }
         return wallet::CreatedTransactionResult{
-            *result,
+            transaction,
             fee,
             change_pos >= 0 ? std::optional<unsigned int>{static_cast<unsigned int>(change_pos)} : std::nullopt,
             FeeCalculation{}};
@@ -1460,9 +1504,9 @@ void WalletQmlModelTests::prepareTransaction_reassignsAmountWhenFeeIncluded()
     QCOMPARE(model->currentTransaction()->amountAmount()->satoshi(), CAmount{49'800});
     QCOMPARE(model->currentTransaction()->feeAmount()->satoshi(), CAmount{200});
     QCOMPARE(model->currentTransaction()->totalAmount()->satoshi(), CAmount{50'000});
-    QCOMPARE(model->currentTransaction()->amount(), QString::fromUtf8("0.00049800 \xe2\x82\xbf"));
-    QCOMPARE(model->currentTransaction()->fee(), QString::fromUtf8("0.00000200 \xe2\x82\xbf"));
-    QCOMPARE(model->currentTransaction()->total(), QString::fromUtf8("0.00050000 \xe2\x82\xbf"));
+    QCOMPARE(model->currentTransaction()->amount(), QStringLiteral("0.00049800 BTC"));
+    QCOMPARE(model->currentTransaction()->fee(), QStringLiteral("0.00000200 BTC"));
+    QCOMPARE(model->currentTransaction()->total(), QStringLiteral("0.00050000 BTC"));
     QCOMPARE(model->currentTransaction()->getTotalTransactionAmount(), CAmount{50'000});
 }
 
@@ -1489,7 +1533,7 @@ void WalletQmlModelTests::walletQmlModelTransaction_reassignAmounts_excludesChan
     QCOMPARE(fee_changed_spy.count(), 1);
     QCOMPARE(total_changed_spy.count(), 1);
     QCOMPARE(transaction.totalAmount()->satoshi(), CAmount{50'200});
-    QCOMPARE(transaction.total(), QString::fromUtf8("0.00050200 \xe2\x82\xbf"));
+    QCOMPARE(transaction.total(), QStringLiteral("0.00050200 BTC"));
 
     transaction.reassignAmounts(/*nChangePosRet=*/1);
 
@@ -1498,9 +1542,9 @@ void WalletQmlModelTests::walletQmlModelTransaction_reassignAmounts_excludesChan
     QCOMPARE(transaction.amountAmount()->satoshi(), CAmount{49'800});
     QCOMPARE(transaction.feeAmount()->satoshi(), CAmount{200});
     QCOMPARE(transaction.totalAmount()->satoshi(), CAmount{50'000});
-    QCOMPARE(transaction.amount(), QString::fromUtf8("0.00049800 \xe2\x82\xbf"));
-    QCOMPARE(transaction.fee(), QString::fromUtf8("0.00000200 \xe2\x82\xbf"));
-    QCOMPARE(transaction.total(), QString::fromUtf8("0.00050000 \xe2\x82\xbf"));
+    QCOMPARE(transaction.amount(), QStringLiteral("0.00049800 BTC"));
+    QCOMPARE(transaction.fee(), QStringLiteral("0.00000200 BTC"));
+    QCOMPARE(transaction.total(), QStringLiteral("0.00050000 BTC"));
     QCOMPARE(transaction.getTotalTransactionAmount(), CAmount{50'000});
 }
 

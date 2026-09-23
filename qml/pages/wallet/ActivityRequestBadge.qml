@@ -10,10 +10,11 @@ Item {
     id: root
     property bool inactive: false
     property color surfaceColor: Theme.color.neutral1
+    property string statusText: inactive ? qsTr("Associated payment request") : qsTr("Payment request fulfilled")
     implicitWidth: 18
     implicitHeight: 18
     Accessible.role: Accessible.StaticText
-    Accessible.name: inactive ? qsTr("Associated payment request") : qsTr("Payment request fulfilled")
+    Accessible.name: statusText
 
     Icon {
         anchors.centerIn: parent

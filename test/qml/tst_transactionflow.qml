@@ -112,7 +112,7 @@ TestCase {
         compare(flow.outputEntries.length, 4)
         compare(toggle.text, "Show all outputs")
         flow.displayUnit = BitcoinAmount.SAT
-        tryCompare(findChild(flow, "transactionFlowOutput_2"), "amountText", "100000 sats")
+        tryCompare(findChild(flow, "transactionFlowOutput_2"), "amountText", Qt.locale().toString(100000) + " sat")
         compare(data.outputs.length, 12)
         compare(data.outputs[2].label, "Recipient note")
 

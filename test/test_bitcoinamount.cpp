@@ -4,6 +4,9 @@
 
 #include <QtTest/QtTest>
 
+#include <QLocale>
+#include <QScopeGuard>
+
 #include <qml/bitcoinamount.h>
 
 class BitcoinAmountTests : public QObject {
@@ -18,6 +21,7 @@ private Q_SLOTS:
     void display_flow_mbtc_and_ubtc();
     void display_flow_sat();
     void displayWithUnit_formatsAmountAndUnit();
+    void localizedDisplayWithUnit_usesLocaleAndKeepsCanonicalDisplay();
     void flipUnit_changesLabelAndDisplaySignal();
 };
 
@@ -101,6 +105,23 @@ void BitcoinAmountTests::displayWithUnit_formatsAmountAndUnit()
 
     amt.setSatoshi(1);
     QCOMPARE(amt.displayWithUnit(), QStringLiteral("1 sat"));
+}
+
+void BitcoinAmountTests::localizedDisplayWithUnit_usesLocaleAndKeepsCanonicalDisplay()
+{
+    const QLocale previous;
+    const auto restore_locale = qScopeGuard([previous] { QLocale::setDefault(previous); });
+    QLocale::setDefault(QLocale{"de_DE"});
+
+    BitcoinAmount amount;
+    QVERIFY(amount.localizedDisplayWithUnit().isEmpty());
+    amount.setSatoshi(123'456'789);
+    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("1,23456789 BTC"));
+    QCOMPARE(amount.displayWithUnit(), QStringLiteral("1.23456789 ₿"));
+
+    amount.setUnit(BitcoinAmount::Unit::SAT);
+    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("123.456.789 sat"));
+    QCOMPARE(amount.displayWithUnit(), QStringLiteral("123456789 sats"));
 }
 
 void BitcoinAmountTests::flipUnit_changesLabelAndDisplaySignal()

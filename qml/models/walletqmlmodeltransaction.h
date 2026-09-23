@@ -12,6 +12,9 @@
 #include <primitives/transaction.h>
 
 #include <QMap>
+#include <QVariantList>
+
+#include <vector>
 
 class WalletQmlModelTransaction : public QObject
 {
@@ -24,6 +27,9 @@ class WalletQmlModelTransaction : public QObject
     Q_PROPERTY(QString total READ total NOTIFY totalChanged)
     Q_PROPERTY(QString label READ label CONSTANT)
     Q_PROPERTY(QString txid READ txid NOTIFY txidChanged)
+    Q_PROPERTY(QVariantList reviewedRecipients READ reviewedRecipients NOTIFY reviewedRecipientsChanged)
+    Q_PROPERTY(int reviewTargetBlocks READ reviewTargetBlocks CONSTANT)
+    Q_PROPERTY(QString reviewFeeRate READ reviewFeeRate CONSTANT)
 public:
     explicit WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent = nullptr);
 
@@ -35,6 +41,10 @@ public:
     QString total() const;
     QString label() const;
     QString txid() const;
+    QVariantList reviewedRecipients() const;
+    bool isReviewedRecipient(const QString& address) const;
+    int reviewTargetBlocks() const { return m_review_target_blocks; }
+    QString reviewFeeRate() const { return m_review_fee_rate; }
     const QMap<QString, QString>& recipientLabels() const { return m_recipient_labels; }
 
     CTransactionRef& getWtx();
@@ -46,6 +56,8 @@ public:
     CAmount getTotalTransactionAmount() const;
 
     void setDisplayUnit(int unit);
+    bool captureReviewedRecipients(const SendRecipientsListModel& recipients);
+    void setReviewFeeDetails(int target_blocks, const QString& fee_rate);
 
     void reassignAmounts(int nChangePosRet); // needed for the subtract-fee-from-amount feature
 
@@ -54,6 +66,7 @@ Q_SIGNALS:
     void feeChanged();
     void totalChanged();
     void txidChanged();
+    void reviewedRecipientsChanged();
 
 private:
     static QString formatWithUnit(CAmount value, int display_unit);
@@ -62,6 +75,15 @@ private:
     QString m_label;
     // Keep the reviewed notes even if the send form is edited or reset later.
     QMap<QString, QString> m_recipient_labels;
+    struct ReviewedRecipient {
+        QString address;
+        QString label;
+        CAmount amount;
+        bool payment_request;
+    };
+    std::vector<ReviewedRecipient> m_reviewed_recipients;
+    int m_review_target_blocks{0};
+    QString m_review_fee_rate;
     CAmount m_amount;
     CAmount m_fee;
     BitcoinAmount* m_amount_amount;

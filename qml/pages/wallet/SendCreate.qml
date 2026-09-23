@@ -44,6 +44,12 @@ PageStack {
     signal transactionPrepared(bool multipleRecipientsEnabled)
     signal viewTransactionInActivity(string txid)
 
+    function openTransactionReview() {
+        transactionReviewPopup.reviewWallet = root.wallet
+        transactionReviewPopup.importedReview = root.wallet.currentTransactionIsImportedPsbt === true
+        transactionReviewPopup.open()
+    }
+
     function returnToSendForm() {
         if (root.depth > 1) {
             root.pop(null, StackView.Immediate)
@@ -64,6 +70,24 @@ PageStack {
         if (prepareTransactionErrorText.length > 0) {
             prepareTransactionErrorText = ""
         }
+    }
+
+    function resetSendForm() {
+        if (!root.wallet) return
+        root.wallet.recipients.clear()
+        root.wallet.clearSelectedCoins()
+        root.wallet.coinsListModel.update()
+        root.manualCoinSelection = false
+        root.clearPrepareTransactionError()
+        sendPage.expandedRecipient = 0
+        sendPage.paymentRequestStatus = ""
+        sendPage.paymentRequestIsError = false
+        sendPage.paymentRequestMessage = ""
+        sendPage.m_pendingClipboardUri = ""
+        sendPage.m_filledUri = ""
+        sendPage.m_dismissedUri = ""
+        sendPage.showClipboardUriBanner = false
+        sendPage.clearPendingPaymentUriPaste()
     }
 
     function displayTransactionError(error) {
@@ -91,8 +115,8 @@ PageStack {
     Connections {
         target: walletController
         function onSelectedWalletChanged() {
-            if (reviewOnlyPsbtPopup.opened) {
-                reviewOnlyPsbtPopup.close()
+            if (transactionReviewPopup.opened) {
+                transactionReviewPopup.close()
             }
             root.pop()
             // Clear URI import state so stale results from the previous wallet
@@ -178,11 +202,9 @@ PageStack {
         function handlePsbtImportResult(result) {
             sendOptionsPopup.close()
             if (result === WalletQmlModel.WalletCanSign) {
-                const multipleRecipientsEnabled = root.wallet.recipients.count > 1
-                root.transactionPrepared(multipleRecipientsEnabled)
+                root.openTransactionReview()
             } else if (result === WalletQmlModel.WalletCannotSign) {
-                reviewOnlyPsbtPopup.reviewWallet = root.wallet
-                reviewOnlyPsbtPopup.open()
+                root.openTransactionReview()
             } else if (result === WalletQmlModel.TransactionAlreadyKnown) {
                 knownPsbtTxPopup.txid = root.wallet.importedPsbt.matchedTxid
                 knownPsbtTxPopup.open()
@@ -205,62 +227,102 @@ PageStack {
         }
 
         Popup {
-            id: reviewOnlyPsbtPopup
-            objectName: "reviewOnlyPsbtPopup"
+            id: transactionReviewPopup
+            objectName: "transactionReviewPopup"
             parent: Overlay.overlay
             x: 0
             y: 0
+            property real verticalOffset: 0
             modal: true
             focus: true
+            dim: false
             closePolicy: Popup.NoAutoClose
             padding: 0
             width: Overlay.overlay.width
             height: Overlay.overlay.height
             onOpened: if (reviewStack.currentItem) reviewStack.currentItem.focusInitialControl()
 
+            enter: Transition {
+                NumberAnimation {
+                    property: "verticalOffset"
+                    from: transactionReviewPopup.height
+                    to: 0
+                    duration: 350
+                    easing.type: Easing.OutCubic
+                }
+            }
+            exit: Transition {
+                NumberAnimation {
+                    property: "verticalOffset"
+                    from: 0
+                    to: transactionReviewPopup.height
+                    duration: 280
+                    easing.type: Easing.InCubic
+                }
+            }
+
             property WalletQmlModel reviewWallet: null
-            property bool broadcastSucceeded: false
+            property bool importedReview: false
 
             onClosed: {
                 const wallet = reviewWallet
-                const showBroadcastSuccess = broadcastSucceeded
+                const wasImported = importedReview
+                reviewStack.pop(null, StackView.Immediate)
                 reviewWallet = null
-                broadcastSucceeded = false
-                if (wallet) {
+                importedReview = false
+                if (wallet && wasImported) {
                     wallet.discardCurrentTransaction()
                 }
-                if (showBroadcastSuccess) {
-                    broadcastSuccessPopup.open()
+            }
+
+            background: null
+
+            contentItem: PageStack {
+                id: reviewStack
+                objectName: "sendTransactionReviewStack"
+                width: transactionReviewPopup.availableWidth
+                height: transactionReviewPopup.availableHeight
+                vertical: true
+                initialItem: reviewPage
+                transform: Translate { y: transactionReviewPopup.verticalOffset }
+                pushEnter: Transition {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
                 }
-            }
-
-            background: Rectangle {
-                color: Theme.color.background
-            }
-
-            contentItem: SendReview {
-                inspectionMode: true
-                width: reviewOnlyPsbtPopup.availableWidth
-                height: reviewOnlyPsbtPopup.availableHeight
-                wallet: reviewOnlyPsbtPopup.reviewWallet
-                onBack: reviewOnlyPsbtPopup.close()
-                onTransactionSent: {
-                    reviewOnlyPsbtPopup.broadcastSucceeded = true
-                    reviewOnlyPsbtPopup.close()
+                pushExit: Transition {
+                    // Keep Review visible under the fading Complete page until
+                    // the Complete background is fully opaque.
+                    NumberAnimation { property: "opacity"; from: 1; to: 1; duration: 180 }
                 }
-            }
-        }
 
-        AlertPopup {
-            id: broadcastSuccessPopup
-            objectName: "psbtBroadcastSuccessPopup"
-            title: qsTr("Transaction broadcast")
-            message: qsTr("The transaction was submitted to the Bitcoin network.")
-            messageObjectName: "psbtBroadcastSuccessMessage"
+                Component {
+                    id: reviewPage
+                    SendTransactionReview {
+                        wallet: transactionReviewPopup.reviewWallet
+                        onBack: transactionReviewPopup.close()
+                        onTransactionSent: (txid) => {
+                            reviewStack.push(sendCompletePage, {
+                                "txid": txid,
+                                "targetBlocks": !transactionReviewPopup.importedReview && wallet && !wallet.customFeeEnabled
+                                    ? wallet.currentTransaction.reviewTargetBlocks : 0
+                            })
+                        }
+                    }
+                }
 
-            AlertAction {
-                text: qsTr("OK")
-                buttonObjectName: "psbtBroadcastSuccessOkButton"
+                Component {
+                    id: sendCompletePage
+                    SendComplete {
+                        onDone: {
+                            root.resetSendForm()
+                            transactionReviewPopup.close()
+                        }
+                        onViewNewTransaction: (txid) => {
+                            root.resetSendForm()
+                            transactionReviewPopup.close()
+                            root.viewTransactionInActivity(txid)
+                        }
+                    }
+                }
             }
         }
 
@@ -346,14 +408,14 @@ PageStack {
             return String(text).trim().toLowerCase().startsWith("bitcoin:")
         }
 
-        function pasteIntoFocusedRecipientField(field) {
-            if (!currentEditor) return
+        function pasteIntoFocusedRecipientField(field, editor) {
+            if (!editor) return
             if (field === "address") {
-                addressField.paste()
+                editor.addressField.paste()
             } else if (field === "label") {
-                label.paste()
+                editor.noteField.paste()
             } else if (field === "amount") {
-                amountInput.paste()
+                editor.amountField.paste()
             }
         }
 
@@ -398,12 +460,12 @@ PageStack {
             applyPastedPaymentRequest(result, text)
         }
 
-        function handleClipboardPaste(field) {
+        function handleClipboardPaste(field, editor) {
             const text = Clipboard.text()
             if (looksLikePaymentUri(text)) {
                 handlePaymentUriPaste(text, field)
             } else {
-                pasteIntoFocusedRecipientField(field)
+                pasteIntoFocusedRecipientField(field, editor)
             }
         }
 
@@ -709,17 +771,12 @@ PageStack {
                         }
                         OverflowMenuButton {
                             id: menuButton; objectName: "sendOptionsButton"
+                            checked: sendOptionsPopup.opened
                             onClicked: sendOptionsPopup.opened ? sendOptionsPopup.close() : sendOptionsPopup.open()
                             SendCreateOptionsPopup {
                                 id: sendOptionsPopup
                                 x: menuButton.width - width; y: menuButton.height + 6
-                                onClearFormRequested: {
-                                    root.wallet.recipients.clear()
-                                    root.wallet.clearSelectedCoins()
-                                    root.wallet.coinsListModel.update()
-                                    root.manualCoinSelection = false
-                                    sendPage.expandedRecipient = 0
-                                }
+                                onClearFormRequested: root.resetSendForm()
                                 onImportPsbtFromFileRequested: {
                                     if (psbtAutomationPathField.text.length > 0) {
                                         const automatedPath = psbtAutomationPathField.text
@@ -826,7 +883,7 @@ PageStack {
                                                     clipboardRequest: sendPage.showClipboardUriBanner
                                                     canRemove: root.wallet.recipients.count > 1
                                                     removeButtonObjectName: "sendRemoveRecipient_" + recipientCard.index
-                                                    onPasteRequested: function(field) { sendPage.handleClipboardPaste(field) }
+                                                    onPasteRequested: function(field) { sendPage.handleClipboardPaste(field, editorLoader.item) }
                                                     onEdited: { root.clearPrepareTransactionError(); root.scheduleFeeEstimates() }
                                                     onRemoveRequested: {
                                                         const walletModel = recipientCard.walletModel
@@ -947,7 +1004,7 @@ PageStack {
                                     && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: {
                                     root.clearPrepareTransactionError()
-                                    if (root.wallet.prepareTransaction()) root.transactionPrepared(root.wallet.recipients.count > 1)
+                                    if (root.wallet.prepareTransaction()) root.openTransactionReview()
                                     else if (root.wallet.transactionNeedsUnlock) { reviewPassphrasePopup.errorText = ""; reviewPassphrasePopup.open() }
                                     else root.prepareTransactionErrorText = root.wallet.transactionError.length > 0
                                         ? root.displayTransactionError(root.wallet.transactionError)
@@ -1041,7 +1098,7 @@ PageStack {
             if (root.wallet.prepareTransactionWithPassphrase(passphrase)) {
                 reviewPassphrasePopup.busy = false
                 reviewPassphrasePopup.close()
-                root.transactionPrepared(root.wallet.recipients.count > 1)
+                root.openTransactionReview()
                 return
             }
             reviewPassphrasePopup.busy = false

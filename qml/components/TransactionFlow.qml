@@ -41,7 +41,7 @@ ColumnLayout {
     readonly property bool canCollapseOutputs: outputPresentation.collapsible
     readonly property var outputEntries: outputPresentation.entries.map(function(entry) {
         return entry.kind === "output-group" && nonWalletOutputGroup
-            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.displayWithUnit : ""}) : entry
+            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.localizedDisplayWithUnit : ""}) : entry
     })
     readonly property real diagramWidth: Math.max(560, width - 48)
     readonly property real inputCardWidth: diagramWidth * 0.35

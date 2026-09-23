@@ -246,6 +246,7 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         mining_address = rpc_call(
             harness.gui_rpc_port,
             "getnewaddress",
+            ["Review input"],
             wallet=GUI_WALLET_NAME,
         )
         rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining_address])
@@ -263,11 +264,19 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.set_text("sendAddressInput", receiver_address)
         gui.set_text("sendAmountInput", SEND_AMOUNT)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        gui.click("sendReviewButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        gui.wait_for_property("transactionFlowInput_0", "title", "Review input", timeout_ms=10000)
+        assert gui.get_property("sendTransactionReviewTargetBlocks", "value") == "6 blocks"
+        assert gui.get_property("sendTransactionReviewFeeRate", "value").endswith(" sat/vB")
+        gui.click("sendTransactionReviewCloseButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False)
         enable_coin_control_and_select_first_coin(gui, checkpoints)
         checkpoints.checkpoint("send form populated", gui)
         assert_no_fee_preview_label(harness.gui_rpc_port, GUI_WALLET_NAME)
 
         gui.wait_for_property("feeSelectionControl", "currentTarget", 6, timeout_ms=5000)
+        gui.click("feeSelectionPickerButton")
         gui.click("feeSelectionOption2")
         gui.wait_for_property("feeSelectionControl", "currentTarget", 10, timeout_ms=5000)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
