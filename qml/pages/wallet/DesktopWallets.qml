@@ -35,6 +35,7 @@ Page {
     signal addWallet()
     signal paymentRequestOutcome(string outcome)
     signal paymentRequestAcceptable()
+    signal walletSelectionClosed()
 
     function viewForWallet(wallet) {
         if (!wallet) return null
@@ -157,6 +158,10 @@ Page {
 
     function openActivity() {
         if (root.activeView) root.showWalletTab(WalletView.Activity)
+    }
+
+    function walletSelectionOpen() {
+        return walletSelect.visible
     }
 
     function canAcceptPaymentUri(waitForSend) {
@@ -301,6 +306,7 @@ Page {
                 x: 0
                 y: parent.height + 2 + verticalOffset
 
+                onClosed: root.walletSelectionClosed()
                 onAddWallet: {
                     root.addWallet()
                 }
