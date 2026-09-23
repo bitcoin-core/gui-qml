@@ -33,6 +33,7 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
+    signal paymentRequestOutcome(string outcome)
 
     function viewForWallet(wallet) {
         if (!wallet) return null
@@ -155,6 +156,13 @@ Page {
 
     function openActivity() {
         if (root.activeView) root.showWalletTab(WalletView.Activity)
+    }
+
+    function applyIncomingPaymentUri(uri, source) {
+        if (!root.activeView) return false
+        root.showWalletTab(WalletView.Send)
+        root.activeView.sendPage.applyPaymentRequest(uri, source)
+        return true
     }
 
     function openSend() {
@@ -459,6 +467,7 @@ Page {
                         if (active) root.showSettingsSection("wallet")
                     }
                     onWalletSelectionRequested: root.openWalletSelection()
+                    onPaymentRequestOutcome: (outcome) => root.paymentRequestOutcome(outcome)
 
                     Connections {
                         target: wallet

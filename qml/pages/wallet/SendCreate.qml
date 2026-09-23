@@ -41,6 +41,7 @@ PageStack {
         : (feeBalanceErrorText.length > 0 ? feeBalanceErrorText : prepareTransactionErrorText)
 
     signal viewTransactionInActivity(string txid)
+    signal paymentRequestOutcome(string outcome)
 
     function confirmTransactionReview() {
         if (!root.wallet) return
@@ -102,6 +103,38 @@ PageStack {
         const hiddenCount = root.hiddenCount
         Qt.callLater(function() {
             if (root.visible && hiddenCount === root.hiddenCount) open()
+        })
+    }
+
+    // A delivered request reports its outcome once. A clipboard paste reports
+    // none, so it cannot complete a queued request.
+    function finishIncomingPaymentRequest(outcome) {
+        if (!sendPage.m_incomingPaymentRequest) return
+        sendPage.m_incomingPaymentRequest = false
+        root.paymentRequestOutcome(outcome)
+    }
+
+    // A delivered request whose wallet is no longer shown, before or during its
+    // confirmation, is reported as interrupted, so it is offered again. It is
+    // reported now: the page may be destroyed before a popup emits closed.
+    function interruptPaymentRequest() {
+        root.finishIncomingPaymentRequest("interrupted")
+    }
+
+    function applyPaymentRequest(uri, source) {
+        root.returnToSendForm()
+        sendPage.m_incomingPaymentRequest = true
+        // Held in a local: the page may be destroyed, and already reported
+        // interrupted, before this runs.
+        const page = sendPage
+        Qt.callLater(function() {
+            if (!page || !page.m_incomingPaymentRequest) return
+            // The wallet can be unloaded before this runs.
+            if (root.wallet === null || root.recipient === null) {
+                root.interruptPaymentRequest()
+                return
+            }
+            page.handleIncomingPaymentUri(uri, source)
         })
     }
 
@@ -173,6 +206,7 @@ PageStack {
         sendPage.m_filledUri = ""
         sendPage.m_dismissedUri = ""
         sendPage.m_applyingUri = false
+        root.interruptPaymentRequest()
         sendPage.clearPendingPaymentUriPaste()
         paymentUriOverwritePopup.close()
     }
@@ -487,6 +521,9 @@ PageStack {
         property bool m_applyingUri: false
         property var m_pendingPastedPaymentRequest: null
         property string m_pendingPastedPaymentRequestText: ""
+        property string m_pendingPastedPaymentRequestSource: ""
+        property bool m_pendingPastedPaymentRequestIncoming: false
+        property bool m_incomingPaymentRequest: false
 
         function looksLikePaymentUri(text) {
             return String(text).trim().toLowerCase().startsWith("bitcoin:")
@@ -530,10 +567,12 @@ PageStack {
         function clearPendingPaymentUriPaste() {
             m_pendingPastedPaymentRequest = null
             m_pendingPastedPaymentRequestText = ""
+            m_pendingPastedPaymentRequestSource = ""
+            m_pendingPastedPaymentRequestIncoming = false
         }
 
-        function applyPastedPaymentRequest(result, text) {
-            applyParsedPaymentRequest(result, qsTr("clipboard"))
+        function applyPastedPaymentRequest(result, text, source) {
+            applyParsedPaymentRequest(result, source)
             if (result.success && Clipboard.text() === text) {
                 m_filledUri = text
                 showClipboardUriBanner = false
@@ -541,18 +580,30 @@ PageStack {
         }
 
         function handlePaymentUriPaste(text, sourceField) {
+            handlePaymentUriRequest(text, qsTr("clipboard"), sourceField, false)
+        }
+
+        function handleIncomingPaymentUri(text, source) {
+            handlePaymentUriRequest(text, source, "", true)
+        }
+
+        function handlePaymentUriRequest(text, source, sourceField, incoming) {
             const result = BitcoinUri.parseBitcoinUri(text)
             if (!result.success) {
-                applyParsedPaymentRequest(result, qsTr("clipboard"))
+                applyParsedPaymentRequest(result, source)
+                if (incoming) root.finishIncomingPaymentRequest("rejected")
                 return
             }
             if (paymentUriConflicts(result, sourceField)) {
                 m_pendingPastedPaymentRequest = result
                 m_pendingPastedPaymentRequestText = text
+                m_pendingPastedPaymentRequestSource = source
+                m_pendingPastedPaymentRequestIncoming = incoming
                 paymentUriOverwritePopup.open()
                 return
             }
-            applyPastedPaymentRequest(result, text)
+            applyPastedPaymentRequest(result, text, source)
+            if (incoming) root.finishIncomingPaymentRequest("resolved")
         }
 
         function handleClipboardPaste(field, editor) {
@@ -664,15 +715,20 @@ PageStack {
             message: qsTr("The payment request from the clipboard contains information that differs from the currently populated values. Pasting will replace the values.")
             messageObjectName: "sendPaymentUriOverwriteMessage"
 
+            // Escape and a press outside close the popup without going through
+            // an action, so the outcome is reported here.
+            onClosed: {
+                const incoming = sendPage.m_pendingPastedPaymentRequestIncoming
+                sendPage.clearPendingPaymentUriPaste()
+                if (incoming) root.finishIncomingPaymentRequest("resolved")
+            }
+
             AlertAction {
                 text: qsTr("Cancel")
                 role: AlertAction.Cancel
                 buttonObjectName: "sendPaymentUriOverwriteCancelButton"
                 closesPopup: false
-                onTriggered: {
-                    sendPage.clearPendingPaymentUriPaste()
-                    paymentUriOverwritePopup.close()
-                }
+                onTriggered: paymentUriOverwritePopup.close()
             }
 
             AlertAction {
@@ -682,9 +738,9 @@ PageStack {
                 onTriggered: {
                     const result = sendPage.m_pendingPastedPaymentRequest
                     const text = sendPage.m_pendingPastedPaymentRequestText
-                    sendPage.clearPendingPaymentUriPaste()
+                    const source = sendPage.m_pendingPastedPaymentRequestSource
                     paymentUriOverwritePopup.close()
-                    if (result) sendPage.applyPastedPaymentRequest(result, text)
+                    if (result) sendPage.applyPastedPaymentRequest(result, text, source)
                 }
             }
         }

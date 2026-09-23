@@ -19,6 +19,8 @@ TestCase {
     property bool walletAvailable: true
     property bool preInitOnboardingRan: false
     property var windowUnderTest: null
+    // Queued before the window is created, as the command line does.
+    property var paymentUris: []
 
     SignalSpy {
         id: shutdownSpy
@@ -45,10 +47,14 @@ TestCase {
         nodeModel.setStartupErrorForTest("")
         desktopWindowBehaviorModel.minimizeOnClose = false
         shutdownSpy.clear()
+        paymentUriHandler.clearForTest()
+        paymentUris = []
     }
 
     function createMain(wallet_enabled, preinit_onboarding_ran, no_wallets_found, wallet_dir_loaded, initialized) {
+        const uris = paymentUris
         cleanup()
+        for (const uri of uris) paymentUriHandler.queueForTest(uri)
         walletAvailable = wallet_enabled
         preInitOnboardingRan = preinit_onboarding_ran || false
         walletController.reset()
@@ -298,5 +304,31 @@ TestCase {
         verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "walletBadge") !== null)
         verify(findChild(window, "createWalletWizard") === null)
+    }
+
+    function test_payment_uri_leaves_queue_once_applied() {
+        testSendRecipient.address.setAddress("")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+        compare(testSendRecipient.address.address, "bcrt1qroutingaddress")
+        compare(window.paymentUriDeliveryInFlight, false)
+    }
+
+    function test_payment_uri_kept_when_its_wallet_view_closes() {
+        testSendRecipient.address.setAddress("bcrt1qexistingaddress")
+        paymentUris = ["bitcoin:bcrt1qroutingaddress"]
+        const window = createMain(true)
+        // The replace confirmation holds the request.
+        tryCompare(window, "paymentUriDeliveryInFlight", true)
+        wait(50)
+        compare(window.paymentUriDeliveryInFlight, true)
+
+        walletController.setOpenWallets([])
+        tryCompare(window, "paymentUriDeliveryInFlight", false)
+        compare(paymentUriHandler.hasPendingRequest, true)
+        compare(paymentUriHandler.pendingRequest(), "bitcoin:bcrt1qroutingaddress")
+        compare(testSendRecipient.address.address, "bcrt1qexistingaddress")
     }
 }

@@ -27,6 +27,11 @@ TestCase {
         SendTransactionReview { wallet: testWalletModel }
     }
 
+    Component {
+        id: outcomeSpyComponent
+        SignalSpy {}
+    }
+
     function init() {
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
@@ -1144,5 +1149,41 @@ TestCase {
         compare(findChild(popup.contentItem, "sendCoinsList").errorText,
                 "This coin is no longer available. Try again.")
         popup.close()
+    }
+
+    function test_send_incoming_payment_request_interrupted_when_wallet_leaves_before_delivery() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
+            {width: testCase.width, height: testCase.height, visible: true})
+        verify(page !== null)
+        const outcomeSpy = createTemporaryObject(outcomeSpyComponent, testCase, {target: page, signalName: "paymentRequestOutcome"})
+
+        page.applyPaymentRequest("bitcoin:bcrt1qdeferredaddress", "command line")
+        page.wallet = null
+
+        tryCompare(outcomeSpy, "count", 1)
+        compare(outcomeSpy.signalArguments[0][0], "interrupted")
+        wait(0)
+        compare(outcomeSpy.count, 1)
+        compare(testSendRecipient.address.address, "bcrt1qsendtoaddress")
+    }
+
+    function test_send_clipboard_payment_request_reports_no_outcome() {
+        testSendRecipient.address.setAddress("")
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
+            {width: testCase.width, height: testCase.height, visible: true})
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+        const popup = findChild(page, "sendPaymentUriOverwritePopup")
+        const outcomeSpy = createTemporaryObject(outcomeSpyComponent, testCase, {target: page, signalName: "paymentRequestOutcome"})
+
+        sendPage.handlePaymentUriPaste("bitcoin:bcrt1qclipboardaddress", "address")
+        compare(testSendRecipient.address.address, "bcrt1qclipboardaddress")
+        sendPage.handlePaymentUriPaste("not a payment request", "address")
+        sendPage.handlePaymentUriPaste("bitcoin:bcrt1qotheraddress", "label")
+        tryCompare(popup, "opened", true)
+        findChild(popup.contentItem, "sendPaymentUriOverwriteCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+
+        compare(outcomeSpy.count, 0)
     }
 }
