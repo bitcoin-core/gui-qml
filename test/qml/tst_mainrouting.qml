@@ -338,4 +338,37 @@ TestCase {
         compare(paymentUriHandler.pendingRequest(), "bitcoin:bcrt1qroutingaddress")
         compare(testSendRecipient.address.address, "bcrt1qexistingaddress")
     }
+
+    function test_payment_uri_queued_after_startup_is_delivered() {
+        testSendRecipient.address.setAddress("")
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        wait(50)
+        compare(review.opened, false)
+
+        paymentUriHandler.queueForTest("bitcoin:bcrt1qlateaddress")
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qlateaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
+
+    function test_escape_on_wallet_disabled_notice_reports_the_next_request() {
+        paymentUris = ["bitcoin:bcrt1qfirstaddress", "bitcoin:bcrt1qsecondaddress"]
+        const window = createMain(false)
+        const popup = findChild(window, "paymentUriWalletDisabledPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+
+        // Escape on the notice runs AlertPopup.cancel().
+        popup.cancel()
+        tryVerify(function() { return paymentUriHandler.pendingRequest() === "bitcoin:bcrt1qsecondaddress" })
+        tryCompare(popup, "opened", true)
+
+        popup.cancel()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+    }
 }
