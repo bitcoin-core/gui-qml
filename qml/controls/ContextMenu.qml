@@ -42,6 +42,12 @@ Popup {
         border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
         border.width: 1
         radius: 5
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            visible: root.modal
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     enter: Transition {

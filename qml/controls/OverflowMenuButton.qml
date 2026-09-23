@@ -6,18 +6,23 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 
-AbstractButton {
+NeutralButton {
     id: root
 
-    property url iconSource: "image://images/ellipsis"
-    property color iconColor: Theme.color.neutral5
+    property bool isOnSurface: false
+    property color iconColor: Theme.color.neutral7
     property color activeIconColor: Theme.color.orange
-    property color backgroundColor: Theme.color.neutral1
-    property color hoverBackgroundColor: Theme.color.neutral2
     property int size: 40
-    property int iconSize: 40
     property bool circular: false
     readonly property alias iconItem: ellipsisIcon
+
+    iconSource: "image://images/ellipsis"
+    iconSize: 40
+    backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    hoverBackgroundColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
+    showBorder: isOnSurface
+    backgroundRadius: circular ? size / 2 : 5
+    scale: 1
 
     implicitWidth: size
     implicitHeight: size
@@ -29,20 +34,6 @@ AbstractButton {
 
     Accessible.role: Accessible.Button
     Accessible.name: text.length > 0 ? text : qsTr("More options")
-
-    HoverHandler {
-        cursorShape: Qt.PointingHandCursor
-    }
-
-    background: Rectangle {
-        color: root.hovered || root.down ? root.hoverBackgroundColor : root.backgroundColor
-        radius: root.circular ? width / 2 : 5
-
-        FocusBorder {
-            visible: root.visualFocus
-            borderRadius: root.circular ? root.size / 2 + 4 : 9
-        }
-    }
 
     contentItem: Item {
         Icon {

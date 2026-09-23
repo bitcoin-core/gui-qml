@@ -59,6 +59,13 @@ Button {
             ColorAnimation { duration: 150 }
         }
 
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: background.color
+            referenceColor: root.backgroundColor
+            cornerRadius: background.radius
+        }
+
         FocusBorder {
             visible: root.enabled && root.visualFocus
             borderRadius: root.size / 2 + 4

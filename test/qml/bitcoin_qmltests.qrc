@@ -49,6 +49,7 @@
         <file>tst_settingsheader.qml</file>
         <file>tst_settingsnavigation.qml</file>
         <file>tst_settingsstatus.qml</file>
+        <file>tst_tooltip.qml</file>
         <file>tst_utils.qml</file>
         <file>tst_valueinput.qml</file>
         <file>tst_walletpassphrasepopup.qml</file>

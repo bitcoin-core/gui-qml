@@ -271,10 +271,10 @@ Page {
                     property bool headerSyncActive: nodeModel.headerSyncActive
 
                     anchors.top: blockClockTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: blockClockTabButton.horizontalCenter
 
-                    visible: blockClockTabButton.hovered
+                    shown: blockClockTabButton.hovered
                     text: {
                         if (faulted) {
                             qsTr("Error")
@@ -313,9 +313,9 @@ Page {
 
                 Tooltip {
                     anchors.top: peersTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: peersTabButton.horizontalCenter
-                    visible: peersTabButton.hovered
+                    shown: peersTabButton.hovered
                     text: qsTr("Peers")
                 }
             }
@@ -330,9 +330,9 @@ Page {
 
                 Tooltip {
                     anchors.top: settingsTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: settingsTabButton.horizontalCenter
-                    visible: settingsTabButton.hovered
+                    shown: settingsTabButton.hovered
                     text: qsTr("Settings")
                 }
             }

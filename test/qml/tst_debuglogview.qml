@@ -147,12 +147,12 @@ TestCase {
         compare(footer.radius, 16)
         verify(findChild(view, "debugLogTitlesHeaderBottomFill") !== null)
         verify(findChild(view, "debugLogTableFooterTopFill") !== null)
-        verify(scrollButton.textFontPixelSize === 13)
-        verify(loadMoreButton.textFontPixelSize === 13)
-        compare(scrollButton.bold, true)
-        compare(loadMoreButton.bold, true)
-        compare(scrollButton.background.border.color, Theme.color.neutral2)
-        compare(loadMoreButton.background.border.color, Theme.color.neutral2)
+        compare(scrollButton.buttonSize, NeutralButton.Medium)
+        compare(loadMoreButton.buttonSize, NeutralButton.Medium)
+        compare(scrollButton.implicitHeight, 34)
+        compare(loadMoreButton.implicitHeight, 34)
+        compare(scrollButton.backgroundColor, Theme.color.neutral2)
+        compare(loadMoreButton.backgroundColor, Theme.color.neutral2)
     }
 
     function test_open_debug_log_button_invokes_model() {

@@ -103,6 +103,11 @@ Popup {
         radius: 10
         border.color: Theme.color.neutral2
         border.width: 1
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     contentItem: ColumnLayout {
@@ -165,41 +170,49 @@ Popup {
             Repeater {
                 model: root.visibleActions.length
 
-                ContinueButton {
-                    id: alertButton
+                Item {
+                    id: actionDelegate
                     // Qt 6.2: does not inject `index` into this delegate; declare
                     // it explicitly so `visibleActions[index]` resolves.
                     required property int index
 
                     readonly property AlertAction alertAction: root.visibleActions[index]
+                    readonly property bool neutralAction: alertAction.role === AlertAction.Cancel
+                        || alertAction.role === AlertAction.Neutral
 
-                    objectName: alertAction.buttonObjectName
                     width: Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
-                    text: alertAction.text
-                    textColor: alertAction.role === AlertAction.Cancel || alertAction.role === AlertAction.Neutral ? Theme.color.neutral9 : Theme.color.white
-                    textHoverColor: textColor
-                    textPressedColor: textColor
-                    backgroundColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral1
-                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral2
-                        : alertAction.role === AlertAction.Destructive ? Theme.color.red : Theme.color.orange
-                    backgroundHoverColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral1
-                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral3
-                        : alertAction.role === AlertAction.Destructive ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
-                    backgroundPressedColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral2
-                        : alertAction.role === AlertAction.Neutral ? Theme.color.neutral3
-                        : alertAction.role === AlertAction.Destructive ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
-                    backgroundRadius: 5
-                    borderColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral6 : "transparent"
-                    borderHoverColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral9 : "transparent"
-                    borderPressedColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral2 : "transparent"
-                    onClicked: {
+                    height: 46
+
+                    function triggerAction() {
                         if (alertAction.closesPopup) {
                             root.close()
                         }
                         alertAction.triggered()
+                    }
+
+                    NeutralButton {
+                        anchors.fill: parent
+                        visible: actionDelegate.neutralAction
+                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction.text
+                        buttonSize: NeutralButton.Large
+                        backgroundColor: Theme.color.neutral2
+                        hoverBackgroundColor: Theme.color.neutral3
+                        onClicked: actionDelegate.triggerAction()
+                    }
+
+                    ContinueButton {
+                        anchors.fill: parent
+                        visible: !actionDelegate.neutralAction
+                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction.text
+                        backgroundColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Theme.color.red : Theme.color.orange
+                        backgroundHoverColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
+                        backgroundPressedColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
+                        onClicked: actionDelegate.triggerAction()
                     }
                 }
             }

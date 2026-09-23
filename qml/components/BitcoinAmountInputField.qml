@@ -184,6 +184,7 @@ ColumnLayout {
             font: Theme.text.body.font
             color: Theme.color.neutral9
             placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+            verticalAlignment: TextInput.AlignVCenter
             background: Item {}
             placeholderText: root.placeholderText
             selectByMouse: true

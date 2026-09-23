@@ -21,8 +21,8 @@ Item {
     property color iconColor: Theme.color.neutral9
     property int iconSize: 14
     property color textColor: Theme.color.neutral9
-    property color backgroundColor: Theme.color.neutral0
-    property color borderColor: Theme.color.neutral4
+    property color backgroundColor: Theme.color.neutral1
+    property color borderColor: Theme.color.neutral2
     property int horizontalPadding: 10
     property int verticalPadding: 4
     property int spacing: 4
@@ -105,8 +105,6 @@ Item {
             textColor: root.textColor
             backgroundColor: root.backgroundColor
             borderColor: root.borderColor
-            arrowAtBottom: true
-            centerBubbleOnArrow: true
             horizontalPadding: root.horizontalPadding
             verticalPadding: root.verticalPadding
             contentSpacing: root.spacing

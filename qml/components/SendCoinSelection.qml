@@ -64,7 +64,16 @@ Popup {
         opacity: root.opacity
     }
 
-    background: Rectangle { radius: 10; color: Theme.color.neutral1; border.color: Theme.color.neutral3 }
+    background: Rectangle {
+        radius: 10
+        color: Theme.color.neutral1
+        border.color: Theme.color.neutral3
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
+    }
     onAboutToShow: { editingCoins = wallet.coinsListModel; browser.fallbackTarget = wallet.sendTotalSatoshi; editingCoins.beginSelection(); wallet.scheduleFeeEstimates() }
     onClosed: { if (editingCoins) editingCoins.cancelSelection(); editingCoins = null }
     onWalletChanged: if (opened) close()

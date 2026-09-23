@@ -135,6 +135,7 @@ Page {
                 objectName: "sendResultViewTransactionButton"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46
+                buttonSize: NeutralButton.Large
                 text: qsTr("View transaction")
                 onClicked: root.viewNewTransaction(root.txid)
             }

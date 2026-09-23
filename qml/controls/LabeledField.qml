@@ -106,21 +106,15 @@ Control {
                 visible: root.fieldSurface
                 radius: root.fieldCornerRadius
                 color: root.fieldBackgroundColor
-                border.width: root.showFieldBorder ? 2 : 0
-                border.color: Qt.rgba(root.activeBorderColor.r, root.activeBorderColor.g,
-                                      root.activeBorderColor.b, 0.4)
             }
 
-            Rectangle {
-                objectName: root.objectName.length > 0 ? root.objectName + "InnerBorder" : ""
+            FieldBorderRings {
                 anchors.fill: parent
-                anchors.margins: 2
                 visible: root.showFieldBorder
-                radius: Math.max(0, root.fieldCornerRadius - 2)
-                color: "transparent"
-                border.width: 1
-                border.color: Qt.rgba(root.activeBorderColor.r, root.activeBorderColor.g,
-                                      root.activeBorderColor.b, 0.7)
+                cornerRadius: root.fieldCornerRadius
+                ringColor: root.activeBorderColor
+                outerObjectName: root.objectName.length > 0 ? root.objectName + "OuterBorder" : ""
+                innerObjectName: root.objectName.length > 0 ? root.objectName + "FieldBorder" : ""
             }
 
             ColumnLayout {

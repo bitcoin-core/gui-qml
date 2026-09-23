@@ -120,6 +120,7 @@ ColumnLayout {
             text: ""
             Component.onCompleted: syncFromAddress()
             wrapMode: Text.WrapAnywhere
+            verticalAlignment: TextEdit.AlignVCenter
             leftPadding: root.embedded ? 16 : 0
             topPadding: root.embedded ? 14 : 0
             rightPadding: root.embedded ? 16 : 0

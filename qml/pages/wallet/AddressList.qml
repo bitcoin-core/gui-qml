@@ -185,6 +185,11 @@ SettingsPage {
             color: Theme.color.neutral1
             border.color: Theme.color.neutral3
             radius: 10
+            SurfaceGradientBorder {
+                anchors.fill: parent
+                surfaceColor: parent.color
+                cornerRadius: parent.radius
+            }
         }
         contentItem: AddressDetails {
             id: addressDetails

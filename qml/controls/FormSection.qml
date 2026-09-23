@@ -13,6 +13,7 @@ ColumnLayout {
     property string description: ""
     property string footerText: ""
     property bool showBackground: true
+    property bool showGradientBorder: true
     property bool isOnSurface: false
     property int rowSpacing: 0
     property int sectionSpacing: 8
@@ -73,6 +74,14 @@ ColumnLayout {
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
             clip: true
+
+            SurfaceGradientBorder {
+                anchors.fill: parent
+                visible: root.showBackground && root.showGradientBorder
+                    && Qt.colorEqual(root.backgroundColor, Theme.color.neutral2)
+                surfaceColor: card.color
+                cornerRadius: card.radius
+            }
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

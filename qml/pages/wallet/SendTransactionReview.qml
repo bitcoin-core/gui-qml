@@ -290,6 +290,7 @@ Page {
                 spacing: 12
                 NeutralButton {
                     objectName: "sendTransactionReviewSaveButton"
+                    buttonSize: NeutralButton.Large
                     enabled: !!root.transaction && !root.sending
                     width: parent.width < 540 || !root.showSend && !root.showBroadcast || externalSignerActions.visible
                         ? parent.width : (parent.width - 12) / 2

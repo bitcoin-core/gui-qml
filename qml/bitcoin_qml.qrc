@@ -99,8 +99,10 @@
         <file>controls/RangeSlider.qml</file>
         <file>controls/Slider.qml</file>
         <file>controls/FocusBorder.qml</file>
+        <file>controls/FieldBorderRings.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
+        <file>controls/SurfaceGradientBorder.qml</file>
         <file>controls/Header.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>

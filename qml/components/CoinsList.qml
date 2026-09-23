@@ -339,10 +339,11 @@ ColumnLayout {
         visible: root.selectionMode || !root.walletSelectionActive
         Layout.fillWidth: true
         isOnSurface: root.selectionMode
+        showGradientBorder: false
         rowSpacing: 0
-        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.displayWithUnit : "—") : totalAmountText.displayWithUnit }
-        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.displayWithUnit : spendableAmountText.displayWithUnit }
-        ValueRow { Layout.fillWidth: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.displayWithUnit }
+        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.displayWithUnit : "—") : totalAmountText.displayWithUnit; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
+        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.displayWithUnit : spendableAmountText.displayWithUnit; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
+        ValueRow { Layout.fillWidth: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.displayWithUnit; showDivider: root.changeAmount > 0; dividerColor: Theme.color.neutral3 }
         ValueRow { Layout.fillWidth: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: changeAmountText.displayWithUnit; showDivider: false }
         ValueRow { Layout.fillWidth: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.displayWithUnit; showDivider: false }
     }

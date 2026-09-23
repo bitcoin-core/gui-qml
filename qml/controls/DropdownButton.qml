@@ -7,7 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
-AbstractButton {
+NeutralButton {
     id: root
 
     property string subtitle: ""
@@ -19,11 +19,19 @@ AbstractButton {
     property int textAlignment: Text.AlignLeft
     property var labelTextStyle: Theme.text.description
     property var subtitleTextStyle: labelTextStyle
-    property color textColor: Theme.color.neutral9
     property color subtitleColor: Theme.color.neutral7
     property color caretColor: Theme.color.neutral9
     property color hoverBgColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
     property color defaultBgColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+
+    textColor: Theme.color.neutral9
+    backgroundColor: active ? Theme.color.orange : defaultBgColor
+    hoverBackgroundColor: active ? Theme.color.orange : hoverBgColor
+    forceHoverBackground: opened || visualFocus
+    showBorder: isOnSurface
+    backgroundRadius: 6
+    focusBorderObjectName: "dropdownButtonFocusBorder"
+    scale: 1
 
     implicitHeight: Math.max(30, caretSize + topPadding + bottomPadding)
     leftPadding: 10
@@ -35,10 +43,6 @@ AbstractButton {
 
     Accessible.name: text
     Accessible.description: subtitle
-
-    HoverHandler {
-        cursorShape: Qt.PointingHandCursor
-    }
 
     contentItem: Item {
         implicitWidth: _row.implicitWidth
@@ -94,19 +98,6 @@ AbstractButton {
                     NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
             }
-        }
-    }
-
-    background: Rectangle {
-        radius: 6
-        color: root.active ? Theme.color.orange : (root.hovered || root.down || root.visualFocus || root.opened)
-            ? root.hoverBgColor
-            : root.defaultBgColor
-
-        FocusBorder {
-            id: _focusBorder
-            objectName: "dropdownButtonFocusBorder"
-            visible: root.visualFocus
         }
     }
 }

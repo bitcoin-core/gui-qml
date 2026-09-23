@@ -656,6 +656,11 @@ PageStack {
                 border.color: Theme.color.neutral2
                 radius: 5
                 border.width: 1
+                SurfaceGradientBorder {
+                    anchors.fill: parent
+                    surfaceColor: parent.color
+                    cornerRadius: parent.radius
+                }
             }
 
             contentItem: ColumnLayout {
@@ -966,7 +971,7 @@ PageStack {
                                     showDivider: false
                                     trailingItem: NeutralButton {
                                         objectName: "sendSelectInputsButton"
-                                        implicitHeight: 36
+                                        buttonSize: NeutralButton.Medium
                                         text: qsTr("Select coins")
                                         onClicked: coinSelectionPopup.open()
                                     }

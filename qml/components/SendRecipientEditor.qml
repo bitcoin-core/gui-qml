@@ -67,6 +67,7 @@ ColumnLayout {
         FormSection {
             Layout.fillWidth: true
             isOnSurface: true
+            showGradientBorder: false
             ValueRow {
                 visible: root.recipient && root.recipient.paymentRequestLabel.length > 0
                 objectName: "sendPaymentRequestPayTo"

@@ -18,6 +18,12 @@ Popup {
     background: Rectangle {
         color: Theme.color.background
         radius: 10
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            referenceColor: Theme.color.neutral1
+            cornerRadius: parent.radius
+        }
     }
 
     ColumnLayout {

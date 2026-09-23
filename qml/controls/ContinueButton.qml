@@ -97,6 +97,20 @@ Button {
             ColorAnimation { duration: 150 }
         }
 
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            visible: (Qt.colorEqual(root.backgroundColor, Theme.color.orange)
+                || Qt.colorEqual(root.backgroundColor, Theme.color.red))
+                && Qt.colorEqual(bg.border.color, "transparent")
+            surfaceColor: bg.color
+            referenceColor: Qt.colorEqual(root.backgroundColor, Theme.color.red)
+                ? Theme.color.red : Theme.color.orange
+            colors: Qt.colorEqual(root.backgroundColor, Theme.color.red)
+                ? Theme.color.destructiveButtonBorderGradient
+                : Theme.color.primaryButtonBorderGradient
+            cornerRadius: bg.radius
+        }
+
         FocusBorder {
             visible: root.enabled && root.visualFocus
         }
