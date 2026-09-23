@@ -35,6 +35,7 @@ Page {
 
     onVisibleChanged: {
         if (!visible) {
+            sweepAlert.close()
             externalSignerActions.reset()
             sending = false
             saveStatus = ""
@@ -56,6 +57,15 @@ Page {
             text: root.showBroadcast ? qsTr("Ready to broadcast") : qsTr("Ready to send")
             accentColor: Theme.color.orange
         }
+    }
+
+    onWalletChanged: sweepAlert.close()
+    onTransactionChanged: sweepAlert.close()
+
+    function requestSend() {
+        if (sending || !wallet) return
+        if (wallet.currentTransactionSweepsWallet) sweepAlert.open()
+        else commitSend()
     }
 
     function commitSend() {
@@ -251,12 +261,14 @@ Page {
                 objectName: "sendTransactionReviewTotals"
                 Layout.fillWidth: true
                 ValueRow {
+                    objectName: "sendTransactionReviewFee"
                     Layout.fillWidth: true
                     title: qsTr("Total fees")
                     value: root.transaction ? root.transaction.fee : ""
                     dividerColor: Theme.color.neutral2
                 }
                 ValueRow {
+                    objectName: "sendTransactionReviewTotal"
                     Layout.fillWidth: true
                     title: qsTr("Total amount")
                     value: root.transaction ? root.transaction.total : ""
@@ -282,7 +294,7 @@ Page {
                 Layout.fillWidth: true
                 wallet: root.wallet
                 canSend: root.canSend
-                onSendRequested: root.commitSend()
+                onSendRequested: root.requestSend()
             }
 
             Flow {
@@ -305,7 +317,7 @@ Page {
                     width: parent.width < 540 ? parent.width : (parent.width - 12) / 2
                     height: 46
                     text: root.showBroadcast ? qsTr("Broadcast transaction") : qsTr("Send transaction")
-                    onClicked: root.showBroadcast ? root.commitBroadcast() : root.commitSend()
+                    onClicked: root.showBroadcast ? root.commitBroadcast() : root.requestSend()
                 }
             }
 
@@ -329,6 +341,29 @@ Page {
             }
 
             Item { Layout.preferredHeight: 24 }
+        }
+    }
+
+    AlertPopup {
+        id: sweepAlert
+        objectName: "sendSweepAlert"
+        parent: Overlay.overlay
+        //: Final confirmation before sending a transaction that uses all available wallet funds.
+        title: qsTr("Send all available funds?")
+        //: Warns that a full-wallet send cannot be undone after confirmation on the network.
+        //: %1 is the prepared transaction's recipient amount with its unit, excluding the fee.
+        message: qsTr("This will send all available funds (%1) from this wallet. Once confirmed, the transaction cannot be undone.").arg(root.transaction ? root.transaction.amountAmount.displayWithUnit : "—")
+        AlertAction {
+            //: Dismiss the full-wallet send confirmation and keep the prepared transaction open for review.
+            text: qsTr("Back to review")
+            role: AlertAction.Cancel
+            buttonObjectName: "sendSweepCancelButton"
+        }
+        AlertAction {
+            //: Confirm and send the prepared transaction using all available wallet funds.
+            text: qsTr("Send all funds")
+            buttonObjectName: "sendSweepConfirmButton"
+            onTriggered: root.commitSend()
         }
     }
 

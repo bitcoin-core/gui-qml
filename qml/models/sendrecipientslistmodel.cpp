@@ -174,8 +174,6 @@ void SendRecipientsListModel::connectRecipientSignals(SendRecipient* recipient)
         }
         m_syncing_units = false;
     });
-    connect(recipient, &SendRecipient::subtractFeeFromAmountChanged,
-            this, &SendRecipientsListModel::subtractFeeFromAmountChanged);
     connect(recipient, &SendRecipient::isValidChanged, this, &SendRecipientsListModel::validationChanged);
 }
 

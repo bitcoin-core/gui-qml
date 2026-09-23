@@ -34,6 +34,7 @@
 #include <outputtype.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
+#include <policy/truc_policy.h>
 #include <primitives/transaction.h>
 #include <psbt.h>
 #include <qml/bitcoinunits.h>
@@ -41,6 +42,7 @@
 #include <support/allocators/secure.h>
 #include <univalue.h>
 #include <util/result.h>
+#include <util/rbf.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 #include <wallet/coincontrol.h>
@@ -52,6 +54,7 @@
 #include <QDateTime>
 #include <QMetaObject>
 #include <QRegularExpression>
+#include <QScopedValueRollback>
 #include <QSettings>
 #include <QVariantList>
 #include <QVariantMap>
@@ -138,14 +141,6 @@ QString FormatFeeEstimate(CAmount amount)
     BitcoinAmount bitcoin_amount;
     bitcoin_amount.setSatoshi(amount);
     return bitcoin_amount.displayWithUnit();
-}
-
-bool AnyRecipientSubtractsFeeFromAmount(const SendRecipientsListModel& recipients)
-{
-    const auto recipient_list = recipients.recipients();
-    return std::any_of(recipient_list.begin(), recipient_list.end(), [](const auto* recipient) {
-        return recipient && recipient->subtractFeeFromAmount();
-    });
 }
 
 bool AmountPlusFeeExceedsBalance(const CAmount amount, const CAmount fee, const CAmount balance)
@@ -241,6 +236,113 @@ void ApplyRegtestStaticFeeOverride(wallet::CCoinControl& coin_control)
     coin_control.m_feerate = CFeeRate{wallet::DEFAULT_TRANSACTION_MINFEE};
 }
 
+// Use the same available input set for automatic sendall and sweep detection.
+// Clear manual selections because AvailableCoins otherwise omits those outputs.
+std::vector<wallet::COutput> AvailableSendAllCoins(const wallet::CWallet& wallet, wallet::CCoinControl control)
+    EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
+{
+    control.UnSelectAll();
+    wallet::CoinFilterParams filter;
+    filter.min_amount = 0;
+    filter.skip_locked = true;
+    return wallet::AvailableCoins(wallet, &control, std::nullopt, filter).All();
+}
+
+bool TransactionSweepsAvailableFunds(interfaces::Wallet& wallet_interface, const CTransaction& tx, const wallet::CCoinControl& control)
+{
+    auto* wallet = wallet_interface.wallet();
+    if (!wallet) return false;
+    LOCK(wallet->cs_wallet);
+    // Selecting every coin is not a sweep if funds return to the wallet.
+    for (const auto& output : tx.vout) {
+        if (wallet->IsMine(output)) return false;
+    }
+    const auto available = AvailableSendAllCoins(*wallet, control);
+    return !available.empty() && std::all_of(available.begin(), available.end(), [&tx](const auto& coin) {
+        return std::any_of(tx.vin.begin(), tx.vin.end(), [&coin](const auto& input) {
+            return input.prevout == coin.outpoint;
+        });
+    });
+}
+
+// Build the no-change transaction using the same rules as Core's sendall RPC.
+// Calling the RPC itself would also sign (including invoking external signers),
+// which must not happen while the user is editing the form or previewing fees.
+util::Result<wallet::CreatedTransactionResult> CreateSendAllTransaction(
+    interfaces::Wallet& wallet_interface,
+    const std::vector<wallet::CRecipient>& recipients,
+    const wallet::CCoinControl& control, int remainder_index, bool sign)
+{
+    auto* wallet = wallet_interface.wallet();
+    if (!wallet || remainder_index < 0 || static_cast<size_t>(remainder_index) >= recipients.size()) {
+        return util::Error{Untranslated("Unable to prepare a send-all transaction.")};
+    }
+    LOCK(wallet->cs_wallet);
+    FeeCalculation fee_calc;
+    const CFeeRate rate = wallet::GetMinimumFeeRate(*wallet, control, &fee_calc);
+    if (control.m_feerate && rate > *control.m_feerate) {
+        return util::Error{Untranslated("Fee rate is below the minimum fee rate.")};
+    }
+    if (fee_calc.reason == FeeReason::FALLBACK && !wallet->m_allow_fallback_fee) {
+        return util::Error{Untranslated("Fee estimation failed. Fallbackfee is disabled.")};
+    }
+    // Explicit selections restrict sendall; otherwise use all available coins
+    // without changing the form's coin-control selection.
+    auto inputs = control.ListSelected();
+    if (inputs.empty()) {
+        for (const auto& coin : AvailableSendAllCoins(*wallet, control)) {
+            inputs.push_back(coin.outpoint);
+        }
+    }
+    if (inputs.empty()) return util::Error{Untranslated("No available inputs to use maximum.")};
+    CMutableTransaction tx;
+    tx.version = control.m_version;
+    CAmount total{0};
+    for (const auto& input : inputs) {
+        const auto* source = wallet->GetWalletTx(input.hash);
+        if (!source || input.n >= source->tx->vout.size() || wallet->IsSpent(input)
+            || !wallet->IsMine(source->tx->vout[input.n])) {
+            return util::Error{Untranslated("A selected input is no longer available.")};
+        }
+        if (wallet->GetTxDepthInMainChain(*source) == 0 && source->tx->version == TRUC_VERSION) {
+            return util::Error{Untranslated("Cannot spend an unconfirmed version 3 input in this transaction.")};
+        }
+        total += source->tx->vout[input.n].nValue;
+        const uint32_t sequence = wallet->m_signal_rbf ? MAX_BIP125_RBF_SEQUENCE : CTxIn::MAX_SEQUENCE_NONFINAL;
+        tx.vin.emplace_back(input, CScript{}, sequence);
+    }
+    CAmount fixed_amount{0};
+    std::set<CTxDestination> destinations;
+    for (size_t i = 0; i < recipients.size(); ++i) {
+        const auto& recipient = recipients[i];
+        if (!destinations.insert(recipient.dest).second) {
+            return util::Error{Untranslated("Each recipient must have a different address when using maximum.")};
+        }
+        const CAmount amount = static_cast<int>(i) == remainder_index ? 0 : recipient.nAmount;
+        fixed_amount += amount;
+        tx.vout.emplace_back(amount, GetScriptForDestination(recipient.dest));
+    }
+    const auto size = wallet::CalculateMaximumSignedTxSize(CTransaction(tx), wallet);
+    if (size.vsize < 0) return util::Error{Untranslated("Unable to determine the transaction size.")};
+    if (size.weight > MAX_STANDARD_TX_WEIGHT) return util::Error{Untranslated("Transaction too large.")};
+    const CAmount fee = rate.GetFee(size.vsize)
+        + wallet->chain().calculateCombinedBumpFee(inputs, rate).value_or(0);
+    if (fee > wallet->m_default_max_tx_fee) return util::Error{Untranslated("Transaction fee exceeds the maximum configured fee.")};
+    if (total <= fee || fixed_amount > total - fee) {
+        return util::Error{Untranslated("Selected inputs do not cover the amount plus fee")};
+    }
+    tx.vout[remainder_index].nValue = total - fee - fixed_amount;
+    for (const auto& output : tx.vout) {
+        if (IsDust(output, wallet->chain().relayDustFee())) {
+            return util::Error{Untranslated("The amount after fees is below the dust threshold.")};
+        }
+    }
+    FastRandomContext rng;
+    wallet::DiscourageFeeSniping(tx, rng, wallet->chain(), wallet->GetLastBlockHash(), wallet->GetLastBlockHeight());
+    if (sign && !wallet->SignTransaction(tx)) return util::Error{Untranslated("Signing transaction failed.")};
+    return wallet::CreatedTransactionResult{MakeTransactionRef(std::move(tx)), fee, std::nullopt, fee_calc};
+}
+
 // A failed fixed-amount preview can still report the fee needed to spend
 // selected inputs when even a transaction without change is unaffordable.
 std::optional<SendFeePreview> EstimateInsufficientSelectedInputsFee(
@@ -282,71 +384,35 @@ std::optional<SendFeePreview> EstimateInsufficientSelectedInputsFee(
     const CAmount fee = rate.GetFee(size.vsize)
         + wallet->chain().calculateCombinedBumpFee(inputs, rate).value_or(0);
     if (!AmountPlusFeeExceedsBalance(send_amount, fee, input_amount)) return std::nullopt;
-    return SendFeePreview{fee, static_cast<int>(inputs.size()), rate.GetFeePerK()};
+    return SendFeePreview{fee, static_cast<int>(inputs.size()), rate.GetFeePerK(), std::nullopt, false};
 }
 
 std::optional<SendFeePreview> TryPreviewFee(interfaces::Wallet& wallet,
                                      const std::vector<wallet::CRecipient>& recipients,
-                                     const wallet::CCoinControl& coin_control)
+                                     const wallet::CCoinControl& coin_control, int remainder_index = -1)
 {
-    const auto result = wallet.createTransaction(recipients, coin_control, /*sign=*/false, /*change_pos=*/std::nullopt);
+    const auto result = remainder_index >= 0
+        ? CreateSendAllTransaction(wallet, recipients, coin_control, remainder_index, /*sign=*/false)
+        : wallet.createTransaction(recipients, coin_control, /*sign=*/false, /*change_pos=*/std::nullopt);
     if (!result) {
-        return EstimateInsufficientSelectedInputsFee(wallet, recipients, coin_control);
+        return remainder_index < 0
+            ? EstimateInsufficientSelectedInputsFee(wallet, recipients, coin_control)
+            : std::nullopt;
     }
 
     const CAmount rate = coin_control.m_feerate
         ? coin_control.m_feerate->GetFeePerK()
         : wallet.getMinimumFee(FEE_RATE_BASIS_VBYTES, coin_control, nullptr, nullptr);
-    return SendFeePreview{result->fee, result->tx ? static_cast<int>(result->tx->vin.size()) : 0, rate};
-}
-
-std::optional<std::vector<wallet::CRecipient>> WithLargestRecipientPayingFee(const std::vector<wallet::CRecipient>& recipients)
-{
-    if (recipients.empty()) {
-        return std::nullopt;
-    }
-    if (std::any_of(recipients.begin(), recipients.end(), [](const auto& recipient) {
-        return recipient.fSubtractFeeFromAmount;
-    })) {
-        return std::nullopt;
-    }
-
-    std::vector<wallet::CRecipient> adjusted{recipients};
-    auto largest_recipient = std::max_element(adjusted.begin(), adjusted.end(), [](const auto& a, const auto& b) {
-        return a.nAmount < b.nAmount;
-    });
-    if (largest_recipient == adjusted.end()) {
-        return std::nullopt;
-    }
-    largest_recipient->fSubtractFeeFromAmount = true;
-    return adjusted;
-}
-
-std::optional<SendFeePreview> TryPreviewFeeWithFallback(interfaces::Wallet& wallet,
-                                                 const std::vector<wallet::CRecipient>& recipients,
-                                                 const wallet::CCoinControl& coin_control)
-{
-    if (const auto fee = TryPreviewFee(wallet, recipients, coin_control)) {
-        return fee;
-    }
-
-    // The fallback is only for fee previews. If a full-balance send cannot pay
-    // an additional fee, retry the estimate as if the largest recipient pays it
-    // so the UI can still show the expected fee without mutating the actual
-    // send recipients used by prepareTransaction().
-    const auto adjusted_recipients{WithLargestRecipientPayingFee(recipients)};
-    if (!adjusted_recipients.has_value()) {
-        return std::nullopt;
-    }
-
-    return TryPreviewFee(wallet, *adjusted_recipients, coin_control);
+    return SendFeePreview{result->fee, result->tx ? static_cast<int>(result->tx->vin.size()) : 0, rate,
+        remainder_index >= 0 ? std::make_optional(result->tx->vout[remainder_index].nValue) : std::nullopt,
+        result->tx && !result->change_pos && TransactionSweepsAvailableFunds(wallet, *result->tx, coin_control)};
 }
 
 std::optional<SendFeePreview> EstimatePreviewFee(interfaces::Wallet& wallet,
                                           const std::vector<wallet::CRecipient>& recipients,
                                           const wallet::CCoinControl& base_coin_control,
                                           const OutputType preview_change_type,
-                                          const unsigned int target)
+                                          const unsigned int target, int remainder_index = -1)
 {
     wallet::CCoinControl coin_control{base_coin_control};
     ApplySelectedInputsPolicy(coin_control);
@@ -355,11 +421,13 @@ std::optional<SendFeePreview> EstimatePreviewFee(interfaces::Wallet& wallet,
     ApplyPreviewChangeDestination(coin_control, preview_change_type);
     ApplyRegtestStaticFeeOverride(coin_control);
 
-    if (const auto fee = TryPreviewFeeWithFallback(wallet, recipients, coin_control)) {
+    if (const auto fee = TryPreviewFee(wallet, recipients, coin_control, remainder_index)) {
         return fee;
     }
 
-    if (Params().GetChainType() == ChainType::REGTEST) {
+    // A maximum amount must use the same fee policy as final construction.
+    // Do not fill an amount using a made-up rate if sendall cannot be estimated.
+    if (remainder_index >= 0 || Params().GetChainType() == ChainType::REGTEST) {
         return std::nullopt;
     }
 
@@ -374,7 +442,7 @@ std::optional<SendFeePreview> EstimatePreviewFee(interfaces::Wallet& wallet,
     // only provide a minimum required feerate.
     fallback_coin_control.m_feerate = CFeeRate{required_fee_per_k * FallbackFeeMultiplier(target)};
 
-    if (const auto fee = TryPreviewFeeWithFallback(wallet, recipients, fallback_coin_control)) {
+    if (const auto fee = TryPreviewFee(wallet, recipients, fallback_coin_control, remainder_index)) {
         return fee;
     }
 
@@ -385,7 +453,7 @@ std::optional<SendFeePreview> EstimateCustomPreviewFee(interfaces::Wallet& walle
                                                 const std::vector<wallet::CRecipient>& recipients,
                                                 const wallet::CCoinControl& base_coin_control,
                                                 const OutputType preview_change_type,
-                                                const CAmount fee_rate_per_kvb)
+                                                const CAmount fee_rate_per_kvb, int remainder_index = -1)
 {
     wallet::CCoinControl coin_control{base_coin_control};
     ApplySelectedInputsPolicy(coin_control);
@@ -393,20 +461,20 @@ std::optional<SendFeePreview> EstimateCustomPreviewFee(interfaces::Wallet& walle
     coin_control.m_feerate = CFeeRate{fee_rate_per_kvb};
     ApplyPreviewChangeDestination(coin_control, preview_change_type);
 
-    if (const auto fee = TryPreviewFeeWithFallback(wallet, recipients, coin_control)) {
+    if (const auto fee = TryPreviewFee(wallet, recipients, coin_control, remainder_index)) {
         return fee;
     }
 
     return std::nullopt;
 }
 
-std::optional<std::vector<wallet::CRecipient>> BuildRecipients(const SendRecipientsListModel& recipients)
+std::optional<std::vector<wallet::CRecipient>> BuildRecipients(const SendRecipientsListModel& recipients, const SendRecipient* maximum_recipient = nullptr)
 {
     std::vector<wallet::CRecipient> vec_send;
     vec_send.reserve(recipients.recipients().size());
 
     for (auto* recipient : recipients.recipients()) {
-        if (recipient == nullptr || !recipient->isValid()) {
+        if (recipient == nullptr || (recipient != maximum_recipient && !recipient->isValid())) {
             return std::nullopt;
         }
 
@@ -415,7 +483,7 @@ std::optional<std::vector<wallet::CRecipient>> BuildRecipients(const SendRecipie
             return std::nullopt;
         }
 
-        vec_send.push_back({destination, recipient->cAmount(), recipient->subtractFeeFromAmount()});
+        vec_send.push_back({destination, recipient->cAmount(), false});
     }
 
     if (vec_send.empty()) {
@@ -516,8 +584,6 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, inter
             this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
     connect(m_send_recipients, &SendRecipientsListModel::validationChanged,
             this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
-    connect(m_send_recipients, &SendRecipientsListModel::subtractFeeFromAmountChanged,
-            this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
     m_sign_verify_message_model = new SignVerifyMessageModel(m_wallet.get(), this);
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
     m_current_payment_request = new PaymentRequest(this);
@@ -541,8 +607,6 @@ WalletQmlModel::WalletQmlModel(interfaces::Node* node, QObject* parent)
     connect(m_send_recipients, &SendRecipientsListModel::totalAmountChanged,
             this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
     connect(m_send_recipients, &SendRecipientsListModel::validationChanged,
-            this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
-    connect(m_send_recipients, &SendRecipientsListModel::subtractFeeFromAmountChanged,
             this, &WalletQmlModel::sendAmountExhaustsBalanceChanged);
     m_sign_verify_message_model = new SignVerifyMessageModel(nullptr, this);
     m_sign_verify_message_model->setSecurityStateChangedFn([this]() { refreshSecurityState(); });
@@ -687,7 +751,7 @@ qint64 WalletQmlModel::sendTotalSatoshi() const
     if (!m_send_recipients) return 0;
     const auto fee = selectedFeeEstimate();
     return m_send_recipients->totalAmountSatoshi()
-        + (fee && !AnyRecipientSubtractsFeeFromAmount(*m_send_recipients) ? *fee : 0);
+        + (fee ? *fee : 0);
 }
 
 qint64 WalletQmlModel::availableSendBalanceSatoshi() const
@@ -695,18 +759,44 @@ qint64 WalletQmlModel::availableSendBalanceSatoshi() const
     return m_wallet ? m_wallet->getAvailableBalance(wallet::CCoinControl{}) : 0;
 }
 
+bool WalletQmlModel::sendDraftSweepsWallet() const
+{
+    const auto preview = selectedFeePreview();
+    return preview && preview->sweeps_wallet;
+}
+
 void WalletQmlModel::useMaximum()
 {
     if (!m_wallet || !m_send_recipients || !m_send_recipients->currentRecipient()) return;
-    auto* recipient = m_send_recipients->currentRecipient();
-    wallet::CCoinControl control{m_coin_control};
-    ApplySelectedInputsPolicy(control);
-    const CAmount other = m_send_recipients->totalAmountSatoshi() - recipient->cAmount();
-    const CAmount available = m_wallet->getAvailableBalance(control);
-    if (available <= other) return;
-    recipient->setSubtractFeeFromAmount(true);
-    recipient->amount()->setSatoshi(available - other);
+    setMaximumRecipient(m_send_recipients->currentRecipient());
     scheduleFeeEstimates();
+}
+
+void WalletQmlModel::setMaximumRecipient(SendRecipient* recipient)
+{
+    if (m_maximum_recipient == recipient) return;
+    QObject::disconnect(m_maximum_amount_connection);
+    QObject::disconnect(m_maximum_recipient_destroyed_connection);
+    m_maximum_recipient = recipient;
+    if (recipient) {
+        m_maximum_amount_connection = connect(recipient->amount(), &BitcoinAmount::amountChanged, this, [this] {
+            // Editing the prefilled amount switches back to a fixed-amount payment.
+            if (!m_updating_maximum) setMaximumRecipient(nullptr);
+        });
+        m_maximum_recipient_destroyed_connection = connect(recipient, &QObject::destroyed, this, [this] {
+            m_maximum_recipient.clear();
+            Q_EMIT maximumRecipientChanged();
+        });
+    }
+    Q_EMIT maximumRecipientChanged();
+}
+
+void WalletQmlModel::updateMaximumAmount()
+{
+    const auto preview = selectedFeePreview();
+    if (!m_maximum_recipient || !preview || !preview->maximum_amount) return;
+    QScopedValueRollback<bool> updating{m_updating_maximum, true};
+    m_maximum_recipient->amount()->setSatoshi(*preview->maximum_amount);
 }
 
 void WalletQmlModel::setCustomFeeTarget(unsigned int target)
@@ -745,14 +835,11 @@ bool WalletQmlModel::sendAmountExhaustsBalance() const
     if (total_amount > balance) {
         return true;
     }
-    if (AnyRecipientSubtractsFeeFromAmount(*m_send_recipients)) {
-        return false;
-    }
     if (const auto fee = selectedFeeEstimate()) {
         return AmountPlusFeeExceedsBalance(total_amount, *fee, balance);
     }
 
-    // Without an estimate, a non fee-included send cannot safely spend the full
+    // Without an estimate, a fixed-amount send cannot safely spend the full
     // balance because prepareTransaction() will still need to add a fee.
     return total_amount >= balance;
 }
@@ -1961,12 +2048,25 @@ std::unique_ptr<interfaces::Handler> WalletQmlModel::handleTransactionChanged(Tr
 
 void WalletQmlModel::scheduleFeeEstimates()
 {
-    if (m_fee_estimation_timer == nullptr) {
+    if (m_updating_maximum || m_fee_estimation_timer == nullptr) {
         return;
     }
     m_fee_estimation_timer->stop();
 
-    if (!m_wallet || !m_send_recipients || !BuildRecipients(*m_send_recipients).has_value()) {
+    // Until a destination is entered, show the gross remainder. A valid
+    // address enables the sendall preview, which replaces it with the net amount.
+    if (m_wallet && m_maximum_recipient && m_maximum_recipient->address()->address().isEmpty()) {
+        wallet::CCoinControl control{m_coin_control};
+        ApplySelectedInputsPolicy(control);
+        CAmount remainder = m_wallet->getAvailableBalance(control);
+        for (const auto* recipient : m_send_recipients->recipients()) {
+            if (recipient != m_maximum_recipient) remainder -= recipient->cAmount();
+        }
+        QScopedValueRollback<bool> updating{m_updating_maximum, true};
+        m_maximum_recipient->amount()->setSatoshi(std::max(CAmount{0}, remainder));
+    }
+
+    if (!m_wallet || !m_send_recipients || !BuildRecipients(*m_send_recipients, m_maximum_recipient).has_value()) {
         clearFeeEstimates();
         return;
     }
@@ -2007,12 +2107,13 @@ void WalletQmlModel::requestFeeEstimatesNow()
         return;
     }
 
-    const auto recipients = BuildRecipients(*m_send_recipients);
+    const auto recipients = BuildRecipients(*m_send_recipients, m_maximum_recipient);
     if (!recipients.has_value()) {
         clearFeeEstimates();
         return;
     }
 
+    const int remainder_index = m_send_recipients->recipients().indexOf(m_maximum_recipient);
     const quint64 request_id = ++m_fee_estimate_request_id;
     const wallet::CCoinControl base_coin_control{m_coin_control};
     const OutputType preview_change_type{base_coin_control.m_change_type.value_or(m_wallet->getDefaultAddressType())};
@@ -2028,7 +2129,7 @@ void WalletQmlModel::requestFeeEstimatesNow()
         Q_EMIT feeEstimateRevisionChanged();
     }
 
-    QTimer::singleShot(0, m_fee_estimation_worker, [this, request_id, recipients = *recipients, base_coin_control, preview_change_type, custom_fee_enabled, custom_fee_rate_per_kvb, wallet]() {
+    QTimer::singleShot(0, m_fee_estimation_worker, [this, request_id, remainder_index, recipients = *recipients, base_coin_control, preview_change_type, custom_fee_enabled, custom_fee_rate_per_kvb, wallet]() {
         QHash<unsigned int, SendFeePreview> estimates;
         std::optional<SendFeePreview> custom_estimate;
 
@@ -2037,7 +2138,7 @@ void WalletQmlModel::requestFeeEstimatesNow()
                                                          recipients,
                                                          base_coin_control,
                                                          preview_change_type,
-                                                         target)) {
+                                                         target, remainder_index)) {
                 estimates.insert(target, *estimate);
             }
         }
@@ -2047,7 +2148,7 @@ void WalletQmlModel::requestFeeEstimatesNow()
                                                                recipients,
                                                                base_coin_control,
                                                                preview_change_type,
-                                                               *custom_fee_rate_per_kvb)) {
+                                                               *custom_fee_rate_per_kvb, remainder_index)) {
                 custom_estimate = *estimate;
             }
         }
@@ -2074,6 +2175,7 @@ void WalletQmlModel::applyFeeEstimates(const QHash<unsigned int, SendFeePreview>
     if (custom_estimate_changed) {
         m_custom_fee_estimate = custom_estimate;
     }
+    updateMaximumAmount();
     if (estimates_changed || custom_estimate_changed) {
         Q_EMIT estimatedFeeChanged();
         Q_EMIT sendAmountExhaustsBalanceChanged();
@@ -2167,7 +2269,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         return false;
     }
 
-    const auto vec_send = BuildRecipients(*m_send_recipients);
+    const auto vec_send = BuildRecipients(*m_send_recipients, m_maximum_recipient);
     if (!vec_send.has_value()) {
         if (passphrase.has_value()) {
             QmlUtil::ClearSecureString(*passphrase);
@@ -2190,12 +2292,8 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
     WalletRelockGuard relock_guard{*m_wallet, [this] { refreshSecurityState(); }, relock};
 
     CAmount total = 0;
-    bool subtract_fee_from_amount = false;
     for (const auto& recipient : *vec_send) {
         total += recipient.nAmount;
-        if (recipient.fSubtractFeeFromAmount) {
-            subtract_fee_from_amount = true;
-        }
     }
 
     wallet::CCoinControl coin_control{m_coin_control};
@@ -2216,7 +2314,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
     }
 
     CAmount balance = m_wallet->getAvailableBalance(coin_control);
-    if (balance < total) {
+    if (!m_maximum_recipient && balance < total) {
         relock_guard.relock();
         setTransactionStatus(coin_control.HasSelected()
             ? tr("Selected inputs do not cover the amount plus fee")
@@ -2225,15 +2323,25 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
     }
 
     const bool sign = !m_wallet->privateKeysDisabled();
-    const auto& result = m_wallet->createTransaction(*vec_send, coin_control, sign, /*change_pos=*/std::nullopt);
+    const auto result = m_maximum_recipient
+        ? CreateSendAllTransaction(*m_wallet, *vec_send, coin_control, m_send_recipients->recipients().indexOf(m_maximum_recipient), sign)
+        : m_wallet->createTransaction(*vec_send, coin_control, sign, /*change_pos=*/std::nullopt);
     if (result) {
+        const CTransactionRef& newTx = result->tx;
+        if (m_maximum_recipient) {
+            // Fee estimates can change between editing and opening review.
+            // Show the recipient's actual output amount in the review as well.
+            QScopedValueRollback<bool> updating{m_updating_maximum, true};
+            const int index = m_send_recipients->recipients().indexOf(m_maximum_recipient);
+            m_maximum_recipient->amount()->setSatoshi(newTx->vout[index].nValue);
+        }
         if (m_current_transaction) {
             delete m_current_transaction;
         }
-        const CTransactionRef& newTx = result->tx;
         m_current_transaction = new WalletQmlModelTransaction(m_send_recipients, this);
         m_current_psbt.reset();
         m_current_transaction_source = CurrentTransactionSource::SendDraft;
+        m_current_transaction_sweeps_wallet = !result->change_pos && TransactionSweepsAvailableFunds(*m_wallet, *newTx, coin_control);
         m_current_transaction_can_send = true;
         m_current_transaction_can_broadcast = false;
         m_current_transaction_review_message.clear();
@@ -2247,7 +2355,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         }
         m_current_transaction->setTransactionFee(result->fee);
         m_current_transaction->setReviewFeeDetails(feeTargetBlocks(), estimatedFeeRate());
-        if (subtract_fee_from_amount) {
+        if (m_maximum_recipient) {
             m_current_transaction->reassignAmounts(
                 result->change_pos ? static_cast<int>(*result->change_pos) : -1);
         }
@@ -2914,13 +3022,16 @@ std::vector<COutPoint> WalletQmlModel::listSelectedCoins() const
 
 void WalletQmlModel::clearSelectedCoins()
 {
-    if (!m_coin_control.HasSelected()) {
-        return;
-    }
+    setMaximumRecipient(nullptr);
+    if (m_coin_control.HasSelected()) setSelectedCoins({});
+}
+
+void WalletQmlModel::setSelectedCoins(const std::vector<COutPoint>& outputs)
+{
+    // Restoring a cancelled coin-picker edit preserves the maximum recipient.
     m_coin_control.UnSelectAll();
-    if (m_coins_list_model) {
-        m_coins_list_model->refreshSelection();
-    }
+    for (const auto& output : outputs) m_coin_control.Select(output);
+    if (m_coins_list_model) m_coins_list_model->refreshSelection();
     Q_EMIT sendAmountExhaustsBalanceChanged();
     scheduleFeeEstimates();
 }
@@ -2934,6 +3045,7 @@ void WalletQmlModel::setFeeTargetBlocks(unsigned int target_blocks)
 {
     if (m_coin_control.m_confirm_target != target_blocks) {
         m_coin_control.m_confirm_target = target_blocks;
+        updateMaximumAmount();
         Q_EMIT feeTargetBlocksChanged();
         Q_EMIT estimatedFeeChanged();
         Q_EMIT sendAmountExhaustsBalanceChanged();

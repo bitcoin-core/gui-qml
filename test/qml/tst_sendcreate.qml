@@ -33,6 +33,12 @@ TestCase {
 
     function init() {
         walletController.setSelectedWallet("send-create-test-wallet")
+        testWalletModel.sendDraftSweepsWallet = false
+        testWalletModel.currentTransactionSweepsWallet = false
+        testWalletModel.useMaximumCalls = 0
+        testWalletModel.clearMaximum()
+        testWalletModel.sendTransactionResult = true
+        testWalletModel.feeEstimatePending = false
         testWalletModel.customFeeEnabled = false
         testWalletModel.customFeeRate = ""
         testWalletModel.targetBlocks = 6
@@ -50,7 +56,6 @@ TestCase {
         testSendRecipient.hasPaymentRequest = false
         testSendRecipient.paymentRequestLabel = ""
         testSendRecipient.message = ""
-        testSendRecipient.subtractFeeFromAmount = false
         testSendRecipient.isValid = true
         testRecipientsModel.allValid = true
         testRecipientsModel.validationError = ""
@@ -728,20 +733,123 @@ TestCase {
         compare(testWalletModel.targetBlocks, 6)
     }
 
-    function test_recipient_fee_checkbox_updates_model() {
-        const page = createTemporaryObject(sendComponent, this)
-        const checkbox = findChild(page, "sendDeductFeeCheckbox")
-        compare(checkbox.checked, false)
-        checkbox.toggle(); checkbox.toggled()
-        compare(testSendRecipient.subtractFeeFromAmount, true)
-        verify(checkbox.indicator.checkProgress < 1)
-        tryCompare(checkbox.indicator, "checkProgress", 1)
-        testSendRecipient.subtractFeeFromAmount = false
-        compare(checkbox.checked, false)
-        compare(checkbox.indicator.checkProgress, 0)
+    function test_maximum_fills_immediately_without_warning() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.currentTransactionSweepsWallet = true
+        findChild(page, "sendUseMaximumButton").clicked()
+        compare(testWalletModel.useMaximumCalls, 1)
+        compare(findChild(page, "sendReviewSweepAlert").opened, false)
+    }
+
+    function test_reviewing_sweep_requires_confirmation_regardless_of_maximum_action() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.sendDraftSweepsWallet = true
+        testRecipientsModel.totalAmountSatoshi = 12345678
+        testSendRecipient.amount.satoshi = 12345678
+        const alert = findChild(page, "sendReviewSweepAlert")
+        const review = findChild(page, "transactionReviewPopup")
+        const prepareCalls = testWalletModel.prepareTransactionCalls
+        const calls = testWalletModel.sendTransactionCalls
+        const amount = testSendRecipient.amount.satoshi
+        findChild(page, "sendReviewButton").clicked()
+        tryCompare(alert, "opened", true)
+        compare(alert.title, "Use all available funds?")
+        compare(alert.message, "You’re preparing to send all available funds (" + testSendRecipient.amount.displayWithUnit + ") from this wallet. Do you want to proceed?")
+        compare(review.opened, false)
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls)
+        compare(testWalletModel.useMaximumCalls, 0)
+        findChild(alert.contentItem, "sendReviewSweepCancelButton").clicked()
+        tryCompare(alert, "visible", false)
+        compare(review.opened, false)
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls)
+        compare(testSendRecipient.amount.satoshi, amount)
+        compare(testWalletModel.sendTransactionCalls, calls)
+        findChild(page, "sendReviewButton").clicked()
+        tryCompare(alert, "opened", true)
+        findChild(alert.contentItem, "sendReviewSweepConfirmButton").clicked()
+        tryCompare(review, "opened", true)
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls + 1)
+        compare(testWalletModel.useMaximumCalls, 0)
+        compare(testWalletModel.sendTransactionCalls, calls)
+    }
+
+    function test_reviewing_partial_send_opens_review_directly() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        findChild(page, "sendReviewButton").clicked()
+        compare(findChild(page, "sendReviewSweepAlert").opened, false)
+        tryCompare(findChild(page, "transactionReviewPopup"), "opened", true)
+    }
+
+    function test_review_sweep_requires_confirmation_and_keeps_draft_on_cancel() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.currentTransactionSweepsWallet = true
+        const calls = testWalletModel.sendTransactionCalls
+        const discardCalls = testWalletModel.discardCurrentTransactionCalls
+        const alert = findChild(review, "sendSweepAlert")
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        tryCompare(alert, "opened", true)
+        compare(alert.title, "Send all available funds?")
+        compare(alert.message, "This will send all available funds (" + testWalletTransaction.amountAmount.displayWithUnit + ") from this wallet. Once confirmed, the transaction cannot be undone.")
+        compare(testWalletModel.sendTransactionCalls, calls)
+        findChild(alert.contentItem, "sendSweepCancelButton").clicked()
+        tryCompare(alert, "visible", false)
+        compare(testWalletModel.sendTransactionCalls, calls)
+        compare(testWalletModel.discardCurrentTransactionCalls, discardCalls)
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        tryCompare(alert, "opened", true)
+        findChild(alert.contentItem, "sendSweepConfirmButton").clicked()
+        compare(testWalletModel.sendTransactionCalls, calls + 1)
+    }
+
+    function test_review_sweep_alert_closes_when_wallet_changes() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.currentTransactionSweepsWallet = true
+        const calls = testWalletModel.sendTransactionCalls
+        const alert = findChild(review, "sendSweepAlert")
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        tryCompare(alert, "opened", true)
+        review.wallet = null
+        tryCompare(alert, "visible", false)
+        compare(testWalletModel.sendTransactionCalls, calls)
+    }
+
+    function test_review_subset_sends_without_sweep_alert() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem)
+        const calls = testWalletModel.sendTransactionCalls
+        findChild(review, "sendTransactionReviewSendButton").clicked()
+        compare(findChild(review, "sendSweepAlert").opened, false)
+        compare(testWalletModel.sendTransactionCalls, calls + 1)
+    }
+
+    function test_maximum_label_tracks_selection_and_no_fee_checkbox() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        page.visible = true
+        compare(findChild(page, "sendDeductFeeCheckbox"), null)
+        const maximum = findChild(page, "sendUseMaximumButton")
+        const status = findChild(page, "sendAmountStatusText")
+        compare(maximum.text, "Use maximum")
+        compare(maximum.enabled, true)
+        compare(status.visible, false)
+        maximum.clicked()
+        compare(maximum.enabled, false)
+        compare(status.text, "Sending maximum available")
+        compare(status.visible, true)
+        testSendRecipient.amount.satoshi = 1000
+        compare(maximum.enabled, true)
+        compare(status.visible, false)
+        testCoinsListModel.toggleCoinSelection(0)
+        compare(maximum.text, "Use maximum from selected coins")
+        maximum.clicked()
+        compare(maximum.enabled, false)
+        compare(status.text, "Sending maximum from selected coins")
+        testWalletModel.clearSelectedCoins()
+        compare(maximum.enabled, true)
+        compare(status.visible, false)
     }
 
     function test_coin_selection_cancel_and_apply() {
+        testSendRecipient.amount.satoshi = 0
+        testWalletModel.feeEstimatePending = true
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
         const popup = findChild(page, "coinSelectionPopup")
         popup.open(); tryCompare(popup, "opened", true)

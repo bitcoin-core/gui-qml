@@ -22,7 +22,6 @@ class SendRecipient : public QObject
     Q_PROPERTY(QString paymentRequestLabel READ paymentRequestLabel NOTIFY paymentRequestChanged)
     Q_PROPERTY(bool hasPaymentRequest READ hasPaymentRequest NOTIFY paymentRequestChanged)
     Q_PROPERTY(BitcoinAmount* amount READ amount CONSTANT)
-    Q_PROPERTY(bool subtractFeeFromAmount READ subtractFeeFromAmount WRITE setSubtractFeeFromAmount NOTIFY subtractFeeFromAmountChanged)
 
     Q_PROPERTY(QString addressError READ addressError NOTIFY addressErrorChanged)
     Q_PROPERTY(QString amountError READ amountError NOTIFY amountErrorChanged)
@@ -49,9 +48,6 @@ public:
 
     CAmount cAmount() const;
 
-    bool subtractFeeFromAmount() const;
-    void setSubtractFeeFromAmount(bool subtract);
-
     bool isValid() const;
 
     QString paymentRequestLabel() const { return m_request_label; }
@@ -66,7 +62,6 @@ Q_SIGNALS:
     void amountErrorChanged();
     void labelChanged();
     void messageChanged();
-    void subtractFeeFromAmountChanged();
     void isValidChanged();
 
 private:
@@ -82,7 +77,6 @@ private:
     QString m_request_address;
     BitcoinAmount* m_amount;
     QString m_amountError{""};
-    bool m_subtractFeeFromAmount{false};
 };
 
 #endif // BITCOIN_QML_MODELS_SENDRECIPIENT_H

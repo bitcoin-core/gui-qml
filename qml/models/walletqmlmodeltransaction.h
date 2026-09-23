@@ -59,7 +59,7 @@ public:
     bool captureReviewedRecipients(const SendRecipientsListModel& recipients);
     void setReviewFeeDetails(int target_blocks, const QString& fee_rate);
 
-    void reassignAmounts(int nChangePosRet); // needed for the subtract-fee-from-amount feature
+    void reassignAmounts(int nChangePosRet); // synchronize review totals with the transaction outputs
 
 Q_SIGNALS:
     void amountChanged();

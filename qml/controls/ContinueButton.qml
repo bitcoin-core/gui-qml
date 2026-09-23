@@ -44,6 +44,7 @@ Button {
         RowLayout {
             id: contentRow
             anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width)
             spacing: 4
 
             SpinningIndicator {
@@ -62,6 +63,10 @@ Button {
             }
 
             CoreText {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                wrap: false
+                elide: Text.ElideRight
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
                 color: root.textColor

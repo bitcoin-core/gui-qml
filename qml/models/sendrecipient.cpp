@@ -99,19 +99,6 @@ void SendRecipient::setMessage(const QString& message)
     }
 }
 
-bool SendRecipient::subtractFeeFromAmount() const
-{
-    return m_subtractFeeFromAmount;
-}
-
-void SendRecipient::setSubtractFeeFromAmount(bool subtract)
-{
-    if (m_subtractFeeFromAmount != subtract) {
-        m_subtractFeeFromAmount = subtract;
-        Q_EMIT subtractFeeFromAmountChanged();
-    }
-}
-
 CAmount SendRecipient::cAmount() const
 {
     return m_amount->satoshi();
@@ -133,7 +120,6 @@ void SendRecipient::clear()
     Q_EMIT paymentRequestChanged();
     m_label = "";
     m_message = "";
-    setSubtractFeeFromAmount(false);
     m_address->setAddress("", 0);
     m_amount->clear();
     Q_EMIT addressChanged();

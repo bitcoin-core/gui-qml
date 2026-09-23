@@ -94,12 +94,6 @@ struct FeeEstimateCall {
     size_t recipient_count;
 };
 
-struct BalancePreviewCall {
-    unsigned int target;
-    CAmount total_amount;
-    bool subtracts_fee;
-};
-
 struct SelectedCoinEstimateCall {
     unsigned int target;
     bool sign;
@@ -206,15 +200,13 @@ WalletModelHarness<MockWallet> MakeWalletModel(interfaces::Node* node = nullptr)
 // A minimal external incoming payment to `dest`, shaped so that
 // Transaction::fromWalletTx decodes it into a single RecvWithAddress row.
 void SetValidRecipient(WalletQmlModel& model,
-                       const QString& address = VALID_MAINNET_ADDRESS,
-                       const bool subtract_fee_from_amount = false)
+                       const QString& address = VALID_MAINNET_ADDRESS)
 {
     auto* recipient = model.sendRecipientList()->currentRecipient();
     QVERIFY(recipient != nullptr);
 
     recipient->address()->setAddress(address, 0);
     recipient->amount()->setSatoshi(50'000);
-    recipient->setSubtractFeeFromAmount(subtract_fee_from_amount);
 
     QVERIFY2(recipient->isValid(), "Recipient must be valid before scheduling fee estimates");
 }
@@ -592,20 +584,18 @@ private Q_SLOTS:
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
-    void maximumUsesRemainingSelectedBalance() {
+    void maximumKeepsAmountWhenValidAddressCannotBeEstimated() {
         auto [wallet, model] = MakeWalletModel();
         SetValidRecipient(*model);
-        model->sendRecipientList()->currentRecipient()->amount()->setSatoshi(5'000);
-        model->sendRecipientList()->add();
         const COutPoint selected{Txid{}, 1};
         model->selectCoin(selected);
-        wallet->get_available_balance_fn = [&](const wallet::CCoinControl& control) {
-            return control.IsSelected(selected) && !control.m_allow_other_inputs ? CAmount{50'000} : CAmount{100'000};
-        };
+        // With a valid address, preserve the existing amount if no sendall
+        // estimate can be made. Gross prefilling is only for an empty address.
         model->useMaximum();
-        QCOMPARE(model->sendRecipientList()->currentRecipient()->cAmount(), CAmount{45'000});
-        QVERIFY(model->sendRecipientList()->currentRecipient()->subtractFeeFromAmount());
-        QCOMPARE(model->sendTotalSatoshi(), 50'000);
+        QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
+        QCOMPARE(model->sendRecipientList()->currentRecipient()->cAmount(), CAmount{50'000});
+        QCOMPARE(model->estimatedFeeSatoshi(), -1);
+        QVERIFY(model->isSelectedCoin(selected));
     }
     void previewExposesFeeInputCountAndTotalDebit() {
         auto [wallet, model] = MakeWalletModel();
@@ -624,21 +614,19 @@ private Q_SLOTS:
         QCOMPARE(model->estimatedInputCount(), 2);
         QCOMPARE(model->estimatedFeeRate(), QString("2.5"));
         QCOMPARE(model->sendTotalSatoshi(), 50'300);
-        model->sendRecipientList()->currentRecipient()->setSubtractFeeFromAmount(true);
-        QCOMPARE(model->sendTotalSatoshi(), 50'000);
     }
     void estimatedFeeForTarget_returnsEmptyWhenUnavailable();
     void scheduleFeeEstimates_populatesFormattedEstimates();
     void scheduleFeeEstimates_fallsBackWhenNetworkFeeEstimatesUnavailable();
     void scheduleFeeEstimates_usesStaticRegtestFeeOverride();
     void scheduleFeeEstimates_usesCustomFeeRateWhenEnabled();
-    void scheduleFeeEstimates_estimatesWhenAmountWouldExceedBalanceWithFee();
+    void scheduleFeeEstimates_neverUsesSubtractFeeFallback();
     void sendAmountExhaustsBalance_requiresFeeBuffer();
     void sendAmountExhaustsBalance_usesCoinControlAvailableBalance();
     void scheduleFeeEstimates_usesDummyPreviewChangeDestination();
     void prepareTransaction_usesStaticRegtestFeeOverride();
     void prepareTransaction_usesCustomFeeRateWithoutRegtestOverride();
-    void prepareTransaction_reassignsAmountWhenFeeIncluded();
+    void prepareTransaction_neverSubtractsFeeFromRecipient();
     void walletQmlModelTransaction_reassignAmounts_excludesChangeOutput();
     void scheduleFeeEstimates_usesSelectedCoinsInCoinControl();
     void prepareTransaction_disallowsOtherInputsWhenCoinsSelected();
@@ -1186,78 +1174,21 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
     QVERIFY(called_target(10));
 }
 
-void WalletQmlModelTests::scheduleFeeEstimates_estimatesWhenAmountWouldExceedBalanceWithFee()
+void WalletQmlModelTests::scheduleFeeEstimates_neverUsesSubtractFeeFallback()
 {
     auto [wallet, model] = MakeWalletModel();
-    wallet->get_balance_fn = [] { return CAmount{50'000}; };
-    wallet->get_available_balance_fn = [](const wallet::CCoinControl&) { return CAmount{50'000}; };
     SetValidRecipient(*model);
-    auto* recipient = model->sendRecipientList()->currentRecipient();
-    QVERIFY(recipient != nullptr);
-    recipient->amount()->setSatoshi(49'850);
-    QVERIFY(!model->sendAmountExhaustsBalance());
-    QSignalSpy balance_exhausted_spy{model.get(), &WalletQmlModel::sendAmountExhaustsBalanceChanged};
-
-    ThreadSafeCallLog<BalancePreviewCall> calls;
-
-    [[maybe_unused]] auto verify_wallet = wallet->VerifyOnExit();
-    wallet->ExpectNoCalls(wallet->calls.getRequiredFee);
+    std::atomic<bool> saw_sffo{false};
     wallet->create_transaction_fn = [&](const std::vector<wallet::CRecipient>& recipients,
-                                        const wallet::CCoinControl& coin_control,
-                                        bool,
-                                        int& change_pos,
-                                        CAmount& fee) -> util::Result<CTransactionRef> {
-        change_pos = -1;
-        fee = coin_control.m_feerate.has_value()
-            ? 50
-            : TestFeeWeight(coin_control.m_confirm_target.value_or(0)) * 100;
-
-        const CAmount total_amount = std::accumulate(recipients.begin(), recipients.end(), CAmount{0}, [](const CAmount total, const wallet::CRecipient& recipient) {
-            return total + recipient.nAmount;
-        });
-        const bool subtracts_fee = std::any_of(recipients.begin(), recipients.end(), [](const wallet::CRecipient& recipient) {
-            return recipient.fSubtractFeeFromAmount;
-        });
-
-        calls.Append({coin_control.m_confirm_target.value_or(0), total_amount, subtracts_fee});
-        if (subtracts_fee) {
-            return util::Result<CTransactionRef>{MakeTransactionRef(CMutableTransaction{})};
-        }
-
-        if (total_amount + fee <= 50'000) {
-            return util::Result<CTransactionRef>{MakeTransactionRef(CMutableTransaction{})};
-        }
+                                        const wallet::CCoinControl&, bool, int&, CAmount&) -> util::Result<CTransactionRef> {
+        for (const auto& recipient : recipients) if (recipient.fSubtractFeeFromAmount) saw_sffo = true;
         return util::Error{Untranslated("amount plus fee exceeds balance")};
     };
-
     model->scheduleFeeEstimates();
-
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
-    QTRY_VERIFY_WITH_TIMEOUT(model->sendAmountExhaustsBalance(), FEE_ESTIMATE_TIMEOUT_MS);
-    QVERIFY(model->sendAmountExhaustsBalance());
-    QVERIFY(balance_exhausted_spy.count() > 0);
-    QTRY_VERIFY_WITH_TIMEOUT(calls.Size() >= 5, FEE_ESTIMATE_TIMEOUT_MS);
-    const auto preview_calls{calls.Snapshot()};
-    QVERIFY(std::ranges::any_of(preview_calls, [](const BalancePreviewCall& call) { return !call.subtracts_fee; }));
-    QVERIFY(std::ranges::any_of(preview_calls, [](const BalancePreviewCall& call) { return call.subtracts_fee; }));
-    QVERIFY(std::ranges::all_of(preview_calls, [](const BalancePreviewCall& call) { return call.total_amount == 49'850; }));
-    QCOMPARE(model->sendRecipientList()->currentRecipient()->subtractFeeFromAmount(), false);
-    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000100 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000600 ₿"));
-
-    model->setFeeTargetBlocks(2);
-    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000100 ₿"));
-    QVERIFY(!model->sendAmountExhaustsBalance());
-
-    model->setFeeTargetBlocks(10);
-    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000600 ₿"));
-    QVERIFY(model->sendAmountExhaustsBalance());
-
-    model->setCustomFeeEnabled(true);
-    model->setCustomFeeRate(QStringLiteral("1"));
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFee(), QStringLiteral("0.00000050 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
-    QVERIFY(!model->sendAmountExhaustsBalance());
+    QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
+    QCOMPARE(model->estimatedFeeSatoshi(), -1);
+    QVERIFY(!saw_sffo);
+    QCOMPARE(model->sendRecipientList()->currentRecipient()->cAmount(), CAmount{50'000});
 }
 
 void WalletQmlModelTests::sendAmountExhaustsBalance_requiresFeeBuffer()
@@ -1277,10 +1208,6 @@ void WalletQmlModelTests::sendAmountExhaustsBalance_requiresFeeBuffer()
 
     recipient->amount()->setSatoshi(50'000);
     QVERIFY(model->sendAmountExhaustsBalance());
-    recipient->setSubtractFeeFromAmount(true);
-    QVERIFY(!model->sendAmountExhaustsBalance());
-
-    recipient->setSubtractFeeFromAmount(false);
     recipient->amount()->setSatoshi(49'000);
     QVERIFY(!model->sendAmountExhaustsBalance());
     model->sendRecipientList()->add();
@@ -1472,10 +1399,10 @@ void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOver
                                      });
 }
 
-void WalletQmlModelTests::prepareTransaction_reassignsAmountWhenFeeIncluded()
+void WalletQmlModelTests::prepareTransaction_neverSubtractsFeeFromRecipient()
 {
     auto [wallet, model] = MakeWalletModel();
-    SetValidRecipient(*model, VALID_MAINNET_ADDRESS, /*subtract_fee_from_amount=*/true);
+    SetValidRecipient(*model, VALID_MAINNET_ADDRESS);
 
     bool saw_subtract_fee_from_amount{false};
     bool saw_wrong_recipient_count{false};
@@ -1493,21 +1420,21 @@ void WalletQmlModelTests::prepareTransaction_reassignsAmountWhenFeeIncluded()
         fee = 200;
 
         CMutableTransaction tx;
-        tx.vout.emplace_back(/*nValue=*/49'800, CScript{});
+        tx.vout.emplace_back(/*nValue=*/50'000, CScript{});
         return util::Result<CTransactionRef>{MakeTransactionRef(std::move(tx))};
     };
 
     QVERIFY(model->prepareTransaction());
     QVERIFY(!saw_wrong_recipient_count);
-    QVERIFY(saw_subtract_fee_from_amount);
+    QVERIFY(!saw_subtract_fee_from_amount);
     QVERIFY(model->currentTransaction() != nullptr);
-    QCOMPARE(model->currentTransaction()->amountAmount()->satoshi(), CAmount{49'800});
+    QCOMPARE(model->currentTransaction()->amountAmount()->satoshi(), CAmount{50'000});
     QCOMPARE(model->currentTransaction()->feeAmount()->satoshi(), CAmount{200});
-    QCOMPARE(model->currentTransaction()->totalAmount()->satoshi(), CAmount{50'000});
-    QCOMPARE(model->currentTransaction()->amount(), QStringLiteral("0.00049800 BTC"));
+    QCOMPARE(model->currentTransaction()->totalAmount()->satoshi(), CAmount{50'200});
+    QCOMPARE(model->currentTransaction()->amount(), QStringLiteral("0.00050000 BTC"));
     QCOMPARE(model->currentTransaction()->fee(), QStringLiteral("0.00000200 BTC"));
-    QCOMPARE(model->currentTransaction()->total(), QStringLiteral("0.00050000 BTC"));
-    QCOMPARE(model->currentTransaction()->getTotalTransactionAmount(), CAmount{50'000});
+    QCOMPARE(model->currentTransaction()->total(), QStringLiteral("0.00050200 BTC"));
+    QCOMPARE(model->currentTransaction()->getTotalTransactionAmount(), CAmount{50'200});
 }
 
 void WalletQmlModelTests::walletQmlModelTransaction_reassignAmounts_excludesChangeOutput()

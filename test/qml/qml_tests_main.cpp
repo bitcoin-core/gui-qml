@@ -669,7 +669,6 @@ class MockSendRecipient : public QObject
     Q_PROPERTY(QString message MEMBER m_message NOTIFY paymentRequestChanged)
     Q_PROPERTY(bool hasPaymentRequest MEMBER m_has_request NOTIFY paymentRequestChanged)
     Q_PROPERTY(QString label MEMBER m_label NOTIFY labelChanged)
-    Q_PROPERTY(bool subtractFeeFromAmount READ subtractFeeFromAmount WRITE setSubtractFeeFromAmount NOTIFY subtractFeeFromAmountChanged)
     Q_PROPERTY(bool isValid MEMBER m_is_valid NOTIFY isValidChanged)
 
 public:
@@ -686,25 +685,16 @@ public:
     QString m_request_label, m_message;
     bool m_has_request{false};
     Q_INVOKABLE void applyPaymentRequest(const QString& address, const QString& label, const QString& message) { m_address.setAddress(address); m_request_label = label; m_message = message; m_has_request = true; Q_EMIT paymentRequestChanged(); }
-    bool m_subtract_fee_from_amount{false};
     bool m_is_valid{true};
 
     QObject* address() { return &m_address; }
     QObject* amount() { return &m_amount; }
-    bool subtractFeeFromAmount() const { return m_subtract_fee_from_amount; }
-    void setSubtractFeeFromAmount(bool value)
-    {
-        if (m_subtract_fee_from_amount == value) return;
-        m_subtract_fee_from_amount = value;
-        Q_EMIT subtractFeeFromAmountChanged();
-    }
 
 Q_SIGNALS:
     void paymentRequestChanged();
     void addressErrorChanged();
     void amountErrorChanged();
     void labelChanged();
-    void subtractFeeFromAmountChanged();
     void isValidChanged();
 };
 
@@ -1082,6 +1072,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
+    Q_PROPERTY(QObject* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
@@ -1115,6 +1106,9 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(int prepareTransactionCalls READ prepareTransactionCalls NOTIFY prepareTransactionCallsChanged)
     Q_PROPERTY(int scheduleFeeEstimatesCalls READ scheduleFeeEstimatesCalls NOTIFY scheduleFeeEstimatesCallsChanged)
     Q_PROPERTY(int sendTransactionCalls READ sendTransactionCalls NOTIFY sendTransactionCallsChanged)
+    Q_PROPERTY(bool sendDraftSweepsWallet MEMBER m_send_draft_sweeps_wallet NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(bool currentTransactionSweepsWallet MEMBER m_current_transaction_sweeps_wallet NOTIFY currentTransactionChanged)
+    Q_PROPERTY(int useMaximumCalls MEMBER m_use_maximum_calls NOTIFY walletInfoChanged)
     Q_PROPERTY(int broadcastCurrentTransactionCalls READ broadcastCurrentTransactionCalls NOTIFY broadcastCurrentTransactionCallsChanged)
     Q_PROPERTY(QString lastSavedPsbtPath MEMBER m_last_saved_psbt_path NOTIFY lastSavedPsbtPathChanged)
     Q_PROPERTY(int discardCurrentTransactionCalls READ discardCurrentTransactionCalls NOTIFY discardCurrentTransactionCallsChanged)
@@ -1150,6 +1144,8 @@ public:
     QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
     QObject* m_recipients{nullptr};
+    QObject* m_maximum_recipient{nullptr};
+    QMetaObject::Connection m_maximum_amount_connection;
     QObject* m_coins_list_model{nullptr};
     QObject* m_current_transaction{nullptr};
     QObject* m_current_payment_request{nullptr};
@@ -1242,10 +1238,33 @@ public:
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }
-    qint64 sendTotalSatoshi() const { const auto* r = qobject_cast<MockRecipientsModel*>(m_recipients); const auto* current = r ? qobject_cast<MockSendRecipient*>(r->current()) : nullptr; return r ? r->totalAmountSatoshi() + (current && current->subtractFeeFromAmount() ? 0 : estimatedFeeSatoshi()) : 0; }
+    qint64 sendTotalSatoshi() const { const auto* r = qobject_cast<MockRecipientsModel*>(m_recipients); return r ? r->totalAmountSatoshi() + estimatedFeeSatoshi() : 0; }
     qint64 availableSendBalanceSatoshi() const { return 1000000; }
-    Q_INVOKABLE void clearSelectedCoins() { if (auto* c = qobject_cast<MockCoinsListModel*>(m_coins_list_model)) c->reset(); }
-    Q_INVOKABLE void useMaximum() {}
+    QObject* maximumRecipient() const { return m_maximum_recipient; }
+    Q_INVOKABLE void clearMaximum()
+    {
+        if (!m_maximum_recipient) return;
+        QObject::disconnect(m_maximum_amount_connection);
+        m_maximum_recipient = nullptr;
+        Q_EMIT maximumRecipientChanged();
+    }
+    Q_INVOKABLE void clearSelectedCoins() { clearMaximum(); if (auto* c = qobject_cast<MockCoinsListModel*>(m_coins_list_model)) c->reset(); }
+    bool m_send_draft_sweeps_wallet{false};
+    bool m_current_transaction_sweeps_wallet{false};
+    int m_use_maximum_calls{0};
+    Q_INVOKABLE void useMaximum()
+    {
+        ++m_use_maximum_calls;
+        auto* recipients = qobject_cast<MockRecipientsModel*>(m_recipients);
+        auto* recipient = recipients ? qobject_cast<MockSendRecipient*>(recipients->current()) : nullptr;
+        if (recipient && recipient != m_maximum_recipient) {
+            clearMaximum();
+            m_maximum_recipient = recipient;
+            m_maximum_amount_connection = connect(&recipient->m_amount, &MockBitcoinAmount::amountChanged, this, [this] { clearMaximum(); });
+            Q_EMIT maximumRecipientChanged();
+        }
+        Q_EMIT walletInfoChanged();
+    }
     Q_INVOKABLE void setCustomFeeTarget(int target) { setTargetBlocks(target); setCustomFeeEnabled(true); setCustomFeeRate("2.5"); }
     int targetBlocks() const { return m_target_blocks; }
     QString estimatedFee() const
@@ -1552,6 +1571,7 @@ Q_SIGNALS:
     void customFeeRateValidChanged();
     void feeEstimatePendingChanged();
     void feeEstimateRevisionChanged();
+    void maximumRecipientChanged();
     void sendAmountExhaustsBalanceChanged();
     void prepareTransactionResultChanged();
     void sendTransactionResultChanged();

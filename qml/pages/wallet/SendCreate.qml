@@ -44,6 +44,23 @@ PageStack {
     signal transactionPrepared(bool multipleRecipientsEnabled)
     signal viewTransactionInActivity(string txid)
 
+    function confirmTransactionReview() {
+        if (!root.wallet) return
+        if (root.wallet.sendDraftSweepsWallet) reviewSweepAlert.open()
+        else root.prepareTransactionForReview()
+    }
+
+    function prepareTransactionForReview() {
+        root.clearPrepareTransactionError()
+        if (root.wallet.prepareTransaction()) root.openTransactionReview()
+        else if (root.wallet.transactionNeedsUnlock) {
+            reviewPassphrasePopup.errorText = ""
+            reviewPassphrasePopup.open()
+        } else root.prepareTransactionErrorText = root.wallet.transactionError.length > 0
+            ? root.displayTransactionError(root.wallet.transactionError)
+            : root.selectedInputsActive ? root.selectedInputsBalanceErrorText : root.availableBalanceErrorText
+    }
+
     function openTransactionReview() {
         transactionReviewPopup.reviewWallet = root.wallet
         transactionReviewPopup.importedReview = root.wallet.currentTransactionIsImportedPsbt === true
@@ -110,7 +127,11 @@ PageStack {
 
     // Re-check the clipboard whenever the Send tab becomes visible so the
     // banner appears even if the URI was copied before navigating here.
-    onVisibleChanged: if (visible) sendPage.checkClipboard()
+    onVisibleChanged: {
+        if (visible) sendPage.checkClipboard()
+        else reviewSweepAlert.close()
+    }
+    onWalletChanged: reviewSweepAlert.close()
 
     Connections {
         target: walletController
@@ -170,6 +191,7 @@ PageStack {
 
     Connections {
         target: root.wallet
+        function onCurrentTransactionChanged() { reviewSweepAlert.close() }
         function onCustomFeeEnabledChanged() {
             root.clearPrepareTransactionError()
         }
@@ -980,7 +1002,8 @@ PageStack {
                                 CoreText {
                                     objectName: "sendInputsSelectedText"
                                     visible: false
-                                    text: root.selectedInputsActive ? qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount)
+                                    //: Status in the Send form showing how many transaction inputs are selected.
+                                    text: root.selectedInputsActive ? (root.wallet.coinsListModel.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount))
                                         : qsTr("%1 inputs selected automatically").arg(root.wallet.estimatedInputCount)
                                 }
                                 OutlineButton {
@@ -1007,14 +1030,7 @@ PageStack {
                                 text: qsTr("Review Transaction")
                                 enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
                                     && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
-                                onClicked: {
-                                    root.clearPrepareTransactionError()
-                                    if (root.wallet.prepareTransaction()) root.openTransactionReview()
-                                    else if (root.wallet.transactionNeedsUnlock) { reviewPassphrasePopup.errorText = ""; reviewPassphrasePopup.open() }
-                                    else root.prepareTransactionErrorText = root.wallet.transactionError.length > 0
-                                        ? root.displayTransactionError(root.wallet.transactionError)
-                                        : root.selectedInputsActive ? root.selectedInputsBalanceErrorText : root.availableBalanceErrorText
-                                }
+                                onClicked: root.confirmTransactionReview()
                             }
                         }
                     }
@@ -1080,6 +1096,28 @@ PageStack {
                     }
                 }
             }
+        }
+    }
+
+    AlertPopup {
+        id: reviewSweepAlert
+        objectName: "sendReviewSweepAlert"
+        parent: Overlay.overlay
+        //: Confirmation before reviewing a transaction that sends the wallet's entire available balance.
+        title: qsTr("Use all available funds?")
+        //: %1 is the total recipient amount with its unit, excluding the transaction fee.
+        message: qsTr("You’re preparing to send all available funds (%1) from this wallet. Do you want to proceed?").arg(recipientsTotalAmount.displayWithUnit)
+        AlertAction {
+            //: Stay on the Send form without changing the recipients, amounts, or selected coins.
+            text: qsTr("Cancel")
+            role: AlertAction.Cancel
+            buttonObjectName: "sendReviewSweepCancelButton"
+        }
+        AlertAction {
+            //: Confirm using all available funds before unlocking the wallet and reviewing; this does not send it.
+            text: qsTr("Use maximum")
+            buttonObjectName: "sendReviewSweepConfirmButton"
+            onTriggered: root.prepareTransactionForReview()
         }
     }
 

@@ -105,7 +105,7 @@ Popup {
                 objectName: "coinSelectionDoneButton"
                 //: Apply these selected coins to the transaction.
                 text: qsTr("Use selected inputs")
-                enabled: browser.covered && browser.feeReady && root.editingCoins && root.editingCoins.selectedCoinsCount > 0
+                enabled: root.editingCoins && root.editingCoins.selectedCoinsCount > 0
                 onClicked: { root.editingCoins.applySelection(); root.close() }
             }
         }

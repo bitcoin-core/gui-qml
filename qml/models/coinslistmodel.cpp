@@ -164,12 +164,12 @@ void CoinsListModel::cancelSelection()
     if (!m_wallet_model || !m_previous_selection) return;
     const auto previous = *m_previous_selection;
     m_previous_selection.reset();
-    m_wallet_model->clearSelectedCoins();
+    std::vector<COutPoint> restored;
     for (const auto& outpoint : previous) {
         if (std::any_of(m_coins.begin(), m_coins.end(), [&](const auto& c) { return c.outpoint == outpoint; }))
-            m_wallet_model->selectCoin(outpoint);
+            restored.push_back(outpoint);
     }
-    refreshSelection();
+    m_wallet_model->setSelectedCoins(restored);
 }
 bool CoinsListModel::setCoinsLocked(const QStringList& ids, bool locked)
 {

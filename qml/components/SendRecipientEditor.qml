@@ -17,6 +17,9 @@ ColumnLayout {
     property alias addressField: addressField
     property alias noteField: noteField
     property alias amountField: amountField
+    readonly property bool sendingMaximum: root.wallet && root.recipient
+        && root.wallet.maximumRecipient === root.recipient
+    readonly property bool selectedCoins: root.wallet && root.wallet.coinsListModel.selectedCoinsCount > 0
     signal pasteRequested(string field)
     signal edited()
     signal removeRequested()
@@ -94,12 +97,18 @@ ColumnLayout {
         label: qsTr("Amount")
         labelSpacing: 6
         messageSpacing: 8
-        messageObjectName: "sendAmountErrorText"
+        messageObjectName: "sendAmountStatusText"
         fieldSurface: true
         fieldFocused: amountField.field.activeFocus
         errorText: root.recipient ? root.recipient.amountError : ""
-        actionText: qsTr("Use maximum")
+        //: Send-form action that fills the amount with the selected coins' total minus fees.
+        //: Without a selection, it selects all available coins first.
+        actionText: root.selectedCoins
+            ? qsTr("Use maximum from selected coins") : qsTr("Use maximum")
+        actionEnabled: root.wallet && !root.sendingMaximum
         actionObjectName: "sendUseMaximumButton"
+        supportingText: !root.sendingMaximum ? "" : root.selectedCoins
+            ? qsTr("Sending maximum from selected coins") : qsTr("Sending maximum available")
         onActionRequested: { root.wallet.useMaximum(); amountField.syncFromAmount(true) }
         BitcoinAmountInputField {
             id: amountField
@@ -116,14 +125,6 @@ ColumnLayout {
             onEditingFinished: root.edited()
             onPasteRequested: root.pasteRequested("amount")
         }
-    }
-
-    CheckBox {
-        objectName: "sendDeductFeeCheckbox"
-        Layout.fillWidth: true
-        text: qsTr("Deduct fee from this recipient")
-        checked: root.recipient ? root.recipient.subtractFeeFromAmount : false
-        onToggled: { root.recipient.subtractFeeFromAmount = checked; root.edited() }
     }
 
     Separator { Layout.fillWidth: true }
@@ -155,4 +156,5 @@ ColumnLayout {
         text: qsTr("Remove")
         onClicked: root.removeRequested()
     }
+
 }

@@ -61,7 +61,6 @@ Q_SIGNALS:
     void currentRecipientChanged();
     void countChanged();
     void totalAmountChanged();
-    void subtractFeeFromAmountChanged();
     void listCleared();
     void validationChanged();
 

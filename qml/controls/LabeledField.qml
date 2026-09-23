@@ -18,6 +18,7 @@ Control {
     property string copyButtonObjectName: ""
     property string copyButtonText: qsTr("Copy")
     property string actionText: ""
+    property bool actionEnabled: true
     property url actionIconSource: ""
     property string actionObjectName: ""
     property string supportingText: ""
@@ -89,7 +90,7 @@ Control {
                     ? root.actionObjectName
                     : root.objectName.length > 0 ? root.objectName + "ActionButton" : ""
                 visible: root.actionText.length > 0
-                enabled: root.enabled
+                enabled: root.enabled && root.actionEnabled
                 text: root.actionText
                 iconSource: root.actionIconSource
                 onClicked: root.actionRequested()

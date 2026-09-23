@@ -37,7 +37,6 @@ TestCase {
         testSendRecipient.address.setAddress("bcrt1qsendtoaddress")
         testSendRecipient.amount.display = "0.00000000"
         testSendRecipient.label = ""
-        testSendRecipient.subtractFeeFromAmount = false
         testSendRecipient.isValid = true
         testRecipientsModel.allValid = true
         testRecipientsModel.validationError = ""
@@ -120,9 +119,9 @@ TestCase {
         verify(findChild(page, "feeSelectionEstimateLabel") !== null)
         verify(findChild(page, "feeSelectionCustomRateInput") !== null)
         verify(findChild(page, "feeSelectionCustomEstimateLabel") !== null)
-        verify(findChild(page, "feeSelectionIncludeFeeToggle") !== null)
-        verify(findChild(page, "sendFeeIncludedNote") !== null)
-        verify(findChild(page, "sendFeeIncludedNoteText") !== null)
+        compare(findChild(page, "feeSelectionIncludeFeeToggle"), null)
+        compare(findChild(page, "sendFeeIncludedNote"), null)
+        compare(findChild(page, "sendFeeIncludedNoteText"), null)
         verify(findChild(page, "sendPrepareTransactionError") !== null)
         verify(findChild(page, "sendPrepareTransactionErrorText") !== null)
         verify(findChild(page, "sendTransactionSectionHeader") !== null)
@@ -474,42 +473,6 @@ TestCase {
 
         customInput.text = "2"
         tryCompare(continueButton, "enabled", true)
-    }
-
-    function test_send_include_fee_note_tracks_recipient_state() {
-        const page = createTemporaryObject(sendComponent, this)
-        verify(page !== null)
-
-        const includedFeeNote = findChild(page, "sendFeeIncludedNote")
-        const includedFeeNoteText = findChild(page, "sendFeeIncludedNoteText")
-        verify(includedFeeNote !== null)
-        verify(includedFeeNoteText !== null)
-
-        compare(includedFeeNote.visible, false)
-        compare(includedFeeNoteText.text, "Fee is included in the amount")
-    }
-
-    function test_send_include_fee_toggle_updates_recipient_and_schedules_fee_estimate() {
-        const page = createTemporaryObject(sendComponent, this)
-        verify(page !== null)
-
-        const popup = findChild(page, "feeSelectionPopup")
-        const toggle = findChild(page, "feeSelectionIncludeFeeToggle")
-        const note = findChild(page, "sendFeeIncludedNote")
-        verify(popup !== null)
-        verify(toggle !== null)
-        verify(note !== null)
-
-        const callsBefore = testWalletModel.scheduleFeeEstimatesCalls
-
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        mouseClick(toggle, toggle.width / 2, toggle.height / 2)
-
-        compare(testSendRecipient.subtractFeeFromAmount, true)
-        tryCompare(testWalletModel, "scheduleFeeEstimatesCalls", callsBefore + 1)
-        tryCompare(popup, "visible", false)
     }
 
     function test_send_uri_import_schedules_fee_estimate() {

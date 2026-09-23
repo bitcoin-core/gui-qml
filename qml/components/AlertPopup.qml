@@ -19,13 +19,24 @@ Popup {
     default property alias actions: actionStore.data
 
     property var visibleActions: [defaultAction]
+    readonly property real minimumActionWidth: visibleActions.reduce(function(width, action) {
+        return Math.max(width, Math.ceil(actionFontMetrics.advanceWidth(action.text)) + 40)
+    }, 0)
+    readonly property real horizontalActionsWidth: minimumActionWidth * visibleActions.length
+        + 10 * Math.max(0, visibleActions.length - 1)
+
+    property FontMetrics actionMetrics: FontMetrics {
+        id: actionFontMetrics
+        font: Theme.text.buttonStrong.font
+    }
 
     modal: true
     dim: true
     focus: true
     closePolicy: Popup.NoAutoClose
     padding: 0
-    width: parent ? Math.min(parent.width - 40, 360) : 360
+    implicitWidth: Math.max(360, horizontalActionsWidth + 40)
+    width: parent ? Math.min(parent.width - 40, implicitWidth) : implicitWidth
     implicitHeight: columnLayout.implicitHeight
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
@@ -152,20 +163,22 @@ Popup {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        // The action buttons live in a Row positioner, not a RowLayout, on
+        // The action buttons live in a Flow positioner, not a RowLayout, on
         // purpose. A Repeater directly inside a Quick Layout hits a Qt 6.4
         // use-after-free in QGridLayoutEngine when the layout rearranges while
         // the Repeater is rebuilding a delegate (for example, navigating to the
         // Send tab resizes the popup, which re-fires its parent-bound width and
         // rearranges this row). A positioner never hands delegates to the grid
-        // layout engine, so the buttons are given equal widths explicitly.
-        Row {
+        // layout engine. Keep equal widths and stack actions when their full
+        // labels cannot fit side by side in the available space.
+        Flow {
             id: actionRow
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             Layout.bottomMargin: 20
             spacing: 10
+            readonly property bool stacked: width < root.horizontalActionsWidth
 
             Repeater {
                 model: root.visibleActions.length
@@ -180,7 +193,8 @@ Popup {
                     readonly property bool neutralAction: alertAction.role === AlertAction.Cancel
                         || alertAction.role === AlertAction.Neutral
 
-                    width: Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
+                    width: actionRow.stacked ? actionRow.width
+                        : Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
                     height: 46
 
                     function triggerAction() {
@@ -203,6 +217,7 @@ Popup {
 
                     ContinueButton {
                         anchors.fill: parent
+                        horizontalPadding: 20
                         visible: !actionDelegate.neutralAction
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text

@@ -66,6 +66,7 @@ AbstractButton {
         RowLayout {
             id: contentRow
             anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width)
             spacing: root.text.length > 0 && root.iconSource.toString().length > 0
                 ? (root.large ? 4 : 8) : 0
             Icon {
@@ -75,6 +76,10 @@ AbstractButton {
                 color: root.textColor
             }
             CoreText {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                wrap: false
+                elide: Text.ElideRight
                 visible: root.text.length > 0
                 text: root.text
                 font: Qt.font({

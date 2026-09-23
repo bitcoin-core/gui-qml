@@ -1045,21 +1045,12 @@ PageStack {
                     id: feeSelection
                     Layout.fillWidth: true
                     walletModel: root.wallet
-                    includeFeeInAmount: root.recipient ? root.recipient.subtractFeeFromAmount : false
                     currentTarget: root.wallet ? root.wallet.targetBlocks : 2
 
                     onFeeChanged: function(target) {
                         root.clearPrepareTransactionError()
                         if (root.wallet) {
                             root.wallet.targetBlocks = target
-                        }
-                    }
-
-                    onIncludeFeeInAmountToggled: function(checked) {
-                        root.clearPrepareTransactionError()
-                        if (root.recipient && root.recipient.subtractFeeFromAmount !== checked) {
-                            root.recipient.subtractFeeFromAmount = checked
-                            root.scheduleFeeEstimates()
                         }
                     }
                 }
@@ -1103,31 +1094,6 @@ PageStack {
                 Separator {
                     visible: sendOptionsPopup.multipleRecipientsEnabled
                     Layout.fillWidth: true
-                }
-
-                RowLayout {
-                    objectName: "sendFeeIncludedNote"
-                    Layout.fillWidth: true
-                    Layout.topMargin: visible ? 12 : 0
-                    visible: root.recipient && root.recipient.subtractFeeFromAmount
-                    spacing: 8
-
-                    Icon {
-                        source: "image://images/check"
-                        size: 18
-                        color: Theme.color.neutral7
-                    }
-
-                    CoreText {
-                        objectName: "sendFeeIncludedNoteText"
-                        Layout.fillWidth: true
-                        text: qsTr("Fee is included in the amount")
-                        font: Theme.text.description.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
-                        color: Theme.color.neutral7
-                        horizontalAlignment: Text.AlignLeft
-                    }
                 }
 
                 RowLayout {
