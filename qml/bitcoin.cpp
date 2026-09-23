@@ -26,6 +26,7 @@
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
+#include <qml/paymenturihandler.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
@@ -532,6 +533,9 @@ int QmlGuiMain(int argc, char* argv[])
     BitcoinUriModel bitcoin_uri_model;
     RegisterQmlTypes(app_mode, build_info, clipboard, bitcoin_uri_model);
 
+    PaymentUriHandler payment_uri_handler;
+    payment_uri_handler.queueRequests(payment_uri_args);
+
     const QString cli_lang = QString::fromStdString(gArgs.GetArg("-lang", ""));
     const QString startup_language = cli_lang.isEmpty()
         ? QSettings().value(SettingsKeys::LANGUAGE, QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(gArgs.GetChainTypeString()))).toString()
@@ -703,6 +707,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);
     engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
+    engine->rootContext()->setContextProperty("paymentUriHandler", &payment_uri_handler);
 
     RpcConsoleModel rpc_console_model{*node};
     QObject::connect(&node_model, &NodeModel::nodeInitialized,
