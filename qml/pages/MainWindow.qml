@@ -109,16 +109,19 @@ ApplicationWindow {
         if (walletCreationModal.visible) {
             return
         }
-        if (!appWindow.desktopWalletMode) {
-            return
-        }
-        // selectedWallet is never null: an empty model stands in until a wallet
-        // is open. Every swap before initialization resets the Send form.
-        if (!walletController.initialized || !walletController.isWalletLoaded) {
+        if (!appWindow.desktopWalletMode || !walletController.initialized) {
             return
         }
         const shell = main.depth === 1 ? main.currentItem : null
         if (!shell || typeof shell.applyIncomingPaymentUri !== "function") {
+            return
+        }
+        // selectedWallet is never null: an empty model stands in until a wallet
+        // is open. Every swap before initialization resets the Send form.
+        if (!walletController.isWalletLoaded) {
+            return
+        }
+        if (!shell.canAcceptPaymentUri()) {
             return
         }
         appWindow.paymentUriDeliveryInFlight = true
@@ -126,6 +129,10 @@ ApplicationWindow {
     }
 
     function finishPendingPaymentUri(outcome) {
+        if (outcome === "available") {
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
+            return
+        }
         if (!appWindow.paymentUriDeliveryInFlight) {
             return
         }

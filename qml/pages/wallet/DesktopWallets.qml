@@ -83,6 +83,10 @@ Page {
         activityTabButton.checked = true
     }
 
+    function canAcceptPaymentUri() {
+        return walletController.isWalletLoaded && sendPage.canAcceptPaymentRequest()
+    }
+
     function applyIncomingPaymentUri(uri, source) {
         sendTabButton.checked = true
         sendPage.applyPaymentRequest(uri, source)
