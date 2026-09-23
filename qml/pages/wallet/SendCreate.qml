@@ -84,9 +84,19 @@ PageStack {
     }
 
     function applyPaymentRequest(uri, source) {
-        root.returnToSendForm()
         Qt.callLater(function() { sendPage.handleIncomingPaymentUri(uri, source) })
     }
+
+    // Coin selection and an open review both own the form; a request waits.
+    function canAcceptPaymentRequest() {
+        return root.wallet !== null
+            && root.recipient !== null
+            && root.depth === 1
+            && !paymentRequestReviewPopup.visible
+            && !paymentUriOverwritePopup.visible
+    }
+
+    onDepthChanged: if (root.depth === 1) root.paymentRequestOutcome("available")
 
     function clearPrepareTransactionError() {
         if (prepareTransactionErrorText.length > 0) {
@@ -156,8 +166,10 @@ PageStack {
             sendPage.m_dismissedUri = ""
             sendPage.m_applyingUri = false
             sendPage.m_paymentUriInterrupted = paymentUriOverwritePopup.visible
+                || paymentRequestReviewPopup.visible
             sendPage.clearPendingPaymentUriPaste()
             paymentUriOverwritePopup.close()
+            paymentRequestReviewPopup.close()
         }
     }
 
@@ -481,7 +493,23 @@ PageStack {
         }
 
         function handleIncomingPaymentUri(text, source) {
-            handlePaymentUriRequest(text, source, "")
+            const result = BitcoinUri.parseBitcoinUri(text)
+            if (!result.success) {
+                applyParsedPaymentRequest(result, source)
+                root.paymentRequestOutcome("rejected")
+                return
+            }
+            m_pendingPastedPaymentRequest = result
+            m_pendingPastedPaymentRequestText = text
+            m_pendingPastedPaymentRequestSource = source
+            paymentRequestReviewPopup.source = source
+            paymentRequestReviewPopup.address = result.address
+            paymentRequestReviewPopup.hasAmount = result.hasAmount
+            paymentRequestReviewPopup.amountSatoshi = result.hasAmount ? result.amountSats : 0
+            paymentRequestReviewPopup.requestLabel = result.hasLabel ? result.label : ""
+            paymentRequestReviewPopup.requestMessage = result.hasMessage ? result.uriMessage : ""
+            paymentRequestReviewPopup.replacesValues = paymentUriConflicts(result, "")
+            paymentRequestReviewPopup.open()
         }
 
         function handlePaymentUriRequest(text, source, sourceField) {
@@ -599,6 +627,26 @@ PageStack {
         function applyPaymentRequestFromFile(path) {
             const result = BitcoinUri.parseBitcoinUriFromFile(path)
             applyParsedPaymentRequest(result, qsTr("file"))
+        }
+
+        PaymentRequestReviewPopup {
+            id: paymentRequestReviewPopup
+            objectName: "sendPaymentRequestReviewPopup"
+            parent: Overlay.overlay
+
+            onClosed: {
+                const accept = accepted
+                const interrupted = sendPage.m_paymentUriInterrupted
+                const result = sendPage.m_pendingPastedPaymentRequest
+                const text = sendPage.m_pendingPastedPaymentRequestText
+                const source = sendPage.m_pendingPastedPaymentRequestSource
+                sendPage.m_paymentUriInterrupted = false
+                sendPage.clearPendingPaymentUriPaste()
+                if (accept && result) {
+                    sendPage.applyPastedPaymentRequest(result, text, source)
+                }
+                root.paymentRequestOutcome(interrupted ? "interrupted" : "resolved")
+            }
         }
 
         AlertPopup {
