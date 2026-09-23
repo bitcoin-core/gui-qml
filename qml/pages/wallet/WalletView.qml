@@ -43,6 +43,7 @@ Item {
     signal tabRequested(int tab)
     signal settingsRequested()
     signal walletSelectionRequested()
+    signal paymentRequestOutcome(string outcome)
 
     function requestTab(tab) {
         root.currentTab = tab
@@ -164,8 +165,15 @@ Item {
         }
     }
 
-    onActiveChanged: if (!active) root.closeOwnedPopups()
-    Component.onDestruction: root.closeOwnedPopups()
+    onActiveChanged: {
+        if (active) return
+        sendPage.interruptPaymentRequest()
+        root.closeOwnedPopups()
+    }
+    Component.onDestruction: {
+        sendPage.interruptPaymentRequest()
+        root.closeOwnedPopups()
+    }
 
     Connections {
         target: walletController
@@ -191,8 +199,13 @@ Item {
         SendCreate {
             id: sendPage
             wallet: root.wallet
-            onVisibleChanged: if (!visible) root.pageHidden(sendPage)
+            onVisibleChanged: {
+                if (visible) return
+                if (!root.active) sendPage.interruptPaymentRequest()
+                root.pageHidden(sendPage)
+            }
             onViewTransactionInActivity: (txid) => root.navigateToTransaction(txid)
+            onPaymentRequestOutcome: (outcome) => root.paymentRequestOutcome(outcome)
         }
         ReceivePage {
             id: receivePage
