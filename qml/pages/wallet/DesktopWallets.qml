@@ -22,7 +22,6 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
-    signal sendTransaction(bool multipleRecipientsEnabled)
 
     function navigateToTransaction(txid, outputIndex) {
         activityTabButton.checked = true
@@ -354,9 +353,6 @@ Page {
         }
         SendCreate {
             id: sendPage
-            onTransactionPrepared: (multipleRecipientsEnabled) => {
-                root.sendTransaction(multipleRecipientsEnabled)
-            }
             onViewTransactionInActivity: (txid) => {
                 root.navigateToTransaction(txid)
             }

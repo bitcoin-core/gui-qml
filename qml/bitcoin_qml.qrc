@@ -8,7 +8,6 @@
         <file>components/BannedPeersPopup.qml</file>
         <file>components/BitcoinAddressDisplayField.qml</file>
         <file>components/BitcoinAddressInputField.qml</file>
-        <file>components/BitcoinAmountDisplayField.qml</file>
         <file>components/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
         <file>components/BlockCounter.qml</file>
@@ -73,8 +72,6 @@
         <file>components/TransactionFlowLayout.js</file>
         <file>components/LabeledValueField.qml</file>
         <file>components/LabeledBitcoinAddressField.qml</file>
-        <file>components/MultipleRecipientsSummary.qml</file>
-        <file>components/SingleRecipientSummary.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AddWalletButton.qml</file>
@@ -203,6 +200,7 @@
         <file>pages/wallet/CoinSelection.qml</file>
         <file>pages/wallet/SendCreate.qml</file>
         <file>pages/wallet/SendComplete.qml</file>
+        <file>pages/wallet/SpeedUpComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
@@ -218,9 +216,6 @@
         <file>pages/wallet/WatchOnlyXpub.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
-        <file>pages/wallet/Send.qml</file>
-        <file>pages/wallet/SendResult.qml</file>
-        <file>pages/wallet/SendReview.qml</file>
         <file>pages/wallet/SendTransactionReview.qml</file>
         <file>pages/wallet/SpeedUpOverlay.qml</file>
         <file>pages/wallet/SignVerifyMessage.qml</file>

@@ -393,7 +393,7 @@ def case_created_wallet_send(harness, checkpoints):
 
     before = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)["txcount"]
     gui.click("sendReviewSendButton")
-    gui.wait_for_property("sendResultPopup", "opened", True, timeout_ms=20000)
+    gui.wait_for_page("sendCompletePage", timeout_ms=20000)
     checkpoints.checkpoint("prepared transaction broadcast", gui)
 
     after = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)["txcount"]
@@ -432,7 +432,7 @@ def case_locked_review_fallback(harness, checkpoints):
     checkpoints.checkpoint("review rebuilt and wallet relocked", gui)
 
     gui.click("sendReviewSendButton")
-    gui.wait_for_property("sendResultPopup", "opened", True, timeout_ms=20000)
+    gui.wait_for_page("sendCompletePage", timeout_ms=20000)
     checkpoints.checkpoint("fallback transaction broadcast", gui)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
 

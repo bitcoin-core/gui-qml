@@ -27,10 +27,6 @@ TestCase {
         SendTransactionReview { wallet: testWalletModel }
     }
 
-    SignalSpy {
-        id: transactionPreparedSpy
-    }
-
     function init() {
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
@@ -408,10 +404,6 @@ TestCase {
         verify(prepareErrorText !== null)
 
         testSendRecipient.isValid = true
-        transactionPreparedSpy.target = page
-        transactionPreparedSpy.signalName = "transactionPrepared"
-        transactionPreparedSpy.clear()
-
         const callsBefore = testWalletModel.prepareTransactionCalls
         compare(page.prepareTransactionErrorText, "")
         compare(prepareErrorText.text, "")
@@ -419,7 +411,6 @@ TestCase {
         testWalletModel.prepareTransactionResult = false
         continueButton.clicked()
         compare(testWalletModel.prepareTransactionCalls, callsBefore + 1)
-        compare(transactionPreparedSpy.count, 0)
         compare(page.prepareTransactionErrorText, "Amount plus fee exceeds available balance. Some of your coins are locked.")
         compare(prepareErrorText.text, "Amount plus fee exceeds available balance. Some of your coins are locked.")
 
@@ -427,14 +418,12 @@ TestCase {
         testCoinsListModel.toggleCoinSelection(0)
         continueButton.clicked()
         compare(testWalletModel.prepareTransactionCalls, callsBefore + 2)
-        compare(transactionPreparedSpy.count, 0)
         compare(page.prepareTransactionErrorText, "Selected inputs do not cover the amount plus fee")
         compare(prepareErrorText.text, "Selected inputs do not cover the amount plus fee")
 
         testWalletModel.prepareTransactionResult = true
         continueButton.clicked()
         compare(testWalletModel.prepareTransactionCalls, callsBefore + 3)
-        compare(transactionPreparedSpy.count, 0)
         tryCompare(findChild(page, "transactionReviewPopup"), "opened", true)
         compare(page.prepareTransactionErrorText, "")
         compare(prepareErrorText.text, "")
@@ -536,7 +525,7 @@ TestCase {
 
         // The mocked amount input still emits one schedule request when the
         // imported amount updates the bound field. The explicit URI-import
-        // refresh added in Send.qml should contribute one more call.
+        // Refreshing the send form should contribute one more call.
         tryVerify(function() { return testWalletModel.scheduleFeeEstimatesCalls > callsBefore })
         compare(testSendRecipient.address.address, "bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9")
         compare(testSendRecipient.amount.display, "0.02000000")

@@ -118,32 +118,6 @@ TestCase {
         }
     }
 
-    Component {
-        id: multipleRecipientsSummaryComponent
-
-        MultipleRecipientsSummary {
-            width: 450
-            wallet: null
-            transaction: null
-            recipients: ListModel {
-                ListElement {
-                    address: "abcd efgh ... uvwx yz12"
-                    label: ""
-                    amount: "1000"
-                    formattedAddress: "abcd efgh ijkl mnop qrst uvwx yz12"
-                    amountUnitLabel: "sats"
-                }
-                ListElement {
-                    address: "2345 6789 ... uvwx yz12"
-                    label: "Alice"
-                    amount: "2000"
-                    formattedAddress: "2345 6789 abcd efgh ijkl mnop qrst uvwx yz12"
-                    amountUnitLabel: "sats"
-                }
-            }
-        }
-    }
-
     function test_addressDetails_request_button_views_existing_request() {
         const details = createTemporaryObject(detailsComponent, host)
         verify(details !== null)
@@ -198,40 +172,6 @@ TestCase {
         compare(field.expanded, false)
         compare(addressText.text, "abcd efgh ... mnop qrst")
         compare(findObject(field, "toggleAddressFieldText"), addressText)
-    }
-
-    function test_multipleRecipients_toggle_each_address_in_place() {
-        const summary = createTemporaryObject(multipleRecipientsSummaryComponent, host)
-        const referenceLabel = createTemporaryObject(addressLabelComponent, host)
-        verify(summary !== null)
-        verify(referenceLabel !== null)
-
-        tryVerify(function() {
-            return findObject(summary, "multipleSendReviewRecipient0AddressText") !== null
-                && findObject(summary, "multipleSendReviewRecipient1AddressText") !== null
-        })
-        const firstAddress = findObject(summary, "multipleSendReviewRecipient0AddressText")
-        const secondAddress = findObject(summary, "multipleSendReviewRecipient1AddressText")
-        const secondLabel = findObject(summary, "multipleSendReviewRecipient1PrimaryText")
-        const referenceText = findObject(referenceLabel, "referenceAddressLabelValue")
-        verify(secondLabel !== null)
-        verify(referenceText !== null)
-        compare(firstAddress.font.family, referenceText.font.family)
-        compare(secondAddress.font.family, referenceText.font.family)
-        compare(firstAddress.text, "abcd efgh ... uvwx yz12")
-        compare(secondLabel.text, "Alice")
-        compare(secondAddress.text, "2345 6789 ... uvwx yz12")
-
-        mouseClick(firstAddress, firstAddress.width / 2, firstAddress.height / 2)
-        compare(firstAddress.text, "abcd efgh ijkl mnop qrst uvwx yz12")
-        mouseClick(firstAddress, firstAddress.width / 2, firstAddress.height / 2)
-        compare(firstAddress.text, "abcd efgh ... uvwx yz12")
-
-        mouseClick(secondAddress, secondAddress.width / 2, secondAddress.height / 2)
-        compare(secondLabel.text, "Alice")
-        compare(secondAddress.text, "2345 6789 abcd efgh ijkl mnop qrst uvwx yz12")
-        mouseClick(secondAddress, secondAddress.width / 2, secondAddress.height / 2)
-        compare(secondAddress.text, "2345 6789 ... uvwx yz12")
     }
 
     function test_addressLabel_truncatesVisuallyButRetainsFullAddress() {

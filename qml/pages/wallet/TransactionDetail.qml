@@ -249,20 +249,18 @@ Page {
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
         onBumpSucceeded: {
-            const stack = root.StackView.view
-            if (!stack) return
-            const page = stack.push("SendResult.qml", {
-                resultType: SendResult.ResultType.SpeedUp,
-                txid: speedUpOverlay.newTxid
-            })
-            page.done.connect(function() {
-                if (root.wallet) root.wallet.transactionActivityModel.reload()
-                stack.pop(null)
-            })
-            page.viewNewTransaction.connect(function(txid) {
-                if (root.wallet) root.wallet.transactionActivityModel.reload()
-                root.showTransaction(txid)
-            })
+            speedUpComplete.txid = speedUpOverlay.newTxid
+            speedUpComplete.open()
+        }
+    }
+
+    SpeedUpComplete {
+        id: speedUpComplete
+        onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
+        onDone: close()
+        onViewNewTransaction: function(txid) {
+            close()
+            root.showTransaction(txid)
         }
     }
 }

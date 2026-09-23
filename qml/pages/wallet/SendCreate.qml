@@ -41,7 +41,6 @@ PageStack {
         ? recipientValidationError
         : (feeBalanceErrorText.length > 0 ? feeBalanceErrorText : prepareTransactionErrorText)
 
-    signal transactionPrepared(bool multipleRecipientsEnabled)
     signal viewTransactionInActivity(string txid)
 
     function confirmTransactionReview() {

@@ -363,9 +363,6 @@ ApplicationWindow {
             onAddWallet: {
                 main.push(createWalletWizard, { "launchContext": CreateWalletWizard.Context.Main })
             }
-            onSendTransaction: {
-                main.push(sendReviewPage)
-            }
         }
     }
 
@@ -374,42 +371,6 @@ ApplicationWindow {
         CreateWalletWizard {
             onFinished: {
                 main.pop()
-            }
-        }
-    }
-
-    Component {
-        id: sendReviewPage
-        SendReview {
-            onBack: {
-                main.pop()
-            }
-            onTransactionSent: (txid) => {
-                const externalSignerWallet = walletController.selectedWallet.hasExternalSigner
-                const descriptionText = externalSignerWallet
-                    ? qsTr("Approved on external signer. It should be confirmed within the next 10 minutes.")
-                    : qsTr("Based on your selected fee, it should be confirmed within the next 10 minutes.")
-                const actionText = externalSignerWallet ? qsTr("Done") : qsTr("Close window")
-                walletController.selectedWallet.recipients.clear()
-                main.push(sendResultPage, {
-                    "descriptionText": descriptionText,
-                    "actionText": actionText,
-                    "txid": txid
-                })
-            }
-        }
-    }
-
-    Component {
-        id: sendResultPage
-        SendResult {
-            onDone: {
-                main.pop(null)
-            }
-            onViewNewTransaction: (txid) => {
-                const walletPage = main.get(0)
-                walletPage.navigateToTransaction(txid)
-                main.pop(null)
             }
         }
     }

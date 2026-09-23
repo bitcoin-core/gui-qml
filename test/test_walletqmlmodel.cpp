@@ -3419,7 +3419,7 @@ void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenT
     QCOMPARE(model->importPsbtFromFile(path), WalletQmlModel::PsbtImportResult::TransactionAlreadyKnown);
     QCOMPARE(model->importedPsbt()->matchedTxid(), QString::fromStdString(psbt_txid.GetHex()));
 
-    // The review/SendReview flow must be skipped entirely.
+    // The review flow must be skipped entirely.
     QVERIFY(wallet->fill_psbt_sign_args.empty());
     QVERIFY(model->currentTransaction() == nullptr);
     QCOMPARE(model->sendRecipientList()->count(), 1);

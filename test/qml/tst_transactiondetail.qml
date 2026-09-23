@@ -234,6 +234,20 @@ TestCase {
         mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
         tryCompare(overlay, "visible", false)
     }
+    function test_fee_bump_success_opens_modal_completion() {
+        const page = createDetail()
+        findChild(page, "speedUpBanner").primaryClicked()
+        const overlay = findChild(page, "speedUpOverlay")
+        tryCompare(overlay, "opened", true)
+        mouseClick(findChild(overlay.contentItem, "updateTransactionButton"))
+
+        const complete = findChild(page, "speedUpCompletePopup")
+        verify(complete !== null)
+        tryCompare(complete, "opened", true)
+        compare(complete.txid, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+        findChild(complete.contentItem, "speedUpCompleteDoneButton").clicked()
+        tryCompare(complete, "opened", false)
+    }
     function test_full_width_scroll_and_narrow_layout() {
         const page = createDetail(transaction(), {width: 390, height: 650})
         const scroll = findChild(page, "transactionDetailScroll")
