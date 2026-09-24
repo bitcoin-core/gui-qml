@@ -381,12 +381,15 @@ def run_test():
         gui.wait_for_property(f"activityItem_{txid}", "visible", True, timeout_ms=30000)
         gui.click_list_item("activityListView", 0, "activityRowOpenButton")
         gui.wait_for_page("activityDetailsPage")
+        gui.settle(stack_view_names=("activityStack",))
+        gui.wait_for_property("activityDetailsPage", "detailsLoading", False, timeout_ms=30000)
+        gui.wait_for_property("transactionFlowRequest_1", "visible", True)
         gui.click("transactionFlowRequest_1")
-        gui.wait_for_property("paymentRequestModal", "opened", True)
+        gui.wait_for_property("transactionPaymentRequestModal", "opened", True)
         assert gui.get_property("activityStack", "depth") == 2
         assert gui.get_property("requestPaymentNoteRow", "value") == "Partial payment received"
         assert gui.get_property("requestPaymentMessageRow", "value") == "pizza"
-        gui.click("paymentRequestModalClose")
+        gui.invoke("transactionPaymentRequestModal", "close")
         gui.wait_for_page("activityDetailsPage")
 
         # Reopening after restart retains the receipt lock and edited note.
@@ -400,7 +403,11 @@ def run_test():
         gui.wait_for_property(f"activityItem_{txid}", "visible", True, timeout_ms=30000)
         gui.click_list_item("activityListView", 0, "activityRowOpenButton")
         gui.wait_for_page("activityDetailsPage")
+        gui.settle(stack_view_names=("activityStack",))
+        gui.wait_for_property("activityDetailsPage", "detailsLoading", False, timeout_ms=30000)
+        gui.wait_for_property("transactionFlowRequest_1", "visible", True)
         gui.click("transactionFlowRequest_1")
+        gui.wait_for_property("transactionPaymentRequestModal", "opened", True)
         gui.wait_for_property("paymentRequestStatus", "text", "Payment received")
         assert not gui.get_property("requestPaymentQRImage", "visible")
         assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00003000"
@@ -408,7 +415,7 @@ def run_test():
         gui.click("paymentRequestMoreButton")
         gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
         gui.click("requestPaymentAgainMenuButton")
-        gui.wait_for_property("paymentRequestModal", "visible", False)
+        gui.wait_for_property("transactionPaymentRequestModal", "visible", False)
         gui.wait_for_property("receiveTabButton", "checked", True)
         gui.wait_for_property("requestPaymentNoteSelfInput", "text", "Partial payment received")
         assert gui.get_property("requestHistoryCount", "count") == 1
@@ -448,11 +455,17 @@ def run_test():
         traceback.print_exc()
         gui = harness.driver
         if gui is not None:
-            gui.save_screenshot(os.path.join(harness.tmpdir, "receive-failure.png"))
-            dump_qml_tree(gui)
+            try:
+                gui.save_screenshot(os.path.join(harness.tmpdir, "receive-failure.png"))
+                dump_qml_tree(gui)
+            except (OSError, QmlDriverError):
+                # The GUI may have crashed; still report its process output.
+                pass
         proc = harness.gui_process
         _stop_gui(harness)
         gui_output = harness.process_output(proc)
+        if proc is not None:
+            print(f"GUI process exit code: {proc.returncode}", file=sys.stderr)
         if gui_output:
             print("\n--- GUI process output ---", file=sys.stderr)
             print(gui_output, file=sys.stderr)

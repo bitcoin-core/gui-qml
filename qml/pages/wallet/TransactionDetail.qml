@@ -103,7 +103,7 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; wallet: root.wallet }
+    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
 
     ScrollView {
         id: scroll

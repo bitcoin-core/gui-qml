@@ -519,7 +519,7 @@ TestCase {
         tryCompare(page.currentItem, "txid", "batch")
         const detail = page.currentItem
         detail.openPaymentRequestDetail("invoice")
-        const detailModal = findChild(detail, "paymentRequestModal")
+        const detailModal = findChild(detail, "transactionPaymentRequestModal")
         tryCompare(detailModal, "opened", true)
         compare(page.depth, 2)
         compare(page.currentItem, detail)
@@ -863,13 +863,15 @@ TestCase {
     function test_scrolls_from_page_side_margins(data) {
         const page = createPage({width: data.pageWidth, height: 600})
         const list = findChild(page, "activityListView")
-        list.positionViewAtBeginning()
-        waitForRendering(page)
-        verify(list.contentHeight > list.height)
         const row = findRow(page, "receive")
         const inset = row.mapToItem(page, 0, 0).x
         verify(inset > 0)
-        const x = data.rightSide ? page.width - inset / 2 : inset / 2
+        list.positionViewAtBeginning()
+        waitForRendering(page)
+        verify(list.contentHeight > list.height)
+        // Stay in the margin without landing on the scrollbar at the outer edge.
+        const marginOffset = Math.min(2, inset / 4)
+        const x = data.rightSide ? page.width - inset + marginOffset : inset - marginOffset
         const y = list.mapToItem(page, 0, list.height / 2).y
         const start = list.contentY
         mouseMove(page, x, y)

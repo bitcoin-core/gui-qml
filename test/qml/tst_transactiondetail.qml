@@ -208,7 +208,7 @@ TestCase {
         compare(findChild(page, "transactionFlowOutput_1").requests[0].requestId, "paid")
         findChild(page, "transactionDetailFlow").paymentRequestRequested("paid")
         tryCompare(testWalletModel, "lastLoadedPaymentRequestDetailId", "paid")
-        const modal = findChild(page, "paymentRequestModal")
+        const modal = findChild(page, "transactionPaymentRequestModal")
         tryCompare(modal, "opened", true)
         compare(stack.depth, 2)
         testTransactionActivityModel.setRows([Object.assign({}, data, {depth: 6})])

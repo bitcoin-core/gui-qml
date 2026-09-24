@@ -57,7 +57,7 @@ void QmlInitExecutorApiTests::initializeEmitsResultAndRunsOffMainThread()
 
     executor.initialize();
 
-    QVERIFY(initialize_spy.wait(SIGNAL_TIMEOUT));
+    QVERIFY(!initialize_spy.isEmpty() || initialize_spy.wait(SIGNAL_TIMEOUT));
     QCOMPARE(initialize_spy.count(), 1);
     QCOMPARE(runaway_spy.count(), 0);
     QVERIFY(ran_off_main_thread.load());
@@ -89,7 +89,7 @@ void QmlInitExecutorApiTests::initializeEmitsRunawayExceptionOnFailure()
 
     executor.initialize();
 
-    QVERIFY(runaway_spy.wait(SIGNAL_TIMEOUT));
+    QVERIFY(!runaway_spy.isEmpty() || runaway_spy.wait(SIGNAL_TIMEOUT));
     QCOMPARE(runaway_spy.count(), 1);
     QCOMPARE(initialize_spy.count(), 0);
     QCOMPARE(runaway_spy.takeFirst().at(0).toString(), QString{"init failed"});
@@ -112,7 +112,7 @@ void QmlInitExecutorApiTests::shutdownEmitsResultAndRunsOffMainThread()
 
     executor.shutdown();
 
-    QVERIFY(shutdown_spy.wait(SIGNAL_TIMEOUT));
+    QVERIFY(!shutdown_spy.isEmpty() || shutdown_spy.wait(SIGNAL_TIMEOUT));
     QCOMPARE(shutdown_spy.count(), 1);
     QCOMPARE(runaway_spy.count(), 0);
     QVERIFY(ran_off_main_thread.load());
@@ -134,7 +134,7 @@ void QmlInitExecutorApiTests::shutdownEmitsRunawayExceptionOnFailure()
 
     executor.shutdown();
 
-    QVERIFY(runaway_spy.wait(SIGNAL_TIMEOUT));
+    QVERIFY(!runaway_spy.isEmpty() || runaway_spy.wait(SIGNAL_TIMEOUT));
     QCOMPARE(runaway_spy.count(), 1);
     QCOMPARE(shutdown_spy.count(), 0);
     QCOMPARE(runaway_spy.takeFirst().at(0).toString(), QString{"shutdown failed"});
