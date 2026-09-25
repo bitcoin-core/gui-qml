@@ -139,3 +139,11 @@ add_executable(widgetlayoutmodel_tests
 target_include_directories(widgetlayoutmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(widgetlayoutmodel_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME widgetlayoutmodel_tests COMMAND widgetlayoutmodel_tests)
+
+add_executable(feeratesmodel_tests
+  test_feeratesmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/feeratesmodel.cpp
+)
+target_include_directories(feeratesmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(feeratesmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME feeratesmodel_tests COMMAND feeratesmodel_tests)

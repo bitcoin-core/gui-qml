@@ -18,6 +18,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
+#include <policy/feerate.h>
 #include <qml/appmode.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buildinfo.h>
@@ -31,6 +32,7 @@
 #endif
 #include <qml/components/blockclockdial.h>
 #include <qml/components/widgets/widgetlayoutmodel.h>
+#include <qml/components/widgets/feeratesmodel.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
@@ -569,9 +571,20 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    FeeRatesModel fee_rates_model{[chain = chain.get()](int target) -> qint64 {
+        if (chain->isInitialBlockDownload()) return 0;
+        return chain->estimateSmartFee(target, /*conservative=*/true).GetFeePerK();
+    }};
+    // Register before the shutdown executor so estimator work finishes first.
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &fee_rates_model, [&] {
+        fee_rates_model.setReady(false);
+    });
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &fee_rates_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested()) fee_rates_model.setReady(true);
+    });
     DebugLogModel debug_log_model{gArgs.GetDataDirNet() / "debug.log"};
 #ifdef ENABLE_WALLET
     std::unique_ptr<WalletQmlController> wallet_controller;
@@ -661,6 +674,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("nodeModel", &node_model);
     engine->rootContext()->setContextProperty("chainModel", &chain_model);
     engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
+    engine->rootContext()->setContextProperty("feeRatesModel", &fee_rates_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

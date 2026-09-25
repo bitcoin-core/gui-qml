@@ -6,6 +6,7 @@
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
         <file>tst_widgetdashboard.qml</file>
+        <file>tst_feerateswidget.qml</file>
         <file>WidgetFixture.qml</file>
         <file>InvalidWidgetFixture.qml</file>
         <file>tst_contextmenubutton.qml</file>

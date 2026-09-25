@@ -16,6 +16,17 @@ WidgetRegistry {
                 WidgetSize { columns: 3; rows: 3 }
             ]
             defaultSize: 1
+        },
+        WidgetDefinition {
+            widgetId: "fee-rates"
+            //: Name of the fee estimates widget in the dashboard picker.
+            title: qsTr("Fee rates")
+            source: Qt.resolvedUrl("FeeRatesWidget.qml")
+            sizes: [
+                WidgetSize { columns: 2; rows: 1 },
+                WidgetSize { columns: 3; rows: 2 },
+                WidgetSize { columns: 1; rows: 1 }
+            ]
         }
     ]
 }
