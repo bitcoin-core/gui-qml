@@ -96,9 +96,7 @@ ApplicationWindow {
         if (!appWindow.menuNavigationEnabled) {
             return
         }
-        main.push(createWalletWizard, {
-            "launchContext": CreateWalletWizard.Context.Main
-        })
+        walletCreationModal.open()
     }
 
     function resolvePostOnboardingWalletRoute() {
@@ -114,8 +112,8 @@ ApplicationWindow {
         appWindow.postOnboardingWalletRouteResolved = true
         main.replace(desktopWallets, {}, StackView.Immediate)
         if (walletController.noWalletsFound) {
-            main.push(createWalletWizard, {
-                "launchContext": CreateWalletWizard.Context.Onboarding
+            main.push(walletCreationFlow, {
+                "waitForWalletDiscovery": true
             }, StackView.Immediate)
         }
     }
@@ -363,17 +361,26 @@ ApplicationWindow {
         DesktopWallets {
             objectName: "desktopWalletsPage"
             onAddWallet: {
-                main.push(createWalletWizard, { "launchContext": CreateWalletWizard.Context.Main })
+                walletCreationModal.open()
             }
         }
     }
 
     Component {
-        id: createWalletWizard
-        CreateWalletWizard {
-            onFinished: {
+        id: walletCreationFlow
+        WalletCreationFlow {
+            onFinished: function(openActivity) {
+                const shell = main.get(0)
+                if (openActivity && shell) shell.openActivity()
                 main.pop()
             }
+        }
+    }
+
+    WalletCreationModal {
+        id: walletCreationModal
+        onFinished: function(openActivity) {
+            if (openActivity) appWindow.routeToShell("openActivity")
         }
     }
 

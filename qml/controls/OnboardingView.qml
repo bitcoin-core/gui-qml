@@ -14,9 +14,13 @@ Page {
         ? (navigationStack.canGoBack !== undefined
             ? navigationStack.canGoBack : navigationStack.depth > 1) : false
     property bool showCloseButton: false
+    property bool showNavigationBar: true
+    property bool usesSharedNavigation: false
     property bool autoNavigateBack: true
     property string heading: ""
     property string subheading: ""
+    property string headingObjectName: ""
+    property string subheadingObjectName: ""
     property url imageSource: ""
     property real imageSize: 96
     property Component imageView: null
@@ -25,10 +29,13 @@ Page {
     property string secondaryButtonText: ""
     property bool primaryButtonEnabled: true
     property bool secondaryButtonEnabled: true
+    property string primaryButtonObjectName: "onboardingPrimaryButton"
+    property string secondaryButtonObjectName: "onboardingSecondaryButton"
     property real maximumContentWidth: 860
     property real contentSidePadding: width >= 640 ? 40 : 24
 
     readonly property alias scrollView: scrollView
+    readonly property alias loadedChildView: childLoader.item
     readonly property alias primaryButton: footerBar.primaryButton
     readonly property alias secondaryButton: footerBar.secondaryButton
 
@@ -47,42 +54,15 @@ Page {
     padding: 0
     background: null
 
-    header: Item {
-        implicitHeight: 76
-
-        NeutralButton {
-            id: backButton
-            objectName: "onboardingBackButton"
-            anchors.left: parent.left
-            anchors.leftMargin: root.contentSidePadding
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.showBackButton
-            buttonSize: NeutralButton.Large
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.goBack()
-        }
-
-        CoreText {
-            anchors.centerIn: parent
-            width: Math.max(0, parent.width - 2 * (root.contentSidePadding + 120))
-            text: root.title
-            color: Theme.color.neutral9
-            font: Theme.text.subheading.font
-            wrap: false
-            elide: Text.ElideRight
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        CloseButton {
-            objectName: "onboardingCloseButton"
-            anchors.right: parent.right
-            anchors.rightMargin: root.contentSidePadding
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.showCloseButton
-            backgroundColor: Theme.color.background
-            onClicked: root.closeClicked()
-        }
+    header: OnboardingNavigationBar {
+        visible: root.showNavigationBar
+        height: visible ? implicitHeight : 0
+        title: root.title
+        contentSidePadding: root.contentSidePadding
+        showBackButton: root.showBackButton
+        showCloseButton: root.showCloseButton
+        onBackClicked: root.goBack()
+        onCloseClicked: root.closeClicked()
     }
 
     ScrollView {
@@ -130,6 +110,7 @@ Page {
                 }
 
                 CoreText {
+                    objectName: root.headingObjectName
                     visible: root.heading.length > 0
                     Layout.fillWidth: true
                     Layout.topMargin: defaultImage.visible || imageLoader.visible ? 24 : 0
@@ -143,6 +124,7 @@ Page {
                 }
 
                 CoreText {
+                    objectName: root.subheadingObjectName
                     visible: root.subheading.length > 0
                     Layout.maximumWidth: 560
                     Layout.fillWidth: true
@@ -180,6 +162,8 @@ Page {
         secondaryText: root.secondaryButtonText
         primaryEnabled: root.primaryButtonEnabled
         secondaryEnabled: root.secondaryButtonEnabled
+        primaryButtonObjectName: root.primaryButtonObjectName
+        secondaryButtonObjectName: root.secondaryButtonObjectName
         onPrimaryClicked: root.primaryClicked()
         onSecondaryClicked: root.secondaryClicked()
     }

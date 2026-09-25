@@ -57,6 +57,8 @@
         <file>components/QRCodePopup.qml</file>
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestModal.qml</file>
+        <file>components/WalletCreationModal.qml</file>
+        <file>components/WalletSuccessBadge.qml</file>
         <file>components/ReceivingAddressCard.qml</file>
         <file>components/PaymentRequestField.qml</file>
         <file>components/SearchBar.qml</file>
@@ -149,6 +151,7 @@
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
         <file>controls/OnboardingFooter.qml</file>
+        <file>controls/OnboardingNavigationBar.qml</file>
         <file>controls/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
@@ -158,6 +161,7 @@
         <file>controls/ValueInput.qml</file>
         <file>controls/ValueRow.qml</file>
         <file>controls/WalletTypeListItem.qml</file>
+        <file>controls/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
@@ -209,6 +213,10 @@
         <file>pages/wallet/SpeedUpComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
         <file>pages/wallet/CreateBackup.qml</file>
+        <file>pages/wallet/CreateWalletForm.qml</file>
+        <file>pages/wallet/WalletCreationTypePage.qml</file>
+        <file>pages/wallet/WalletCreationReadyPage.qml</file>
+        <file>pages/wallet/WalletCreationFlow.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
         <file>pages/wallet/CreateExternalWallet.qml</file>
         <file>pages/wallet/CreateIntro.qml</file>

@@ -83,6 +83,50 @@ TestCase {
         menuActions.createWallet.trigger()
         const wizard = findChild(window, "createWalletWizard")
         verify(wizard !== null)
+        compare(findChild(window, "mainPageStack").depth, 1)
+        compare(findChild(window, "walletCreationModal").visible, true)
+        verify(findChild(wizard, "walletCreationTypePage") !== null)
+    }
+
+    function test_add_wallet_completion_returns_to_activity() {
+        const window = createMain(true)
+        findChild(window, "desktopMenuActions").createWallet.trigger()
+        const wizard = findChild(window, "createWalletWizard")
+        verify(wizard !== null)
+        findChild(wizard, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(wizard, "createWalletFormPage") !== null })
+        const form = findChild(wizard, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Watch wallet"
+        findChild(form, "watchOnlyXpubInput").text =
+            "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryVerify(function() { return findChild(wizard, "walletCreationReadyPage") !== null })
+        findChild(wizard, "createWalletReadyDoneButton").clicked()
+
+        tryCompare(findChild(window, "walletCreationModal"), "visible", false)
+        compare(findChild(window, "mainPageStack").depth, 1)
+        compare(findChild(window, "activityTabButton").checked, true)
+    }
+
+    function test_onboarding_creation_returns_to_activity() {
+        const window = createMain(true, true, true, true, true)
+        const wizard = findChild(window, "createWalletWizard")
+        verify(wizard !== null)
+        findChild(wizard, "createWalletButton").clicked()
+        tryVerify(function() { return findChild(wizard, "walletCreationTypePage") !== null })
+        findChild(wizard, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(wizard, "createWalletFormPage") !== null })
+        const form = findChild(wizard, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Onboarding watch wallet"
+        findChild(form, "watchOnlyXpubInput").text =
+            "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryVerify(function() { return findChild(wizard, "walletCreationReadyPage") !== null })
+        walletController.setWalletLoaded(true)
+        findChild(wizard, "createWalletReadyDoneButton").clicked()
+
+        compare(findChild(window, "mainPageStack").depth, 1)
+        compare(findChild(window, "activityTabButton").checked, true)
     }
 
     function test_view_menu_commands_select_wallet_tabs() {
@@ -173,6 +217,8 @@ TestCase {
         compare(findChild(window, "createWalletDiscoveryBusyIndicator").visible, false)
         verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "walletBadge") !== null)
+        compare(findChild(window, "mainPageStack").depth, 2)
+        compare(findChild(window, "walletCreationModal").visible, false)
         verify(findChild(window, "nodeRunner") === null)
     }
 

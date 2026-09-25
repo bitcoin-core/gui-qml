@@ -29,6 +29,15 @@ TestCase {
     }
 
     Component {
+        id: navigationBarComponent
+        OnboardingNavigationBar {
+            width: 720
+            title: "Add a wallet"
+            showCloseButton: true
+        }
+    }
+
+    Component {
         id: secondPage
         OnboardingView { title: "Second" }
     }
@@ -78,6 +87,33 @@ TestCase {
         mouseClick(findChild(second, "onboardingBackButton"))
         tryCompare(stack, "depth", 1)
         compare(stack.currentItem.title, "First")
+    }
+
+    function test_navigationBarCrossFadesTitleAndButtons() {
+        const bar = createTemporaryObject(navigationBarComponent, testCase)
+        verify(bar !== null)
+        const back = findChild(bar, "onboardingBackButton")
+        const outgoing = findChild(bar, "onboardingOutgoingTitle")
+        const current = findChild(bar, "onboardingCurrentTitle")
+        const close = findChild(bar, "onboardingCloseButton")
+        compare(current.text, "Add a wallet")
+        compare(current.opacity, 1)
+
+        bar.title = ""
+        bar.showBackButton = true
+        bar.showCloseButton = false
+        compare(outgoing.text, "Add a wallet")
+        verify(outgoing.opacity > 0)
+        compare(current.text, "")
+        tryCompare(back, "opacity", 1)
+        tryCompare(outgoing, "opacity", 0)
+        tryCompare(close, "visible", false)
+
+        bar.title = "View-only wallet"
+        tryCompare(current, "opacity", 1)
+        compare(current.text, "View-only wallet")
+        bar.showBackButton = false
+        tryCompare(back, "visible", false)
     }
 
     function test_scrollableChildAndFooterActions() {

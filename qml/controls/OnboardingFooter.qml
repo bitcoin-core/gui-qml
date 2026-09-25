@@ -12,6 +12,8 @@ Item {
     property string secondaryText: ""
     property bool primaryEnabled: true
     property bool secondaryEnabled: true
+    property string primaryButtonObjectName: "onboardingPrimaryButton"
+    property string secondaryButtonObjectName: "onboardingSecondaryButton"
     property real maximumContentWidth: 860
     property real contentSidePadding: width >= 640 ? 40 : 24
     readonly property bool compact: actions.width < 420
@@ -44,7 +46,7 @@ Item {
 
         ContinueButton {
             id: primaryButton
-            objectName: "onboardingPrimaryButton"
+            objectName: root.primaryButtonObjectName
             visible: root.primaryText.length > 0
             enabled: root.primaryEnabled
             width: root.compact ? actions.width : Math.min(actions.width, Math.max(180, implicitWidth + 40))
@@ -54,7 +56,7 @@ Item {
 
         NeutralButton {
             id: secondaryButton
-            objectName: "onboardingSecondaryButton"
+            objectName: root.secondaryButtonObjectName
             visible: root.secondaryText.length > 0
             enabled: root.secondaryEnabled
             buttonSize: NeutralButton.Large

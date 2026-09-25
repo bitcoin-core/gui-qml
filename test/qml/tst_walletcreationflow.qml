@@ -1,0 +1,156 @@
+// Copyright (c) 2026 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtTest 1.2
+import "../../qml/controls"
+import "../../qml/pages/wallet"
+
+TestCase {
+    name: "WalletCreationFlow"
+    when: windowShown
+    visible: true
+    width: 760
+    height: 700
+
+    readonly property string validXpub:
+        "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"
+
+    Component {
+        id: flowComponent
+        WalletCreationFlow { width: 720; height: 660; modalView: true }
+    }
+
+    function init() {
+        walletController.reset()
+        walletController.initialized = true
+    }
+
+    function createFlow() {
+        const flow = createTemporaryObject(flowComponent, this)
+        verify(flow !== null)
+        return flow
+    }
+
+    function test_watch_only_validates_key_and_finishes_on_ready_page() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeViewOnly").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+
+        const form = findChild(flow, "createWalletFormPage")
+        verify(findChild(form, "onboardingScrollView") !== null)
+        compare(form.showBackButton, true)
+        compare(form.title, "")
+        compare(form.heading, "View-only wallet")
+        compare(findChild(form, "watchOnlyXpubPasteButton"), null)
+        const name = findChild(form, "createWalletNameInput")
+        const xpub = findChild(form, "watchOnlyXpubInput")
+        const xpubEntry = findChild(form, "createWalletXpubEntry")
+        const initialHeight = xpubEntry.height
+        xpub.text = "line\nline\nline\nline\nline\nline"
+        tryVerify(function() { return xpubEntry.height > initialHeight })
+        name.text = "Watch wallet"
+        xpub.text = "invalid"
+        compare(form.canCreate, false)
+        xpub.text = validXpub
+        compare(form.canCreate, true)
+
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
+        const ready = findChild(flow, "walletCreationReadyPage")
+        compare(ready.backupRequired, false)
+        compare(ready.loadedChildView, null)
+        compare(ready.showBackButton, false)
+        compare(ready.primaryButton.visible, false)
+        compare(ready.secondaryButton, findChild(ready, "createWalletReadyDoneButton"))
+        compare(ready.secondaryButton.buttonSize, NeutralButton.Large)
+        let finished = false
+        flow.finished.connect(function(openActivity) { finished = openActivity })
+        findChild(ready, "createWalletReadyDoneButton").clicked()
+        compare(finished, true)
+    }
+
+    function test_regular_requires_acknowledgement_and_warns_for_unencrypted_creation() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeRegular").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        verify(form.scrollView.contentHeight > form.scrollView.height)
+        const create = findChild(form, "createWalletFormCreateButton")
+        const encrypt = findChild(form, "createWalletEncryptCheckBox")
+        const password = findChild(form, "createWalletPasswordInput")
+        const confirm = findChild(form, "createWalletPasswordRepeatInput")
+        const warning = findChild(form, "createWalletUnencryptedWarning")
+        const acknowledgement = findChild(form, "createWalletPasswordConfirmToggle")
+        const unencryptedAcknowledgement = findChild(form, "createWalletUnencryptedConfirmToggle")
+
+        compare(encrypt.checked, true)
+        compare(form.title, "")
+        compare(unencryptedAcknowledgement.visible, false)
+        compare(form.heading, "Single-key wallet")
+        compare(findChild(form, "createWalletNameEntry").supportingText,
+            "You cannot change this later.")
+        compare(encrypt.text, "Encrypt this wallet with a strong password.")
+        compare(acknowledgement.loadedTrailingItem.checked, false)
+        findChild(form, "createWalletNameInput").text = "Regular wallet"
+        password.text = "correct horse battery staple"
+        confirm.text = "different"
+        compare(form.canCreate, false)
+        confirm.text = password.text
+        compare(form.canCreate, false)
+        acknowledgement.clicked()
+        compare(acknowledgement.loadedTrailingItem.checked, true)
+        compare(form.canCreate, true)
+        encrypt.checked = false
+        compare(acknowledgement.loadedTrailingItem.checked, false)
+        compare(unencryptedAcknowledgement.visible, true)
+        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(form.canCreate, false)
+        compare(create.enabled, false)
+        unencryptedAcknowledgement.clicked()
+        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, true)
+        compare(form.canCreate, true)
+        encrypt.checked = true
+        encrypt.checked = false
+        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(form.canCreate, false)
+        unencryptedAcknowledgement.clicked()
+        create.clicked()
+        verify(warning.message.indexOf("won't be able to set a password later") !== -1)
+        compare(warning.visibleActions[1].role, 0)
+        warning.close()
+        warning.visibleActions[1].triggered()
+        tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
+        const ready = findChild(flow, "walletCreationReadyPage")
+        compare(ready.watchOnly, false)
+        compare(ready.backupRequired, true)
+        compare(ready.encryptedWallet, false)
+    }
+
+    function test_encrypted_ready_keeps_password_backup_guidance() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeRegular").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Encrypted wallet"
+        findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
+        findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
+        compare(form.canCreate, false)
+        findChild(form, "createWalletPasswordConfirmToggle").clicked()
+        compare(form.canCreate, true)
+        let warningOpened = false
+        const warning = findChild(form, "createWalletUnencryptedWarning")
+        warning.visibleChanged.connect(function() {
+            if (warning.visible) warningOpened = true
+        })
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
+        compare(warningOpened, false)
+        const ready = findChild(flow, "walletCreationReadyPage")
+        compare(ready.encryptedWallet, true)
+        verify(findChild(ready, "walletCreationBackupSection").description.indexOf("password") !== -1)
+    }
+
+}

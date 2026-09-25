@@ -16,6 +16,7 @@ AbstractButton {
     readonly property bool large: buttonSize === NeutralButton.Large
     property url iconSource: ""
     property int iconSize: large ? 20 : 15
+    property int contentSpacing: large ? 4 : 8
     property var textStyle: large ? Theme.text.buttonStrong : Theme.text.captionStrong
     property int textFontPixelSize: textStyle.pixelSize
     property color textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral5
@@ -68,7 +69,7 @@ AbstractButton {
             anchors.centerIn: parent
             width: Math.min(implicitWidth, parent.width)
             spacing: root.text.length > 0 && root.iconSource.toString().length > 0
-                ? (root.large ? 4 : 8) : 0
+                ? root.contentSpacing : 0
             Icon {
                 visible: root.iconSource.toString().length > 0
                 source: root.iconSource

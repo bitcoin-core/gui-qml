@@ -9,8 +9,11 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
 
-    property int size: 30
-    property int iconSize: 10
+    enum Size { Medium, Large }
+
+    property int buttonSize: CloseButton.Medium
+    property int size: buttonSize === CloseButton.Large ? 40 : 30
+    property int iconSize: buttonSize === CloseButton.Large ? 14 : 10
     property color iconColor: Theme.color.neutral6
     property color backgroundColor: Theme.color.neutral2
     property color backgroundHoverColor: Theme.color.neutral3

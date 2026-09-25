@@ -22,7 +22,7 @@ def open_create_wallet_page(gui):
         gui.click("walletSelectAddWalletButton")
     except QmlDriverError:
         pass
-    gui.wait_for_page("createTypeSelector", timeout_ms=10000)
+    gui.wait_for_page("walletCreationTypePage", timeout_ms=10000)
 
 
 def open_type_selector(gui):
@@ -60,28 +60,17 @@ def case_watchonly_creation_flow(harness, test_xpub):
     print("  Type selector opened")
 
     gui.click("walletTypeViewOnly")
-    gui.wait_for_page("watchOnlyIntro", timeout_ms=5000)
-    print("  Watch-only intro page")
-
-    gui.click("watchOnlyIntroNextButton")
-    gui.wait_for_page("watchOnlyXpub", timeout_ms=5000)
-    print("  xpub entry page")
-
-    gui.set_text("watchOnlyXpubInput", test_xpub)
-    gui.wait_for_property("watchOnlyXpubNextButton", "enabled", True, timeout_ms=5000)
-    gui.click("watchOnlyXpubNextButton")
-    gui.wait_for_page("createWalletNamePage", timeout_ms=5000)
-    print("  xpub entered, proceeding to name")
-
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", "watchonly_test")
-    gui.wait_for_property("createWalletNameContinueButton", "enabled", True, timeout_ms=5000)
-    gui.click("createWalletNameContinueButton")
-    gui.wait_for_page("createWalletConfirmPage", timeout_ms=15000)
-    print("  Wallet created, confirm page shown")
+    gui.set_text("watchOnlyXpubInput", test_xpub)
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=15000)
+    print("  Wallet created, ready page shown")
 
-    gui.click("createWalletConfirmNextButton")
+    gui.click("createWalletReadyDoneButton")
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=15000)
-    print("  Confirm page dismissed")
+    print("  Ready page dismissed")
 
     badge_text = gui.get_text("walletBadge")
     print(f"  Wallet badge: {badge_text}")
@@ -103,40 +92,22 @@ def case_type_selector_regular_flow(harness):
     print("  Type selector opened")
 
     gui.click("walletTypeRegular")
-    gui.wait_for_page("createWalletIntroPage", timeout_ms=5000)
-    print("  CreateIntro page opened")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
+    print("  Regular wallet form opened")
 
     print("  Regular wallet type selector flow PASSED")
 
 
-def case_type_selector_import_flow(harness):
-    """Test that import wallet option in type selector routes correctly."""
-    harness.start_gui()
-    gui = harness.driver
-
-    open_type_selector(gui)
-    print("  Type selector opened")
-
-    gui.click("walletTypeImport")
-    gui.wait_for_page("importWalletOptions", timeout_ms=5000)
-    print("  Import wallet page opened from type selector")
-
-    print("  Import wallet type selector flow PASSED")
-
-
 def case_type_selector_disabled_options(harness):
-    """Test that Multi-key and Custom options are disabled."""
+    """Test that unavailable wallet types are omitted."""
     harness.start_gui()
     gui = harness.driver
 
     open_type_selector(gui)
     print("  Type selector opened")
 
-    multi_key_enabled = gui.get_property("walletTypeMultiKey", "enabled")
-    assert multi_key_enabled is False, f"Multi-key should be disabled, got enabled={multi_key_enabled}"
-
-    custom_enabled = gui.get_property("walletTypeCustom", "enabled")
-    assert custom_enabled is False, f"Custom should be disabled, got enabled={custom_enabled}"
+    assert not gui.object_exists("walletTypeMultiKey"), "Multi-key option should not be shown"
+    assert not gui.object_exists("walletTypeCustom"), "Custom option should not be shown"
 
     print("  Disabled options check PASSED")
 
@@ -185,12 +156,6 @@ def run_tests():
         "type_selector_regular",
         port_offset=90,
         case_body=case_type_selector_regular_flow,
-    )
-
-    failures += run_case(
-        "type_selector_import",
-        port_offset=100,
-        case_body=case_type_selector_import_flow,
     )
 
     failures += run_case(
