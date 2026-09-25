@@ -148,6 +148,8 @@
         <file>controls/TextButton.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
+        <file>controls/OnboardingFooter.qml</file>
+        <file>controls/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
