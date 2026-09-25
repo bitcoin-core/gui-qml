@@ -217,6 +217,8 @@
         <file>pages/wallet/WalletCreationTypePage.qml</file>
         <file>pages/wallet/WalletCreationReadyPage.qml</file>
         <file>pages/wallet/WalletCreationFlow.qml</file>
+        <file>pages/wallet/WalletImportErrorPage.qml</file>
+        <file>pages/wallet/WalletImportCompletePage.qml</file>
         <file>pages/wallet/CreateConfirm.qml</file>
         <file>pages/wallet/CreateExternalWallet.qml</file>
         <file>pages/wallet/CreateIntro.qml</file>
@@ -278,6 +280,7 @@
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="cross-circle-filled">res/icons/cross-circle-filled.png</file>
         <file alias="cross-filled">res/icons/cross-filled.png</file>
         <file alias="devices-filled">res/icons/devices-filled.png</file>

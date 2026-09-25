@@ -153,4 +153,49 @@ TestCase {
         verify(findChild(ready, "walletCreationBackupSection").description.indexOf("password") !== -1)
     }
 
+    function test_import_choice_uses_onboarding_error_and_complete_pages() {
+        const flow = createFlow()
+        flow.importingWallet = true
+        walletController.walletLoadError = "Data is not in recognized format."
+        tryVerify(function() { return findChild(flow, "walletImportErrorPage") !== null })
+        const errorPage = findChild(flow, "walletImportErrorPage")
+        compare(findChild(errorPage, "importWalletErrorView").visible, true)
+        compare(findChild(errorPage, "importWalletErrorTitle").text,
+            walletController.walletImportErrorTitle)
+        compare(findChild(errorPage, "importWalletErrorDescription").text,
+            walletController.walletImportErrorDescription)
+
+        walletController.lastImportedWalletName = "Imported wallet"
+        walletController.lastImportedWalletKeyScheme = "Single-key"
+        findChild(flow, "importWalletPathField").text = "/tmp/test-wallet.bak"
+        findChild(errorPage, "importWalletChooseAnotherFileButton").clicked()
+        tryVerify(function() { return findChild(flow, "importWalletSuccessPage") !== null })
+        const complete = findChild(flow, "importWalletSuccessPage")
+        compare(complete.heading, "Import complete")
+        verify(findChild(complete, "importWalletSuccessBadge") !== null)
+        const infoSection = findChild(complete, "importWalletInfoSection")
+        compare(infoSection.showBackground, true)
+        compare(infoSection.isOnSurface, true)
+        compare(infoSection.showGradientBorder, false)
+        compare(findChild(complete, "importWalletSuccessWalletName").text, "Imported wallet")
+        compare(findChild(complete, "importWalletSuccessKeyScheme").text, "Single-key")
+        compare(complete.primaryButton.visible, false)
+        compare(complete.secondaryButton.buttonSize, NeutralButton.Large)
+        let finished = false
+        flow.finished.connect(function(openActivity) { finished = openActivity })
+        findChild(complete, "importWalletSuccessOverviewButton").clicked()
+        compare(finished, true)
+    }
+
+    function test_import_choice_opens_file_dialog_and_cancel_returns_to_types() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeImport").clicked()
+        compare(flow.depth, 1)
+        compare(findChild(flow, "walletImportErrorPage"), null)
+        const dialog = findChild(flow, "walletImportFileDialog")
+        verify(dialog !== null)
+        tryCompare(dialog, "visible", true)
+        dialog.reject()
+        compare(flow.depth, 1)
+    }
 }

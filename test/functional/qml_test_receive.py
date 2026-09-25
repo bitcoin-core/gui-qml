@@ -104,10 +104,8 @@ def _import_wallet_backup(gui, backup_path, wallet_name):
     except QmlDriverError:
         pass
     gui.wait_for_property("walletTypeImport", "visible", True, timeout_ms=10000)
-    gui.click("walletTypeImport")
-    gui.wait_for_page("importWalletOptions", timeout_ms=10000)
     gui.set_text("importWalletPathField", backup_path)
-    gui.click("importWalletChooseFileButton")
+    gui.click("walletTypeImport")
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=30000)
     gui.click("importWalletSuccessOverviewButton")
     gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)

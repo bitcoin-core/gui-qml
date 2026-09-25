@@ -233,7 +233,8 @@ def open_wallet_settings_page(gui):
     gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
-def open_import_wallet_page(gui):
+def import_wallet_from_creation_flow(gui, backup_path):
+    gui.set_text("importWalletPathField", backup_path)
     try:
         gui.wait_for_property("importWalletButton", "visible", True, timeout_ms=1000)
         gui.wait_for_property("importWalletButton", "enabled", True, timeout_ms=25000)
@@ -241,12 +242,6 @@ def open_import_wallet_page(gui):
     except QmlDriverError:
         gui.wait_for_property("walletTypeImport", "visible", True, timeout_ms=10000)
         gui.click("walletTypeImport")
-    gui.wait_for_page("importWalletOptions", timeout_ms=10000)
-
-
-def trigger_automated_import(gui, backup_path):
-    gui.set_text("importWalletPathField", backup_path)
-    gui.click("importWalletChooseFileButton")
 
 
 def drain_change_keypool(gui_rpc_port, wallet_name):
@@ -452,10 +447,8 @@ def case_import_encrypted_wallet(harness, checkpoints):
     gui = harness.driver
     checkpoints.checkpoint("GUI launched", gui)
     harness.finish_onboarding()
-    open_import_wallet_page(gui)
-    checkpoints.checkpoint("import flow opened", gui)
-
-    trigger_automated_import(gui, backup_path)
+    import_wallet_from_creation_flow(gui, backup_path)
+    checkpoints.checkpoint("wallet file submitted", gui)
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=20000)
     gui.click("importWalletSuccessOverviewButton")
     gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)

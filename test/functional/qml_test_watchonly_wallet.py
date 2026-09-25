@@ -4,6 +4,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """End-to-end GUI tests for watch-only wallet creation flow."""
 
+import os
 import re
 import sys
 
@@ -98,6 +99,23 @@ def case_type_selector_regular_flow(harness):
     print("  Regular wallet type selector flow PASSED")
 
 
+def case_type_selector_import_flow(harness):
+    """Test that import wallet option in type selector routes correctly."""
+    harness.start_gui()
+    gui = harness.driver
+
+    open_type_selector(gui)
+    print("  Type selector opened")
+
+    invalid_backup = os.path.join(os.path.dirname(__file__), "fixtures", "invalid-wallet-backup.bak")
+    gui.set_text("importWalletPathField", invalid_backup)
+    gui.click("walletTypeImport")
+    gui.wait_for_page("walletImportErrorPage", timeout_ms=15000)
+    print("  Import error shown directly from type selector")
+
+    print("  Import wallet type selector flow PASSED")
+
+
 def case_type_selector_disabled_options(harness):
     """Test that unavailable wallet types are omitted."""
     harness.start_gui()
@@ -156,6 +174,12 @@ def run_tests():
         "type_selector_regular",
         port_offset=90,
         case_body=case_type_selector_regular_flow,
+    )
+
+    failures += run_case(
+        "type_selector_import",
+        port_offset=100,
+        case_body=case_type_selector_import_flow,
     )
 
     failures += run_case(
