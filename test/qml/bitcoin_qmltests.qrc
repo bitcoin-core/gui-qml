@@ -12,11 +12,6 @@
         <file>tst_contextmenutoggle.qml</file>
         <file>tst_copybutton.qml</file>
         <file>tst_corecheckbox.qml</file>
-        <file>tst_createbackup.qml</file>
-        <file>tst_createname.qml</file>
-        <file>tst_createpassword.qml</file>
-        <file>tst_createtypeselector.qml</file>
-        <file>tst_createwalletwizard.qml</file>
         <file>tst_walletcreationflow.qml</file>
         <file>tst_debuglogview.qml</file>
         <file>tst_desktopmenuactions.qml</file>
@@ -24,7 +19,6 @@
         <file>tst_dropdownbutton.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_feeselection.qml</file>
-        <file>tst_importwalletoptions.qml</file>
         <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
@@ -56,7 +50,5 @@
         <file>tst_walletpassphrasepopup.qml</file>
         <file>tst_walletpasswordsettings.qml</file>
         <file>tst_walletselect.qml</file>
-        <file>tst_wallettypelistitem.qml</file>
-        <file>tst_watchonlyxpub.qml</file>
     </qresource>
 </RCC>

@@ -160,7 +160,6 @@
         <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
         <file>controls/ValueRow.qml</file>
-        <file>controls/WalletTypeListItem.qml</file>
         <file>controls/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
@@ -212,7 +211,6 @@
         <file>pages/wallet/SendComplete.qml</file>
         <file>pages/wallet/SpeedUpComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
-        <file>pages/wallet/CreateBackup.qml</file>
         <file>pages/wallet/CreateWalletForm.qml</file>
         <file>pages/wallet/WalletCreationTypePage.qml</file>
         <file>pages/wallet/WalletCreationReadyPage.qml</file>
@@ -221,17 +219,6 @@
         <file>pages/wallet/WalletCreationExternalReadyPage.qml</file>
         <file>pages/wallet/WalletImportErrorPage.qml</file>
         <file>pages/wallet/WalletImportCompletePage.qml</file>
-        <file>pages/wallet/CreateConfirm.qml</file>
-        <file>pages/wallet/CreateExternalWallet.qml</file>
-        <file>pages/wallet/CreateIntro.qml</file>
-        <file>pages/wallet/CreateName.qml</file>
-        <file>pages/wallet/CreatePassword.qml</file>
-        <file>pages/wallet/ImportWalletOptions.qml</file>
-        <file>pages/wallet/ImportWalletSuccess.qml</file>
-        <file>pages/wallet/CreateTypeSelector.qml</file>
-        <file>pages/wallet/CreateWalletWizard.qml</file>
-        <file>pages/wallet/WatchOnlyIntro.qml</file>
-        <file>pages/wallet/WatchOnlyXpub.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
         <file>pages/wallet/SendTransactionReview.qml</file>

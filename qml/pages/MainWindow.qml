@@ -92,7 +92,7 @@ ApplicationWindow {
         appWindow.routeToShell("openSettings", section)
     }
 
-    function openCreateWalletWizard() {
+    function openWalletCreation() {
         if (!appWindow.menuNavigationEnabled) {
             return
         }
@@ -182,7 +182,7 @@ ApplicationWindow {
         shuttingDown: appWindow.shutdownInProgress
         isMacOs: Qt.platform.os === "osx"
 
-        onCreateWalletRequested: appWindow.openCreateWalletWizard()
+        onCreateWalletRequested: appWindow.openWalletCreation()
         onCloseWalletRequested: appWindow.routeToShell("requestCloseWallet")
         onBackupWalletRequested: appWindow.routeToShell("startWalletBackup")
         onOpenUriRequested: appWindow.routeToShell("openUriImporter")
