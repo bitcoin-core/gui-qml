@@ -249,20 +249,16 @@ Item {
     }
     Component {
         id: externalWallet
-        CreateExternalWallet {
-            onBack: root.pop()
-            onNext: root.push(externalConfirm)
+        ExternalSignerWalletForm {
+            modalView: root.modalView
+            onCancel: root.finished(false)
+            onCreated: root.push(externalConfirm, {}, StackView.Immediate)
         }
     }
     Component {
         id: externalConfirm
-        CreateConfirm {
-            pageObjectName: "externalWalletCreatedPage"
-            headerText: qsTr("Your external wallet has been created")
-            descriptionText: qsTr("This wallet uses the connected external signer for addresses and signing.")
-            nextButtonText: qsTr("Done")
-            nextButtonObjectName: "externalWalletCreatedDoneButton"
-            onNext: root.finished(true)
+        WalletCreationExternalReadyPage {
+            onDone: root.finished(true)
         }
     }
 }

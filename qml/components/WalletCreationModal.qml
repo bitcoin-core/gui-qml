@@ -23,7 +23,9 @@ Popup {
     focus: true
     readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
     closePolicy: flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
-        (flow.currentItem && flow.currentItem.objectName === "walletCreationReadyPage"))
+        (flow.currentItem && flow.currentItem.creatingWallet) ||
+        (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
+            || flow.currentItem.objectName === "externalWalletCreatedPage")))
         ? Popup.NoAutoClose : Popup.CloseOnEscape
 
     background: Rectangle {

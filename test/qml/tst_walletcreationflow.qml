@@ -72,6 +72,35 @@ TestCase {
         compare(finished, true)
     }
 
+    function test_external_signer_uses_onboarding_form_and_ready_page() {
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "trezor_t"
+        walletController.suggestedExternalSignerWalletName = "trezor_t2"
+        const flow = createFlow()
+        findChild(flow, "walletTypeExternalSigner").clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
+
+        const form = findChild(flow, "externalSignerWalletFormPage")
+        compare(form.heading, "External signer wallet")
+        compare(form.subheading, "Connected signer: trezor_t")
+        compare(form.title, "")
+        compare(findChild(form, "externalWalletNameInput").text, "trezor_t2")
+        compare(form.primaryButton, findChild(form, "createExternalWalletButton"))
+        compare(form.primaryButton.enabled, true)
+        form.primaryButton.clicked()
+
+        tryVerify(function() { return findChild(flow, "externalWalletCreatedPage") !== null })
+        const ready = findChild(flow, "externalWalletCreatedPage")
+        verify(findChild(ready, "externalWalletSuccessBadge") !== null)
+        compare(ready.showBackButton, false)
+        compare(ready.primaryButton.visible, false)
+        compare(ready.secondaryButton.buttonSize, NeutralButton.Large)
+        let finished = false
+        flow.finished.connect(function(openActivity) { finished = openActivity })
+        findChild(ready, "externalWalletCreatedDoneButton").clicked()
+        compare(finished, true)
+    }
+
     function test_regular_requires_acknowledgement_and_warns_for_unencrypted_creation() {
         const flow = createFlow()
         findChild(flow, "walletTypeRegular").clicked()

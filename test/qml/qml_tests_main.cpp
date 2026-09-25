@@ -1802,7 +1802,7 @@ public:
             Q_EMIT walletLoadErrorChanged();
             return false;
         }
-        Q_EMIT walletCreateSucceeded();
+        Q_EMIT walletLoadSucceeded();
         return true;
     }
     Q_INVOKABLE void importWallet(const QString&)
@@ -1949,6 +1949,7 @@ Q_SIGNALS:
     void openReceiveRequested();
     void openWalletSettingsRequested();
     void walletCreateSucceeded();
+    void walletLoadSucceeded();
     void walletImportSucceeded();
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
