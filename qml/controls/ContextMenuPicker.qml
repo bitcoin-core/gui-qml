@@ -16,6 +16,7 @@ Item {
     property string valueRole: "value"
     property string subtitleRole: ""
     property string iconRole: ""
+    property string enabledRole: ""
     property string objectNameRole: ""
     property string subtitleObjectNameRole: ""
     property bool multiSelect: false
@@ -128,6 +129,8 @@ Item {
                     property url rowIconSource: root._rowIconSource(rowData)
                     property string subtitleObjectName: root._rowSubtitleObjectName(rowData)
                     objectName: root._rowObjectName(rowData)
+                    enabled: root.enabledRole === "" || typeof rowData !== "object" || rowData === null
+                        || rowData[root.enabledRole] !== false
                     readonly property bool selected: root.multiSelect ? root.selectedValues.indexOf(rowValue) >= 0 : root.currentValue === rowValue
                     readonly property int _effectiveHeight: root._rowHeight(rowData)
 

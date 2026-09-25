@@ -156,6 +156,19 @@ TestCase {
         compare(tabs[2].iconSource, "image://images/gear-outline")
         compare(findChild(page, "consoleTabButton"), null)
         compare(findChild(page, "desktopWalletSettingsPreviewTabButton"), null)
+        compare(findChild(page, "nodeWarningsButton"), null)
+        compare(findChild(page, "nodeInformationButton"), null)
+    }
+
+    function test_network_chip_opens_node_information() {
+        const page = createDesktopWallets()
+        const networkIndicator = findChild(page, "desktopNetworkIndicator")
+        const informationPopup = findChild(page, "nodeInformationPopup")
+        verify(networkIndicator !== null)
+        verify(informationPopup !== null)
+
+        networkIndicator.clicked()
+        tryCompare(informationPopup, "opened", true)
     }
 
     function test_settings_is_lazilyLoadedAndRetained() {

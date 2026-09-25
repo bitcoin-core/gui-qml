@@ -10,6 +10,20 @@
         <file>components/BitcoinAddressInputField.qml</file>
         <file>components/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
+        <file>components/widgets/BlockClockWidget.qml</file>
+        <file>components/widgets/WidgetSection.qml</file>
+        <file>components/widgets/DashboardWidget.qml</file>
+        <file>components/widgets/WidgetMetrics.js</file>
+        <file>components/widgets/WidgetDefinition.qml</file>
+        <file>components/widgets/WidgetSize.qml</file>
+        <file>components/widgets/WidgetRegistry.qml</file>
+        <file>components/widgets/DefaultWidgetRegistry.qml</file>
+        <file>components/widgets/WidgetDashboard.qml</file>
+        <file>components/widgets/WidgetActionsButton.qml</file>
+        <file>components/widgets/WidgetGrid.qml</file>
+        <file>components/widgets/WidgetFrame.qml</file>
+        <file>components/widgets/WidgetPicker.qml</file>
+
         <file>components/BlockCounter.qml</file>
         <file>components/ConnectionOptions.qml</file>
         <file>components/ConnectionSettings.qml</file>
@@ -233,6 +247,7 @@
         <file>pages/wallet/WalletSelect.qml</file>
     </qresource>
     <qresource prefix="/icons">
+        <file alias="widgets.svg">res/src/widgets.svg</file>
         <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
         <file alias="alert-filled">res/icons/alert-filled.png</file>
         <file alias="arrow-diagonal-square">res/icons/arrow-diagonal-square.png</file>

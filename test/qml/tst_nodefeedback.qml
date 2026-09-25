@@ -180,7 +180,7 @@ TestCase {
         tryCompare(warningButton, "visible", true)
     }
 
-    function test_node_runner_status_actions_align_with_settings_button() {
+    function test_node_runner_uses_network_chip_for_node_information() {
         nodeModel.setWarningsForTest(["Clock skew warning"])
 
         const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem)
@@ -191,22 +191,18 @@ TestCase {
 
         const warningButton = findChild(runner, "nodeWarningsButton")
         const infoButton = findChild(runner, "nodeInformationButton")
+        const networkIndicator = findChild(runner, "nodeRunnerNetworkIndicator")
         const settingsButton = findChild(runner, "nodeSettingsButton")
-        verify(warningButton !== null)
-        verify(infoButton !== null)
+        compare(warningButton, null)
+        compare(infoButton, null)
+        verify(networkIndicator !== null)
         verify(settingsButton !== null)
         compare(findChild(runner, "consoleTabButton"), null)
-        tryCompare(warningButton, "visible", true)
 
-        compare(warningButton.height, 34)
-        compare(infoButton.height, 34)
-        compare(settingsButton.height, 34)
-
-        const warningCenterY = warningButton.mapToItem(runner, 0, warningButton.height / 2).y
-        const infoCenterY = infoButton.mapToItem(runner, 0, infoButton.height / 2).y
-        const settingsCenterY = settingsButton.mapToItem(runner, 0, settingsButton.height / 2).y
-        verify(Math.abs(warningCenterY - settingsCenterY) <= 0.5)
-        verify(Math.abs(infoCenterY - settingsCenterY) <= 0.5)
+        networkIndicator.clicked()
+        const informationPopup = waitForChild(testWindow.contentItem, "nodeInformationPopup")
+        verify(informationPopup !== null)
+        tryCompare(informationPopup, "opened", true)
     }
 
     function test_node_runner_clock_follows_stack_visibility() {
@@ -274,7 +270,7 @@ TestCase {
         verify(fatalPopup !== null)
 
         compare(warningsPopup.contentMargin, 28)
-        compare(informationPopup.contentMargin, 28)
+        compare(informationPopup.contentMargin, 24)
         compare(runtimePopup.contentMargin, 28)
         compare(fatalPopup.contentMargin, 28)
         verify(warningsPopup.width > 460)
@@ -291,9 +287,22 @@ TestCase {
 
         tryCompare(popup, "informationRowCount", 3)
         compare(popup.firstInformationValue, "Bitcoin Core test")
+
+        const surface = findChild(popup, "nodeInformationSurface")
+        const table = findChild(popup, "nodeInformationTable")
+        const closeButton = findChild(popup, "nodeInformationCloseButton")
+        verify(surface !== null)
+        verify(table !== null)
+        verify(closeButton !== null)
+        compare(surface.color, Theme.color.neutral1)
+        compare(surface.border.width, 0)
+        compare(table.color, Theme.color.neutral2)
+        compare(table.border.width, 0)
+        verify(popup.enter !== null)
+        verify(popup.exit !== null)
     }
 
-    function test_node_information_popup_wraps_long_warning_value() {
+    function test_node_information_popup_shows_wrapped_warning_above_table() {
         nodeModel.setWarningsForTest([longWarningText()])
 
         const popup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
@@ -301,15 +310,14 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 4)
-        tryCompare(popup, "lastInformationValueWrapMode", Text.WordWrap)
-        for (let i = 0; i < 20; ++i) {
-            if (popup.lastInformationValueLineCount > 1) {
-                return
-            }
-            wait(25)
-        }
-        verify(popup.lastInformationValueLineCount > 1)
+        tryCompare(popup, "informationRowCount", 3)
+        const warningBanner = findChild(popup, "nodeInformationWarningBanner")
+        const warningText = findChild(popup, "nodeInformationWarningText")
+        verify(warningBanner !== null)
+        verify(warningText !== null)
+        compare(warningBanner.visible, true)
+        compare(warningText.text, longWarningText())
+        verifyWraps(warningText)
     }
 
     function test_runtime_dialog_opens_from_node_model_and_answers() {

@@ -702,16 +702,30 @@ QByteArray TestBridge::cmdInvoke(const QString& object_name, const QString& meth
     if (object_name.isEmpty() || method.isEmpty()) {
         return errorResponse(QStringLiteral("objectName and method are required"));
     }
-    if (args.size() > 1) {
-        return errorResponse(QStringLiteral("Only zero or one string argument is supported"));
-    }
-
     QObject* obj = findObjectByName(object_name);
     if (!obj) {
         return errorResponse(QStringLiteral("Object not found: %1").arg(object_name));
     }
 
     const QMetaObject* meta = obj->metaObject();
+    // QML functions expose untyped arguments as QVariant. Support small tuples
+    // so functional tests can exercise layout operations without adding test
+    // entry points to production QML components.
+    if (args.size() > 1) {
+        if (args.size() > 3 || method.contains(QLatin1Char('('))) {
+            return errorResponse(QStringLiteral("Expected up to three arguments to a QML function"));
+        }
+        const QByteArray signature = method.toUtf8() + (args.size() == 2 ? "(QVariant,QVariant)" : "(QVariant,QVariant,QVariant)");
+        const int index = meta->indexOfMethod(signature.constData());
+        if (index < 0) return errorResponse(QStringLiteral("QML function not found: %1").arg(QString::fromUtf8(signature)));
+        const QVariant first = args.at(0).toVariant();
+        const QVariant second = args.at(1).toVariant();
+        const QVariant third = args.size() == 3 ? args.at(2).toVariant() : QVariant{};
+        const bool invoked = args.size() == 2
+            ? meta->method(index).invoke(obj, Qt::DirectConnection, Q_ARG(QVariant, first), Q_ARG(QVariant, second))
+            : meta->method(index).invoke(obj, Qt::DirectConnection, Q_ARG(QVariant, first), Q_ARG(QVariant, second), Q_ARG(QVariant, third));
+        return invoked ? okResponse() : errorResponse(QStringLiteral("Could not invoke QML function"));
+    }
     QByteArray signature = method.toUtf8();
     if (!signature.contains('(')) {
         signature += args.isEmpty() ? "()" : "(QString)";

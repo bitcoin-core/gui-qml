@@ -668,7 +668,6 @@ TestCase {
         verify(view !== null)
 
         const themePicker = findChild(view, "displayThemePicker")
-        const blockStatusSizePicker = findChild(view, "displayBlockStatusSizePicker")
         const moneyFontPicker = findChild(view, "displayMoneyFontPicker")
         const displayUnitPicker = findChild(view, "displayUnitPicker")
         const languageDisclosure = findChild(view, "displayLanguageDisclosureIndicator")
@@ -676,7 +675,6 @@ TestCase {
         const designSystemRow = findChild(view, "displayDesignSystemRow")
 
         verify(themePicker !== null)
-        verify(blockStatusSizePicker !== null)
         verify(moneyFontPicker !== null)
         verify(displayUnitPicker !== null)
         verify(languageDisclosure !== null)
@@ -698,26 +696,6 @@ TestCase {
 
         themePicker.selected(0, "Light")
         compare(Theme.dark, false)
-
-        compare(blockStatusSizePicker.subtitleRole, "description")
-        compare(blockStatusSizePicker.iconRole, "icon")
-        compare(blockStatusSizePicker.iconSize, 40)
-        compare(blockStatusSizePicker.minimumMenuWidth, 520)
-        compare(blockStatusSizePicker.currentText, "Compact")
-        tryVerify(function() { return blockStatusSizePicker.itemAtIndex(1) !== null })
-        compare(blockStatusSizePicker.itemAtIndex(0).subtitle,
-            "For personal use on a computer or smartphone.")
-        compare(blockStatusSizePicker.itemAtIndex(1).subtitle,
-            "A larger block clock for public display on a tablet or other large screen.")
-        compare(blockStatusSizePicker.itemAtIndex(0).rowIconSource.toString(),
-            "image://images/blockclock-size-compact")
-        compare(blockStatusSizePicker.itemAtIndex(1).rowIconSource.toString(),
-            "image://images/blockclock-size-showcase")
-        compare(blockStatusSizePicker.itemAtIndex(0).implicitHeight, 52)
-        compare(blockStatusSizePicker.itemAtIndex(1).implicitHeight, 52)
-        blockStatusSizePicker.activated(1 / 2)
-        compare(Theme.blockclocksize, 1 / 2)
-        compare(blockStatusSizePicker.currentText, "Showcase")
 
         compare(moneyFontPicker.subtitleRole, "description")
         compare(moneyFontPicker.minimumMenuWidth, 400)

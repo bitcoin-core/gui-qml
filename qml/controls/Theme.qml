@@ -163,6 +163,13 @@ Control {
         readonly property string family: "BitcoinCoreSans"
         readonly property string monoFamily: "Roboto Mono"
 
+        readonly property TextStyle widgetDisplay: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 44
+            lineHeight: 48
+        }
+
         // Headers — Semi Bold
         readonly property TextStyle display: TextStyle {
             family: textSetRoot.family

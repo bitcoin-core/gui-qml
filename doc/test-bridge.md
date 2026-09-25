@@ -143,6 +143,11 @@ intermediate control behavior that would run during a real click. Prefer
 `click`, `set_text`, `key_click`, and other user-like commands when a test is
 asserting UI behavior.
 
+`invoke` accepts zero arguments or one string argument. Untyped QML functions
+also accept two or three JSON arguments, converted to `QVariant`. For example,
+the widget persistence test calls `resizeTo("blockclock", 3, 3)` after separate
+Qt Quick tests verify pointer delivery and resizing.
+
 ```json
 → {"cmd": "invoke", "objectName": "testHelper", "method": "resetState"}
 ← {"ok": true}

@@ -17,6 +17,7 @@ Item {
     objectName: "blockClock"
     property real parentWidth: 600
     property real parentHeight: 600
+    property bool fillAvailableSpace: false
     property bool showNetworkIndicator: true
     // Backing models remain current while false; only presentation work stops.
     property bool renderingActive: true
@@ -65,8 +66,10 @@ Item {
         objectName: "blockClockDial"
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
-                Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
+        width: root.fillAvailableSpace
+            ? Math.max(1, Math.min(root.parentWidth, root.parentHeight) - 24)
+            : Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
+                       Math.min(root.parentWidth * dial.scale, root.parentHeight * dial.scale))
         height: dial.width
         penWidth: dial.width / 50
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0

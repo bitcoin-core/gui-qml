@@ -27,6 +27,7 @@
 #include <vector>
 
 #include <qml/components/blockclockdial.h>
+#include <qml/components/widgets/widgetlayoutmodel.h>
 #include <qml/controls/linegraph.h>
 
 class MockAppMode : public QObject
@@ -2670,6 +2671,7 @@ public:
         rows.push_back(QVariant::fromValue(peers));
         if (!m_warning_list.isEmpty()) {
             QVariantMap warnings;
+            warnings.insert(QStringLiteral("id"), QStringLiteral("warnings"));
             warnings.insert(QStringLiteral("label"), QStringLiteral("Warnings"));
             warnings.insert(QStringLiteral("value"), m_warning_list.join(QStringLiteral("\n")));
             rows.push_back(QVariant::fromValue(warnings));
@@ -4113,6 +4115,7 @@ public Q_SLOTS:
         );
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
         qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+        qmlRegisterType<WidgetLayoutModel>("org.bitcoincore.qt", 1, 0, "WidgetLayoutModel");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
         engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);

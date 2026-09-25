@@ -86,6 +86,7 @@ qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
 add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/widgetlayoutmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${QMLTESTS_QRC_CPP}
 )
@@ -129,3 +130,12 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
     target_link_libraries(bitcoinqml_qmltests PRIVATE Qt6::qmlsettingsplugin)
   endif()
 endif()
+
+# Widget placement and persistence can be exercised without a Bitcoin node.
+add_executable(widgetlayoutmodel_tests
+  test_widgetlayoutmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/widgetlayoutmodel.cpp
+)
+target_include_directories(widgetlayoutmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(widgetlayoutmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME widgetlayoutmodel_tests COMMAND widgetlayoutmodel_tests)

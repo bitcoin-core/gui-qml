@@ -11,6 +11,7 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../controls/utils.js" as Utils
 import "../../components"
+import "../../components/widgets"
 import "../node"
 
 Page {
@@ -243,8 +244,12 @@ Page {
         rightItem: RowLayout {
             spacing: 5
             NetworkIndicator {
+                id: networkIndicator
+                objectName: "desktopNetworkIndicator"
                 textSize: 11
                 shorten: true
+                Accessible.name: qsTr("Open node information")
+                onClicked: nodeInformationPopup.open()
             }
             NavigationTab {
                 id: blockClockTabButton
@@ -366,22 +371,8 @@ Page {
                 root.openSettingsRoute("addresses")
             }
         }
-        Item {
+        WidgetDashboard {
             id: blockClockTab
-            NodeStatusActions {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: 16
-                anchors.rightMargin: 16
-                z: 2
-            }
-            BlockClock {
-                parentWidth: blockClockTab.width - 40
-                parentHeight: blockClockTab.height
-                anchors.centerIn: blockClockTab
-                showNetworkIndicator: false
-                renderingActive: root.visible && blockClockTabButton.checked
-            }
         }
         PeersView {
             showHeader: false
@@ -431,6 +422,11 @@ Page {
                 }
             }
         }
+    }
+
+    NodeInformationPopup {
+        id: nodeInformationPopup
+        parent: Overlay.overlay
     }
 
     WalletMigrationPopup {

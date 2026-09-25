@@ -37,38 +37,6 @@ SettingsPage {
         }
 
         FormRow {
-            objectName: "displayBlockStatusSizeRow"
-            Layout.fillWidth: true
-            title: qsTranslate("SettingsDisplay", "Block status size")
-            trailingItem: PopupPicker {
-                objectName: "displayBlockStatusSizePicker"
-                embedded: true
-                minimumMenuWidth: 520
-                subtitleRole: "description"
-                iconRole: "icon"
-                iconSize: 40
-                currentValue: Theme.blockclocksize >= 1 / 2 ? 1 / 2 : 1 / 3
-                model: [
-                    {
-                        text: qsTr("Compact"),
-                        value: 1 / 3,
-                        description: qsTr("For personal use on a computer or smartphone."),
-                        icon: "image://images/blockclock-size-compact"
-                    },
-                    {
-                        text: qsTr("Showcase"),
-                        value: 1 / 2,
-                        description: qsTr("A larger block clock for public display on a tablet or other large screen."),
-                        icon: "image://images/blockclock-size-showcase"
-                    }
-                ]
-                onActivated: function(value) {
-                    Theme.blockclocksize = value
-                }
-            }
-        }
-
-        FormRow {
             objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")

@@ -85,9 +85,12 @@ bool HasMultipleRuntimeDialogButtons(unsigned int buttons)
     return (buttons & (buttons - 1)) != 0;
 }
 
-QVariant InformationRow(const QString& label, const QString& value)
+QVariant InformationRow(const QString& label, const QString& value, const QString& id = {})
 {
     QVariantMap row;
+    if (!id.isEmpty()) {
+        row.insert(QStringLiteral("id"), id);
+    }
     row.insert(QStringLiteral("label"), label);
     row.insert(QStringLiteral("value"), value);
     return QVariant::fromValue(row);
@@ -688,7 +691,7 @@ QVariantList NodeModel::nodeInformationRows()
     rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
     rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
     rows.push_back(InformationRow(tr("Local addresses"), local_addresses));
-    rows.push_back(InformationRow(tr("Warnings"), warning_text));
+    rows.push_back(InformationRow(tr("Warnings"), warning_text, QStringLiteral("warnings")));
     return rows;
 }
 

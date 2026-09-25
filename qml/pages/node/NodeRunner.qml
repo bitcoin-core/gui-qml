@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../controls/utils.js" as Utils
 import "../../components"
+import "../../components/widgets"
 
 Page {
     signal settingsClicked
@@ -17,6 +18,14 @@ Page {
     background: null
     clip: true
     header: NavigationBar2 {
+        leftItem: NetworkIndicator {
+            id: networkIndicator
+            objectName: "nodeRunnerNetworkIndicator"
+            textSize: 11
+            shorten: true
+            Accessible.name: qsTr("Open node information")
+            onClicked: nodeInformationPopup.open()
+        }
         rightItem: Item {
             implicitWidth: actionsRow.implicitWidth + 12
             implicitHeight: actionsRow.implicitHeight + 10
@@ -29,7 +38,8 @@ Page {
                 anchors.rightMargin: 12
                 spacing: 4
 
-                NodeStatusActions {
+                WidgetActionsButton {
+                    dashboard: dashboardView
                     Layout.alignment: Qt.AlignVCenter
                 }
                 IconButton {
@@ -58,10 +68,14 @@ Page {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
-    BlockClock {
-        parentWidth: parent.width - 40
-        parentHeight: parent.height
-        anchors.centerIn: parent
-        renderingActive: root.visible
+    WidgetDashboard {
+        id: dashboardView
+        showWidgetActions: false
+        anchors.fill: parent
+    }
+
+    NodeInformationPopup {
+        id: nodeInformationPopup
+        parent: Overlay.overlay
     }
 }
