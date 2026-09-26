@@ -14,32 +14,44 @@ Item {
     property bool secondaryEnabled: true
     property string primaryButtonObjectName: "onboardingPrimaryButton"
     property string secondaryButtonObjectName: "onboardingSecondaryButton"
+    property bool secondaryButtonIsLink: false
+    property bool showBackButton: false
+    property string backButtonObjectName: "onboardingFooterBackButton"
+    property bool isOnSurface: true
     property real maximumContentWidth: 860
     property real contentSidePadding: width >= 640 ? 40 : 24
+    property bool fullWidth: false
     readonly property bool compact: actions.width < 420
     readonly property alias primaryButton: primaryButton
-    readonly property alias secondaryButton: secondaryButton
+    readonly property var secondaryButton: secondaryButtonIsLink ? secondaryLinkButton : secondaryNeutralButton
+    readonly property alias backButton: backButton
 
+    signal backClicked()
     signal primaryClicked()
     signal secondaryClicked()
 
-    visible: primaryText.length > 0 || secondaryText.length > 0
-    implicitHeight: visible ? separator.height + 24 + actions.height + 24 : 0
+    visible: showBackButton || primaryText.length > 0 || secondaryText.length > 0
+    implicitHeight: visible ? separator.height + 24 + actions.height
+        + (showBackButton && compact ? 12 + backButton.height : 0) + 24 : 0
 
     Separator {
         id: separator
+        objectName: "onboardingFooterSeparator"
         anchors.top: parent.top
         anchors.horizontalCenter: parent.horizontalCenter
-        width: actions.width
+        width: root.fullWidth ? root.width : actions.width
     }
 
     Flow {
         id: actions
+        objectName: "onboardingFooterActions"
         anchors.top: separator.bottom
         anchors.topMargin: 24
         anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.max(0, Math.min(root.width - root.contentSidePadding * 2,
-                                    root.maximumContentWidth))
+        width: Math.max(0, root.fullWidth
+            ? root.width - root.contentSidePadding * 2
+            : Math.min(root.width - root.contentSidePadding * 2,
+                       root.maximumContentWidth))
         height: childrenRect.height
         layoutDirection: Qt.RightToLeft
         spacing: 12
@@ -55,14 +67,40 @@ Item {
         }
 
         NeutralButton {
-            id: secondaryButton
-            objectName: root.secondaryButtonObjectName
-            visible: root.secondaryText.length > 0
+            id: secondaryNeutralButton
+            objectName: root.secondaryButtonIsLink ? "" : root.secondaryButtonObjectName
+            visible: root.secondaryText.length > 0 && !root.secondaryButtonIsLink
             enabled: root.secondaryEnabled
             buttonSize: NeutralButton.Large
+            isOnSurface: root.isOnSurface
             width: root.compact ? actions.width : Math.min(actions.width, Math.max(140, implicitWidth))
             text: root.secondaryText
             onClicked: root.secondaryClicked()
         }
+
+        LinkButton {
+            id: secondaryLinkButton
+            objectName: root.secondaryButtonIsLink ? root.secondaryButtonObjectName : ""
+            visible: root.secondaryText.length > 0 && root.secondaryButtonIsLink
+            enabled: root.secondaryEnabled
+            width: root.compact ? actions.width : implicitWidth
+            height: root.compact ? implicitHeight : primaryButton.height
+            text: root.secondaryText
+            onClicked: root.secondaryClicked()
+        }
+    }
+
+    OnboardingBackButton {
+        id: backButton
+        objectName: root.backButtonObjectName
+        visible: root.showBackButton
+        enabled: visible
+        isOnSurface: root.isOnSurface
+        anchors.left: parent.left
+        anchors.leftMargin: root.fullWidth ? root.contentSidePadding
+            : Math.max(root.contentSidePadding, (root.width - actions.width) / 2)
+        anchors.top: actions.top
+        anchors.topMargin: root.compact ? actions.height + 12 : 0
+        onClicked: root.backClicked()
     }
 }

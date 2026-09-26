@@ -13,7 +13,7 @@ NeutralButton {
     property string subtitle: ""
     property bool opened: false
     property bool active: false
-    property bool isOnSurface: false
+    isOnSurface: false
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft

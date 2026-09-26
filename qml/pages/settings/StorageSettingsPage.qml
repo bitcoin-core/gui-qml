@@ -15,6 +15,7 @@ SettingsPage {
     showBackButton: false
 
     property var settingsModel: optionsModel
+    property bool onboarding: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var pruneSetting: coreSettingsModel.entry("prune")
     readonly property bool hasStorageResult: root.settingsModel
@@ -50,10 +51,13 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Block storage")
+        isOnSurface: root.onboarding
+        showGradientBorder: false
 
         FormRow {
             Layout.fillWidth: true
             title: qsTr("Store recent blocks only")
+            dividerColor: root.onboarding ? Theme.color.neutral3 : Theme.color.neutral2
             supportingText: root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
             trailingItem: OptionSwitch {
@@ -93,6 +97,8 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Data directory")
+        isOnSurface: root.onboarding
+        showGradientBorder: false
         description: qsTr("Selected before startup. The data directory cannot be changed while the node is running.")
 
         FormRow {
@@ -115,7 +121,7 @@ SettingsPage {
 
     SettingsRestartNotice {
         objectName: "storageRestartNotice"
-        visible: root.settingsModel.storageSettingsDirty
+        visible: !root.onboarding && root.settingsModel.storageSettingsDirty
         Layout.fillWidth: true
         Layout.maximumWidth: root.contentLayout.width
     }

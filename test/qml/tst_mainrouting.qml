@@ -85,7 +85,13 @@ TestCase {
         verify(wizard !== null)
         compare(findChild(window, "mainPageStack").depth, 1)
         compare(findChild(window, "walletCreationModal").visible, true)
-        verify(findChild(wizard, "walletCreationTypePage") !== null)
+        const typePage = findChild(wizard, "walletCreationTypePage")
+        verify(typePage !== null)
+        compare(typePage.title, "")
+        compare(typePage.heading, "Choose a wallet type")
+        compare(typePage.subheading, "You can create a new wallet or import from a wallet file.")
+        compare(findChild(typePage, "walletTypeImport").description,
+            "Use an existing wallet backup file")
     }
 
     function test_add_wallet_completion_returns_to_activity() {
@@ -110,10 +116,16 @@ TestCase {
 
     function test_onboarding_creation_returns_to_activity() {
         const window = createMain(true, true, true, true, true)
+        tryCompare(findChild(window, "walletCreationModal"), "visible", true)
         const wizard = findChild(window, "createWalletWizard")
         verify(wizard !== null)
-        findChild(wizard, "createWalletButton").clicked()
-        tryVerify(function() { return findChild(wizard, "walletCreationTypePage") !== null })
+        const typePage = findChild(wizard, "walletCreationTypePage")
+        verify(typePage !== null)
+        compare(typePage.title, "")
+        compare(typePage.heading, "Add a wallet to your node")
+        compare(typePage.subheading,
+            "Add a wallet to start using Bitcoin Core. You can create a new wallet now or import from wallet file.")
+        compare(findChild(window, "blockClockTabButton").checked, true)
         findChild(wizard, "walletTypeViewOnly").clicked()
         tryVerify(function() { return findChild(wizard, "createWalletFormPage") !== null })
         const form = findChild(wizard, "createWalletFormPage")
@@ -125,6 +137,8 @@ TestCase {
         walletController.setWalletLoaded(true)
         findChild(wizard, "createWalletReadyDoneButton").clicked()
 
+        tryCompare(findChild(window, "walletCreationModal"), "visible", false)
+        tryCompare(findChild(window, "walletCreationModal"), "onboardingEntry", false)
         compare(findChild(window, "mainPageStack").depth, 1)
         compare(findChild(window, "activityTabButton").checked, true)
     }
@@ -195,36 +209,32 @@ TestCase {
         compare(noteInput.text, editedText)
     }
 
-    function test_preinit_onboarding_shows_startup_loading_while_wallet_scan_pending() {
+    function test_preinit_onboarding_shows_node_while_wallet_scan_pending() {
         const window = createMain(true, true, false, false, false)
-        verify(findChild(window, "postOnboardingStartupPage") !== null)
-        verify(findChild(window, "postOnboardingStartupBusyIndicator") !== null)
-        verify(findChild(window, "desktopWalletsPage") === null)
+        verify(findChild(window, "desktopWalletsPage") !== null)
+        compare(findChild(window, "blockClockTabButton").checked, true)
         verify(findChild(window, "createWalletWizard") === null)
         verify(findChild(window, "nodeRunner") === null)
     }
 
-    function test_preinit_onboarding_no_wallets_opens_create_wallet_wizard_after_scan() {
+    function test_preinit_onboarding_no_wallets_opens_modal_over_node_after_scan() {
         const window = createMain(true, true, true, false, false)
-        verify(findChild(window, "postOnboardingStartupPage") !== null)
+        verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "createWalletWizard") === null)
         walletController.setInitialized(true)
         walletListModel.setWalletDirLoaded(true)
-        tryVerify(function() {
-            const createButton = findChild(window, "createWalletButton")
-            return createButton && createButton.enabled
-        })
-        compare(findChild(window, "createWalletDiscoveryBusyIndicator").visible, false)
+        tryCompare(findChild(window, "walletCreationModal"), "visible", true)
         verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "walletBadge") !== null)
-        compare(findChild(window, "mainPageStack").depth, 2)
-        compare(findChild(window, "walletCreationModal").visible, false)
+        compare(findChild(window, "mainPageStack").depth, 1)
+        compare(findChild(window, "blockClockTabButton").checked, true)
+        verify(findChild(window, "walletCreationTypePage") !== null)
         verify(findChild(window, "nodeRunner") === null)
     }
 
     function test_preinit_onboarding_existing_wallets_opens_wallet_shell_after_scan() {
         const window = createMain(true, true, false, false, false)
-        verify(findChild(window, "postOnboardingStartupPage") !== null)
+        verify(findChild(window, "desktopWalletsPage") !== null)
         verify(findChild(window, "createWalletWizard") === null)
         walletController.setInitialized(true)
         walletListModel.setWalletDirLoaded(true)

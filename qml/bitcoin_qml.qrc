@@ -57,6 +57,7 @@
         <file>components/QRCodePopup.qml</file>
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestModal.qml</file>
+        <file>components/OnboardingSettingsPopup.qml</file>
         <file>components/WalletCreationModal.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
         <file>components/ReceivingAddressCard.qml</file>
@@ -151,6 +152,7 @@
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
         <file>controls/OnboardingFooter.qml</file>
+        <file>controls/OnboardingBackButton.qml</file>
         <file>controls/OnboardingNavigationBar.qml</file>
         <file>controls/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>

@@ -17,6 +17,7 @@ Control {
     property var titleTextStyle: Theme.text.headline
     property var descriptionTextStyle: Theme.text.description
     property int descriptionTextFormat: Text.AutoText
+    property int titleAlignment: Text.AlignLeft
 
     Accessible.name: title
     Accessible.description: description
@@ -42,7 +43,7 @@ Control {
                 font: root.titleTextStyle.font
                 lineHeight: root.titleTextStyle.lineHeight
                 lineHeightMode: Text.FixedHeight
-                horizontalAlignment: Text.AlignLeft
+                horizontalAlignment: root.titleAlignment
                 wrap: false
                 elide: Text.ElideRight
             }

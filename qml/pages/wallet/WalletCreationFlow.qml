@@ -13,6 +13,7 @@ Item {
     objectName: "createWalletWizard"
     clip: true
     property bool modalView: false
+    property bool onboardingEntry: false
     property bool waitForWalletDiscovery: false
     property bool creatingWallet: false
     property bool importingWallet: false
@@ -164,7 +165,7 @@ Item {
             objectName: "walletCreationStartPage"
             showNavigationBar: false
             usesSharedNavigation: true
-            title: qsTr("Add a wallet")
+            title: ""
             maximumContentWidth: 640
             heading: qsTr("Your wallet starts here")
             subheading: qsTr("Create a wallet to manage your keys in this app, or import an existing wallet file.")
@@ -195,6 +196,7 @@ Item {
         id: typePage
         WalletCreationTypePage {
             modalView: root.modalView
+            onboardingEntry: root.onboardingEntry
             importingWallet: root.importingWallet
             onCancel: root.finished(false)
             onRegularSelected: root.push(formPage, { "watchOnly": false,

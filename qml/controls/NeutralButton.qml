@@ -20,10 +20,11 @@ AbstractButton {
     property var textStyle: large ? Theme.text.buttonStrong : Theme.text.captionStrong
     property int textFontPixelSize: textStyle.pixelSize
     property color textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral5
-    property color backgroundColor: Theme.color.neutral2
-    property color hoverBackgroundColor: Theme.color.neutral3
+    property bool isOnSurface: true
+    property color backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    property color hoverBackgroundColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
     property bool forceHoverBackground: false
-    property bool showBorder: true
+    property bool showBorder: isOnSurface
     property int backgroundRadius: 5
     property string focusBorderObjectName: ""
     readonly property color currentBackgroundColor: forceHoverBackground || hovered || down

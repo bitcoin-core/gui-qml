@@ -19,6 +19,7 @@ SettingsPage {
     property string errorText: ""
     property string pendingDisplayName: root.wallet ? root.wallet.displayName : ""
     readonly property bool walletLoaded: walletController.isWalletLoaded
+    readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
 
     signal selectWalletRequested()
@@ -107,17 +108,22 @@ SettingsPage {
     }
 
     PageHeading {
+        objectName: "walletSettingsEmptyHeading"
         visible: !root.walletLoaded
         Layout.fillWidth: true
-        title: qsTr("No wallet selected")
-        description: qsTr("Select a wallet to manage wallet-specific settings.")
+        title: root.noWalletsAvailable ? "" : qsTr("No wallet selected")
+        description: root.noWalletsAvailable
+            ? qsTr("Add a wallet to manage its settings.")
+            : qsTr("Select a wallet to manage wallet-specific settings.")
+        titleAlignment: Text.AlignHCenter
     }
 
     OutlineButton {
+        objectName: "walletSettingsEmptyAction"
         visible: !root.walletLoaded
         Layout.preferredWidth: 220
         Layout.alignment: Qt.AlignHCenter
-        text: qsTr("Select wallet")
+        text: root.noWalletsAvailable ? qsTr("Add wallet") : qsTr("Select wallet")
         onClicked: root.selectWalletRequested()
     }
 

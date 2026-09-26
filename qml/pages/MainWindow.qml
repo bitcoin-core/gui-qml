@@ -110,11 +110,9 @@ ApplicationWindow {
             return
         }
         appWindow.postOnboardingWalletRouteResolved = true
-        main.replace(desktopWallets, {}, StackView.Immediate)
         if (walletController.noWalletsFound) {
-            main.push(walletCreationFlow, {
-                "waitForWalletDiscovery": true
-            }, StackView.Immediate)
+            main.currentItem.openNode()
+            Qt.callLater(function() { walletCreationModal.openForOnboarding() })
         }
     }
 
@@ -288,9 +286,7 @@ ApplicationWindow {
     PageStack {
         id: main
         objectName: "mainPageStack"
-        initialItem: appWindow.waitForPostOnboardingWalletRoute
-            ? postOnboardingStartup
-            : (appWindow.desktopWalletMode ? desktopWallets : node)
+        initialItem: appWindow.desktopWalletMode ? desktopWallets : node
         anchors.fill: parent
         focus: true
         Keys.onReleased: (event) => {
@@ -341,38 +337,11 @@ ApplicationWindow {
     }
 
     Component {
-        id: postOnboardingStartup
-        Page {
-            objectName: "postOnboardingStartupPage"
-            background: Rectangle {
-                color: "black"
-            }
-
-            BusyIndicator {
-                objectName: "postOnboardingStartupBusyIndicator"
-                anchors.centerIn: parent
-                running: true
-            }
-        }
-    }
-
-    Component {
         id: desktopWallets
         DesktopWallets {
             objectName: "desktopWalletsPage"
             onAddWallet: {
                 walletCreationModal.open()
-            }
-        }
-    }
-
-    Component {
-        id: walletCreationFlow
-        WalletCreationFlow {
-            onFinished: function(openActivity) {
-                const shell = main.get(0)
-                if (openActivity && shell) shell.openActivity()
-                main.pop()
             }
         }
     }

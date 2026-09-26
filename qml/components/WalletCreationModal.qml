@@ -11,6 +11,14 @@ Popup {
     id: root
     objectName: "walletCreationModal"
     signal finished(bool openActivity)
+    property bool onboardingEntry: false
+
+    function openForOnboarding() {
+        onboardingEntry = true
+        open()
+    }
+
+    onClosed: onboardingEntry = false
 
     parent: Overlay.overlay
     width: Math.min(880, parent ? parent.width - 32 : 880)
@@ -52,6 +60,7 @@ Popup {
         active: root.visible
         sourceComponent: WalletCreationFlow {
             modalView: true
+            onboardingEntry: root.onboardingEntry
             onFinished: function(openActivity) {
                 root.close()
                 root.finished(openActivity)

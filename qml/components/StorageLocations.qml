@@ -55,6 +55,7 @@ ColumnLayout {
         objectName: "storageDefaultLocationOption"
         Layout.fillWidth: true
         ButtonGroup.group: group
+        surfaceSelectionStyle: true
         text: qsTr("Default")
         checked: root.settingsModel.dataDir === root.settingsModel.getDefaultDataDirString
         description: root.locationDescription(qsTr("Your application directory."), checked)
@@ -70,6 +71,7 @@ ColumnLayout {
         objectName: "storageCustomLocationOption"
         Layout.fillWidth: true
         ButtonGroup.group: group
+        surfaceSelectionStyle: true
         text: qsTr("Custom")
         description: root.locationDescription(qsTr("Choose the directory and storage device."), checked)
         customDir: checked && root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString ? root.settingsModel.dataDir : ""

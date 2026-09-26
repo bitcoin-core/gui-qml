@@ -9,7 +9,7 @@ import org.bitcoincore.qt 1.0
 NeutralButton {
     id: root
 
-    property bool isOnSurface: false
+    isOnSurface: false
     property color iconColor: Theme.color.neutral7
     property color activeIconColor: Theme.color.orange
     property int size: 40

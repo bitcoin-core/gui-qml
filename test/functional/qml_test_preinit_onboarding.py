@@ -49,17 +49,16 @@ def assert_create_wallet_onboarding_shown(gui, timeout_ms=30000):
         raise AssertionError("Timed out waiting for create-wallet onboarding")
 
     gui.wait_for_object("desktopWalletsPage", timeout_ms=timeout_ms)
-    assert not gui.object_exists("createWalletWizardBackButton"), "Create-wallet Back must not be shown during onboarding"
-    if not gui.get_property("createWalletButton", "enabled"):
-        gui.wait_for_property("createWalletDiscoveryBusyIndicator", "visible", True, timeout_ms=timeout_ms)
-        gui.wait_for_property("importWalletButton", "enabled", False, timeout_ms=timeout_ms)
+    gui.wait_for_property("walletCreationModal", "visible", True, timeout_ms=timeout_ms)
+    gui.wait_for_page("walletCreationTypePage", timeout_ms=timeout_ms)
+    assert gui.get_property("blockClockTabButton", "checked"), "Node tab should be selected"
 
 
 def assert_preinit_cover_about_available(gui):
     gui.wait_for_object("onboardingCoverInfoButton", timeout_ms=10000)
     gui.click("onboardingCoverInfoButton")
-    gui.wait_for_page("settingsAbout", timeout_ms=10000)
-    gui.click("settingsAboutBack")
+    gui.wait_for_page("aboutSettingsPage", timeout_ms=10000)
+    gui.click("onboardingAboutCloseButton")
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
 
 
@@ -192,21 +191,21 @@ def prepare_existing_profile_with_explicit_walletdir(tmpdir, wallet_name):
 
 def assert_saved_connection_settings_visible(gui):
     gui.click("connectionSettingsButton")
-    gui.wait_for_page("gotoProxy", timeout_ms=5000)
+    gui.wait_for_page("connectionSettingsPage", timeout_ms=5000)
     gui.wait_for_property("listenSwitch", "checked", False, timeout_ms=5000)
     gui.wait_for_property("natpmpSwitch", "checked", True, timeout_ms=5000)
     gui.wait_for_property("serverSwitch", "checked", True, timeout_ms=5000)
 
-    gui.click("gotoProxy")
-    gui.wait_for_page("settingsProxy", timeout_ms=5000)
+    gui.click("proxySettingsRow")
+    gui.wait_for_page("proxySettingsPage", timeout_ms=5000)
     gui.wait_for_property("proxyEnableSwitch", "checked", True, timeout_ms=5000)
     gui.wait_for_property("proxyAddressInput", "text", "10.0.0.1:9050", timeout_ms=5000)
     gui.wait_for_property("torEnableSwitch", "checked", True, timeout_ms=5000)
     gui.wait_for_property("torAddressInput", "text", "127.0.0.1:9150", timeout_ms=5000)
 
-    gui.click("settingsProxyDone")
-    gui.wait_for_page("gotoProxy", timeout_ms=5000)
-    gui.click("connectionSettingsDoneButton")
+    gui.click("proxySettingsBackButton")
+    gui.wait_for_page("connectionSettingsPage", timeout_ms=5000)
+    gui.click("onboardingConnectionSettingsCloseButton")
     gui.wait_for_page("onboardingConnectionButton", timeout_ms=5000)
 
 
@@ -223,8 +222,7 @@ def run_wallet_enabled_flow():
         gui = finish_preinit_and_reconnect(harness)
         assert_create_wallet_onboarding_shown(gui)
         assert_onboarding_wallet_creation_visible(gui)
-        assert not gui.object_exists("createWalletWizardBackButton"), "Create-wallet Back must not be shown during onboarding"
-        gui.click("createWalletWizardExitButton")
+        gui.click("onboardingCloseButton")
         assert_wallet_shell_visible(gui)
         assert not gui.object_exists("onboardingStorageLocation"), "Create-wallet Skip must not return to datadir onboarding"
 

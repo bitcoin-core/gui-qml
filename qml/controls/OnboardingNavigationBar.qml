@@ -14,6 +14,7 @@ Item {
     property real contentSidePadding: width >= 640 ? 40 : 24
     property real buttonSidePadding: contentSidePadding
     property int closeButtonSize: CloseButton.Medium
+    property string backButtonObjectName: "onboardingBackButton"
     property bool titleReady: false
     signal backClicked()
     signal closeClicked()
@@ -55,9 +56,9 @@ Item {
         easing.type: Easing.OutCubic
     }
 
-    NeutralButton {
+    OnboardingBackButton {
         id: backButton
-        objectName: "onboardingBackButton"
+        objectName: root.backButtonObjectName
         anchors.left: parent.left
         anchors.leftMargin: root.buttonSidePadding
         anchors.verticalCenter: parent.verticalCenter
@@ -67,30 +68,7 @@ Item {
         Behavior on opacity {
             NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
         }
-        buttonSize: NeutralButton.Medium
-        leftPadding: 6
-        text: qsTr("Back")
-        contentItem: Item {
-            implicitWidth: backChevron.width - 3 + backLabel.implicitWidth
-            implicitHeight: Math.max(backChevron.height, backLabel.implicitHeight)
-
-            Icon {
-                id: backChevron
-                source: "image://images/caret-left"
-                size: 18
-                color: backButton.textColor
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            CoreText {
-                id: backLabel
-                x: backChevron.width - 3
-                anchors.verticalCenter: parent.verticalCenter
-                text: backButton.text
-                font: Theme.text.captionStrong.font
-                color: backButton.textColor
-                wrap: false
-            }
-        }
+        isOnSurface: root.isOnSurface
         onClicked: root.backClicked()
     }
 

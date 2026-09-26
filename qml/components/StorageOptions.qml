@@ -52,6 +52,7 @@ ColumnLayout {
         objectName: "storageReduceOption"
         Layout.fillWidth: true
         ButtonGroup.group: group
+        surfaceSelectionStyle: true
         text: qsTr("Reduce storage")
         description: qsTr("Uses about %1GB. For regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
@@ -67,6 +68,7 @@ ColumnLayout {
         objectName: "storageFullOption"
         Layout.fillWidth: true
         ButtonGroup.group: group
+        surfaceSelectionStyle: true
         text: qsTr("Store all data")
         checked: !root.pruneSetting.enabled
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
@@ -84,6 +86,7 @@ ColumnLayout {
         sourceComponent: OptionButton {
             objectName: "storageCustomOption"
             ButtonGroup.group: group
+            surfaceSelectionStyle: true
             checked: root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
             text: qsTr("Custom")
             description: qsTr("Storing recent blocks up to %1 GB.").arg(root.effectiveCustomStorageAmount)

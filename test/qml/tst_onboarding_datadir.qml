@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 import "../../qml/pages/onboarding"
 
 TestCase {
@@ -123,9 +124,35 @@ TestCase {
 
         const infoButton = findChild(wizard.currentItem, "onboardingCoverInfoButton")
         verify(infoButton !== null)
+        compare(infoButton.textColor, Theme.color.orange)
 
         infoButton.clicked()
-        tryVerify(function() { return findChild(wizard.currentItem, "settingsAbout") !== null })
+        const popup = findChild(wizard.currentItem, "onboardingAboutPopup")
+        verify(popup !== null)
+        tryCompare(popup, "visible", true)
+        compare(popup.width, 532)
+        compare(popup.height, 504)
+        const aboutPage = findChild(popup, "aboutSettingsPage")
+        verify(aboutPage !== null)
+        compare(aboutPage.title, "About Bitcoin Core")
+        compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.neutral3)
+
+        findChild(aboutPage, "aboutDeveloperRow").clicked()
+        const developerPage = findChild(popup, "settingsDeveloper")
+        verify(developerPage !== null)
+        const developerSection = findChild(developerPage, "developerSettingsSection")
+        verify(developerSection !== null)
+        compare(developerSection.backgroundColor, Theme.color.neutral2)
+        const dbcacheField = findChild(developerPage, "developerDbcacheField")
+        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
+        verify(dbcacheField !== null)
+        verify(scriptThreadsField !== null)
+        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
+        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
+        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
+        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
+        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
+        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
     }
 
     function test_normal_onboarding_starts_at_cover() {
@@ -138,9 +165,29 @@ TestCase {
         const wizard = createTemporaryObject(fullPreInitWizard, this)
         verify(wizard !== null)
         compare(wizard.currentItem.objectName, "onboardingCover")
+        compare(findChild(wizard.currentItem, "onboardingWizardBackButton").visible, false)
+        const separator = findChild(wizard.currentItem, "onboardingFooterSeparator")
+        const actions = findChild(wizard.currentItem, "onboardingFooterActions")
+        verify(separator !== null)
+        verify(actions !== null)
+        compare(separator.width, wizard.width)
+        compare(actions.width, wizard.width - 80)
+        wizard.width = 1100
+        compare(separator.width, 1100)
+        compare(actions.width, 1020)
 
         triggerButton(wizard.currentItem, "onboardingCoverButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingStrengthen" })
+        compare(wizard.busy, false)
+        compare(wizard.currentItem.showBackButton, true)
+        compare(wizard.currentItem.backButtonInFooter, true)
+        const backButton = findChild(wizard.currentItem, "onboardingWizardBackButton")
+        verify(backButton !== null)
+        compare(backButton, wizard.currentItem.footerBackButton)
+        tryCompare(backButton, "opacity", 1)
+        compare(backButton.isOnSurface, false)
+        const backButtonX = backButton.x
+        const backButtonY = backButton.y
 
         triggerButton(wizard.currentItem, "onboardingStrengthenButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingBlockclock" })
@@ -150,17 +197,20 @@ TestCase {
 
         triggerButton(wizard.currentItem, "onboardingStorageLocationButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingStorageAmount" })
-        const backButton = findChild(wizard.currentItem, "onboardingStorageAmountBackButton")
-        verify(backButton !== null)
+        const storageBackButton = findChild(wizard.currentItem, "onboardingWizardBackButton")
+        verify(storageBackButton !== null)
+        compare(storageBackButton.x, backButtonX)
+        compare(storageBackButton.y, backButtonY)
 
-        backButton.clicked()
+        storageBackButton.clicked()
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingStorageLocation" })
+        compare(wizard.busy, false)
     }
 
     function test_storage_location_uses_injected_chainstate_size() {
         const page = createTemporaryObject(storageLocation, this)
         verify(page !== null)
-        verify(page.description.indexOf("10GB") !== -1)
+        verify(page.subheading.indexOf("10GB") !== -1)
     }
 
     function test_existing_profile_storage_location_uses_operational_minimum() {
@@ -172,8 +222,8 @@ TestCase {
         const defaultOption = findChild(page, "storageDefaultLocationOption")
         verify(defaultOption !== null)
 
-        compare(page.description, "Where do you want to store the downloaded block data?\nYou need a minimum of 1GB of storage.")
-        tryCompare(page, "buttonEnabled", true)
+        compare(page.subheading, "Where do you want to store the downloaded block data?\nYou need a minimum of 1GB of storage.")
+        tryCompare(page, "primaryButtonEnabled", true)
         compare(defaultOption.showErrorText, false)
     }
 
@@ -183,6 +233,34 @@ TestCase {
         const button = findChild(page, "onboardingConnectionButton")
         verify(button !== null)
         compare(button.text, "Start")
+    }
+
+    function test_onboarding_settings_open_in_modals() {
+        const amountPage = createTemporaryObject(storageAmount, this)
+        verify(amountPage !== null)
+        findChild(amountPage, "onboardingStorageSettingsButton").clicked()
+        compare(findChild(amountPage, "onboardingStorageSettingsButton").textColor, Theme.color.orange)
+        const storagePopup = findChild(amountPage, "onboardingStorageSettingsPopup")
+        verify(storagePopup !== null)
+        tryCompare(storagePopup, "visible", true)
+        const storagePage = findChild(storagePopup, "storageSettingsPage")
+        verify(storagePage !== null)
+        compare(storagePage.onboarding, true)
+        verify(findChild(storagePage, "pruneSwitch") !== null)
+        storagePopup.close()
+
+        const connectionPage = createTemporaryObject(connection, this)
+        verify(connectionPage !== null)
+        const connectionSettingsButton = findChild(connectionPage, "connectionSettingsButton")
+        verify(connectionSettingsButton.width < connectionPage.width)
+        compare(connectionSettingsButton.textColor, Theme.color.orange)
+        connectionSettingsButton.clicked()
+        const connectionPopup = findChild(connectionPage, "onboardingConnectionSettingsPopup")
+        verify(connectionPopup !== null)
+        tryCompare(connectionPopup, "visible", true)
+        verify(findChild(connectionPopup, "connectionSettingsPage") !== null)
+        findChild(connectionPopup, "proxySettingsRow").clicked()
+        tryVerify(function() { return findChild(connectionPopup, "proxySettingsPage") !== null })
     }
 
     function test_storage_location_uses_folder_dialog_for_custom_directory() {
@@ -310,7 +388,7 @@ TestCase {
         verify(button !== null)
         verify(defaultOption !== null)
 
-        compare(page.description, "Where do you want to store the downloaded block data?\nYou need a minimum of 10GB of storage.")
+        compare(page.subheading, "Where do you want to store the downloaded block data?\nYou need a minimum of 10GB of storage.")
         compare(button.enabled, false)
         compare(defaultOption.showErrorText, true)
         compare(defaultOption.errorText, "Not enough storage available.")
@@ -319,12 +397,10 @@ TestCase {
     function test_storage_amount_uses_detected_available_space() {
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
-        const info = findChild(page, "onboardingStorageAmountPage")
-        verify(info !== null)
-        compare(info.headerText, "Storage amount")
-        compare(info.description, "Data retrieved from the Bitcoin network is stored on your device.\nYou have 123GB of storage available.")
-        verify(info.description.indexOf("500GB") === -1)
-        compare(info.subtext, "")
+        compare(page.heading, "Storage amount")
+        compare(page.subheading, "Data retrieved from the Bitcoin network is stored on your device.\nYou have 123GB of storage available.")
+        verify(page.subheading.indexOf("500GB") === -1)
+        compare(page.storageWarningText, "")
     }
 
     function test_storage_amount_disables_full_storage_when_space_is_insufficient() {
@@ -347,7 +423,7 @@ TestCase {
 
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
-        const infoPage = findChild(page, "onboardingStorageAmountPage")
+        const infoPage = page
         const reduceOption = findChild(page, "storageReduceOption")
         const fullOption = findChild(page, "storageFullOption")
         verify(infoPage !== null)
@@ -357,7 +433,7 @@ TestCase {
         compare(reduceOption.enabled, true)
         tryCompare(fullOption, "enabled", true)
         compare(fullOption.checked, true)
-        tryCompare(infoPage, "buttonEnabled", true)
+        tryCompare(infoPage, "primaryButtonEnabled", true)
     }
 
     function test_disabled_full_storage_does_not_hover() {

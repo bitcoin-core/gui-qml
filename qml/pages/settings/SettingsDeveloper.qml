@@ -3,29 +3,22 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
 import "../../components"
 
-InformationPage {
+SettingsPage {
     id: root
     objectName: "settingsDeveloper"
     property bool onboarding: false
-    showNavBar: false
-    header: SettingsHeader {
-        title: root.onboarding ? "" : qsTr("Developer settings")
-        showBackButton: true
-        backButtonObjectName: "settingsDeveloperBack"
-        onBack: root.back()
-    }
-    bannerActive: false
-    bold: true
-    showHeader: root.onboarding
-    headerText: qsTr("Developer options")
-    headerMargin: 0
-    detailActive: true
-    detailItem: DeveloperOptions {
+
+    title: qsTr("Developer settings")
+    showBackButton: true
+    backButtonObjectName: "settingsDeveloperBack"
+
+    DeveloperOptions {
+        Layout.fillWidth: true
+        isOnSurface: root.onboarding
         showRestartNotice: !root.onboarding && optionsModel.developerSettingsDirty
     }
 }

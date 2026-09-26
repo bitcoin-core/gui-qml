@@ -16,6 +16,7 @@ SettingsPage {
     backButtonObjectName: "proxySettingsBackButton"
 
     property var settingsModel: optionsModel
+    property bool onboardingModal: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var proxySetting: coreSettingsModel.entry("proxy")
     readonly property var onionSetting: coreSettingsModel.entry("onion")
@@ -107,27 +108,23 @@ SettingsPage {
     onBack: root.requestBack()
     Component.onCompleted: root.resetProxyDraft()
 
-    rightItem: NavButton {
-        objectName: "proxySettingsSaveButton"
-        text: qsTr("Save")
-        enabled: root.canSaveProxyDraft
-        onClicked: root.save()
-    }
-
     SettingsRestartNotice {
         objectName: "proxyRestartNotice"
-        visible: root.settingsModel.proxySettingsDirty
+        visible: !root.onboardingModal && root.settingsModel.proxySettingsDirty
         Layout.fillWidth: true
     }
 
     FormSection {
         objectName: "defaultProxySection"
         Layout.fillWidth: true
+        isOnSurface: root.onboardingModal
+        showGradientBorder: false
         title: qsTr("Default proxy")
         description: qsTr("Route peer connections through a SOCKS5 proxy. IPv4, IPv6, and Tor connections are supported.")
 
         FormRow {
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Enable")
             supportingText: root.proxySetting.infoText
             enabled: root.proxySetting.canEdit
@@ -163,11 +160,14 @@ SettingsPage {
     FormSection {
         objectName: "torProxySection"
         Layout.fillWidth: true
+        isOnSurface: root.onboardingModal
+        showGradientBorder: false
         title: qsTr("Tor proxy")
         description: qsTr("Route Tor connections through a dedicated SOCKS5 proxy.")
 
         FormRow {
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Enable")
             supportingText: root.onionSetting.infoText
             enabled: root.onionSetting.canEdit
@@ -198,6 +198,15 @@ SettingsPage {
                 }
             }
         }
+    }
+
+    ContinueButton {
+        objectName: "proxySettingsSaveButton"
+        Layout.alignment: Qt.AlignRight
+        Layout.preferredWidth: 140
+        text: qsTr("Save")
+        enabled: root.canSaveProxyDraft
+        onClicked: root.save()
     }
 
     AlertPopup {

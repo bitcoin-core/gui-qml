@@ -14,6 +14,7 @@ OnboardingView {
     showNavigationBar: false
     usesSharedNavigation: true
     property bool modalView: false
+    property bool onboardingEntry: false
     property bool importingWallet: false
     signal cancel()
     signal regularSelected()
@@ -21,10 +22,13 @@ OnboardingView {
     signal externalSignerSelected()
     signal importSelected()
 
-    title: qsTr("Add a wallet")
-    heading: qsTr("Choose a wallet type")
+    title: ""
+    heading: onboardingEntry ? qsTr("Add a wallet to your node")
+        : qsTr("Choose a wallet type")
     subheading: importingWallet ? qsTr("Importing your wallet file…")
-        : qsTr("You can create a new wallet or import from a wallet file.")
+        : onboardingEntry
+            ? qsTr("Add a wallet to start using Bitcoin Core. You can create a new wallet now or import from wallet file.")
+            : qsTr("You can create a new wallet or import from a wallet file.")
     maximumContentWidth: 700
     showCloseButton: modalView && !importingWallet
     showBackButton: !importingWallet && navigationStack && navigationStack.depth > 1
@@ -75,7 +79,7 @@ OnboardingView {
             Layout.fillWidth: true
             enabled: !root.importingWallet
             title: qsTr("Import wallet")
-            description: qsTr("Use an existing wallet.dat file")
+            description: qsTr("Use an existing wallet backup file")
             iconSource: "image://images/file"
             onClicked: root.importSelected()
         }

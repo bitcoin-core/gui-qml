@@ -3,28 +3,27 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import "../../controls"
 
-InformationPage {
+OnboardingView {
     id: root
     objectName: "onboardingStrengthen"
-    buttonObjectName: "onboardingStrengthenButton"
-    navLeftDetail: NavButton {
-        iconSource: "image://images/caret-left"
-        text: qsTr("Back")
-        onClicked: root.back()
-    }
-    bannerItem: Image {
-        source: Theme.image.network
-        sourceSize.width: 200
-        sourceSize.height: 200
-    }
-    bold: true
-    headerText: qsTr("Strengthen bitcoin")
-    description: qsTr("Bitcoin Core runs a full Bitcoin node which verifies " +
+    signal back()
+    signal next()
+
+    isOnSurface: false
+    backButtonInFooter: true
+    backButtonObjectName: "onboardingWizardBackButton"
+    autoNavigateBack: false
+    maximumContentWidth: 640
+    heading: qsTr("Strengthen bitcoin")
+    subheading: qsTr("Bitcoin Core runs a full Bitcoin node which verifies " +
         "the rules of the network are being followed.\n\nUsers running nodes " +
         "is what makes bitcoin so resilient and trustworthy.")
-    buttonText: qsTr("Next")
+    imageSource: Theme.image.network
+    imageSize: 200
+    primaryButtonText: qsTr("Next")
+    primaryButtonObjectName: "onboardingStrengthenButton"
+    onBackClicked: root.back()
+    onPrimaryClicked: root.next()
 }
