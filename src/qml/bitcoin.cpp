@@ -4,7 +4,6 @@
 
 #include <qml/bitcoin.h>
 
-#include <chainparams.h>
 #include <clientversion.h>
 #include <common/args.h>
 #include <common/init.h>
@@ -25,6 +24,7 @@
 #include <qml/onboarding_settings.h>
 #include <qml/test/testbridge.h>
 #include <qml/translationmanager.h>
+#include <util/chaintype.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/threadnames.h>
@@ -157,15 +157,9 @@ PreInitOnboardingStatus RunPreInitOnboarding(
         return PreInitOnboardingStatus::NOT_SHOWN;
     }
 
-    try {
-        SelectParams(gArgs.GetChainType());
-    } catch (const std::exception& e) {
-        InitError(Untranslated(e.what()));
-        return PreInitOnboardingStatus::FAILED;
-    }
-
     context.options_model = std::make_unique<OnboardingOptionsModel>(argv, can_listen_ipc);
-    context.network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
+    const auto chain{ChainTypeFromString(status.resolved_chain.toStdString()).value_or(ChainType::MAIN)};
+    context.network_style.reset(NetworkStyle::instantiate(chain));
     assert(context.network_style);
     context.engine = std::make_unique<QQmlApplicationEngine>();
     translations.attachEngine(*context.engine);
