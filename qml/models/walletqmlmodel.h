@@ -5,7 +5,6 @@
 #ifndef BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 #define BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 
-#include <qml/models/activitylistmodel.h>
 #include <qml/models/addresslistmodel.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
@@ -14,6 +13,7 @@
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/signverifymessagemodel.h>
+#include <qml/models/transactionactivitymodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
@@ -70,7 +70,7 @@ private:
     Q_PROPERTY(QString balance READ balance NOTIFY balanceChanged)
     Q_PROPERTY(qint64 balanceSatoshi READ balanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(bool hasExternalSigner READ hasExternalSigner CONSTANT)
-    Q_PROPERTY(ActivityListModel* activityListModel READ activityListModel CONSTANT)
+    Q_PROPERTY(TransactionActivityModel* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(AddressListModel* addressListModel READ addressListModel CONSTANT)
     Q_PROPERTY(CoinsListModel* coinsListModel READ coinsListModel CONSTANT)
     Q_PROPERTY(SendRecipientsListModel* recipients READ sendRecipientList CONSTANT)
@@ -125,7 +125,7 @@ public:
     Q_INVOKABLE bool loadPaymentRequestDetail(const QString& request_id);
     Q_INVOKABLE void usePaymentRequestAsTemplate(const QString& request_id);
 
-    ActivityListModel* activityListModel() const { return m_activity_list_model; }
+    TransactionActivityModel* transactionActivityModel();
     AddressListModel* addressListModel() const { return m_address_list_model; }
     BumpTransactionModel* bumpModel() const { return m_bump_transaction_model; }
     CoinsListModel* coinsListModel() const { return m_coins_list_model; }
@@ -166,6 +166,8 @@ public:
     Q_INVOKABLE void discardCurrentTransaction();
     PsbtQmlModel* importedPsbt() const { return m_imported_psbt_model; }
     interfaces::Wallet* wallet() const { return m_wallet.get(); }
+    // Background readers retain the interface until their current read finishes.
+    std::shared_ptr<interfaces::Wallet> walletHandle() const { return m_wallet; }
     interfaces::Node* node() const { return m_node; }
     void removeWallet();
 
@@ -259,6 +261,9 @@ Q_SIGNALS:
     void walletUnloaded();
     void settingsErrorChanged();
     void addressListChanged();
+    // Forwarded on the GUI thread; models must not read wallet state from the
+    // Core callback while it holds the wallet lock.
+    void transactionChanged(const QString& txid, int change);
 
 private:
     enum class CurrentTransactionSource {
@@ -282,6 +287,7 @@ private:
     bool ensurePaymentRequestDestination();
     bool saveCurrentPaymentRequest();
     bool sendTransactionInternal(std::optional<SecureString> passphrase = std::nullopt);
+    void saveSentRecipientLabels();
     bool unlockForAction(std::optional<SecureString>& passphrase, bool& relock);
     void clearTransactionStatus();
     void setTransactionStatus(const QString& error, bool needs_unlock = false);
@@ -289,9 +295,9 @@ private:
     QString persistedReceiveAddressTypeKey() const;
     bool tryImportPsbtToReview(const PartiallySignedTransaction& psbt, PsbtImportResult& result, QString& reason);
 
-    std::unique_ptr<interfaces::Wallet> m_wallet;
+    std::shared_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
-    ActivityListModel* m_activity_list_model{nullptr};
+    TransactionActivityModel* m_transaction_activity_model{nullptr};
     AddressListModel* m_address_list_model{nullptr};
     BumpTransactionModel* m_bump_transaction_model{nullptr};
     CoinsListModel* m_coins_list_model{nullptr};

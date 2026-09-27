@@ -76,15 +76,16 @@ sudo apt install \
   qt6-l10n-tools \
   qt6-tools-dev-tools \
   qt6-declarative-dev \
+  qt6-svg-dev \
   qml6-module-qt-labs-platform \
   qml6-module-qt-labs-settings \
   qml6-module-qtquick \
   qml6-module-qtquick-controls \
   qml6-module-qtquick-dialogs \
-  qml6-module-qtquick-layouts \
+  qml6-module-qtquick-shapes qml6-module-qtquick-layouts \
   qml6-module-qtquick-templates \
   qml6-module-qtquick-window \
-  qml6-module-qtqml \
+  qml6-module-qtqml-models qml6-module-qtqml \
   qml6-module-qtqml-workerscript \
   libgl-dev \
   libqrencode-dev

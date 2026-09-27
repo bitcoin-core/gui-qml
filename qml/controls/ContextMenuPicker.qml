@@ -49,6 +49,22 @@ Item {
         const v = item[root.iconRole]
         return v === undefined || v === null ? "" : v
     }
+    function _rowHeight(item) {
+        const subtitleHeight = _rowSubtitle(item) !== "" ? subtitleRowHeight : rowHeight
+        const icon = _rowIconSource(item)
+        const iconHeight = icon.toString() !== "" ? iconSize + 12 : 0
+        return Math.max(subtitleHeight, iconHeight)
+    }
+    readonly property int rowsHeight: {
+        let total = 0
+        for (let i = 0; i < model.length; ++i) total += _rowHeight(model[i])
+        return total
+    }
+    function _rowOffset(index) {
+        let offset = 0
+        for (let i = 0; i < index; ++i) offset += _rowHeight(model[i])
+        return offset
+    }
     function _rowObjectName(item) {
         if (root.objectNameRole === "" || typeof item !== 'object' || item === null) return ""
         const v = item[root.objectNameRole]
@@ -90,102 +106,109 @@ Item {
             color: Theme.color.neutral6
         }
 
-        Repeater {
-            id: _repeater
-            model: root.model
+        // Keep repeated rows out of Quick Layouts; Qt 6.4 can read freed delegates.
+        Item {
+            id: rowsContainer
+            Layout.fillWidth: true
+            implicitWidth: 0
+            implicitHeight: root.rowsHeight
 
-            delegate: ContextMenuButton {
-                id: _row
-                required property var modelData
-                readonly property var rowData: modelData
-                property string rowText: root._rowText(rowData)
-                property var rowValue: root._rowValue(rowData)
-                property string subtitle: root._rowSubtitle(rowData)
-                property url rowIconSource: root._rowIconSource(rowData)
-                property string subtitleObjectName: root._rowSubtitleObjectName(rowData)
-                objectName: root._rowObjectName(rowData)
-                readonly property bool selected: root.multiSelect ? root.selectedValues.indexOf(rowValue) >= 0 : root.currentValue === rowValue
-                readonly property int _textHeight: subtitle !== "" ? root.subtitleRowHeight : root.rowHeight
-                readonly property int _iconHeight: rowIconSource.toString() !== "" ? root.iconSize + 12 : 0
-                readonly property int _effectiveHeight: Math.max(_textHeight, _iconHeight)
+            Repeater {
+                id: _repeater
+                model: root.model
 
-                Accessible.name: rowText
-                Accessible.checkable: true
-                Accessible.checked: selected
+                delegate: ContextMenuButton {
+                    id: _row
+                    required property int index
+                    required property var modelData
+                    readonly property var rowData: modelData
+                    property string rowText: root._rowText(rowData)
+                    property var rowValue: root._rowValue(rowData)
+                    property string subtitle: root._rowSubtitle(rowData)
+                    property url rowIconSource: root._rowIconSource(rowData)
+                    property string subtitleObjectName: root._rowSubtitleObjectName(rowData)
+                    objectName: root._rowObjectName(rowData)
+                    readonly property bool selected: root.multiSelect ? root.selectedValues.indexOf(rowValue) >= 0 : root.currentValue === rowValue
+                    readonly property int _effectiveHeight: root._rowHeight(rowData)
 
-                autoClose: false
-                text: rowText
-                Layout.fillWidth: true
-                Layout.preferredHeight: _effectiveHeight
-                Layout.minimumHeight: _effectiveHeight
-                implicitHeight: _effectiveHeight
+                    Accessible.name: rowText
+                    Accessible.checkable: true
+                    Accessible.checked: selected
 
-                onTriggered: root.activated(_row.rowValue)
+                    autoClose: false
+                    text: rowText
+                    width: rowsContainer.width
+                    height: _effectiveHeight
+                    y: root._rowOffset(index)
+                    implicitHeight: _effectiveHeight
 
-                contentItem: RowLayout {
-                    spacing: 7
+                    onTriggered: root.activated(_row.rowValue)
 
-                    Item {
-                        visible: _row.rowIconSource.toString() !== ""
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: visible ? root.iconSize : 0
-                        Layout.preferredHeight: visible ? root.iconSize : 0
+                    contentItem: RowLayout {
+                        spacing: 7
 
-                        Icon {
-                            anchors.centerIn: parent
-                            source: _row.rowIconSource
-                            color: _row._highlighted ? _row._hoverColor : _row._idleColor
-                            size: root.iconSize
+                        Item {
+                            visible: _row.rowIconSource.toString() !== ""
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: visible ? root.iconSize : 0
+                            Layout.preferredHeight: visible ? root.iconSize : 0
+
+                            Icon {
+                                anchors.centerIn: parent
+                                source: _row.rowIconSource
+                                color: _row._highlighted ? _row._hoverColor : _row._idleColor
+                                size: root.iconSize
+                            }
                         }
-                    }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.alignment: Qt.AlignVCenter
-                        spacing: 2
-
-                        CoreText {
+                        ColumnLayout {
                             Layout.fillWidth: true
-                            text: _row.rowText
-                            horizontalAlignment: Text.AlignLeft
-                            font: Theme.text.menuItem.font
-                            lineHeight: Theme.text.menuItem.lineHeight
-                            lineHeightMode: Text.FixedHeight
-                            wrap: false
-                            elide: Text.ElideRight
-                            color: _row._highlighted ? _row._hoverColor : _row._idleColor
+                            Layout.alignment: Qt.AlignVCenter
+                            spacing: 2
+
+                            CoreText {
+                                Layout.fillWidth: true
+                                text: _row.rowText
+                                horizontalAlignment: Text.AlignLeft
+                                font: Theme.text.menuItem.font
+                                lineHeight: Theme.text.menuItem.lineHeight
+                                lineHeightMode: Text.FixedHeight
+                                wrap: false
+                                elide: Text.ElideRight
+                                color: _row._highlighted ? _row._hoverColor : _row._idleColor
+                            }
+
+                            CoreText {
+                                objectName: _row.subtitleObjectName
+                                visible: _row.subtitle !== ""
+                                Layout.fillWidth: true
+                                text: _row.subtitle
+                                horizontalAlignment: Text.AlignLeft
+                                font: Theme.text.caption.font
+                                lineHeight: Theme.text.caption.lineHeight
+                                lineHeightMode: Text.FixedHeight
+                                wrap: false
+                                elide: Text.ElideRight
+                                color: Theme.color.neutral6
+                            }
                         }
 
-                        CoreText {
-                            objectName: _row.subtitleObjectName
-                            visible: _row.subtitle !== ""
-                            Layout.fillWidth: true
-                            text: _row.subtitle
-                            horizontalAlignment: Text.AlignLeft
-                            font: Theme.text.caption.font
-                            lineHeight: Theme.text.caption.lineHeight
-                            lineHeightMode: Text.FixedHeight
-                            wrap: false
-                            elide: Text.ElideRight
-                            color: Theme.color.neutral6
+                        Item {
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: 18
+                            Layout.preferredHeight: 18
+
+                            Icon {
+                                anchors.centerIn: parent
+                                visible: _row.selected
+                                source: root.selectionIconSource
+                                color: Theme.color.orange
+                                size: 20
+                            }
                         }
                     }
-
-                    Item {
-                        Layout.alignment: Qt.AlignVCenter
-                        Layout.preferredWidth: 18
-                        Layout.preferredHeight: 18
-
-                        Icon {
-                            anchors.centerIn: parent
-                            visible: _row.selected
-                            source: root.selectionIconSource
-                            color: Theme.color.orange
-                            size: 20
-                        }
-                    }
-                }
             }
         }
     }
+}
 }

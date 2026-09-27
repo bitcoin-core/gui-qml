@@ -16,6 +16,7 @@ AbstractButton {
     property bool truncated: false
     property bool truncateWhenNeeded: false
     property bool embedded: false
+    property bool interactive: true
     property int leadingCharacterCount: 8
     property int trailingCharacterCount: 8
     property color primaryColor: Theme.color.neutral9
@@ -27,7 +28,9 @@ AbstractButton {
         || (truncateWhenNeeded && fullAddressMetrics.advanceWidth > availableWidth)
     readonly property string displayAddress: isTruncated ? truncatedAddress(address) : address
     readonly property string formattedText: formatAddressRichText(displayAddress)
-    readonly property bool showCopiedStatus: copiedResetTimer.running
+    readonly property bool showCopiedStatus: interactive && copiedResetTimer.running
+    readonly property real displayWidth: Math.ceil(displayAddressMetrics.advanceWidth)
+        + leftPadding + rightPadding
     readonly property real naturalWidth: Math.max(
         Math.ceil(fullAddressMetrics.advanceWidth), copiedRow.implicitWidth
     ) + leftPadding + rightPadding
@@ -81,22 +84,25 @@ AbstractButton {
     }
 
     function copy() {
-        if (root.address === "" || !root.clipboard) return
+        if (!root.interactive || root.address === "" || !root.clipboard) return
         root.clipboard.setText(root.address)
         copiedResetTimer.restart()
         root.copied()
     }
 
-    hoverEnabled: AppMode.isDesktop
-    enabled: address !== ""
+    hoverEnabled: interactive && AppMode.isDesktop
+    enabled: interactive && address !== ""
+    focusPolicy: interactive ? Qt.StrongFocus : Qt.NoFocus
     leftPadding: 8
     rightPadding: 8
     topPadding: 4
     bottomPadding: 4
     implicitHeight: content.implicitHeight + topPadding + bottomPadding
-    Accessible.name: showCopiedStatus ? qsTr("Copied") : qsTr("Copy address")
+    Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
+    Accessible.name: interactive ? (showCopiedStatus ? qsTr("Copied") : qsTr("Copy address")) : address
 
     HoverHandler {
+        enabled: root.interactive && root.enabled
         cursorShape: Qt.PointingHandCursor
     }
 
@@ -104,7 +110,8 @@ AbstractButton {
 
     contentItem: Item {
         id: content
-        implicitHeight: Math.max(addressText.paintedHeight, copiedRow.implicitHeight)
+        implicitHeight: root.interactive ? Math.max(addressText.paintedHeight, copiedRow.implicitHeight)
+            : addressText.paintedHeight
 
         CoreText {
             id: addressText
@@ -172,11 +179,19 @@ AbstractButton {
         text: root.chunkedPlainText(root.address)
     }
 
+    TextMetrics {
+        id: displayAddressMetrics
+        font: root.textStyle.font
+        text: root.displayAddress.split("…").map(function(part) {
+            return root.chunkedPlainText(part)
+        }).join(" … ")
+    }
+
     background: Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
         radius: 5
         color: root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
-        opacity: root.hovered || root.down ? 1 : 0
+        opacity: root.interactive && (root.hovered || root.down) ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation { duration: 150 }

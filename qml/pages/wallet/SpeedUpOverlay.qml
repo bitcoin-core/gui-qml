@@ -25,13 +25,32 @@ Popup {
     signal done()
     signal viewNewTransaction(string newTxid)
 
+    readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
+    property real verticalOffset: 0
+    parent: Overlay.overlay
+    x: parent ? Math.round((parent.width - width) / 2) : 0
+    y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
+    width: Math.min(640, parent ? parent.width - 40 : 640)
     modal: true
-    leftPadding: 40
-    rightPadding: 40
+    focus: true
+    leftPadding: width < 480 ? 20 : 40
+    rightPadding: leftPadding
     topPadding: 30
     bottomPadding: 30
-    width: 500
-    anchors.centerIn: parent
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "verticalOffset"; from: -30; to: 0; duration: 300; easing.type: Easing.OutCubic }
+    }
+    exit: Transition {
+        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.InCubic }
+        NumberAnimation { property: "verticalOffset"; from: 0; to: -30; duration: 250; easing.type: Easing.InCubic }
+    }
+    Overlay.modal: Rectangle {
+        color: root.modalOverlayColor
+        opacity: root.opacity
+    }
 
     onOpened: {
         if (root.bumpModel) {
@@ -46,9 +65,9 @@ Popup {
     }
 
     background: Rectangle {
-        color: Theme.color.neutral0
+        color: Theme.color.neutral1
         radius: 10
-        border.color: Theme.color.neutral4
+        border.color: Theme.color.neutral3
         border.width: 1
     }
 
@@ -67,16 +86,22 @@ Popup {
         }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
+    contentItem: ColumnLayout {
         spacing: 0
 
-        CoreText {
-            text: qsTr("Speed up transaction")
-            font.pixelSize: 21
-            bold: true
-            horizontalAlignment: Text.AlignLeft
+        RowLayout {
             Layout.fillWidth: true
+            spacing: 12
+            Header {
+                Layout.fillWidth: true
+                header: qsTr("Speed up transaction")
+                headerBold: true
+                center: false
+            }
+            CloseButton {
+                objectName: "speedUpCloseButton"
+                onClicked: root.close()
+            }
         }
 
         CoreText {
@@ -90,42 +115,27 @@ Popup {
             wrap: true
         }
 
-        RowLayout {
+        FormSection {
+            objectName: "speedUpFeeSection"
             Layout.fillWidth: true
-            CoreText {
-                text: qsTr("Original fee")
-                font.pixelSize: 15
-                color: Theme.color.neutral7
-            }
-            CoreText {
-                text: root.bumpModel ? root.bumpModel.oldFee : ""
-                font.pixelSize: 15
-                color: Theme.color.neutral9
-                horizontalAlignment: Text.AlignRight
+            backgroundColor: Theme.color.neutral2
+            ValueRow {
+                objectName: "speedUpOriginalFeeRow"
                 Layout.fillWidth: true
+                title: qsTr("Original fee")
+                value: root.bumpModel ? root.bumpModel.oldFee : ""
+                valueTextStyle: Theme.text.monoCaption
+                valueMaximumWidth: root.availableWidth * 0.6
+                dividerColor: Theme.color.neutral3
             }
-            //FIXME: Add label to show estimated confirmation duration (~20 min)
-        }
-
-        Separator {
-            Layout.fillWidth: true
-            Layout.topMargin: 10
-            Layout.bottomMargin: 10
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            CoreText {
-                text: qsTr("New fee")
-                font.pixelSize: 15
-                color: Theme.color.neutral7
-            }
-            CoreText {
-                text: root.bumpModel ? root.bumpModel.newFee : ""
-                font.pixelSize: 15
-                color: Theme.color.neutral9
-                horizontalAlignment: Text.AlignRight
+            ValueRow {
+                objectName: "speedUpNewFeeRow"
                 Layout.fillWidth: true
+                title: qsTr("New fee")
+                value: root.bumpModel ? root.bumpModel.newFee : ""
+                valueTextStyle: Theme.text.monoCaption
+                valueMaximumWidth: root.availableWidth * 0.6
+                showDivider: false
             }
         }
 
@@ -140,10 +150,12 @@ Popup {
             wrap: true
         }
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 25
-            spacing: 15
+            Layout.topMargin: 24
+            columns: root.width < 480 ? 1 : 2
+            columnSpacing: 12
+            rowSpacing: 12
 
             OutlineButton {
                 text: qsTr("Cancel")

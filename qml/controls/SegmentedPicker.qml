@@ -35,7 +35,9 @@ Control {
         }
     }
 
-    contentItem: RowLayout {
+    // A positioner keeps changing options out of the Qt 6.4 layout engine.
+    contentItem: Row {
+        id: segmentsRow
         spacing: 5
 
         Repeater {
@@ -48,10 +50,8 @@ Control {
                 objectName: typeof modelData === "object" && modelData !== null && modelData.objectName !== undefined
                     ? modelData.objectName
                     : (root.objectName.length > 0 ? root.objectName + "Option_" + index : "")
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: 1
-                Layout.minimumWidth: 0
+                width: Math.max(0, (segmentsRow.width - segmentsRow.spacing * (root.model.length - 1)) / Math.max(1, root.model.length))
+                height: segmentsRow.height
                 autoExclusive: true
                 checked: index === root.currentIndex
                 text: root.optionText(modelData)

@@ -320,34 +320,41 @@ SettingsPage {
         text: qsTr("Typography")
     }
 
-    Repeater {
-        model: root.typographyRoles
-        delegate: ColumnLayout {
-            id: typographySample
-            required property var modelData
-            Layout.fillWidth: true
-            spacing: 4
+    // Positioners keep changing Repeater delegates out of the Qt 6.4 layout engine.
+    Column {
+        id: typographyColumn
+        Layout.fillWidth: true
+        spacing: root.contentSpacing
 
-            Text {
-                Layout.fillWidth: true
-                font: Theme.text[typographySample.modelData.name].font
-                lineHeight: Theme.text[typographySample.modelData.name].lineHeight
-                lineHeightMode: Text.FixedHeight
-                color: Theme.color.neutral9
-                text: typographySample.modelData.name
-                elide: Text.ElideRight
-            }
-            Text {
-                Layout.fillWidth: true
-                font: Theme.text.caption.font
-                color: Theme.color.neutral6
-                text: Theme.text[typographySample.modelData.name].family + " " + Theme.text[typographySample.modelData.name].styleName + " · " + Theme.text[typographySample.modelData.name].pixelSize + "/" + Theme.text[typographySample.modelData.name].lineHeight + " · " + typographySample.modelData.group
-            }
-            Rectangle {
-                Layout.topMargin: 8
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: Theme.color.neutral3
+        Repeater {
+            model: root.typographyRoles
+            delegate: ColumnLayout {
+                id: typographySample
+                required property var modelData
+                width: typographyColumn.width
+                spacing: 4
+
+                Text {
+                    Layout.fillWidth: true
+                    font: Theme.text[typographySample.modelData.name].font
+                    lineHeight: Theme.text[typographySample.modelData.name].lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    color: Theme.color.neutral9
+                    text: typographySample.modelData.name
+                    elide: Text.ElideRight
+                }
+                Text {
+                    Layout.fillWidth: true
+                    font: Theme.text.caption.font
+                    color: Theme.color.neutral6
+                    text: Theme.text[typographySample.modelData.name].family + " " + Theme.text[typographySample.modelData.name].styleName + " · " + Theme.text[typographySample.modelData.name].pixelSize + "/" + Theme.text[typographySample.modelData.name].lineHeight + " · " + typographySample.modelData.group
+                }
+                Rectangle {
+                    Layout.topMargin: 8
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: Theme.color.neutral3
+                }
             }
         }
     }
@@ -368,7 +375,8 @@ SettingsPage {
         wrapMode: Text.WordWrap
     }
 
-    GridLayout {
+    Grid {
+        id: paletteGrid
         Layout.fillWidth: true
         columns: 2
         columnSpacing: 12
@@ -379,7 +387,7 @@ SettingsPage {
             delegate: RowLayout {
                 id: paletteSample
                 required property string modelData
-                Layout.fillWidth: true
+                width: Math.max(0, (paletteGrid.width - paletteGrid.columnSpacing) / paletteGrid.columns)
                 spacing: 10
 
                 Rectangle {

@@ -37,6 +37,7 @@ Button {
     property string textFontStyleName: textStyle.styleName
 
     contentItem: Item {
+        implicitWidth: contentRow.implicitWidth
         implicitHeight: contentRow.implicitHeight
 
         RowLayout {

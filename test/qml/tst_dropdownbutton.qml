@@ -27,7 +27,7 @@ TestCase {
             width: 200
             height: implicitHeight
             text: "All dates"
-            caretSource: Qt.resolvedUrl("../../qml/res/icons/caret-down-medium-filled.png")
+            caretSource: "qrc:/icons/caret-down-medium-filled"
         }
     }
 
@@ -45,7 +45,7 @@ TestCase {
                 width: 200
                 height: implicitHeight
                 text: "All dates"
-                caretSource: Qt.resolvedUrl("../../qml/res/icons/caret-down-medium-filled.png")
+                caretSource: "qrc:/icons/caret-down-medium-filled"
             }
         }
     }
@@ -132,7 +132,7 @@ TestCase {
         tryCompare(button, "implicitHeight", 34)
     }
 
-    function test_disabled_button_does_not_activate_and_dims_caret() {
+    function test_disabled_button_does_not_activate_and_keeps_neutral_caret() {
         const popup = openPopup()
         const button = popup.button
         const caretItem = child(button, "dropdownButtonCaret")

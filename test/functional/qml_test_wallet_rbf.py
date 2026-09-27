@@ -180,18 +180,18 @@ def run_test():
         gui.settle()
 
         print("[rbf] waiting for unconfirmed tx in activity list")
-        if not gui.get_property("activitySearchToggle", "checked"):
-            gui.click("activitySearchToggle")
-        gui.wait_for_property("activitySearchToggle", "checked", True, timeout_ms=5000)
+        gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=5000)
         gui.click("activityTypeFilterButton")
         gui.click("activityTypeSent")
+        gui.invoke("activityTypeFilterPopup", "close")
         gui.wait_for_property("activityFilterProxyModel", "count", 1, timeout_ms=15000)
         wait_until(
-            lambda: gui.get_list_item_property("activityListView", 0, "txid") == txid,
+            lambda: gui.get_property(f"activityItem_{txid}", "txid") == txid,
             timeout=10,
             description=f"sent Activity row for {txid}",
         )
-        gui.click_list_item("activityListView", 0)
+        gui.click_list_item("activityListView", 0, "activityRowOpenButton")
+        gui.wait_for_page("activityDetailsPage", timeout_ms=10000)
         gui.settle()
 
         print("[rbf] verifying speed up banner")

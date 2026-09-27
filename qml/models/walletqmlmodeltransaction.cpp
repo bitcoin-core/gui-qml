@@ -17,6 +17,11 @@ WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipientsListMod
       m_total_amount(new BitcoinAmount(this)),
       m_wtx(nullptr)
 {
+    for (const auto* entry : recipient->recipients()) {
+        if (!entry->label().trimmed().isEmpty()) {
+            m_recipient_labels.insert(entry->address()->address(), entry->label());
+        }
+    }
     const BitcoinAmount::Unit display_unit = recipient->recipients().at(0)->amount()->unit();
     m_amount_amount->setUnit(display_unit);
     m_amount_amount->setSatoshi(m_amount);

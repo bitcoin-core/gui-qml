@@ -28,7 +28,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/module)
 
 # Qt dependencies QML
-set(qt_components Core Gui LinguistTools Widgets Network Qml Quick QuickControls2)
+set(qt_components Core Gui LinguistTools Widgets Network Qml Quick QuickControls2 Svg)
 find_package(Qt 6.2 MODULE REQUIRED
     COMPONENTS ${qt_components}
 )
@@ -130,6 +130,7 @@ target_link_libraries(bitcoinqml
     Qt6::Qml
     Qt6::Quick
     Qt6::QuickControls2
+    Qt6::Svg
     Qt6::Network
     Qt6::Widgets
   PRIVATE
@@ -194,6 +195,7 @@ target_link_libraries(bitcoin-core-app
     bitcoinqml
     bitcoinqt
 )
+qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
 qt6_import_qml_plugins(bitcoin-core-app)
 
 if(BUILD_APP_TESTS)

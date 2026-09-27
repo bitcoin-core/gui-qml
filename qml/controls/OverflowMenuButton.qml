@@ -14,8 +14,8 @@ AbstractButton {
     property color activeIconColor: Theme.color.orange
     property color backgroundColor: Theme.color.neutral1
     property color hoverBackgroundColor: Theme.color.neutral2
-    property int size: 36
-    property int iconSize: 30
+    property int size: 40
+    property int iconSize: 40
     readonly property alias iconItem: ellipsisIcon
 
     implicitWidth: size

@@ -407,9 +407,6 @@ ApplicationWindow {
                 main.pop(null)
             }
             onViewNewTransaction: (txid) => {
-                if (walletController.selectedWallet) {
-                    walletController.selectedWallet.activityListModel.reload()
-                }
                 const walletPage = main.get(0)
                 walletPage.navigateToTransaction(txid)
                 main.pop(null)

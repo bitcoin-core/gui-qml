@@ -79,8 +79,7 @@ Control {
         textAlignment: root.textAlignment
         caretSize: root.caretSize
         labelTextStyle: root.labelTextStyle
-        defaultBgColor: root.embedded ? Theme.color.neutral2 : Theme.color.background
-        hoverBgColor: root.embedded ? Theme.color.neutral3 : Theme.color.neutral2
+        isOnSurface: root.embedded
         onClicked: root.opened ? root.close() : root.open()
     }
 

@@ -5,7 +5,7 @@
 #include <QtTest/QtTest>
 
 #include <qml/models/activityfilterproxymodel.h>
-#include <qml/models/activitylistmodel.h>
+#include <qml/models/transactionactivitymodel.h>
 #include <qml/models/transaction.h>
 
 #include <QAbstractListModel>
@@ -29,11 +29,11 @@ struct ActivityRow {
     qint64 timestamp{0};
     QString txid;
     bool pending_request{false};
-    bool used_address_request{false};
+    bool has_payment_request{false};
     qlonglong net_amount_sat{0};
 };
 
-class TestActivityListModel : public QAbstractListModel
+class TestActivityModel : public QAbstractListModel
 {
 public:
     int rowCount(const QModelIndex& parent = QModelIndex()) const override
@@ -47,29 +47,49 @@ public:
 
         const ActivityRow& row = m_rows.at(index.row());
         switch (role) {
-        case ActivityListModel::AddressRole:
+        case TransactionActivityModel::AddressRole:
             return row.address;
-        case ActivityListModel::AmountRole:
+        case TransactionActivityModel::AmountRole:
             return row.amount;
-        case ActivityListModel::DateTimeRole:
+        case TransactionActivityModel::DateTimeRole:
             return row.date;
-        case ActivityListModel::DepthRole:
+        case TransactionActivityModel::DepthRole:
             return row.depth;
-        case ActivityListModel::LabelRole:
+        case TransactionActivityModel::LabelRole:
             return row.label;
-        case ActivityListModel::StatusRole:
+        case TransactionActivityModel::StatusRole:
             return row.status;
-        case ActivityListModel::TypeRole:
+        case TransactionActivityModel::TypeRole:
             return row.type;
-        case ActivityListModel::TimestampRole:
+        case TransactionActivityModel::TimestampRole:
             return row.timestamp;
-        case ActivityListModel::TxIdRole:
+        case TransactionActivityModel::TxidRole:
             return row.pending_request ? QString{} : row.txid;
-        case ActivityListModel::IsPendingRequestRole:
+        case TransactionActivityModel::IsPendingRequestRole:
             return row.pending_request;
-        case ActivityListModel::IsUsedAddressRequestRole:
-            return row.used_address_request;
-        case ActivityListModel::NetAmountSatRole:
+        case TransactionActivityModel::HasPaymentRequestRole:
+            return row.pending_request || row.has_payment_request;
+        case TransactionActivityModel::IdRole:
+            return row.txid.isEmpty() ? row.label : row.txid;
+        case TransactionActivityModel::StatusKnownRole:
+            return true;
+        case TransactionActivityModel::IsPendingRole:
+            return row.pending_request || row.status == Transaction::Unconfirmed;
+        case TransactionActivityModel::ActivityTypeRole:
+            switch (row.type) {
+            case Transaction::RecvWithAddress: case Transaction::RecvFromOther: return int(TransactionActivityModel::Receive);
+            case Transaction::SendToAddress: case Transaction::SendToOther: return int(TransactionActivityModel::Send);
+            case Transaction::SendToSelf: return int(TransactionActivityModel::InternalTransfer);
+            case Transaction::Generated: return int(TransactionActivityModel::Mined);
+            default: return int(TransactionActivityModel::Other);
+            }
+        case TransactionActivityModel::ActionsRole: {
+            const int direction = row.type == Transaction::RecvWithAddress || row.type == Transaction::RecvFromOther
+                ? TransactionActivityModel::ReceiveAction : row.type == Transaction::SendToAddress || row.type == Transaction::SendToOther
+                ? TransactionActivityModel::SendAction : TransactionActivityModel::InternalAction;
+            return QVariantList{QVariantMap{{"direction", direction}}};
+        }
+        case TransactionActivityModel::NetAmountSatRole:
             return row.net_amount_sat;
         default:
             return {};
@@ -79,18 +99,18 @@ public:
     QHash<int, QByteArray> roleNames() const override
     {
         return {
-            {ActivityListModel::AddressRole, "address"},
-            {ActivityListModel::AmountRole, "amount"},
-            {ActivityListModel::DateTimeRole, "date"},
-            {ActivityListModel::DepthRole, "depth"},
-            {ActivityListModel::LabelRole, "label"},
-            {ActivityListModel::StatusRole, "status"},
-            {ActivityListModel::TypeRole, "type"},
-            {ActivityListModel::TimestampRole, "timestamp"},
-            {ActivityListModel::TxIdRole, "txid"},
-            {ActivityListModel::IsPendingRequestRole, "isPendingRequest"},
-            {ActivityListModel::IsUsedAddressRequestRole, "isUsedAddressRequest"},
-            {ActivityListModel::NetAmountSatRole, "netAmountSat"},
+            {TransactionActivityModel::AddressRole, "address"},
+            {TransactionActivityModel::AmountRole, "amount"},
+            {TransactionActivityModel::DateTimeRole, "date"},
+            {TransactionActivityModel::DepthRole, "depth"},
+            {TransactionActivityModel::LabelRole, "label"},
+            {TransactionActivityModel::StatusRole, "status"},
+            {TransactionActivityModel::TypeRole, "type"},
+            {TransactionActivityModel::TimestampRole, "timestamp"},
+            {TransactionActivityModel::TxidRole, "txid"},
+            {TransactionActivityModel::IsPendingRequestRole, "isPendingRequest"},
+            {TransactionActivityModel::HasPaymentRequestRole, "hasPaymentRequest"},
+            {TransactionActivityModel::NetAmountSatRole, "netAmountSat"},
         };
     }
 
@@ -99,6 +119,12 @@ public:
         beginResetModel();
         m_rows = std::move(rows);
         endResetModel();
+    }
+
+    void setAmount(int row, qint64 amount)
+    {
+        m_rows[row].net_amount_sat = amount;
+        Q_EMIT dataChanged(index(row, 0), index(row, 0), {TransactionActivityModel::NetAmountSatRole});
     }
 
 private:
@@ -137,7 +163,7 @@ ActivityRow MakeRow(QString label, int type, qint64 timestamp, QString txid = {}
 bool ContainsLabel(const ActivityFilterProxyModel& proxy, const QString& label)
 {
     for (int row = 0; row < proxy.rowCount(); ++row) {
-        if (proxy.index(row, 0).data(ActivityListModel::LabelRole).toString() == label) {
+        if (proxy.index(row, 0).data(TransactionActivityModel::LabelRole).toString() == label) {
             return true;
         }
     }
@@ -157,8 +183,11 @@ private Q_SLOTS:
     void rejectsInvalidCustomRange();
     void appliesCustomRangeWithOneNotification();
     void filtersByTypeBucketsAndKeepsPendingRequestsExclusive();
-    void usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter();
+    void paymentRequestFilterIncludesAssociatedTransactions();
     void filtersByMinimumAmount();
+    void combinesTypeSelections();
+    void filtersByInclusiveAmountRange();
+    void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
     void exportsCsvUsingDisplayUnit();
@@ -168,7 +197,7 @@ private Q_SLOTS:
 
 void ActivityFilterProxyModelTests::searchMatchesLabelAddressAndTxid()
 {
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Pizza night", Transaction::RecvWithAddress, 10, "aaa", "bc1qpizza"),
         MakeRow("Coffee", Transaction::SendToAddress, 20, "txid-coffee", "bc1qcoffee"),
@@ -180,15 +209,15 @@ void ActivityFilterProxyModelTests::searchMatchesLabelAddressAndTxid()
 
     proxy.setSearchText("pizza");
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Pizza night"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Pizza night"});
 
     proxy.setSearchText("bc1qcoffee");
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Coffee"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Coffee"});
 
     proxy.setSearchText("ZZZ");
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Rent"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Rent"});
 }
 
 void ActivityFilterProxyModelTests::filtersByDateBuckets()
@@ -201,7 +230,7 @@ void ActivityFilterProxyModelTests::filtersByDateBuckets()
     const QDate start_of_next_month = start_of_month.addMonths(1);
     const QDate start_of_next_year = start_of_year.addYears(1);
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Today", Transaction::RecvWithAddress, TimestampForLocalDate(today)),
         MakeRow("Yesterday", Transaction::RecvWithAddress, TimestampForLocalDate(today.addDays(-1))),
@@ -247,7 +276,7 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
     ActivityRow request = MakeRow("Request", Transaction::RecvWithAddress, now);
     request.pending_request = true;
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Received", Transaction::RecvFromOther, now),
         MakeRow("Sent", Transaction::SendToAddress, now),
@@ -262,70 +291,52 @@ void ActivityFilterProxyModelTests::filtersByTypeBucketsAndKeepsPendingRequestsE
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Received);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Received"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Received"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Sent);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Sent"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Sent"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Other);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Other"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Other"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::SentToSelf);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Self"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Self"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::Mined);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Mined"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Mined"});
 
     proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
     QCOMPARE(proxy.rowCount(), 1);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"Request"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Request"});
 }
 
-void ActivityFilterProxyModelTests::usedAddressRequestsOnlyVisibleUnderPaymentRequestFilter()
+void ActivityFilterProxyModelTests::paymentRequestFilterIncludesAssociatedTransactions()
 {
-    // A request whose address already has a real transaction is materialized so
-    // the Payment request filter can surface it, but it must stay hidden in the
-    // default view so it does not duplicate that address's real row.
-    ActivityRow received = MakeRow("Received", Transaction::RecvWithAddress, 30, "tx-received");
-    ActivityRow pending = MakeRow("Pending", Transaction::RecvWithAddress, 20);
+    auto received = MakeRow("Received", Transaction::RecvWithAddress, 30, "tx-received");
+    received.has_payment_request = true;
+    auto pending = MakeRow("Pending", Transaction::RecvWithAddress, 20);
     pending.pending_request = true;
-    ActivityRow used = MakeRow("Used", Transaction::RecvWithAddress, 10);
-    used.pending_request = true;
-    used.used_address_request = true;
-
-    TestActivityListModel source;
-    source.setRows({received, pending, used});
-
+    TestActivityModel source;
+    source.setRows({received, pending, MakeRow("Sent", Transaction::SendToAddress, 10, "tx-sent")});
     ActivityFilterProxyModel proxy;
     proxy.setSourceModel(&source);
-
-    // Default view (all types): the used-address request is hidden.
+    QCOMPARE(proxy.rowCount(), 3);
+    proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
     QCOMPARE(proxy.rowCount(), 2);
     QVERIFY(ContainsLabel(proxy, "Received"));
     QVERIFY(ContainsLabel(proxy, "Pending"));
-    QVERIFY(!ContainsLabel(proxy, "Used"));
-
-    // Payment request filter: both requests show, the real transaction does not.
-    proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
-    QCOMPARE(proxy.rowCount(), 2);
-    QVERIFY(ContainsLabel(proxy, "Pending"));
-    QVERIFY(ContainsLabel(proxy, "Used"));
-    QVERIFY(!ContainsLabel(proxy, "Received"));
-
-    // Any other type filter still hides the used-address request.
     proxy.setTypeFilter(ActivityFilterProxyModel::Received);
     QCOMPARE(proxy.rowCount(), 1);
     QVERIFY(ContainsLabel(proxy, "Received"));
-    QVERIFY(!ContainsLabel(proxy, "Used"));
 }
 
 void ActivityFilterProxyModelTests::sortsByTimestampDescending()
 {
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Old", Transaction::RecvWithAddress, 10),
         MakeRow("New", Transaction::RecvWithAddress, 30),
@@ -334,9 +345,9 @@ void ActivityFilterProxyModelTests::sortsByTimestampDescending()
 
     ActivityFilterProxyModel proxy;
     proxy.setSourceModel(&source);
-    QCOMPARE(proxy.index(0, 0).data(ActivityListModel::LabelRole).toString(), QString{"New"});
-    QCOMPARE(proxy.index(1, 0).data(ActivityListModel::LabelRole).toString(), QString{"Middle"});
-    QCOMPARE(proxy.index(2, 0).data(ActivityListModel::LabelRole).toString(), QString{"Old"});
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"New"});
+    QCOMPARE(proxy.index(1, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Middle"});
+    QCOMPARE(proxy.index(2, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Old"});
 }
 
 void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()
@@ -347,7 +358,7 @@ void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()
     request.net_amount_sat = 10'000;
     request.status = Transaction::Unconfirmed;
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         request,
         MakeRow("Bob", Transaction::SendToAddress, timestamp - 1, "txid-bob", "bc1qbob"),
@@ -365,7 +376,7 @@ void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
     const QString csv = QString::fromUtf8(file.readAll());
-    QVERIFY(csv.startsWith("\"Confirmed\",\"Date\",\"Type\",\"Label\",\"Address\",\"Amount (BTC)\",\"ID\"\n"));
+    QVERIFY(csv.startsWith("\"Confirmed\",\"Date\",\"Type\",\"Label\",\"Address\",\"Amount (BTC)\",\"ID\",\"Record\",\"Action ID\",\"Status\",\"Action amount (BTC)\"\n"));
     QVERIFY(csv.contains("\"false\""));
     QVERIFY(csv.contains("\"Payment request\""));
     QVERIFY(csv.contains("\"Alice\""));
@@ -380,7 +391,7 @@ void ActivityFilterProxyModelTests::exportsCsvUsingDisplayUnit()
     ActivityRow row = MakeRow("Alice", Transaction::RecvWithAddress, timestamp, "txid-alice", "bc1qalice");
     row.net_amount_sat = 123'456'789;
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({row});
 
     ActivityFilterProxyModel proxy;
@@ -395,7 +406,7 @@ void ActivityFilterProxyModelTests::exportsCsvUsingDisplayUnit()
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
     const QString csv = QString::fromUtf8(file.readAll());
-    QVERIFY(csv.startsWith("\"Confirmed\",\"Date\",\"Type\",\"Label\",\"Address\",\"Amount (sat)\",\"ID\"\n"));
+    QVERIFY(csv.startsWith("\"Confirmed\",\"Date\",\"Type\",\"Label\",\"Address\",\"Amount (sat)\",\"ID\",\"Record\",\"Action ID\",\"Status\",\"Action amount (sat)\"\n"));
     QVERIFY(csv.contains("\"123456789\""));
     QVERIFY(!csv.contains("\"1.23456789\""));
 }
@@ -406,7 +417,7 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     ActivityRow sent = MakeRow("Bob \"Builder\"", Transaction::SendToAddress, timestamp, "txid-bob", "bc1q,bob");
     sent.net_amount_sat = -123'456'789;
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         sent,
         MakeRow("Carol", Transaction::RecvWithAddress, timestamp - 1, "txid-carol", "bc1qcarol"),
@@ -438,7 +449,7 @@ void ActivityFilterProxyModelTests::filtersByCustomDateRange()
     const QDate start{2025, 6, 10};
     const QDate end{2025, 6, 20};
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(start.addDays(-1))),
         MakeRow("On start", Transaction::RecvWithAddress, TimestampForLocalDate(start)),
@@ -482,7 +493,7 @@ void ActivityFilterProxyModelTests::customRangeHandlesDstGapDayBoundaries()
 
     const QDate gap_day{2018, 11, 4};
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Before", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day.addDays(-1))),
         MakeRow("On gap day", Transaction::RecvWithAddress, TimestampForLocalDate(gap_day)),
@@ -510,7 +521,7 @@ void ActivityFilterProxyModelTests::customRangeHandlesDstGapDayBoundaries()
 
 void ActivityFilterProxyModelTests::rejectsInvalidCustomRange()
 {
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
     });
@@ -536,7 +547,7 @@ void ActivityFilterProxyModelTests::rejectsInvalidCustomRange()
 
 void ActivityFilterProxyModelTests::appliesCustomRangeWithOneNotification()
 {
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({
         MakeRow("Inside", Transaction::RecvWithAddress, TimestampForLocalDate(QDate(2025, 6, 15))),
     });
@@ -584,7 +595,7 @@ void ActivityFilterProxyModelTests::filtersByMinimumAmount()
     ActivityRow big_send = MakeRow("Big send", Transaction::SendToAddress, 30);
     big_send.net_amount_sat = -200'000;
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({small, big_receive, big_send});
 
     ActivityFilterProxyModel proxy;
@@ -612,7 +623,7 @@ void ActivityFilterProxyModelTests::exportsCsvNeutralizesFormulaInjection()
     ActivityRow linefeed = MakeRow("\n=1+2", Transaction::RecvWithAddress, timestamp - 2,
                                    "txid-linefeed", "bc1qlinefeed");
 
-    TestActivityListModel source;
+    TestActivityModel source;
     source.setRows({hostile, negative, linefeed});
 
     ActivityFilterProxyModel proxy;
@@ -638,6 +649,92 @@ void ActivityFilterProxyModelTests::exportsCsvNeutralizesFormulaInjection()
     // ...while the numeric amount column keeps its minus sign untouched.
     QVERIFY(csv.contains("\"-1.23456789\""));
     QVERIFY(csv.contains("\"bc1qplain\""));
+}
+
+void ActivityFilterProxyModelTests::combinesTypeSelections()
+{
+    auto request = MakeRow("Request", Transaction::Other, 40);
+    request.pending_request = true;
+    TestActivityModel source;
+    source.setRows({MakeRow("Receive", Transaction::RecvWithAddress, 10),
+                    MakeRow("Send", Transaction::SendToAddress, 20),
+                    MakeRow("Mined", Transaction::Generated, 30), request});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    proxy.setTypeFilters({ActivityFilterProxyModel::Sent, ActivityFilterProxyModel::Received, ActivityFilterProxyModel::Sent});
+    QCOMPARE(proxy.rowCount(), 2);
+    QCOMPARE(proxy.typeFilters().size(), 2);
+    QVERIFY(ContainsLabel(proxy, "Send"));
+    QVERIFY(ContainsLabel(proxy, "Receive"));
+    proxy.setTypeFilters({ActivityFilterProxyModel::Sent, ActivityFilterProxyModel::PaymentRequest});
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Request"));
+    proxy.setTypeFilters({});
+    QCOMPARE(proxy.typeFilter(), ActivityFilterProxyModel::TypeAll);
+    QCOMPARE(proxy.rowCount(), 4); // All transactions and unpaid requests are visible.
+    proxy.setTypeFilter(ActivityFilterProxyModel::Mined); // Legacy single selection still works.
+    QCOMPARE(proxy.typeFilters(), QList<int>{ActivityFilterProxyModel::Mined});
+    QCOMPARE(proxy.rowCount(), 1);
+}
+
+void ActivityFilterProxyModelTests::filtersByInclusiveAmountRange()
+{
+    auto send = MakeRow("Send", Transaction::SendToAddress, 10);
+    auto receive = MakeRow("Receive", Transaction::RecvWithAddress, 20);
+    auto larger = MakeRow("Larger", Transaction::RecvWithAddress, 30);
+    send.net_amount_sat = -200;
+    receive.net_amount_sat = 200;
+    larger.net_amount_sat = 201;
+    TestActivityModel source;
+    source.setRows({send, receive, larger});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QVERIFY(proxy.setAmountRange(200, 200));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(ContainsLabel(proxy, "Send"));
+    QVERIFY(ContainsLabel(proxy, "Receive"));
+    QVERIFY(!proxy.setAmountRange(201, 200));
+    QCOMPARE(proxy.minAmount(), 200);
+    QCOMPARE(proxy.maxAmount(), 200);
+    QVERIFY(proxy.setAmountRange(-1, 200));
+    QCOMPARE(proxy.rowCount(), 2);
+    QVERIFY(proxy.setAmountRange(-1, -1));
+    QCOMPARE(proxy.rowCount(), 3);
+    QVERIFY(proxy.setAmountRange(0, 0));
+    QCOMPARE(proxy.rowCount(), 0);
+}
+
+void ActivityFilterProxyModelTests::availableMaximumUsesUnfilteredTransactionsAndUpdates()
+{
+    auto send = MakeRow("Send", Transaction::SendToAddress, 10);
+    auto receive = MakeRow("Receive", Transaction::RecvWithAddress, 20);
+    auto request = MakeRow("Request", Transaction::Other, 30);
+    send.net_amount_sat = -500;
+    receive.net_amount_sat = 200;
+    request.pending_request = true;
+    request.net_amount_sat = 9000;
+    TestActivityModel source;
+    source.setRows({send, receive, request});
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    proxy.setSearchText("Receive");
+    QVERIFY(proxy.setAmountRange(0, 300));
+    QCOMPARE(proxy.rowCount(), 1);
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    source.setAmount(0, -700);
+    QCOMPARE(proxy.availableMaxAmount(), 700);
+    source.setRows({receive, request});
+    QCOMPARE(proxy.availableMaxAmount(), 200);
+    TestActivityModel other;
+    proxy.setSourceModel(&other);
+    QCOMPARE(proxy.availableMaxAmount(), 0);
+    source.setRows({send}); // A previous wallet must no longer affect the range.
+    QCOMPARE(proxy.availableMaxAmount(), 0);
+    other.setRows({send});
+    QCOMPARE(proxy.availableMaxAmount(), 500);
+    proxy.setSourceModel(nullptr);
+    QCOMPARE(proxy.availableMaxAmount(), 0);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

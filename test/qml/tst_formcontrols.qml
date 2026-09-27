@@ -301,7 +301,7 @@ TestCase {
         const menu = findChild(picker, "examplePickerMenu")
         verify(button !== null)
         verify(menu !== null)
-        compare(button.defaultBgColor, Theme.color.background)
+        compare(button.defaultBgColor, Theme.color.neutral1)
         compare(button.hoverBgColor, Theme.color.neutral2)
         compare(menu.backgroundColor, Theme.color.neutral1)
 

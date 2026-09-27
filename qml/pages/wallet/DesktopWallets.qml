@@ -347,7 +347,7 @@ Page {
     contentItem: StackLayout {
         currentIndex: navigationTabs.checkedButton.index
         clip: true
-        Activity {
+        ActivityList {
             id: activityPage
         }
         Send {

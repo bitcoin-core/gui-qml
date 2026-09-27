@@ -356,7 +356,8 @@ Page {
             radius: 12
             border.width: 0
             clip: true
-            ColumnLayout {
+            // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
+            Column {
                 id: tableColumn
                 width: parent.width
                 spacing: 0
@@ -368,7 +369,7 @@ Page {
                             id: rowDelegate
                             required property int index
                             readonly property var rowData: table.rows[index]
-                            Layout.fillWidth: true
+                            width: tableColumn.width
                             spacing: 0
                             RowLayout {
                                 Layout.fillWidth: true

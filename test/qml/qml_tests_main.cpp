@@ -8,9 +8,11 @@
 #include <QDateTime>
 #include <QFont>
 #include <QHash>
+#include <QIcon>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickImageProvider>
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
@@ -610,19 +612,24 @@ class MockTransaction : public QObject
 
 public:
     enum Status {
-        Unconfirmed = 0,
-        Confirming = 1,
-        Confirmed = 2
+        Confirmed,
+        Unconfirmed,
+        Confirming,
+        Conflicted,
+        Abandoned,
+        Immature,
+        NotAccepted
     };
     Q_ENUM(Status)
 
     enum Type {
-        Other = 0,
-        RecvWithAddress = 1,
-        RecvFromOther = 2,
-        SendToAddress = 3,
-        SendToOther = 4,
-        Generated = 5
+        Other,
+        Generated,
+        SendToAddress,
+        SendToOther,
+        RecvWithAddress,
+        RecvFromOther,
+        SendToSelf
     };
     Q_ENUM(Type)
 };
@@ -970,7 +977,7 @@ class MockWalletQmlModel : public QObject
     Q_OBJECT
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
-    Q_PROPERTY(QObject* activityListModel READ activityListModel CONSTANT)
+    Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
@@ -1027,7 +1034,7 @@ public:
 
     QString m_name{QStringLiteral("testwallet")};
     QString m_balance{QStringLiteral("1.00000000 BTC")};
-    QObject* m_activity_list_model{nullptr};
+    QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
     QObject* m_recipients{nullptr};
     QObject* m_coins_list_model{nullptr};
@@ -1053,7 +1060,7 @@ public:
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
 
-    QObject* activityListModel() const { return m_activity_list_model; }
+    QObject* transactionActivityModel() const { return m_transaction_activity_model; }
     QObject* bumpModel() const { return m_bump_model; }
     QObject* recipients() const { return m_recipients; }
     QObject* coinsListModel() const { return m_coins_list_model; }
@@ -1124,7 +1131,7 @@ public:
             return 1;
         }
     }
-    void setActivityListModel(QObject* model) { m_activity_list_model = model; }
+    void setTransactionActivityModel(QObject* model) { m_transaction_activity_model = model; }
     void setBumpModel(QObject* model) { m_bump_model = model; }
     void setRecipients(QObject* model) { m_recipients = model; }
     void setCoinsListModel(QObject* model) { m_coins_list_model = model; }
@@ -3025,211 +3032,68 @@ private:
     bool m_require_unlock{false};
 };
 
-class MockActivityListModel : public QAbstractListModel
+// Configurable presentation fixture. Transaction interpretation and filtering
+// correctness are covered by the C++ model tests; this supplies their QML roles.
+class MockTransactionActivityModel : public QAbstractListModel
 {
     Q_OBJECT
-    Q_PROPERTY(int count READ count NOTIFY countChanged)
-
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    Q_PROPERTY(bool loading MEMBER m_loading NOTIFY countChanged)
+    Q_PROPERTY(QString loadError MEMBER m_load_error NOTIFY countChanged)
 public:
-    enum Roles {
-        AddressRole = Qt::UserRole + 1,
-        AmountRole,
-        DateRole,
-        DepthRole,
-        LabelRole,
-        StatusRole,
-        TypeRole,
-        TxidRole,
-        ReplacesTxidRole,
-        ReplacedByTxidRole,
-        IsPendingRequestRole,
-        RequestIdRole,
-        TimestampRole,
-        NetAmountSatRole,
-        OutputIndexRole,
-        IsUsedAddressRequestRole,
-        CountsForBalanceRole
-    };
+    enum ActivityType { Send, Receive, Multiple, Consolidation, Split, InternalTransfer, Mined, Other };
+    Q_ENUM(ActivityType)
+    enum ActionDirection { SendAction, ReceiveAction, InternalAction };
+    Q_ENUM(ActionDirection)
+    enum ActionSource { Output, WalletInputs };
+    Q_ENUM(ActionSource)
 
-    int rowCount(const QModelIndex& parent = QModelIndex{}) const override
-    {
-        Q_UNUSED(parent);
-        return m_count;
-    }
-
-    int count() const { return m_count; }
-
-    QVariant data(const QModelIndex& index, int role) const override
-    {
-        if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
-        if (role == LabelRole && !m_label_override.isEmpty()) return m_label_override;
-        if (index.row() == m_used_request_row) {
-            switch (role) {
-            case IsPendingRequestRole: return true;
-            case IsUsedAddressRequestRole: return true;
-            case TxidRole: return QString{};
-            case RequestIdRole: return QStringLiteral("used-req-1");
-            case NetAmountSatRole: return 0; // a request created without an amount
-            default: break;
-            }
-        }
-        if (role == IsUsedAddressRequestRole) return false;
-        if (index.row() == 0) {
-            switch (role) {
-            case AddressRole: return QStringLiteral("bcrt1qreceiveaddress");
-            case AmountRole: return QStringLiteral("+0.01000000 BTC");
-            case DateRole: return QStringLiteral("2026-01-01 00:00");
-            case DepthRole: return 3;
-            case LabelRole: return QStringLiteral("salary");
-            case StatusRole: return MockTransaction::Confirmed;
-            case TypeRole: return MockTransaction::RecvWithAddress;
-            case TxidRole: return QStringLiteral("aaaa");
-            case ReplacesTxidRole: return QString{};
-            case ReplacedByTxidRole: return QString{};
-            case IsPendingRequestRole: return false;
-            case RequestIdRole: return QString{};
-            case TimestampRole: return 1767225600;
-            case NetAmountSatRole: return 1000000;
-            case OutputIndexRole: return 0;
-            case CountsForBalanceRole: return true;
-            default: return {};
-            }
-        }
-        const bool first_send_output = index.row() >= 2;
-        switch (role) {
-        case AddressRole: return first_send_output
-                ? QStringLiteral("bcrt1qfirstsendaddress")
-                : QStringLiteral("bcrt1qsecondsendaddress");
-        case AmountRole: return first_send_output
-                ? QStringLiteral("-0.00200000 BTC")
-                : QStringLiteral("-0.00100000 BTC");
-        case DateRole: return QStringLiteral("2026-01-02 00:00");
-        case DepthRole: return 0;
-        case LabelRole: return QStringLiteral("coffee");
-        case StatusRole: return MockTransaction::Unconfirmed;
-        case TypeRole: return MockTransaction::SendToAddress;
-        case TxidRole: return QStringLiteral("bbbb");
-        case ReplacesTxidRole: return QString{};
-        case ReplacedByTxidRole: return QString{};
-        case IsPendingRequestRole: return false;
-        case RequestIdRole: return QString{};
-        case TimestampRole: return 1767312000;
-        case NetAmountSatRole: return first_send_output ? -200000 : -100000;
-        case OutputIndexRole: return first_send_output ? 1 : 2;
-        case CountsForBalanceRole: return false;
-        default: return {};
-        }
-    }
-
+    int rowCount(const QModelIndex& parent = {}) const override { return parent.isValid() ? 0 : m_rows.size(); }
     QHash<int, QByteArray> roleNames() const override
     {
-        return {
-            {AddressRole, "address"},
-            {AmountRole, "amount"},
-            {DateRole, "date"},
-            {DepthRole, "depth"},
-            {LabelRole, "label"},
-            {StatusRole, "status"},
-            {TypeRole, "type"},
-            {TxidRole, "txid"},
-            {ReplacesTxidRole, "replacesTxid"},
-            {ReplacedByTxidRole, "replacedByTxid"},
-            {IsPendingRequestRole, "isPendingRequest"},
-            {RequestIdRole, "requestId"},
-            {TimestampRole, "timestamp"},
-            {NetAmountSatRole, "netAmountSat"},
-            {OutputIndexRole, "outputIndex"},
-            {IsUsedAddressRequestRole, "isUsedAddressRequest"},
-            {CountsForBalanceRole, "countsForBalance"},
-        };
+        QHash<int, QByteArray> roles;
+        const QList<QByteArray> names{
+            "activityId", "activityType", "txid", "requestId", "label", "address", "amount", "netAmountSat", "timestamp",
+            "status", "depth", "blocksToMaturity", "statusKnown", "isInactive", "isPending", "isPendingRequest",
+            "replacedByTxid", "hasPaymentRequest", "actions", "type", "paymentRequests", "canBump"};
+        for (int i = 0; i < names.size(); ++i) roles.insert(Qt::UserRole + 500 + i, names[i]);
+        return roles;
     }
-
+    QVariant data(const QModelIndex& index, int role) const override
+    {
+        return index.isValid() && index.row() < m_rows.size() ? m_rows[index.row()].toMap().value(QString::fromUtf8(roleNames().value(role))) : QVariant{};
+    }
+    Q_INVOKABLE void setRows(const QVariantList& rows)
+    {
+        beginResetModel();
+        m_rows = rows;
+        endResetModel();
+        Q_EMIT countChanged();
+        Q_EMIT transactionDetailsChanged();
+    }
     Q_INVOKABLE void reload() {}
-    Q_INVOKABLE QVariantMap firstTransactionDetails(const QString& txid) const
+    Q_INVOKABLE void requestTransactionDetails(const QString& txid) { m_requested_txid = txid; }
+    Q_INVOKABLE QString requestedTransaction() const { return m_requested_txid; }
+    Q_INVOKABLE QString rawTransaction(const QString& txid) const { return transactionDetails(txid).value("rawTransaction").toString(); }
+    Q_INVOKABLE QString paymentRequestUri(const QString& request_id) const
     {
-        int first_row{-1};
-        int first_output{std::numeric_limits<int>::max()};
-        for (int row = 0; row < rowCount(); ++row) {
-            const QModelIndex model_index = index(row, 0);
-            if (data(model_index, TxidRole).toString() != txid) continue;
-            const int output_index = data(model_index, OutputIndexRole).toInt();
-            if (output_index < first_output) {
-                first_row = row;
-                first_output = output_index;
-            }
-        }
-        return transactionDetailsForRow(first_row);
-    }
-
-    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, int output_index) const
-    {
-        for (int row = 0; row < rowCount(); ++row) {
-            const QModelIndex model_index = index(row, 0);
-            if (data(model_index, TxidRole).toString() == txid
-                && data(model_index, OutputIndexRole).toInt() == output_index) {
-                return transactionDetailsForRow(row);
-            }
-        }
+        for (const auto& row : m_rows) if (row.toMap().value("requestId").toString() == request_id) return row.toMap().value("uri").toString();
         return {};
     }
-
-    Q_INVOKABLE void setCountForTest(int count)
+    Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, bool include_flow = false) const
     {
-        if (m_count == count) return;
-        beginResetModel();
-        m_count = count;
-        endResetModel();
-        Q_EMIT countChanged();
+        Q_UNUSED(include_flow);
+        for (const auto& row : m_rows) if (row.toMap().value("txid").toString() == txid) return row.toMap();
+        return {};
     }
-
-    // Marks one row as a used-address payment request (-1 for none), so tests
-    // can cover the paid-request rendering path in the Activity delegate.
-    Q_INVOKABLE void setUsedAddressRequestRowForTest(int row)
-    {
-        if (m_used_request_row == row) return;
-        beginResetModel();
-        m_used_request_row = row;
-        endResetModel();
-        Q_EMIT countChanged();
-    }
-
-    Q_INVOKABLE void setLabelOverrideForTest(const QString& label)
-    {
-        m_label_override = label;
-        if (rowCount() > 0) {
-            Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {LabelRole});
-        }
-    }
-
 Q_SIGNALS:
     void countChanged();
-
+    void transactionDetailsChanged();
 private:
-    QVariantMap transactionDetailsForRow(int row) const
-    {
-        if (row < 0 || row >= rowCount()) return {};
-        const QModelIndex model_index = index(row, 0);
-        return {
-            {"txid", data(model_index, TxidRole)},
-            {"outputIndex", data(model_index, OutputIndexRole)},
-            // Bump eligibility is only read when details open, mirroring
-            // the real model, which exposes no per-row role for it.
-            {"canBump", row != 0},
-            {"replacedByTxid", data(model_index, ReplacedByTxidRole)},
-            {"amount", data(model_index, AmountRole)},
-            {"date", data(model_index, DateRole)},
-            {"depth", data(model_index, DepthRole)},
-            {"type", data(model_index, TypeRole)},
-            {"status", data(model_index, StatusRole)},
-            {"address", data(model_index, AddressRole)},
-            {"label", data(model_index, LabelRole)},
-            {"paymentRequests", QVariantList{}},
-        };
-    }
-
-    int m_count{2};
-    int m_used_request_row{-1};
-    QString m_label_override;
+    QVariantList m_rows;
+    bool m_loading{false};
+    QString m_load_error;
+    QString m_requested_txid;
 };
 
 class MockActivityFilterProxyModel : public QSortFilterProxyModel
@@ -3238,11 +3102,19 @@ class MockActivityFilterProxyModel : public QSortFilterProxyModel
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
+    Q_PROPERTY(QList<int> typeFilters READ typeFilters WRITE setTypeFilters NOTIFY typeFiltersChanged)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(qint64 minAmount READ minAmount WRITE setMinAmount NOTIFY minAmountChanged)
+    Q_PROPERTY(qint64 maxAmount READ maxAmount WRITE setMaxAmount NOTIFY maxAmountChanged)
+    Q_PROPERTY(qint64 availableMaxAmount READ availableMaxAmount NOTIFY availableMaxAmountChanged)
     Q_PROPERTY(QDate rangeStart READ rangeStart NOTIFY rangeChanged)
     Q_PROPERTY(QDate rangeEnd READ rangeEnd NOTIFY rangeChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int transactionCount READ transactionCount NOTIFY countChanged)
+    Q_PROPERTY(int requestCount READ requestCount NOTIFY countChanged)
+    Q_PROPERTY(qint64 pendingBalanceSat READ pendingBalanceSat NOTIFY pendingBalanceChanged)
+    Q_PROPERTY(QString pendingBalance READ pendingBalance NOTIFY pendingBalanceChanged)
+    Q_PROPERTY(GroupBy groupBy READ groupBy WRITE setGroupBy NOTIFY groupByChanged)
 
 public:
     enum DateFilter {
@@ -3262,9 +3134,56 @@ public:
         SentToSelf,
         Mined,
         Other,
-        PaymentRequest
+        PaymentRequest,
+        Multiple,
+        Consolidation,
+        Split
     };
     Q_ENUM(TypeFilter)
+
+    enum GroupBy { Month, Day };
+    Q_ENUM(GroupBy)
+    enum SectionRole { SectionKeyRole = Qt::UserRole + 200, SectionLabelRole, DateTimeLabelRole };
+    GroupBy groupBy() const { return m_group_by; }
+    void setGroupBy(GroupBy group)
+    {
+        if (group == m_group_by) return;
+        m_group_by = group;
+        if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0));
+        Q_EMIT groupByChanged();
+    }
+    bool grouped() const { return qobject_cast<MockTransactionActivityModel*>(sourceModel()); }
+    QVariant namedData(const QModelIndex& index, const QByteArray& name) const
+    {
+        const auto roles = index.model()->roleNames();
+        return index.data(roles.key(name, -1));
+    }
+    int requestCount() const
+    {
+        int count{0};
+        for (int i = 0; i < rowCount(); ++i) count += namedData(mapToSource(index(i, 0)), "isPendingRequest").toBool();
+        return count;
+    }
+    int transactionCount() const { return rowCount() - requestCount(); }
+    qint64 pendingBalanceSat() const
+    {
+        qint64 total{0};
+        if (!grouped()) return total;
+        for (int i = 0; i < rowCount(); ++i) {
+            const auto row = mapToSource(index(i, 0));
+            if (namedData(row, "isPending").toBool() && !namedData(row, "isPendingRequest").toBool()) {
+                total += namedData(row, "netAmountSat").toLongLong();
+            }
+        }
+        return total;
+    }
+    QString pendingBalance() const
+    {
+        MockBitcoinAmount amount;
+        amount.setUnit(static_cast<MockBitcoinAmount::Unit>(m_display_unit));
+        amount.setSatoshi(pendingBalanceSat());
+        return (pendingBalanceSat() > 0 ? QStringLiteral("+") : QString{}) + amount.displayWithUnit();
+    }
 
     explicit MockActivityFilterProxyModel(QObject* parent = nullptr)
         : QSortFilterProxyModel(parent)
@@ -3273,17 +3192,49 @@ public:
         connect(this, &QAbstractItemModel::rowsRemoved, this, &MockActivityFilterProxyModel::countChanged);
         connect(this, &QAbstractItemModel::modelReset, this, &MockActivityFilterProxyModel::countChanged);
         connect(this, &QAbstractItemModel::layoutChanged, this, &MockActivityFilterProxyModel::countChanged);
+        connect(this, &MockActivityFilterProxyModel::countChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
+        connect(this, &QAbstractItemModel::dataChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
+        connect(this, &MockActivityFilterProxyModel::displayUnitChanged, this, &MockActivityFilterProxyModel::pendingBalanceChanged);
     }
 
     QHash<int, QByteArray> roleNames() const override
     {
-        return sourceModel() ? sourceModel()->roleNames() : QHash<int, QByteArray>{};
+        auto roles = sourceModel() ? sourceModel()->roleNames() : QHash<int, QByteArray>{};
+        if (grouped()) {
+            roles.insert(SectionKeyRole, "sectionKey");
+            roles.insert(SectionLabelRole, "sectionLabel");
+            roles.insert(DateTimeLabelRole, "dateTimeLabel");
+        }
+        return roles;
+    }
+
+    QVariant data(const QModelIndex& index, int role) const override
+    {
+        if (grouped() && (role == SectionKeyRole || role == SectionLabelRole || role == DateTimeLabelRole)) {
+            const auto source = mapToSource(index);
+            const bool pending = namedData(source, "isPending").toBool();
+            const auto date = QDateTime::fromSecsSinceEpoch(namedData(source, "timestamp").toLongLong());
+            if (role == DateTimeLabelRole) return date.toString(m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
+            if (pending) return QStringLiteral("Pending");
+            return date.toString(m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
+        }
+        return QSortFilterProxyModel::data(index, role);
     }
 
     void setSourceModel(QAbstractItemModel* source_model) override
     {
         if (sourceModel() == source_model) return;
+        for (const auto& connection : m_source_connections) disconnect(connection);
+        m_source_connections.clear();
         QSortFilterProxyModel::setSourceModel(source_model);
+        if (source_model) {
+            m_source_connections << connect(source_model, &QAbstractItemModel::modelReset, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::rowsInserted, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::rowsRemoved, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+            m_source_connections << connect(source_model, &QAbstractItemModel::dataChanged, this, &MockActivityFilterProxyModel::availableMaxAmountChanged);
+        }
+        Q_EMIT availableMaxAmountChanged();
+        if (grouped()) sort(0, Qt::DescendingOrder);
         Q_EMIT countChanged();
     }
 
@@ -3325,22 +3276,16 @@ public:
         Q_EMIT countChanged();
     }
 
-    TypeFilter typeFilter() const { return m_type_filter; }
-    void setTypeFilter(TypeFilter type_filter)
+    TypeFilter typeFilter() const { return m_type_filters.isEmpty() ? TypeAll : static_cast<TypeFilter>(m_type_filters.first()); }
+    QList<int> typeFilters() const { return m_type_filters; }
+    void setTypeFilter(TypeFilter type) { setTypeFilters(type == TypeAll ? QList<int>{} : QList<int>{type}); }
+    void setTypeFilters(const QList<int>& types)
     {
-        if (m_type_filter == type_filter) return;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        beginFilterChange();
-#endif
-        m_type_filter = type_filter;
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-        invalidateFilter();
-#endif
+        if (m_type_filters == types) return;
+        m_type_filters = types;
+        invalidate();
         Q_EMIT typeFilterChanged();
+        Q_EMIT typeFiltersChanged();
         Q_EMIT countChanged();
     }
 
@@ -3353,21 +3298,28 @@ public:
     }
 
     qint64 minAmount() const { return m_min_amount; }
-    void setMinAmount(qint64 min_amount)
+    qint64 maxAmount() const { return m_max_amount; }
+    void setMinAmount(qint64 value) { setAmountRange(value, m_max_amount); }
+    void setMaxAmount(qint64 value) { setAmountRange(m_min_amount, value); }
+    Q_INVOKABLE bool setAmountRange(qint64 minimum, qint64 maximum)
     {
-        const qint64 normalized = min_amount < 0 ? -1 : min_amount;
-        if (m_min_amount == normalized) return;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        beginFilterChange();
-#endif
-        m_min_amount = normalized;
-#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
-        endFilterChange(QSortFilterProxyModel::Direction::Rows);
-#else
-        invalidateFilter();
-#endif
+        if (minimum >= 0 && maximum >= 0 && minimum > maximum) return false;
+        m_min_amount = minimum < 0 ? -1 : minimum;
+        m_max_amount = maximum < 0 ? -1 : maximum;
+        invalidate();
         Q_EMIT minAmountChanged();
+        Q_EMIT maxAmountChanged();
         Q_EMIT countChanged();
+        return true;
+    }
+    qint64 availableMaxAmount() const
+    {
+        qint64 result{0};
+        if (sourceModel()) for (int i = 0; i < sourceModel()->rowCount(); ++i) {
+            const auto row = sourceModel()->index(i, 0);
+            if (!namedData(row, "isPendingRequest").toBool()) result = qMax(result, qAbs(namedData(row, "netAmountSat").toLongLong()));
+        }
+        return result;
     }
 
     QDate rangeStart() const { return m_range_start; }
@@ -3409,31 +3361,79 @@ public:
         return true;
     }
 
+    bool matchesTypes(const QModelIndex& row) const
+    {
+        using Model = MockTransactionActivityModel;
+        if (m_type_filters.isEmpty()) return true;
+        const bool request = namedData(row, "isPendingRequest").toBool();
+        const int kind = namedData(row, "activityType").toInt();
+        for (int type : m_type_filters) {
+            if (type == PaymentRequest && (request || namedData(row, "hasPaymentRequest").toBool())) return true;
+            if (request) continue;
+            if ((type == Multiple && kind == Model::Multiple) || (type == Consolidation && kind == Model::Consolidation)
+                || (type == Split && kind == Model::Split) || (type == Mined && kind == Model::Mined)
+                || (type == Other && kind == Model::Other) || (type == SentToSelf && (kind == Model::InternalTransfer || kind == Model::Consolidation || kind == Model::Split))) return true;
+            if (type == Sent || type == Received) {
+                if ((type == Sent && kind == Model::Send) || (type == Received && kind == Model::Receive)) return true;
+                for (const auto& action : namedData(row, "actions").toList()) {
+                    if (action.toMap().value("direction").toInt() == (type == Sent ? Model::SendAction : Model::ReceiveAction)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override
     {
+        if (grouped()) {
+            const auto row = sourceModel()->index(source_row, 0, source_parent);
+            QString search = namedData(row, "label").toString() + namedData(row, "address").toString() + namedData(row, "txid").toString();
+            for (const auto& action : namedData(row, "actions").toList()) search += action.toMap().value("label").toString() + action.toMap().value("address").toString();
+            return search.contains(m_search_text.trimmed(), Qt::CaseInsensitive)
+                && (m_min_amount < 0 || qAbs(namedData(row, "netAmountSat").toLongLong()) >= m_min_amount)
+                && (m_max_amount < 0 || qAbs(namedData(row, "netAmountSat").toLongLong()) <= m_max_amount)
+                && matchesTypes(row) && m_date_filter == DateAll;
+        }
         Q_UNUSED(source_row);
         Q_UNUSED(source_parent);
         return m_search_text.trimmed().isEmpty() &&
             m_date_filter == DateAll &&
-            m_type_filter == TypeAll;
+            m_type_filters.isEmpty();
+    }
+
+    bool lessThan(const QModelIndex& left, const QModelIndex& right) const override
+    {
+        if (!grouped()) return QSortFilterProxyModel::lessThan(left, right);
+        const bool a = namedData(left, "isPending").toBool(), b = namedData(right, "isPending").toBool();
+        if (a != b) return !a;
+        return namedData(left, "timestamp").toLongLong() < namedData(right, "timestamp").toLongLong();
     }
 
 Q_SIGNALS:
     void searchTextChanged();
     void dateFilterChanged();
     void typeFilterChanged();
+    void typeFiltersChanged();
     void displayUnitChanged();
     void minAmountChanged();
+    void maxAmountChanged();
+    void availableMaxAmountChanged();
     void rangeChanged();
     void countChanged();
 
+    void groupByChanged();
+    void pendingBalanceChanged();
+
 private:
     QString m_search_text;
+    GroupBy m_group_by{Month};
     DateFilter m_date_filter{DateAll};
-    TypeFilter m_type_filter{TypeAll};
+    QList<int> m_type_filters;
+    QList<QMetaObject::Connection> m_source_connections;
     int m_display_unit{0};
     qint64 m_min_amount{-1};
+    qint64 m_max_amount{-1};
     QDate m_range_start;
     QDate m_range_end;
 };
@@ -3757,13 +3757,33 @@ private:
     int m_next_old_row{0};
 };
 
+class TestIconProvider : public QQuickImageProvider
+{
+public:
+    TestIconProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
+
+    QPixmap requestPixmap(const QString& id, QSize* size, const QSize& requested_size) override
+    {
+        const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") + id).pixmap(requested_size);
+        if (size) *size = pixmap.size();
+        return pixmap;
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
 
 public Q_SLOTS:
+    void applicationAvailable()
+    {
+        // Exercise the same customizable controls used by the application.
+        qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    }
+
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
         static MockBuildInfo build_info;
@@ -3790,12 +3810,12 @@ public Q_SLOTS:
         static MockWalletQmlModel wallet_model;
         static MockWalletController wallet_controller;
         static MockWalletListModel wallet_list_model;
-        static MockActivityListModel activity_list_model;
+        static MockTransactionActivityModel transaction_activity_model;
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
         recipients_model.setCurrent(&send_recipient);
-        wallet_model.setActivityListModel(&activity_list_model);
+        wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
         wallet_model.setRecipients(&recipients_model);
         wallet_model.setCoinsListModel(&coins_list_model);
@@ -3814,6 +3834,7 @@ public Q_SLOTS:
         qmlRegisterType<MockBitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
         qmlRegisterType<MockBitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
         qmlRegisterType<MockActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
+        qmlRegisterUncreatableType<MockTransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Test fixture");
         qmlRegisterUncreatableType<MockAddressListModel>("org.bitcoincore.qt", 1, 0, "AddressListModel", "Test stub type");
         qmlRegisterType<MockPaymentRequest>("org.bitcoincore.qt", 1, 0, "PaymentRequest");
         qmlRegisterUncreatableType<MockTransaction>("org.bitcoincore.qt", 1, 0, "Transaction", "Test stub type");
@@ -3853,7 +3874,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletTransaction"), &wallet_transaction);
         engine->rootContext()->setContextProperty(QStringLiteral("testPaymentRequest"), &payment_request);
-        engine->rootContext()->setContextProperty(QStringLiteral("testActivityListModel"), &activity_list_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testTransactionActivityModel"), &transaction_activity_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testSendRecipient"), &send_recipient);
         engine->rootContext()->setContextProperty(QStringLiteral("testAutomationEnabled"), false);
         engine->rootContext()->setContextProperty(QStringLiteral("testRecipientsModel"), &recipients_model);

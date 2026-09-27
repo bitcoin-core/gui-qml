@@ -14,7 +14,7 @@
 #include <primitives/transaction.h>
 #include <psbt.h>
 #include <qml/models/activityfilterproxymodel.h>
-#include <qml/models/activitylistmodel.h>
+#include <qml/models/transactionactivitymodel.h>
 #include <qml/models/psbtqmlmodel.h>
 #include <qml/models/receiverequesthistorymodel.h>
 #include <qml/models/sendrecipient.h>
@@ -178,26 +178,6 @@ WalletModelHarness<MockWallet> MakeWalletModel(interfaces::Node* node = nullptr)
 
 // A minimal external incoming payment to `dest`, shaped so that
 // Transaction::fromWalletTx decodes it into a single RecvWithAddress row.
-interfaces::WalletTx ReceiveWalletTxFor(const CTxDestination& dest, CAmount amount)
-{
-    CMutableTransaction mtx;
-    mtx.version = 2;
-    mtx.vout.emplace_back(amount, GetScriptForDestination(dest));
-
-    interfaces::WalletTx wtx;
-    wtx.tx = MakeTransactionRef(mtx);
-    wtx.txin_is_mine = {false}; // an external sender: an incoming payment
-    wtx.txout_is_mine = {true};
-    wtx.txout_address = {dest};
-    wtx.txout_address_is_mine = {true};
-    wtx.txout_is_change = {false};
-    wtx.credit = amount;
-    wtx.debit = 0;
-    wtx.time = 500;
-    wtx.is_coinbase = false;
-    return wtx;
-}
-
 void SetValidRecipient(WalletQmlModel& model,
                        const QString& address = VALID_MAINNET_ADDRESS,
                        const bool subtract_fee_from_amount = false)
@@ -210,32 +190,6 @@ void SetValidRecipient(WalletQmlModel& model,
     recipient->setSubtractFeeFromAmount(subtract_fee_from_amount);
 
     QVERIFY2(recipient->isValid(), "Recipient must be valid before scheduling fee estimates");
-}
-
-interfaces::WalletTx MakeOutgoingActivityWalletTx(const std::vector<CAmount>& output_values,
-                                                   const std::vector<bool>& output_is_mine,
-                                                   const std::vector<bool>& output_is_change)
-{
-    CMutableTransaction transaction;
-    transaction.vin.emplace_back(COutPoint{Txid::FromUint256(uint256{1}), 0});
-    for (const CAmount value : output_values) {
-        transaction.vout.emplace_back(value, CScript{});
-    }
-
-    interfaces::WalletTx wallet_tx;
-    wallet_tx.tx = MakeTransactionRef(std::move(transaction));
-    wallet_tx.txin_is_mine = {true};
-    wallet_tx.txout_is_mine = output_is_mine;
-    wallet_tx.txout_is_change = output_is_change;
-    wallet_tx.txout_address.assign(output_values.size(), DecodeDestination(VALID_MAINNET_ADDRESS.toStdString()));
-    wallet_tx.txout_address_is_mine = output_is_mine;
-    wallet_tx.credit = std::inner_product(
-        output_values.begin(), output_values.end(), output_is_mine.begin(), CAmount{0});
-    wallet_tx.debit = std::accumulate(output_values.begin(), output_values.end(), CAmount{0}) + 1'000;
-    wallet_tx.change = 0;
-    wallet_tx.time = 0;
-    wallet_tx.is_coinbase = false;
-    return wallet_tx;
 }
 
 class FakePasswordWallet : public StubWallet
@@ -586,9 +540,7 @@ private Q_SLOTS:
     void availableReceiveAddressTypesHideUnavailableTaproot();
     void receiveAddressTypeDefaultPersistsPerWallet();
     void removeReceiveRequestRemovesPendingActivityRow();
-    void activityDetailsSelectLowestOutputIndex();
-    void activityDetailsPreferOutgoingForSelfPayment();
-    void editedReceiveRequestLabelShownInActivityRow();
+    void editedReceiveRequestNameShownInActivityMetadata();
     void editedRequestSyncsAddressBookLabel();
     void requestSaveLeavesUneditedAddressBookLabelAlone();
     void amountOnlyRequestEditPreservesAddressBookLabel();
@@ -596,11 +548,6 @@ private Q_SLOTS:
     void requestSaveLeavesSiblingRequestLabelsAlone();
     void labelSyncSkipsInMemoryUpdateWhenPersistFails();
     void editedAddressBookLabelUpdatesHeldRequestObjects();
-    void usedAddressReceiveRequestRowIsFlaggedAndUntracked();
-    void paidPendingRequestBecomesUsedAddressRequestLive();
-    void paymentMarksEveryPendingRequestForAddressUsedLive();
-    void transactionChangedOffThreadIsQueuedToModelThread();
-    void reloadMarksEveryRequestForPaidAddressUsed();
     void prepareTransactionOnLockedWalletRequiresPassword();
     void prepareTransactionWithPrivateKeysDisabledDoesNotRequirePassword();
     void sendRecipientRejectsDustAmount();
@@ -1739,81 +1686,43 @@ void WalletQmlModelTests::removeReceiveRequestRemovesPendingActivityRow()
     auto [wallet, model] = MakePasswordWalletModel();
     model->currentPaymentRequest()->setLabel(QStringLiteral("request label"));
 
-    QCOMPARE(model->activityListModel()->rowCount(), 0);
+    QTRY_COMPARE(model->transactionActivityModel()->rowCount(), 0);
     QVERIFY(model->commitPaymentRequest());
     QCOMPARE(wallet->set_address_receive_request_calls, 1);
     QCOMPARE(wallet->receive_request_ids.back(), std::string{"1"});
-    QCOMPARE(model->activityListModel()->rowCount(), 1);
+    QTRY_COMPARE(model->transactionActivityModel()->rowCount(), 1);
 
     QVERIFY(model->removeReceiveRequest(QStringLiteral("1")));
     QCOMPARE(wallet->set_address_receive_request_calls, 2);
     QCOMPARE(wallet->receive_request_ids.back(), std::string{"1"});
-    QCOMPARE(model->activityListModel()->rowCount(), 0);
+    QTRY_COMPARE(model->transactionActivityModel()->rowCount(), 0);
 }
 
-void WalletQmlModelTests::activityDetailsSelectLowestOutputIndex()
-{
-    auto [wallet, model] = MakeWalletModel();
-    const interfaces::WalletTx wallet_tx = MakeOutgoingActivityWalletTx(
-        {10'000, 20'000, 30'000},
-        {true, false, false},
-        {true, false, false});
-    wallet->get_wallet_txs_fn = [wallet_tx] {
-        return std::set<interfaces::WalletTx>{wallet_tx};
-    };
-    model->activityListModel()->reload();
-
-    const QString txid = QString::fromStdString(wallet_tx.tx->GetHash().ToString());
-    const QVariantMap first = model->activityListModel()->firstTransactionDetails(txid);
-    QCOMPARE(first.value("outputIndex").toInt(), 1);
-
-    const QVariantMap exact = model->activityListModel()->transactionDetails(txid, 2);
-    QCOMPARE(exact.value("outputIndex").toInt(), 2);
-}
-
-void WalletQmlModelTests::activityDetailsPreferOutgoingForSelfPayment()
-{
-    auto [wallet, model] = MakeWalletModel();
-    const interfaces::WalletTx wallet_tx = MakeOutgoingActivityWalletTx(
-        {20'000},
-        {true},
-        {false});
-    wallet->get_wallet_txs_fn = [wallet_tx] {
-        return std::set<interfaces::WalletTx>{wallet_tx};
-    };
-    model->activityListModel()->reload();
-
-    const QString txid = QString::fromStdString(wallet_tx.tx->GetHash().ToString());
-    const QVariantMap details = model->activityListModel()->firstTransactionDetails(txid);
-    QCOMPARE(details.value("outputIndex").toInt(), 0);
-    QVERIFY(details.value("amount").toString().startsWith('-'));
-}
-
-void WalletQmlModelTests::editedReceiveRequestLabelShownInActivityRow()
+void WalletQmlModelTests::editedReceiveRequestNameShownInActivityMetadata()
 {
     auto [wallet, model] = MakePasswordWalletModel();
 
-    // The address book reports a different label for the request address. A
-    // pending request row must show the request's own label, not the address
-    // book label, so an edited label is not overwritten when Activity renders.
+    // The address book reports a different label for the request address.
+    // request metadata must show the request's own name. The activity row
+    // label remains reserved for its private note.
     wallet->get_address_result = true;
     wallet->get_address_label = "address book label";
 
     model->currentPaymentRequest()->setLabel(QStringLiteral("Old label"));
     QVERIFY(model->commitPaymentRequest());
 
-    ActivityListModel* activity = model->activityListModel();
-    QCOMPARE(activity->rowCount(), 1);
+    TransactionActivityModel* activity = model->transactionActivityModel();
+    QTRY_COMPARE(activity->rowCount(), 1);
     const QModelIndex row = activity->index(0);
-    QVERIFY(activity->data(row, ActivityListModel::IsPendingRequestRole).toBool());
-    QCOMPARE(activity->data(row, ActivityListModel::LabelRole).toString(), QStringLiteral("Old label"));
+    QVERIFY(activity->data(row, TransactionActivityModel::IsPendingRequestRole).toBool());
+    QCOMPARE(activity->data(row, TransactionActivityModel::PaymentRequestsRole).toList().first().toMap().value("label").toString(), QStringLiteral("Old label"));
 
     // Editing the label commits an update for the same request id.
     model->currentPaymentRequest()->setLabel(QStringLiteral("New label"));
     QVERIFY(model->commitPaymentRequest());
 
     QCOMPARE(activity->rowCount(), 1);
-    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+    QCOMPARE(activity->data(activity->index(0), TransactionActivityModel::PaymentRequestsRole).toList().first().toMap().value("label").toString(),
              QStringLiteral("New label"));
 }
 
@@ -1893,8 +1802,9 @@ void WalletQmlModelTests::editedAddressBookLabelSyncsRequestLabel()
     const QString address = model->currentPaymentRequest()->address();
     QVERIFY(!address.isEmpty());
 
-    ActivityListModel* activity = model->activityListModel();
-    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+    TransactionActivityModel* activity = model->transactionActivityModel();
+    QTRY_COMPARE(activity->rowCount(), 1);
+    QCOMPARE(activity->data(activity->index(0), TransactionActivityModel::PaymentRequestsRole).toList().first().toMap().value("label").toString(),
              QStringLiteral("Old label"));
 
     // Editing the label on the Addresses page must propagate to the matching
@@ -1902,7 +1812,7 @@ void WalletQmlModelTests::editedAddressBookLabelSyncsRequestLabel()
     // the address book (the reverse of editedRequestSyncsAddressBookLabel).
     QVERIFY(model->setAddressLabel(address, QStringLiteral("New label")));
 
-    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+    QCOMPARE(activity->data(activity->index(0), TransactionActivityModel::PaymentRequestsRole).toList().first().toMap().value("label").toString(),
              QStringLiteral("New label"));
     const QVariantList matches = model->receiveRequests()->matchingEntriesForAddress(address);
     QCOMPARE(matches.size(), 1);
@@ -1971,8 +1881,9 @@ void WalletQmlModelTests::labelSyncSkipsInMemoryUpdateWhenPersistFails()
     const auto entry = model->receiveRequests()->entryById(request_id);
     QVERIFY(entry.has_value());
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("Old label"));
-    ActivityListModel* activity = model->activityListModel();
-    QCOMPARE(activity->data(activity->index(0), ActivityListModel::LabelRole).toString(),
+    TransactionActivityModel* activity = model->transactionActivityModel();
+    QTRY_COMPARE(activity->rowCount(), 1);
+    QCOMPARE(activity->data(activity->index(0), TransactionActivityModel::PaymentRequestsRole).toList().first().toMap().value("label").toString(),
              QStringLiteral("Old label"));
 }
 
@@ -2002,264 +1913,6 @@ void WalletQmlModelTests::editedAddressBookLabelUpdatesHeldRequestObjects()
     QVERIFY(model->setAddressLabel(address, QStringLiteral("Renamed again")));
     QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("Unsaved draft"));
     QCOMPARE(model->detailPaymentRequest()->label(), QStringLiteral("Renamed again"));
-}
-
-void WalletQmlModelTests::usedAddressReceiveRequestRowIsFlaggedAndUntracked()
-{
-    auto [wallet, model] = MakePasswordWalletModel();
-    ActivityListModel* activity = model->activityListModel();
-    QCOMPARE(activity->rowCount(), 0);
-
-    // An unused-address request is a normal pending row.
-    activity->addReceiveRequest(QStringLiteral("bcrt1qunused"), QStringLiteral("Unused"),
-                                1000, 100, QStringLiteral("1"), /*used_address=*/false);
-    QCOMPARE(activity->rowCount(), 1);
-    QVERIFY(activity->data(activity->index(0), ActivityListModel::IsPendingRequestRole).toBool());
-    QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsUsedAddressRequestRole).toBool());
-
-    // A used-address request is still a payment-request row but is flagged so the
-    // proxy can keep it out of every view except the Payment request filter.
-    activity->addReceiveRequest(QStringLiteral("bcrt1qused"), QStringLiteral("Used"),
-                                2000, 200, QStringLiteral("2"), /*used_address=*/true);
-    QCOMPARE(activity->rowCount(), 2);
-    const QModelIndex used_row = activity->index(0); // rows are pushed to the front
-    QVERIFY(activity->data(used_row, ActivityListModel::IsPendingRequestRole).toBool());
-    QVERIFY(activity->data(used_row, ActivityListModel::IsUsedAddressRequestRole).toBool());
-    QCOMPARE(activity->data(used_row, ActivityListModel::LabelRole).toString(), QStringLiteral("Used"));
-}
-
-void WalletQmlModelTests::paidPendingRequestBecomesUsedAddressRequestLive()
-{
-    auto wallet = std::make_unique<MockWallet>();
-    auto* wallet_ptr = wallet.get();
-
-    const CTxDestination dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 7)}}};
-    const QString address = QString::fromStdString(EncodeDestination(dest));
-    const interfaces::WalletTx received = ReceiveWalletTxFor(dest, 50 * COIN);
-
-    std::vector<interfaces::Wallet::TransactionChangedFn> callbacks;
-    wallet_ptr->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
-    wallet_ptr->get_balance_fn = [] { return 10 * COIN; };
-    wallet_ptr->handle_transaction_changed_fn = [&](interfaces::Wallet::TransactionChangedFn fn) {
-        callbacks.push_back(std::move(fn));
-        return std::unique_ptr<interfaces::Handler>{};
-    };
-    wallet_ptr->get_wallet_tx_fn = [received](const Txid&) { return received; };
-    wallet_ptr->try_get_tx_status_fn = [](const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) { return true; };
-
-    WalletQmlModel model{std::move(wallet)};
-    ActivityListModel* activity = model.activityListModel();
-
-    // A pending request for the address that is about to be paid.
-    activity->addReceiveRequest(address, QStringLiteral("req"), 0, 100, QStringLiteral("1"));
-    QCOMPARE(activity->rowCount(), 1);
-    QVERIFY(activity->data(activity->index(0), ActivityListModel::IsPendingRequestRole).toBool());
-    QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsUsedAddressRequestRole).toBool());
-
-    // The payment arrives while the wallet is open (no reload).
-    QVERIFY(!callbacks.empty());
-    for (const auto& cb : callbacks) {
-        cb(received.tx->GetHash(), CT_NEW);
-    }
-
-    // The request is kept as a used-address request (Payment request filter only)
-    // and the received transaction is added as its own row, matching the reloaded
-    // state instead of consuming the request in place. The update is queued to
-    // the model's thread, so spin the event loop for it.
-    QTRY_COMPARE(activity->rowCount(), 2);
-    QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsPendingRequestRole).toBool());
-    QVERIFY(!activity->data(activity->index(0), ActivityListModel::IsUsedAddressRequestRole).toBool());
-    QCOMPARE(activity->data(activity->index(0), ActivityListModel::TypeRole).toInt(),
-             static_cast<int>(Transaction::RecvWithAddress));
-
-    const QModelIndex request_row = activity->index(1);
-    QVERIFY(activity->data(request_row, ActivityListModel::IsPendingRequestRole).toBool());
-    QVERIFY(activity->data(request_row, ActivityListModel::IsUsedAddressRequestRole).toBool());
-    QCOMPARE(activity->data(request_row, ActivityListModel::LabelRole).toString(), QStringLiteral("req"));
-}
-
-namespace {
-// Collect (label, isPendingRequest, isUsedAddressRequest) per row so the
-// assertions do not depend on the model's insertion order.
-struct RequestRowState {
-    bool pending{false};
-    bool used{false};
-};
-std::map<QString, RequestRowState> RequestRowStates(ActivityListModel* activity)
-{
-    std::map<QString, RequestRowState> states;
-    for (int i = 0; i < activity->rowCount(); ++i) {
-        const QModelIndex row = activity->index(i);
-        states[activity->data(row, ActivityListModel::LabelRole).toString()] = RequestRowState{
-            activity->data(row, ActivityListModel::IsPendingRequestRole).toBool(),
-            activity->data(row, ActivityListModel::IsUsedAddressRequestRole).toBool()};
-    }
-    return states;
-}
-} // namespace
-
-// Core supports multiple receive requests for one address. When a payment
-// arrives, every pending request for the paid address must become a
-// used-address request, not just the row the address lookup found first:
-// a single marked row would strand its siblings as pending for the rest of
-// the session while a reload marks them all used.
-void WalletQmlModelTests::paymentMarksEveryPendingRequestForAddressUsedLive()
-{
-    auto wallet = std::make_unique<MockWallet>();
-    auto* wallet_ptr = wallet.get();
-
-    const CTxDestination dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 7)}}};
-    const QString address = QString::fromStdString(EncodeDestination(dest));
-    const CTxDestination other_dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 8)}}};
-    const QString other_address = QString::fromStdString(EncodeDestination(other_dest));
-    const interfaces::WalletTx received = ReceiveWalletTxFor(dest, 50 * COIN);
-
-    std::vector<interfaces::Wallet::TransactionChangedFn> callbacks;
-    wallet_ptr->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
-    wallet_ptr->get_balance_fn = [] { return 10 * COIN; };
-    wallet_ptr->handle_transaction_changed_fn = [&](interfaces::Wallet::TransactionChangedFn fn) {
-        callbacks.push_back(std::move(fn));
-        return std::unique_ptr<interfaces::Handler>{};
-    };
-    wallet_ptr->get_wallet_tx_fn = [received](const Txid&) { return received; };
-    wallet_ptr->try_get_tx_status_fn = [](const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) { return true; };
-
-    WalletQmlModel model{std::move(wallet)};
-    ActivityListModel* activity = model.activityListModel();
-    ActivityFilterProxyModel proxy;
-    proxy.setSourceModel(activity);
-
-    // Two pending requests for the address about to be paid, and one for an
-    // unrelated address that must stay pending.
-    activity->addReceiveRequest(address, QStringLiteral("req-a1"), 0, 100, QStringLiteral("1"));
-    activity->addReceiveRequest(address, QStringLiteral("req-a2"), 0, 110, QStringLiteral("2"));
-    activity->addReceiveRequest(other_address, QStringLiteral("req-b"), 0, 120, QStringLiteral("3"));
-    QCOMPARE(activity->rowCount(), 3);
-    QCOMPARE(proxy.rowCount(), 3);
-
-    QVERIFY(!callbacks.empty());
-    for (const auto& cb : callbacks) {
-        cb(received.tx->GetHash(), CT_NEW);
-    }
-
-    QTRY_COMPARE(activity->rowCount(), 4);
-    const auto states = RequestRowStates(activity);
-    QVERIFY(states.at(QStringLiteral("req-a1")).used);
-    QVERIFY(states.at(QStringLiteral("req-a2")).used);
-    QVERIFY(states.at(QStringLiteral("req-b")).pending);
-    QVERIFY(!states.at(QStringLiteral("req-b")).used);
-
-    // The default view hides both used rows: the real transaction and the
-    // unrelated pending request remain.
-    QCOMPARE(proxy.rowCount(), 2);
-    proxy.setTypeFilter(ActivityFilterProxyModel::PaymentRequest);
-    QCOMPARE(proxy.rowCount(), 3);
-}
-
-// The wallet fires transactionChanged on its notification thread. The model
-// must not mutate itself there: the rows and their model signals belong to
-// the thread the attached proxies and views live on, so the update has to be
-// queued and land only once that thread's event loop runs (the marshalling
-// the Widgets TransactionTableModel does for this same notification).
-void WalletQmlModelTests::transactionChangedOffThreadIsQueuedToModelThread()
-{
-    auto wallet = std::make_unique<MockWallet>();
-    auto* wallet_ptr = wallet.get();
-
-    const CTxDestination dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 7)}}};
-    const QString address = QString::fromStdString(EncodeDestination(dest));
-    const interfaces::WalletTx received = ReceiveWalletTxFor(dest, 50 * COIN);
-
-    std::vector<interfaces::Wallet::TransactionChangedFn> callbacks;
-    wallet_ptr->get_wallet_txs_fn = [] { return std::set<interfaces::WalletTx>{}; };
-    wallet_ptr->get_balance_fn = [] { return 10 * COIN; };
-    wallet_ptr->handle_transaction_changed_fn = [&](interfaces::Wallet::TransactionChangedFn fn) {
-        callbacks.push_back(std::move(fn));
-        return std::unique_ptr<interfaces::Handler>{};
-    };
-    wallet_ptr->get_wallet_tx_fn = [received](const Txid&) { return received; };
-    std::atomic<bool> status_read_on_notifier_thread{false};
-    std::thread::id notifier_id;
-    wallet_ptr->try_get_tx_status_fn = [&](const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) {
-        if (std::this_thread::get_id() == notifier_id) {
-            status_read_on_notifier_thread = true;
-        }
-        return true;
-    };
-
-    WalletQmlModel model{std::move(wallet)};
-    ActivityListModel* activity = model.activityListModel();
-
-    activity->addReceiveRequest(address, QStringLiteral("req"), 0, 100, QStringLiteral("1"));
-    QCOMPARE(activity->rowCount(), 1);
-
-    // Fire the notification from a worker thread, the way the wallet does.
-    QVERIFY(!callbacks.empty());
-    std::thread notifier{[&] {
-        notifier_id = std::this_thread::get_id();
-        for (const auto& cb : callbacks) {
-            cb(received.tx->GetHash(), CT_NEW);
-        }
-    }};
-    notifier.join();
-
-    // The notification thread must only have queued the update, not applied
-    // it: the row set is unchanged until this thread's event loop runs.
-    QCOMPARE(activity->rowCount(), 1);
-
-    // The status snapshot, however, must have been taken on the notification
-    // thread itself: it holds cs_wallet there, so the try-lock inside
-    // tryGetTxStatus cannot fail. Deferred to this thread it can lose the
-    // try-lock and silently drop the update.
-    QVERIFY(status_read_on_notifier_thread);
-
-    QTRY_COMPARE(activity->rowCount(), 2);
-}
-
-// The reload half of the same rule: rebuilding the model from the wallet
-// marks every request whose address appears in a real transaction as a
-// used-address request, so a restart shows the same state as the live
-// update path.
-void WalletQmlModelTests::reloadMarksEveryRequestForPaidAddressUsed()
-{
-    auto wallet = std::make_unique<MockWallet>();
-    auto* wallet_ptr = wallet.get();
-
-    const CTxDestination dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 7)}}};
-    const QString address = QString::fromStdString(EncodeDestination(dest));
-    const CTxDestination other_dest{WitnessV0KeyHash{uint160{std::vector<unsigned char>(20, 8)}}};
-    const QString other_address = QString::fromStdString(EncodeDestination(other_dest));
-    const interfaces::WalletTx received = ReceiveWalletTxFor(dest, 50 * COIN);
-
-    wallet_ptr->get_wallet_txs_fn = [received] { return std::set<interfaces::WalletTx>{received}; };
-    wallet_ptr->get_balance_fn = [] { return 10 * COIN; };
-    wallet_ptr->try_get_tx_status_fn = [](const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) { return true; };
-
-    WalletQmlModel model{std::move(wallet)};
-    ActivityListModel* activity = model.activityListModel();
-
-    auto make_entry = [](int64_t id, const QString& addr, const char* label) {
-        QmlRecentRequestEntry entry;
-        entry.id = id;
-        entry.date = QDateTime::fromSecsSinceEpoch(100 + id);
-        entry.recipient.address = addr.toStdString();
-        entry.recipient.label = label;
-        return entry;
-    };
-    std::vector<QmlRecentRequestEntry> entries;
-    entries.push_back(make_entry(1, address, "req-a1"));
-    entries.push_back(make_entry(2, address, "req-a2"));
-    entries.push_back(make_entry(3, other_address, "req-b"));
-    model.receiveRequests()->setEntries(std::move(entries));
-
-    activity->reload();
-
-    QCOMPARE(activity->rowCount(), 4);
-    const auto states = RequestRowStates(activity);
-    QVERIFY(states.at(QStringLiteral("req-a1")).used);
-    QVERIFY(states.at(QStringLiteral("req-a2")).used);
-    QVERIFY(states.at(QStringLiteral("req-b")).pending);
-    QVERIFY(!states.at(QStringLiteral("req-b")).used);
 }
 
 void WalletQmlModelTests::prepareTransactionOnLockedWalletRequiresPassword()

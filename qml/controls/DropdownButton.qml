@@ -13,6 +13,7 @@ AbstractButton {
     property string subtitle: ""
     property bool opened: false
     property bool active: false
+    property bool isOnSurface: false
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft
@@ -21,8 +22,8 @@ AbstractButton {
     property color textColor: Theme.color.neutral9
     property color subtitleColor: Theme.color.neutral7
     property color caretColor: Theme.color.neutral9
-    property color hoverBgColor: Theme.color.neutral2
-    property color defaultBgColor: Theme.color.background
+    property color hoverBgColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
+    property color defaultBgColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
 
     implicitHeight: Math.max(30, caretSize + topPadding + bottomPadding)
     leftPadding: 10

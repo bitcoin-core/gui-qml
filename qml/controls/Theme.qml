@@ -27,6 +27,7 @@ Control {
         required property color blue
         required property color amber
         required property color purple
+        required property color lavender
         required property color neutral0
         required property color neutral1
         required property color neutral2
@@ -75,6 +76,7 @@ Control {
         blue: "#3CA3DE"
         amber: "#C9B500"
         purple: "#C075DC"
+        lavender: "#6877FD"
         neutral0: "#000000"
         neutral1: "#121212"
         neutral2: "#222222"
@@ -107,6 +109,7 @@ Control {
         blue: "#2D9CDB"
         amber: "#C9B500"
         purple: "#BB6BD9"
+        lavender: "#6877FD"
         neutral0: "#FFFFFF"
         neutral1: "#F6F6F6"
         neutral2: "#EEEEEE"
