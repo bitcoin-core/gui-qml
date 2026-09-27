@@ -31,7 +31,7 @@ def wait_for_text(gui, object_name, expected, timeout_ms=10000):
 def create_wallet_through_gui(harness, gui):
     complete_onboarding(gui)
     if gui.object_exists("createWalletWizard"):
-        gui.click("createWalletWizardExitButton")
+        gui.click("onboardingCloseButton")
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
     wait_for_rpc(harness.gui_rpc_port, timeout=30)
     gui.click("walletBadge")
@@ -43,27 +43,17 @@ def create_wallet_through_gui(harness, gui):
         gui.wait_for_property("walletTypeRegular", "visible", True, timeout_ms=5000)
     gui.settle()
     gui.click("walletTypeRegular")
-    gui.wait_for_property("createWalletIntroStartButton", "visible", True, timeout_ms=5000)
-    gui.click("createWalletIntroStartButton")
-    gui.settle()
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", WALLET_NAME)
-    gui.click("createWalletNameContinueButton")
-    gui.settle()
-    gui.click("createWalletPasswordSkipButton")
-    gui.wait_for_property("createWalletConfirmNextButton", "visible", True, timeout_ms=20000)
-    gui.click("createWalletConfirmNextButton")
-    gui.wait_for_property("createWalletBackupDoneButton", "visible", True, timeout_ms=10000)
-    gui.click("createWalletBackupDoneButton")
-    gui.settle()
-    try:
-        wizard_visible = gui.get_property("createWalletWizard", "visible")
-    except QmlDriverError as err:
-        if "Object not found: createWalletWizard" not in str(err):
-            raise
-        wizard_visible = False
-    if wizard_visible:
-        gui.click("typeSelectorCancelButton")
-        gui.settle()
+    gui.click("createWalletEncryptCheckBox")
+    gui.click("createWalletUnencryptedConfirmToggle")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=20000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_property("createWalletUnencryptedWarning", "opened", True, timeout_ms=5000)
+    gui.click("createWalletWarningConfirmButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=20000)
+    gui.click("createWalletReadyDoneButton")
+    gui.wait_for_property("walletCreationModal", "visible", False, timeout_ms=5000)
     gui.wait_for_property("walletBadge", "text", WALLET_NAME, timeout_ms=20000)
 
 

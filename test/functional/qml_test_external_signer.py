@@ -226,12 +226,8 @@ def ensure_desktop_wallets_visible(gui):
     except QmlDriverError:
         pass
 
-    try:
-        gui.wait_for_property("createWalletWizardExitButton", "visible", True, timeout_ms=1000)
-        gui.click("createWalletWizardExitButton")
-    except QmlDriverError:
-        gui.wait_for_property("typeSelectorCancelButton", "visible", True, timeout_ms=10000)
-        gui.click("typeSelectorCancelButton")
+    gui.wait_for_property("onboardingCloseButton", "visible", True, timeout_ms=10000)
+    gui.click("onboardingCloseButton")
     gui.wait_for_property("desktopWalletSettingsTabButton", "visible", True, timeout_ms=10000)
 
 
@@ -542,13 +538,13 @@ def run_test(args):
         checkpoints.checkpoint("no-signer review displayed", harness.driver)
         assert_signer_status(
             harness.driver,
-            "sendReviewStatusText",
+            "sendTransactionReviewSignerStatus",
             "Approve on external signer to broadcast this transaction.",
         )
-        harness.driver.click("sendReviewExternalSignerButton")
+        harness.driver.click("sendTransactionReviewSignerButton")
         assert_signer_status(
             harness.driver,
-            "sendReviewStatusText",
+            "sendTransactionReviewSignerStatus",
             "External signer not found. Connect one device and try again.",
         )
         checkpoints.checkpoint("no-signer review error surfaced", harness.driver)
@@ -565,14 +561,14 @@ def run_test(args):
 
         open_external_signer_review(harness.driver, destination_address, "0.50000000")
         checkpoints.checkpoint("signer review displayed", harness.driver)
-        harness.driver.click("sendReviewExternalSignerButton")
+        harness.driver.click("sendTransactionReviewSignerButton")
         assert_signer_status(
             harness.driver,
-            "sendReviewStatusText",
+            "sendTransactionReviewSignerStatus",
             "Signed on external signer. Ready to send.",
         )
         checkpoints.checkpoint("signer approval completed", harness.driver)
-        harness.driver.click("sendReviewExternalSignerButton")
+        harness.driver.click("sendTransactionReviewSignerButton")
         wait_until(
             lambda: expected_txid in rpc_call(harness.gui_rpc_port, "getrawmempool"),
             description="signed transaction broadcast",

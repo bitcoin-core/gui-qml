@@ -292,8 +292,8 @@ Page {
 
             ExternalSignerReviewActions {
                 id: externalSignerActions
-                buttonObjectName: "sendReviewExternalSignerButton"
-                statusObjectName: "sendReviewStatusText"
+                statusObjectName: "sendTransactionReviewSignerStatus"
+                buttonObjectName: "sendTransactionReviewSignerButton"
                 visible: root.showSend && root.wallet && root.wallet.hasExternalSigner
                 Layout.fillWidth: true
                 wallet: root.wallet

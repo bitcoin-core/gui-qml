@@ -91,7 +91,7 @@ TestCase {
         compare(typePage.heading, "Choose a wallet type")
         compare(typePage.subheading, "You can create a new wallet or import from a wallet file.")
         compare(findChild(typePage, "walletTypeImport").description,
-            "Use an existing wallet backup file")
+            "Use an existing wallet backup file.")
     }
 
     function test_add_wallet_completion_returns_to_activity() {

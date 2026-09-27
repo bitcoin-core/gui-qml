@@ -34,7 +34,7 @@ def wait_for_text_contains(gui, object_name, expected_substring, timeout_ms=1000
     )
 
 
-def open_create_wallet_name_page(gui):
+def open_create_wallet_form(gui):
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
     gui.click("walletBadge")
     try:
@@ -44,14 +44,17 @@ def open_create_wallet_name_page(gui):
         pass
     gui.wait_for_property("walletTypeRegular", "visible", True, timeout_ms=10000)
     gui.click("walletTypeRegular")
-    gui.wait_for_property("createWalletIntroStartButton", "visible", True, timeout_ms=10000)
-    gui.click("createWalletIntroStartButton")
-    gui.wait_for_page("createWalletNamePage", timeout_ms=10000)
+    gui.wait_for_page("createWalletFormPage", timeout_ms=10000)
+    gui.set_text("createWalletPasswordInput", "test wallet password")
+    gui.set_text("createWalletPasswordRepeatInput", "test wallet password")
+    gui.click("createWalletPasswordConfirmToggle")
 
 
 def submit_name(gui, wallet_name):
     gui.set_text("createWalletNameInput", wallet_name)
-    gui.click("createWalletNameContinueButton")
+    assert gui.get_text("createWalletFormErrorText") == ""
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=5000)
+    gui.click("createWalletFormCreateButton")
     gui.settle()
 
 
@@ -138,28 +141,30 @@ def case_name_availability(harness):
     wait_for_rpc(harness.gui_rpc_port)
     rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": loaded_wallet})
 
-    open_create_wallet_name_page(gui)
+    open_create_wallet_form(gui)
 
     submit_name(gui, closed_wallet)
-    gui.wait_for_page("createWalletNamePage", timeout_ms=10000)
-    wait_for_text_contains(gui, "walletNameError", "already exists")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=10000)
+    wait_for_text_contains(gui, "createWalletFormErrorText", "already exists")
 
     submit_name(gui, loaded_wallet)
-    gui.wait_for_page("createWalletNamePage", timeout_ms=10000)
-    wait_for_text_contains(gui, "walletNameError", "already exists")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=10000)
+    wait_for_text_contains(gui, "createWalletFormErrorText", "already exists")
 
     # Reject names that collide with another wallet's stored display alias.
     submit_name(gui, custom_alias)
-    gui.wait_for_page("createWalletNamePage", timeout_ms=10000)
-    wait_for_text_contains(gui, "walletNameError", "already exists")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=10000)
+    wait_for_text_contains(gui, "createWalletFormErrorText", "already exists")
 
     # Case-insensitive collision.
     submit_name(gui, custom_alias.lower())
-    gui.wait_for_page("createWalletNamePage", timeout_ms=10000)
-    wait_for_text_contains(gui, "walletNameError", "already exists")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=10000)
+    wait_for_text_contains(gui, "createWalletFormErrorText", "already exists")
 
     submit_name(gui, available_wallet)
-    gui.wait_for_page("createWalletPasswordPage", timeout_ms=10000)
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=20000)
+    gui.click("createWalletReadyDoneButton")
+    gui.wait_for_property("walletBadge", "text", available_wallet, timeout_ms=20000)
 
 
 def run_test(_args):
