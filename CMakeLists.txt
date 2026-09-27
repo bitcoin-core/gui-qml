@@ -61,6 +61,13 @@ cmake_dependent_option(BUILD_APP_TESTS "Build tests for the app" ON "BUILD_GUI" 
 # Builds libraries: univalue, core_interface, bitcoin_node, bitcoin_wallet
 add_subdirectory(bitcoin)
 
+# Core appends debug/sanitizer build overrides to its directory's command
+# rules. Keep parent targets consistent: mixing DEBUG_LOCKORDER definitions
+# makes inline lock destructors disagree about releasing the lock tracker.
+foreach(rule CMAKE_CXX_COMPILE_OBJECT CMAKE_CXX_CREATE_SHARED_LIBRARY CMAKE_CXX_LINK_EXECUTABLE)
+  get_directory_property(${rule} DIRECTORY bitcoin DEFINITION ${rule})
+endforeach()
+
 # Qt-specific commands
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_MOC_OPTIONS "-p${CMAKE_CURRENT_SOURCE_DIR}")

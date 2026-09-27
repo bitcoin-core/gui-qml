@@ -92,6 +92,12 @@ child exit status and captured output for thread-guard and sanitizer failures;
 it kills a child that exceeds its bounded timeout. The thread guard is active
 throughout interface use, including startup and shutdown.
 
+Runtime snapshots and actions wait for `NodeModel::nodeReady`, emitted only
+after successful initialization. Peer, ban, chain, RPC-completion, mempool and
+traffic reads therefore cannot overlap construction of Core's runtime objects.
+Warnings and initialization progress still reach the GUI while startup runs.
+Regression tests cover failed initialization and a late success after draining.
+
 These scenarios currently exercise runtime-disabled-wallet startup. They do not
 certify wallet discovery/creation or remote IPC startup, and the minimal platform
 does not certify native window-system behavior. The explicit isolated data
@@ -104,7 +110,8 @@ times in `qint64` and clamps the remaining-time estimate before converting to
 the public `int` property. Startup and real block notifications cover this path.
 Sanitizer CTest runs combine the pinned Core UBSan suppressions with staging's
 existing suppression for Qt 6.4's intentional unsigned hash overflow. Application
-integer checks remain enabled; no leak suppression is added.
+integer checks remain enabled. The narrow Qt rendering leak suppression is
+described below.
 
 ## GUI thread enforcement
 
@@ -200,6 +207,17 @@ proves local exceptions are unavailable to proxies; it is not a real IPC journey
 Actual client-side IPC validation remains a prerequisite for claiming transport
 coverage. Direct filesystem access, QML computation and other uninstrumented
 work can also stall the GUI; passing these journeys does not prove otherwise.
+
+### Qt rendering leak checks
+
+For leak checks with Qt older than 6.6, the QML rendering test adds one narrow
+suppression for `QSGRenderContext::textureForFactory`. Qt 6.4's software render
+context does not free its texture cache during invalidation; Qt 6.6 does. A
+standalone Qt Quick Image reproduces the leak, while an unrelated application
+allocation still fails with the suppression enabled. This suppression is not
+applied to production or audited process-lifecycle tests, or to newer Qt versions.
+The transaction-flow component separately releases its Instantiator references
+before Shape deletes the generated paths; those application leaks are fixed.
 
 ## Next chunks
 

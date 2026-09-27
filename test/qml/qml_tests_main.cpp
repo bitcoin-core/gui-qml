@@ -5,7 +5,9 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QEvent>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
@@ -3840,6 +3842,12 @@ class QmlTestsSetup : public QObject
 {
     Q_OBJECT
 
+public:
+    Q_INVOKABLE void processDeferredDeletes()
+    {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
 public Q_SLOTS:
     void applicationAvailable()
     {
@@ -3849,6 +3857,7 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->rootContext()->setContextProperty(QStringLiteral("testLifecycle"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;

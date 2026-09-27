@@ -13,6 +13,9 @@ import "TransactionFlowLayout.js" as FlowLayout
 
 ColumnLayout {
     id: root
+    // Shape reparents the generated paths. Release the model's references
+    // before Shape destroys those children during component teardown.
+    Component.onDestruction: ribbonInstantiator.active = false
     // Plain snapshot data: no wallet, history, navigation or broadcast dependency.
     property var flow: ({})
     property string transactionId: ""
@@ -150,6 +153,7 @@ ColumnLayout {
                             data: root.ribbonObjects
                         }
                         Instantiator {
+                            id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
                             // the array model rebuilds every path for each measured card.
                             // Qt 6.4 retains the previous delegates for a numeric

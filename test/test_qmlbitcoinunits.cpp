@@ -19,6 +19,7 @@ private Q_SLOTS:
     void localized_default_and_canonical_are_independent();
     void format_btc_basic();
     void format_btc_negative();
+    void format_minimum_integer();
     void format_btc_thinSpaceSeparators();
     void format_mbtc_and_ubtc();
     void format_sat_noDecimals();
@@ -76,6 +77,12 @@ void QmlBitcoinUnitsTests::format_btc_basic()
 void QmlBitcoinUnitsTests::format_btc_negative()
 {
     QCOMPARE(QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::BTC, -1), QString("-0.00000001"));
+}
+
+void QmlBitcoinUnitsTests::format_minimum_integer()
+{
+    QCOMPARE(QmlBitcoinUnits::format(QmlBitcoinUnits::Unit::SAT, std::numeric_limits<CAmount>::min(), false,
+                                    QmlBitcoinUnits::SeparatorStyle::NEVER), QStringLiteral("-9223372036854775808"));
 }
 
 void QmlBitcoinUnitsTests::format_btc_thinSpaceSeparators()

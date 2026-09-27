@@ -96,6 +96,7 @@ target_compile_definitions(bitcoinqml_qmltests
 
 target_link_libraries(bitcoinqml_qmltests
   PRIVATE
+    sanitize_interface
     Qt6::Core
     Qt6::Qml
     Qt6::Quick
@@ -192,6 +193,15 @@ if(SANITIZERS)
   if(ENABLE_TEST_AUTOMATION)
     set_property(TEST bitcoinqml_audited_python APPEND PROPERTY ENVIRONMENT_MODIFICATION
       "UBSAN_OPTIONS=string_append::suppressions=${CMAKE_CURRENT_BINARY_DIR}/ubsan_suppressions:print_stacktrace=1:halt_on_error=1")
+  endif()
+  if(Qt6_VERSION VERSION_LESS 6.6)
+    # Older Qt software renderers retain texture-cache allocations at shutdown.
+    # Restrict the verified dependency suppression to the QML rendering suite.
+    file(READ "${PROJECT_SOURCE_DIR}/bitcoin/test/sanitizer_suppressions/lsan" core_lsan_suppressions)
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/sanitizer_suppressions/lsan" qml_lsan_suppressions)
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lsan_suppressions" "${core_lsan_suppressions}\n${qml_lsan_suppressions}")
+    set_property(TEST bitcoinqml_qmltests APPEND PROPERTY ENVIRONMENT_MODIFICATION
+      "LSAN_OPTIONS=string_append::suppressions=${CMAKE_CURRENT_BINARY_DIR}/lsan_suppressions")
   endif()
 endif()
 
