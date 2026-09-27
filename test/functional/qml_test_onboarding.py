@@ -38,7 +38,8 @@ def run_tests():
         # Each entry is (button_to_click, expected_next_page).
         onboarding_steps = [
             ("onboardingCoverButton",           "onboardingStrengthen"),
-            ("onboardingStrengthenButton",      "onboardingBlockclock"),
+            ("onboardingStrengthenButton",      "onboardingBlockchain"),
+            ("onboardingBlockchainButton",      "onboardingBlockclock"),
             ("onboardingBlockclockButton",      "onboardingStorageLocation"),
             ("onboardingStorageLocationButton", "onboardingStorageAmount"),
             ("onboardingStorageAmountButton",   "onboardingConnection"),

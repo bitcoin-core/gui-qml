@@ -10,6 +10,7 @@ OnboardingView {
     objectName: "onboardingStrengthen"
     signal back()
     signal next()
+    property bool useSharedMotion: false
 
     isOnSurface: false
     backButtonInFooter: true
@@ -18,12 +19,18 @@ OnboardingView {
     maximumContentWidth: 640
     heading: qsTr("Strengthen bitcoin")
     subheading: qsTr("Bitcoin Core runs a full Bitcoin node which verifies " +
-        "the rules of the network are being followed.\n\nUsers running nodes " +
+        "the rules of the network are being followed. Users running nodes " +
         "is what makes bitcoin so resilient and trustworthy.")
-    imageSource: Theme.image.network
+    imageSource: useSharedMotion ? "" : Theme.image.network
+    imageView: useSharedMotion ? motionSpace : null
     imageSize: 200
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStrengthenButton"
     onBackClicked: root.back()
     onPrimaryClicked: root.next()
+
+    Component {
+        id: motionSpace
+        Item { implicitWidth: 224; implicitHeight: 224 }
+    }
 }

@@ -33,7 +33,7 @@ OnboardingView {
     maximumContentWidth: 640
     heading: qsTr("Storage amount")
     subheading: root.hasStorageResult
-        ? qsTr("Data retrieved from the Bitcoin network is stored on your device.\nYou have %1GB of storage available.").arg(root.storageAvailableGB)
+        ? qsTr("Data retrieved from the Bitcoin network is stored on your device. You have %1GB of storage available.").arg(root.storageAvailableGB)
         : qsTr("Data retrieved from the Bitcoin network is stored on your device.")
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageAmountButton"

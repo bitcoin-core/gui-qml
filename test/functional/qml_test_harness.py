@@ -336,7 +336,8 @@ def walk_onboarding_to_connection(gui):
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     steps = [
         ("onboardingCoverButton",           "onboardingStrengthen"),
-        ("onboardingStrengthenButton",      "onboardingBlockclock"),
+        ("onboardingStrengthenButton",      "onboardingBlockchain"),
+        ("onboardingBlockchainButton",      "onboardingBlockclock"),
         ("onboardingBlockclockButton",      "onboardingStorageLocation"),
         ("onboardingStorageLocationButton", "onboardingStorageAmount"),
         ("onboardingStorageAmountButton",   "onboardingConnection"),

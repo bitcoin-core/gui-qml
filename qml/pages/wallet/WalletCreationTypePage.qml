@@ -79,7 +79,7 @@ OnboardingView {
             Layout.fillWidth: true
             enabled: !root.importingWallet
             title: qsTr("Import wallet")
-            description: qsTr("Use an existing wallet backup file")
+            description: qsTr("Use an existing wallet backup file.")
             iconSource: "image://images/file"
             onClicked: root.importSelected()
         }

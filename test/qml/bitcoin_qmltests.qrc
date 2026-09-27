@@ -27,6 +27,7 @@
         <file>tst_navigationsplitview.qml</file>
         <file>tst_nodefeedback.qml</file>
         <file>tst_onboarding_datadir.qml</file>
+        <file>tst_onboardingmotion.qml</file>
         <file>tst_onboardingview.qml</file>
         <file>tst_peeractions.qml</file>
         <file>tst_popuppicker.qml</file>

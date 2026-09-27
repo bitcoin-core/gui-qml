@@ -24,6 +24,11 @@ AbstractButton {
         radius: 12
         color: root.down || root.hovered ? Theme.color.neutral3 : Theme.color.neutral2
         border.width: 0
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
         FocusBorder {
             visible: root.visualFocus
             borderRadius: 14

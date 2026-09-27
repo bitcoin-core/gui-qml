@@ -12,6 +12,7 @@ OnboardingView {
     id: root
     objectName: "onboardingCover"
     signal next()
+    property bool useSharedMotion: false
 
     isOnSurface: false
     backButtonInFooter: true
@@ -21,11 +22,17 @@ OnboardingView {
     childTopMargin: 16
     heading: qsTr("Bitcoin Core App")
     subheading: qsTr("Be part of the Bitcoin network.")
-    imageSource: "image://images/app"
+    imageSource: useSharedMotion ? "" : "image://images/app"
+    imageView: useSharedMotion ? motionSpace : null
     imageSize: 224
     primaryButtonText: qsTr("Start")
     primaryButtonObjectName: "onboardingCoverButton"
     onPrimaryClicked: root.next()
+
+    Component {
+        id: motionSpace
+        Item { implicitWidth: 224; implicitHeight: 224 }
+    }
 
     childView: ColumnLayout {
         spacing: 16
@@ -34,8 +41,8 @@ OnboardingView {
             Layout.fillWidth: true
             text: qsTr("100% open-source & open-design")
             color: Theme.color.neutral7
-            font: Theme.text.body.font
-            lineHeight: Theme.text.body.lineHeight
+            font: Theme.text.description.font
+            lineHeight: Theme.text.description.lineHeight
             lineHeightMode: Text.FixedHeight
             horizontalAlignment: Text.AlignHCenter
         }

@@ -161,11 +161,24 @@ TestCase {
         compare(wizard.currentItem.objectName, "onboardingCover")
     }
 
+    function test_cover_footer_appears_after_content() {
+        const wizard = createTemporaryObject(fullWizard, this)
+        verify(wizard !== null)
+        const footer = wizard.currentItem.footer
+        compare(footer.opacity, 0)
+        compare(footer.enabled, false)
+        wait(1800)
+        compare(footer.opacity, 0)
+        tryCompare(footer, "opacity", 1, 2000)
+        compare(footer.enabled, true)
+    }
+
     function test_full_preinit_wizard_can_go_back_from_storage_amount() {
         const wizard = createTemporaryObject(fullPreInitWizard, this)
         verify(wizard !== null)
         compare(wizard.currentItem.objectName, "onboardingCover")
         compare(findChild(wizard.currentItem, "onboardingWizardBackButton").visible, false)
+        compare(wizard.currentItem.footer.opacity, 0)
         const separator = findChild(wizard.currentItem, "onboardingFooterSeparator")
         const actions = findChild(wizard.currentItem, "onboardingFooterActions")
         verify(separator !== null)
@@ -178,6 +191,7 @@ TestCase {
 
         triggerButton(wizard.currentItem, "onboardingCoverButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingStrengthen" })
+        compare(wizard.currentItem.footer.opacity, 1)
         compare(wizard.busy, false)
         compare(wizard.currentItem.showBackButton, true)
         compare(wizard.currentItem.backButtonInFooter, true)
@@ -190,7 +204,12 @@ TestCase {
         const backButtonY = backButton.y
 
         triggerButton(wizard.currentItem, "onboardingStrengthenButton")
+        tryVerify(function() { return wizard.currentItem.objectName === "onboardingBlockchain" })
+        compare(wizard.currentItem.footer.opacity, 1)
+
+        triggerButton(wizard.currentItem, "onboardingBlockchainButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingBlockclock" })
+        compare(wizard.currentItem.footer.opacity, 1)
 
         triggerButton(wizard.currentItem, "onboardingBlockclockButton")
         tryVerify(function() { return wizard.currentItem.objectName === "onboardingStorageLocation" })
@@ -222,7 +241,7 @@ TestCase {
         const defaultOption = findChild(page, "storageDefaultLocationOption")
         verify(defaultOption !== null)
 
-        compare(page.subheading, "Where do you want to store the downloaded block data?\nYou need a minimum of 1GB of storage.")
+        compare(page.subheading, "Where do you want to store the downloaded block data? You need a minimum of 1GB of storage.")
         tryCompare(page, "primaryButtonEnabled", true)
         compare(defaultOption.showErrorText, false)
     }
@@ -388,7 +407,7 @@ TestCase {
         verify(button !== null)
         verify(defaultOption !== null)
 
-        compare(page.subheading, "Where do you want to store the downloaded block data?\nYou need a minimum of 10GB of storage.")
+        compare(page.subheading, "Where do you want to store the downloaded block data? You need a minimum of 10GB of storage.")
         compare(button.enabled, false)
         compare(defaultOption.showErrorText, true)
         compare(defaultOption.errorText, "Not enough storage available.")
@@ -398,7 +417,7 @@ TestCase {
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
         compare(page.heading, "Storage amount")
-        compare(page.subheading, "Data retrieved from the Bitcoin network is stored on your device.\nYou have 123GB of storage available.")
+        compare(page.subheading, "Data retrieved from the Bitcoin network is stored on your device. You have 123GB of storage available.")
         verify(page.subheading.indexOf("500GB") === -1)
         compare(page.storageWarningText, "")
     }

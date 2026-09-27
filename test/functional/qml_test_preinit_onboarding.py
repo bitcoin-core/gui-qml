@@ -77,6 +77,8 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
     gui.click("onboardingCoverButton")
     gui.wait_for_page("onboardingStrengthen", timeout_ms=5000)
     gui.click("onboardingStrengthenButton")
+    gui.wait_for_page("onboardingBlockchain", timeout_ms=5000)
+    gui.click("onboardingBlockchainButton")
     gui.wait_for_page("onboardingBlockclock", timeout_ms=5000)
     gui.click("onboardingBlockclockButton")
     gui.wait_for_page("onboardingStorageLocation", timeout_ms=5000)

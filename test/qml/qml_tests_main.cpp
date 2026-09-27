@@ -4017,7 +4017,8 @@ public:
 
     QPixmap requestPixmap(const QString& id, QSize* size, const QSize& requested_size) override
     {
-        const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") + id).pixmap(requested_size);
+        const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") +
+            (id == QStringLiteral("app") ? QStringLiteral("bitcoin") : id)).pixmap(requested_size);
         if (size) *size = pixmap.size();
         return pixmap;
     }

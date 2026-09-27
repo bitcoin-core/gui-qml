@@ -25,7 +25,7 @@ OnboardingView {
     autoNavigateBack: false
     maximumContentWidth: 640
     heading: qsTr("Storage location")
-    subheading: qsTr("Where do you want to store the downloaded block data?\nYou need a minimum of %1GB of storage.").arg(root.minimumStorageRequiredGB)
+    subheading: qsTr("Where do you want to store the downloaded block data? You need a minimum of %1GB of storage.").arg(root.minimumStorageRequiredGB)
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageLocationButton"
     primaryButtonEnabled: !loadedChildView || loadedChildView.validSelection

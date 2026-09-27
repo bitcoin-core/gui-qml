@@ -39,6 +39,8 @@ Page {
     property real childTopMargin: 48
     property bool footerFullWidth: false
     property bool animateContent: false
+    property bool animateFooterAfterContent: false
+    property int contentAnimationDelay: 0
     property bool isOnSurface: true
 
     readonly property alias scrollView: scrollView
@@ -63,10 +65,7 @@ Page {
     background: null
 
     Component.onCompleted: {
-        if (animateContent) {
-            contentEntrance.start()
-            footerEntrance.start()
-        }
+        if (animateContent) contentEntrance.start()
     }
 
     header: OnboardingNavigationBar {
@@ -157,8 +156,8 @@ Page {
                     Layout.topMargin: root.heading.length > 0 ? 16 : 0
                     text: root.subheading
                     color: Theme.color.neutral7
-                    font: Theme.text.body.font
-                    lineHeight: Theme.text.body.lineHeight
+                    font: Theme.text.description.font
+                    lineHeight: Theme.text.description.lineHeight
                     lineHeightMode: Text.FixedHeight
                     wrap: true
                     horizontalAlignment: Text.AlignHCenter
@@ -198,7 +197,8 @@ Page {
         primaryButtonObjectName: root.primaryButtonObjectName
         secondaryButtonObjectName: root.secondaryButtonObjectName
         secondaryButtonIsLink: root.secondaryButtonIsLink
-        opacity: root.animateContent ? 0 : 1
+        opacity: root.animateContent && root.animateFooterAfterContent ? 0 : 1
+        enabled: !root.animateFooterAfterContent || opacity === 1
         onBackClicked: root.goBack()
         onPrimaryClicked: root.primaryClicked()
         onSecondaryClicked: root.secondaryClicked()
@@ -206,35 +206,38 @@ Page {
 
     ParallelAnimation {
         id: contentEntrance
+        onFinished: {
+            if (root.animateFooterAfterContent) footerEntrance.start()
+        }
 
         SequentialAnimation {
-            PauseAnimation { duration: 100 }
+            PauseAnimation { duration: root.contentAnimationDelay + 100 }
             ParallelAnimation {
-                NumberAnimation { target: defaultImage; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: defaultImageOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: imageLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: imageLoaderOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.OutCubic }
+                NumberAnimation { target: defaultImage; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: defaultImageOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: imageLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: imageLoaderOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.InOutCubic }
             }
         }
         SequentialAnimation {
-            PauseAnimation { duration: 180 }
+            PauseAnimation { duration: root.contentAnimationDelay + 180 }
             ParallelAnimation {
-                NumberAnimation { target: headingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: headingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.OutCubic }
+                NumberAnimation { target: headingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: headingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
             }
         }
         SequentialAnimation {
-            PauseAnimation { duration: 260 }
+            PauseAnimation { duration: root.contentAnimationDelay + 260 }
             ParallelAnimation {
-                NumberAnimation { target: subheadingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: subheadingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.OutCubic }
+                NumberAnimation { target: subheadingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: subheadingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
             }
         }
         SequentialAnimation {
-            PauseAnimation { duration: 340 }
+            PauseAnimation { duration: root.contentAnimationDelay + 340 }
             ParallelAnimation {
-                NumberAnimation { target: childLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
-                NumberAnimation { target: childOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.OutCubic }
+                NumberAnimation { target: childLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: childOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
             }
         }
     }
@@ -246,6 +249,6 @@ Page {
         from: 0
         to: 1
         duration: 160
-        easing.type: Easing.OutCubic
+        easing.type: Easing.InOutCubic
     }
 }

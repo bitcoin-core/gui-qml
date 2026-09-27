@@ -14,6 +14,7 @@ Item {
     signal finished()
     property var settingsModel: optionsModel
     property bool preInit: false
+    property bool reducedMotion: false
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0
     readonly property alias currentItem: pages.currentItem
@@ -45,34 +46,95 @@ Item {
         initialItem: cover
     }
 
+    Item {
+        id: heroLayer
+        readonly property var currentPage: pages.currentItem
+        anchors.top: navigationBar.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        clip: true
+        visible: !!currentPage &&
+            (currentPage.objectName === "onboardingCover" ||
+             currentPage.objectName === "onboardingStrengthen" ||
+             currentPage.objectName === "onboardingBlockchain" ||
+             currentPage.objectName === "onboardingBlockclock")
+
+        OnboardingMotion {
+            id: motion
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 8 - (heroLayer.currentPage && heroLayer.currentPage.scrollView
+                ? heroLayer.currentPage.scrollView.contentItem.contentY : 0)
+            reducedMotion: root.reducedMotion
+        }
+    }
+
     Component {
         id: cover
         OnboardingCover {
+            useSharedMotion: true
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
-            onNext: root.push(strengthen)
+            animateContent: !root.reducedMotion
+            animateFooterAfterContent: !root.reducedMotion
+            contentAnimationDelay: 1800
+            onNext: {
+                root.push(strengthen)
+                motion.toNetwork()
+            }
         }
     }
     Component {
         id: strengthen
         OnboardingStrengthen {
+            useSharedMotion: true
             showBackButton: pages.depth > 1
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
-            onBack: root.pop()
-            onNext: root.push(blockclock)
+            animateContent: !root.reducedMotion
+            contentAnimationDelay: 650
+            onBack: {
+                root.pop()
+                motion.toLogo()
+            }
+            onNext: {
+                root.push(blockchain)
+                motion.toBlocks()
+            }
+        }
+    }
+    Component {
+        id: blockchain
+        OnboardingBlockchain {
+            useSharedMotion: true
+            showBackButton: pages.depth > 1
+            showNavigationBar: false
+            footerFullWidth: true
+            animateContent: !root.reducedMotion
+            contentAnimationDelay: 650
+            onBack: {
+                root.pop()
+                motion.backToNetwork()
+            }
+            onNext: {
+                root.push(blockclock)
+                motion.toClock()
+            }
         }
     }
     Component {
         id: blockclock
         OnboardingBlockclock {
+            useSharedMotion: true
             showBackButton: pages.depth > 1
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
-            onBack: root.pop()
+            animateContent: !root.reducedMotion
+            contentAnimationDelay: 650
+            onBack: {
+                root.pop()
+                motion.backToBlocks()
+            }
             onNext: root.push(storageLocation)
         }
     }

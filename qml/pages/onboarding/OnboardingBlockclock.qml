@@ -10,6 +10,7 @@ OnboardingView {
     objectName: "onboardingBlockclock"
     signal back()
     signal next()
+    property bool useSharedMotion: false
 
     isOnSurface: false
     backButtonInFooter: true
@@ -18,12 +19,18 @@ OnboardingView {
     maximumContentWidth: 640
     heading: qsTr("The block clock")
     subheading: qsTr("The Bitcoin network targets a new block every 10 minutes. " +
-        "Sometimes it's faster and sometimes slower.\n\nThe block clock indicates each " +
+        "Sometimes it's faster and sometimes slower. The block clock indicates each " +
         "block on a dial that represents the current day.")
-    imageSource: Theme.image.blocktime
+    imageSource: useSharedMotion ? "" : Theme.image.blocktime
+    imageView: useSharedMotion ? motionSpace : null
     imageSize: 200
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingBlockclockButton"
     onBackClicked: root.back()
     onPrimaryClicked: root.next()
+
+    Component {
+        id: motionSpace
+        Item { implicitWidth: 224; implicitHeight: 224 }
+    }
 }

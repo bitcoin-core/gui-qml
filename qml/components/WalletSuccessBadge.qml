@@ -10,7 +10,17 @@ Item {
     implicitWidth: 72
     implicitHeight: 72
     opacity: 0
-    rotation: 60
+
+    Rectangle {
+        anchors.fill: parent
+        radius: width / 2
+        color: "transparent"
+        border.width: 2
+        border.color: Theme.color.green
+        readonly property real pulse: Math.max(0, (checkCanvas.progress - 0.55) / 0.45)
+        scale: 1 + pulse * 0.28
+        opacity: Math.sin(pulse * Math.PI) * 0.35
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -28,10 +38,19 @@ Item {
         onPaint: {
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            if (progress <= 0) return
             const points = [[5, 21], [16, 31], [35, 9]]
             const first = Math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1])
             const second = Math.hypot(points[2][0] - points[1][0], points[2][1] - points[1][1])
+            // Let the ring recede as the check is drawn, keeping both strokes
+            // legible throughout rather than collapsing the circle to a point.
+            ctx.beginPath()
+            ctx.arc(20, 20, 16, -Math.PI / 2 + progress * Math.PI * 2, Math.PI * 1.5)
+            ctx.strokeStyle = Theme.color.white
+            ctx.lineWidth = 3
+            ctx.lineCap = "round"
+            ctx.globalAlpha = 1 - progress
+            ctx.stroke()
+            ctx.globalAlpha = 1
             let remaining = progress * (first + second)
             ctx.beginPath()
             ctx.moveTo(points[0][0], points[0][1])
@@ -54,10 +73,7 @@ Item {
 
     SequentialAnimation {
         running: true
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
-            NumberAnimation { target: root; property: "rotation"; from: 60; to: 0; duration: 280; easing.type: Easing.OutCubic }
-        }
+        NumberAnimation { target: root; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
         NumberAnimation { target: checkCanvas; property: "progress"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
     }
 }

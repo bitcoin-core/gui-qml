@@ -22,7 +22,8 @@ def click_to_storage_location(gui):
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     for button, expected_page in [
         ("onboardingCoverButton", "onboardingStrengthen"),
-        ("onboardingStrengthenButton", "onboardingBlockclock"),
+        ("onboardingStrengthenButton", "onboardingBlockchain"),
+        ("onboardingBlockchainButton", "onboardingBlockclock"),
         ("onboardingBlockclockButton", "onboardingStorageLocation"),
     ]:
         gui.click(button)
