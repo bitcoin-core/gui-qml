@@ -147,6 +147,8 @@ TestCase {
         confirm.clicked()
 
         compare(nodeModel.disconnectPeerCalls, 1)
+        compare(peerTableModel.refreshCalls, 0)
+        nodeModel.peerActionFinished(true)
         compare(peerTableModel.refreshCalls, 1)
         compare(popup.opened, false)
     }
@@ -594,6 +596,21 @@ TestCase {
         tryCompare(banner, "visible", true)
     }
 
+    function test_backend_failure_after_acceptance_opens_error_popup() {
+        const page = createPeerDetailsPage()
+        const button = findChild(page, "peerDisconnectButton")
+        button.clicked()
+        const confirmation = findChild(page, "disconnectConfirmationPopup")
+        tryCompare(confirmation, "opened", true)
+        const confirm = waitForChild(testWindow.contentItem, "disconnectConfirmButton")
+        verify(confirm !== null)
+        confirm.clicked()
+        compare(nodeModel.disconnectPeerCalls, 1)
+        compare(peerTableModel.refreshCalls, 0)
+        nodeModel.peerActionFinished(false)
+        verifyPeerActionError(page, "Could not complete peer action.")
+    }
+
     function test_disconnect_failure_opens_error_popup() {
         nodeModel.disconnectPeerResult = false
         const page = createPeerDetailsPage()
@@ -626,6 +643,8 @@ TestCase {
 
         compare(nodeModel.banPeerCalls, 1)
         compare(confirmation.opened, false)
+        compare(peerTableModel.refreshCalls, 0)
+        nodeModel.peerActionFinished(true)
         compare(peerTableModel.refreshCalls, 1)
         compare(banListModel.refreshCalls, 1)
         compare(popup.opened, false)
@@ -670,6 +689,16 @@ TestCase {
 
         compare(banListModel.unbanCalls, 1)
         compare(banListModel.refreshCalls, 0)
+        verifyUnbanActionError(page)
+    }
+
+    function test_unban_backend_failure_after_acceptance_opens_error_popup() {
+        const page = createPeersPageWithBannedPopup()
+        const button = waitForChild(testWindow.contentItem, "unbanButton_0")
+        verify(button !== null)
+        button.clicked()
+        compare(banListModel.unbanCalls, 1)
+        banListModel.unbanFinished(false)
         verifyUnbanActionError(page)
     }
 

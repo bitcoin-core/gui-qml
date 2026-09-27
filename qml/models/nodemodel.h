@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_MODELS_NODEMODEL_H
 #define BITCOIN_QML_MODELS_NODEMODEL_H
 
+#include <qml/backendworker.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <clientversion.h>
@@ -52,6 +53,7 @@ class NodeModel : public QObject
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
     Q_PROPERTY(double headerSyncProgress READ headerSyncProgress NOTIFY headerSyncChanged)
+    Q_PROPERTY(bool peerActionPending READ peerActionPending NOTIFY peerActionPendingChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
@@ -93,6 +95,7 @@ public:
     bool headerSyncActive() const { return m_header_sync_active; }
     bool headerPresync() const { return m_header_presync; }
     double headerSyncProgress() const { return m_header_sync_progress; }
+    bool peerActionPending() const { return m_peer_action_pending; }
     bool pause() const { return m_pause; }
     void setPause(bool new_pause);
     bool errorState() const { return m_faulted; }
@@ -110,13 +113,14 @@ public:
     unsigned int runtimeDialogButtons() const { return m_runtime_dialog_buttons; }
     bool runtimeDialogQuestion() const { return m_runtime_dialog_question; }
 
-    Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
-    Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
+    Q_INVOKABLE float getTotalBytesReceived() const { return static_cast<float>(m_total_bytes_received); }
+    Q_INVOKABLE float getTotalBytesSent() const { return static_cast<float>(m_total_bytes_sent); }
     Q_INVOKABLE void refreshMempoolInfo();
 
     Q_INVOKABLE void startNodeInitializionThread();
     Q_INVOKABLE void requestShutdown();
 
+    void drainBackend();
     void startShutdownPolling();
     void stopShutdownPolling();
 
@@ -125,6 +129,7 @@ public:
     Q_INVOKABLE bool disconnectPeer(int nodeId);
     Q_INVOKABLE bool banPeer(const QString& rawAddress, int64_t banDuration);
     Q_INVOKABLE QVariantList nodeInformationRows();
+    Q_INVOKABLE void refreshNodeInformation() { refreshSnapshot(); }
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
     Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
@@ -155,8 +160,14 @@ Q_SIGNALS:
 
     void setTimeRatioList(int new_time);
     void setTimeRatioListInitial();
+    // Emitted only after successful initialization, before runtime reads begin.
+    void nodeReady();
     void nodeInitialized();
     void bannedListChanged();
+    void backendDrained();
+    void nodeInformationChanged();
+    void peerActionFinished(bool success);
+    void peerActionPendingChanged();
 
 protected:
     void timerEvent(QTimerEvent* event) override;
@@ -205,6 +216,7 @@ private:
     int m_header_tip_height{0};
     int64_t m_header_tip_time{0};
     bool m_node_ready{false};
+    uint64_t m_sync_generation{0};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
     bool m_runtime_dialogs_enabled{false};
@@ -220,11 +232,22 @@ private:
 
     int m_shutdown_polling_timer_id{0};
 
-    QVector<QPair<int, double>> m_block_process_time;
+    QVector<QPair<qint64, double>> m_block_process_time;
 
     interfaces::Node& m_node;
-    QObject* m_mempool_info_worker{nullptr};
-    QThread* m_mempool_info_thread{nullptr};
+    BackendWorker m_backend;
+    BackendWorker m_shutdown_worker;
+    int m_workers_to_drain{2};
+    bool m_snapshot_pending{false};
+    bool m_snapshot_again{false};
+    bool m_mempool_pending{false};
+    bool m_mempool_again{false};
+    bool m_draining{false};
+    bool m_peer_action_pending{false};
+    int64_t m_total_bytes_received{0};
+    int64_t m_total_bytes_sent{0};
+    int64_t m_last_block_time{0};
+    QString m_local_addresses;
     QTimer* m_mempool_info_timer{nullptr};
     std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
     std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
@@ -257,7 +280,7 @@ private:
     bool showRuntimeDialogOnGuiThread(const QString& message, unsigned int style, bool question);
     void showRuntimeDialogRequest(const std::shared_ptr<RuntimeDialogRequest>& request);
     void requestMempoolInfoRefresh();
-    void fetchMempoolInfo();
+    void refreshSnapshot();
     void applyMempoolInfo(const MempoolInfo& info);
 };
 

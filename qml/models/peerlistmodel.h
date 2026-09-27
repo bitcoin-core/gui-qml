@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_MODELS_PEERLISTMODEL_H
 #define BITCOIN_QML_MODELS_PEERLISTMODEL_H
 
+#include <qml/backendworker.h>
+
 #include <net.h>
 #include <net_processing.h>
 
@@ -37,6 +39,8 @@ public:
     explicit PeerListModel(interfaces::Node& node, QObject* parent);
     ~PeerListModel();
 
+    void drainBackend();
+    void onNodeReady();
     Q_INVOKABLE
     void startAutoRefresh();
     Q_INVOKABLE
@@ -65,9 +69,17 @@ public:
 public Q_SLOTS:
     void refresh();
 
+Q_SIGNALS:
+    void backendDrained();
+
 private:
     QList<CNodeCombinedStats> m_peers_data{};
     interfaces::Node& m_node;
+    BackendWorker m_backend;
+    bool m_pending{false};
+    bool m_again{false};
+    bool m_draining{false};
+    bool m_node_ready{false};
     QTimer* m_timer{nullptr};
 };
 

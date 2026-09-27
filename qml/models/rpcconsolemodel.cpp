@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/rpcconsolemodel.h>
+#include <qml/backendworker.h>
 
 #include <interfaces/node.h>
 #include <qml/models/rpccommandexecutor.h>
@@ -286,6 +287,7 @@ RpcConsoleModel::RpcConsoleModel(interfaces::Node& node, QObject* parent)
     connect(&m_worker_thread, &QThread::finished,
             m_worker, &RpcConsoleWorker::deleteLater);
 
+    connect(&m_worker_thread, &QThread::finished, this, &RpcConsoleModel::backendDrained);
     m_worker_thread.start();
 }
 
@@ -315,6 +317,8 @@ void RpcConsoleModel::appendFormattedRow(const QString& time, int category, cons
 
 bool RpcConsoleModel::submitCommand(const QString& command, const QString& wallet_name)
 {
+    RequireModelThread(this);
+    if (m_draining) return false;
     const QString trimmed_command = command.trimmed();
     if (trimmed_command.isEmpty()) return false;
 
@@ -338,15 +342,10 @@ bool RpcConsoleModel::submitCommand(const QString& command, const QString& walle
     }
     QString filteredCmd = QString::fromStdString(filtered).trimmed();
 
-    // A special case allows requesting shutdown even while a long-running command
-    // is executing, mirroring Core's RPCConsole::on_lineEdit_returnPressed().
-    // "stop" runs synchronously on the calling thread, so it can abort a command
-    // that is blocking the worker, and returns before the request is echoed or
-    // added to history: the GUI shuts down immediately, so that output is never
-    // seen.
+    // Stop must interrupt an occupied RPC worker without running Core on the
+    // GUI thread. The application routes this to its independent shutdown worker.
     if (trimmed_command == QLatin1String("stop")) {
-        std::string result;
-        RpcCommandExecutor::RPCExecuteCommandLine(m_node, result, trimmed_command.toStdString());
+        Q_EMIT shutdownRequested();
         return true;
     }
 
@@ -430,22 +429,32 @@ void RpcConsoleModel::clear()
 
 void RpcConsoleModel::onNodeInitialized()
 {
-    std::vector<std::string> cmds = m_node.listRpcCommands();
-    QStringList list;
-    list.reserve(static_cast<int>(cmds.size()));
-    for (const auto& c : cmds) {
-        list.append(QString::fromStdString(c));
-        list.append(QStringLiteral("help ") + QString::fromStdString(c));
-    }
-    list.append(QStringLiteral("help-console"));
-    list.sort(Qt::CaseInsensitive);
-    list.removeDuplicates();
-    m_available_commands = list;
-    Q_EMIT availableCommandsChanged();
+    RequireModelThread(this);
+    if (m_draining) return;
+    QMetaObject::invokeMethod(m_worker, [this] {
+        std::vector<std::string> cmds = m_node.listRpcCommands();
+        QStringList list;
+        list.reserve(static_cast<int>(cmds.size()));
+        for (const auto& c : cmds) {
+            list.append(QString::fromStdString(c));
+            list.append(QStringLiteral("help ") + QString::fromStdString(c));
+        }
+        list.append(QStringLiteral("help-console"));
+        list.sort(Qt::CaseInsensitive);
+        list.removeDuplicates();
+        QMetaObject::invokeMethod(this, [this, list = std::move(list)] {
+            RequireModelThread(this);
+            if (m_draining) return;
+            m_available_commands = list;
+            Q_EMIT availableCommandsChanged();
+        }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
 }
 
 void RpcConsoleModel::onResultReady(const QString& time, int category, const QString& rawText)
 {
+    RequireModelThread(this);
+    if (m_draining) return;
     // Append the row first so the output line appears before the submit button
     // is re-enabled, avoiding a single-frame window where the user could submit
     // again before seeing the reply.
@@ -459,4 +468,12 @@ void RpcConsoleModel::setExecuting(bool executing)
         m_executing = executing;
         Q_EMIT executingChanged();
     }
+}
+
+void RpcConsoleModel::drainBackend()
+{
+    RequireModelThread(this);
+    if (m_draining) return;
+    m_draining = true;
+    QMetaObject::invokeMethod(m_worker, [this] { m_worker_thread.quit(); }, Qt::QueuedConnection);
 }

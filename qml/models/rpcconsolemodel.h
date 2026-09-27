@@ -102,6 +102,7 @@ public:
     Q_ENUM(MessageCategory)
 
     explicit RpcConsoleModel(interfaces::Node& node, QObject* parent = nullptr);
+    void drainBackend();
     ~RpcConsoleModel();
 
     bool executing() const { return m_executing; }
@@ -128,6 +129,8 @@ public Q_SLOTS:
     void onNodeInitialized();
 
 Q_SIGNALS:
+    void shutdownRequested();
+    void backendDrained();
     void executingChanged();
     void availableCommandsChanged();
 
@@ -140,6 +143,7 @@ private:
 
     interfaces::Node& m_node;
     bool m_executing{false};
+    bool m_draining{false};
     QStringList m_available_commands;
     RpcOutputListModel m_output_model;
 

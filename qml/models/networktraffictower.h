@@ -30,6 +30,9 @@ class NetworkTrafficTower : public QObject
 
 public:
     explicit NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms = 1000);
+    // Core must finish initialization before its connection manager is read.
+    void startSampling();
+    void drainBackend();
     ~NetworkTrafficTower() override;
 
     bool active() const { return m_active; }
@@ -46,6 +49,7 @@ public Q_SLOTS:
     Q_INVOKABLE void updateFilterWindowSize(int new_size);
 
 Q_SIGNALS:
+    void backendDrained();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
@@ -58,6 +62,8 @@ private:
     NetworkTrafficWorker* m_worker{nullptr};
     QThread* m_worker_thread{nullptr};
     bool m_active{false};
+    bool m_sampling{false};
+    bool m_draining{false};
     quint64 m_activation_generation{0};
     quint64 m_total_bytes_received{0};
     quint64 m_total_bytes_sent{0};

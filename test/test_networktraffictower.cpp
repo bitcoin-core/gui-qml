@@ -24,11 +24,33 @@ class NetworkTrafficTowerTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void samplingWaitsForInitializationAndCannotStartAfterDrain();
     void samplesOffGuiThreadWithoutPublishingWhileInactive();
     void activeControlsPublishingWithoutDiscardingBackgroundHistory();
     void filterWindowChangesPreserveTotalsAndHistory();
     void stopsSamplingWhenDestroyedWhileActive();
 };
+
+void NetworkTrafficTowerTests::samplingWaitsForInitializationAndCannotStartAfterDrain()
+{
+    MockNode node;
+    std::atomic<int> received_calls{0};
+    node.get_total_bytes_recv_fn = [&] {
+        ++received_calls;
+        return int64_t{1'000};
+    };
+
+    NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    tower.setActive(true);
+    QTest::qWait(TEST_SAMPLE_INTERVAL_MS * 3);
+    QCOMPARE(received_calls.load(), 0);
+
+    QSignalSpy drained{&tower, &NetworkTrafficTower::backendDrained};
+    tower.drainBackend();
+    tower.startSampling();
+    QTRY_COMPARE_WITH_TIMEOUT(drained.count(), 1, ASYNC_TIMEOUT_MS);
+    QCOMPARE(received_calls.load(), 0);
+}
 
 void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive()
 {
@@ -54,6 +76,7 @@ void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive
         QSignalSpy received_list_spy{&tower, &NetworkTrafficTower::receivedRateListChanged};
         QSignalSpy sent_list_spy{&tower, &NetworkTrafficTower::sentRateListChanged};
 
+        tower.startSampling();
         QTRY_VERIFY_WITH_TIMEOUT(received_calls.load() >= 3, ASYNC_TIMEOUT_MS);
         QTRY_VERIFY_WITH_TIMEOUT(sent_calls.load() >= 3, ASYNC_TIMEOUT_MS);
         QVERIFY(!sampled_on_gui_thread.load());
@@ -88,6 +111,7 @@ void NetworkTrafficTowerTests::activeControlsPublishingWithoutDiscardingBackgrou
     QSignalSpy received_list_spy{&tower, &NetworkTrafficTower::receivedRateListChanged};
     QSignalSpy sent_list_spy{&tower, &NetworkTrafficTower::sentRateListChanged};
 
+    tower.startSampling();
     tower.setActive(true);
     QTRY_COMPARE_WITH_TIMEOUT(tower.totalBytesReceived(), quint64{1'000}, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(tower.totalBytesSent(), quint64{2'000}, ASYNC_TIMEOUT_MS);
@@ -133,6 +157,7 @@ void NetworkTrafficTowerTests::filterWindowChangesPreserveTotalsAndHistory()
     };
 
     NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    tower.startSampling();
     tower.setActive(true);
     QTRY_VERIFY_WITH_TIMEOUT(received_calls.load() >= 25, ASYNC_TIMEOUT_MS);
     QTRY_VERIFY_WITH_TIMEOUT(tower.receivedRateList().size() > 20, ASYNC_TIMEOUT_MS);
@@ -166,6 +191,7 @@ void NetworkTrafficTowerTests::stopsSamplingWhenDestroyedWhileActive()
 
     {
         NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+        tower.startSampling();
         tower.setActive(true);
         QTRY_VERIFY_WITH_TIMEOUT(received_calls.load() >= 3, ASYNC_TIMEOUT_MS);
         QVERIFY(tower.active());

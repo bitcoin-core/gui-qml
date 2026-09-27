@@ -25,6 +25,16 @@ Popup {
         }
     }
 
+    Connections {
+        target: root.model
+        function onUnbanFinished(success) {
+            if (!success) {
+                unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+                unbanActionError.open()
+            }
+        }
+    }
+
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
     width: Math.min(640, parent ? parent.width - 40 : 640)

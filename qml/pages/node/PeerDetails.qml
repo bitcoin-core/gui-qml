@@ -99,9 +99,7 @@ Page {
         peerActionError.open()
     }
     function disconnectPeer() {
-        if (pendingDisconnectTarget && nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
-            peerTableModel.refresh()
-        } else {
+        if (!pendingDisconnectTarget || !nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
             showActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
@@ -118,11 +116,20 @@ Page {
         banConfirmation.open()
     }
     function confirmBan() {
-        if (pendingBanTarget && nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
-        } else {
+        if (!pendingBanTarget || !nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
             showActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
+        }
+    }
+
+    Connections {
+        target: nodeModel
+        function onPeerActionFinished(success) {
+            if (success) {
+                peerTableModel.refresh()
+                banListModel.refresh()
+            } else {
+                root.showActionError(qsTr("Could not complete peer action. The peer or node state may have changed."))
+            }
         }
     }
 
@@ -196,6 +203,7 @@ Page {
 
                 IconButton {
                     id: actionButton
+                    enabled: nodeModel.peerActionPending !== true
                     objectName: "peerActionsButton"
                     Layout.alignment: Qt.AlignTop
                     size: 40

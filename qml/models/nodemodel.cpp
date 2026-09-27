@@ -21,6 +21,8 @@
 #include <cassert>
 #include <algorithm>
 #include <chrono>
+#include <limits>
+#include <utility>
 
 #include <QDateTime>
 #include <QEventLoop>
@@ -98,9 +100,13 @@ NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
     m_mempool_information_available = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
+    const auto drained = [this] {
+        if (--m_workers_to_drain == 0) Q_EMIT backendDrained();
+    };
+    connect(&m_backend, &BackendWorker::drained, this, drained);
+    connect(&m_shutdown_worker, &BackendWorker::drained, this, drained);
     initializeMempoolInfoPolling();
     refreshPeerCounts();
-    refreshWarnings();
     ConnectToBlockTipSignal();
     ConnectToHeaderTipSignal();
     ConnectToNumConnectionsChangedSignal();
@@ -115,14 +121,11 @@ NodeModel::~NodeModel()
 {
     unsubscribeFromCoreSignals();
     setMempoolInfoPollingActive(false);
-    if (m_mempool_info_thread) {
-        m_mempool_info_thread->quit();
-        m_mempool_info_thread->wait();
-    }
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
 {
+    RequireModelThread(this);
     if (new_height != m_block_tip_height) {
         m_block_tip_height = new_height;
         Q_EMIT blockTipHeightChanged();
@@ -131,6 +134,7 @@ void NodeModel::setBlockTipHeight(int new_height)
 
 void NodeModel::setNumOutboundPeers(int new_num)
 {
+    RequireModelThread(this);
     if (new_num != m_num_outbound_peers) {
         m_num_outbound_peers = new_num;
         Q_EMIT numOutboundPeersChanged();
@@ -139,6 +143,7 @@ void NodeModel::setNumOutboundPeers(int new_num)
 
 void NodeModel::setNumPeers(int new_num)
 {
+    RequireModelThread(this);
     if (new_num != m_num_peers) {
         m_num_peers = new_num;
         Q_EMIT numPeersChanged();
@@ -147,6 +152,7 @@ void NodeModel::setNumPeers(int new_num)
 
 void NodeModel::setNumInboundPeers(int new_num)
 {
+    RequireModelThread(this);
     if (new_num != m_num_inbound_peers) {
         m_num_inbound_peers = new_num;
         Q_EMIT numInboundPeersChanged();
@@ -155,9 +161,53 @@ void NodeModel::setNumInboundPeers(int new_num)
 
 void NodeModel::refreshPeerCounts()
 {
-    setNumPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::Both)));
-    setNumInboundPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::In)));
-    setNumOutboundPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::Out)));
+    refreshSnapshot();
+}
+
+void NodeModel::refreshSnapshot()
+{
+    RequireModelThread(this);
+    if (m_draining) return;
+    if (m_snapshot_pending) {
+        m_snapshot_again = true;
+        return;
+    }
+    m_snapshot_pending = true;
+    struct Snapshot {
+        int peers, inbound, outbound;
+        QString warnings, addresses;
+        int64_t received, sent;
+    };
+    m_backend.submit([node = &m_node, ready = m_node_ready] {
+        Snapshot result{};
+        result.warnings = QString::fromStdString(node->getWarnings().translated);
+        if (ready) {
+            result.peers = static_cast<int>(node->getNodeCount(ConnectionDirection::Both));
+            result.inbound = static_cast<int>(node->getNodeCount(ConnectionDirection::In));
+            result.outbound = static_cast<int>(node->getNodeCount(ConnectionDirection::Out));
+            result.received = node->getTotalBytesRecv();
+            result.sent = node->getTotalBytesSent();
+            for (const auto& [addr, info] : node->getNetLocalAddresses()) {
+                result.addresses += QString::fromStdString(addr.ToStringAddr());
+                if (!addr.IsI2P()) result.addresses += QStringLiteral(":") + QString::number(info.nPort);
+                result.addresses += QStringLiteral(", ");
+            }
+            if (!result.addresses.isEmpty()) result.addresses.chop(2);
+        }
+        return result;
+    }, [this](Snapshot result) {
+        RequireModelThread(this);
+        m_snapshot_pending = false;
+        setNumPeers(result.peers);
+        setNumInboundPeers(result.inbound);
+        setNumOutboundPeers(result.outbound);
+        setWarnings(result.warnings);
+        m_total_bytes_received = result.received;
+        m_total_bytes_sent = result.sent;
+        m_local_addresses = std::move(result.addresses);
+        Q_EMIT nodeInformationChanged();
+        if (std::exchange(m_snapshot_again, false)) refreshSnapshot();
+    });
 }
 
 void NodeModel::refreshMempoolInfo()
@@ -167,78 +217,62 @@ void NodeModel::refreshMempoolInfo()
 
 void NodeModel::setMempoolInfoPollingActive(bool active)
 {
-    if (m_mempool_info_polling_active == active) {
-        return;
-    }
+    RequireModelThread(this);
+    if (m_draining) active = false;
+    if (m_mempool_info_polling_active == active) return;
     m_mempool_info_polling_active = active;
     Q_EMIT mempoolInfoPollingActiveChanged(active);
-
-    QTimer* timer = m_mempool_info_timer;
-    if (!timer) {
-        return;
-    }
-
-    QMetaObject::invokeMethod(timer, [timer, active] {
-        if (active) {
-            timer->start();
-        } else {
-            timer->stop();
-        }
-    }, Qt::QueuedConnection);
-
     if (active) {
+        m_mempool_info_timer->start();
         refreshMempoolInfo();
+    } else {
+        m_mempool_info_timer->stop();
     }
 }
 
 void NodeModel::initializeMempoolInfoPolling()
 {
-    m_mempool_info_worker = new QObject;
-    m_mempool_info_thread = new QThread(this);
-    m_mempool_info_timer = new QTimer;
+    m_mempool_info_timer = new QTimer(this);
     m_mempool_info_timer->setInterval(MEMPOOL_INFO_POLLING_INTERVAL_MS);
-
-    m_mempool_info_worker->moveToThread(m_mempool_info_thread);
-    m_mempool_info_timer->moveToThread(m_mempool_info_thread);
-
-    connect(m_mempool_info_timer, &QTimer::timeout, m_mempool_info_worker, [this] {
-        fetchMempoolInfo();
-    });
-    connect(m_mempool_info_thread, &QThread::finished, m_mempool_info_timer, &QObject::deleteLater);
-    connect(m_mempool_info_thread, &QThread::finished, m_mempool_info_worker, &QObject::deleteLater);
-
-    m_mempool_info_thread->start();
-    QTimer::singleShot(0, m_mempool_info_worker, [] {
-        util::ThreadRename("qml-mempool");
-    });
+    connect(m_mempool_info_timer, &QTimer::timeout, this, &NodeModel::requestMempoolInfoRefresh);
 }
 
 void NodeModel::requestMempoolInfoRefresh()
 {
-    if (!m_mempool_info_worker) {
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
+    if (m_mempool_pending) {
+        m_mempool_again = true;
         return;
     }
-
-    QTimer::singleShot(0, m_mempool_info_worker, [this] {
-        fetchMempoolInfo();
+    m_mempool_pending = true;
+    m_backend.submit([node = &m_node] {
+        return MempoolInfo{
+            static_cast<int>(node->getMempoolSize()),
+            node->getMempoolDynamicUsage() / 1'000'000.0,
+            node->getMempoolMaxUsage() / 1'000'000.0,
+        };
+    }, [this](const MempoolInfo& info) {
+        m_mempool_pending = false;
+        applyMempoolInfo(info);
+        if (std::exchange(m_mempool_again, false)) requestMempoolInfoRefresh();
     });
 }
 
-void NodeModel::fetchMempoolInfo()
+void NodeModel::drainBackend()
 {
-    const MempoolInfo info{
-        static_cast<int>(m_node.getMempoolSize()),
-        m_node.getMempoolDynamicUsage() / 1'000'000.0,
-        m_node.getMempoolMaxUsage() / 1'000'000.0,
-    };
-
-    QMetaObject::invokeMethod(this, [this, info] {
-        applyMempoolInfo(info);
-    }, Qt::QueuedConnection);
+    RequireModelThread(this);
+    if (m_draining) return;
+    m_draining = true;
+    setMempoolInfoPollingActive(false);
+    unsubscribeFromCoreSignals();
+    m_backend.drain();
+    m_shutdown_worker.drain();
 }
 
 void NodeModel::applyMempoolInfo(const MempoolInfo& info)
 {
+    RequireModelThread(this);
     if (info.transaction_count != m_mempool_transaction_count ||
         info.usage_mb != m_mempool_usage_mb ||
         info.max_usage_mb != m_mempool_max_usage_mb) {
@@ -251,7 +285,8 @@ void NodeModel::applyMempoolInfo(const MempoolInfo& info)
 
 void NodeModel::setRemainingSyncTime(double new_progress)
 {
-    int currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    RequireModelThread(this);
+    const qint64 currentTime = QDateTime::currentDateTime().toMSecsSinceEpoch();
 
     // keep a vector of samples of verification progress at height
     m_block_process_time.push_front(qMakePair(currentTime, new_progress));
@@ -259,17 +294,18 @@ void NodeModel::setRemainingSyncTime(double new_progress)
     // show progress speed if we have more than one sample
     if (m_block_process_time.size() >= 2) {
         double progressDelta = 0;
-        int timeDelta = 0;
+        qint64 timeDelta = 0;
         int remainingMSecs = 0;
         double remainingProgress = 1.0 - new_progress;
         for (int i = 1; i < m_block_process_time.size(); i++) {
-            QPair<int, double> sample = m_block_process_time[i];
+            const auto& sample = m_block_process_time[i];
 
             // take first sample after 500 seconds or last available one
             if (sample.first < (currentTime - 500 * 1000) || i == m_block_process_time.size() - 1) {
                 progressDelta = m_block_process_time[0].second - sample.second;
                 timeDelta = m_block_process_time[0].first - sample.first;
-                remainingMSecs = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
+                const double estimate = (progressDelta > 0) ? remainingProgress / progressDelta * timeDelta : -1;
+                remainingMSecs = static_cast<int>(std::clamp(estimate, -1.0, static_cast<double>(std::numeric_limits<int>::max())));
                 break;
             }
         }
@@ -286,6 +322,7 @@ void NodeModel::setRemainingSyncTime(double new_progress)
 }
 void NodeModel::setVerificationProgress(double new_progress)
 {
+    RequireModelThread(this);
     if (new_progress != m_verification_progress) {
         setRemainingSyncTime(new_progress);
 
@@ -296,6 +333,7 @@ void NodeModel::setVerificationProgress(double new_progress)
 
 void NodeModel::setBlockSyncActive(bool active)
 {
+    RequireModelThread(this);
     if (m_block_sync_active == active) {
         return;
     }
@@ -306,6 +344,7 @@ void NodeModel::setBlockSyncActive(bool active)
 
 void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
 {
+    RequireModelThread(this);
     m_header_tip_height = height;
     m_header_tip_time = block_time;
 
@@ -327,15 +366,18 @@ void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
 
 void NodeModel::setPause(bool new_pause)
 {
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
     if(m_pause != new_pause) {
         m_pause = new_pause;
-        m_node.setNetworkActive(!new_pause);
+        m_backend.post([node = &m_node, new_pause] { node->setNetworkActive(!new_pause); });
         Q_EMIT pauseChanged(new_pause);
     }
 }
 
 void NodeModel::setErrorState(bool faulted)
 {
+    RequireModelThread(this);
     if (m_faulted != faulted) {
         m_faulted = faulted;
         Q_EMIT errorStateChanged(faulted);
@@ -344,6 +386,7 @@ void NodeModel::setErrorState(bool faulted)
 
 void NodeModel::setStartupError(const QString& error)
 {
+    RequireModelThread(this);
     if (m_startup_error != error) {
         m_startup_error = error;
         Q_EMIT startupErrorChanged();
@@ -359,6 +402,7 @@ void NodeModel::addStartupWarnings(const QStringList& warnings)
 
 void NodeModel::setWarnings(const QString& warnings)
 {
+    RequireModelThread(this);
     const QStringList warning_list{SplitWarnings(warnings)};
     if (m_warnings == warnings && m_warning_list == warning_list) {
         return;
@@ -371,7 +415,7 @@ void NodeModel::setWarnings(const QString& warnings)
 void NodeModel::refreshWarnings()
 {
     // Keep "current warnings" tied to Core's active warning set.
-    setWarnings(QString::fromStdString(m_node.getWarnings().translated));
+    refreshSnapshot();
 }
 
 void NodeModel::showStartupWarnings()
@@ -415,17 +459,22 @@ void NodeModel::startNodeInitializionThread()
 
 void NodeModel::requestShutdown()
 {
+    RequireModelThread(this);
     if (m_shutdown_requested) {
         return;
     }
     m_shutdown_requested = true;
     stopShutdownPolling();
-    m_node.startShutdown();
+    // Interrupt must not wait behind a blocked read/RPC, and Interrupt itself
+    // can take locks. Give it a separate worker while the shutdown page renders.
+    m_shutdown_worker.post([node = &m_node] { node->startShutdown(); });
     Q_EMIT requestedShutdown();
 }
 
 void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info)
 {
+    RequireModelThread(this);
+    if (m_draining) return;
     if (success && (m_shutdown_requested || m_node.shutdownRequested())) {
         requestShutdown();
         return;
@@ -451,12 +500,19 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
     } else {
         m_startup_error_messages.clear();
         m_node_ready = true;
+        Q_EMIT nodeReady();
         m_runtime_dialogs_enabled = true;
         refreshWarnings();
         showStartupWarnings();
         setBlockTipHeight(tip_info.block_height);
         setVerificationProgress(tip_info.verification_progress);
-        setBlockSyncActive(tip_info.block_height > 0 && m_node.isInitialBlockDownload());
+        m_last_block_time = tip_info.block_time;
+        const auto generation = ++m_sync_generation;
+        m_backend.submit([node = &m_node] { return node->isInitialBlockDownload(); },
+                         [this, generation, height = tip_info.block_height](bool ibd) {
+                             if (generation == m_sync_generation) setBlockSyncActive(height > 0 && ibd);
+                         });
+        refreshSnapshot();
         setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
         refreshMempoolInfo();
         Q_EMIT setTimeRatioListInitial();
@@ -504,7 +560,10 @@ void NodeModel::ConnectToBlockTipSignal()
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this]([[maybe_unused]] SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             QMetaObject::invokeMethod(this, [this, state, block_height = tip.block_height, block_time = tip.block_time, verification_progress] {
+                ++m_sync_generation;
+                m_last_block_time = block_time;
                 setBlockTipHeight(block_height);
+                refreshSnapshot();
                 setVerificationProgress(verification_progress);
                 setBlockSyncActive(block_height > 0 && state != SynchronizationState::POST_INIT);
 
@@ -608,47 +667,47 @@ QString NodeModel::defaultProxyAddress()
 
 bool NodeModel::disconnectPeer(int nodeId)
 {
-    return m_node.disconnectById(nodeId);
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready || m_peer_action_pending) return false;
+    m_peer_action_pending = true;
+    Q_EMIT peerActionPendingChanged();
+    m_backend.submit([node = &m_node, nodeId] { return node->disconnectById(nodeId); },
+                     [this](bool success) {
+        m_peer_action_pending = false;
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionFinished(success);
+    });
+    return true;
 }
 
 bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
 {
-    if (banDuration <= 0) return false;
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready || m_peer_action_pending || banDuration <= 0) return false;
     auto addr = LookupHost(rawAddress.toStdString(), /*fAllowLookup=*/false);
     if (!addr) return false;
-    bool result = m_node.ban(*addr, banDuration);
-    if (result) {
-        m_node.disconnectByAddress(*addr);
-    }
-    return result;
+    m_peer_action_pending = true;
+    Q_EMIT peerActionPendingChanged();
+    m_backend.submit([node = &m_node, addr = *addr, banDuration] {
+        const bool success = node->ban(addr, banDuration);
+        if (success) node->disconnectByAddress(addr);
+        return success;
+    }, [this](bool success) {
+        m_peer_action_pending = false;
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionFinished(success);
+    });
+    return true;
 }
 
 QVariantList NodeModel::nodeInformationRows()
 {
-    int header_height{m_header_tip_height};
-    int64_t header_time{m_header_tip_time};
-    if (m_node_ready && header_height == 0) {
-        m_node.getHeaderTip(header_height, header_time);
-    }
-
-    QString local_addresses;
-    if (m_node_ready) {
-        for (const auto& [addr, info] : m_node.getNetLocalAddresses()) {
-            local_addresses += QString::fromStdString(addr.ToStringAddr());
-            if (!addr.IsI2P()) {
-                local_addresses += QStringLiteral(":") + QString::number(info.nPort);
-            }
-            local_addresses += QStringLiteral(", ");
-        }
-    }
-    if (!local_addresses.isEmpty()) {
-        local_addresses.chop(2);
-    } else {
-        local_addresses = tr("None");
-    }
-
-    const int block_height{m_node_ready ? std::max(m_block_tip_height, m_node.getNumBlocks()) : m_block_tip_height};
-    const int64_t last_block_time{m_node_ready ? m_node.getLastBlockTime() : 0};
+    RequireModelThread(this);
+    const int header_height{m_header_tip_height};
+    const int64_t header_time{m_header_tip_time};
+    const QString local_addresses{m_local_addresses.isEmpty() ? tr("None") : m_local_addresses};
+    const int block_height{m_block_tip_height};
+    const int64_t last_block_time{m_last_block_time};
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
@@ -664,7 +723,7 @@ QVariantList NodeModel::nodeInformationRows()
     rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
     rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
     rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
-    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (!m_pause ? tr("Yes") : tr("No")) : tr("Unknown")));
     rows.push_back(InformationRow(tr("Local addresses"), local_addresses));
     rows.push_back(InformationRow(tr("Warnings"), warning_text));
     return rows;
@@ -751,6 +810,7 @@ bool NodeModel::showRuntimeDialogOnGuiThread(const QString& message, unsigned in
 
 void NodeModel::showRuntimeDialogRequest(const std::shared_ptr<RuntimeDialogRequest>& request)
 {
+    RequireModelThread(this);
     m_runtime_dialog_active = request;
     m_runtime_dialog_title = RuntimeDialogTitle(request->style);
     m_runtime_dialog_message = request->message;
@@ -763,6 +823,7 @@ void NodeModel::showRuntimeDialogRequest(const std::shared_ptr<RuntimeDialogRequ
 
 void NodeModel::answerRuntimeDialog(unsigned int button)
 {
+    RequireModelThread(this);
     if (!m_runtime_dialog_active) {
         return;
     }
