@@ -788,10 +788,12 @@ PageStack {
                             //: Main heading of the transaction creation form.
                             CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); font: Theme.text.headline.font; horizontalAlignment: Text.AlignLeft }
                             RowLayout {
+                                id: availableBalanceRow
                                 Layout.fillWidth: true
                                 spacing: 4
                                 //: Available wallet balance excludes locked coins.
                                 CoreText {
+                                    id: availableBalanceCaption
                                     objectName: "sendAvailableCaption"
                                     text: qsTr("Available")
                                     font: Theme.text.description.font
@@ -807,6 +809,8 @@ PageStack {
                                     color: Theme.color.neutral7
                                     horizontalAlignment: Text.AlignLeft
                                     Layout.alignment: Qt.AlignBaseline
+                                    animationAvailableWidth: Math.max(0, availableBalanceRow.parent.width
+                                        - availableBalanceCaption.width - availableBalanceRow.spacing)
                                 }
                                 BitcoinAmount { id: availableAmount; satoshi: root.wallet ? (root.wallet.coinsListModel.coinCount, root.wallet.availableSendBalanceSatoshi) : 0; unit: optionsModel.displayUnit }
                             }

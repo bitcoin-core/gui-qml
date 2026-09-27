@@ -49,6 +49,16 @@ BitcoinAmountDisplayLabelBase {
     displayText: ""
 
     FontMetrics { id: metrics; font: root.font }
+    Timer {
+        id: updateStaticTextTimer
+        interval: 0
+        onTriggered: root.updateStaticText()
+    }
+    Timer {
+        id: startUnitAnimationTimer
+        interval: 0
+        onTriggered: root.startUnitAnimation()
+    }
 
     Component.onCompleted: {
         displayText = text
@@ -62,7 +72,7 @@ BitcoinAmountDisplayLabelBase {
         if (!initialized) return
         if (animating && text !== animationText) queueUnitAnimation()
         // Formatting and display-unit bindings can fire in either order.
-        Qt.callLater(updateStaticText)
+        updateStaticTextTimer.restart()
     }
     onAnimateUnitChangesChanged: {
         if (initialized && !animateUnitChanges) finishAnimation()
@@ -127,7 +137,7 @@ BitcoinAmountDisplayLabelBase {
         animationPending = true
         // Keep the current frame visible while the formatting bindings settle.
         motion.stop()
-        Qt.callLater(startUnitAnimation)
+        startUnitAnimationTimer.restart()
     }
 
     function finishAnimation() {

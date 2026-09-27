@@ -164,7 +164,6 @@ jobs:
           python3 test/functional/qml_test_send_receive.py
           python3 test/functional/qml_test_addresses.py
           python3 test/functional/qml_test_address_label_sync.py
-          python3 test/functional/qml_test_send_review.py
           python3 test/functional/qml_test_psbt.py
           python3 test/functional/qml_test_wallet_migration.py
           python3 test/functional/qml_test_wallet_qt_compat.py

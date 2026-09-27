@@ -5,6 +5,7 @@
 """End-to-end GUI test for send preview fee parity."""
 
 import argparse
+import base64
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import os
@@ -81,7 +82,7 @@ class CheckpointRecorder:
 
 
 def assert_review_values(gui, *, expected_fee_sats, expected_amount_sats, expected_total_sats):
-    review_amount_text = gui.get_property("sendTransactionReviewRecipient0", "amount")
+    review_amount_text = gui.get_property("sendTransactionReviewRecipient0Amount", "text")
     review_fee_text = gui.get_property("sendTransactionReviewFee", "value")
     review_total_text = gui.get_property("sendTransactionReviewTotal", "value")
 
@@ -377,8 +378,8 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("sendReviewSweepConfirmButton")
         gui.wait_for_property("sendReviewSweepAlert", "visible", False)
         gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
-        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0", "amount")) == 148 * 100000000 - multiple_fee
-        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient1", "amount")) == 2 * 100000000
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text")) == 148 * 100000000 - multiple_fee
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient1Amount", "text")) == 2 * 100000000
         assert amount_text_to_sats(gui.get_property("sendTransactionReviewTotal", "value")) == 150 * 100000000
         gui.click("sendTransactionReviewSendButton")
         gui.wait_for_property("sendSweepAlert", "opened", True)
@@ -628,6 +629,65 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         assert rpc_call(harness.gui_rpc_port, "getbalance", wallet=GUI_WALLET_NAME) == 50
         assert rpc_call(harness.gui_rpc_port, "listlockunspent", wallet=GUI_WALLET_NAME) == [locked_input]
         checkpoints.checkpoint("sweep warning precedes passphrase and final send confirmation", gui)
+
+        # A later payment must not change the recipients of a transaction that
+        # is already prepared and open for review.
+        gui.click("sendResultDoneButton")
+        gui.wait_for_page("sendPage", timeout_ms=10000)
+        funding_wallet = "review_funding_wallet"
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": funding_wallet})
+        funding_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=funding_wallet)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, funding_address])
+        gui.wait_for_property("walletBadge", "text", funding_wallet, timeout_ms=20000)
+        gui.click("walletBadge")
+        gui.wait_for_property("walletSelectPopup", "opened", True)
+        gui.wait_for_property("walletSelectList", "count", 2)
+        for row_index in range(2):
+            if gui.get_list_item_property(view_object_name="walletSelectList", row_index=row_index, prop="name") == GUI_WALLET_NAME:
+                gui.click_list_item(view_object_name="walletSelectList", row_index=row_index)
+                break
+        else:
+            raise AssertionError(f"Wallet {GUI_WALLET_NAME!r} missing from wallet picker")
+        gui.wait_for_property("walletBadge", "text", GUI_WALLET_NAME, timeout_ms=20000)
+        gui.wait_for_property("walletSelectPopup", "opened", False)
+        rpc_call(harness.gui_rpc_port, "lockunspent", [True, [locked_input]], wallet=GUI_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "walletpassphrase", [review_password, 600], wallet=GUI_WALLET_NAME)
+        gui.set_text("sendAddressInput", receiver_address)
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        gui.click("sendReviewSweepConfirmButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        prepared_amount = amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text"))
+        prepared_destination = gui.get_property("sendTransactionReviewRecipient0Description", "text")
+
+        incoming_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=GUI_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "sendtoaddress", [incoming_address, 0.5], wallet=funding_wallet)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, funding_address])
+        wait_until(lambda: amount_text_to_sats(gui.get_text("sendAmountInput")) > prepared_amount,
+                   description="live maximum amount refreshing after payment")
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text")) == prepared_amount
+        assert gui.get_property("sendTransactionReviewRecipient0Description", "text") == prepared_destination
+
+        review_psbt_path = os.path.join(harness.tmpdir, "review-snapshot.psbt")
+        gui.set_text("sendTransactionReviewSavePsbtPathField", review_psbt_path)
+        gui.click("sendTransactionReviewSaveButton")
+        wait_until(lambda: os.path.exists(review_psbt_path), description="prepared PSBT export")
+        with open(review_psbt_path, "rb") as psbt_file:
+            decoded_psbt = rpc_call(harness.gui_rpc_port, "decodepsbt", [base64.b64encode(psbt_file.read()).decode("ascii")])
+        if "tx" in decoded_psbt:
+            outputs = [(output["scriptPubKey"].get("address"), output["value"])
+                       for output in decoded_psbt["tx"]["vout"]]
+        else:
+            outputs = [(output["script"].get("address"), output["amount"])
+                       for output in decoded_psbt["outputs"]]
+        recipient_outputs = [value for address, value in outputs if address == receiver_address]
+        assert len(recipient_outputs) == 1
+        psbt_amount = int((Decimal(str(recipient_outputs[0])) * Decimal("100000000")).to_integral_value())
+        assert psbt_amount == prepared_amount
+        checkpoints.checkpoint("review remains equal to prepared PSBT after receiving funds", gui)
+        gui.click("sendTransactionReviewCloseButton")
 
         print(
             "Send flow passed: preview totals were correct for fixed amounts and sendall, "

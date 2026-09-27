@@ -228,6 +228,10 @@ def run_tests():
         )
         gui.set_clipboard_text(amount_field_uri)
         gui.click("sendAmountInput")
+        # A synthetic click can miss a field outside the viewport. The
+        # native paste path requires active focus to process the edit.
+        gui.invoke("sendAmountInput", "forceActiveFocus")
+        gui.wait_for_property("sendAmountInput", "activeFocus", True)
         gui.invoke("sendAmountInput", "paste")
         gui.wait_for_property(
             "sendAmountInput", "text",
@@ -240,6 +244,8 @@ def run_tests():
         )
         gui.set_clipboard_text(label_field_uri)
         gui.click("sendNoteInput")
+        gui.invoke("sendNoteInput", "forceActiveFocus")
+        gui.wait_for_property("sendNoteInput", "activeFocus", True)
         gui.invoke("sendNoteInput", "paste")
         gui.wait_for_property(
             "sendPaymentRequestPayTo", "value", "field-paste", timeout_ms=5000,
@@ -251,6 +257,8 @@ def run_tests():
         )
         gui.set_clipboard_text(address_field_uri)
         gui.click("sendAddressInput")
+        gui.invoke("sendAddressInput", "forceActiveFocus")
+        gui.wait_for_property("sendAddressInput", "activeFocus", True)
         gui.invoke("sendAddressInput", "paste")
         gui.wait_for_property(
             "sendPaymentRequestMessageText", "value",

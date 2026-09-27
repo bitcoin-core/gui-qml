@@ -107,7 +107,8 @@ TestCase {
         optionsModel.displayUnit = BitcoinAmount.BTC
         const label = createTemporaryObject(alignedAmountDisplayComponent, host,
             {horizontalAlignment: data.alignment, intrinsicSizing: data.intrinsic})
-        wait(0)
+        verify(waitForItemPolished(label))
+        tryVerify(() => Math.abs(label.x + label.width - host.width) < 0.01)
         compare(label.text, "0.00012300 BTC")
         const before = label.layout(label.text)
         const startX = label.mapToItem(host, before.units[0].x
@@ -118,12 +119,14 @@ TestCase {
         const incoming = findObject(label, "amountUnit_sat")
         verify(outgoing !== null && incoming !== null)
         verify(!label.transitionCells.some(cell => cell.glyph.includes("BTC") || cell.glyph.includes("sat")))
-        wait(60)
+        // Headless platforms may skip frames, so inspect a controlled fade frame.
+        label.unitProgress = 0.5
         verify(outgoing.opacity > 0 && outgoing.opacity < 1)
         verify(incoming.opacity > 0 && incoming.opacity < 1)
-        verify(Math.abs(outgoing.mapToItem(host, 0, 0).x - startX) < 1)
-        wait(40)
-        verify(Math.abs(outgoing.mapToItem(host, 0, 0).x - startX) < 1)
+        for (const progress of [0, 0.5, 1]) {
+            label.shiftProgress = progress
+            tryVerify(() => Math.abs(outgoing.mapToItem(host, 0, 0).x - startX) < 1)
+        }
         compare(label.horizontalAlignment, data.alignment)
         tryCompare(label, "animating", false)
         compare(label.text, "12,300 sat")
@@ -200,7 +203,10 @@ TestCase {
         compare(ones.steps, 1) // 9 rolls forward to 0, not back through eight digits.
         compare(tens.steps, 1)
         compare(hundreds.steps, 0)
-        wait(80)
+        // Set a representative frame directly so headless platforms need
+        // not render an intermediate animation frame within a fixed delay.
+        label.rollProgress = 0.25
+        label.elapsed = label.rollDuration * 0.25
         compare(ones.turn, tens.turn)
         verify(ones.offset < 0)
         compare(hundreds.offset, 0)
@@ -213,7 +219,7 @@ TestCase {
         tryCompare(label, "animating", true)
         compare(label.direction, -1)
         compare(findObject(label, "amountColumn_d0").steps, 1)
-        wait(80)
+        label.rollProgress = 0.25
         verify(findObject(label, "amountColumn_d0").offset > 0)
         tryCompare(label, "animating", false)
     }
@@ -227,7 +233,7 @@ TestCase {
         compare(findObject(label, "amountColumn_d0").steps, 1)
         verify(findObject(label, "amountColumn_d3").modelData.arriving)
         verify(label.toWidth > label.fromWidth)
-        wait(80)
+        label.shiftProgress = 0.5
         verify(label.implicitWidth > label.fromWidth && label.implicitWidth < label.toWidth)
         tryCompare(label, "animating", false)
         label.amountOverride = "9"

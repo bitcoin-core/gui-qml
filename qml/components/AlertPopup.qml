@@ -19,9 +19,13 @@ Popup {
     default property alias actions: actionStore.data
 
     property var visibleActions: [defaultAction]
-    readonly property real minimumActionWidth: visibleActions.reduce(function(width, action) {
-        return Math.max(width, Math.ceil(actionFontMetrics.advanceWidth(action.text)) + 40)
-    }, 0)
+    readonly property real minimumActionWidth: {
+        let width = 0
+        for (let i = 0; i < visibleActions.length; ++i) {
+            width = Math.max(width, Math.ceil(actionFontMetrics.advanceWidth(visibleActions[i].text)) + 40)
+        }
+        return width
+    }
     readonly property real horizontalActionsWidth: minimumActionWidth * visibleActions.length
         + 10 * Math.max(0, visibleActions.length - 1)
 

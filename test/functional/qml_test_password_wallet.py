@@ -386,13 +386,13 @@ def case_created_wallet_send(harness, checkpoints):
     checkpoints.checkpoint("review passphrase prompt displayed", gui)
     gui.set_text("reviewPassphraseField", WALLET_PASSWORD)
     gui.click("reviewPassphraseConfirmButton")
-    gui.wait_for_property("sendReviewSendButton", "visible", True, timeout_ms=20000)
+    gui.wait_for_property("sendTransactionReviewSendButton", "visible", True, timeout_ms=20000)
     assert_passphrase_not_in_ui(gui, WALLET_PASSWORD)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("review built and wallet relocked", gui)
 
     before = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=wallet_name)["txcount"]
-    gui.click("sendReviewSendButton")
+    gui.click("sendTransactionReviewSendButton")
     gui.wait_for_page("sendCompletePage", timeout_ms=20000)
     checkpoints.checkpoint("prepared transaction broadcast", gui)
 
@@ -426,12 +426,12 @@ def case_locked_review_fallback(harness, checkpoints):
 
     gui.set_text("reviewPassphraseField", WALLET_PASSWORD)
     gui.click("reviewPassphraseConfirmButton")
-    gui.wait_for_property("sendReviewSendButton", "visible", True, timeout_ms=20000)
+    gui.wait_for_property("sendTransactionReviewSendButton", "visible", True, timeout_ms=20000)
     assert_passphrase_not_in_ui(gui, WALLET_PASSWORD)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)
     checkpoints.checkpoint("review rebuilt and wallet relocked", gui)
 
-    gui.click("sendReviewSendButton")
+    gui.click("sendTransactionReviewSendButton")
     gui.wait_for_page("sendCompletePage", timeout_ms=20000)
     checkpoints.checkpoint("fallback transaction broadcast", gui)
     assert_wallet_locked(harness.gui_rpc_port, wallet_name)

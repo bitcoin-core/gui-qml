@@ -440,12 +440,12 @@ def open_external_signer_review(gui, destination_address, amount_text):
     gui.click("sendTabButton")
     gui.wait_for_page("sendPage", timeout_ms=10000)
     set_multiple_recipients(gui, False)
-    set_amount_unit(gui, "₿")
+    set_amount_unit(gui, "BTC")
     gui.set_text("sendAddressInput", destination_address)
     gui.set_text("sendAmountInput", amount_text)
     gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
     gui.click("sendReviewButton")
-    gui.wait_for_page("sendReviewPage", timeout_ms=10000)
+    gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
 
 
 def assert_signer_status(gui, object_name, expected_text):

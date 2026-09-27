@@ -90,8 +90,12 @@ LabeledField {
         }
 
         Component.onCompleted: if (root.interceptPaste) syncFromModel()
-        onTextChanged: if (!syncingFromModel) handlePaymentUriInput()
-        onTextEdited: if (!handlePaymentUriInput()) root.textEdited()
+        // TextEdit.textEdited was added in Qt 6.9. Treat changes made while
+        // focused as edits, excluding updates restored from the model.
+        onTextChanged: {
+            if (syncingFromModel || !activeFocus) return
+            if (!handlePaymentUriInput()) root.textEdited()
+        }
         onEditingFinished: root.editingFinished()
     }
 }
