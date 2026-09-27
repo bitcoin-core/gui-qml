@@ -137,6 +137,7 @@ class QmlTestHarness:
         self.external = socket_path is not None
         self.process = None
         self.driver = None
+        self._captured_process_output = None
         self.extra_args = extra_args or []
         self.reset_settings = reset_settings
         self.start_onboarded = start_onboarded
@@ -226,6 +227,8 @@ class QmlTestHarness:
 
     def process_output(self):
         """Return captured stdout+stderr from the GUI process as a string."""
+        if self._captured_process_output is not None:
+            return self._captured_process_output
         if not self.process:
             return ""
         if self.process.poll() is None:
@@ -243,7 +246,8 @@ class QmlTestHarness:
             parts.append(f"stdout:\n{stdout}")
         if stderr:
             parts.append(f"stderr:\n{stderr}")
-        return "\n\n".join(parts)
+        self._captured_process_output = "\n\n".join(parts)
+        return self._captured_process_output
 
     def stop(self, cleanup=True):
         """Shut down the GUI process (only if we launched it).
@@ -263,6 +267,13 @@ class QmlTestHarness:
         if cleanup and self.tmpdir and self._owns_tmpdir:
             shutil.rmtree(self.tmpdir, ignore_errors=True)
             self.tmpdir = None
+        if self.process and os.getenv("QML_TEST_CHECK_EXIT") == "1":
+            output = self.process_output()
+            diagnostics = ("Core thread policy violation:", "GUI model mutated on a foreign thread:",
+                           "ERROR: AddressSanitizer", "ERROR: LeakSanitizer", "runtime error:",
+                           "WARNING: ThreadSanitizer", "WARNING: MemorySanitizer")
+            if self.process.returncode != 0 or any(text in output for text in diagnostics):
+                raise RuntimeError(f"GUI exited with status {self.process.returncode}\n{output}")
 
     def _candidate_debug_logs(self):
         if not self.datadir:
@@ -291,13 +302,7 @@ class QmlTestHarness:
                 f"GUI process exited before the bridge connected with return code {return_code}.",
                 file=sys.stderr,
             )
-            stdout, stderr = self.process.communicate(timeout=1)
-            if stdout:
-                print("\n--- GUI stdout ---", file=sys.stderr)
-                print(stdout.decode("utf-8", errors="replace"), file=sys.stderr)
-            if stderr:
-                print("\n--- GUI stderr ---", file=sys.stderr)
-                print(stderr.decode("utf-8", errors="replace"), file=sys.stderr)
+            print(self.process_output(), file=sys.stderr)
 
         for debug_log in self._candidate_debug_logs():
             if os.path.isfile(debug_log):

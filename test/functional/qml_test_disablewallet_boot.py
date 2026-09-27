@@ -44,6 +44,10 @@ def parse_args():
         action="store_true",
         help="Save a PNG at each GUI checkpoint under test/artifacts/",
     )
+    parser.add_argument(
+        "--node-only", action="store_true",
+        help="Run only runtime-disabled-wallet cases with the audited node integration executable.",
+    )
     return parser.parse_args()
 
 
@@ -327,7 +331,8 @@ def run_tests():
     if not args.socket_path:
         run_config_disablewallet_flow(checkpoints)
         run_settings_disablewallet_flow(checkpoints)
-        run_cli_enable_override_flow(checkpoints)
+        if not args.node_only:
+            run_cli_enable_override_flow(checkpoints)
 
     print("\n" + "=" * 60)
     print("Disablewallet node-only boot test PASSED")

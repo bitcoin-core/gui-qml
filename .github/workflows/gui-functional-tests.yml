@@ -128,7 +128,7 @@ jobs:
       - name: Configure
         run: |
           cmake -B build \
-            -DBUILD_APP_TESTS=OFF \
+            -DBUILD_APP_TESTS=ON \
             -DENABLE_TEST_AUTOMATION=ON \
             -DBUILD_DAEMON=ON \
             -DENABLE_IPC=OFF
@@ -136,6 +136,9 @@ jobs:
       - name: Build
         run: |
           cmake --build build -j"$(nproc)"
+
+      - name: Run GUI integration and thread checks
+        run: ctest --test-dir build --output-on-failure -R '^bitcoinqml_(integration_tests|startup_tests|thread_tests|thread_policy|audited_python)$'
 
       - name: Run QML test automation suite
         env:
@@ -149,7 +152,6 @@ jobs:
           python3 test/functional/qml_test_onboarding.py
           python3 test/functional/qml_test_preinit_onboarding.py
           python3 test/functional/qml_test_disablewallet_boot.py
-          python3 test/functional/qml_test_blockclock.py
           python3 test/functional/qml_test_blocksonly_settings.py
           python3 test/functional/qml_test_external_signer.py
           python3 test/functional/qml_test_peers.py

@@ -197,6 +197,13 @@ target_link_libraries(bitcoin-core-app
 )
 qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
 qt6_import_qml_plugins(bitcoin-core-app)
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
+  # The scanner also sees the inactive Qt 6.2 compatibility source. Its
+  # settings plugin duplicates QtCore's QQmlSettings symbols in static builds.
+  get_target_property(app_libraries bitcoin-core-app LINK_LIBRARIES)
+  list(REMOVE_ITEM app_libraries Qt6::qmlsettingsplugin)
+  set_property(TARGET bitcoin-core-app PROPERTY LINK_LIBRARIES "${app_libraries}")
+endif()
 
 if(BUILD_APP_TESTS)
   include(CTest)

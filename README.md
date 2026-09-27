@@ -138,6 +138,17 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
+The `bitcoinqml_integration_tests` target runs the production QML application
+with a real, isolated regtest node. It covers startup/shutdown, node notifications,
+the block clock, settings navigation, and onboarding profile previews. The
+`bitcoinqml_startup_tests` target exercises actual onboarding, cancellation,
+restart, reset, and configuration precedence in fresh application processes.
+Both run without the test automation bridge. Checked Core interfaces reject
+backend work on the GUI thread; companion tests exercise failures, delayed work
+and responsive shutdown.
+See [GUI integration tests](doc/gui-integration-tests.md) for
+the first migration chunk and remaining Python coverage.
+
 - If CMake reports "Target Qt6::Test not found", ensure Qt6 Test is available
   and discoverable by CMake:
 

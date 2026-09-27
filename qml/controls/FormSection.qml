@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 ColumnLayout {
@@ -64,23 +65,26 @@ ColumnLayout {
             }
         }
 
-        Rectangle {
-            id: card
-            objectName: root.objectName.length > 0 ? root.objectName + "Card" : ""
+        // Let Control track content sizing without a direct nested-layout
+        // height binding, which loops for wrapped rows on Qt 6.2.
+        Control {
             Layout.fillWidth: true
-            implicitHeight: contentColumn.implicitHeight
-            radius: root.cornerRadius
-            color: root.showBackground ? root.backgroundColor : "transparent"
+            padding: 0
+            implicitHeight: implicitContentHeight
             clip: true
 
-            Behavior on color {
-                ColorAnimation { duration: 150 }
+            background: Rectangle {
+                objectName: root.objectName.length > 0 ? root.objectName + "Card" : ""
+                radius: root.cornerRadius
+                color: root.showBackground ? root.backgroundColor : "transparent"
+
+                Behavior on color {
+                    ColorAnimation { duration: 150 }
+                }
             }
 
-            ColumnLayout {
+            contentItem: ColumnLayout {
                 id: contentColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
                 spacing: root.rowSpacing
             }
         }
