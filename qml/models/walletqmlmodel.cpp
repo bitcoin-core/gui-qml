@@ -2895,7 +2895,7 @@ QVariantMap WalletQmlModel::currentTransactionFlow() const
     const auto unit = QmlBitcoinUnits::fromDisplayUnit(m_display_unit);
     const auto format_amount = [unit](CAmount amount) -> QString {
         return QmlBitcoinUnits::formatForDisplay(unit, amount) + QLatin1Char(' ')
-            + QmlBitcoinUnits::label(unit);
+            + QmlBitcoinUnits::label(unit, amount);
     };
     for (const QString& side : {QStringLiteral("inputs"), QStringLiteral("outputs")}) {
         QVariantList entries = flow.value(side).toList();

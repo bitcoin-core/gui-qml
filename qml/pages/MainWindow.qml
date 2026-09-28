@@ -197,6 +197,8 @@ ApplicationWindow {
         onRedoRequested: appWindow.invokeEditCommand("redo")
         onCopyRequested: appWindow.invokeEditCommand("copy")
         onPasteRequested: appWindow.invokeEditCommand("paste")
+        onToggleDisplayUnitRequested: optionsModel.displayUnit = optionsModel.displayUnit === BitcoinAmount.SAT
+            ? BitcoinAmount.BTC : BitcoinAmount.SAT
         onMinimizeRequested: appWindow.showMinimized()
         onZoomRequested: {
             if (appWindow.visibility === Window.Maximized) {

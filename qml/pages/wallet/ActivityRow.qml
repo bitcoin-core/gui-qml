@@ -413,7 +413,7 @@ Item {
         Accessible.ignored: true // The transaction/action already exposes the full address.
     }
 
-    component AmountText: CoreText {
+    component AmountText: BitcoinAmountDisplayLabel {
         font.family: optionsModel.moneyFont.family
         font.weight: optionsModel.moneyFont.weight
         font.pixelSize: Theme.text.description.pixelSize

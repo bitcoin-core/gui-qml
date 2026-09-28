@@ -144,6 +144,14 @@ Platform.MenuBar {
         enabled: root.active && !root.actions.shuttingDown
 
         Platform.MenuItem {
+            objectName: "menuToggleDisplayUnit"
+            text: root.actions.toggleDisplayUnit.text
+            enabled: root.actions.toggleDisplayUnit.enabled
+            shortcut: root.actions.toggleDisplayUnit.shortcut
+            onTriggered: root.actions.toggleDisplayUnit.trigger()
+        }
+        Platform.MenuSeparator {}
+        Platform.MenuItem {
             objectName: "menuNode"
             text: root.actions.nodeView.text
             enabled: root.actions.nodeView.enabled

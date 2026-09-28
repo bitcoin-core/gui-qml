@@ -72,6 +72,29 @@ TestCase {
         keyClick(Qt.Key_V, Qt.ControlModifier)
     }
 
+    function test_available_balance_keeps_caption_static() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+
+        const caption = findChild(page, "sendAvailableCaption")
+        const amount = findChild(page, "sendAvailableAmount")
+        verify(caption !== null)
+        verify(amount !== null)
+        compare(caption.text, "Available")
+        verify(amount.text.length > 0)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(amount, "animating", true)
+        tryCompare(amount, "animating", false)
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        tryCompare(amount, "animating", true)
+        tryCompare(amount, "animating", false)
+        verify(amount.text.endsWith(" BTC"))
+        compare(caption.text, "Available")
+    }
+
     function test_review_only_psbt_closes_and_discards_on_wallet_change() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)

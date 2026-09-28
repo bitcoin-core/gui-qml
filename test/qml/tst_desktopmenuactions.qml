@@ -30,6 +30,12 @@ TestCase {
     }
 
     SignalSpy {
+        id: toggleDisplayUnitSpy
+        target: testCase.actionsUnderTest
+        signalName: "toggleDisplayUnitRequested"
+    }
+
+    SignalSpy {
         id: rpcDocumentationSpy
         target: testCase.actionsUnderTest
         signalName: "rpcDocumentationRequested"
@@ -47,6 +53,7 @@ TestCase {
         }
         exitSpy.clear()
         undoSpy.clear()
+        toggleDisplayUnitSpy.clear()
         rpcDocumentationSpy.clear()
     }
 
@@ -125,6 +132,19 @@ TestCase {
 
         actionsUnderTest.undo.trigger()
         compare(undoSpy.count, 1)
+    }
+
+    function test_display_unit_command_is_always_available_until_shutdown() {
+        compare(actionsUnderTest.toggleDisplayUnit.text, "Toggle display unit")
+        compare(actionsUnderTest.toggleDisplayUnit.shortcut, "Ctrl+B")
+        compare(actionsUnderTest.toggleDisplayUnit.enabled, true)
+        actionsUnderTest.toggleDisplayUnit.trigger()
+        compare(toggleDisplayUnitSpy.count, 1)
+
+        actionsUnderTest.shuttingDown = true
+        compare(actionsUnderTest.toggleDisplayUnit.enabled, false)
+        actionsUnderTest.toggleDisplayUnit.trigger()
+        compare(toggleDisplayUnitSpy.count, 1)
     }
 
     function test_shutdown_disables_commands_and_blocks_trigger() {

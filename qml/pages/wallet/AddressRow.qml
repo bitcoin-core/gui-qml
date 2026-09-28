@@ -163,7 +163,7 @@ AbstractButton {
             contentItem: RowLayout {
                 spacing: 8
 
-                CoreText {
+                BitcoinAmountDisplayLabel {
                     id: amountText
                     objectName: "addressRowAmountText"
                     Layout.fillWidth: true

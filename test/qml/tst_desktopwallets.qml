@@ -118,6 +118,25 @@ TestCase {
         compare(balanceText.font.weight, optionsModel.moneyFont.weight)
     }
 
+    function test_wallet_badge_balance_updates_unit_suffix() {
+        const originalUnit = optionsModel.displayUnit
+        const page = createDesktopWallets()
+        const balanceText = findChild(page, "walletBadgeBalanceText")
+        verify(balanceText !== null)
+        try {
+            for (const unit of [0, 3, 0]) {
+                optionsModel.displayUnit = unit
+                for (const satoshi of [0, 1, 2, 1000]) {
+                    findChild(page, "walletBadge").balanceSatoshi = satoshi
+                    compare(balanceText.text, balanceText.amount + (unit === 3
+                        ? (satoshi === 1 ? " sat" : " sats") : " BTC"))
+                }
+            }
+        } finally {
+            optionsModel.displayUnit = originalUnit
+        }
+    }
+
     function test_desktop_top_nav_icon_buttons_match_design_size() {
         const page = createDesktopWallets()
         const tabs = [

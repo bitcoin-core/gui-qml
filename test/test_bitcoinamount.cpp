@@ -98,7 +98,7 @@ void BitcoinAmountTests::displayWithUnit_formatsAmountAndUnit()
     QVERIFY(amt.displayWithUnit().isEmpty());
 
     amt.setSatoshi(COIN);
-    QCOMPARE(amt.displayWithUnit(), QStringLiteral("1.00000000 ₿"));
+    QCOMPARE(amt.displayWithUnit(), QStringLiteral("1.00000000 BTC"));
 
     amt.setUnit(BitcoinAmount::Unit::SAT);
     QCOMPARE(amt.displayWithUnit(), QStringLiteral("100000000 sats"));
@@ -115,12 +115,15 @@ void BitcoinAmountTests::localizedDisplayWithUnit_usesLocaleAndKeepsCanonicalDis
 
     BitcoinAmount amount;
     QVERIFY(amount.localizedDisplayWithUnit().isEmpty());
+    QVERIFY(amount.localizedDisplay().isEmpty());
     amount.setSatoshi(123'456'789);
     QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("1,23456789 BTC"));
-    QCOMPARE(amount.displayWithUnit(), QStringLiteral("1.23456789 ₿"));
+    QCOMPARE(amount.localizedDisplay(), QStringLiteral("1,23456789"));
+    QCOMPARE(amount.displayWithUnit(), QStringLiteral("1.23456789 BTC"));
 
     amount.setUnit(BitcoinAmount::Unit::SAT);
-    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("123.456.789 sat"));
+    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("123.456.789 sats"));
+    QCOMPARE(amount.localizedDisplay(), QStringLiteral("123.456.789"));
     QCOMPARE(amount.displayWithUnit(), QStringLiteral("123456789 sats"));
 }
 

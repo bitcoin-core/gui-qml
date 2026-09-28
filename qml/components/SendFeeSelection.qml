@@ -124,11 +124,13 @@ ColumnLayout {
 
     ValueRow {
         objectName: "feeSelectionEstimateLabel"
+        amountValue: true
         Layout.fillWidth: true
         title: qsTr("Fee amount")
         showDivider: false
         value: root.walletModel && !root.walletModel.feeEstimatePending && root.walletModel.estimatedFeeSatoshi >= 0
-            ? fee.displayWithUnit : "—"
+            ? fee.localizedDisplay : "—"
+        valueUnit: fee.unitLabel
         valueTextStyle: Theme.text.monoDescription
     }
 

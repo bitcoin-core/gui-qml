@@ -123,7 +123,7 @@ void BitcoinAmount::setUnit(const Unit unit)
 
 QString BitcoinAmount::unitLabel() const
 {
-    return QmlBitcoinUnits::displayLabel(ToQmlUnit(m_unit), m_satoshi);
+    return QmlBitcoinUnits::label(ToQmlUnit(m_unit), m_satoshi);
 }
 
 void BitcoinAmount::flipUnit()
@@ -164,12 +164,18 @@ QString BitcoinAmount::displayWithUnit() const
     return display.isEmpty() ? QString{} : display + QStringLiteral(" ") + unitLabel();
 }
 
+QString BitcoinAmount::localizedDisplay() const
+{
+    if (!m_isSet) return {};
+    return QmlBitcoinUnits::formatForDisplay(ToQmlUnit(m_unit), m_satoshi);
+}
+
 QString BitcoinAmount::localizedDisplayWithUnit() const
 {
     if (!m_isSet) return {};
     const auto unit = ToQmlUnit(m_unit);
-    return QmlBitcoinUnits::formatForDisplay(unit, m_satoshi) + QLatin1Char(' ')
-        + QmlBitcoinUnits::label(unit);
+    return localizedDisplay() + QLatin1Char(' ')
+        + QmlBitcoinUnits::label(unit, m_satoshi);
 }
 
 qint64 BitcoinAmount::displayToSats(const QString& sanitized) const

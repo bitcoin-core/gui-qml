@@ -37,12 +37,14 @@ ColumnLayout {
                 + (amountUnit.visible ? spacing + amountUnit.implicitWidth : 0))
             spacing: 12
 
-            CoreText {
+            BitcoinAmountDisplayLabel {
                 id: amountText
                 objectName: "transactionSummaryAmount"
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignBaseline
+                animationAvailableWidth: Math.max(0, amountRow.parent.width
+                    - (amountUnit.visible ? amountRow.spacing + amountUnit.implicitWidth : 0))
                 text: root.amountValue
                 color: root.amountColor
                 font.family: Theme.text.monoLead.font.family
@@ -53,7 +55,7 @@ ColumnLayout {
                 minimumPixelSize: 22
                 wrap: false
             }
-            CoreText {
+            BitcoinAmountDisplayLabel {
                 id: amountUnit
                 objectName: "transactionSummaryUnit"
                 visible: root.amountUnit.length > 0

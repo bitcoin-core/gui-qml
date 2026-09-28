@@ -164,8 +164,9 @@ class MockBitcoinAmount : public QObject
     Q_PROPERTY(QString display READ display WRITE setDisplay NOTIFY displayChanged)
     Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
     Q_PROPERTY(qint64 satoshi READ satoshi WRITE setSatoshi NOTIFY amountChanged)
-    Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY unitChanged)
+    Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY displayChanged)
     Q_PROPERTY(QString displayWithUnit READ displayWithUnit NOTIFY displayChanged)
+    Q_PROPERTY(QString localizedDisplay READ localizedDisplay NOTIFY displayChanged)
     Q_PROPERTY(QString localizedDisplayWithUnit READ localizedDisplayWithUnit NOTIFY displayChanged)
 
 public:
@@ -229,11 +230,16 @@ public:
         Q_EMIT amountChanged();
     }
     QString displayWithUnit() const { return m_display.isEmpty() ? QString{} : m_display + QStringLiteral(" ") + unitLabel(); }
+    QString localizedDisplay() const
+    {
+        const QString formatted = localizedDisplayWithUnit();
+        return formatted.left(formatted.lastIndexOf(QLatin1Char(' ')));
+    }
     QString localizedDisplayWithUnit() const
     {
         if (m_display.isEmpty()) return {};
         const QLocale locale;
-        if (m_unit == SAT) return locale.toString(satoshi()) + QStringLiteral(" sat");
+        if (m_unit == SAT) return locale.toString(satoshi()) + QLatin1Char(' ') + unitLabel();
         const QStringList parts = m_display.split(QLatin1Char('.'));
         QString formatted = locale.toString(parts.first().toLongLong());
         if (parts.size() > 1) formatted += locale.decimalPoint() + parts.at(1);
@@ -1373,7 +1379,7 @@ public:
         const bool was_valid = customFeeRateValid();
         if (m_custom_fee_rate == value) return;
         m_custom_fee_rate = value;
-        m_custom_fee_estimate = customFeeRateValid() ? QStringLiteral("0.00000400 ₿") : QString{};
+        m_custom_fee_estimate = customFeeRateValid() ? QStringLiteral("0.00000400 BTC") : QString{};
         ++m_fee_estimate_revision;
         Q_EMIT customFeeRateChanged();
         if (was_valid != customFeeRateValid()) {
@@ -1613,7 +1619,7 @@ private:
         }
     }
 
-    QHash<int, QString> m_fee_estimates{{1, QStringLiteral("0.00000750 ₿")}, {2, QStringLiteral("0.00000500 ₿")}, {6, QStringLiteral("0.00000250 ₿")}};
+    QHash<int, QString> m_fee_estimates{{1, QStringLiteral("0.00000750 BTC")}, {2, QStringLiteral("0.00000500 BTC")}, {6, QStringLiteral("0.00000250 BTC")}};
     bool m_custom_fee_enabled{false};
     QString m_custom_fee_rate;
     QString m_custom_fee_estimate;
@@ -3074,6 +3080,7 @@ public:
         BalanceRole,
         KeySchemeKindRole,
         WalletSectionRole,
+        BalanceSatoshiRole,
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -3091,6 +3098,7 @@ public:
         if (role == LoadStateRole) return m_wallet_load_states.at(index.row());
         if (role == ErrorMessageRole) return QString{};
         if (role == BalanceRole) return QString{};
+        if (role == BalanceSatoshiRole) return qint64{0};
         if (role == WalletSectionRole) return m_wallet_load_states.at(index.row()) == 1 ? QStringLiteral("open") : QStringLiteral("closed");
         if (role == KeySchemeKindRole) return 0;
         return {};
@@ -3107,6 +3115,7 @@ public:
             {BalanceRole, "balance"},
             {KeySchemeKindRole, "keySchemeKind"},
             {WalletSectionRole, "walletSection"},
+            {BalanceSatoshiRole, "balanceSatoshi"},
         };
     }
 
@@ -3195,9 +3204,9 @@ public:
     {
         Q_UNUSED(targetBlocks);
         m_old_txid = txid;
-        m_old_fee = QStringLiteral("0.00000500 ₿");
-        m_new_fee = QStringLiteral("0.00001000 ₿");
-        m_fee_increase = QStringLiteral("0.00000500 ₿");
+        m_old_fee = QStringLiteral("0.00000500 BTC");
+        m_new_fee = QStringLiteral("0.00001000 BTC");
+        m_fee_increase = QStringLiteral("0.00000500 BTC");
         setState(NeedsConfirmation);
         Q_EMIT resultChanged();
     }

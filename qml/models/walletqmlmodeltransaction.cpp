@@ -46,7 +46,7 @@ QString WalletQmlModelTransaction::formatWithUnit(CAmount value, int display_uni
 {
     const QmlBitcoinUnits::Unit unit = QmlBitcoinUnits::fromDisplayUnit(display_unit);
     return QmlBitcoinUnits::formatForDisplay(unit, value) + QLatin1Char(' ')
-        + QmlBitcoinUnits::label(unit);
+        + QmlBitcoinUnits::label(unit, value);
 }
 
 QString WalletQmlModelTransaction::amount() const

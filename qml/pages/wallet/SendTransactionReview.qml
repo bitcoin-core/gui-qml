@@ -224,7 +224,7 @@ Page {
                                 surfaceColor: Theme.color.neutral1
                                 statusText: qsTr("Payment request recipient")
                             }
-                            trailingItem: CoreText {
+                            trailingItem: BitcoinAmountDisplayLabel {
                                 objectName: "sendTransactionReviewRecipient" + index + "Amount"
                                 text: modelData.amount
                                 font: Theme.text.monoDescription.font
@@ -262,6 +262,7 @@ Page {
                 Layout.fillWidth: true
                 ValueRow {
                     objectName: "sendTransactionReviewFee"
+                    amountValue: true
                     Layout.fillWidth: true
                     title: qsTr("Total fees")
                     value: root.transaction ? root.transaction.fee : ""
@@ -269,6 +270,7 @@ Page {
                 }
                 ValueRow {
                     objectName: "sendTransactionReviewTotal"
+                    amountValue: true
                     Layout.fillWidth: true
                     title: qsTr("Total amount")
                     value: root.transaction ? root.transaction.total : ""

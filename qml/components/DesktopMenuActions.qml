@@ -43,6 +43,7 @@ QtObject {
     signal redoRequested()
     signal copyRequested()
     signal pasteRequested()
+    signal toggleDisplayUnitRequested()
     signal minimizeRequested()
     signal zoomRequested()
     signal mainWindowRequested()
@@ -135,6 +136,12 @@ QtObject {
         shortcut: StandardKey.Paste
         enabled: root.commandEnabled && root.canPaste
         onTriggered: root.pasteRequested()
+    }
+    readonly property MenuCommand toggleDisplayUnit: MenuCommand {
+        text: qsTr("Toggle display unit")
+        shortcut: qsTr("Ctrl+B")
+        enabled: root.commandEnabled
+        onTriggered: root.toggleDisplayUnitRequested()
     }
     readonly property MenuCommand minimize: MenuCommand {
         text: qsTr("&Minimize")

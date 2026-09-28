@@ -5,11 +5,13 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../controls"
 
 Rectangle {
     id: root
     property var entry: ({})
+    property int displayUnit: optionsModel.displayUnit
     property string walletName: qsTr("Your wallet")
     property color accentColor: Theme.color.purple
     property bool input: false
@@ -29,8 +31,14 @@ Rectangle {
         : entry.kind === "data" ? qsTr("Data output")
         : entry.ownership === "wallet" ? (entry.isChange ? qsTr("Change · %1").arg(walletName) : walletName)
         : input ? qsTr("External input") : qsTr("Recipient"))
-    readonly property string amountText: entry.amountKnown ? (entry.amount || String(entry.amountSat) + " " + qsTr("sats")) : qsTr("Unknown amount")
+    readonly property string amountText: entry.amountKnown ? nodeAmount.localizedDisplayWithUnit : qsTr("Unknown amount")
     signal paymentRequestRequested(string requestId)
+
+    BitcoinAmount {
+        id: nodeAmount
+        unit: root.displayUnit
+        satoshi: root.entry.amountKnown ? root.entry.amountSat : 0
+    }
 
     color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.2)
     border.width: 2
@@ -59,13 +67,18 @@ Rectangle {
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
             }
-            CoreText {
+            BitcoinAmountDisplayLabel {
+                objectName: "transactionFlowAmountWide"
+                displayUnit: root.displayUnit
                 visible: !root.compact
+                animationAvailableWidth: Math.max(0, parent.width - parent.spacing)
                 text: root.amountText
                 font: Theme.text.monoCaption.font
             }
         }
-        CoreText {
+        BitcoinAmountDisplayLabel {
+            objectName: "transactionFlowAmountCompact"
+            displayUnit: root.displayUnit
             visible: root.compact
             Layout.fillWidth: true
             text: root.amountText

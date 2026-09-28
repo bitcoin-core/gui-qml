@@ -318,9 +318,9 @@ ColumnLayout {
                             text: qsTr("Locked from automatic coin selection")
                         }
                     }
-                    CoreText {
+                    BitcoinAmountDisplayLabel {
                         Layout.preferredWidth: Math.min(190, implicitWidth); Layout.alignment: Qt.AlignVCenter
-                        text: rowAmount.displayWithUnit; horizontalAlignment: Text.AlignRight
+                        amount: rowAmount.localizedDisplay; unit: rowAmount.unitLabel; horizontalAlignment: Text.AlignRight
                         font: Theme.text.monoDescription.font; wrap: false
                     }
                 }
@@ -341,11 +341,11 @@ ColumnLayout {
         isOnSurface: root.selectionMode
         showGradientBorder: false
         rowSpacing: 0
-        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.displayWithUnit : "—") : totalAmountText.displayWithUnit; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.displayWithUnit : spendableAmountText.displayWithUnit; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.displayWithUnit; showDivider: root.changeAmount > 0; dividerColor: Theme.color.neutral3 }
-        ValueRow { Layout.fillWidth: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.displayWithUnit : "—"; showDivider: false }
-        ValueRow { Layout.fillWidth: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.displayWithUnit; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
+        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
+        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.neutral3 }
+        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
     }
 
     RowLayout {
@@ -403,7 +403,7 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: 12
             spacing: 8
-            CoreText { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); font: Theme.text.description.font; horizontalAlignment: Text.AlignLeft }
+            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); font: Theme.text.description.font; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
                 minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0

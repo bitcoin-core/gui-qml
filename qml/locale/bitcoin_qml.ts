@@ -97,14 +97,6 @@
     </message>
 </context>
 <context>
-    <name>BitcoinAmountDisplayField</name>
-    <message>
-        <location filename="../components/BitcoinAmountDisplayField.qml" line="14"/>
-        <source>Amount</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>BitcoinAmountInputField</name>
     <message>
         <location filename="../components/BitcoinAmountInputField.qml" line="17"/>
@@ -2780,6 +2772,16 @@ If you find it useful, please contribute.
     <message>
         <location filename="../components/DesktopMenuActions.qml" line="134"/>
         <source>&amp;Paste</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="141"/>
+        <source>Toggle display unit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../components/DesktopMenuActions.qml" line="142"/>
+        <source>Ctrl+B</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

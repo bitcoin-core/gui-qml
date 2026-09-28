@@ -89,6 +89,10 @@
         <file>controls/CoreCheckBox.qml</file>
         <file>controls/CheckBox.qml</file>
         <file>controls/CoreText.qml</file>
+        <file>controls/BitcoinAmountDisplayLabelBase.qml</file>
+        <file>controls/BitcoinAmountDisplayLabel.qml</file>
+        <file>controls/BitcoinAmountDigitBase.qml</file>
+        <file>controls/AmountDisplayLayout.js</file>
         <file>controls/CoreTextField.qml</file>
         <file>controls/EditableKeyValueRow.qml</file>
         <file>controls/ExternalLink.qml</file>

@@ -74,6 +74,217 @@ TestCase {
     }
 
     Component {
+        id: amountDisplayComponent
+        BitcoinAmountDisplayLabel {
+            property string amountOverride: ""
+            width: 200
+            text: amountOverride.length ? amountOverride
+                : optionsModel.displayUnit === BitcoinAmount.BTC ? "1.2 BTC" : "12345678 sats"
+        }
+    }
+
+    Component {
+        id: alignedAmountDisplayComponent
+        BitcoinAmountDisplayLabel {
+            property bool intrinsicSizing: false
+            width: intrinsicSizing ? implicitWidth : 280
+            anchors.right: parent.right
+            amount: optionsModel.displayUnit === BitcoinAmount.BTC ? "0.00012300" : "12,300"
+            unit: optionsModel.displayUnit === BitcoinAmount.BTC ? "BTC" : "sat"
+        }
+    }
+
+    function test_amountDisplayLabel_unit_keeps_alignment_data() {
+        return [
+            {tag: "left", alignment: Text.AlignLeft, intrinsic: false},
+            {tag: "center", alignment: Text.AlignHCenter, intrinsic: false},
+            {tag: "right", alignment: Text.AlignRight, intrinsic: false},
+            {tag: "right_intrinsic", alignment: Text.AlignRight, intrinsic: true}
+        ]
+    }
+
+    function test_amountDisplayLabel_unit_keeps_alignment(data) {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(alignedAmountDisplayComponent, host,
+            {horizontalAlignment: data.alignment, intrinsicSizing: data.intrinsic})
+        wait(0)
+        compare(label.text, "0.00012300 BTC")
+        const before = label.layout(label.text)
+        const startX = label.mapToItem(host, before.units[0].x
+            + label.alignmentFactor * (label.width - before.width), 0).x
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        const outgoing = findObject(label, "amountUnit_BTC")
+        const incoming = findObject(label, "amountUnit_sat")
+        verify(outgoing !== null && incoming !== null)
+        verify(!label.transitionCells.some(cell => cell.glyph.includes("BTC") || cell.glyph.includes("sat")))
+        wait(60)
+        verify(outgoing.opacity > 0 && outgoing.opacity < 1)
+        verify(incoming.opacity > 0 && incoming.opacity < 1)
+        verify(Math.abs(outgoing.mapToItem(host, 0, 0).x - startX) < 1)
+        wait(40)
+        verify(Math.abs(outgoing.mapToItem(host, 0, 0).x - startX) < 1)
+        compare(label.horizontalAlignment, data.alignment)
+        tryCompare(label, "animating", false)
+        compare(label.text, "12,300 sat")
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    Component {
+        id: animatedSummaryComponent
+        TransactionSummary {
+            width: 600
+            amount: optionsModel.displayUnit === BitcoinAmount.BTC ? "0.00012300 BTC" : "12,300 sats"
+        }
+    }
+
+    function test_summary_animates_both_directions() {
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        const summary = createTemporaryObject(animatedSummaryComponent, host)
+        verify(waitForItemPolished(summary))
+        const label = findObject(summary, "transactionSummaryAmount")
+        for (const unit of [BitcoinAmount.BTC, BitcoinAmount.SAT]) {
+            optionsModel.displayUnit = unit
+            tryCompare(label, "animating", true)
+            tryCompare(label, "animating", false)
+            verify(waitForItemPolished(summary))
+        }
+    }
+
+    function test_amountDisplayLabel_animates_unit_switch_only() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        verify(label !== null)
+        compare(label.animating, false)
+        label.amountOverride = "2.4 BTC"
+        wait(0)
+        compare(label.animating, false)
+        compare(label.displayText, "2.4 BTC")
+        label.amountOverride = ""
+        wait(0)
+
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        compare(label.animationText, "12345678 sats")
+        tryCompare(label, "animating", false)
+        compare(label.displayText, "12345678 sats")
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_preserves_old_text_until_animation_start() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        const staticText = findObject(label, "amountStaticText")
+        compare(staticText.visible, true)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        // The new formatted value must never flash before the wheels start.
+        compare(staticText.visible, true)
+        compare(staticText.text, "1.2 BTC")
+        tryCompare(label, "animationText", "12345678 sats")
+        compare(staticText.visible, false)
+        tryCompare(label, "animating", false)
+        compare(staticText.text, "12345678 sats")
+        compare(staticText.visible, true)
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_rolls_changed_columns_together() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host, {amountOverride: "1,209"})
+        label.amountOverride = "1,210"
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        const ones = findObject(label, "amountColumn_d0")
+        const tens = findObject(label, "amountColumn_d1")
+        const hundreds = findObject(label, "amountColumn_d2")
+        compare(ones.steps, 1) // 9 rolls forward to 0, not back through eight digits.
+        compare(tens.steps, 1)
+        compare(hundreds.steps, 0)
+        wait(80)
+        compare(ones.turn, tens.turn)
+        verify(ones.offset < 0)
+        compare(hundreds.offset, 0)
+        compare(hundreds.opacity, 1)
+        verify(ones.blurAmount > 0)
+        tryCompare(label, "animating", false)
+
+        label.amountOverride = "1,209"
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        tryCompare(label, "animating", true)
+        compare(label.direction, -1)
+        compare(findObject(label, "amountColumn_d0").steps, 1)
+        wait(80)
+        verify(findObject(label, "amountColumn_d0").offset > 0)
+        tryCompare(label, "animating", false)
+    }
+
+    function test_amountDisplayLabel_grows_and_shrinks_by_place_value() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host, {amountOverride: "9"})
+        label.amountOverride = "1,000"
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        compare(findObject(label, "amountColumn_d0").steps, 1)
+        verify(findObject(label, "amountColumn_d3").modelData.arriving)
+        verify(label.toWidth > label.fromWidth)
+        wait(80)
+        verify(label.implicitWidth > label.fromWidth && label.implicitWidth < label.toWidth)
+        tryCompare(label, "animating", false)
+        label.amountOverride = "9"
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        tryCompare(label, "animating", true)
+        verify(findObject(label, "amountColumn_d3").modelData.leaving)
+        verify(label.toWidth < label.fromWidth)
+        tryCompare(label, "animating", false)
+    }
+
+    function test_amountDisplayLabel_interrupts_without_resetting_positions() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host, {amountOverride: "12345678"})
+        label.amountOverride = "87654321"
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "animating", true)
+        wait(110)
+        const currentWidth = label.implicitWidth
+        label.amountOverride = "12345678"
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        tryCompare(label, "animationText", "12345678")
+        compare(label.fromWidth, currentWidth)
+        verify(label.transitionCells.some(cell => Math.abs(cell.fromOffset) > 0))
+        tryCompare(label, "animating", false)
+        compare(label.displayText, "12345678")
+        compare(label.transitionCells.length, 0)
+    }
+
+    function test_amountDisplayLabel_preserves_locale_digits_and_separators() {
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        label.numberLocale = Qt.locale("de_DE")
+        const german = label.layout("₿ 1.234,56")
+        compare(german.cells.find(cell => cell.key === "d0").glyph, "4")
+        compare(german.cells.find(cell => cell.key === "decimal").glyph, ",")
+        compare(german.cells.find(cell => cell.key === "f2").glyph, "6")
+        label.numberLocale = Qt.locale("ar_EG")
+        const arabic = label.layout("١٬٢٣٤٫٥٦")
+        compare(arabic.cells.find(cell => cell.key === "d0").digit, 4)
+        compare(arabic.cells.find(cell => cell.key === "f2").glyph, "٦")
+    }
+
+    function test_amountDisplayLabel_skips_fitted_or_disabled_animation() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host, {width: 20})
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        wait(0)
+        compare(label.animating, false)
+        compare(label.displayText, "12345678 sats")
+        label.width = 200
+        label.animateUnitChanges = false
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        wait(0)
+        compare(label.animating, false)
+        compare(label.displayText, "1.2 BTC")
+    }
+
+    Component {
         id: detailsComponent
         AddressDetails {
             width: 480

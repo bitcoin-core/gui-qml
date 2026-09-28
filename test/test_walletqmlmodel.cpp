@@ -1021,10 +1021,10 @@ void WalletQmlModelTests::scheduleFeeEstimates_populatesFormattedEstimates()
                                                   {10, false, false, std::nullopt, 1},
                                               });
     QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
-    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000100 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000600 ₿"));
-    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000200 ₿"));
+    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000100 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000600 BTC"));
+    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000200 BTC"));
 }
 
 void WalletQmlModelTests::scheduleFeeEstimates_fallsBackWhenNetworkFeeEstimatesUnavailable()
@@ -1061,13 +1061,13 @@ void WalletQmlModelTests::scheduleFeeEstimates_fallsBackWhenNetworkFeeEstimatesU
 
     model->scheduleFeeEstimates();
 
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 BTC"), FEE_ESTIMATE_TIMEOUT_MS);
     QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
     QTRY_VERIFY_WITH_TIMEOUT(fallback_calls.Size() == 3, FEE_ESTIMATE_TIMEOUT_MS);
-    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000750 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000250 ₿"));
-    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000500 ₿"));
+    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000750 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000250 BTC"));
+    QCOMPARE(model->estimatedFee(), QStringLiteral("0.00000500 BTC"));
     CompareFeeEstimateCalls(fallback_calls.Snapshot(), {
                                                            {0, false, false, CAmount{3000}, 1},
                                                            {0, false, false, CAmount{2000}, 1},
@@ -1108,10 +1108,10 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesStaticRegtestFeeOverride()
 
     model->scheduleFeeEstimates();
 
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000250 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
-    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000250 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000250 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000250 ₿"));
+    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000250 BTC"), FEE_ESTIMATE_TIMEOUT_MS);
+    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000250 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000250 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00000250 BTC"));
     CompareFeeEstimateCalls(calls.Snapshot(), {
                                                   {0, false, false, CAmount{wallet::DEFAULT_TRANSACTION_MINFEE}, 1},
                                                   {0, false, false, CAmount{wallet::DEFAULT_TRANSACTION_MINFEE}, 1},
@@ -1151,7 +1151,7 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
     model->setCustomFeeRate(QStringLiteral("2"));
     model->scheduleFeeEstimates();
 
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFee(), QStringLiteral("0.00000500 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFee(), QStringLiteral("0.00000500 BTC"), FEE_ESTIMATE_TIMEOUT_MS);
     const auto recorded_calls{calls.Snapshot()};
     QCOMPARE(recorded_calls.size(), 4U);
     for (const FeeEstimateCall& call : recorded_calls) {
@@ -1582,9 +1582,9 @@ void WalletQmlModelTests::scheduleFeeEstimates_debouncesRapidRestarts()
     QTRY_COMPARE_WITH_TIMEOUT(wallet->calls.createTransaction.load(), 3, FEE_ESTIMATE_TIMEOUT_MS);
     QVERIFY(!saw_sign_true.load());
     QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
-    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000250 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 ₿"));
-    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00001500 ₿"));
+    QCOMPARE(model->estimatedFeeForTarget(2), QStringLiteral("0.00000250 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(6), QStringLiteral("0.00000500 BTC"));
+    QCOMPARE(model->estimatedFeeForTarget(10), QStringLiteral("0.00001500 BTC"));
 }
 
 void WalletQmlModelTests::scheduleFeeEstimates_invalidatesStalePreviewState()
@@ -1644,7 +1644,7 @@ void WalletQmlModelTests::scheduleFeeEstimates_invalidatesStalePreviewState()
     QVERIFY(!model->sendAmountExhaustsBalance());
 
     release_fresh_request.release();
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 ₿"), FEE_ESTIMATE_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFeeForTarget(6), QStringLiteral("0.00000200 BTC"), FEE_ESTIMATE_TIMEOUT_MS);
     QTRY_VERIFY_WITH_TIMEOUT(!model->feeEstimatePending(), FEE_ESTIMATE_TIMEOUT_MS);
     QVERIFY(model->sendAmountExhaustsBalance());
     QVERIFY(wallet->calls.createTransaction.load() >= 6);

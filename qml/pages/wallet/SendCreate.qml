@@ -787,11 +787,27 @@ PageStack {
                             Layout.fillWidth: true; spacing: 6
                             //: Main heading of the transaction creation form.
                             CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); font: Theme.text.headline.font; horizontalAlignment: Text.AlignLeft }
-                            CoreText {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                font: Theme.text.description.font; color: Theme.color.neutral7; horizontalAlignment: Text.AlignLeft
+                                spacing: 4
                                 //: Available wallet balance excludes locked coins.
-                                text: qsTr("Available %1").arg(availableAmount.displayWithUnit)
+                                CoreText {
+                                    objectName: "sendAvailableCaption"
+                                    text: qsTr("Available")
+                                    font: Theme.text.description.font
+                                    color: Theme.color.neutral7
+                                    horizontalAlignment: Text.AlignLeft
+                                    Layout.alignment: Qt.AlignBaseline
+                                }
+                                BitcoinAmountDisplayLabel {
+                                    objectName: "sendAvailableAmount"
+                                    amount: availableAmount.localizedDisplay
+                                    unit: availableAmount.unitLabel
+                                    font: Theme.text.description.font
+                                    color: Theme.color.neutral7
+                                    horizontalAlignment: Text.AlignLeft
+                                    Layout.alignment: Qt.AlignBaseline
+                                }
                                 BitcoinAmount { id: availableAmount; satoshi: root.wallet ? (root.wallet.coinsListModel.coinCount, root.wallet.availableSendBalanceSatoshi) : 0; unit: optionsModel.displayUnit }
                             }
                         }
@@ -888,7 +904,7 @@ PageStack {
                                                             font: Theme.text.subheading.font
                                                             text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
                                                         }
-                                                        CoreText { visible: !recipientCard.expanded; text: recipientCard.recipientObject.amount.displayWithUnit; font: Theme.text.monoDescription.font }
+                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; font: Theme.text.monoDescription.font }
                                                         Icon {
                                                             source: "image://images/caret-right"
                                                             rotation: recipientCard.expanded ? 90 : 0
@@ -1018,8 +1034,8 @@ PageStack {
                                 title: qsTr("Summary")
                                 BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
                                 BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
-                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.displayWithUnit : "—"; valueTextStyle: Theme.text.monoDescription }
-                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.displayWithUnit : recipientsTotalAmount.displayWithUnit; valueTextStyle: Theme.text.monoBody }
+                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
+                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
                             }
 
                             CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.red }

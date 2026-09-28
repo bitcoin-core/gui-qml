@@ -110,6 +110,12 @@ QString QmlBitcoinUnits::label(Unit unit)
     assert(false);
 }
 
+QString QmlBitcoinUnits::label(Unit unit, CAmount amount)
+{
+    if (unit == Unit::SAT) return amount == 1 || amount == -1 ? QStringLiteral("sat") : QStringLiteral("sats");
+    return label(unit);
+}
+
 QString QmlBitcoinUnits::displayLabel(Unit unit, CAmount amount)
 {
     switch (unit) {
@@ -117,7 +123,7 @@ QString QmlBitcoinUnits::displayLabel(Unit unit, CAmount amount)
     case Unit::mBTC: return QStringLiteral("mBTC");
     case Unit::uBTC: return QStringLiteral("bits");
     case Unit::SAT:
-        return qAbs(amount) == 1 ? QStringLiteral("sat") : QStringLiteral("sats");
+        return label(unit, amount);
     }
     assert(false);
 }
