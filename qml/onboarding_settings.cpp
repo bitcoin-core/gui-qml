@@ -825,11 +825,11 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         return status;
     }
 
-    // Capture chooser state before a saved GUI datadir is soft-set as
-    // -datadir. The effective reset value is resolved separately after config
-    // and settings have been read.
+    // Capture explicit chooser requests before config or saved GUI settings
+    // supply -datadir. Check directory availability only after resolving the
+    // profile, since bitcoin.conf can redirect away from the default directory.
     const bool force_data_dir_chooser{
-        QmlDataDir::ShouldShowDataDirChooser(preview_args)
+        QmlDataDir::IsDataDirChooserRequested(preview_args)
     };
     const bool explicit_datadir = HasExplicitDataDirArg(preview_args);
     QString selected_data_dir;
@@ -882,6 +882,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     const bool force_show_onboarding{
         preview_args.GetBoolArg("-resetguisettings", false) ||
         force_data_dir_chooser ||
+        !QFileInfo(status.active_data_dir).isDir() ||
         (!explicit_datadir && ReadResolvedGuiReset(preview_args))
     };
     status.settings_enabled = profile_read.settings_enabled;
