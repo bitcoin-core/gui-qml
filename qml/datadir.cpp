@@ -255,18 +255,12 @@ QString ValidateExplicitDataDir(const ArgsManager& args)
         .arg(QString::fromStdString(args.GetArg("-datadir", "")));
 }
 
-bool ShouldShowDataDirChooser(const ArgsManager& args)
+bool IsDataDirChooserRequested(const ArgsManager& args)
 {
     if (HasExplicitDataDirArg(args)) return false;
 
     QSettings settings;
-    const QString data_dir = ReadGuiDataDir();
-    const QString validation_error = IsDefaultDataDir(data_dir) ? QString{} : ValidateCustomDataDir(data_dir);
-    const QFileInfo data_dir_info(data_dir);
-    return !validation_error.isEmpty() ||
-           !data_dir_info.exists() ||
-           !data_dir_info.isDir() ||
-           args.GetBoolArg("-choosedatadir", false) ||
+    return args.GetBoolArg("-choosedatadir", false) ||
            args.GetBoolArg("-resetguisettings", false) ||
            settings.value(RESET_GUI_SETTINGS_KEY, false).toBool() ||
            QmlLegacySettings::ReadLegacyGuiReset();

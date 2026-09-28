@@ -108,6 +108,7 @@ private Q_SLOTS:
     void resetGuiSettingsPreservesBitcoinConfOverrides();
     void qmlOnboardedProfileSkipsPreInitOnboarding();
     void qmlOnboardedCommandLineOverrideShowsPreInitOnboarding();
+    void qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding_data();
     void qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding();
     void configuredDatadirPreviewKeepsConfigSource();
     void configuredDatadirApplyDoesNotPersistGuiDataDir();
@@ -1174,11 +1175,15 @@ void OptionsModelTests::guiDataDirChooserShowsForMissingConfiguredDir()
     settings.setValue(SettingsKeys::DATA_DIR, missing_data_dir);
     QVERIFY(!QFileInfo::exists(missing_data_dir));
 
-    ArgsManager args;
-    QVERIFY(QmlDataDir::ShouldShowDataDirChooser(args));
+    const auto status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(TestArgv(), /*can_listen_ipc=*/false)};
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QVERIFY(status.should_show_onboarding);
+    QCOMPARE(status.active_data_dir, missing_data_dir);
 
-    args.ForceSetArg("-datadir", QDir(temp_dir.path()).filePath("explicit-data-dir").toStdString());
-    QVERIFY(!QmlDataDir::ShouldShowDataDirChooser(args));
+    const auto explicit_status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(
+        TestArgvWithDataDir(QDir(temp_dir.path()).filePath("explicit-data-dir")), /*can_listen_ipc=*/false)};
+    QVERIFY(!explicit_status.ok);
+    QVERIFY(explicit_status.error.contains(QStringLiteral("does not exist")));
 }
 
 void OptionsModelTests::guiDataDirChooserShowsForUnwritableConfiguredDir()
@@ -1198,15 +1203,12 @@ void OptionsModelTests::guiDataDirChooserShowsForUnwritableConfiguredDir()
         QSKIP("Cannot make temporary data directory unwritable on this platform.");
     }
 
-    ArgsManager args;
-    const bool should_show = QmlDataDir::ShouldShowDataDirChooser(args);
-
-    args.ForceSetArg("-datadir", QDir(temp_dir.path()).filePath("explicit-data-dir").toStdString());
-    const bool explicit_datadir_should_show = QmlDataDir::ShouldShowDataDirChooser(args);
+    const auto status{QmlOnboardingSettings::ResolveOnboardingStartupStatus(TestArgv(), /*can_listen_ipc=*/false)};
 
     QVERIFY(QFile(data_dir).setPermissions(original_permissions));
-    QVERIFY(should_show);
-    QVERIFY(!explicit_datadir_should_show);
+    QVERIFY2(status.ok, qPrintable(status.error));
+    QVERIFY(status.should_show_onboarding);
+    QCOMPARE(status.active_data_dir, data_dir);
 }
 
 void OptionsModelTests::guiDataDirChooserShowsForUnreadableConfiguredDir()
@@ -1990,9 +1992,55 @@ void OptionsModelTests::qmlOnboardedCommandLineOverrideShowsPreInitOnboarding()
     QCOMPARE(status.active_data_dir, data_dir.path());
 }
 
+void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding_data()
+{
+    QTest::addColumn<QString>("default_dir_state");
+    QTest::addColumn<QString>("request");
+    for (const QString& request : {QString{}, QStringLiteral("-choosedatadir"), QStringLiteral("-resetguisettings")}) {
+        QTest::newRow(qPrintable(QStringLiteral("configured-profile") + request)) << QString{} << request;
+    }
+#ifndef Q_OS_WIN
+    for (const QString& state : {QStringLiteral("missing"), QStringLiteral("file"), QStringLiteral("directory")}) {
+        for (const QString& request : {QString{}, QStringLiteral("-choosedatadir"), QStringLiteral("-resetguisettings")}) {
+            QTest::newRow(qPrintable(state + request)) << state << request;
+        }
+    }
+#endif
+}
+
 void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding()
 {
+    QFETCH(QString, default_dir_state);
+    QFETCH(QString, request);
     SavedGuiDataDirSettings saved_settings;
+    SavedNamedSettings legacy_settings{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt")};
+    QTemporaryDir profile_home;
+    QVERIFY(profile_home.isValid());
+#ifndef Q_OS_WIN
+    const bool had_home{qEnvironmentVariableIsSet("HOME")};
+    const QByteArray original_home{qgetenv("HOME")};
+    [[maybe_unused]] const auto restore_home = qScopeGuard([&] {
+        if (had_home) {
+            qputenv("HOME", original_home);
+        } else {
+            qunsetenv("HOME");
+        }
+    });
+    if (!default_dir_state.isEmpty()) {
+        QVERIFY(qputenv("HOME", profile_home.path().toUtf8()));
+        const QString default_dir{QmlDataDir::DefaultDataDirString()};
+        if (default_dir_state == QStringLiteral("directory")) {
+            QVERIFY(QDir().mkpath(default_dir));
+        } else if (default_dir_state == QStringLiteral("file")) {
+            QVERIFY(QDir().mkpath(QFileInfo(default_dir).absolutePath()));
+            QFile blocked_dir{default_dir};
+            QVERIFY(blocked_dir.open(QIODevice::WriteOnly));
+        }
+    }
+#endif
+    QSettings settings;
+    settings.setValue(SettingsKeys::DATA_DIR, QmlDataDir::DefaultDataDirString());
+    settings.remove(QStringLiteral("fReset"));
     QTemporaryDir temp_dir;
     QVERIFY(temp_dir.isValid());
     QTemporaryDir configured_data_dir;
@@ -2004,7 +2052,7 @@ void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboardi
     QVERIFY(conf.write(QStringLiteral("regtest=1\ndatadir=%1\n[regtest]\nserver=1\n").arg(configured_data_dir.path()).toUtf8()) > 0);
     conf.close();
 
-    const std::vector<std::string> argv{
+    std::vector<std::string> argv{
         std::string{"bitcoinqml"},
         std::string{"-regtest"},
         "-conf=" + conf_path.toStdString(),
@@ -2020,14 +2068,23 @@ void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboardi
     QString write_error;
     QVERIFY2(QmlOnboardingSettings::MarkQmlOnboarded(write_args, &write_error), qPrintable(write_error));
 
+    if (!request.isEmpty()) argv.push_back(request.toStdString());
+
     const QmlOnboardingSettings::OnboardingStartupStatus status{
         QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, /*can_listen_ipc=*/false)
     };
     QVERIFY2(status.ok, qPrintable(status.error));
-    QVERIFY(status.qml_onboarded);
-    QVERIFY(!status.should_show_onboarding);
+    QCOMPARE(status.qml_onboarded, request.isEmpty());
+    QCOMPARE(status.should_show_onboarding, !request.isEmpty());
     QCOMPARE(status.active_data_dir, configured_data_dir.path());
     QVERIFY(status.data_dir_source == QmlOnboardingSettings::DataDirSource::Config);
+#ifndef Q_OS_WIN
+    if (!default_dir_state.isEmpty()) {
+        const QFileInfo default_dir{QmlDataDir::DefaultDataDirString()};
+        QCOMPARE(default_dir.exists(), default_dir_state != QStringLiteral("missing"));
+        QCOMPARE(default_dir.isDir(), default_dir_state == QStringLiteral("directory"));
+    }
+#endif
 }
 
 void OptionsModelTests::configuredDatadirPreviewKeepsConfigSource()
