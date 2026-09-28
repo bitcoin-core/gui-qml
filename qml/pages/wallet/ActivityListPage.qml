@@ -498,6 +498,7 @@ Page {
         ContextMenuButton {
             objectName: "activityCopyPaymentRequest"
             visible: activityRowMenu.isRequest
+            enabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
             text: qsTr("Copy payment request")
             onTriggered: {
                 const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRowMenu.requestId) : ""

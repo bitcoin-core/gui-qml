@@ -29,6 +29,7 @@ TestCase {
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.receiveRequestReconciliationPending = false
         walletController.closePaymentRequestDetailRequests = 0
     }
 
@@ -388,6 +389,30 @@ TestCase {
         note.editingFinished()
         verify(card.saveFields())
         compare(card.request.noteSelf, "Received, thank you")
+    }
+
+    function test_saved_request_cannot_be_shared_while_payment_scan_is_pending() {
+        const page = createPage()
+        const saved = createRequest(page)
+        const requestId = saved.request.id
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        testWalletModel.receiveRequestReconciliationPending = true
+        verify(page.requestModal.openRequest(requestId))
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
+        verify(!card.sharing)
+        verify(!findChild(card, "requestPaymentQRImage").visible)
+        verify(!findChild(card, "requestPaymentCopyButton").enabled)
+        verify(!findChild(card, "requestPaymentAddressText").interactive)
+        card.copyRequest()
+
+        // The saved unpaid flag can be stale until the scan marks a payment.
+        card.request.paymentReceived = true
+        testWalletModel.receiveRequestReconciliationPending = false
+        verify(!card.sharing)
+        verify(!findChild(card, "requestPaymentQRImage").visible)
+        verify(!findChild(card, "requestPaymentCopyButton").visible)
     }
 
     function test_payment_arrival_preserves_private_note_draft() {

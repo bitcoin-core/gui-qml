@@ -361,6 +361,21 @@ def run_test():
         assert not gui.get_property("requestPaymentAddressText", "interactive")
         assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00001000"
         assert not gui.get_property("requestPaymentReceivedIcon", "dashed")
+        # The payer and receiver use separate wallets. The receiver's original
+        # transaction has no replaced_by_txid metadata after the payer bumps it.
+        replacement = rpc_call(harness.gui_rpc_port, "bumpfee", [txid, {"fee_rate": 20}], wallet=MINER_WALLET_NAME)
+        assert replacement["txid"] != txid
+        wait_until(lambda: replacement["txid"] in rpc_call(harness.gui_rpc_port, "getrawmempool"),
+                   description="replacement in mempool")
+        wait_until(lambda: rpc_call(harness.gui_rpc_port, "gettransaction", [replacement["txid"]],
+                                    wallet=WALLET_NAME)["confirmations"] == 0,
+                   description="replacement visible to receiver")
+        gui.settle()
+        assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00001000"
+        # Confirm the replacement so the payer can spend its change again.
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, mining_address])
+        gui.settle()
+        assert gui.get_property("requestPaymentReceivedSummary", "amount").split()[0] == "0.00001000"
         # A further payment updates the visible total; confirmation notifications
         # must not count either transaction twice.
         rpc_call(harness.gui_rpc_port, "sendtoaddress", [address, 0.00002], wallet=MINER_WALLET_NAME)

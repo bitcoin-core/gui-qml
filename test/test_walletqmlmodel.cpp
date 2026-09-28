@@ -29,6 +29,7 @@
 #include <wallet/types.h>
 
 #include <QFile>
+#include <QElapsedTimer>
 #include <QLocale>
 #include <QScopeGuard>
 #include <QSemaphore>
@@ -198,11 +199,21 @@ public:
     std::function<std::set<interfaces::WalletTx>()> get_wallet_txs_fn;
     std::set<interfaces::WalletTx> getWalletTxs() override { return get_wallet_txs_fn ? get_wallet_txs_fn() : std::set<interfaces::WalletTx>{}; }
     std::map<Txid, interfaces::WalletTxStatus> transaction_statuses;
+    std::map<Txid, bool> transaction_in_mempool;
+    std::map<Txid, interfaces::WalletTx> transaction_details;
+    TransactionChangedFn transaction_changed_fn;
+    interfaces::WalletTx getWalletTx(const Txid& txid) override
+    {
+        const auto it = transaction_details.find(txid);
+        return it == transaction_details.end() ? interfaces::WalletTx{} : it->second;
+    }
     interfaces::WalletTx getWalletTxDetails(const Txid& txid, interfaces::WalletTxStatus& status,
-                                          interfaces::WalletOrderForm&, bool&, int&) override
+                                          interfaces::WalletOrderForm&, bool& in_mempool, int&) override
     {
         status = transaction_statuses[txid];
-        return {};
+        in_mempool = transaction_in_mempool.count(txid) ? transaction_in_mempool[txid] : true;
+        const auto it = transaction_details.find(txid);
+        return it == transaction_details.end() ? interfaces::WalletTx{} : it->second;
     }
 
     bool encrypted{true};
@@ -354,11 +365,21 @@ public:
         return get_address_result;
     }
     std::vector<interfaces::WalletAddress> getAddresses() override { return wallet_addresses; }
-    std::vector<std::string> getAddressReceiveRequests() override { return {}; }
-    bool setAddressReceiveRequest(const CTxDestination&, const std::string& id, const std::string&) override
+    std::map<std::string, std::string> saved_receive_requests;
+    std::vector<std::string> getAddressReceiveRequests() override
+    {
+        std::vector<std::string> requests;
+        for (const auto& [id, blob] : saved_receive_requests) requests.push_back(blob);
+        return requests;
+    }
+    bool setAddressReceiveRequest(const CTxDestination&, const std::string& id, const std::string& blob) override
     {
         ++set_address_receive_request_calls;
         receive_request_ids.push_back(id);
+        if (set_address_receive_request_result) {
+            if (blob.empty()) saved_receive_requests.erase(id);
+            else saved_receive_requests[id] = blob;
+        }
         return set_address_receive_request_result;
     }
     bool set_address_receive_request_result{true};
@@ -448,7 +469,11 @@ public:
     std::unique_ptr<interfaces::Handler> handleShowProgress(ShowProgressFn) override { return MakeNoopHandler(); }
     std::unique_ptr<interfaces::Handler> handleStatusChanged(StatusChangedFn) override { return MakeNoopHandler(); }
     std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn) override { return MakeNoopHandler(); }
-    std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn) override { return MakeNoopHandler(); }
+    std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn fn) override
+    {
+        transaction_changed_fn = std::move(fn);
+        return MakeNoopHandler();
+    }
     std::unique_ptr<interfaces::Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn) override { return MakeNoopHandler(); }
 };
 
@@ -545,6 +570,10 @@ private Q_SLOTS:
     void updateChangesUnpaidPaymentRequestAmount();
     void paymentArrivalLocksRequestAndPreservesNote();
     void paymentRequestTracksActualReceivedAmount();
+    void replacementNotificationRechecksReceiverOriginal();
+    void cancelledPaymentWithoutNotificationClearsReceivedAmount();
+    void reconciliationBatchesActivityRebuilds();
+    void openingRequestRemainsResponsiveDuringLargeHistoryScan();
     void requestDetailEditsPreserveReceiveDraft();
     void setCurrentPaymentRequestAddressEditsExistingRequest();
     void usePaymentRequestAsTemplatePreservesAddressType();
@@ -1654,16 +1683,18 @@ void WalletQmlModelTests::paymentArrivalLocksRequestAndPreservesNote()
     QVERIFY(model->loadPaymentRequestDetail(id));
     QVERIFY(!model->detailPaymentRequest()->paymentReceived());
 
-    // Even a partial unconfirmed payment locks the request; no status/depth
-    // lookup is required. Detect it at save time before queued UI callbacks.
+    // A queued payment notification blocks an edit until its lock is applied.
     CMutableTransaction incoming;
     incoming.vout.emplace_back(1, GetScriptForDestination(request->destination()));
     interfaces::WalletTx payment{};
     payment.tx = MakeTransactionRef(incoming);
     payment.txout_is_mine = {true};
     wallet->get_wallet_txs_fn = [payment] { return std::set<interfaces::WalletTx>{payment}; };
+    wallet->transaction_details[payment.tx->GetHash()] = payment;
+    QVERIFY(wallet->transaction_changed_fn);
+    wallet->transaction_changed_fn(payment.tx->GetHash(), CT_UPDATED);
     QVERIFY(!model->updatePaymentRequest(id, 20000, "Changed", "Changed", ""));
-    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QTRY_VERIFY(model->detailPaymentRequest()->paymentReceived());
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{1});
     QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
     QVERIFY(model->transactionActivityModel()->paymentRequestUri(id).isEmpty());
@@ -1717,6 +1748,8 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
         return std::set<interfaces::WalletTx>{first_payment, second_payment};
     };
 
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->amount()->satoshi(), qint64{10000});
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
@@ -1725,25 +1758,40 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
 
-    // An unconfirmed original with replacement metadata must not contribute
-    // to the total. If it later confirms, the historical marker is ignored.
+    // The receiving wallet has no replacement metadata on the original.
+    wallet->transaction_in_mempool[first_payment.tx->GetHash()] = false;
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{200});
+
+    // A sender-side replacement marker also excludes an unconfirmed original.
+    wallet->transaction_in_mempool[first_payment.tx->GetHash()] = true;
     first_payment.value_map["replaced_by_txid"] = second_payment.tx->GetHash().ToString();
     wallet->get_wallet_txs_fn = [first_payment, second_payment] {
         return std::set<interfaces::WalletTx>{first_payment, second_payment};
     };
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{200});
     QCOMPARE(request->receivedAmountSatoshi(), qint64{200});
     QVERIFY(model->detailPaymentRequest()->paymentReceived());
     QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
     wallet->transaction_statuses[first_payment.tx->GetHash()].depth_in_main_chain = 1;
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{341});
 
     wallet->transaction_statuses[second_payment.tx->GetHash()].is_abandoned = true;
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{141});
     wallet->transaction_statuses[first_payment.tx->GetHash()].depth_in_main_chain = -1;
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
     QVERIFY(model->loadPaymentRequestDetail(id));
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{0});
     QVERIFY(model->detailPaymentRequest()->paymentReceived());
@@ -1751,6 +1799,155 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
 
     model->detailPaymentRequest()->clear();
     QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{0});
+}
+
+void WalletQmlModelTests::replacementNotificationRechecksReceiverOriginal()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(model->commitPaymentRequest());
+    const QString id = model->currentPaymentRequest()->id();
+    const auto script = GetScriptForDestination(model->currentPaymentRequest()->destination());
+    CMutableTransaction original_raw;
+    original_raw.vout.emplace_back(100, script);
+    interfaces::WalletTx original{};
+    original.tx = MakeTransactionRef(original_raw);
+    original.txout_is_mine = {true};
+    wallet->transaction_details[original.tx->GetHash()] = original;
+    wallet->transaction_changed_fn(original.tx->GetHash(), CT_NEW);
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QTRY_COMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{100});
+
+    // The sender bumps the fee. The receiver sees the replacement but gets no
+    // changed notification or replaced_by_txid marker for the original.
+    wallet->transaction_in_mempool[original.tx->GetHash()] = false;
+    CMutableTransaction replacement_raw;
+    replacement_raw.nLockTime = 1;
+    replacement_raw.vout.emplace_back(100, script);
+    interfaces::WalletTx replacement{};
+    replacement.tx = MakeTransactionRef(replacement_raw);
+    replacement.txout_is_mine = {true};
+    wallet->transaction_details[replacement.tx->GetHash()] = replacement;
+    QSignalSpy changed{model.get(), &WalletQmlModel::transactionChanged};
+    wallet->transaction_changed_fn(replacement.tx->GetHash(), CT_NEW);
+    QTRY_COMPARE(changed.size(), 1);
+    QCOMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{100});
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+}
+
+void WalletQmlModelTests::cancelledPaymentWithoutNotificationClearsReceivedAmount()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(model->commitPaymentRequest());
+    const QString id = model->currentPaymentRequest()->id();
+    CMutableTransaction incoming;
+    incoming.vout.emplace_back(100, GetScriptForDestination(model->currentPaymentRequest()->destination()));
+    interfaces::WalletTx payment{};
+    payment.tx = MakeTransactionRef(incoming);
+    payment.txout_is_mine = {true};
+    wallet->transaction_details[payment.tx->GetHash()] = payment;
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    wallet->transaction_changed_fn(payment.tx->GetHash(), CT_NEW);
+    QTRY_COMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{100});
+
+    // A conflicting replacement pays elsewhere. The receiver gets no
+    // notification for its original transaction leaving the mempool.
+    wallet->transaction_in_mempool[payment.tx->GetHash()] = false;
+    QTRY_COMPARE(model->detailPaymentRequest()->receivedAmountSatoshi(), qint64{0});
+    QVERIFY(model->detailPaymentRequest()->paymentReceived());
+    QVERIFY(model->detailPaymentRequest()->qrPayload().isEmpty());
+}
+
+void WalletQmlModelTests::reconciliationBatchesActivityRebuilds()
+{
+    constexpr int REQUEST_COUNT{500};
+    auto [wallet, model] = MakePasswordWalletModel();
+    auto* activity = model->transactionActivityModel();
+    QTRY_VERIFY(!activity->loading());
+    for (int i = 1; i <= REQUEST_COUNT; ++i) {
+        QmlRecentRequestEntry entry;
+        entry.id = i;
+        entry.date = QDateTime::currentDateTime();
+        entry.recipient.address = VALID_MAINNET_ADDRESS.toStdString();
+        wallet->saved_receive_requests[std::to_string(i)] = ReceiveRequestHistoryModel::SerializeEntry(entry);
+    }
+    CMutableTransaction incoming;
+    incoming.vout.emplace_back(100, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
+    interfaces::WalletTx payment{};
+    payment.tx = MakeTransactionRef(incoming);
+    payment.txout_is_mine = {true};
+    QSemaphore scan_gate;
+    std::atomic<bool> scan_started{false};
+    wallet->get_wallet_txs_fn = [&] {
+        scan_started = true;
+        scan_gate.tryAcquire(1, 10'000);
+        return std::set<interfaces::WalletTx>{payment};
+    };
+    model->reloadReceiveRequests();
+    QTRY_VERIFY(scan_started.load());
+    QCOMPARE(activity->requestCount(), REQUEST_COUNT);
+    QVERIFY(activity->paymentRequestUri(QStringLiteral("1")).isEmpty());
+    QSignalSpy rebuilt{activity, &TransactionActivityModel::transactionDetailsChanged};
+    scan_gate.release();
+    QTRY_VERIFY(!model->receiveRequestReconciliationPending());
+    QTRY_VERIFY(model->receiveRequests()->entryById(QStringLiteral("1"))->payment_received);
+    QTRY_COMPARE(rebuilt.size(), 1);
+    QCOMPARE(activity->requestCount(), REQUEST_COUNT);
+    QVERIFY(activity->index(0).data(TransactionActivityModel::PaymentRequestsRole)
+        .toList().first().toMap().value("paymentReceived").toBool());
+    QVERIFY(activity->paymentRequestUri(QStringLiteral("1")).isEmpty());
+}
+
+void WalletQmlModelTests::openingRequestRemainsResponsiveDuringLargeHistoryScan()
+{
+    constexpr int HISTORY_SIZE{10'000};
+    auto wallet = std::make_unique<FakePasswordWallet>();
+    const auto destination = DecodeDestination(VALID_MAINNET_ADDRESS.toStdString());
+    const auto script = GetScriptForDestination(destination);
+    std::set<interfaces::WalletTx> history;
+    for (int i = 0; i < HISTORY_SIZE; ++i) {
+        QmlRecentRequestEntry entry;
+        entry.id = i + 1;
+        entry.date = QDateTime::currentDateTime();
+        entry.recipient.address = VALID_MAINNET_ADDRESS.toStdString();
+        entry.payment_received = true;
+        wallet->saved_receive_requests[std::to_string(entry.id)] = ReceiveRequestHistoryModel::SerializeEntry(entry);
+
+        CMutableTransaction raw;
+        raw.nLockTime = i;
+        raw.vout.emplace_back(1, script);
+        interfaces::WalletTx tx{};
+        tx.tx = MakeTransactionRef(raw);
+        tx.txout_is_mine = {true};
+        history.insert(tx);
+    }
+    QSemaphore scan_gate;
+    std::atomic<bool> scan_started{false};
+    wallet->get_wallet_txs_fn = [&] {
+        scan_started = true;
+        scan_gate.tryAcquire(1, 10'000);
+        return history;
+    };
+    auto* wallet_view = wallet.get();
+    WalletQmlModel model{std::move(wallet)};
+    QTRY_VERIFY(scan_started.load());
+    QVERIFY(model.receiveRequestReconciliationPending());
+    QElapsedTimer timer;
+    timer.start();
+    QVERIFY(model.loadPaymentRequestDetail(QStringLiteral("1")));
+    QVERIFY2(timer.elapsed() < 250, "Opening a saved request blocked on the wallet history scan");
+    scan_gate.release();
+    QTRY_VERIFY_WITH_TIMEOUT(!model.receiveRequestReconciliationPending(), 20'000);
+    QCOMPARE(model.detailPaymentRequest()->receivedAmountSatoshi(), qint64{HISTORY_SIZE});
+
+    std::atomic<int> history_reads{0};
+    wallet_view->get_wallet_txs_fn = [&] {
+        ++history_reads;
+        return history;
+    };
+    timer.restart();
+    QVERIFY(model.updatePaymentRequest(QStringLiteral("1"), 0, {}, {}, QStringLiteral("Private note")));
+    QVERIFY2(timer.elapsed() < 250, "Editing a saved request blocked on wallet history");
+    QCOMPARE(history_reads.load(), 0);
 }
 
 void WalletQmlModelTests::requestDetailEditsPreserveReceiveDraft()

@@ -177,6 +177,7 @@ private:
     QFutureWatcher<Snapshot>* m_watcher{nullptr};
     quint64 m_generation{0}, m_detail_generation{0};
     bool m_scheduled{false}, m_stopped{false}, m_loading{false};
+    bool m_request_rebuild_pending{false};
     QString m_load_error;
 };
 

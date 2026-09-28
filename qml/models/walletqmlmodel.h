@@ -25,6 +25,7 @@
 #include <wallet/coincontrol.h>
 
 #include <map>
+#include <atomic>
 #include <memory>
 #include <optional>
 #include <set>
@@ -32,6 +33,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QStringList>
 #include <QThread>
 #include <QTimer>
@@ -79,6 +81,7 @@ private:
     Q_PROPERTY(PaymentRequest* receivingAddress READ receivingAddress CONSTANT)
     Q_PROPERTY(PaymentRequest* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
+    Q_PROPERTY(bool receiveRequestReconciliationPending READ receiveRequestReconciliationPending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
     Q_PROPERTY(QString estimatedFee READ estimatedFee NOTIFY estimatedFeeChanged)
@@ -140,6 +143,8 @@ public:
     Q_INVOKABLE bool commitReceivingPaymentRequest();
     PaymentRequest* detailPaymentRequest() const { return m_detail_payment_request; }
     ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
+    bool receiveRequestReconciliationPending() const { return m_receive_reconciliation_thread != nullptr || m_receive_reconciliation_applying; }
+    bool receiveRequestReconciliationApplying() const { return m_receive_reconciliation_applying; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
     QString estimatedFee() const;
     CFeeRate dustRelayFee() const;
@@ -257,6 +262,7 @@ Q_SIGNALS:
     void feeEstimatePendingChanged();
     void feeEstimateRevisionChanged();
     void walletIsLoadedChanged();
+    void receiveRequestReconciliationPendingChanged();
     void externalSignerApprovalSucceeded();
     void externalSignerApprovalPartiallySucceeded();
     void externalSignerApprovalFailed(const QString& message, bool signerNotFound);
@@ -294,6 +300,11 @@ private:
     bool savePaymentRequest(PaymentRequest* request);
     void refreshReceiveRequestPayments();
     void recordReceiveRequestPayment(const interfaces::WalletTx& tx);
+    void removeReceiveRequestPayment(const Txid& txid);
+    void markReceiveRequestPayment(const QString& address);
+    void recheckReceiveRequestPayments(const Txid& changed_txid);
+    void pollUnconfirmedReceiveRequestPayments();
+    void updateReceivePaymentPollTimer();
     CAmount receivedPaymentRequestAmount(const QString& address) const;
     void updateReceivedPaymentRequestAmounts();
     bool sendTransactionInternal(std::optional<SecureString> passphrase = std::nullopt);
@@ -319,6 +330,18 @@ private:
     ReceiveRequestHistoryModel* m_receive_requests{nullptr};
     // Derived from wallet transactions, rebuilt on load and replaced per txid on updates.
     std::map<Txid, std::map<QString, CAmount>> m_receive_request_payments;
+    std::map<QString, CAmount> m_receive_request_totals;
+    std::map<QString, std::set<Txid>> m_receive_request_txids_by_address;
+    std::set<Txid> m_receive_request_unconfirmed_txids;
+    QTimer m_receive_payment_poll_timer;
+    QThread* m_receive_payment_poll_thread{nullptr};
+    quint64 m_receive_payment_revision{0};
+    QSet<QString> m_receive_request_addresses;
+    QThread* m_receive_reconciliation_thread{nullptr};
+    bool m_receive_reconciliation_applying{false};
+    bool m_receive_reconciliation_requested{false};
+    std::map<Txid, bool> m_receive_reconciliation_updates;
+    std::atomic<int> m_receive_request_notifications_pending{0};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
     std::unique_ptr<PartiallySignedTransaction> m_current_psbt;

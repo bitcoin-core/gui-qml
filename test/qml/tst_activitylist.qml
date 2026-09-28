@@ -106,6 +106,7 @@ TestCase {
         testWalletModel.lastLoadedPaymentRequestDetailId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.receiveRequestReconciliationPending = false
     }
     function createPage(properties) {
         const page = createTemporaryObject(pageComponent, this, properties || {})
@@ -180,6 +181,19 @@ TestCase {
         }
         tryCompare(menu, "visible", false)
         compare(page.depth, 1)
+    }
+
+    function test_request_copy_waits_for_payment_scan() {
+        testWalletModel.receiveRequestReconciliationPending = true
+        const page = createPage()
+        const item = findChild(page, "activityRequest_invoice")
+        mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
+        const menu = findChild(page, "activityRowContextMenu")
+        tryCompare(menu, "opened", true)
+        const copy = findChild(menu.contentItem, "activityCopyPaymentRequest")
+        verify(!copy.enabled)
+        testWalletModel.receiveRequestReconciliationPending = false
+        tryCompare(copy, "enabled", true)
     }
 
     function test_right_click_delete_request_data() {
@@ -523,6 +537,11 @@ TestCase {
         tryCompare(detailModal, "opened", true)
         compare(page.depth, 2)
         compare(page.currentItem, detail)
+        testTransactionActivityModel.setRows(rows().map(function(activity) {
+            return activity.txid === "batch" ? Object.assign({}, activity, {depth: 6}) : activity
+        }))
+        tryCompare(detail, "depth", 6)
+        compare(detailModal.opened, true)
         detailModal.close()
         tryCompare(detailModal, "visible", false)
         compare(page.currentItem.txid, "batch")

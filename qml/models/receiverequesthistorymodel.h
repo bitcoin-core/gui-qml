@@ -14,6 +14,8 @@
 #include <vector>
 
 #include <QAbstractListModel>
+#include <QHash>
+#include <QSet>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -54,6 +56,7 @@ public:
     // caller can update and re-store them (used to sync a request label with an
     // edited address book label).
     std::vector<QmlRecentRequestEntry> entriesForAddress(const QString& address) const;
+    QSet<QString> requestAddresses() const;
 
     std::optional<QmlRecentRequestEntry> entryById(const QString& request_id) const;
     int64_t maxId() const;
@@ -67,6 +70,9 @@ Q_SIGNALS:
     void countChanged();
 
 private:
+    void rebuildIndex();
+    QHash<int64_t, int> m_row_by_id;
+    QHash<QString, std::vector<int64_t>> m_ids_by_address;
     int indexOfId(int64_t id) const;
     QVariant dataForEntry(const QmlRecentRequestEntry& entry, int role) const;
     QVariantMap entryMap(const QmlRecentRequestEntry& entry) const;

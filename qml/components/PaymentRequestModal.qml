@@ -10,6 +10,7 @@ Popup {
     id: root
     objectName: "paymentRequestModal"
     property var wallet: walletController.selectedWallet
+    property var openedWallet: null
     property real originY: -1
     property bool reducedMotion: false
     property real verticalOffset: 0
@@ -34,6 +35,7 @@ Popup {
         if (!wallet || !wallet.loadPaymentRequestDetail(requestId)) return false
         originY = fromY === undefined ? -1 : fromY
         card.resetFields()
+        openedWallet = wallet
         open()
         return true
     }
@@ -45,6 +47,7 @@ Popup {
             }
         }
         deletedRequestId = ""
+        openedWallet = null
         card.resetFields()
         if (repeatRequestId) {
             const requestId = repeatRequestId
@@ -58,7 +61,12 @@ Popup {
             })
         }
     }
-    onWalletChanged: { repeatRequestId = ""; close() }
+    onWalletChanged: {
+        if (openedWallet && wallet !== openedWallet) {
+            repeatRequestId = ""
+            close()
+        }
+    }
 
     Overlay.modal: Rectangle {
         color: Qt.rgba(0, 0, 0, 0.6)

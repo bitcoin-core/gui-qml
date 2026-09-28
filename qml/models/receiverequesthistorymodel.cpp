@@ -105,10 +105,18 @@ QHash<int, QByteArray> ReceiveRequestHistoryModel::roleNames() const
 
 int ReceiveRequestHistoryModel::indexOfId(int64_t id) const
 {
-    for (size_t i = 0; i < m_entries.size(); ++i) {
-        if (m_entries[i].id == id) return static_cast<int>(i);
+    return m_row_by_id.value(id, -1);
+}
+
+void ReceiveRequestHistoryModel::rebuildIndex()
+{
+    m_row_by_id.clear();
+    m_ids_by_address.clear();
+    for (size_t row = 0; row < m_entries.size(); ++row) {
+        const auto& entry = m_entries[row];
+        m_row_by_id.insert(entry.id, static_cast<int>(row));
+        m_ids_by_address[QString::fromStdString(entry.recipient.address)].push_back(entry.id);
     }
-    return -1;
 }
 
 void ReceiveRequestHistoryModel::setEntries(std::vector<QmlRecentRequestEntry>&& entries)
@@ -122,6 +130,7 @@ void ReceiveRequestHistoryModel::setEntries(std::vector<QmlRecentRequestEntry>&&
                   if (a.date != b.date) return a.date > b.date;
                   return a.id > b.id;
               });
+    rebuildIndex();
     endResetModel();
     Q_EMIT countChanged();
 }
@@ -130,13 +139,16 @@ void ReceiveRequestHistoryModel::prependOrReplace(const QmlRecentRequestEntry& e
 {
     const int existing = indexOfId(entry.id);
     if (existing >= 0) {
+        const bool address_changed = m_entries[existing].recipient.address != entry.recipient.address;
         m_entries[existing] = entry;
+        if (address_changed) rebuildIndex();
         const QModelIndex idx = index(existing);
         Q_EMIT dataChanged(idx, idx);
         return;
     }
     beginInsertRows(QModelIndex(), 0, 0);
     m_entries.insert(m_entries.begin(), entry);
+    rebuildIndex();
     endInsertRows();
     Q_EMIT countChanged();
 }
@@ -150,6 +162,7 @@ bool ReceiveRequestHistoryModel::removeByRequestId(const QString& request_id)
     if (row < 0) return false;
     beginRemoveRows(QModelIndex(), row, row);
     m_entries.erase(m_entries.begin() + row);
+    rebuildIndex();
     endRemoveRows();
     Q_EMIT countChanged();
     return true;
@@ -159,10 +172,8 @@ QVariantList ReceiveRequestHistoryModel::matchingEntriesForAddress(const QString
 {
     QVariantList matches;
     if (address.isEmpty()) return matches;
-    for (const auto& entry : m_entries) {
-        if (QString::fromStdString(entry.recipient.address) == address) {
-            matches.append(entryMap(entry));
-        }
+    for (const int64_t id : m_ids_by_address.value(address)) {
+        matches.append(entryMap(m_entries[indexOfId(id)]));
     }
     return matches;
 }
@@ -171,12 +182,17 @@ std::vector<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entriesForAddress
 {
     std::vector<QmlRecentRequestEntry> matches;
     if (address.isEmpty()) return matches;
-    for (const auto& entry : m_entries) {
-        if (QString::fromStdString(entry.recipient.address) == address) {
-            matches.push_back(entry);
-        }
+    for (const int64_t id : m_ids_by_address.value(address)) {
+        matches.push_back(m_entries[indexOfId(id)]);
     }
     return matches;
+}
+
+QSet<QString> ReceiveRequestHistoryModel::requestAddresses() const
+{
+    QSet<QString> addresses;
+    for (auto it = m_ids_by_address.cbegin(); it != m_ids_by_address.cend(); ++it) addresses.insert(it.key());
+    return addresses;
 }
 
 std::optional<QmlRecentRequestEntry> ReceiveRequestHistoryModel::entryById(const QString& request_id) const

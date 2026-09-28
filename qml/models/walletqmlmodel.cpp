@@ -69,6 +69,53 @@ constexpr unsigned int FEE_RATE_BASIS_VBYTES{1000};
 constexpr std::array<unsigned int, 3> STANDARD_FEE_TARGETS{1, DEFAULT_STANDARD_FEE_TARGET, 6};
 const QRegularExpression CUSTOM_FEE_RATE_PATTERN{QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")};
 
+struct ReceiveRequestPaymentScan {
+    std::map<Txid, std::map<QString, CAmount>> payments;
+    std::map<QString, CAmount> totals;
+    std::map<QString, std::set<Txid>> txids_by_address;
+    std::set<Txid> unconfirmed_txids;
+    std::set<QString> observed_addresses;
+};
+
+struct UnconfirmedReceiveRequestPaymentCheck {
+    std::set<Txid> inactive;
+    std::set<Txid> confirmed;
+};
+
+std::map<QString, CAmount> ScanReceiveRequestTransaction(const interfaces::WalletTx& tx,
+    interfaces::Wallet& wallet, const QSet<QString>& request_addresses, std::set<QString>& observed, bool& unconfirmed)
+{
+    std::map<QString, CAmount> received;
+    unconfirmed = false;
+    if (!tx.tx) return received;
+    for (size_t i = 0; i < tx.tx->vout.size(); ++i) {
+        const auto& output = tx.tx->vout[i];
+        if (output.nValue <= 0 || i >= tx.txout_is_mine.size() || !tx.txout_is_mine[i]) continue;
+        CTxDestination destination;
+        if (!ExtractDestination(output.scriptPubKey, destination)) continue;
+        const QString address = QString::fromStdString(EncodeDestination(destination));
+        if (!request_addresses.contains(address)) continue;
+        observed.insert(address);
+        received[address] += output.nValue;
+    }
+    if (received.empty()) return received;
+
+    interfaces::WalletTxStatus status{};
+    interfaces::WalletOrderForm order_form;
+    bool in_mempool{false};
+    int num_blocks{0};
+    wallet.getWalletTxDetails(tx.tx->GetHash(), status, order_form, in_mempool, num_blocks);
+    const auto replacement = tx.value_map.find("replaced_by_txid");
+    const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+    // The receiver's wallet has no replacement marker on the original tx.
+    // An unconfirmed transaction that left the mempool must not add to the
+    // received total, but its address remains locked against reuse.
+    if (status.depth_in_main_chain < 0 || status.is_abandoned ||
+        (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) received.clear();
+    else unconfirmed = status.depth_in_main_chain == 0;
+    return received;
+}
+
 int FallbackFeeMultiplier(const unsigned int target)
 {
     for (size_t i = 0; i < STANDARD_FEE_TARGETS.size(); ++i) {
@@ -404,6 +451,8 @@ WalletQmlModel::WalletQmlModel(std::unique_ptr<interfaces::Wallet> wallet, inter
     , m_node(node)
 {
     m_receive_requests = new ReceiveRequestHistoryModel(this);
+    m_receive_payment_poll_timer.setInterval(1000);
+    connect(&m_receive_payment_poll_timer, &QTimer::timeout, this, &WalletQmlModel::pollUnconfirmedReceiveRequestPayments);
     reloadReceiveRequests();
     m_address_list_model = new AddressListModel(this);
     m_bump_transaction_model = new BumpTransactionModel(m_wallet.get(), this);
@@ -460,6 +509,15 @@ WalletQmlModel::WalletQmlModel(QObject* parent)
 WalletQmlModel::~WalletQmlModel()
 {
     unsubscribeFromWalletSignals();
+    m_receive_payment_poll_timer.stop();
+    if (m_receive_payment_poll_thread) {
+        m_receive_payment_poll_thread->wait();
+        delete m_receive_payment_poll_thread;
+    }
+    if (m_receive_reconciliation_thread) {
+        m_receive_reconciliation_thread->wait();
+        delete m_receive_reconciliation_thread;
+    }
     if (m_fee_estimation_timer) {
         m_fee_estimation_timer->stop();
     }
@@ -1023,6 +1081,9 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
     }
 
     const bool is_update = !request->id().isEmpty();
+    // Until the background history scan completes, an old request might have
+    // received a payment that is not yet reflected in its persisted lock.
+    if (is_update && (receiveRequestReconciliationPending() || m_receive_request_notifications_pending.load() > 0)) return false;
     if (is_update && request->amount()->satoshi() == 0 && request->label().trimmed().isEmpty()
         && request->message().trimmed().isEmpty() && request->noteSelf().trimmed().isEmpty()) return false;
     const QString request_id_text = is_update
@@ -1058,7 +1119,6 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
         const CAmount edited_amount = request->amount()->satoshi();
         const std::string edited_label = request->label().toStdString();
         const std::string edited_message = request->message().toStdString();
-        refreshReceiveRequestPayments();
         const auto existing = m_receive_requests->entryById(request_id_text);
         if (!existing || request->address().toStdString() != existing->recipient.address) return false;
         request_entry.payment_received = existing->payment_received;
@@ -1091,6 +1151,8 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
 
     if (m_receive_requests) {
         m_receive_requests->prependOrReplace(request_entry);
+        m_receive_request_addresses.insert(request->address());
+        if (!is_update && m_receive_reconciliation_thread) m_receive_reconciliation_requested = true;
     }
 
     // Address book labels are private. Never copy public payment metadata
@@ -1169,10 +1231,24 @@ void WalletQmlModel::reloadReceiveRequests()
     if (!m_receive_requests) return;
     if (!m_wallet) {
         m_receive_requests->setEntries({});
+        m_receive_request_payments.clear();
+        m_receive_request_totals.clear();
+        m_receive_request_txids_by_address.clear();
+        m_receive_request_unconfirmed_txids.clear();
+        ++m_receive_payment_revision;
+        m_receive_payment_poll_timer.stop();
+        m_receive_request_addresses.clear();
         return;
     }
     m_receive_requests->setEntries(
         ReceiveRequestHistoryModel::DeserializeEntries(m_wallet->getAddressReceiveRequests()));
+    m_receive_request_addresses = m_receive_requests->requestAddresses();
+    m_receive_request_payments.clear();
+    m_receive_request_totals.clear();
+    m_receive_request_txids_by_address.clear();
+    m_receive_request_unconfirmed_txids.clear();
+    ++m_receive_payment_revision;
+    m_receive_payment_poll_timer.stop();
     refreshReceiveRequestPayments();
 }
 
@@ -1187,13 +1263,14 @@ bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
         return false;
     }
     m_receive_requests->removeByRequestId(request_id);
+    m_receive_request_addresses = m_receive_requests->requestAddresses();
+    refreshReceiveRequestPayments();
     return true;
 }
 
 bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
 {
     if (!m_current_payment_request || !m_receive_requests) return false;
-    refreshReceiveRequestPayments();
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry) return false;
     if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
@@ -1218,7 +1295,6 @@ bool WalletQmlModel::loadPaymentRequest(const QString& request_id)
 bool WalletQmlModel::loadPaymentRequestDetail(const QString& request_id)
 {
     if (!m_detail_payment_request || !m_receive_requests) return false;
-    refreshReceiveRequestPayments();
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry) return false;
     if (entry->id < 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
@@ -1262,17 +1338,86 @@ bool WalletQmlModel::updatePaymentRequest(const QString& request_id, qint64 amou
 
 void WalletQmlModel::refreshReceiveRequestPayments()
 {
-    m_receive_request_payments.clear();
-    if (!m_wallet || !m_receive_requests || m_receive_requests->count() == 0) return;
-    for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
-    updateReceivedPaymentRequestAmounts();
+    if (!m_wallet || !m_receive_requests) return;
+    if (m_receive_reconciliation_thread) {
+        m_receive_reconciliation_requested = true;
+        return;
+    }
+    if (m_receive_requests->count() == 0) {
+        m_receive_request_payments.clear();
+        m_receive_request_totals.clear();
+        m_receive_request_txids_by_address.clear();
+        m_receive_request_unconfirmed_txids.clear();
+        ++m_receive_payment_revision;
+        m_receive_payment_poll_timer.stop();
+        updateReceivedPaymentRequestAmounts();
+        return;
+    }
+    const auto wallet = m_wallet;
+    const auto addresses = m_receive_request_addresses;
+    m_receive_reconciliation_thread = QThread::create([this, wallet, addresses] {
+        ReceiveRequestPaymentScan scan;
+        for (const auto& tx : wallet->getWalletTxs()) {
+            std::set<QString> observed;
+            bool unconfirmed{false};
+            auto received = ScanReceiveRequestTransaction(tx, *wallet, addresses, observed, unconfirmed);
+            scan.observed_addresses.insert(observed.begin(), observed.end());
+            if (!received.empty()) {
+                const Txid txid = tx.tx->GetHash();
+                if (unconfirmed) scan.unconfirmed_txids.insert(txid);
+                for (const auto& [address, amount] : received) {
+                    scan.totals[address] += amount;
+                    scan.txids_by_address[address].insert(txid);
+                }
+                scan.payments.emplace(txid, std::move(received));
+            }
+        }
+        QMetaObject::invokeMethod(this, [this, scan = std::move(scan)]() mutable {
+            m_receive_reconciliation_thread->wait();
+            delete m_receive_reconciliation_thread;
+            m_receive_reconciliation_thread = nullptr;
+            if (m_receive_reconciliation_requested) {
+                m_receive_reconciliation_requested = false;
+                m_receive_reconciliation_updates.clear();
+                refreshReceiveRequestPayments();
+                if (!receiveRequestReconciliationPending()) Q_EMIT receiveRequestReconciliationPendingChanged();
+                return;
+            }
+            m_receive_reconciliation_applying = true;
+            m_receive_request_payments = std::move(scan.payments);
+            m_receive_request_totals = std::move(scan.totals);
+            m_receive_request_txids_by_address = std::move(scan.txids_by_address);
+            m_receive_request_unconfirmed_txids = std::move(scan.unconfirmed_txids);
+            ++m_receive_payment_revision;
+            for (const QString& address : scan.observed_addresses) markReceiveRequestPayment(address);
+            for (const auto& [txid, deleted] : m_receive_reconciliation_updates) {
+                removeReceiveRequestPayment(txid);
+                if (!deleted) {
+                    interfaces::WalletTxStatus status{};
+                    interfaces::WalletOrderForm order_form;
+                    bool in_mempool{false};
+                    int num_blocks{0};
+                    recordReceiveRequestPayment(m_wallet->getWalletTxDetails(txid, status, order_form,
+                                                                             in_mempool, num_blocks));
+                    recheckReceiveRequestPayments(txid);
+                }
+            }
+            m_receive_reconciliation_updates.clear();
+            updateReceivedPaymentRequestAmounts();
+            updateReceivePaymentPollTimer();
+            m_receive_reconciliation_applying = false;
+            Q_EMIT receiveRequestReconciliationPendingChanged();
+        }, Qt::QueuedConnection);
+    });
+    m_receive_reconciliation_thread->start();
+    Q_EMIT receiveRequestReconciliationPendingChanged();
 }
 
 void WalletQmlModel::recordReceiveRequestPayment(const interfaces::WalletTx& tx)
 {
     if (!m_wallet || !m_receive_requests || !tx.tx) return;
-    auto& received = m_receive_request_payments[tx.tx->GetHash()];
-    received.clear();
+    const Txid txid = tx.tx->GetHash();
+    removeReceiveRequestPayment(txid);
     for (size_t i = 0; i < tx.tx->vout.size(); ++i) {
         const auto& output = tx.tx->vout[i];
         if (output.nValue <= 0 || i >= tx.txout_is_mine.size() || !tx.txout_is_mine[i]) continue;
@@ -1282,50 +1427,137 @@ void WalletQmlModel::recordReceiveRequestPayment(const interfaces::WalletTx& tx)
         if (m_receiving_address && address == m_receiving_address->address()) {
             m_receiving_address->setPaymentReceived(true);
         }
-        const auto requests = m_receive_requests->entriesForAddress(address);
-        if (requests.empty()) continue;
-        received[address] += output.nValue;
-        for (auto entry : requests) {
-            if (entry.payment_received) continue;
-            entry.payment_received = true;
-            const QString id = QString::number(entry.id);
-            // Keep the in-memory lock even if persistence fails. A later load
-            // also reconciles against wallet transactions before sharing.
-            m_wallet->setAddressReceiveRequest(destination, id.toStdString(),
-                ReceiveRequestHistoryModel::SerializeEntry(entry));
-            m_receive_requests->prependOrReplace(entry);
-            for (auto* held : {m_current_payment_request, m_detail_payment_request}) {
-                if (!held || held->id() != id) continue;
-                held->setPaymentReceived(true);
-                held->amount()->setSatoshi(entry.recipient.amount);
-                held->setLabel(QString::fromStdString(entry.recipient.label));
-                held->setMessage(QString::fromStdString(entry.recipient.message));
-            }
+        markReceiveRequestPayment(address);
+    }
+    std::set<QString> observed;
+    bool unconfirmed{false};
+    auto received = ScanReceiveRequestTransaction(tx, *m_wallet, m_receive_request_addresses, observed, unconfirmed);
+    if (!received.empty()) {
+        if (unconfirmed) m_receive_request_unconfirmed_txids.insert(txid);
+        ++m_receive_payment_revision;
+        for (const auto& [address, amount] : received) {
+            m_receive_request_totals[address] += amount;
+            m_receive_request_txids_by_address[address].insert(txid);
+        }
+        m_receive_request_payments.emplace(txid, std::move(received));
+        updateReceivePaymentPollTimer();
+    }
+}
+
+void WalletQmlModel::markReceiveRequestPayment(const QString& address)
+{
+    if (!m_receive_requests || !m_wallet) return;
+    const auto requests = m_receive_requests->entriesForAddress(address);
+    for (auto entry : requests) {
+        if (entry.payment_received) continue;
+        entry.payment_received = true;
+        const QString id = QString::number(entry.id);
+        const auto destination = DecodeDestination(entry.recipient.address);
+        // Keep the in-memory lock even if persistence fails.
+        m_wallet->setAddressReceiveRequest(destination, id.toStdString(),
+            ReceiveRequestHistoryModel::SerializeEntry(entry));
+        m_receive_requests->prependOrReplace(entry);
+        for (auto* held : {m_current_payment_request, m_detail_payment_request}) {
+            if (!held || held->id() != id) continue;
+            held->setPaymentReceived(true);
+            held->amount()->setSatoshi(entry.recipient.amount);
+            held->setLabel(QString::fromStdString(entry.recipient.label));
+            held->setMessage(QString::fromStdString(entry.recipient.message));
         }
     }
-    if (!received.empty()) {
+}
+
+void WalletQmlModel::removeReceiveRequestPayment(const Txid& txid)
+{
+    m_receive_request_unconfirmed_txids.erase(txid);
+    ++m_receive_payment_revision;
+    updateReceivePaymentPollTimer();
+    const auto it = m_receive_request_payments.find(txid);
+    if (it == m_receive_request_payments.end()) return;
+    for (const auto& [address, amount] : it->second) {
+        auto txids = m_receive_request_txids_by_address.find(address);
+        if (txids != m_receive_request_txids_by_address.end()) {
+            txids->second.erase(txid);
+            if (txids->second.empty()) m_receive_request_txids_by_address.erase(txids);
+        }
+        auto total = m_receive_request_totals.find(address);
+        if (total != m_receive_request_totals.end()) {
+            total->second -= amount;
+            if (total->second == 0) m_receive_request_totals.erase(total);
+        }
+    }
+    m_receive_request_payments.erase(it);
+}
+
+void WalletQmlModel::updateReceivePaymentPollTimer()
+{
+    if (m_receive_request_unconfirmed_txids.empty()) m_receive_payment_poll_timer.stop();
+    else if (!m_receive_payment_poll_timer.isActive()) m_receive_payment_poll_timer.start();
+}
+
+void WalletQmlModel::pollUnconfirmedReceiveRequestPayments()
+{
+    if (!m_wallet || m_receive_payment_poll_thread || receiveRequestReconciliationPending() ||
+        m_receive_request_notifications_pending.load() > 0) return;
+    const auto wallet = m_wallet;
+    const auto txids = m_receive_request_unconfirmed_txids;
+    const auto revision = m_receive_payment_revision;
+    m_receive_payment_poll_thread = QThread::create([this, wallet, txids, revision] {
+        UnconfirmedReceiveRequestPaymentCheck check;
+        for (const Txid& txid : txids) {
+            interfaces::WalletTxStatus status{};
+            interfaces::WalletOrderForm order_form;
+            bool in_mempool{false};
+            int num_blocks{0};
+            const auto tx = wallet->getWalletTxDetails(txid, status, order_form, in_mempool, num_blocks);
+            const auto replacement = tx.value_map.find("replaced_by_txid");
+            const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+            if (!tx.tx || status.depth_in_main_chain < 0 || status.is_abandoned ||
+                (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) check.inactive.insert(txid);
+            else if (status.depth_in_main_chain > 0) check.confirmed.insert(txid);
+        }
+        QMetaObject::invokeMethod(this, [this, revision, check = std::move(check)] {
+            m_receive_payment_poll_thread->wait();
+            delete m_receive_payment_poll_thread;
+            m_receive_payment_poll_thread = nullptr;
+            if (revision != m_receive_payment_revision || receiveRequestReconciliationPending() ||
+                m_receive_request_notifications_pending.load() > 0) return;
+            for (const Txid& txid : check.inactive) removeReceiveRequestPayment(txid);
+            for (const Txid& txid : check.confirmed) m_receive_request_unconfirmed_txids.erase(txid);
+            updateReceivePaymentPollTimer();
+            if (!check.inactive.empty()) updateReceivedPaymentRequestAmounts();
+        }, Qt::QueuedConnection);
+    });
+    m_receive_payment_poll_thread->start();
+}
+
+void WalletQmlModel::recheckReceiveRequestPayments(const Txid& changed_txid)
+{
+    const auto changed = m_receive_request_payments.find(changed_txid);
+    if (changed == m_receive_request_payments.end()) return;
+    std::set<Txid> related;
+    for (const auto& [address, amount] : changed->second) {
+        const auto it = m_receive_request_txids_by_address.find(address);
+        if (it != m_receive_request_txids_by_address.end()) related.insert(it->second.begin(), it->second.end());
+    }
+    related.erase(changed_txid);
+    for (const Txid& txid : related) {
         interfaces::WalletTxStatus status{};
         interfaces::WalletOrderForm order_form;
         bool in_mempool{false};
         int num_blocks{0};
-        m_wallet->getWalletTxDetails(tx.tx->GetHash(), status, order_form, in_mempool, num_blocks);
-        // Keep the address-reuse lock, but do not count replaced, conflicted,
-        // or abandoned payments in the amount that was actually received.
+        const auto tx = m_wallet->getWalletTxDetails(txid, status, order_form, in_mempool, num_blocks);
         const auto replacement = tx.value_map.find("replaced_by_txid");
-        const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty()
-            && status.depth_in_main_chain <= 0;
-        if (replaced || status.depth_in_main_chain < 0 || status.is_abandoned) received.clear();
+        const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+        if (status.depth_in_main_chain < 0 || status.is_abandoned ||
+            (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) removeReceiveRequestPayment(txid);
     }
-    if (received.empty()) m_receive_request_payments.erase(tx.tx->GetHash());
 }
 
 CAmount WalletQmlModel::receivedPaymentRequestAmount(const QString& address) const
 {
-    CAmount total{0};
-    for (const auto& [txid, received] : m_receive_request_payments) {
-        if (const auto it = received.find(address); it != received.end()) total += it->second;
-    }
-    return total;
+    const auto it = m_receive_request_totals.find(address);
+    return it == m_receive_request_totals.end() ? 0 : it->second;
 }
 
 void WalletQmlModel::updateReceivedPaymentRequestAmounts()
@@ -2581,13 +2813,20 @@ void WalletQmlModel::subscribeToWalletSignals()
         }, Qt::QueuedConnection);
     });
     m_handler_transaction_changed = handleTransactionChanged([this](const uint256& txid, ChangeType change) {
+        m_receive_request_notifications_pending.fetch_add(1);
         QMetaObject::invokeMethod(this, [this, txid, change] {
-            m_receive_request_payments.erase(Txid::FromUint256(txid));
-            if (change != CT_DELETED) recordReceiveRequestPayment(getWalletTx(txid));
+            const Txid id = Txid::FromUint256(txid);
+            if (m_receive_reconciliation_thread) m_receive_reconciliation_updates[id] = change == CT_DELETED;
+            removeReceiveRequestPayment(id);
+            if (change != CT_DELETED) {
+                recordReceiveRequestPayment(getWalletTx(txid));
+                recheckReceiveRequestPayments(id);
+            }
             updateReceivedPaymentRequestAmounts();
             Q_EMIT transactionChanged(QString::fromStdString(txid.ToString()), change);
             Q_EMIT balanceChanged();
             Q_EMIT sendAmountExhaustsBalanceChanged();
+            m_receive_request_notifications_pending.fetch_sub(1);
         }, Qt::QueuedConnection);
     });
     m_handler_unload = handleUnload([this]() {

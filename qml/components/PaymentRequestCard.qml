@@ -21,7 +21,8 @@ Pane {
     property string errorText: ""
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
-    readonly property bool sharing: visible && saved && !paymentReceived
+    readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
+        && !wallet.receiveRequestReconciliationPending
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -347,7 +348,7 @@ Pane {
                 Layout.topMargin: 8
                 address: root.request ? root.request.address : ""
                 textStyle: Theme.text.monoDescription
-                interactive: !root.paymentReceived
+                interactive: !root.saved || root.sharing
                 clipboard: root.clipboard
                 embedded: true
             }
@@ -558,13 +559,16 @@ Pane {
             objectName: "requestPaymentUpdateButton"
             visible: root.saved && root.modified
             Layout.fillWidth: true
-            enabled: root.modified && root.hasDetails
-            text: qsTr("Update payment request")
+            enabled: root.modified && root.hasDetails && !!root.wallet
+                && !root.wallet.receiveRequestReconciliationPending
+            text: root.wallet && root.wallet.receiveRequestReconciliationPending
+                ? qsTr("Checking payments…") : qsTr("Update payment request")
             onClicked: root.saveFields()
         }
         OutlineButton {
             objectName: "requestPaymentCopyButton"
             visible: root.saved && !root.modified && !root.paymentReceived
+            enabled: root.sharing
             Layout.fillWidth: true
             text: qsTr("Copy payment request")
             onClicked: root.copyRequest()
