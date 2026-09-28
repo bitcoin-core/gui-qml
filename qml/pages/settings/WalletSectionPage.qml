@@ -17,7 +17,6 @@ SettingsPage {
 
     property var wallet: walletController.selectedWallet
     property string errorText: ""
-    property string pendingDisplayName: root.wallet ? root.wallet.displayName : ""
     readonly property bool walletLoaded: walletController.isWalletLoaded
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
@@ -92,17 +91,12 @@ SettingsPage {
         function onSettingsErrorChanged() {
             root.errorText = root.wallet ? root.wallet.settingsError : ""
         }
-
-        function onDisplayNameChanged() {
-            root.pendingDisplayName = root.wallet ? root.wallet.displayName : ""
-        }
     }
 
     Connections {
         target: walletController
 
         function onSelectedWalletChanged() {
-            root.pendingDisplayName = root.wallet ? root.wallet.displayName : ""
             root.errorText = ""
         }
     }
@@ -133,19 +127,11 @@ SettingsPage {
         Layout.fillWidth: true
         title: qsTr("Wallet info")
 
-        TextFieldRow {
+        ValueRow {
+            objectName: "walletNameRow"
             Layout.fillWidth: true
             title: qsTr("Name")
-            fieldObjectName: "walletNameInput"
-            fieldWidth: 220
-            text: root.pendingDisplayName
-            onTextEdited: function(text) { root.pendingDisplayName = text }
-            onEditingFinished: {
-                if (!root.wallet) return
-                if (!walletController.setWalletDisplayName(root.wallet.name, root.pendingDisplayName)) {
-                    root.errorText = root.wallet.settingsError
-                }
-            }
+            value: root.wallet ? root.wallet.displayName : ""
         }
 
         ValueRow {
