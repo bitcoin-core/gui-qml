@@ -360,6 +360,23 @@ def run_configured_datadir_preserves_config_source_flow():
         assert settings.get("qml_onboarded") is True, settings
         harness.stop(cleanup=False)
         assert_qsettings_datadir_not_persisted(harness.config_home)
+
+        # A configured, onboarded profile must not depend on the unused default
+        # datadir. The harness gives each flow its own home and GUI settings.
+        if sys.platform == "linux":
+            default_datadir = os.path.join(harness.home_dir, ".bitcoin")
+            assert not os.path.exists(default_datadir)
+            for default_dir_exists in (False, True):
+                if default_dir_exists:
+                    os.makedirs(default_datadir)
+                harness.start()
+                gui = harness.driver
+                assert_node_shell_visible(gui)
+                assert not gui.object_exists("onboardingCover")
+                assert read_settings_json(configured_datadir).get("qml_onboarded") is True
+                assert os.path.exists(default_datadir) == default_dir_exists
+                harness.stop(cleanup=False)
+                assert_qsettings_datadir_not_persisted(harness.config_home)
     except Exception:
         if gui is not None:
             dump_qml_tree(gui)

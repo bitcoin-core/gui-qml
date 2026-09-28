@@ -52,7 +52,7 @@ void PersistDefaultDataDirSelection();
 
 bool HasExplicitDataDirArg(const ArgsManager& args);
 QString ValidateExplicitDataDir(const ArgsManager& args);
-bool ShouldShowDataDirChooser(const ArgsManager& args);
+bool IsDataDirChooserRequested(const ArgsManager& args);
 bool ApplyGuiDataDirSetting(ArgsManager& args);
 bool ApplyDataDirArg(ArgsManager& args, const QString& path);
 
