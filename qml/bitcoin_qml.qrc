@@ -13,6 +13,8 @@
         <file>components/widgets/BlockClockWidget.qml</file>
         <file>components/widgets/WidgetSection.qml</file>
         <file>components/widgets/FeeRatesWidget.qml</file>
+        <file>components/widgets/MempoolWidget.qml</file>
+        <file>components/widgets/IncomingTransactionsChart.qml</file>
         <file>components/widgets/DashboardWidget.qml</file>
         <file>components/widgets/WidgetMetrics.js</file>
         <file>components/widgets/WidgetDefinition.qml</file>

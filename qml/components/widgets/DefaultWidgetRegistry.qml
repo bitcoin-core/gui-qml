@@ -27,6 +27,17 @@ WidgetRegistry {
                 WidgetSize { columns: 3; rows: 2 },
                 WidgetSize { columns: 1; rows: 1 }
             ]
+        },
+        WidgetDefinition {
+            widgetId: "mempool"
+            //: Name of the incoming mempool transaction widget in the picker.
+            title: qsTr("Incoming transactions")
+            source: Qt.resolvedUrl("MempoolWidget.qml")
+            sizes: [
+                WidgetSize { columns: 2; rows: 1 },
+                WidgetSize { columns: 3; rows: 2 },
+                WidgetSize { columns: 1; rows: 1 }
+            ]
         }
     ]
 }

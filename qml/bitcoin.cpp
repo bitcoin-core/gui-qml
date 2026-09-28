@@ -12,6 +12,7 @@
 #include <chainparams.h>
 #include <init.h>
 #include <interfaces/chain.h>
+#include <interfaces/handler.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
@@ -19,6 +20,7 @@
 #include <node/interface_ui.h>
 #include <noui.h>
 #include <policy/feerate.h>
+#include <univalue.h>
 #include <qml/appmode.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buildinfo.h>
@@ -33,6 +35,8 @@
 #include <qml/components/blockclockdial.h>
 #include <qml/components/widgets/widgetlayoutmodel.h>
 #include <qml/components/widgets/feeratesmodel.h>
+#include <qml/components/widgets/mempoolactivitymodel.h>
+#include <qml/components/widgets/mempoolactivitysource.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
@@ -571,6 +575,26 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    auto mempool_activity_source = std::make_shared<MempoolActivitySource>();
+    std::unique_ptr<interfaces::Handler> mempool_activity_handler;
+    MempoolActivityModel mempool_activity_model{[source = mempool_activity_source, chain = chain.get(), node = node.get(), loaded = false]() mutable {
+        // Mempool loading continues after appInitMain returns. The interfaces
+        // expose its completion through getmempoolinfo, not the init signal.
+        if (!loaded) {
+            const auto info = node->executeRpc("getmempoolinfo", UniValue{UniValue::VARR}, "");
+            if (!info["loaded"].get_bool()) return MempoolActivityModel::Snapshot{0, -1, false};
+            chain->waitForNotifications();
+            loaded = true;
+        }
+        const auto minimum = std::max(chain->mempoolMinFee().GetFeePerK(), chain->relayMinFee().GetFeePerK());
+        return MempoolActivityModel::Snapshot{source->incomingVbytes(), minimum / 1000.0};
+    }, 1000000.0 / Params().GetConsensus().nPowTargetSpacing};
+    QObject::connect(&mempool_activity_model, &MempoolActivityModel::statsRefreshRequested,
+                     &node_model, &NodeModel::refreshMempoolInfo);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &mempool_activity_model, [&] {
+        mempool_activity_model.setReady(false);
+        mempool_activity_handler.reset();
+    });
     FeeRatesModel fee_rates_model{[chain = chain.get()](int target) -> qint64 {
         if (chain->isInitialBlockDownload()) return 0;
         return chain->estimateSmartFee(target, /*conservative=*/true).GetFeePerK();
@@ -582,6 +606,13 @@ int QmlGuiMain(int argc, char* argv[])
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &mempool_activity_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested() && node_model.mempoolInformationAvailable()) {
+            // The sampler waits for the saved mempool and its notifications.
+            mempool_activity_handler = chain->handleNotifications(mempool_activity_source);
+            mempool_activity_model.setReady(true);
+        }
+    });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &fee_rates_model, [&](bool success) {
         if (success && !shutdown_requested && !node->shutdownRequested()) fee_rates_model.setReady(true);
     });
@@ -675,6 +706,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("chainModel", &chain_model);
     engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
     engine->rootContext()->setContextProperty("feeRatesModel", &fee_rates_model);
+    engine->rootContext()->setContextProperty("mempoolActivityModel", &mempool_activity_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

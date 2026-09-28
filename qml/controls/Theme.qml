@@ -44,6 +44,7 @@ Control {
         required property var destructiveButtonBorderGradient
         required property var confirmationColors
         required property var feeRateColors
+        required property var incomingRateColors
     }
 
     component ImageSet: QtObject {
@@ -72,6 +73,7 @@ Control {
     ColorSet {
         id: darkColorSet
         feeRateColors: [green, blue, orange, red]
+        incomingRateColors: [green, blue, red]
         white: "#FFFFFF"
         background: "black"
         orange: "#F89B2A"
@@ -110,6 +112,7 @@ Control {
     ColorSet {
         id: lightColorSet
         feeRateColors: [green, blue, orange, red]
+        incomingRateColors: [green, blue, red]
         white: "#FFFFFF"
         background: "white"
         orange: "#F7931A"

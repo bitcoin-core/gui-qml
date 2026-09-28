@@ -147,3 +147,11 @@ add_executable(feeratesmodel_tests
 target_include_directories(feeratesmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(feeratesmodel_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME feeratesmodel_tests COMMAND feeratesmodel_tests)
+
+add_executable(mempoolactivitymodel_tests
+  test_mempoolactivitymodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/mempoolactivitymodel.cpp
+)
+target_include_directories(mempoolactivitymodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(mempoolactivitymodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mempoolactivitymodel_tests COMMAND mempoolactivitymodel_tests)
