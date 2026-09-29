@@ -38,6 +38,16 @@ WidgetRegistry {
                 WidgetSize { columns: 3; rows: 2 },
                 WidgetSize { columns: 1; rows: 1 }
             ]
+        },
+        WidgetDefinition {
+            widgetId: "difficulty-period"
+            title: qsTr("Difficulty Period")
+            source: Qt.resolvedUrl("DifficultyPeriodWidget.qml")
+            sizes: [
+                WidgetSize { columns: 2; rows: 1 },
+                WidgetSize { columns: 3; rows: 2 },
+                WidgetSize { columns: 1; rows: 1 }
+            ]
         }
     ]
 }

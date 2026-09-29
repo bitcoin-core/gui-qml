@@ -37,6 +37,7 @@
 #include <qml/components/widgets/feeratesmodel.h>
 #include <qml/components/widgets/mempoolactivitymodel.h>
 #include <qml/components/widgets/mempoolactivitysource.h>
+#include <qml/components/widgets/difficultyperiodsource.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
@@ -575,6 +576,13 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    DifficultyPeriodModel difficulty_period_model{[node = node.get(), chain = chain.get()] {
+        return ReadDifficultyPeriod(*node, *chain);
+    }};
+    QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &difficulty_period_model, &DifficultyPeriodModel::refresh);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &difficulty_period_model, [&] {
+        difficulty_period_model.setReady(false);
+    });
     auto mempool_activity_source = std::make_shared<MempoolActivitySource>();
     std::unique_ptr<interfaces::Handler> mempool_activity_handler;
     MempoolActivityModel mempool_activity_model{[source = mempool_activity_source, chain = chain.get(), node = node.get(), loaded = false]() mutable {
@@ -606,6 +614,9 @@ int QmlGuiMain(int argc, char* argv[])
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &difficulty_period_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested()) difficulty_period_model.setReady(true);
+    });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &mempool_activity_model, [&](bool success) {
         if (success && !shutdown_requested && !node->shutdownRequested() && node_model.mempoolInformationAvailable()) {
             // The sampler waits for the saved mempool and its notifications.
@@ -707,6 +718,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
     engine->rootContext()->setContextProperty("feeRatesModel", &fee_rates_model);
     engine->rootContext()->setContextProperty("mempoolActivityModel", &mempool_activity_model);
+    engine->rootContext()->setContextProperty("difficultyPeriodModel", &difficulty_period_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

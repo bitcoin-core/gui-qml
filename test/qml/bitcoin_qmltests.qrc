@@ -8,6 +8,7 @@
         <file>tst_widgetdashboard.qml</file>
         <file>tst_feerateswidget.qml</file>
         <file>tst_mempoolwidget.qml</file>
+        <file>tst_difficultyperiodwidget.qml</file>
         <file>WidgetFixture.qml</file>
         <file>InvalidWidgetFixture.qml</file>
         <file>tst_contextmenubutton.qml</file>

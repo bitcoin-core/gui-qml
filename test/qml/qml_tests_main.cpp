@@ -7,6 +7,7 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QFont>
+#include <QFontDatabase>
 #include <QHash>
 #include <QIcon>
 #include <QLocale>
@@ -4033,6 +4034,10 @@ class QmlTestsSetup : public QObject
 public Q_SLOTS:
     void applicationAvailable()
     {
+        // Match production font metrics so layout tests catch real text overflow.
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/regular"));
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/semibold"));
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/robotomono/regular"));
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }

@@ -155,3 +155,11 @@ add_executable(mempoolactivitymodel_tests
 target_include_directories(mempoolactivitymodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(mempoolactivitymodel_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME mempoolactivitymodel_tests COMMAND mempoolactivitymodel_tests)
+
+add_executable(difficultyperiodmodel_tests
+  test_difficultyperiodmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/difficultyperiodmodel.cpp
+)
+target_include_directories(difficultyperiodmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(difficultyperiodmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME difficultyperiodmodel_tests COMMAND difficultyperiodmodel_tests)
