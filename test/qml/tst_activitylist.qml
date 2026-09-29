@@ -661,6 +661,14 @@ TestCase {
         compare(findRow(page, "consolidation").displayLabel, "Consolidation")
         compare(findRow(page, "split").displayLabel, "Split")
         const mixed = findRow(page, "mixed")
+        // ListView can still be incubating child delegates after the row exists.
+        tryVerify(function() {
+            const receipt = findChild(mixed, "activityAction_receipt")
+            return receipt !== null
+                && findChild(receipt, "activityActionLabel") !== null
+                && findChild(receipt, "activityActionRequestBadge") !== null
+                && findChild(receipt, "activityActionAddress") !== null
+        })
         const receipt = findChild(mixed, "activityAction_receipt")
         compare(findChild(receipt, "activityActionLabel").visible, false)
         verify(findChild(receipt, "activityActionRequestBadge").visible)
@@ -894,8 +902,13 @@ TestCase {
         const y = list.mapToItem(page, 0, list.height / 2).y
         const start = list.contentY
         mouseMove(page, x, y)
-        mouseWheel(page, x, y, 0, -120, Qt.NoButton, Qt.NoModifier, 100)
-        tryVerify(function() { return list.contentY > start })
+        // A single kinetic scroll can expire before its first rendered frame
+        // under instrumentation. Keep scrolling until movement is observed.
+        tryVerify(function() {
+            if (list.contentY > start) return true
+            mouseWheel(page, x, y, 0, -120, Qt.NoButton, Qt.NoModifier, 100)
+            return list.contentY > start
+        })
         // The margin scrolls the list without becoming a transaction link.
         mouseClick(page, x, y)
         compare(page.depth, 1)

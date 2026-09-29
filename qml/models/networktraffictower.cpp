@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/networktraffictower.h>
+#include <qml/backendworker.h>
 
 #include <interfaces/node.h>
 #include <util/threadnames.h>
@@ -263,7 +264,8 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_inte
 {
     m_worker = new NetworkTrafficWorker(node, sample_interval_ms, [this](TrafficSnapshot snapshot) {
         QMetaObject::invokeMethod(this, [this, snapshot = std::move(snapshot)]() mutable {
-            if (!m_active || snapshot.generation != m_activation_generation) return;
+            RequireModelThread(this);
+            if (m_draining || !m_active || snapshot.generation != m_activation_generation) return;
 
             if (m_total_bytes_received != snapshot.total_bytes_received) {
                 m_total_bytes_received = snapshot.total_bytes_received;
@@ -290,10 +292,8 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_inte
     });
     m_worker->moveToThread(m_worker_thread);
     connect(m_worker_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(m_worker_thread, &QThread::finished, this, &NetworkTrafficTower::backendDrained);
     m_worker_thread->start();
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker] {
-        worker->start();
-    }, Qt::QueuedConnection);
 }
 
 NetworkTrafficTower::~NetworkTrafficTower()
@@ -308,8 +308,20 @@ NetworkTrafficTower::~NetworkTrafficTower()
     m_worker = nullptr;
 }
 
+void NetworkTrafficTower::startSampling()
+{
+    RequireModelThread(this);
+    if (m_draining || m_sampling) return;
+    m_sampling = true;
+    QMetaObject::invokeMethod(m_worker, [worker = m_worker] {
+        worker->start();
+    }, Qt::QueuedConnection);
+}
+
 void NetworkTrafficTower::setActive(bool active)
 {
+    RequireModelThread(this);
+    if (m_draining) return;
     if (m_active == active) return;
 
     m_active = active;
@@ -323,7 +335,20 @@ void NetworkTrafficTower::setActive(bool active)
 
 void NetworkTrafficTower::updateFilterWindowSize(int new_size)
 {
+    RequireModelThread(this);
+    if (m_draining) return;
     QMetaObject::invokeMethod(m_worker, [worker = m_worker, new_size] {
         worker->setFilterWindowSize(new_size);
+    }, Qt::QueuedConnection);
+}
+
+void NetworkTrafficTower::drainBackend()
+{
+    RequireModelThread(this);
+    if (m_draining) return;
+    m_draining = true;
+    QMetaObject::invokeMethod(m_worker, [this] {
+        m_worker->stop();
+        m_worker_thread->quit();
     }, Qt::QueuedConnection);
 }

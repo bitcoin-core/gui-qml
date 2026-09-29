@@ -1,0 +1,3 @@
+# Qt 6.4's inline hash deliberately multiplies modulo 2^64.
+# Ported from staging's test/sanitizer_suppressions/ubsan.
+unsigned-integer-overflow:*/QtCore/qhashfunctions.h

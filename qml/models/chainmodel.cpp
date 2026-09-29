@@ -9,8 +9,9 @@
 
 #include <QDateTime>
 #include <QString>
-#include <QThread>
 #include <QTime>
+
+#include <utility>
 
 using interfaces::FoundBlock;
 
@@ -19,13 +20,9 @@ ChainModel::ChainModel(interfaces::Chain& chain)
       m_assumed_chainstate_size{Params().AssumedChainStateSize()},
       m_chain{chain}
 {
-    QTimer* timer = new QTimer();
-    connect(timer, &QTimer::timeout, this, &ChainModel::setCurrentTimeRatio);
-    timer->start(1000);
-
-    QThread* timer_thread = new QThread;
-    timer->moveToThread(timer_thread);
-    timer_thread->start();
+    connect(&m_backend, &BackendWorker::drained, this, &ChainModel::backendDrained);
+    connect(&m_timer, &QTimer::timeout, this, &ChainModel::setCurrentTimeRatio);
+    m_timer.start(1000);
 }
 
 void ChainModel::setCurrentNetworkName(QString network_name)
@@ -36,17 +33,32 @@ void ChainModel::setCurrentNetworkName(QString network_name)
 
 void ChainModel::setTimeRatioList(int new_time)
 {
-    if (m_time_ratio_list.isEmpty()) {
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
+    if (m_time_ratio_list.size() < 2 || m_pending) {
         setTimeRatioListInitial();
-    }
-    int time_at_meridian = timestampAtMeridian();
-
-    if (new_time < time_at_meridian) {
         return;
     }
+    const int time_at_meridian = timestampAtMeridian();
+    if (new_time < time_at_meridian) return;
     m_time_ratio_list.push_back(double(new_time - time_at_meridian) / SECS_IN_12_HOURS);
-
     Q_EMIT timeRatioListChanged();
+}
+
+void ChainModel::onNodeReady()
+{
+    RequireModelThread(this);
+    if (m_draining || m_node_ready) return;
+    m_node_ready = true;
+    setTimeRatioListInitial();
+}
+
+void ChainModel::drainBackend()
+{
+    RequireModelThread(this);
+    m_draining = true;
+    m_timer.stop();
+    m_backend.drain();
 }
 
 int ChainModel::timestampAtMeridian()
@@ -59,45 +71,46 @@ int ChainModel::timestampAtMeridian()
 
 void ChainModel::setTimeRatioListInitial()
 {
-    int time_at_meridian = timestampAtMeridian();
-    m_time_ratio_list.clear();
-    /* m_time_ratio_list[0] = current_time_ratio
-     * m_time_ratio_list[1] = 0
-     * These two positions remain fixed for these
-     * values in m_time_ratio_list */
-    m_time_ratio_list.push_back(double(QDateTime::currentSecsSinceEpoch() - time_at_meridian) / SECS_IN_12_HOURS);
-    m_time_ratio_list.push_back(0);
-
-    if (!m_chain.getHeight()) {
-        Q_EMIT timeRatioListChanged();
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
+    if (m_pending) {
+        m_again = true;
         return;
     }
-
-    int first_block_height;
-    int active_chain_height = m_chain.getHeight().value();
-    bool success = m_chain.findFirstBlockWithTimeAndHeight(/*min_time=*/time_at_meridian, /*min_height=*/0, interfaces::FoundBlock().height(first_block_height));
-
-    if (!success) {
+    m_pending = true;
+    const int meridian = timestampAtMeridian();
+    m_backend.submit([chain = &m_chain, meridian] {
+        QVariantList ratios{double(QDateTime::currentSecsSinceEpoch() - meridian) / SECS_IN_12_HOURS, 0};
+        const auto height = chain->getHeight();
+        int first_height{0};
+        if (height && chain->findFirstBlockWithTimeAndHeight(meridian, 0, FoundBlock().height(first_height))) {
+            for (int i = first_height; i <= *height; ++i) {
+                int64_t time{0};
+                if (chain->findBlock(chain->getBlockHash(i), FoundBlock().time(time))) {
+                    ratios.push_back(double(time - meridian) / SECS_IN_12_HOURS);
+                }
+            }
+        }
+        return ratios;
+    }, [this, meridian](QVariantList ratios) {
+        RequireModelThread(this);
+        m_pending = false;
+        if (std::exchange(m_again, false) || meridian != timestampAtMeridian()) {
+            setTimeRatioListInitial();
+            return;
+        }
+        m_time_ratio_list = std::move(ratios);
         Q_EMIT timeRatioListChanged();
-        return;
-    }
-
-    for (int height = first_block_height; height < active_chain_height + 1; height++) {
-        uint256 block_hash{m_chain.getBlockHash(height)};
-        int64_t block_time;
-        m_chain.findBlock(block_hash, FoundBlock().time(block_time));
-        m_time_ratio_list.push_back(double(block_time - time_at_meridian) / SECS_IN_12_HOURS);
-    }
-
-    Q_EMIT timeRatioListChanged();
+    });
 }
 
 void ChainModel::setCurrentTimeRatio()
 {
+    RequireModelThread(this);
     int secs_since_meridian = (QTime::currentTime().msecsSinceStartOfDay() / 1000) % SECS_IN_12_HOURS;
     double current_time_ratio = double(secs_since_meridian) / SECS_IN_12_HOURS;
 
-    if (current_time_ratio < m_time_ratio_list[0].toDouble()) { // That means time has crossed a meridian
+    if (!m_time_ratio_list.isEmpty() && current_time_ratio < m_time_ratio_list[0].toDouble()) { // That means time has crossed a meridian
         m_time_ratio_list.clear();
     }
 

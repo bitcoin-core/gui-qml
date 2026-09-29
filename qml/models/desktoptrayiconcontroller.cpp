@@ -138,6 +138,9 @@ void DesktopTrayIconController::setVisible(bool visible)
     if (visible == m_tray_icon->isVisible()) return;
 
     if (visible) {
+        // Match the Widgets GUI: only show the icon when a tray is available.
+        // Qt 6.2's minimal platform crashes if asked to show an unsupported tray.
+        if (!supported()) return;
         m_tray_icon->show();
         if (!m_tray_icon->isVisible()) {
             Q_EMIT supportedChanged(false);

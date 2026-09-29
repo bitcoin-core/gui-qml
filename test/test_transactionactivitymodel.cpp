@@ -329,6 +329,8 @@ void TransactionActivityModelTests::historyReadsLeaveTheEventLoopFreeAndDiscardS
     QVERIFY(model->loading());
     QCOMPARE(model->rowCount(), 0);
     QTRY_VERIFY(gate->entered.available() > 0);
+    // Acquire the released permit before mutating the worker's fixture data.
+    QVERIFY(gate->entered.tryAcquire());
     bool heartbeat{false};
     QTimer::singleShot(0, [&] { heartbeat = true; });
     QTRY_VERIFY(heartbeat);
@@ -362,6 +364,8 @@ void TransactionActivityModelTests::detailReadsDiscardPreviousSelectionsAndHandl
     const auto release = qScopeGuard([&] { gate->release.release(); });
     model->requestTransactionDetails(Id(a));
     QTRY_VERIFY(gate->entered.available() > 0);
+    // Acquire the released permit before mutating the worker's fixture data.
+    QVERIFY(gate->entered.tryAcquire());
     model->requestTransactionDetails(Id(b));
     const auto pending = model->transactionDetails(Id(b), true);
     QVERIFY(pending.value("detailsLoading").toBool());
@@ -436,6 +440,8 @@ void TransactionActivityModelTests::largeDetailPreviewDoesNotWaitForInputReads()
     QVERIFY(!flow.value("inputs").toList().first().toMap().value("amountKnown").toBool());
     QVERIFY(!flow.value("feeKnown").toBool());
     QTRY_VERIFY(gate->entered.available() > 0);
+    // Acquire the released permit before mutating the worker's fixture data.
+    QVERIFY(gate->entered.tryAcquire());
     bool heartbeat{false};
     QTimer::singleShot(0, [&] { heartbeat = true; });
     QTRY_VERIFY(heartbeat);
@@ -466,6 +472,8 @@ void TransactionActivityModelTests::bumpEligibilityIsOnlyReadForTheSelectedTrans
     const auto release = qScopeGuard([&] { gate->release.release(); });
     model->requestTransactionDetails(txid);
     QTRY_VERIFY(gate->entered.available() > 0);
+    // Acquire the released permit before mutating the worker's fixture data.
+    QVERIFY(gate->entered.tryAcquire());
     QVERIFY(model->transactionDetails(txid, true).value("detailsLoading").toBool());
     QVERIFY(!model->transactionDetails(txid, true).value("canBump").toBool());
     gate->release.release();
@@ -488,6 +496,8 @@ void TransactionActivityModelTests::deletingWalletDoesNotWaitForActivityReads()
     const std::weak_ptr<interfaces::Wallet> lifetime = f.wallet->walletHandle();
     auto* model = f.wallet->transactionActivityModel();
     QTRY_VERIFY(gate->entered.available() > 0);
+    // Acquire the released permit before mutating the worker's fixture data.
+    QVERIFY(gate->entered.tryAcquire());
     QSignalSpy changes(model, &Model::countChanged);
     Q_EMIT f.wallet->walletUnloaded();
     QVERIFY(!model->loading());

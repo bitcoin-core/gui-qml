@@ -1,0 +1,977 @@
+{
+  "Node::initLogging": {
+    "signature": "void initLogging()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::initParameterInteraction": {
+    "signature": "void initParameterInteraction()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getWarnings": {
+    "signature": "bilingual_str getWarnings()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getExitStatus": {
+    "signature": "int getExitStatus()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getLogCategories": {
+    "signature": "BCLog::CategoryMask getLogCategories()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::baseInitialize": {
+    "signature": "bool baseInitialize()",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::appInitMain": {
+    "signature": "bool appInitMain(interfaces::BlockAndHeaderTipInfo* tip_info)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::appShutdown": {
+    "signature": "void appShutdown()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::startShutdown": {
+    "signature": "void startShutdown()",
+    "policy": "Worker",
+    "reason": "Interrupts Core services and can acquire locks or run a shutdown command. Use the independent shutdown worker."
+  },
+  "Node::shutdownRequested": {
+    "signature": "bool shutdownRequested()",
+    "policy": "LocalShutdown",
+    "reason": "In-process atomic shutdown flag needed by the GUI lifecycle; never exempt IPC dispatch."
+  },
+  "Node::isSettingIgnored": {
+    "signature": "bool isSettingIgnored(const std::string& name)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::getPersistentSetting": {
+    "signature": "common::SettingsValue getPersistentSetting(const std::string& name)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::updateRwSetting": {
+    "signature": "void updateRwSetting(const std::string& name, const common::SettingsValue& value)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::forceSetting": {
+    "signature": "void forceSetting(const std::string& name, const common::SettingsValue& value)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::resetSettings": {
+    "signature": "void resetSettings()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::mapPort": {
+    "signature": "void mapPort(bool enable)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getProxy": {
+    "signature": "std::optional<Proxy> getProxy(Network net)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getNodeCount": {
+    "signature": "size_t getNodeCount(ConnectionDirection flags)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getNodesStats": {
+    "signature": "bool getNodesStats(NodesStats& stats)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getBanned": {
+    "signature": "bool getBanned(banmap_t& banmap)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::ban": {
+    "signature": "bool ban(const CNetAddr& net_addr, int64_t ban_time_offset)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::unban": {
+    "signature": "bool unban(const CSubNet& ip)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::disconnectByAddress": {
+    "signature": "bool disconnectByAddress(const CNetAddr& net_addr)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::disconnectById": {
+    "signature": "bool disconnectById(NodeId id)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::listExternalSigners": {
+    "signature": "std::vector<std::unique_ptr<ExternalSigner>> listExternalSigners()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getTotalBytesRecv": {
+    "signature": "int64_t getTotalBytesRecv()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getTotalBytesSent": {
+    "signature": "int64_t getTotalBytesSent()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getMempoolSize": {
+    "signature": "size_t getMempoolSize()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getMempoolDynamicUsage": {
+    "signature": "size_t getMempoolDynamicUsage()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getMempoolMaxUsage": {
+    "signature": "size_t getMempoolMaxUsage()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getHeaderTip": {
+    "signature": "bool getHeaderTip(int& height, int64_t& block_time)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getNumBlocks": {
+    "signature": "int getNumBlocks()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getNetLocalAddresses": {
+    "signature": "std::map<CNetAddr, LocalServiceInfo> getNetLocalAddresses()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getBestBlockHash": {
+    "signature": "uint256 getBestBlockHash()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getLastBlockTime": {
+    "signature": "int64_t getLastBlockTime()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getVerificationProgress": {
+    "signature": "double getVerificationProgress()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::isInitialBlockDownload": {
+    "signature": "bool isInitialBlockDownload()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::isLoadingBlocks": {
+    "signature": "bool isLoadingBlocks()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::setNetworkActive": {
+    "signature": "void setNetworkActive(bool active)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getNetworkActive": {
+    "signature": "bool getNetworkActive()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getDustRelayFee": {
+    "signature": "CFeeRate getDustRelayFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::executeRpc": {
+    "signature": "UniValue executeRpc(const std::string& command, const UniValue& params, const std::string& uri)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::listRpcCommands": {
+    "signature": "std::vector<std::string> listRpcCommands()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::getUnspentOutput": {
+    "signature": "std::optional<Coin> getUnspentOutput(const COutPoint& output)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::broadcastTransaction": {
+    "signature": "node::TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Node::walletLoader": {
+    "signature": "WalletLoader& walletLoader()",
+    "policy": "LocalAccessor",
+    "reason": "In-process accessor to a stable loader; only the checked wrapper is returned. Never exempt IPC dispatch."
+  },
+  "Node::handleInitMessage": {
+    "signature": "std::unique_ptr<Handler> handleInitMessage(InitMessageFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleMessageBox": {
+    "signature": "std::unique_ptr<Handler> handleMessageBox(MessageBoxFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleQuestion": {
+    "signature": "std::unique_ptr<Handler> handleQuestion(QuestionFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleShowProgress": {
+    "signature": "std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleInitWallet": {
+    "signature": "std::unique_ptr<Handler> handleInitWallet(InitWalletFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleNotifyNumConnectionsChanged": {
+    "signature": "std::unique_ptr<Handler> handleNotifyNumConnectionsChanged(NotifyNumConnectionsChangedFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleNotifyNetworkActiveChanged": {
+    "signature": "std::unique_ptr<Handler> handleNotifyNetworkActiveChanged(NotifyNetworkActiveChangedFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleNotifyAlertChanged": {
+    "signature": "std::unique_ptr<Handler> handleNotifyAlertChanged(NotifyAlertChangedFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleBannedListChanged": {
+    "signature": "std::unique_ptr<Handler> handleBannedListChanged(BannedListChangedFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleNotifyBlockTip": {
+    "signature": "std::unique_ptr<Handler> handleNotifyBlockTip(NotifyBlockTipFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::handleNotifyHeaderTip": {
+    "signature": "std::unique_ptr<Handler> handleNotifyHeaderTip(NotifyHeaderTipFn fn)",
+    "policy": "Bootstrap",
+    "reason": "Only in-process, before the runtime window: base initialization and initial settings/subscriptions. Runtime calls require a worker."
+  },
+  "Node::context": {
+    "signature": "node::NodeContext* context()",
+    "policy": "Forbidden",
+    "reason": "Raw implementation pointers would bypass this audit."
+  },
+  "Node::setContext": {
+    "signature": "void setContext(node::NodeContext* context)",
+    "policy": "Forbidden",
+    "reason": "Raw implementation pointers would bypass this audit."
+  },
+  "Wallet::encryptWallet": {
+    "signature": "bool encryptWallet(const SecureString& wallet_passphrase)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::isCrypted": {
+    "signature": "bool isCrypted()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::lock": {
+    "signature": "bool lock()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::unlock": {
+    "signature": "bool unlock(const SecureString& wallet_passphrase)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::isLocked": {
+    "signature": "bool isLocked()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::changeWalletPassphrase": {
+    "signature": "bool changeWalletPassphrase(const SecureString& old_wallet_passphrase, const SecureString& new_wallet_passphrase)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::abortRescan": {
+    "signature": "void abortRescan()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::backupWallet": {
+    "signature": "bool backupWallet(const std::string& filename)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getWalletName": {
+    "signature": "std::string getWalletName()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getNewDestination": {
+    "signature": "util::Result<CTxDestination> getNewDestination(OutputType type, const std::string& label)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getPubKey": {
+    "signature": "bool getPubKey(const CScript& script, const CKeyID& address, CPubKey& pub_key)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::signMessage": {
+    "signature": "SigningResult signMessage(const std::string& message, const PKHash& pkhash, std::string& str_sig)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::isSpendable": {
+    "signature": "bool isSpendable(const CTxDestination& dest)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::setAddressBook": {
+    "signature": "bool setAddressBook(const CTxDestination& dest, const std::string& name, const std::optional<wallet::AddressPurpose>& purpose)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::delAddressBook": {
+    "signature": "bool delAddressBook(const CTxDestination& dest)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getAddress": {
+    "signature": "bool getAddress(const CTxDestination& dest, std::string* name, wallet::AddressPurpose* purpose)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getAddresses": {
+    "signature": "std::vector<WalletAddress> getAddresses()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getAddressReceiveRequests": {
+    "signature": "std::vector<std::string> getAddressReceiveRequests()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::setAddressReceiveRequest": {
+    "signature": "bool setAddressReceiveRequest(const CTxDestination& dest, const std::string& id, const std::string& value)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::displayAddress": {
+    "signature": "util::Result<void> displayAddress(const CTxDestination& dest)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::lockCoin": {
+    "signature": "bool lockCoin(const COutPoint& output, bool write_to_db)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::unlockCoin": {
+    "signature": "bool unlockCoin(const COutPoint& output)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::isLockedCoin": {
+    "signature": "bool isLockedCoin(const COutPoint& output)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::listLockedCoins": {
+    "signature": "void listLockedCoins(std::vector<COutPoint>& outputs)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::createTransaction": {
+    "signature": "util::Result<wallet::CreatedTransactionResult> createTransaction(const std::vector<wallet::CRecipient>& recipients, const wallet::CCoinControl& coin_control, bool sign, std::optional<unsigned int> change_pos)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::commitTransaction": {
+    "signature": "void commitTransaction(CTransactionRef tx, WalletValueMap value_map, WalletOrderForm order_form)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::transactionCanBeAbandoned": {
+    "signature": "bool transactionCanBeAbandoned(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::abandonTransaction": {
+    "signature": "bool abandonTransaction(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::transactionCanBeBumped": {
+    "signature": "bool transactionCanBeBumped(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::createBumpTransaction": {
+    "signature": "bool createBumpTransaction(const Txid& txid, const wallet::CCoinControl& coin_control, std::vector<bilingual_str>& errors, CAmount& old_fee, CAmount& new_fee, CMutableTransaction& mtx)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::signBumpTransaction": {
+    "signature": "bool signBumpTransaction(CMutableTransaction& mtx)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::commitBumpTransaction": {
+    "signature": "bool commitBumpTransaction(const Txid& txid, CMutableTransaction&& mtx, std::vector<bilingual_str>& errors, Txid& bumped_txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getTx": {
+    "signature": "CTransactionRef getTx(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getWalletTx": {
+    "signature": "WalletTx getWalletTx(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getWalletTxs": {
+    "signature": "std::set<WalletTx> getWalletTxs()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::tryGetTxStatus": {
+    "signature": "bool tryGetTxStatus(const Txid& txid, WalletTxStatus& tx_status, int& num_blocks, int64_t& block_time)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getWalletTxDetails": {
+    "signature": "WalletTx getWalletTxDetails(const Txid& txid, WalletTxStatus& tx_status, WalletOrderForm& order_form, bool& in_mempool, int& num_blocks)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::fillPSBT": {
+    "signature": "std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions& options, size_t* n_signed, PartiallySignedTransaction& psbtx, bool& complete)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getBalances": {
+    "signature": "WalletBalances getBalances()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::tryGetBalances": {
+    "signature": "bool tryGetBalances(WalletBalances& balances, uint256& block_hash)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getBalance": {
+    "signature": "CAmount getBalance()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getAvailableBalance": {
+    "signature": "CAmount getAvailableBalance(const wallet::CCoinControl& coin_control)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::txinIsMine": {
+    "signature": "bool txinIsMine(const CTxIn& txin)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::txoutIsMine": {
+    "signature": "bool txoutIsMine(const CTxOut& txout)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getDebit": {
+    "signature": "CAmount getDebit(const CTxIn& txin)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getCredit": {
+    "signature": "CAmount getCredit(const CTxOut& txout)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::listCoins": {
+    "signature": "CoinsList listCoins()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getCoins": {
+    "signature": "std::vector<WalletTxOut> getCoins(const std::vector<COutPoint>& outputs)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getRequiredFee": {
+    "signature": "CAmount getRequiredFee(unsigned int tx_bytes)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getMinimumFee": {
+    "signature": "CAmount getMinimumFee(unsigned int tx_bytes, const wallet::CCoinControl& coin_control, int* returned_target, FeeReason* reason)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getConfirmTarget": {
+    "signature": "unsigned int getConfirmTarget()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::hdEnabled": {
+    "signature": "bool hdEnabled()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::canGetAddresses": {
+    "signature": "bool canGetAddresses()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::privateKeysDisabled": {
+    "signature": "bool privateKeysDisabled()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::taprootEnabled": {
+    "signature": "bool taprootEnabled()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::hasExternalSigner": {
+    "signature": "bool hasExternalSigner()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getDefaultAddressType": {
+    "signature": "OutputType getDefaultAddressType()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::getDefaultMaxTxFee": {
+    "signature": "CAmount getDefaultMaxTxFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::remove": {
+    "signature": "void remove()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleUnload": {
+    "signature": "std::unique_ptr<Handler> handleUnload(UnloadFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleShowProgress": {
+    "signature": "std::unique_ptr<Handler> handleShowProgress(ShowProgressFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleStatusChanged": {
+    "signature": "std::unique_ptr<Handler> handleStatusChanged(StatusChangedFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleAddressBookChanged": {
+    "signature": "std::unique_ptr<Handler> handleAddressBookChanged(AddressBookChangedFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleTransactionChanged": {
+    "signature": "std::unique_ptr<Handler> handleTransactionChanged(TransactionChangedFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::handleCanGetAddressesChanged": {
+    "signature": "std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Wallet::wallet": {
+    "signature": "wallet::CWallet* wallet()",
+    "policy": "Forbidden",
+    "reason": "Raw implementation pointers would bypass this audit."
+  },
+  "WalletLoader::registerRpcs": {
+    "signature": "void registerRpcs()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::verify": {
+    "signature": "bool verify()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::load": {
+    "signature": "bool load()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::start": {
+    "signature": "void start(CScheduler& scheduler)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::stop": {
+    "signature": "void stop()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::setMockTime": {
+    "signature": "void setMockTime(int64_t time)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::schedulerMockForward": {
+    "signature": "void schedulerMockForward(std::chrono::seconds delta_seconds)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::createWallet": {
+    "signature": "util::Result<std::unique_ptr<Wallet>> createWallet(const std::string& name, const SecureString& passphrase, uint64_t wallet_creation_flags, std::vector<bilingual_str>& warnings)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::loadWallet": {
+    "signature": "util::Result<std::unique_ptr<Wallet>> loadWallet(const std::string& name, std::vector<bilingual_str>& warnings)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::getWalletDir": {
+    "signature": "std::string getWalletDir()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::restoreWallet": {
+    "signature": "util::Result<std::unique_ptr<Wallet>> restoreWallet(const fs::path& backup_file, const std::string& wallet_name, std::vector<bilingual_str>& warnings, bool load_after_restore)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::migrateWallet": {
+    "signature": "util::Result<WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::isEncrypted": {
+    "signature": "bool isEncrypted(const std::string& wallet_name)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::listWalletDir": {
+    "signature": "std::vector<std::pair<std::string, std::string>> listWalletDir()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::getWallets": {
+    "signature": "std::vector<std::unique_ptr<Wallet>> getWallets()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::handleLoadWallet": {
+    "signature": "std::unique_ptr<Handler> handleLoadWallet(LoadWalletFn fn)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "WalletLoader::context": {
+    "signature": "wallet::WalletContext* context()",
+    "policy": "Forbidden",
+    "reason": "Raw implementation pointers would bypass this audit."
+  },
+  "Chain::getHeight": {
+    "signature": "std::optional<int> getHeight()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getBlockHash": {
+    "signature": "uint256 getBlockHash(int height)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::haveBlockOnDisk": {
+    "signature": "bool haveBlockOnDisk(int height)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findLocatorFork": {
+    "signature": "std::optional<int> findLocatorFork(const CBlockLocator& locator)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::hasBlockFilterIndex": {
+    "signature": "bool hasBlockFilterIndex(BlockFilterType filter_type)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::blockFilterMatchesAny": {
+    "signature": "std::optional<bool> blockFilterMatchesAny(BlockFilterType filter_type, const uint256& block_hash, const GCSFilter::ElementSet& filter_set)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findBlock": {
+    "signature": "bool findBlock(const uint256& hash, const FoundBlock& block)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findFirstBlockWithTimeAndHeight": {
+    "signature": "bool findFirstBlockWithTimeAndHeight(int64_t min_time, int min_height, const FoundBlock& block)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findAncestorByHeight": {
+    "signature": "bool findAncestorByHeight(const uint256& block_hash, int ancestor_height, const FoundBlock& ancestor_out)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findAncestorByHash": {
+    "signature": "bool findAncestorByHash(const uint256& block_hash, const uint256& ancestor_hash, const FoundBlock& ancestor_out)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findCommonAncestor": {
+    "signature": "bool findCommonAncestor(const uint256& block_hash1, const uint256& block_hash2, const FoundBlock& ancestor_out, const FoundBlock& block1_out, const FoundBlock& block2_out)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::findCoins": {
+    "signature": "void findCoins(std::map<COutPoint, Coin>& coins)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::guessVerificationProgress": {
+    "signature": "double guessVerificationProgress(const uint256& block_hash)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::hasBlocks": {
+    "signature": "bool hasBlocks(const uint256& block_hash, int min_height, std::optional<int> max_height)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::isRBFOptIn": {
+    "signature": "RBFTransactionState isRBFOptIn(const CTransaction& tx)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::isInMempool": {
+    "signature": "bool isInMempool(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::hasDescendantsInMempool": {
+    "signature": "bool hasDescendantsInMempool(const Txid& txid)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::broadcastTransaction": {
+    "signature": "bool broadcastTransaction(const CTransactionRef& tx, const CAmount& max_tx_fee, node::TxBroadcast broadcast_method, std::string& err_string)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getTransactionAncestry": {
+    "signature": "void getTransactionAncestry(const Txid& txid, size_t& ancestors, size_t& cluster_count, size_t* ancestorsize, CAmount* ancestorfees)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::calculateIndividualBumpFees": {
+    "signature": "std::map<COutPoint, CAmount> calculateIndividualBumpFees(const std::vector<COutPoint>& outpoints, const CFeeRate& target_feerate)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::calculateCombinedBumpFee": {
+    "signature": "std::optional<CAmount> calculateCombinedBumpFee(const std::vector<COutPoint>& outpoints, const CFeeRate& target_feerate)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getPackageLimits": {
+    "signature": "void getPackageLimits(unsigned int& limit_ancestor_count, unsigned int& limit_descendant_count)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::checkChainLimits": {
+    "signature": "util::Result<void> checkChainLimits(const CTransactionRef& tx)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::estimateSmartFee": {
+    "signature": "CFeeRate estimateSmartFee(int num_blocks, bool conservative, FeeCalculation* calc)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::estimateMaxBlocks": {
+    "signature": "unsigned int estimateMaxBlocks()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::mempoolMinFee": {
+    "signature": "CFeeRate mempoolMinFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::relayMinFee": {
+    "signature": "CFeeRate relayMinFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::relayIncrementalFee": {
+    "signature": "CFeeRate relayIncrementalFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::relayDustFee": {
+    "signature": "CFeeRate relayDustFee()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::havePruned": {
+    "signature": "bool havePruned()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getPruneHeight": {
+    "signature": "std::optional<int> getPruneHeight()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::isReadyToBroadcast": {
+    "signature": "bool isReadyToBroadcast()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::isInitialBlockDownload": {
+    "signature": "bool isInitialBlockDownload()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::shutdownRequested": {
+    "signature": "bool shutdownRequested()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::initMessage": {
+    "signature": "void initMessage(const std::string& message)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::initWarning": {
+    "signature": "void initWarning(const bilingual_str& message)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::initError": {
+    "signature": "void initError(const bilingual_str& message)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::showProgress": {
+    "signature": "void showProgress(const std::string& title, int progress, bool resume_possible)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::handleNotifications": {
+    "signature": "std::unique_ptr<Handler> handleNotifications(std::shared_ptr<Notifications> notifications)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::waitForNotificationsIfTipChanged": {
+    "signature": "void waitForNotificationsIfTipChanged(const uint256& old_tip)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::waitForNotifications": {
+    "signature": "void waitForNotifications()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::handleRpc": {
+    "signature": "std::unique_ptr<Handler> handleRpc(const CRPCCommand& command)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::rpcEnableDeprecated": {
+    "signature": "bool rpcEnableDeprecated(const std::string& method)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getSetting": {
+    "signature": "common::SettingsValue getSetting(const std::string& arg)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getSettingsList": {
+    "signature": "std::vector<common::SettingsValue> getSettingsList(const std::string& arg)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::getRwSetting": {
+    "signature": "common::SettingsValue getRwSetting(const std::string& name)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::updateRwSetting": {
+    "signature": "bool updateRwSetting(const std::string& name, const SettingsUpdate& update_function)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::overwriteRwSetting": {
+    "signature": "bool overwriteRwSetting(const std::string& name, common::SettingsValue value, SettingsAction action)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::deleteRwSettings": {
+    "signature": "bool deleteRwSettings(const std::string& name, SettingsAction action)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::requestMempoolTransactions": {
+    "signature": "void requestMempoolTransactions(Notifications& notifications)",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::hasAssumedValidChain": {
+    "signature": "bool hasAssumedValidChain()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  },
+  "Chain::context": {
+    "signature": "node::NodeContext* context()",
+    "policy": "Forbidden",
+    "reason": "Raw implementation pointers would bypass this audit."
+  },
+  "ExternalSigner::getName": {
+    "signature": "std::string getName()",
+    "policy": "Worker",
+    "reason": "Backend operations run on an owned worker, including getters and try-lock operations."
+  }
+}

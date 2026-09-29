@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_MODELS_CHAINMODEL_H
 #define BITCOIN_QML_MODELS_CHAINMODEL_H
 
+#include <qml/backendworker.h>
+
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -34,6 +36,8 @@ public:
     quint64 assumedChainstateSize() const { return m_assumed_chainstate_size; };
     QVariantList timeRatioList() const { return m_time_ratio_list; };
 
+    void drainBackend();
+    void onNodeReady();
     int timestampAtMeridian();
 
     void setCurrentTimeRatio();
@@ -43,6 +47,7 @@ public Q_SLOTS:
     void setTimeRatioListInitial();
 
 Q_SIGNALS:
+    void backendDrained();
     void timeRatioListChanged();
     void currentNetworkNameChanged();
 
@@ -59,6 +64,12 @@ private:
     QVariantList m_time_ratio_list{0.0};
 
     interfaces::Chain& m_chain;
+    BackendWorker m_backend;
+    QTimer m_timer;
+    bool m_pending{false};
+    bool m_again{false};
+    bool m_draining{false};
+    bool m_node_ready{false};
 };
 
 #endif // BITCOIN_QML_MODELS_CHAINMODEL_H

@@ -61,11 +61,10 @@ void BanListModelTests::refreshPopulatesRolesAndRows()
 
     BanListModel model{node, nullptr};
     QSignalSpy count_spy(&model, &BanListModel::countChanged);
+    model.onNodeReady();
 
-    model.refresh();
-
-    QCOMPARE(node.calls.getBanned.load(), 1);
-    QCOMPARE(model.count(), 2);
+    QTRY_VERIFY(node.calls.getBanned.load() >= 1);
+    QTRY_COMPARE(model.count(), 2);
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.rowCount(model.index(0, 0)), 0);
     QCOMPARE(count_spy.count(), 1);
@@ -104,15 +103,19 @@ void BanListModelTests::unbanAtTargetsSelectedSubnet()
     };
 
     BanListModel model{node, nullptr};
-    model.refresh();
+    model.onNodeReady();
+    QTRY_COMPARE(model.count(), 1);
 
     bool received_expected_subnet{false};
     node.unban_fn = [&](const CSubNet& value) {
         received_expected_subnet = value.ToString() == subnet.ToString();
         return true;
     };
+    QSignalSpy completed{&model, &BanListModel::unbanFinished};
     QVERIFY(model.unbanAt(0));
-    QCOMPARE(node.calls.getBanned.load(), 1);
+    QTRY_COMPARE(completed.count(), 1);
+    QVERIFY(completed.at(0).at(0).toBool());
+    QTRY_VERIFY(node.calls.getBanned.load() >= 1);
     QCOMPARE(node.calls.unban.load(), 1);
     QVERIFY(received_expected_subnet);
 }
@@ -129,11 +132,15 @@ void BanListModelTests::unbanAtReturnsFalseWhenNodeRejectsSubnet()
     };
 
     BanListModel model{node, nullptr};
-    model.refresh();
+    model.onNodeReady();
 
     node.unban_fn = [](const CSubNet&) { return false; };
-    QVERIFY(!model.unbanAt(0));
-    QCOMPARE(node.calls.getBanned.load(), 1);
+    QTRY_COMPARE(model.count(), 1);
+    QSignalSpy completed{&model, &BanListModel::unbanFinished};
+    QVERIFY(model.unbanAt(0));
+    QTRY_COMPARE(completed.count(), 1);
+    QVERIFY(!completed.at(0).at(0).toBool());
+    QTRY_VERIFY(node.calls.getBanned.load() >= 1);
     QCOMPARE(node.calls.unban.load(), 1);
 }
 
@@ -149,11 +156,11 @@ void BanListModelTests::unbanAtIgnoresInvalidRows()
     };
 
     BanListModel model{node, nullptr};
-    model.refresh();
+    model.onNodeReady();
 
     QVERIFY(!model.unbanAt(-1));
     QVERIFY(!model.unbanAt(42));
-    QCOMPARE(node.calls.getBanned.load(), 1);
+    QTRY_VERIFY(node.calls.getBanned.load() >= 1);
     QCOMPARE(node.calls.unban.load(), 0);
 }
 

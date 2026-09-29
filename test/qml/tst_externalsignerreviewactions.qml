@@ -175,6 +175,9 @@ TestCase {
 
         review.beginApproval()
         review.destroy()
+        // destroy() is deferred. Process the deletion before advancing timers;
+        // a slow/instrumented run can otherwise fire the 1 ms approval first.
+        testLifecycle.processDeferredDeletes()
         wait(50)
 
         compare(wallet.approveCalls, 0)

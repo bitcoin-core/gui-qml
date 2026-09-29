@@ -13,6 +13,7 @@
 BanListModel::BanListModel(interfaces::Node& node, QObject* parent)
     : QAbstractListModel(parent), m_node(node)
 {
+    connect(&m_backend, &BackendWorker::drained, this, &BanListModel::backendDrained);
 }
 
 int BanListModel::rowCount(const QModelIndex& parent) const
@@ -46,20 +47,50 @@ QHash<int, QByteArray> BanListModel::roleNames() const
 
 bool BanListModel::unbanAt(int row)
 {
-    if (row < 0 || row >= m_ban_list.size()) return false;
-    return m_node.unban(m_ban_list.at(row).subnet);
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready || row < 0 || row >= m_ban_list.size()) return false;
+    m_backend.submit([node = &m_node, subnet = m_ban_list.at(row).subnet] { return node->unban(subnet); },
+                     [this](bool success) { Q_EMIT unbanFinished(success); refresh(); });
+    return true;
 }
 
 void BanListModel::refresh()
 {
-    beginResetModel();
-    banmap_t banMap;
-    m_node.getBanned(banMap);
-    m_ban_list.clear();
-    m_ban_list.reserve(static_cast<int>(banMap.size()));
-    for (const auto& [subnet, entry] : banMap) {
-        m_ban_list.append({subnet, entry});
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
+    if (m_pending) {
+        m_again = true;
+        return;
     }
-    endResetModel();
-    Q_EMIT countChanged();
+    m_pending = true;
+    m_backend.submit([node = &m_node] {
+        banmap_t bans;
+        node->getBanned(bans);
+        return bans;
+    }, [this](const banmap_t& bans) {
+        RequireModelThread(this);
+        m_pending = false;
+        beginResetModel();
+        m_ban_list.clear();
+        m_ban_list.reserve(static_cast<int>(bans.size()));
+        for (const auto& [subnet, entry] : bans) m_ban_list.append({subnet, entry});
+        endResetModel();
+        Q_EMIT countChanged();
+        if (std::exchange(m_again, false)) refresh();
+    });
+}
+
+void BanListModel::onNodeReady()
+{
+    RequireModelThread(this);
+    if (m_draining || m_node_ready) return;
+    m_node_ready = true;
+    refresh();
+}
+
+void BanListModel::drainBackend()
+{
+    RequireModelThread(this);
+    m_draining = true;
+    m_backend.drain();
 }

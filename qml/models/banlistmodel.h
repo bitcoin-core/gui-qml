@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_MODELS_BANLISTMODEL_H
 #define BITCOIN_QML_MODELS_BANLISTMODEL_H
 
+#include <qml/backendworker.h>
+
 #include <net_types.h>
 #include <netaddress.h>
 
@@ -39,15 +41,24 @@ public:
     int count() const { return m_ban_list.size(); }
 
     Q_INVOKABLE bool unbanAt(int row);
+    void drainBackend();
+    void onNodeReady();
 
 public Q_SLOTS:
     void refresh();
 
 Q_SIGNALS:
     void countChanged();
+    void backendDrained();
+    void unbanFinished(bool success);
 
 private:
     interfaces::Node& m_node;
+    BackendWorker m_backend;
+    bool m_pending{false};
+    bool m_again{false};
+    bool m_draining{false};
+    bool m_node_ready{false};
     QList<BanListEntry> m_ban_list;
 };
 

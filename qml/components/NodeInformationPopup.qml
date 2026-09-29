@@ -19,7 +19,17 @@ Popup {
     readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
     readonly property int contentMargin: 28
 
-    onAboutToShow: rows = nodeModel.nodeInformationRows()
+    onAboutToShow: {
+        rows = nodeModel.nodeInformationRows()
+        if (nodeModel.refreshNodeInformation) nodeModel.refreshNodeInformation()
+    }
+    Connections {
+        target: nodeModel
+        ignoreUnknownSignals: true
+        function onNodeInformationChanged() {
+            if (root.visible) root.rows = nodeModel.nodeInformationRows()
+        }
+    }
 
     modal: true
     padding: 0

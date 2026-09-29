@@ -5,7 +5,9 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QEvent>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
@@ -1160,7 +1162,7 @@ public:
     int backupWalletCalls() const { return m_backup_wallet_calls; }
     Q_INVOKABLE QString estimatedFeeForTarget(const int target) const
     {
-        const QString estimate = m_fee_estimates.value(target);
+        QString estimate = m_fee_estimates.value(target);
         if (!estimate.isEmpty()) {
             return estimate;
         }
@@ -2578,6 +2580,7 @@ Q_SIGNALS:
     void mempoolInfoPollingActiveChanged(bool active);
     void mempoolInformationAvailableChanged();
     void peerActionStateChanged();
+    void peerActionFinished(bool success);
     void peerActionCallsChanged();
 };
 
@@ -2873,6 +2876,7 @@ public:
     }
 
 Q_SIGNALS:
+    void unbanFinished(bool success);
     void countChanged();
     void actionStateChanged();
     void actionCallsChanged();
@@ -3838,6 +3842,12 @@ class QmlTestsSetup : public QObject
 {
     Q_OBJECT
 
+public:
+    Q_INVOKABLE void processDeferredDeletes()
+    {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
 public Q_SLOTS:
     void applicationAvailable()
     {
@@ -3847,6 +3857,7 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->rootContext()->setContextProperty(QStringLiteral("testLifecycle"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;

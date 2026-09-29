@@ -68,6 +68,7 @@
 #endif
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/string.h>
 #include <util/threadnames.h>
 #include <util/translation.h>
 #ifdef ENABLE_WALLET
@@ -76,6 +77,7 @@
 
 #include <cassert>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -88,6 +90,7 @@
 #include <QPixmap>
 #include <QGuiApplication>
 #include <QJSEngine>
+#include <QMessageBox>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -298,8 +301,51 @@ enum class PreInitOnboardingStatus {
     FAILED,
 };
 
+bool ErrorSettingsRead(
+    const bilingual_str& error,
+    const std::vector<std::string>& details,
+    std::optional<QmlOnboardingSettings::SettingsFileBackup>& settings_file_backup,
+    QString& settings_file_backup_error)
+{
+    const auto capture_backup = [&] {
+        QmlOnboardingSettings::SettingsFileBackup backup;
+        if (!QmlOnboardingSettings::CaptureSettingsFileBackup(
+                gArgs,
+                backup,
+                &settings_file_backup_error)) {
+            return false;
+        }
+        settings_file_backup = std::move(backup);
+        return true;
+    };
+
+    if (gArgs.GetBoolArg("-resetguisettings", false)) return !capture_backup();
+
+    QMessageBox message_box{
+        QMessageBox::Critical,
+        CLIENT_NAME,
+        QString::fromStdString(strprintf("%s.", error.translated)),
+        QMessageBox::Reset | QMessageBox::Abort,
+    };
+    /*: Explanatory text shown on startup when the settings file cannot be read.
+      Prompts user to make a choice between resetting or aborting. */
+    message_box.setInformativeText(QObject::tr("Do you want to reset settings to default values, or to abort without making changes?"));
+    message_box.setDetailedText(QString::fromStdString(util::MakeUnorderedList(details)));
+    message_box.setTextFormat(Qt::PlainText);
+    message_box.setDefaultButton(QMessageBox::Reset);
+    switch (message_box.exec()) {
+    case QMessageBox::Reset:
+        return !capture_backup();
+    case QMessageBox::Abort:
+        return true;
+    default:
+        assert(false);
+    }
+}
+
 struct PreInitOnboardingContext {
     std::unique_ptr<OnboardingOptionsModel> onboarding_options_model;
+    std::optional<QmlOnboardingSettings::PendingApply> pending_apply;
     QScopedPointer<const NetworkStyle> network_style;
     std::unique_ptr<QQmlApplicationEngine> engine;
 #ifdef ENABLE_TEST_AUTOMATION
@@ -326,11 +372,21 @@ bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_
     const QmlOnboardingSettings::OnboardingStartupStatus status{
         QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc)
     };
+    if (status.settings_file_unreadable) {
+        return false;
+    }
     return !status.ok || status.should_show_onboarding;
 }
 
-PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc)
+PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc,
+    const std::function<void(QQmlApplicationEngine&)>& window_created)
 {
+    // Let InitConfig report invalid explicit datadirs with Core's standard
+    // error instead of entering an onboarding preview that cannot override
+    // the command line.
+    if (!QmlDataDir::ValidateExplicitDataDir(gArgs).isEmpty()) {
+        return PreInitOnboardingStatus::NOT_SHOWN;
+    }
     if (!ShouldShowPreInitOnboarding(argv, can_listen_ipc)) {
         QmlDataDir::ApplyGuiDataDirSetting(gArgs);
         return PreInitOnboardingStatus::NOT_SHOWN;
@@ -373,6 +429,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     QEventLoop loop;
     QObject::connect(context.engine->rootObjects().first(), SIGNAL(finished()), &loop, SLOT(quit()));
     QObject::connect(context.window, SIGNAL(closing(QQuickCloseEvent*)), &loop, SLOT(quit()));
+    if (window_created) window_created(*context.engine);
     loop.exec();
 
     const bool completed = context.engine->rootObjects().first()->property("completed").toBool();
@@ -382,34 +439,42 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     }
 
     QString error;
-    if (!context.onboarding_options_model->applyToArgs(gArgs, &error)) {
+    QmlOnboardingSettings::PendingApply pending_apply;
+    if (!context.onboarding_options_model->prepareApplyToArgs(gArgs, pending_apply, &error)) {
         InitError(Untranslated(error.toStdString()));
         context.close();
         return PreInitOnboardingStatus::FAILED;
     }
+    context.pending_apply = std::move(pending_apply);
     return PreInitOnboardingStatus::COMPLETED;
 }
-
-// Qt gets a synthetic argument list so it never parses the process command line:
-// a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
-// before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
-int qt_argc = 1;
-const char* qt_argv = "bitcoin-core-app";
 } // namespace
 
 
-int QmlGuiMain(int argc, char* argv[])
+int QmlGuiMain(int argc, char* argv[], const QmlApplicationHooks& hooks)
 {
 #ifdef WIN32
     common::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
 #endif // WIN32
 
+    return RunQmlApplication(argc, argv, hooks);
+}
+
+int RunQmlApplication(int argc, char* argv[], const QmlApplicationHooks& hooks)
+{
+    // Shared by the production executable and every application test runner.
+    noui_connect();
     Q_INIT_RESOURCE(bitcoin_qml);
     Q_INIT_RESOURCE(bitcoin_compat);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
+    // Qt gets a synthetic argument list so it never parses the process command line:
+    // a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
+    // before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
+    int qt_argc = 1;
+    const char* qt_argv = "bitcoin-core-app";
     QApplication app(qt_argc, const_cast<char**>(&qt_argv));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
@@ -473,13 +538,9 @@ int QmlGuiMain(int argc, char* argv[])
 
     app.setQuitOnLastWindowClosed(false);
     setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
-    if (gArgs.GetBoolArg("-resetguisettings", false)) {
-        QString reset_error;
-        if (!QmlDataDir::ResetGuiSettings(gArgs, &reset_error)) {
-            InitError(Untranslated(reset_error.toStdString()));
-            return EXIT_FAILURE;
-        }
-    }
+    const QmlOnboardingSettings::GuiSettingsStore bootstrap_gui_settings{
+        QmlOnboardingSettings::CurrentGuiSettingsStore()
+    };
 
     LoadFontResource(":/fonts/bitcoincoresans/regular");
     LoadFontResource(":/fonts/bitcoincoresans/semibold");
@@ -505,7 +566,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     PreInitOnboardingContext pre_init_onboarding_context;
     const PreInitOnboardingStatus pre_init_onboarding_status{
-        RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc())
+        RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc(), hooks.onboarding_created)
     };
     switch (pre_init_onboarding_status) {
     case PreInitOnboardingStatus::COMPLETED:
@@ -518,27 +579,36 @@ int QmlGuiMain(int argc, char* argv[])
         break;
     }
 
+    std::optional<QmlOnboardingSettings::SettingsFileBackup> settings_file_backup;
+    QString settings_file_backup_error;
     if (auto error = common::InitConfig(
             gArgs,
-            [](const bilingual_str& msg, const std::vector<std::string>& details) {
-                return InitError(msg, details);
+            [&](const bilingual_str& message, const std::vector<std::string>& details) {
+                return ErrorSettingsRead(
+                    message,
+                    details,
+                    settings_file_backup,
+                    settings_file_backup_error);
             })) {
+        if (!settings_file_backup_error.isEmpty()) {
+            InitError(Untranslated(settings_file_backup_error.toStdString()));
+        } else if (error->status != common::ConfigStatus::ABORTED) {
+            InitError(error->message, error->details);
+        }
         return EXIT_FAILURE;
     }
 
-    const QmlLegacySettings::MigrationResult legacy_migration{
-        QmlLegacySettings::MigrateCoreSettings(gArgs, QmlLegacySettings::MigrationMode::Persist)
-    };
-    if (!legacy_migration.error.isEmpty()) {
-        InitError(Untranslated(legacy_migration.error.toStdString()));
+    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
+    QString finalize_settings_error;
+    if (!QmlOnboardingSettings::FinalizeStartupSettings(
+            gArgs,
+            bootstrap_gui_settings,
+            pre_init_onboarding_context.pending_apply ? &*pre_init_onboarding_context.pending_apply : nullptr,
+            /*result=*/nullptr,
+            &finalize_settings_error,
+            settings_file_backup ? &*settings_file_backup : nullptr)) {
+        InitError(Untranslated(finalize_settings_error.toStdString()));
         return EXIT_FAILURE;
-    }
-    if (legacy_migration.settings_changed) {
-        std::vector<std::string> settings_errors;
-        if (!gArgs.WriteSettingsFile(&settings_errors)) {
-            InitError(_("Settings file could not be written"), settings_errors);
-            return EXIT_FAILURE;
-        }
     }
 
     // legacy GUI: parameterSetup()
@@ -553,6 +623,7 @@ int QmlGuiMain(int argc, char* argv[])
     // legacy GUI: createNode()
     std::unique_ptr<interfaces::Node> node = init->makeNode();
     std::unique_ptr<interfaces::Chain> chain = init->makeChain();
+    if (hooks.interfaces_created) hooks.interfaces_created(node, chain);
 
     // legacy GUI: baseInitialize()
     if (!node->baseInitialize()) {
@@ -584,18 +655,6 @@ int QmlGuiMain(int argc, char* argv[])
     }
 #endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, [&] {
-        if (shutdown_requested) {
-            return;
-        }
-        shutdown_requested = true;
-#ifdef ENABLE_WALLET
-        if (wallet_controller) {
-            wallet_controller->unloadWallets();
-        }
-#endif
-        init_executor.shutdown();
-    });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &QmlInitExecutor::shutdownResult, qGuiApp, [] {
         QCoreApplication::exit(0);
@@ -603,6 +662,12 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&init_executor, &QmlInitExecutor::runawayException, &node_model, &NodeModel::handleRunawayException);
 
     NetworkTrafficTower network_traffic_tower{*node};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &network_traffic_tower,
+                     [&](bool success) {
+                         if (success && !shutdown_requested && !node->shutdownRequested()) {
+                             network_traffic_tower.startSampling();
+                         }
+                     });
     NetworkStatusModel network_status_model;
 #ifdef __ANDROID__
     AndroidNotifier android_notifier{node_model};
@@ -610,16 +675,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     ChainModel chain_model{*chain};
     chain_model.setCurrentNetworkName(QString::fromStdString(gArgs.GetChainTypeString()));
-    setupChainQSettings(&app, chain_model.currentNetworkName());
-    // Settings reset must happen before model instantiation so the models
-    // read clean defaults from QSettings.
-    if (gArgs.IsArgSet("-resetguisettings")) {
-        QSettings settings;
-        settings.remove(QStringLiteral("fHideTrayIcon"));
-        settings.remove(QStringLiteral("fMinimizeToTray"));
-        settings.remove(QStringLiteral("fMinimizeOnClose"));
-    }
 
+    QObject::connect(&node_model, &NodeModel::nodeReady, &chain_model, &ChainModel::onNodeReady);
     QObject::connect(&node_model, &NodeModel::setTimeRatioList, &chain_model, &ChainModel::setTimeRatioList);
     QObject::connect(&node_model, &NodeModel::setTimeRatioListInitial, &chain_model, &ChainModel::setTimeRatioListInitial);
 
@@ -635,14 +692,15 @@ int QmlGuiMain(int argc, char* argv[])
     });
 
     PeerListModel peer_model{*node, nullptr};
+    QObject::connect(&node_model, &NodeModel::nodeReady, &peer_model, &PeerListModel::onNodeReady);
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 
     BanListModel ban_list_model{*node, nullptr};
     QObject::connect(&node_model, &NodeModel::bannedListChanged,
                      &ban_list_model, &BanListModel::refresh);
-    QObject::connect(&node_model, &NodeModel::nodeInitialized,
-                     &ban_list_model, &BanListModel::refresh);
+    QObject::connect(&node_model, &NodeModel::nodeReady,
+                     &ban_list_model, &BanListModel::onNodeReady);
 
     auto engine = std::make_unique<QQmlApplicationEngine>();
 
@@ -661,7 +719,8 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
 
     RpcConsoleModel rpc_console_model{*node};
-    QObject::connect(&node_model, &NodeModel::nodeInitialized,
+    QObject::connect(&rpc_console_model, &RpcConsoleModel::shutdownRequested, &node_model, &NodeModel::requestShutdown);
+    QObject::connect(&node_model, &NodeModel::nodeReady,
                      &rpc_console_model, &RpcConsoleModel::onNodeInitialized);
     engine->rootContext()->setContextProperty("rpcConsoleModel", &rpc_console_model);
 
@@ -771,7 +830,34 @@ int QmlGuiMain(int argc, char* argv[])
 
     qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(window);
 
+    // Drain feature workers while QML can still render the shutdown page.
+    // Core shutdown must not destroy state that an accepted read still uses.
+    int pending_shutdown_workers{6};
+    const auto worker_drained = [&] {
+        if (--pending_shutdown_workers == 0) init_executor.shutdown();
+    };
+    QObject::connect(&node_model, &NodeModel::backendDrained, &app, worker_drained);
+    QObject::connect(&chain_model, &ChainModel::backendDrained, &app, worker_drained);
+    QObject::connect(&peer_model, &PeerListModel::backendDrained, &app, worker_drained);
+    QObject::connect(&ban_list_model, &BanListModel::backendDrained, &app, worker_drained);
+    QObject::connect(&network_traffic_tower, &NetworkTrafficTower::backendDrained, &app, worker_drained);
+    QObject::connect(&rpc_console_model, &RpcConsoleModel::backendDrained, &app, worker_drained);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &app, [&] {
+        if (shutdown_requested) return;
+        shutdown_requested = true;
+#ifdef ENABLE_WALLET
+        if (wallet_controller) wallet_controller->unloadWallets();
+#endif
+        node_model.drainBackend();
+        chain_model.drainBackend();
+        peer_model.drainBackend();
+        ban_list_model.drainBackend();
+        network_traffic_tower.drainBackend();
+        rpc_console_model.drainBackend();
+    });
+
     node_model.startShutdownPolling();
+    if (hooks.window_created) hooks.window_created(*node, *engine);
     const int exit_code{qGuiApp->exec()};
 #ifdef ENABLE_TEST_AUTOMATION
     test_bridge.reset();

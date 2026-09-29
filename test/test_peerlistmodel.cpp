@@ -72,7 +72,8 @@ void PeerListModelTests::mapsRoleData()
     };
 
     PeerListModel model{node, nullptr};
-    QCOMPARE(model.rowCount(), 1);
+    model.onNodeReady();
+    QTRY_COMPARE(model.rowCount(), 1);
     QCOMPARE(model.rowCount(model.index(0, 0)), 0);
 
     const QModelIndex index = model.index(0, 0);
@@ -114,7 +115,7 @@ void PeerListModelTests::mapsRoleData()
     QCOMPARE(model.flags(QModelIndex{}), Qt::NoItemFlags);
     QVERIFY(model.flags(index).testFlag(Qt::ItemIsSelectable));
     QVERIFY(model.flags(index).testFlag(Qt::ItemIsEnabled));
-    QCOMPARE(node.calls.getNodesStats.load(), 1);
+    QTRY_COMPARE(node.calls.getNodesStats.load(), 1);
 }
 
 void PeerListModelTests::refreshUpdatesRows()
@@ -140,19 +141,20 @@ void PeerListModelTests::refreshUpdatesRows()
     };
 
     PeerListModel model{node, nullptr};
-    QCOMPARE(model.rowCount(), 2);
+    model.onNodeReady();
+    QTRY_COMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
     QCOMPARE(model.data(model.index(1, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
 
     model.refresh();
-    QCOMPARE(model.rowCount(), 1);
+    QTRY_COMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
 
     model.refresh();
-    QCOMPARE(model.rowCount(), 2);
+    QTRY_COMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
     QCOMPARE(model.data(model.index(1, 0), PeerListModel::NetNodeId).toLongLong(), 3LL);
-    QCOMPARE(node.calls.getNodesStats.load(), 3);
+    QTRY_COMPARE(node.calls.getNodesStats.load(), 3);
 }
 
 void PeerListModelTests::refreshHandlesGetNodesStatsFailure()
@@ -169,13 +171,14 @@ void PeerListModelTests::refreshHandlesGetNodesStatsFailure()
     };
 
     PeerListModel model{node, nullptr};
-    QCOMPARE(model.rowCount(), 1);
+    model.onNodeReady();
+    QTRY_COMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
 
     model.refresh();
-    QCOMPARE(model.rowCount(), 1);
+    QTRY_COMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
-    QCOMPARE(node.calls.getNodesStats.load(), 2);
+    QTRY_COMPARE(node.calls.getNodesStats.load(), 2);
 }
 
 void PeerListModelTests::startStopAutoRefresh()
@@ -183,7 +186,7 @@ void PeerListModelTests::startStopAutoRefresh()
     const auto stats{MakeStats({MakeNodeStats(1, "10.0.0.1:8333", true, ConnectionType::INBOUND, NET_IPV4)})};
 
     MockNode node;
-    int get_nodes_stats_calls{0};
+    std::atomic<int> get_nodes_stats_calls{0};
     node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats& out_stats) {
         ++get_nodes_stats_calls;
         out_stats = stats;
@@ -191,7 +194,9 @@ void PeerListModelTests::startStopAutoRefresh()
     };
 
     PeerListModel model{node, nullptr};
-    const int calls_after_ctor = get_nodes_stats_calls;
+    model.onNodeReady();
+    QTRY_COMPARE(get_nodes_stats_calls.load(), 1);
+    const int calls_after_ctor = get_nodes_stats_calls.load();
     QCOMPARE(calls_after_ctor, 1);
 
     model.startAutoRefresh();
@@ -200,7 +205,7 @@ void PeerListModelTests::startStopAutoRefresh()
     model.stopAutoRefresh();
     const int calls_after_stop = get_nodes_stats_calls;
     QTest::qWait(AUTO_REFRESH_STOP_WAIT);
-    QCOMPARE(get_nodes_stats_calls, calls_after_stop);
+    QCOMPARE(get_nodes_stats_calls.load(), calls_after_stop);
     QVERIFY(node.calls.getNodesStats.load() >= 2);
 }
 
@@ -242,6 +247,8 @@ void PeerListModelTests::sortProxySortsByRoles()
     };
 
     PeerListModel model{node, nullptr};
+    model.onNodeReady();
+    QTRY_COMPARE(model.rowCount(), 3);
     PeerListSortProxy proxy{nullptr};
     proxy.setSourceModel(&model);
 
@@ -327,7 +334,7 @@ void PeerListModelTests::sortProxySortsByRoles()
     QVERIFY(details != nullptr);
     QCOMPARE(details->nodeId(), 20);
     QCOMPARE(proxy.peerDetailsAt(node_20_row), details);
-    QCOMPARE(node.calls.getNodesStats.load(), 1);
+    QTRY_COMPARE(node.calls.getNodesStats.load(), 1);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

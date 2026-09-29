@@ -1,0 +1,6 @@
+# Qt's software renderer did not free its texture cache in invalidate() before
+# Qt 6.6. A plain Qt Quick Image reproduces this without application code.
+# https://github.com/qt/qtdeclarative/blob/v6.4.2/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp
+# https://github.com/qt/qtdeclarative/blob/v6.6.0/src/quick/scenegraph/adaptations/software/qsgsoftwarecontext.cpp
+# Match only the cache's allocation, not the executable or a Qt library.
+leak:QSGRenderContext::textureForFactory

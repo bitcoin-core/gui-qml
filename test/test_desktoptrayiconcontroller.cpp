@@ -15,6 +15,7 @@ class DesktopTrayIconControllerTests : public QObject
 private Q_SLOTS:
     void initiallyNotVisible();
     void setVisibleFalseWhenAlreadyHidden_noSignal();
+    void setVisibleTrueWithoutSystemTray_staysHidden();
     void setToolTipIsReadable();
     void showRestoresGeometryCapturedAtHide();
 };
@@ -30,6 +31,16 @@ void DesktopTrayIconControllerTests::setVisibleFalseWhenAlreadyHidden_noSignal()
     DesktopTrayIconController controller;
     QSignalSpy spy(&controller, &DesktopTrayIconController::visibleChanged);
     controller.setVisible(false);
+    QCOMPARE(spy.count(), 0);
+}
+
+void DesktopTrayIconControllerTests::setVisibleTrueWithoutSystemTray_staysHidden()
+{
+    DesktopTrayIconController controller;
+    if (controller.supported()) QSKIP("Requires a platform without a system tray");
+    QSignalSpy spy(&controller, &DesktopTrayIconController::visibleChanged);
+    controller.setVisible(true);
+    QVERIFY(!controller.visible());
     QCOMPARE(spy.count(), 0);
 }
 

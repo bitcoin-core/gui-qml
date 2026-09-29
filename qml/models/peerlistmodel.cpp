@@ -21,11 +21,11 @@ constexpr auto MODEL_UPDATE_DELAY{std::chrono::milliseconds{250}};
 PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent)
     : QAbstractListModel(parent), m_node(node)
 {
+    connect(&m_backend, &BackendWorker::drained, this, &PeerListModel::backendDrained);
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &PeerListModel::refresh);
     m_timer->setInterval(MODEL_UPDATE_DELAY);
 
-    refresh();
 }
 
 PeerListModel::~PeerListModel() = default;
@@ -107,39 +107,68 @@ Qt::ItemFlags PeerListModel::flags(const QModelIndex& index) const
 
 void PeerListModel::refresh()
 {
-    interfaces::Node::NodesStats nodes_stats;
-    if (!m_node.getNodesStats(nodes_stats)) return;
-
-    decltype(m_peers_data) new_peers_data;
-    new_peers_data.reserve(nodes_stats.size());
-    for (const auto& node_stats : nodes_stats) {
-        const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
-        new_peers_data.append(stats);
-    }
-
-    const bool count_changed = m_peers_data.size() != new_peers_data.size();
-    bool order_changed{false};
-    if (!count_changed) {
-        for (int i = 0; i < m_peers_data.size(); ++i) {
-            if (m_peers_data.at(i).nodeStats.nodeid != new_peers_data.at(i).nodeStats.nodeid) {
-                order_changed = true;
-                break;
-            }
-        }
-    }
-
-    if (count_changed || order_changed) {
-        beginResetModel();
-        m_peers_data = std::move(new_peers_data);
-        endResetModel();
+    RequireModelThread(this);
+    if (m_draining || !m_node_ready) return;
+    if (m_pending) {
+        m_again = true;
         return;
     }
+    m_pending = true;
+    m_backend.submit([node = &m_node] {
+        interfaces::Node::NodesStats stats;
+        const bool success = node->getNodesStats(stats);
+        return std::make_pair(success, std::move(stats));
+    }, [this](auto result) {
+        RequireModelThread(this);
+        m_pending = false;
+        if (std::exchange(m_again, false)) refresh();
+        if (!result.first) return;
+        decltype(m_peers_data) new_peers_data;
+        new_peers_data.reserve(result.second.size());
+        for (const auto& node_stats : result.second) {
+            new_peers_data.append({std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)});
+        }
 
-    m_peers_data = std::move(new_peers_data);
+        const bool count_changed = m_peers_data.size() != new_peers_data.size();
+        bool order_changed{false};
+        if (!count_changed) {
+            for (int i = 0; i < m_peers_data.size(); ++i) {
+                if (m_peers_data.at(i).nodeStats.nodeid != new_peers_data.at(i).nodeStats.nodeid) {
+                    order_changed = true;
+                    break;
+                }
+            }
+        }
 
-    if (rowCount() > 0) {
-        const auto top_left = index(0, 0);
-        const auto bottom_right = index(rowCount() - 1, 0);
-        Q_EMIT dataChanged(top_left, bottom_right);
-    }
+        if (count_changed || order_changed) {
+            beginResetModel();
+            m_peers_data = std::move(new_peers_data);
+            endResetModel();
+            return;
+        }
+
+        m_peers_data = std::move(new_peers_data);
+
+        if (rowCount() > 0) {
+            const auto top_left = index(0, 0);
+            const auto bottom_right = index(rowCount() - 1, 0);
+            Q_EMIT dataChanged(top_left, bottom_right);
+        }
+    });
+}
+
+void PeerListModel::onNodeReady()
+{
+    RequireModelThread(this);
+    if (m_draining || m_node_ready) return;
+    m_node_ready = true;
+    refresh();
+}
+
+void PeerListModel::drainBackend()
+{
+    RequireModelThread(this);
+    m_draining = true;
+    m_timer->stop();
+    m_backend.drain();
 }
