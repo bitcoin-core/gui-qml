@@ -359,7 +359,11 @@ Page {
                 root.navigateToTransaction(txid)
             }
         }
-        RequestPayment {
+        ReceivePage {
+            onPaymentRequestCreated: {
+                activityPage.pop(null)
+                root.openActivity()
+            }
             onAddressHistoryRequested: {
                 root.openSettingsRoute("addresses")
             }
@@ -421,6 +425,10 @@ Page {
                     showDoneButton: false
                     onSelectWalletRequested: root.openWalletSelection()
                     onReceiveRequested: receiveTabButton.checked = true
+                    onPaymentRequestRequested: function(requestId) {
+                        root.openActivity()
+                        activityPage.openPaymentRequest(requestId)
+                    }
                 }
             }
         }

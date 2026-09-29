@@ -13,5 +13,5 @@ Image {
 
     fillMode: Image.PreserveAspectFit
     smooth: false
-    source: `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
+    source: code.length === 0 ? "" : `image://qr/${encodeURIComponent(root.code)}?&fg=${encodeURIComponent(root.foregroundColor)}&bg=${encodeURIComponent(root.backgroundColor)}`
 }

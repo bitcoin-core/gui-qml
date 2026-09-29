@@ -49,7 +49,18 @@ TransactionActivityModel::TransactionActivityModel(WalletQmlModel* wallet_model)
     connect(requests, &QAbstractItemModel::modelReset, this, &TransactionActivityModel::rebuildRows);
     connect(requests, &QAbstractItemModel::rowsInserted, this, &TransactionActivityModel::rebuildRows);
     connect(requests, &QAbstractItemModel::rowsRemoved, this, &TransactionActivityModel::rebuildRows);
-    connect(requests, &QAbstractItemModel::dataChanged, this, &TransactionActivityModel::rebuildRows);
+    connect(requests, &QAbstractItemModel::dataChanged, this, [this] {
+        if (!m_wallet_model->receiveRequestReconciliationApplying()) {
+            if (!m_request_rebuild_pending) rebuildRows();
+            return;
+        }
+        if (m_request_rebuild_pending) return;
+        m_request_rebuild_pending = true;
+        QTimer::singleShot(0, this, [this] {
+            m_request_rebuild_pending = false;
+            if (!m_stopped) rebuildRows();
+        });
+    });
     connect(wallet_model, &WalletQmlModel::displayUnitChanged, this, &TransactionActivityModel::setDisplayUnit);
     connect(wallet_model, &WalletQmlModel::walletUnloaded, this, &TransactionActivityModel::stop);
     connect(&m_timer, &QTimer::timeout, this, &TransactionActivityModel::poll);
@@ -670,8 +681,9 @@ QString TransactionActivityModel::rawTransaction(const QString& txid) const
 
 QString TransactionActivityModel::paymentRequestUri(const QString& request_id) const
 {
+    if (m_wallet_model->receiveRequestReconciliationPending()) return {};
     const auto entry = m_wallet_model->receiveRequests()->entryById(request_id);
-    if (!entry) return {};
+    if (!entry || entry->payment_received) return {};
     return ReceiveRequestHistoryModel::BuildBitcoinUri(QString::fromStdString(entry->recipient.address),
         entry->recipient.amount, QString::fromStdString(entry->recipient.label), QString::fromStdString(entry->recipient.message));
 }

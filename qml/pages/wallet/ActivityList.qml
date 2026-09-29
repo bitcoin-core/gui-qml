@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
+import "../../components"
 
 PageStack {
     id: stackView
@@ -17,6 +18,11 @@ PageStack {
     }
     replaceExit: Transition {
         NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.OutCubic }
+    }
+
+    function openPaymentRequest(requestId) {
+        stackView.pop(null)
+        paymentRequestModal.openRequest(requestId)
     }
 
     function detailProperties(txid, outputIndex) {
@@ -69,8 +75,8 @@ PageStack {
 
     Connections {
         target: walletController
-        function onSelectedWalletChanged() { stackView.pop(null) }
-        function onClosePaymentRequestDetailRequested() { stackView.pop(null) }
+        function onSelectedWalletChanged() { paymentRequestModal.close(); stackView.pop(null) }
+        function onClosePaymentRequestDetailRequested() { paymentRequestModal.close() }
     }
     Connections {
         target: stackView.wallet ? stackView.wallet.transactionActivityModel : null
@@ -83,13 +89,13 @@ PageStack {
         when: stackView.wallet !== null
     }
 
+    PaymentRequestModal { id: paymentRequestModal; wallet: stackView.wallet }
+
     initialItem: ActivityListPage {
         wallet: stackView.wallet
         onTransactionRequested: function(txid) { stackView.navigateToTransaction(txid) }
         onPaymentRequestRequested: function(requestId) {
-            if (stackView.wallet && stackView.wallet.loadPaymentRequestDetail(requestId)) {
-                stackView.push("PaymentRequestDetail.qml")
-            }
+            paymentRequestModal.openRequest(requestId)
         }
     }
 }

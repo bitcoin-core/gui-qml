@@ -176,6 +176,7 @@ CTxDestination PaymentRequest::destination() const
 
 QString PaymentRequest::qrPayload() const
 {
+    if (m_payment_received) return {};
     const QString addr = address();
     if (addr.isEmpty()) return {};
     return ReceiveRequestHistoryModel::BuildBitcoinUri(addr, m_amount->satoshi(), m_label, m_message);
@@ -217,6 +218,8 @@ void PaymentRequest::setIsEditing(bool editing)
 
 void PaymentRequest::clear()
 {
+    m_payment_received = false;
+    setReceivedAmountSatoshi(0);
     m_destination = CNoDestination();
     m_label.clear();
     m_message.clear();
@@ -240,6 +243,22 @@ void PaymentRequest::clear()
     Q_EMIT unlockErrorChanged();
     Q_EMIT createdIsoChanged();
     Q_EMIT isEditingChanged();
+    Q_EMIT paymentReceivedChanged();
+}
+
+void PaymentRequest::setPaymentReceived(bool received)
+{
+    if (m_payment_received == received) return;
+    m_payment_received = received;
+    Q_EMIT paymentReceivedChanged();
+    Q_EMIT qrPayloadChanged();
+}
+
+void PaymentRequest::setReceivedAmountSatoshi(qint64 amount)
+{
+    if (m_received_amount == amount) return;
+    m_received_amount = amount;
+    Q_EMIT receivedAmountChanged();
 }
 
 void PaymentRequest::edit()

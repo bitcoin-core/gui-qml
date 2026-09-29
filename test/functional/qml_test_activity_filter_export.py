@@ -173,6 +173,7 @@ def run_test(save_screenshots=False, screenshot_root=None):
         payment_request_uri = _request_qr_payload(gui)
         payment_request_address = _address_from_bip21(payment_request_uri)
         checkpoints.checkpoint("payment request created", gui)
+        gui.click("paymentRequestModalClose")
 
         mined_address, mined_txid = _mine_to_gui_wallet(harness)
         assert mined_address != payment_request_address, "Mined row should not consume the pending request row"

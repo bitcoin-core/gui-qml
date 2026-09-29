@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 import "../../qml/pages/wallet"
 
@@ -143,24 +144,22 @@ TestCase {
         compare(settingsLoader.active, true)
     }
 
-    function test_receive_options_view_address_history_opens_settings_address_stack() {
+    function test_receive_view_addresses_opens_address_settings() {
         const page = createDesktopWallets()
-        const receiveTab = findChild(page, "receiveTabButton")
-        verify(receiveTab !== null)
-        receiveTab.clicked()
-
-        const optionsButton = findChild(page, "receiveOptionsButton")
-        verify(optionsButton !== null)
-        optionsButton.clicked()
-
-        const popup = findChild(page, "receiveOptionsPopup")
-        verify(popup !== null)
-        tryCompare(popup, "opened", true)
-
-        const viewHistoryButton = findChild(page, "receiveOptionsViewAddressHistoryButton")
-        verify(viewHistoryButton !== null)
-        viewHistoryButton.clicked()
-
+        findChild(page, "receiveTabButton").clicked()
+        findChild(page, "receiveMoreButton").clicked()
+        tryCompare(findChild(page, "receiveMoreMenu"), "opened", true)
+        const historyButton = findChild(page, "requestPaymentHistoryButton")
+        verify(historyButton !== null)
+        historyButton.clicked()
+        compare(findChild(page, "desktopWalletSettingsTabButton").checked, true)
+        tryCompare(findChild(page, "settingsPageContainer"), "depth", 2)
+        compare(findChild(page, "settingsPageContainer").currentItem.objectName, "addressListPage")
+    }
+    function test_addresses_settings_preserves_details_popup() {
+        const page = createDesktopWallets()
+        page.openSettingsRoute("addresses")
+        wait(0)
         const settingsTab = findChild(page, "desktopWalletSettingsTabButton")
         verify(settingsTab !== null)
         compare(settingsTab.checked, true)

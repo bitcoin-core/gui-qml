@@ -8,6 +8,7 @@
 #include <QObject>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QImage>
 
 class Clipboard : public QObject
 {
@@ -28,6 +29,12 @@ public:
 
     Q_INVOKABLE QString text() const {
         return QGuiApplication::clipboard()->text();
+    }
+
+    Q_INVOKABLE bool setImage(const QImage& image) {
+        if (image.isNull()) return false;
+        QGuiApplication::clipboard()->setImage(image);
+        return true;
     }
 };
 

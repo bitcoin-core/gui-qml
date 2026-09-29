@@ -13,10 +13,11 @@ Rectangle {
     property bool pending: false
     property bool inactive: false
     property bool paymentRequest: false
+    property bool solid: false
     property int iconSize: 24
     readonly property bool multiple: !paymentRequest && activityType === TransactionActivityModel.Multiple
-    readonly property bool dashed: (pending || paymentRequest) && !inactive
-    readonly property bool neutral: activityType === TransactionActivityModel.Other
+    readonly property bool dashed: (pending || paymentRequest) && !inactive && !solid
+    readonly property bool neutral: !paymentRequest && activityType === TransactionActivityModel.Other
     readonly property color accent: {
         if (inactive) return Theme.color.neutral6
         if (paymentRequest) return Theme.color.lavender

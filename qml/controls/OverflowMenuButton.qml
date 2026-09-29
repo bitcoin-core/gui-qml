@@ -16,6 +16,7 @@ AbstractButton {
     property color hoverBackgroundColor: Theme.color.neutral2
     property int size: 40
     property int iconSize: 40
+    property bool circular: false
     readonly property alias iconItem: ellipsisIcon
 
     implicitWidth: size
@@ -35,11 +36,11 @@ AbstractButton {
 
     background: Rectangle {
         color: root.hovered || root.down ? root.hoverBackgroundColor : root.backgroundColor
-        radius: 5
+        radius: root.circular ? width / 2 : 5
 
         FocusBorder {
             visible: root.visualFocus
-            borderRadius: 9
+            borderRadius: root.circular ? root.size / 2 + 4 : 9
         }
     }
 

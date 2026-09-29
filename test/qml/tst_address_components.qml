@@ -144,7 +144,7 @@ TestCase {
         }
     }
 
-    function test_addressDetails_request_button_edits_existing_request() {
+    function test_addressDetails_request_button_views_existing_request() {
         const details = createTemporaryObject(detailsComponent, host)
         verify(details !== null)
         const button = findObject(details, "addressDetailsCreatePaymentRequestButton")
@@ -152,12 +152,11 @@ TestCase {
         compare(button.text, "Create payment request")
 
         details.hasPaymentRequest = true
-        compare(button.text, "Edit payment request")
+        compare(button.text, "View payment request")
 
-        // A used address with a saved request keeps the edit action, while
-        // a used address without one keeps the button hidden.
+        // Used addresses never offer creation or editing from Address Details.
         details.used = true
-        tryCompare(button, "visible", true)
+        tryCompare(button, "visible", false)
         details.hasPaymentRequest = false
         tryCompare(button, "visible", false)
     }
@@ -509,7 +508,8 @@ TestCase {
         compare(amountRow.dividerColor, Theme.color.neutral3)
         compare(noteRow.visible, true)
         compare(noteRow.text, "Pizza")
-        compare(noteRow.placeholderText, "Add label...")
+        compare(noteRow.title, "Note to self")
+        compare(noteRow.placeholderText, "Add note...")
         compare(noteField.text, "Pizza")
         compare(noteField.readOnly, false)
         compare(noteField.background.border.color, Theme.color.orange)
@@ -563,6 +563,13 @@ TestCase {
         const paymentRequestButton = findObject(details, "addressDetailsCreatePaymentRequestButton")
         verify(paymentRequestButton !== null)
         compare(paymentRequestButton.visible, true)
+        details.hasPaymentRequest = true
+        compare(paymentRequestButton.text, "View payment request")
+        compare(paymentRequestButton.visible, true)
+        details.used = true
+        compare(paymentRequestButton.visible, false)
+        details.hasPaymentRequest = false
+        compare(paymentRequestButton.visible, false)
 
         let closed = false
         details.closeRequested.connect(function() { closed = true })
