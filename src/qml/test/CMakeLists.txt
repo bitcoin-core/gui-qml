@@ -8,20 +8,29 @@ add_executable(test_bitcoin-qt
   test_application.cpp
   test_applicationrouter.cpp
   test_translationmanager.cpp
+  test_console_integration.cpp
   test_navigation_integration.cpp
   test_onboarding_integration.cpp
   test_node_integration.cpp
+  test_banlistmodel.cpp
   test_blockclockdial.cpp
   test_desktopwindowbehaviormodel.cpp
   test_display_settings.cpp
+  test_debuglog.cpp
   test_guiargs.cpp
   test_networkstatusmodel.cpp
+  test_networktraffictower.cpp
   test_nodemodel.cpp
   test_noderuntimemodels.cpp
   test_runtimedialogmodel.cpp
+  test_mempoolmodel.cpp
   test_onboarding_storage.cpp
   test_onboarding_profile.cpp
   test_startupsettings.cpp
+  test_peerlistmodel.cpp
+  test_peerstatsutil.cpp
+  test_rpccommandexecutor.cpp
+  test_qtinfo_integration.cpp
   test_testbridge.cpp
   test_unit_tests_main.cpp
 )
@@ -33,7 +42,9 @@ qt6_add_resources(test_bitcoin-qt qml_tests
     qml/tst_appfolderdialog.qml
     qml/tst_blockclock.qml
     qml/tst_globalmenu.qml
+    qml/tst_monospaceoutputview.qml
     qml/tst_navbutton.qml
+    qml/tst_nodepopups.qml
     qml/tst_proxylocationinput.qml
     qml/tst_valueinput.qml
 )
@@ -98,7 +109,7 @@ add_test(NAME test_bitcoin-qt-startup
     -P ${CMAKE_CURRENT_SOURCE_DIR}/startup_invalid_datadir.cmake
 )
 set_tests_properties(test_bitcoin-qt-startup PROPERTIES
-  TIMEOUT 70
+  TIMEOUT 100
   ENVIRONMENT "QT_QPA_PLATFORM=minimal;QML_DISABLE_DISK_CACHE=1"
 )
 

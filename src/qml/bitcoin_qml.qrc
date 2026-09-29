@@ -7,10 +7,15 @@
         <file>components/BlockClockDisplayMode.qml</file>
         <file>components/ConnectionSettings.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/DebugLogOutputView.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/InfoBanner.qml</file>
+        <file>components/MempoolInformationRows.qml</file>
+        <file>components/MonospaceOutputView.qml</file>
         <file>components/NetworkIndicator.qml</file>
+        <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
+        <file>components/NodeInformationPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
         <file>components/NodeStatusActions.qml</file>
         <file>components/NodeWarningsPopup.qml</file>
@@ -22,6 +27,7 @@
         <file>components/StorageOptions.qml</file>
         <file>components/StorageSettings.qml</file>
         <file>components/ThemeSettings.qml</file>
+        <file>components/TotalBytesIndicator.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/ContinueButton.qml</file>
         <file>controls/CoreText.qml</file>
@@ -32,6 +38,7 @@
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
         <file>controls/InformationPage.qml</file>
+        <file>controls/KeyValueRow.qml</file>
         <file>controls/NavButton.qml</file>
         <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
@@ -46,6 +53,7 @@
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/Theme.qml</file>
+        <file>controls/ToggleButton.qml</file>
         <file>controls/ValueInput.qml</file>
         <file>controls/qmldir</file>
         <file>controls/utils.js</file>
@@ -53,8 +61,14 @@
         <file>pages/ApplicationShell.qml</file>
         <file>components/GlobalMenu.qml</file>
         <file>pages/preinit.qml</file>
+        <file>pages/node/BannedPeers.qml</file>
+        <file>pages/node/CommandConsole.qml</file>
+        <file>pages/node/MempoolInformationSettings.qml</file>
+        <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/NodeSettings.qml</file>
+        <file>pages/node/PeerDetails.qml</file>
+        <file>pages/node/Peers.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
@@ -71,6 +85,7 @@
         <file>pages/settings/SettingsDisplay.qml</file>
         <file>pages/settings/SettingsDisplayUnit.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
+        <file>pages/settings/SettingsDebugLog.qml</file>
         <file>pages/settings/SettingsProxy.qml</file>
         <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/SettingsTheme.qml</file>
@@ -78,6 +93,8 @@
     </qresource>
     <qresource prefix="/icons">
         <file alias="alert-filled">res/icons/alert-filled.png</file>
+        <file alias="arrow-down">res/icons/arrow-down.png</file>
+        <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="bitcoin">res/icons/bitcoin.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
@@ -87,6 +104,7 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check">res/icons/check.png</file>
+        <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
@@ -94,6 +112,7 @@
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info-filled">res/icons/info-filled.png</file>
         <file alias="info">res/icons/info.png</file>
+        <file alias="minus">res/icons/minus.png</file>
         <file alias="network-dark">res/icons/network-dark.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
         <file alias="node-0-connections">res/icons/node-0-connections.png</file>
@@ -101,6 +120,9 @@
         <file alias="node-2-connections">res/icons/node-2-connections.png</file>
         <file alias="node-3-connections">res/icons/node-3-connections.png</file>
         <file alias="node-4-connections">res/icons/node-4-connections.png</file>
+        <file alias="plus">res/icons/plus.png</file>
+        <file alias="refresh">res/icons/refresh.png</file>
+        <file alias="search">res/icons/search.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
