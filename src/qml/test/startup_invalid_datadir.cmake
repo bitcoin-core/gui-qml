@@ -24,4 +24,22 @@ foreach(datadir IN ITEMS "relative-missing" "~/missing" "${profile}/absolute-mis
     message(FATAL_ERROR "Invalid datadir did not produce a normal startup error (${result}): ${stdout}${stderr}")
   endif()
 endforeach()
+
+# Qt options must reach Core's argument validation unchanged. In particular,
+# an invalid platform must not be consumed by Qt before Core can reject it.
+foreach(option IN ITEMS -qwindowtitle -platform)
+  execute_process(
+    COMMAND "${GUI}" -regtest -qml_onboarded=1 -noconf -nosettings
+      "-test-settings-dir=${profile}/settings" "-datadir=${profile}"
+      "${option}" "invalid-qt-option-value"
+    WORKING_DIRECTORY "${profile}"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE stdout
+    ERROR_VARIABLE stderr
+    TIMEOUT 15
+  )
+  if(NOT result STREQUAL "1" OR NOT stderr MATCHES "Error parsing command line arguments: Invalid parameter ${option}")
+    message(FATAL_ERROR "Qt option did not reach Core's argument parser (${result}): ${stdout}${stderr}")
+  endif()
+endforeach()
 file(REMOVE_RECURSE "${profile}")
