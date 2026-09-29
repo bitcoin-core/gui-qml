@@ -56,6 +56,7 @@ void MempoolActivityModel::setReady(bool ready)
     } else {
         m_timer.stop();
         QMetaObject::invokeMethod(m_worker, [] {}, Qt::BlockingQueuedConnection);
+        m_queued_vbytes = -1;
         m_minimum_fee = -1;
         m_incoming_rate = -1;
         m_history.clear();
@@ -76,14 +77,23 @@ void MempoolActivityModel::setActive(bool active)
     }
 }
 
+void MempoolActivityModel::setSummaryActive(bool active)
+{
+    if (m_summary_active == active) return;
+    m_summary_active = active;
+    Q_EMIT summaryActiveChanged();
+    if (active) refresh();
+}
+
 void MempoolActivityModel::refresh()
 {
     if (!m_ready || m_pending) return;
-    if (m_active) Q_EMIT statsRefreshRequested();
+    if (m_active || m_summary_active) Q_EMIT statsRefreshRequested();
     m_pending = true;
     Q_EMIT pendingChanged();
     QMetaObject::invokeMethod(m_worker, [this, generation = m_generation] {
-        const auto snapshot = m_sample();
+        Snapshot snapshot{0, -1, false};
+        try { snapshot = m_sample(); } catch (...) { /* Node RPC unavailable during startup/shutdown. */ }
         const auto time = m_now();
         QMetaObject::invokeMethod(this, [this, generation, snapshot, time] {
             m_pending = false;
@@ -98,8 +108,12 @@ void MempoolActivityModel::applySnapshot(const Snapshot& snapshot, qint64 time)
 {
     if (!snapshot.loaded) {
         m_has_previous = false;
+        m_queued_vbytes = -1;
+        m_minimum_fee = -1;
+        Q_EMIT snapshotChanged();
         return;
     }
+    m_queued_vbytes = snapshot.queued_vbytes;
     m_minimum_fee = std::isfinite(snapshot.minimum_fee) && snapshot.minimum_fee >= 0 ? snapshot.minimum_fee : -1;
     if (m_has_previous) {
         const qint64 elapsed = time - m_previous_time;

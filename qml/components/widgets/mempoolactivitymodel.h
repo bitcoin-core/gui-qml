@@ -19,12 +19,14 @@ class MempoolActivityModel : public QObject
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
     Q_PROPERTY(double incomingRate READ incomingRate NOTIFY snapshotChanged)
     Q_PROPERTY(double minimumFee READ minimumFee NOTIFY snapshotChanged)
+    Q_PROPERTY(qint64 queuedVbytes READ queuedVbytes NOTIFY snapshotChanged)
+    Q_PROPERTY(bool summaryActive READ summaryActive WRITE setSummaryActive NOTIFY summaryActiveChanged)
     Q_PROPERTY(double baseline READ baseline CONSTANT)
     Q_PROPERTY(bool ready READ ready NOTIFY readyChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(bool pending READ pending NOTIFY pendingChanged)
 public:
-    struct Snapshot { quint64 incoming_vbytes; double minimum_fee; bool loaded{true}; };
+    struct Snapshot { quint64 incoming_vbytes; double minimum_fee; bool loaded{true}; qint64 queued_vbytes{-1}; };
     using SampleFn = std::function<Snapshot()>;
     using NowFn = std::function<qint64()>;
     explicit MempoolActivityModel(SampleFn sample, double baseline = 1000000.0 / 600,
@@ -33,6 +35,9 @@ public:
     QVariantList history() const;
     double incomingRate() const { return m_incoming_rate; }
     double minimumFee() const { return m_minimum_fee; }
+    qint64 queuedVbytes() const { return m_queued_vbytes; }
+    bool summaryActive() const { return m_summary_active; }
+    void setSummaryActive(bool active);
     double baseline() const { return m_baseline; }
     bool ready() const { return m_ready; }
     bool active() const { return m_active; }
@@ -45,6 +50,7 @@ Q_SIGNALS:
     void snapshotChanged();
     void readyChanged();
     void activeChanged();
+    void summaryActiveChanged();
     void pendingChanged();
     void statsRefreshRequested();
 private:
@@ -62,6 +68,8 @@ private:
     quint64 m_previous_vbytes{0};
     qint64 m_previous_time{0};
     quint64 m_generation{0};
+    qint64 m_queued_vbytes{-1};
+    bool m_summary_active{false};
     bool m_has_previous{false};
     bool m_ready{false};
     bool m_active{false};

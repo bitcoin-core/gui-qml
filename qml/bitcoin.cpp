@@ -588,14 +588,14 @@ int QmlGuiMain(int argc, char* argv[])
     MempoolActivityModel mempool_activity_model{[source = mempool_activity_source, chain = chain.get(), node = node.get(), loaded = false]() mutable {
         // Mempool loading continues after appInitMain returns. The interfaces
         // expose its completion through getmempoolinfo, not the init signal.
+        const auto info = node->executeRpc("getmempoolinfo", UniValue{UniValue::VARR}, "");
         if (!loaded) {
-            const auto info = node->executeRpc("getmempoolinfo", UniValue{UniValue::VARR}, "");
             if (!info["loaded"].get_bool()) return MempoolActivityModel::Snapshot{0, -1, false};
             chain->waitForNotifications();
             loaded = true;
         }
         const auto minimum = std::max(chain->mempoolMinFee().GetFeePerK(), chain->relayMinFee().GetFeePerK());
-        return MempoolActivityModel::Snapshot{source->incomingVbytes(), minimum / 1000.0};
+        return MempoolActivityModel::Snapshot{source->incomingVbytes(), minimum / 1000.0, true, info["bytes"].getInt<int64_t>()};
     }, 1000000.0 / Params().GetConsensus().nPowTargetSpacing};
     QObject::connect(&mempool_activity_model, &MempoolActivityModel::statsRefreshRequested,
                      &node_model, &NodeModel::refreshMempoolInfo);

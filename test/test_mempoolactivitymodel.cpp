@@ -15,6 +15,34 @@ class MempoolActivityModelTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void summaryAndIncomingHaveIndependentVisibility()
+    {
+        MempoolActivityModel::Snapshot sample{0, 0.1, true, 1200000};
+        MempoolActivityModel model{[&] { return sample; }};
+        QSignalSpy refreshes(&model, &MempoolActivityModel::statsRefreshRequested);
+        model.setReady(true);
+        QTRY_VERIFY(!model.pending());
+        QCOMPARE(model.queuedVbytes(), 1200000);
+        model.setSummaryActive(true);
+        QTRY_VERIFY(!model.pending());
+        QVERIFY(refreshes.count() > 0);
+        model.setActive(true);
+        QTRY_VERIFY(!model.pending());
+        model.setActive(false);
+        QVERIFY(model.summaryActive());
+        sample.queued_vbytes = 0; // Mining empties the queue, without negative arrivals.
+        model.refresh();
+        QTRY_VERIFY(!model.pending());
+        QCOMPARE(model.queuedVbytes(), 0);
+        model.setSummaryActive(false);
+        const int before = refreshes.count();
+        model.refresh();
+        QTRY_VERIFY(!model.pending());
+        QCOMPARE(refreshes.count(), before);
+        model.setReady(false);
+        QCOMPARE(model.queuedVbytes(), -1);
+    }
+
     void savedMempoolLoadingIsNotIncomingTraffic()
     {
         qint64 now{100000};

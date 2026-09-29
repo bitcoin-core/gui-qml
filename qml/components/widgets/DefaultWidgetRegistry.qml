@@ -48,6 +48,12 @@ WidgetRegistry {
                 WidgetSize { columns: 3; rows: 2 },
                 WidgetSize { columns: 1; rows: 1 }
             ]
+        },
+        WidgetDefinition {
+            widgetId: "mempool-summary"
+            title: qsTr("Mempool")
+            source: Qt.resolvedUrl("MempoolSummaryWidget.qml")
+            sizes: [WidgetSize { columns: 2; rows: 1 }, WidgetSize { columns: 3; rows: 2 }, WidgetSize { columns: 1; rows: 1 }]
         }
     ]
 }
