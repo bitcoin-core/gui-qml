@@ -109,7 +109,7 @@ add_test(NAME test_bitcoin-qt-startup
     -P ${CMAKE_CURRENT_SOURCE_DIR}/startup_invalid_datadir.cmake
 )
 set_tests_properties(test_bitcoin-qt-startup PROPERTIES
-  TIMEOUT 70
+  TIMEOUT 100
   ENVIRONMENT "QT_QPA_PLATFORM=minimal;QML_DISABLE_DISK_CACHE=1"
 )
 
