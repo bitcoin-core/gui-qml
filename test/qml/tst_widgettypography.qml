@@ -55,12 +55,50 @@ TestCase {
         const title = firstText(widget)
         verify(title !== null)
         const originalSize = title.font.pixelSize
+        const expectedStyle = Theme.text.widgetTitle
+        compare(originalSize, expectedStyle.pixelSize)
+        compare(title.font.styleName, expectedStyle.styleName)
         compare(widget.fontScale, 1)
+        const valueStyle = data.columns >= 3 && data.rows >= 2
+            ? Theme.text.widgetPrimaryValueLarge : Theme.text.widgetPrimaryValue
+        compare(widget.primaryValueFont, valueStyle.font)
+        const large = data.columns >= 3 && data.rows >= 2
+        compare(widget.largeTypography, large)
+        const primaryLabelStyle = large ? Theme.text.widgetPrimaryLabelLarge : Theme.text.widgetPrimaryLabel
+        const secondaryValueStyle = large ? Theme.text.widgetSecondaryValueLarge : Theme.text.widgetSecondaryValue
+        const footerLabelStyle = large ? Theme.text.widgetFooterLabelLarge : Theme.text.widgetFooterLabel
+        const footerValueStyle = large ? Theme.text.widgetFooterValueLarge : Theme.text.widgetFooterValue
+        compare(widget.primaryLabelFont, primaryLabelStyle.font)
+        compare(widget.secondaryValueFont, secondaryValueStyle.font)
+        compare(widget.footerLabelFont, footerLabelStyle.font)
+        compare(widget.footerValueFont, footerValueStyle.font)
+        const valueNames = {FeeRatesWidget: "feeRatesHeadline", MempoolWidget: "incomingTransactionsPrimaryValue",
+            MempoolSummaryWidget: "mempoolSummaryCount", DifficultyPeriodWidget: "difficultyNextChange",
+            HalvingWidget: "halvingHeadline", BlockClockWidget: "blockClockPrimaryValue"}
+        const value = findChild(widget, valueNames[data.file])
+        verify(value !== null)
+        compare(value.font.pixelSize, valueStyle.pixelSize)
+        compare(value.font.styleName, valueStyle.styleName)
+        const clockLabel = findChild(widget, "blockClockSubText")
+        const clockDial = findChild(widget, "blockClockDial")
+        if (clockLabel) {
+            compare(clockLabel.font.styleName, "Semi Bold")
+            compare(clockLabel.font.pixelSize, Math.round(clockDial.width * 0.08))
+        }
+        const footerValue = findChild(widget, "difficultyAverageBlockTime")
+        if (footerValue) compare(footerValue.font, widget.footerValueFont)
         frame.width += data.columns * 160
         frame.height += data.rows * 160
         waitForPolish(widget)
         compare(widget.fontScale, 2)
-        compare(title.font.pixelSize, originalSize * 2)
+        compare(widget.secondaryValueFont.pixelSize, secondaryValueStyle.pixelSize * 2)
+        compare(widget.primaryLabelFont, primaryLabelStyle.font)
+        compare(widget.footerLabelFont, footerLabelStyle.font)
+        compare(widget.footerValueFont, footerValueStyle.font)
+        compare(value.font.pixelSize, valueStyle.pixelSize * 2)
+        if (clockLabel) compare(clockLabel.font.pixelSize, Math.round(clockDial.width * 0.08))
+        if (footerValue) compare(footerValue.font, widget.footerValueFont)
+        compare(title.font.pixelSize, originalSize)
         tryVerify(function() { return !title.truncated })
         compare(title.font.family, Theme.text.family)
         frame.width -= data.columns * 160

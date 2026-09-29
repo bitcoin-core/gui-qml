@@ -78,7 +78,7 @@ TestCase {
         waitForPolish(widget)
         const chart = findChild(widget, "incomingTransactionsChart")
         compare(chart.showAxes, !widget.compact)
-        compare(chart.labelFont.pixelSize, Math.round(Theme.text.caption.pixelSize * 0.8))
+        compare(chart.labelFont, widget.footerLabelFont)
         const rate = findChild(widget, "incomingTransactionsRate")
         compare(rate.visible, !widget.compact)
         if (!widget.compact) compare(rate.text, "800 vB/s")
@@ -89,7 +89,7 @@ TestCase {
         verify(chart.height > 0)
         if (!widget.compact) {
             const title = findChild(widget, "incomingTransactionsTitle")
-            verify(chart.labelFont.pixelSize < title.font.pixelSize)
+            compare(chart.labelFont.pixelSize, widget.largeTypography ? Theme.text.widgetFooterLabelLarge.pixelSize : title.font.pixelSize)
             verify(position.y >= title.mapToItem(widget, 0, title.height).y + 8)
         }
         verify(findChild(widget, "incomingTransactionsLineChart") instanceof LineChart)

@@ -90,14 +90,14 @@ TestCase {
                 - blocksLabel.mapToItem(widget, 0, blocksLabel.baselineOffset).y) < 1
         }
         tryVerify(labelsAligned)
-        verify(count.font.pixelSize > widget.scaledPixelSize(Theme.text.widgetDisplay))
+        compare(count.font.pixelSize, widget.scaledPixelSize(Theme.text.widgetPrimaryValueLarge))
         const tableArea = findChild(widget, "mempoolSummaryTableArea")
         tryVerify(function() { return Math.abs(table.height - Math.max(table.implicitHeight, tableArea.height * 0.75)) < 1 })
         const originalTableHeight = table.height
         widget.width = 992
         widget.height = 644
         waitForPolish(widget)
-        verify(fee.font.pixelSize > originalSize)
+        compare(fee.font.pixelSize, originalSize)
         compare(fee.font, memory.font)
         tryVerify(function() { return !fee.truncated && !memory.truncated })
         tryVerify(labelsAligned)

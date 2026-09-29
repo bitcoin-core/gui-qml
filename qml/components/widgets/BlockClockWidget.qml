@@ -8,18 +8,14 @@ import "../../controls"
 
 DashboardWidget {
     id: root
-    CoreText {
+    WidgetTitle {
         id: title
         objectName: "blockClockWidgetTitle"
         anchors.top: parent.top
         anchors.left: parent.left
         width: parent.width
         text: qsTr("Blockclock")
-        font: root.scaledFont(Theme.text.subheading)
         color: Theme.color.neutral8
-        horizontalAlignment: Text.AlignLeft
-        elide: Text.ElideRight
-        wrap: false
     }
     Item {
         anchors.top: title.bottom
@@ -34,6 +30,7 @@ DashboardWidget {
             fillAvailableSpace: true
             showNetworkIndicator: false
             renderingActive: root.active
+            primaryValueFont: root.primaryValueFont
         }
     }
 }

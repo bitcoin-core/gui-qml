@@ -36,20 +36,21 @@ DashboardWidget {
                 objectName: "incomingTransactionsRate"
                 visible: !root.compact
                 text: root.currentRate >= 0 ? qsTr("%1 vB/s").arg(root.number(root.currentRate, 0)) : qsTr("— vB/s")
-                font: root.scaledFont(Theme.text.captionStrong)
+                font: root.secondaryValueFont
                 color: root.currentRate >= 0 ? chart.colorForRate(root.currentRate) : Theme.color.neutral6
                 wrap: false
             }
         }
         CoreText {
+            objectName: "incomingTransactionsPrimaryValue"
             visible: root.compact
             Layout.fillWidth: true
             text: root.currentRate >= 0 ? qsTr("%1 vB/s").arg(root.number(root.currentRate, 0)) : qsTr("— vB/s")
-            font: root.scaledFont(Theme.text.heading)
+            font: root.primaryValueFont
             horizontalAlignment: Text.AlignLeft
             wrap: false
             fontSizeMode: Text.Fit
-            minimumPixelSize: root.scaledPixelSize(Theme.text.caption)
+            minimumPixelSize: root.footerValueStyle.pixelSize
         }
         Item {
             Layout.fillWidth: true
@@ -59,9 +60,7 @@ DashboardWidget {
             IncomingTransactionsChart {
                 id: chart
                 anchors.fill: parent
-                labelFont: Qt.font({family: Theme.text.caption.family,
-                                    styleName: Theme.text.caption.styleName,
-                                    pixelSize: Math.round(Theme.text.caption.pixelSize * 0.8)})
+                labelFont: root.footerLabelFont
                 samples: root.samples
                 capacityBaseline: root.capacityBaseline
                 expanded: root.expanded
@@ -76,7 +75,7 @@ DashboardWidget {
                 visible: !root.ready || !chart.hasSamples
                 text: !root.available ? qsTr("Unavailable in blocks-only mode")
                     : !root.ready ? qsTr("Waiting for node") : qsTr("Collecting incoming transactions…")
-                font: root.scaledFont(Theme.text.caption)
+                font: root.footerLabelFont
                 color: Theme.color.neutral7
                 maximumLineCount: 2
                 elide: Text.ElideRight

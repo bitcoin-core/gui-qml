@@ -27,11 +27,11 @@ DashboardWidget {
     }
     Accessible.description: qsTr("Unconfirmed transactions, estimated queued blocks, minimum fee and memory usage. Queued blocks use virtual size and do not predict confirmation time.")
     FontMetrics { id: countMetrics; font: count.font }
-    FontMetrics { id: blockLabelMetrics; font: root.scaledFont(Theme.text.caption) }
+    FontMetrics { id: blockLabelMetrics; font: root.primaryLabelFont }
     ColumnLayout {
         anchors.fill: parent
         spacing: root.expanded ? 14 * root.fontScale : 6
-        CoreText { text: qsTr("Mempool"); font: root.scaledFont(root.compact ? Theme.text.captionStrong : Theme.text.subheading); color: Theme.color.neutral7 }
+        WidgetTitle { text: qsTr("Mempool") }
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
@@ -51,14 +51,10 @@ DashboardWidget {
                             ? Math.max(0, Math.min(Math.ceil(countMetrics.advanceWidth(text)), parent.width - inlineCountLabel.implicitWidth - 6))
                             : parent.width
                         text: root.ready ? root.number(root.nodeModelRef.mempoolTransactionCount, 0) : "—"
-                        font: {
-                            const value = root.scaledFont(root.expanded ? Theme.text.widgetDisplay : Theme.text.headline)
-                            if (root.expanded) value.pixelSize = Math.round(value.pixelSize * 1.25)
-                            return value
-                        }
+                        font: root.primaryValueFont
                         horizontalAlignment: Text.AlignLeft
                         fontSizeMode: Text.Fit
-                        minimumPixelSize: root.scaledPixelSize(Theme.text.heading)
+                        minimumPixelSize: root.scaledPixelSize(root.secondaryValueStyle)
                         wrap: false
                     }
                     CoreText {
@@ -68,7 +64,7 @@ DashboardWidget {
                         x: count.width + 6
                         anchors.baseline: count.baseline
                         text: qsTr("unconfirmed")
-                        font: root.scaledFont(Theme.text.caption)
+                        font: root.primaryLabelFont
                         color: Theme.color.neutral6
                         wrap: false
                     }
@@ -78,7 +74,7 @@ DashboardWidget {
                     visible: root.compact || root.expanded
                     Layout.fillWidth: true
                     text: root.expanded ? qsTr("Unconfirmed transactions") : qsTr("Unconfirmed")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
@@ -99,7 +95,7 @@ DashboardWidget {
                     objectName: "mempoolQueuedBlocks"
                     Layout.fillWidth: true
                     text: root.queuedBlocks >= 0 ? qsTr("≈%1").arg(root.number(root.queuedBlocks, 0)) : "—"
-                    font: root.scaledFont(root.expanded ? Theme.text.headline : Theme.text.captionStrong)
+                    font: root.secondaryValueFont
                     horizontalAlignment: Text.AlignRight
                     wrap: false
                 }
@@ -108,7 +104,7 @@ DashboardWidget {
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     text: blockLabelMetrics.advanceWidth(qsTr("Blocks queued")) <= width ? qsTr("Blocks queued") : qsTr("Blocks")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignRight
                     wrap: false
@@ -134,13 +130,15 @@ DashboardWidget {
                         visible: root.compact
                         Layout.fillWidth: true
                         spacing: 4
-                        CoreText { text: qsTr("Min fee"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; wrap: false }
+                        CoreText { text: qsTr("Min fee"); font: root.footerLabelFont; color: Theme.color.neutral6; wrap: false }
                         CoreText {
                             objectName: "mempoolSummaryCompactFee"
+                            fontSizeMode: Text.Fit
+                            minimumPixelSize: 9
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
                             text: root.feeText()
-                            font: root.scaledFont(Theme.text.captionStrong)
+                            font: root.footerValueFont
                             horizontalAlignment: Text.AlignRight
                             wrap: false
                             elide: Text.ElideRight
@@ -153,14 +151,14 @@ DashboardWidget {
                         columns: 2
                         rowSpacing: root.expanded ? 10 : 4
                         columnSpacing: 8
-                        CoreText { Layout.fillHeight: root.expanded; Layout.row: 0; Layout.column: 0; text: qsTr("Min fee"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+                        CoreText { Layout.fillHeight: root.expanded; Layout.row: 0; Layout.column: 0; text: qsTr("Min fee"); font: root.footerLabelFont; color: Theme.color.neutral6 }
                         CoreText {
                             Layout.row: root.expanded ? 0 : 1
                             Layout.column: root.expanded ? 1 : 0
                             Layout.fillHeight: root.expanded
                             objectName: "mempoolSummaryFee"
                             text: root.feeText()
-                            font: root.scaledFont(root.expanded ? Theme.text.heading : Theme.text.captionStrong)
+                            font: root.footerValueFont
                             horizontalAlignment: root.expanded ? Text.AlignRight : Text.AlignLeft
                             Layout.fillWidth: true
                             wrap: false
@@ -176,14 +174,14 @@ DashboardWidget {
                             Layout.preferredHeight: 1
                             color: Theme.color.neutral3
                         }
-                        CoreText { Layout.fillHeight: root.expanded; Layout.row: root.expanded ? 2 : 0; Layout.column: root.expanded ? 0 : 1; text: qsTr("Memory"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; horizontalAlignment: root.expanded ? Text.AlignLeft : Text.AlignRight; Layout.fillWidth: true }
+                        CoreText { Layout.fillHeight: root.expanded; Layout.row: root.expanded ? 2 : 0; Layout.column: root.expanded ? 0 : 1; text: qsTr("Memory"); font: root.footerLabelFont; color: Theme.color.neutral6; horizontalAlignment: root.expanded ? Text.AlignLeft : Text.AlignRight; Layout.fillWidth: true }
                         CoreText {
                             Layout.row: root.expanded ? 2 : 1
                             Layout.column: 1
                             Layout.fillHeight: root.expanded
                             objectName: "mempoolSummaryMemory"
                             text: root.ready ? qsTr("%1 / %2 MB").arg(root.number(root.nodeModelRef.mempoolUsageMB, 2)).arg(root.number(root.nodeModelRef.mempoolMaxUsageMB, 0)) : "—"
-                            font: root.scaledFont(root.expanded ? Theme.text.heading : Theme.text.captionStrong)
+                            font: root.footerValueFont
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignRight
                             wrap: false

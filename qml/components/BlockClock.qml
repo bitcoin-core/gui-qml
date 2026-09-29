@@ -21,6 +21,14 @@ Item {
     property bool showNetworkIndicator: true
     // Backing models remain current while false; only presentation work stops.
     property bool renderingActive: true
+    // Node and Dashboard share typography; hosts can supply their value size.
+    readonly property real fontScale: Math.max(0.85, Math.min(parentWidth, parentHeight) / 480)
+    property font primaryValueFont: Qt.font({family: Theme.text.widgetPrimaryValueLarge.family,
+        styleName: Theme.text.widgetPrimaryValueLarge.styleName,
+        pixelSize: Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * fontScale)})
+    property font accompanyingFont: Qt.font({family: Theme.text.widgetPrimaryValueLarge.family,
+        styleName: Theme.text.widgetPrimaryValueLarge.styleName,
+        pixelSize: Math.max(1, Math.round(dial.width * 0.08))})
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
@@ -108,9 +116,13 @@ Item {
     Label {
         id: mainText
         anchors.centerIn: dial
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: dial.width * (4/25)
+        objectName: "blockClockPrimaryValue"
+        width: dial.width * 0.8
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.NoWrap
+        font: root.primaryValueFont
+        fontSizeMode: Text.Fit
+        minimumPixelSize: Theme.text.widgetSecondaryValue.pixelSize
         color: Theme.color.neutral9
 
         Behavior on color {
@@ -120,9 +132,7 @@ Item {
 
     TextMetrics {
         id: subTextMetrics
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
+        font: root.accompanyingFont
         text: subText.text
     }
 
@@ -132,16 +142,20 @@ Item {
         anchors.top: mainText.bottom
         property bool estimating: root.estimating
         anchors.horizontalCenter: root.horizontalCenter
-        width: dial.width * (4/5)
+        width: dial.width * 0.8
         horizontalAlignment: Text.AlignHCenter
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        wrapMode: Text.NoWrap
+        elide: Text.ElideRight
         readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
         readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
-        font.pixelSize: subText.desiredTextWidth > subText.width
-            ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
-            : subText.desiredPixelSize
-        elide: Text.ElideRight
+        font: Qt.font({
+            family: root.accompanyingFont.family,
+            styleName: root.accompanyingFont.styleName,
+            weight: root.accompanyingFont.weight,
+            pixelSize: subText.desiredTextWidth > subText.width
+                ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
+                : subText.desiredPixelSize
+        })
         color: Theme.color.neutral4
 
         Behavior on color {
@@ -224,7 +238,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Paused"
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: "Tap to resume"
                 estimating: false
             }
@@ -243,7 +257,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Error"
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
             }
             PropertyChanges {
                 target: bitcoinIcon
@@ -257,7 +271,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Offline")
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: qsTr("Check network")
                 estimating: false
             }
@@ -277,7 +291,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Connecting")
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: qsTr("Please wait")
                 estimating: false
             }

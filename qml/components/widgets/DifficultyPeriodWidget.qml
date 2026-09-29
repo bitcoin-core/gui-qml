@@ -15,11 +15,6 @@ DashboardWidget {
     readonly property int progressPercent: Math.floor(progress * 100)
     readonly property real nextChange: available ? periodModel.nextChange : NaN
     readonly property real previousChange: available ? periodModel.previousChange : NaN
-    readonly property font progressCaptionFont: {
-        const value = root.scaledFont(Theme.text.caption)
-        if (!root.expanded) value.pixelSize = Math.round(value.pixelSize * 0.85)
-        return value
-    }
     Accessible.description: qsTr("Difficulty period progress, estimated next adjustment, previous change, blocks left, estimated time remaining and average block time.")
 
     Binding { target: root.periodModel; property: "active"; value: root.active; when: root.periodModel !== null }
@@ -53,17 +48,15 @@ DashboardWidget {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: root.expanded ? (root.height < 240 ? 8 : 14) : 6
-        CoreText {
+        spacing: root.expanded ? (root.height < 280 ? 6 : 12) : 6
+        WidgetTitle {
+            objectName: "difficultyWidgetTitle"
             Layout.fillWidth: true
             text: qsTr("Difficulty Period")
-            font: root.compact ? root.scaledFont(Theme.text.captionStrong) : root.scaledFont(Theme.text.subheading)
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            wrap: false
-            elide: Text.ElideRight
         }
+        Item { visible: root.expanded; Layout.fillHeight: true }
         RowLayout {
+            objectName: "difficultyValuesRow"
             Layout.fillWidth: true
             spacing: 12
             ColumnLayout {
@@ -74,29 +67,29 @@ DashboardWidget {
                 CoreText {
                     objectName: "difficultyNextChange"
                     text: root.changeText(root.nextChange)
-                    font: {
-                        const value = root.scaledFont(root.expanded ? Theme.text.widgetDisplay : Theme.text.headline)
-                        if (root.expanded) value.pixelSize = Math.round(value.pixelSize * 1.25)
-                        return value
-                    }
+                    font: root.primaryValueFont
                     color: root.changeColor(root.nextChange)
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     fontSizeMode: Text.Fit
-                    minimumPixelSize: root.scaledPixelSize(Theme.text.heading)
+                    minimumPixelSize: root.scaledPixelSize(root.secondaryValueStyle)
                 }
                 CoreText {
                     objectName: "difficultyNextLabel"
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    fontSizeMode: Text.Fit
+                    minimumPixelSize: root.footerLabelStyle.pixelSize
                     visible: root.compact || root.expanded
                     text: qsTr("Next adjustment")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                 }
             }
-            CoreText { visible: !root.compact && !root.expanded; text: qsTr("Next\nadjustment"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; horizontalAlignment: Text.AlignRight }
+            CoreText { visible: !root.compact && !root.expanded; text: qsTr("Next\nadjustment"); font: root.primaryLabelFont; color: Theme.color.neutral6; horizontalAlignment: Text.AlignRight }
             ColumnLayout {
                 visible: root.expanded
                 Layout.fillWidth: true
@@ -108,22 +101,18 @@ DashboardWidget {
                     objectName: "difficultyPreviousChange"
                     Layout.fillWidth: true
                     text: root.changeText(root.previousChange)
-                    font: {
-                        const value = root.scaledFont(Theme.text.captionStrong)
-                        value.pixelSize *= 2
-                        return value
-                    }
+                    font: root.secondaryValueFont
                     color: root.changeColor(root.previousChange)
                     horizontalAlignment: Text.AlignRight
                     wrap: false
                     fontSizeMode: Text.Fit
-                    minimumPixelSize: root.scaledPixelSize(Theme.text.captionStrong)
+                    minimumPixelSize: root.footerValueStyle.pixelSize
                 }
                 CoreText {
                     objectName: "difficultyPreviousLabel"
                     Layout.fillWidth: true
                     text: qsTr("Previous")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignRight
                     wrap: false
@@ -137,7 +126,7 @@ DashboardWidget {
             Layout.preferredHeight: implicitHeight * (root.expanded ? 1.2 : 1)
             padding: root.compact ? 5 : root.expanded ? 12 : 8
             contentItem: ColumnLayout {
-                spacing: root.expanded ? 10 : 5
+                spacing: root.expanded ? (root.height < 280 ? 6 : 10) : 5
                 RowLayout {
                     Layout.fillWidth: true
                     CoreText {
@@ -145,7 +134,7 @@ DashboardWidget {
                         visible: !root.compact
                         Layout.fillWidth: true
                         text: root.available ? qsTr("%1 blocks left").arg(root.number(root.periodModel.blocksLeft, 0)) : "—"
-                        font: root.expanded ? root.scaledFont(Theme.text.subheading) : root.progressCaptionFont
+                        font: root.footerValueFont
                         horizontalAlignment: Text.AlignLeft
                         wrap: false
                         elide: Text.ElideRight
@@ -154,7 +143,7 @@ DashboardWidget {
                         objectName: "difficultyProgress"
                         visible: !root.expanded
                         text: root.available ? qsTr("%1%").arg(root.number(root.progressPercent, 0)) : "—"
-                        font: root.progressCaptionFont
+                        font: root.footerLabelFont
                         color: Theme.color.neutral7
                     }
                     CoreText {
@@ -162,7 +151,7 @@ DashboardWidget {
                         visible: root.compact
                         Layout.fillWidth: true
                         text: root.available ? qsTr("%1 left").arg(root.periodModel.blocksLeft) : "—"
-                        font: root.progressCaptionFont
+                        font: root.footerLabelFont
                         color: Theme.color.neutral7
                         horizontalAlignment: Text.AlignRight
                         wrap: false
@@ -172,7 +161,7 @@ DashboardWidget {
                         objectName: "difficultyTimeRemaining"
                         visible: !root.compact
                         text: root.remainingText()
-                        font: root.progressCaptionFont
+                        font: root.footerLabelFont
                         color: Theme.color.neutral7
                         horizontalAlignment: Text.AlignRight
                         wrap: false
@@ -187,13 +176,13 @@ DashboardWidget {
                     color: Theme.color.neutral2
                     clip: true
                     Rectangle { width: parent.width * root.progress; height: parent.height; radius: parent.radius; color: Theme.color.blue }
-                    CoreText { anchors.centerIn: parent; visible: root.expanded; text: root.available ? qsTr("%1%").arg(root.progressPercent) : "—"; font: root.scaledFont(Theme.text.captionStrong); color: Theme.color.neutral9 }
+                    CoreText { anchors.centerIn: parent; visible: root.expanded; text: root.available ? qsTr("%1%").arg(root.progressPercent) : "—"; font: root.footerValueFont; color: Theme.color.neutral9 }
                 }
                 RowLayout {
                     visible: root.expanded
                     Layout.fillWidth: true
-                    CoreText { objectName: "difficultyAverageLabel"; text: qsTr("Avg. block time"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
-                    CoreText { objectName: "difficultyAverageBlockTime"; Layout.fillWidth: true; text: root.averageText(); font: root.scaledFont(Theme.text.captionStrong); horizontalAlignment: Text.AlignRight; wrap: false }
+                    CoreText { objectName: "difficultyAverageLabel"; text: qsTr("Avg. block time"); font: root.footerLabelFont; color: Theme.color.neutral6 }
+                    CoreText { objectName: "difficultyAverageBlockTime"; Layout.fillWidth: true; text: root.averageText(); font: root.footerValueFont; horizontalAlignment: Text.AlignRight; wrap: false }
                 }
             }
         }

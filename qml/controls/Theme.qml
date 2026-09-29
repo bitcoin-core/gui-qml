@@ -169,11 +169,82 @@ Control {
         readonly property string family: "BitcoinCoreSans"
         readonly property string monoFamily: "Roboto Mono"
 
-        readonly property TextStyle widgetDisplay: TextStyle {
+        // Dashboard widget typography
+        readonly property TextStyle widgetTitle: TextStyle {
             family: textSetRoot.family
             styleName: "Semi Bold"
-            pixelSize: 44
-            lineHeight: 48
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetPrimaryValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 28
+            lineHeight: 34
+        }
+
+        readonly property TextStyle widgetPrimaryValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 52
+            lineHeight: 60
+        }
+
+        readonly property TextStyle widgetPrimaryLabel: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 15
+            lineHeight: 22
+        }
+
+        readonly property TextStyle widgetPrimaryLabelLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 18
+            lineHeight: 26
+        }
+
+        readonly property TextStyle widgetSecondaryValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 18
+            lineHeight: 21
+        }
+
+        readonly property TextStyle widgetSecondaryValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 28
+            lineHeight: 34
+        }
+
+        readonly property TextStyle widgetFooterLabel: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetFooterLabelLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 15
+            lineHeight: 22
+        }
+
+        readonly property TextStyle widgetFooterValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetFooterValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 15
+            lineHeight: 22
         }
 
         // Headers — Semi Bold

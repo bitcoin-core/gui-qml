@@ -27,7 +27,7 @@ DashboardWidget {
     ColumnLayout {
         anchors.fill: parent
         spacing: root.expanded ? 12 : 6
-        CoreText { text: root.compact ? qsTr("Halving") : qsTr("Halving progress"); font: root.compact ? root.scaledFont(Theme.text.captionStrong) : root.scaledFont(Theme.text.subheading); color: Theme.color.neutral7 }
+        WidgetTitle { Layout.fillWidth: true; text: qsTr("Halving progress") }
         Item { visible: root.expanded; Layout.fillHeight: true }
         RowLayout {
             Layout.fillWidth: true
@@ -38,18 +38,14 @@ DashboardWidget {
                     objectName: "halvingHeadline"
                     Layout.fillWidth: true
                     text: root.available ? qsTr("%1%").arg(root.percent) : "—"
-                    font: {
-                        const value = root.scaledFont(root.expanded ? Theme.text.widgetDisplay : Theme.text.headline)
-                        if (root.expanded) value.pixelSize = Math.round(value.pixelSize * 1.25)
-                        return value
-                    }
+                    font: root.primaryValueFont
                     color: Theme.color.orange
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     fontSizeMode: Text.Fit
-                    minimumPixelSize: root.scaledPixelSize(Theme.text.heading)
+                    minimumPixelSize: root.scaledPixelSize(root.secondaryValueStyle)
                 }
-                CoreText { visible: root.compact; text: root.compact && root.available ? qsTr("%1 left").arg(root.number(root.milestoneModel.blocksLeft, 0)) : qsTr("Blocks remaining"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; wrap: false; elide: Text.ElideRight }
+                CoreText { visible: root.compact; text: root.compact && root.available ? qsTr("%1 left").arg(root.number(root.milestoneModel.blocksLeft, 0)) : qsTr("Blocks remaining"); font: root.primaryLabelFont; color: Theme.color.neutral6; Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; wrap: false; elide: Text.ElideRight }
             }
             ColumnLayout {
                 visible: !root.compact
@@ -58,14 +54,14 @@ DashboardWidget {
                     objectName: "halvingBlocksRemaining"
                     Layout.fillWidth: true
                     text: root.available ? root.number(root.milestoneModel.blocksLeft, 0) : "—"
-                    font: root.scaledFont(root.expanded ? Theme.text.headline : Theme.text.heading)
+                    font: root.secondaryValueFont
                     color: Theme.color.neutral9
                     horizontalAlignment: Text.AlignRight
                     wrap: false
                 }
                 CoreText {
                     text: qsTr("Blocks remaining")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignRight
                     Layout.fillWidth: true
@@ -90,9 +86,9 @@ DashboardWidget {
         RowLayout {
             visible: root.expanded
             Layout.fillWidth: true
-            CoreText { text: root.available ? root.number(root.milestoneModel.periodStart, 0) : "—"; font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+            CoreText { text: root.available ? root.number(root.milestoneModel.periodStart, 0) : "—"; font: root.footerLabelFont; color: Theme.color.neutral6 }
             Item { Layout.fillWidth: true }
-            CoreText { text: root.available && !root.milestoneModel.complete ? root.number(root.milestoneModel.nextHeight, 0) : "—"; font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+            CoreText { text: root.available && !root.milestoneModel.complete ? root.number(root.milestoneModel.nextHeight, 0) : "—"; font: root.footerLabelFont; color: Theme.color.neutral6 }
         }
         Item { visible: root.expanded; Layout.fillHeight: true }
         WidgetSection {
@@ -106,15 +102,11 @@ DashboardWidget {
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 4
-                    CoreText { visible: root.expanded; text: qsTr("Estimated arrival"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+                    CoreText { visible: root.expanded; text: qsTr("Estimated arrival"); font: root.footerLabelFont; color: Theme.color.neutral6 }
                     CoreText {
                         objectName: "halvingArrival"
                         text: root.arrival()
-                        font: {
-                            const value = root.scaledFont(root.expanded ? Theme.text.subheading : Theme.text.caption)
-                            if (!root.expanded) value.pixelSize = Math.round(value.pixelSize * 0.85)
-                            return value
-                        }
+                        font: root.footerValueFont
                         color: Theme.color.neutral9
                         wrap: false
                     }
@@ -122,8 +114,8 @@ DashboardWidget {
                 ColumnLayout {
                     visible: root.expanded
                     spacing: 4
-                    CoreText { Layout.fillWidth: true; text: qsTr("Block subsidy · BTC"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; horizontalAlignment: Text.AlignRight }
-                    CoreText { objectName: "halvingSubsidy"; Layout.fillWidth: true; text: root.available ? qsTr("%1 → %2").arg(root.subsidy(root.milestoneModel.subsidy)).arg(root.subsidy(root.milestoneModel.nextSubsidy)) : "—"; font: root.scaledFont(Theme.text.subheading); horizontalAlignment: Text.AlignRight; wrap: false; elide: Text.ElideRight }
+                    CoreText { Layout.fillWidth: true; text: qsTr("Block subsidy · BTC"); font: root.footerLabelFont; color: Theme.color.neutral6; horizontalAlignment: Text.AlignRight }
+                    CoreText { objectName: "halvingSubsidy"; Layout.fillWidth: true; text: root.available ? qsTr("%1 → %2").arg(root.subsidy(root.milestoneModel.subsidy)).arg(root.subsidy(root.milestoneModel.nextSubsidy)) : "—"; font: root.footerValueFont; horizontalAlignment: Text.AlignRight; wrap: false; elide: Text.ElideRight }
                 }
             }
         }

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import "../../controls"
 import "WidgetMetrics.js" as WidgetMetrics
 
 // Content contract. WidgetFrame supplies these values; placement and saving
@@ -14,6 +15,22 @@ Item {
     // The host supplies the actual cell size. The fallback also supports previews.
     property real cellSize: Math.min((width + 2 * WidgetMetrics.contentPadding - (columnSpan - 1) * 12) / columnSpan,
                                     (height + 2 * WidgetMetrics.contentPadding - (rowSpan - 1) * 12) / rowSpan)
+    readonly property bool largeTypography: columnSpan >= 3 && rowSpan >= 2
+    readonly property var primaryValueStyle: largeTypography
+        ? Theme.text.widgetPrimaryValueLarge : Theme.text.widgetPrimaryValue
+    readonly property font primaryValueFont: scaledFont(primaryValueStyle)
+    readonly property var primaryLabelStyle: largeTypography
+        ? Theme.text.widgetPrimaryLabelLarge : Theme.text.widgetPrimaryLabel
+    readonly property var secondaryValueStyle: largeTypography
+        ? Theme.text.widgetSecondaryValueLarge : Theme.text.widgetSecondaryValue
+    readonly property var footerLabelStyle: largeTypography
+        ? Theme.text.widgetFooterLabelLarge : Theme.text.widgetFooterLabel
+    readonly property var footerValueStyle: largeTypography
+        ? Theme.text.widgetFooterValueLarge : Theme.text.widgetFooterValue
+    readonly property font primaryLabelFont: primaryLabelStyle.font
+    readonly property font secondaryValueFont: scaledFont(secondaryValueStyle)
+    readonly property font footerLabelFont: footerLabelStyle.font
+    readonly property font footerValueFont: footerValueStyle.font
     readonly property real fontScale: Math.max(0.85, cellSize / 160)
     function scaledFont(style) {
         return Qt.font({family: style.family, styleName: style.styleName, pixelSize: scaledPixelSize(style)})

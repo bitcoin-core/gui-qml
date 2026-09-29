@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 
 TestCase {
     name: "BlockClock"
@@ -277,6 +278,20 @@ TestCase {
         compare(clock.state, "BLOCKCLOCK")
         compare(clock.header, Number(nodeModelMock.blockTipHeight).toLocaleString(Qt.locale(), "f", 0))
         compare(clock.subText, "Blocktime")
+        const value = findChild(clock, "blockClockPrimaryValue")
+        const label = findChild(clock, "blockClockSubText")
+        compare(value.font.family, Theme.text.widgetPrimaryValueLarge.family)
+        compare(value.font.styleName, Theme.text.widgetPrimaryValueLarge.styleName)
+        compare(value.font.pixelSize, Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * clock.fontScale))
+        const dial = findChild(clock, "blockClockDial")
+        compare(label.font.styleName, "Semi Bold")
+        compare(label.font.pixelSize, Math.round(dial.width * 0.08))
+        clock.parentWidth = 300
+        clock.parentHeight = 300
+        waitForPolish(clock)
+        compare(label.font.styleName, "Semi Bold")
+        compare(label.font.pixelSize, Math.round(dial.width * 0.08))
+        compare(value.font.pixelSize, Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * clock.fontScale))
     }
 
     function test_core_ibd_state_overrides_rounded_verification_completion() {

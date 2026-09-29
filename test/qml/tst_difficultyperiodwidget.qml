@@ -66,8 +66,8 @@ TestCase {
         const section = findChild(widget, "difficultyProgressSection")
         compare(section.background.color, Theme.color.neutral1)
         if (widget.expanded) {
-            compare(previous.font.pixelSize, widget.scaledPixelSize(Theme.text.captionStrong) * 2)
-            verify(next.font.pixelSize > widget.scaledPixelSize(Theme.text.widgetDisplay))
+            compare(previous.font.pixelSize, widget.scaledPixelSize(widget.secondaryValueStyle))
+            compare(next.font.pixelSize, widget.scaledPixelSize(Theme.text.widgetPrimaryValueLarge))
             for (const pair of [["difficultyNextChange", "difficultyNextLabel"], ["difficultyPreviousChange", "difficultyPreviousLabel"]]) {
                 const number = findChild(widget, pair[0])
                 const caption = findChild(widget, pair[1])
@@ -99,6 +99,28 @@ TestCase {
             }
         }
     }
+    function test_largeValuesUseBalancedSpace() {
+        const widget = createTemporaryObject(fixture, testCase, {
+            width: 520, height: 330, columnSpan: 3, rowSpan: 2
+        })
+        const title = findChild(widget, "difficultyWidgetTitle")
+        const values = findChild(widget, "difficultyValuesRow")
+        const section = findChild(widget, "difficultyProgressSection")
+        let previousTop = 0
+        for (const height of [330, 650]) {
+            widget.height = height
+            waitForPolish(widget)
+            const top = values.mapToItem(widget, 0, 0).y
+            const topGap = top - title.mapToItem(widget, 0, title.height).y
+            const bottomGap = section.mapToItem(widget, 0, 0).y - values.mapToItem(widget, 0, values.height).y
+            verify(topGap > 0)
+            fuzzyCompare(topGap, bottomGap, 1)
+            verify(top > previousTop)
+            previousTop = top
+            fuzzyCompare(section.mapToItem(widget, 0, section.height).y, widget.height, 1)
+        }
+    }
+
     function test_remainingTime() {
         const widget = createTemporaryObject(fixture, testCase, {width: 330, height: 148, columnSpan: 2, rowSpan: 1})
         const remaining = findChild(widget, "difficultyTimeRemaining")

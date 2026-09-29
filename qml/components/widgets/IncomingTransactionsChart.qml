@@ -8,8 +8,8 @@ import "../../controls"
 Item {
     id: root
     property var samples: []
-    property font labelFont: Theme.text.caption.font
-    readonly property real axisScale: labelFont.pixelSize / Theme.text.caption.pixelSize
+    property font labelFont: Theme.text.widgetFooterLabel.font
+    readonly property real axisScale: labelFont.pixelSize / Theme.text.widgetFooterLabel.pixelSize
     property real capacityBaseline: 1000000 / 600
     property bool expanded: false
     property bool showAxes: true

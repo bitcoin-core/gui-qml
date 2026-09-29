@@ -99,7 +99,7 @@ TestCase {
         for (let i = 0; i < 4; ++i) {
             const target = findChild(widget, "feeRateTarget_" + i)
             compare(target.text, ["2 blocks", "4 blocks", "6 blocks", "100+ blocks"][i])
-            if (!widget.expanded) verify(target.font.pixelSize < widget.scaledPixelSize(Theme.text.caption))
+            compare(target.font, widget.footerLabelFont)
             const label = findChild(widget, "feeRateValue_" + i)
             verify(!label.truncated,
                    label.objectName + " must show the complete value (width=" + label.width

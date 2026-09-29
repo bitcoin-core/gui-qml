@@ -19,11 +19,6 @@ DashboardWidget {
         return false
     }
     readonly property var targets: [qsTr("2 blocks"), qsTr("4 blocks"), qsTr("6 blocks"), qsTr("100+ blocks")]
-    readonly property font mediumTargetFont: Qt.font({
-        family: Theme.text.caption.family,
-        styleName: Theme.text.caption.styleName,
-        pixelSize: Math.max(9, Math.round(root.scaledPixelSize(Theme.text.caption) * 0.8))
-    })
 
     Binding {
         target: root.feeRatesModelRef
@@ -68,15 +63,11 @@ DashboardWidget {
         spacing: root.expanded ? 14 : 6
         RowLayout {
             Layout.fillWidth: true
-            CoreText {
+            WidgetTitle {
                 text: qsTr("Fee rates")
-                font: root.scaledFont(Theme.text.subheading)
-                color: Theme.color.neutral7
-                horizontalAlignment: Text.AlignLeft
                 Layout.fillWidth: true
-                wrap: false
             }
-            CoreText { visible: !root.compact; text: qsTr("sat/vB"); font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+            CoreText { visible: !root.compact; text: qsTr("sat/vB"); font: root.primaryLabelFont; color: Theme.color.neutral6 }
         }
         ColumnLayout {
             visible: root.compact
@@ -90,12 +81,12 @@ DashboardWidget {
                     objectName: "feeRatesHeadline"
                     width: Math.max(0, Math.min(Math.ceil(headlineMetrics.advanceWidth(text)), parent.width - rateUnit.implicitWidth - 6))
                     text: root.formattedRate(0)
-                    font: root.scaledFont(Theme.text.headline)
+                    font: root.primaryValueFont
                     color: root.rateColors[0]
                     wrap: false
                     horizontalAlignment: Text.AlignLeft
                     fontSizeMode: Text.Fit
-                    minimumPixelSize: root.scaledPixelSize(Theme.text.subheading)
+                    minimumPixelSize: root.scaledPixelSize(root.secondaryValueStyle)
                 }
                 CoreText {
                     id: rateUnit
@@ -104,12 +95,12 @@ DashboardWidget {
                     anchors.leftMargin: 6
                     anchors.baseline: headline.baseline
                     text: qsTr("sat/vB")
-                    font: root.scaledFont(Theme.text.caption)
+                    font: root.primaryLabelFont
                     color: Theme.color.neutral6
                     wrap: false
                 }
             }
-            CoreText { objectName: "feeRatesHeadlineTarget"; text: root.targets[0]; font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6 }
+            CoreText { objectName: "feeRatesHeadlineTarget"; text: root.targets[0]; font: root.primaryLabelFont; color: Theme.color.neutral6 }
         }
         Item {
             Layout.fillWidth: true
@@ -143,7 +134,7 @@ DashboardWidget {
             objectName: "feeRatesStatus"
             visible: !root.hasEstimates
             Layout.fillWidth: true
-            font: root.scaledFont(Theme.text.caption)
+            font: root.footerLabelFont
             color: Theme.color.neutral7
             text: !root.feeRatesModelRef || !root.feeRatesModelRef.ready ? qsTr("Waiting for node")
                 : root.feeRatesModelRef.pending ? qsTr("Estimating fees…") : qsTr("Estimates unavailable")
@@ -169,7 +160,7 @@ DashboardWidget {
                         Layout.minimumWidth: 0
                         Layout.preferredWidth: 1
                         text: root.targets[parent.index]
-                        font: root.expanded ? root.scaledFont(Theme.text.caption) : root.mediumTargetFont
+                        font: root.footerLabelFont
                         color: Theme.color.neutral7
                         wrap: false
                         elide: Text.ElideRight
@@ -180,10 +171,10 @@ DashboardWidget {
                         Layout.minimumWidth: 0
                         Layout.preferredWidth: 1
                         text: root.formattedRate(parent.index)
-                        font: root.expanded ? root.scaledFont(Theme.text.heading) : root.scaledFont(Theme.text.subheading)
+                        font: root.secondaryValueFont
                         color: root.rateColors[parent.index]
                         fontSizeMode: Text.Fit
-                        minimumPixelSize: root.scaledPixelSize(Theme.text.caption)
+                        minimumPixelSize: root.footerValueStyle.pixelSize
                         wrap: false
                         Accessible.name: qsTr("%1: %2 sat/vB").arg(root.targets[parent.index]).arg(text)
                     }
@@ -200,8 +191,8 @@ DashboardWidget {
         RowLayout {
             visible: root.compact && root.hasEstimates
             Layout.fillWidth: true
-            CoreText { Layout.fillWidth: true; text: root.targets[2]; font: root.scaledFont(Theme.text.caption); color: Theme.color.neutral6; horizontalAlignment: Text.AlignLeft }
-            CoreText { objectName: "feeRatesCompactHour"; text: root.rateAt(2) > 0 ? qsTr("%1 sat/vB").arg(Math.floor(root.rateAt(2)).toLocaleString(Qt.locale(), 'f', 0)) : "—"; font: root.scaledFont(Theme.text.captionStrong); color: root.rateColors[2]; wrap: false }
+            CoreText { Layout.fillWidth: true; text: root.targets[2]; font: root.footerLabelFont; color: Theme.color.neutral6; horizontalAlignment: Text.AlignLeft }
+            CoreText { objectName: "feeRatesCompactHour"; text: root.rateAt(2) > 0 ? qsTr("%1 sat/vB").arg(Math.floor(root.rateAt(2)).toLocaleString(Qt.locale(), 'f', 0)) : "—"; font: root.footerValueFont; color: root.rateColors[2]; wrap: false }
         }
     }
 }
