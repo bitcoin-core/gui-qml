@@ -163,3 +163,11 @@ add_executable(difficultyperiodmodel_tests
 target_include_directories(difficultyperiodmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(difficultyperiodmodel_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME difficultyperiodmodel_tests COMMAND difficultyperiodmodel_tests)
+
+add_executable(halvingmodel_tests
+  test_halvingmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/halvingmodel.cpp
+)
+target_include_directories(halvingmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(halvingmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME halvingmodel_tests COMMAND halvingmodel_tests)

@@ -38,6 +38,7 @@
 #include <qml/components/widgets/mempoolactivitymodel.h>
 #include <qml/components/widgets/mempoolactivitysource.h>
 #include <qml/components/widgets/difficultyperiodsource.h>
+#include <qml/components/widgets/halvingmodel.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
@@ -576,6 +577,13 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    HalvingModel halving_model{Params().GetConsensus().nSubsidyHalvingInterval,
+                               int(Params().GetConsensus().nPowTargetSpacing)};
+    const auto refresh_halving = [&] {
+        halving_model.setHeight(node->isInitialBlockDownload() ? -1 : node_model.blockTipHeight());
+    };
+    QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &halving_model, refresh_halving);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &halving_model, [&] { halving_model.setHeight(-1); });
     DifficultyPeriodModel difficulty_period_model{[node = node.get(), chain = chain.get()] {
         return ReadDifficultyPeriod(*node, *chain);
     }};
@@ -614,6 +622,9 @@ int QmlGuiMain(int argc, char* argv[])
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &halving_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested()) refresh_halving();
+    });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &difficulty_period_model, [&](bool success) {
         if (success && !shutdown_requested && !node->shutdownRequested()) difficulty_period_model.setReady(true);
     });
@@ -719,6 +730,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("feeRatesModel", &fee_rates_model);
     engine->rootContext()->setContextProperty("mempoolActivityModel", &mempool_activity_model);
     engine->rootContext()->setContextProperty("difficultyPeriodModel", &difficulty_period_model);
+    engine->rootContext()->setContextProperty("halvingModel", &halving_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

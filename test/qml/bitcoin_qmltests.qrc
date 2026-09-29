@@ -6,9 +6,11 @@
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
         <file>tst_widgetdashboard.qml</file>
+        <file>tst_widgettypography.qml</file>
         <file>tst_feerateswidget.qml</file>
         <file>tst_mempoolwidget.qml</file>
         <file>tst_difficultyperiodwidget.qml</file>
+        <file>tst_halvingwidget.qml</file>
         <file>tst_mempoolsummarywidget.qml</file>
         <file>WidgetFixture.qml</file>
         <file>InvalidWidgetFixture.qml</file>
