@@ -2823,6 +2823,8 @@ class MockNetworkTrafficTower : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QVariantList history MEMBER m_history NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList widgetHistory READ widgetHistory NOTIFY historyChanged)
+    Q_PROPERTY(bool widgetActive MEMBER m_widget_active NOTIFY widgetActiveChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(quint64 totalBytesReceived MEMBER m_total_bytes_received NOTIFY totalBytesReceivedChanged)
     Q_PROPERTY(quint64 totalBytesSent MEMBER m_total_bytes_sent NOTIFY totalBytesSentChanged)
@@ -2841,6 +2843,8 @@ public:
         Q_EMIT activeChanged();
     }
 
+    QVariantList widgetHistory() const { return m_history; }
+    bool m_widget_active{false};
     QVariantList m_history{
         QVariantMap{{"time", 1'000.0}, {"received", 30.0}, {"sent", 35.0}},
         QVariantMap{{"time", 2'000.0}, {"received", 20.0}, {"sent", 25.0}},
@@ -2862,6 +2866,7 @@ public:
 
 Q_SIGNALS:
     void historyChanged();
+    void widgetActiveChanged();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();

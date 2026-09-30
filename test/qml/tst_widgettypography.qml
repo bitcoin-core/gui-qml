@@ -27,7 +27,7 @@ TestCase {
 
     function test_cellResize_data() {
         const cases = []
-        for (const file of ["FeeRatesWidget", "MempoolWidget", "MempoolSummaryWidget", "DifficultyPeriodWidget", "HalvingWidget", "BlockClockWidget"]) {
+        for (const file of ["FeeRatesWidget", "MempoolWidget", "MempoolSummaryWidget", "DifficultyPeriodWidget", "HalvingWidget", "NetworkTrafficWidget", "BlockClockWidget"]) {
             const sizes = file === "BlockClockWidget" ? [[2, 2], [3, 3]] : [[1, 1], [2, 1], [3, 2]]
             for (const size of sizes) cases.push({tag: file + size.join("x"), file: file, columns: size[0], rows: size[1]})
         }
@@ -74,7 +74,7 @@ TestCase {
         compare(widget.footerValueFont, footerValueStyle.font)
         const valueNames = {FeeRatesWidget: "feeRatesHeadline", MempoolWidget: "incomingTransactionsPrimaryValue",
             MempoolSummaryWidget: "mempoolSummaryCount", DifficultyPeriodWidget: "difficultyNextChange",
-            HalvingWidget: "halvingHeadline", BlockClockWidget: "blockClockPrimaryValue"}
+            HalvingWidget: "halvingHeadline", NetworkTrafficWidget: data.columns === 1 && data.rows === 1 ? "networkTrafficCompactReceived" : "networkTrafficReceivedRate", BlockClockWidget: "blockClockPrimaryValue"}
         const value = findChild(widget, valueNames[data.file])
         verify(value !== null)
         compare(value.font.pixelSize, valueStyle.pixelSize)

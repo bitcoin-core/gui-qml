@@ -60,6 +60,12 @@ WidgetRegistry {
             title: qsTr("Halving progress")
             source: Qt.resolvedUrl("HalvingWidget.qml")
             sizes: [WidgetSize { columns: 2; rows: 1 }, WidgetSize { columns: 3; rows: 2 }, WidgetSize { columns: 1; rows: 1 }]
+        },
+        WidgetDefinition {
+            widgetId: "network-traffic"
+            title: qsTr("Network traffic")
+            source: Qt.resolvedUrl("NetworkTrafficWidget.qml")
+            sizes: [WidgetSize { columns: 2; rows: 1 }, WidgetSize { columns: 3; rows: 2 }, WidgetSize { columns: 1; rows: 1 }]
         }
     ]
 }

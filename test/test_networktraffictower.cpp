@@ -35,6 +35,7 @@ private Q_SLOTS:
     void filterWindowChangesPreserveTotalsAndHistory();
     void stopsSamplingWhenDestroyedWhileActive();
     void timestampedHistoryPairsSamplesAndPreservesExtrema();
+    void widgetAndPagePublishingAreIndependent();
 };
 
 void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive()
@@ -192,7 +193,8 @@ void NetworkTrafficTowerTests::timestampedHistoryPairsSamplesAndPreservesExtrema
     NetworkTrafficTower tower{node, 1};
     tower.updateFilterWindowSize(8640);
     tower.setActive(true);
-    QTRY_VERIFY_WITH_TIMEOUT(tower.receivedRateList().size() > 3000, 10000);
+    tower.setWidgetActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(tower.receivedRateList().size() > 4000, 10000);
     const auto history = tower.history();
     QVERIFY(!history.isEmpty());
     QVERIFY(history.size() <= 2880);
@@ -210,10 +212,67 @@ void NetworkTrafficTowerTests::timestampedHistoryPairsSamplesAndPreservesExtrema
     QCOMPARE(max_received, tower.maxReceivedRateBps());
     QCOMPARE(max_sent, tower.maxSentRateBps());
     QCOMPARE(history.back().toMap().value("received").toFloat(), tower.receivedRateList().front());
+    const auto widget_history = tower.widgetHistory();
+    QVERIFY(!widget_history.isEmpty());
+    QVERIFY(widget_history.size() <= 2880);
+    QVERIFY(widget_history.front().toMap().value("time").toLongLong() > history.front().toMap().value("time").toLongLong());
+    QCOMPARE(widget_history.back().toMap().value("time"), history.back().toMap().value("time"));
     tower.setActive(false);
+    tower.setWidgetActive(false);
     const auto paused = tower.history();
     QTest::qWait(30);
     QCOMPARE(tower.history(), paused);
+}
+
+void NetworkTrafficTowerTests::widgetAndPagePublishingAreIndependent()
+{
+    MockNode node;
+    std::atomic<int64_t> received{1000};
+    int64_t sampled_received{0};
+    node.get_total_bytes_recv_fn = [&] { sampled_received = received.load(); return sampled_received; };
+    node.get_total_bytes_sent_fn = [&] { return sampled_received * 2; };
+    NetworkTrafficTower tower{node, TEST_SAMPLE_INTERVAL_MS};
+    QSignalSpy widget_spy{&tower, &NetworkTrafficTower::widgetHistoryChanged};
+    tower.setWidgetActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(tower.widgetHistory().size() >= 5, ASYNC_TIMEOUT_MS);
+    QVERIFY(tower.history().isEmpty());
+    QCOMPARE(tower.totalBytesReceived(), quint64{1000});
+
+    tower.updateFilterWindowSize(1000);
+    tower.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(!tower.history().isEmpty(), ASYNC_TIMEOUT_MS);
+    received += 100000;
+    QTRY_VERIFY_WITH_TIMEOUT(tower.maxReceivedRateBps() > 0, ASYNC_TIMEOUT_MS);
+    float maximum_widget_rate{0};
+    for (const auto& point : tower.widgetHistory()) {
+        const auto sample = point.toMap();
+        maximum_widget_rate = std::max(maximum_widget_rate, sample.value("received").toFloat());
+        QCOMPARE(sample.value("sent").toFloat(), sample.value("received").toFloat() * 2);
+    }
+    QVERIFY(maximum_widget_rate > tower.maxReceivedRateBps());
+
+    tower.setActive(false);
+    const auto page_history = tower.history();
+    const auto widget_signals = widget_spy.count();
+    received += 1000;
+    QTRY_VERIFY_WITH_TIMEOUT(widget_spy.count() > widget_signals, ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(tower.totalBytesReceived(), quint64{102000}, ASYNC_TIMEOUT_MS);
+    QCOMPARE(tower.history(), page_history);
+
+    tower.setActive(true);
+    tower.setWidgetActive(false);
+    const auto widget_history = tower.widgetHistory();
+    const auto page_size = tower.history().size();
+    QTRY_VERIFY_WITH_TIMEOUT(tower.history().size() > page_size, ASYNC_TIMEOUT_MS);
+    QCOMPARE(tower.widgetHistory(), widget_history);
+    tower.setActive(false);
+    QTest::qWait(30);
+    const auto signals_while_hidden = widget_spy.count();
+    QTest::qWait(30);
+    QCOMPARE(widget_spy.count(), signals_while_hidden);
+    tower.setWidgetActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(widget_spy.count() > signals_while_hidden, ASYNC_TIMEOUT_MS);
+    QVERIFY(tower.widgetHistory().size() > widget_history.size());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
