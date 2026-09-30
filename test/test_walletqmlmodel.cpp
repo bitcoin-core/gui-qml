@@ -197,8 +197,6 @@ WalletModelHarness<MockWallet> MakeWalletModel(interfaces::Node* node = nullptr)
     return {wallet_view, std::make_unique<WalletQmlModel>(std::move(wallet), node)};
 }
 
-// A minimal external incoming payment to `dest`, shaped so that
-// Transaction::fromWalletTx decodes it into a single RecvWithAddress row.
 void SetValidRecipient(WalletQmlModel& model,
                        const QString& address = VALID_MAINNET_ADDRESS)
 {
@@ -518,6 +516,29 @@ WalletModelHarness<FakePasswordWallet> MakePasswordWalletModel(interfaces::Node*
     auto wallet = std::make_unique<FakePasswordWallet>();
     FakePasswordWallet* const wallet_view{wallet.get()};
     return {wallet_view, std::make_unique<WalletQmlModel>(std::move(wallet), node)};
+}
+
+// Include the input and output metadata consumed by the activity models,
+// even when a test only asserts payment-request reconciliation.
+interfaces::WalletTx MakeIncomingPayment(CMutableTransaction tx, std::vector<bool> owned_outputs)
+{
+    if (tx.vin.empty()) tx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
+    interfaces::WalletTx payment{};
+    payment.tx = MakeTransactionRef(std::move(tx));
+    payment.txin_is_mine.resize(payment.tx->vin.size(), false);
+    payment.txout_is_mine = std::move(owned_outputs);
+    payment.txout_is_change.resize(payment.tx->vout.size(), false);
+    payment.txout_address.resize(payment.tx->vout.size());
+    payment.txout_address_is_mine.resize(payment.tx->vout.size(), false);
+    for (size_t i{0}; i < payment.tx->vout.size(); ++i) {
+        const auto& output = payment.tx->vout[i];
+        const bool has_address = ExtractDestination(output.scriptPubKey, payment.txout_address[i]);
+        if (payment.txout_is_mine.at(i)) {
+            payment.credit += output.nValue;
+            payment.txout_address_is_mine[i] = has_address;
+        }
+    }
+    return payment;
 }
 
 void SetPasswordRecipient(WalletQmlModel& model, qint64 satoshis)
@@ -860,9 +881,7 @@ void WalletQmlModelTests::receivingAddressIsStableUntilRotatedOrPaid()
 
     CMutableTransaction incoming;
     incoming.vout.emplace_back(1, GetScriptForDestination(model->receivingAddress()->destination()));
-    interfaces::WalletTx payment{};
-    payment.tx = MakeTransactionRef(incoming);
-    payment.txout_is_mine = {true};
+    const auto payment = MakeIncomingPayment(incoming, {true});
     wallet->get_wallet_txs_fn = [payment] { return std::set<interfaces::WalletTx>{payment}; };
     model->currentPaymentRequest()->setLabel("Too late");
     QVERIFY(!model->commitReceivingPaymentRequest());
@@ -1739,9 +1758,7 @@ void WalletQmlModelTests::paymentArrivalLocksRequestAndPreservesNote()
     // A queued payment notification blocks an edit until its lock is applied.
     CMutableTransaction incoming;
     incoming.vout.emplace_back(1, GetScriptForDestination(request->destination()));
-    interfaces::WalletTx payment{};
-    payment.tx = MakeTransactionRef(incoming);
-    payment.txout_is_mine = {true};
+    const auto payment = MakeIncomingPayment(incoming, {true});
     wallet->get_wallet_txs_fn = [payment] { return std::set<interfaces::WalletTx>{payment}; };
     wallet->transaction_details[payment.tx->GetHash()] = payment;
     QVERIFY(wallet->transaction_changed_fn);
@@ -1789,14 +1806,10 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
     first.vout.emplace_back(100, script);
     first.vout.emplace_back(41, script);
     first.vout.emplace_back(5000, CScript{} << OP_RETURN);
-    interfaces::WalletTx first_payment{};
-    first_payment.tx = MakeTransactionRef(first);
-    first_payment.txout_is_mine = {true, true, false};
+    auto first_payment = MakeIncomingPayment(first, {true, true, false});
     CMutableTransaction second;
     second.vout.emplace_back(200, script);
-    interfaces::WalletTx second_payment{};
-    second_payment.tx = MakeTransactionRef(second);
-    second_payment.txout_is_mine = {true};
+    const auto second_payment = MakeIncomingPayment(second, {true});
     wallet->get_wallet_txs_fn = [first_payment, second_payment] {
         return std::set<interfaces::WalletTx>{first_payment, second_payment};
     };
@@ -1862,9 +1875,7 @@ void WalletQmlModelTests::replacementNotificationRechecksReceiverOriginal()
     const auto script = GetScriptForDestination(model->currentPaymentRequest()->destination());
     CMutableTransaction original_raw;
     original_raw.vout.emplace_back(100, script);
-    interfaces::WalletTx original{};
-    original.tx = MakeTransactionRef(original_raw);
-    original.txout_is_mine = {true};
+    const auto original = MakeIncomingPayment(original_raw, {true});
     wallet->transaction_details[original.tx->GetHash()] = original;
     wallet->transaction_changed_fn(original.tx->GetHash(), CT_NEW);
     QVERIFY(model->loadPaymentRequestDetail(id));
@@ -1876,9 +1887,7 @@ void WalletQmlModelTests::replacementNotificationRechecksReceiverOriginal()
     CMutableTransaction replacement_raw;
     replacement_raw.nLockTime = 1;
     replacement_raw.vout.emplace_back(100, script);
-    interfaces::WalletTx replacement{};
-    replacement.tx = MakeTransactionRef(replacement_raw);
-    replacement.txout_is_mine = {true};
+    const auto replacement = MakeIncomingPayment(replacement_raw, {true});
     wallet->transaction_details[replacement.tx->GetHash()] = replacement;
     QSignalSpy changed{model.get(), &WalletQmlModel::transactionChanged};
     wallet->transaction_changed_fn(replacement.tx->GetHash(), CT_NEW);
@@ -1894,9 +1903,7 @@ void WalletQmlModelTests::cancelledPaymentWithoutNotificationClearsReceivedAmoun
     const QString id = model->currentPaymentRequest()->id();
     CMutableTransaction incoming;
     incoming.vout.emplace_back(100, GetScriptForDestination(model->currentPaymentRequest()->destination()));
-    interfaces::WalletTx payment{};
-    payment.tx = MakeTransactionRef(incoming);
-    payment.txout_is_mine = {true};
+    const auto payment = MakeIncomingPayment(incoming, {true});
     wallet->transaction_details[payment.tx->GetHash()] = payment;
     QVERIFY(model->loadPaymentRequestDetail(id));
     wallet->transaction_changed_fn(payment.tx->GetHash(), CT_NEW);
@@ -1925,9 +1932,7 @@ void WalletQmlModelTests::reconciliationBatchesActivityRebuilds()
     }
     CMutableTransaction incoming;
     incoming.vout.emplace_back(100, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    interfaces::WalletTx payment{};
-    payment.tx = MakeTransactionRef(incoming);
-    payment.txout_is_mine = {true};
+    const auto payment = MakeIncomingPayment(incoming, {true});
     QSemaphore scan_gate;
     std::atomic<bool> scan_started{false};
     wallet->get_wallet_txs_fn = [&] {
@@ -1968,9 +1973,7 @@ void WalletQmlModelTests::openingRequestRemainsResponsiveDuringLargeHistoryScan(
         CMutableTransaction raw;
         raw.nLockTime = i;
         raw.vout.emplace_back(1, script);
-        interfaces::WalletTx tx{};
-        tx.tx = MakeTransactionRef(raw);
-        tx.txout_is_mine = {true};
+        const auto tx = MakeIncomingPayment(raw, {true});
         history.insert(tx);
     }
     QSemaphore scan_gate;

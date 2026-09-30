@@ -141,7 +141,7 @@ def case_bad_format(harness, checkpoints):
     gui.wait_for_property("importWalletErrorView", "visible", True, timeout_ms=20000)
     checkpoints.checkpoint("bad-format error screen displayed", gui)
 
-    assert gui.get_current_page() == "walletImportErrorPage", "Bad-format restore should show the import error page"
+    gui.wait_for_property("createWalletWizard", "currentItem.objectName", "walletImportErrorPage", timeout_ms=20000)
     assert gui.get_property("walletBadge", "noWalletLoaded") is True, "Bad-format restore should not load a wallet"
     assert gui.get_text("importWalletErrorTitle") == "This wallet type is not supported"
     assert gui.get_text("importWalletErrorDescription") == (
@@ -195,7 +195,7 @@ def case_legacy_wallet(harness, checkpoints):
     gui.wait_for_property("importWalletErrorView", "visible", True, timeout_ms=20000)
     checkpoints.checkpoint("legacy-wallet error screen displayed", gui)
 
-    assert gui.get_current_page() == "walletImportErrorPage", "Legacy restore should show the import error page"
+    gui.wait_for_property("createWalletWizard", "currentItem.objectName", "walletImportErrorPage", timeout_ms=20000)
     assert gui.get_property("walletBadge", "noWalletLoaded") is True, "Legacy restore failure should not load a wallet"
     assert gui.get_text("importWalletErrorTitle") == "This wallet needs to be migrated"
     assert gui.get_text("importWalletErrorDescription") == (

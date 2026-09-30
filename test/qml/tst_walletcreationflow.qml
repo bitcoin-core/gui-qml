@@ -216,15 +216,42 @@ TestCase {
         compare(finished, true)
     }
 
-    function test_import_choice_opens_file_dialog_and_cancel_returns_to_types() {
+    function test_import_choice_uses_selected_file() {
         const flow = createFlow()
+        findChild(flow, "importWalletPathField").text = "/tmp/test-wallet.bak"
         findChild(flow, "walletTypeImport").clicked()
-        compare(flow.depth, 1)
+        tryVerify(function() { return findChild(flow, "importWalletSuccessPage") !== null })
+        compare(findChild(flow, "importWalletPathField").text, "")
         compare(findChild(flow, "walletImportErrorPage"), null)
+        compare(flow.importingWallet, false)
+    }
+
+    function test_import_file_dialog_rejection_keeps_wallet_types() {
+        const flow = createFlow()
         const dialog = findChild(flow, "walletImportFileDialog")
         verify(dialog !== null)
-        tryCompare(dialog, "visible", true)
-        dialog.reject()
+        verify(dialog.selectedFile !== undefined)
+        compare(dialog.nameFilters.length, 2)
+        // Exercise dialog signals without opening a platform picker: the
+        // minimal platform has no native picker on Qt 6.2.
+        dialog.rejected()
         compare(flow.depth, 1)
+        compare(flow.currentItem.objectName, "walletCreationTypePage")
+        compare(flow.importingWallet, false)
+        compare(findChild(flow, "walletImportErrorPage"), null)
+    }
+
+    function test_import_file_dialog_acceptance_without_selection_does_not_import() {
+        const flow = createFlow()
+        const dialog = findChild(flow, "walletImportFileDialog")
+        verify(dialog !== null)
+        // Qt 6.2 exposes selectedFile as read-only. Successful selection is
+        // covered through importWalletPathField without opening a picker.
+        compare(dialog.selectedFile.toString(), "")
+        dialog.accepted()
+        compare(flow.depth, 1)
+        compare(flow.currentItem.objectName, "walletCreationTypePage")
+        compare(flow.importingWallet, false)
+        compare(findChild(flow, "importWalletSuccessPage"), null)
     }
 }
