@@ -19,11 +19,28 @@ Popup {
     default property alias actions: actionStore.data
 
     property var visibleActions: [defaultAction]
+    readonly property real minimumActionWidth: {
+        let width = 0
+        for (let i = 0; i < visibleActions.length; ++i) {
+            width = Math.max(width, Math.ceil(actionFontMetrics.advanceWidth(visibleActions[i].text)) + 40)
+        }
+        return width
+    }
+    readonly property real horizontalActionsWidth: minimumActionWidth * visibleActions.length
+        + 10 * Math.max(0, visibleActions.length - 1)
+
+    property FontMetrics actionMetrics: FontMetrics {
+        id: actionFontMetrics
+        font: Theme.text.buttonStrong.font
+    }
 
     modal: true
     dim: true
+    focus: true
+    closePolicy: Popup.NoAutoClose
     padding: 0
-    width: parent ? Math.min(parent.width - 40, 360) : 360
+    implicitWidth: Math.max(360, horizontalActionsWidth + 40)
+    width: parent ? Math.min(parent.width - 40, implicitWidth) : implicitWidth
     implicitHeight: columnLayout.implicitHeight
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
@@ -77,8 +94,23 @@ Popup {
         visibleActions = actionStore.data.length > 0 ? actionStore.data : [defaultAction]
     }
 
+    function cancel() {
+        for (let i = 0; i < visibleActions.length; ++i) {
+            const action = visibleActions[i]
+            if (action.role === AlertAction.Cancel || action.role === AlertAction.Neutral) {
+                close()
+                action.triggered()
+                return
+            }
+        }
+        close()
+    }
+
     Component.onCompleted: refreshActions()
-    onOpened: refreshActions()
+    onOpened: {
+        refreshActions()
+        columnLayout.forceActiveFocus()
+    }
 
     background: Rectangle {
         objectName: "alertPopupSurface"
@@ -86,11 +118,23 @@ Popup {
         radius: 10
         border.color: Theme.color.neutral2
         border.width: 1
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     contentItem: ColumnLayout {
         id: columnLayout
+        focus: true
         spacing: 0
+
+        Keys.priority: Keys.BeforeItem
+        Keys.onEscapePressed: function(event) {
+            root.cancel()
+            event.accepted = true
+        }
 
         CoreText {
             objectName: "alertTitle"
@@ -123,55 +167,71 @@ Popup {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        // The action buttons live in a Row positioner, not a RowLayout, on
+        // The action buttons live in a Flow positioner, not a RowLayout, on
         // purpose. A Repeater directly inside a Quick Layout hits a Qt 6.4
         // use-after-free in QGridLayoutEngine when the layout rearranges while
         // the Repeater is rebuilding a delegate (for example, navigating to the
         // Send tab resizes the popup, which re-fires its parent-bound width and
         // rearranges this row). A positioner never hands delegates to the grid
-        // layout engine, so the buttons are given equal widths explicitly.
-        Row {
+        // layout engine. Keep equal widths and stack actions when their full
+        // labels cannot fit side by side in the available space.
+        Flow {
             id: actionRow
             Layout.fillWidth: true
             Layout.leftMargin: 20
             Layout.rightMargin: 20
             Layout.bottomMargin: 20
             spacing: 10
+            readonly property bool stacked: width < root.horizontalActionsWidth
 
             Repeater {
                 model: root.visibleActions.length
 
-                ContinueButton {
-                    id: alertButton
+                Item {
+                    id: actionDelegate
                     // Qt 6.2: does not inject `index` into this delegate; declare
                     // it explicitly so `visibleActions[index]` resolves.
                     required property int index
 
                     readonly property AlertAction alertAction: root.visibleActions[index]
+                    readonly property bool neutralAction: alertAction.role === AlertAction.Cancel
+                        || alertAction.role === AlertAction.Neutral
 
-                    objectName: alertAction.buttonObjectName
-                    width: Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
-                    text: alertAction.text
-                    textColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral9 : Theme.color.white
-                    textHoverColor: textColor
-                    textPressedColor: textColor
-                    backgroundColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral1
-                        : alertAction.role === AlertAction.Destructive ? Theme.color.red : Theme.color.orange
-                    backgroundHoverColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral1
-                        : alertAction.role === AlertAction.Destructive ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
-                    backgroundPressedColor: alertAction.role === AlertAction.Cancel
-                        ? Theme.color.neutral2
-                        : alertAction.role === AlertAction.Destructive ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
-                    borderColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral6 : "transparent"
-                    borderHoverColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral9 : "transparent"
-                    borderPressedColor: alertAction.role === AlertAction.Cancel ? Theme.color.neutral2 : "transparent"
-                    onClicked: {
+                    width: actionRow.stacked ? actionRow.width
+                        : Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
+                    height: 46
+
+                    function triggerAction() {
                         if (alertAction.closesPopup) {
                             root.close()
                         }
                         alertAction.triggered()
+                    }
+
+                    NeutralButton {
+                        anchors.fill: parent
+                        visible: actionDelegate.neutralAction
+                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction.text
+                        buttonSize: NeutralButton.Large
+                        backgroundColor: Theme.color.neutral2
+                        hoverBackgroundColor: Theme.color.neutral3
+                        onClicked: actionDelegate.triggerAction()
+                    }
+
+                    ContinueButton {
+                        anchors.fill: parent
+                        horizontalPadding: 20
+                        visible: !actionDelegate.neutralAction
+                        objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
+                        text: actionDelegate.alertAction.text
+                        backgroundColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Theme.color.red : Theme.color.orange
+                        backgroundHoverColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
+                        backgroundPressedColor: actionDelegate.alertAction.role === AlertAction.Destructive
+                            ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
+                        onClicked: actionDelegate.triggerAction()
                     }
                 }
             }

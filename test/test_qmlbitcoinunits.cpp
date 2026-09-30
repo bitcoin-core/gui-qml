@@ -106,6 +106,11 @@ void QmlBitcoinUnitsTests::display_unit_mapping_and_labels()
 
     QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::mBTC), QString("mBTC"));
     QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::uBTC), QString("bits"));
+    QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::BTC, 1), QString("BTC"));
+    QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::SAT, 0), QString("sats"));
+    QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::SAT, 1), QString("sat"));
+    QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::SAT, -1), QString("sat"));
+    QCOMPARE(QmlBitcoinUnits::label(QmlBitcoinUnits::Unit::SAT, 2), QString("sats"));
     QCOMPARE(QmlBitcoinUnits::displayLabel(QmlBitcoinUnits::Unit::SAT, 1), QString("sat"));
     QCOMPARE(QmlBitcoinUnits::displayLabel(QmlBitcoinUnits::Unit::SAT, 2), QString("sats"));
 }

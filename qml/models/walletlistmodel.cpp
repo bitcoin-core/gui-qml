@@ -196,7 +196,7 @@ void WalletListModel::setWalletInfo(const QString& name, qint64 balance, int key
         }
         if (changed) {
             const QModelIndex idx = index(row, 0);
-            Q_EMIT dataChanged(idx, idx, {BalanceRole, KeySchemeKindRole});
+            Q_EMIT dataChanged(idx, idx, {BalanceRole, BalanceSatoshiRole, KeySchemeKindRole});
         }
         return;
     }
@@ -236,6 +236,8 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
         return (m_load_error.first == item.name) ? m_load_error.second : QString();
     case BalanceRole:
         return item.balance ? QmlBitcoinUnits::formatForDisplay(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), *item.balance) : QString{};
+    case BalanceSatoshiRole:
+        return item.balance.value_or(0);
     case WalletSectionRole:
         return m_open_wallet_names.contains(item.name) ? QStringLiteral("open") : QStringLiteral("closed");
     case KeySchemeKindRole:
@@ -254,6 +256,7 @@ QHash<int, QByteArray> WalletListModel::roleNames() const
     roles[LoadStateRole] = "loadState";
     roles[ErrorMessageRole] = "errorMessage";
     roles[BalanceRole] = "balance";
+    roles[BalanceSatoshiRole] = "balanceSatoshi";
     roles[KeySchemeKindRole] = "keySchemeKind";
     roles[WalletSectionRole] = "walletSection";
     return roles;

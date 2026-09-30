@@ -14,9 +14,11 @@ class BitcoinAmount : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(Unit unit READ unit WRITE setUnit NOTIFY unitChanged)
-    Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY unitChanged)
+    Q_PROPERTY(QString unitLabel READ unitLabel NOTIFY displayWithUnitChanged)
     Q_PROPERTY(QString display READ toDisplay WRITE fromDisplay NOTIFY displayChanged)
     Q_PROPERTY(QString displayWithUnit READ displayWithUnit NOTIFY displayWithUnitChanged)
+    Q_PROPERTY(QString localizedDisplay READ localizedDisplay NOTIFY displayChanged)
+    Q_PROPERTY(QString localizedDisplayWithUnit READ localizedDisplayWithUnit NOTIFY displayWithUnitChanged)
     Q_PROPERTY(qint64 satoshi READ satoshi WRITE setSatoshi NOTIFY amountChanged)
 
 public:
@@ -36,6 +38,8 @@ public:
 
     QString toDisplay() const;
     QString displayWithUnit() const;
+    QString localizedDisplay() const;
+    QString localizedDisplayWithUnit() const;
     void fromDisplay(const QString& new_amount);
     qint64 satoshi() const;
     void setSatoshi(qint64 new_amount);

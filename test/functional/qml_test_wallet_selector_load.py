@@ -208,8 +208,8 @@ def case_selector_loads_closed_wallet(harness, checkpoints):
         f"Expected loadState=Open ({LOAD_STATE_OPEN}) after load, got {open_state}"
     )
     open_text = gui.get_text(status_object)
-    assert open_text.startswith("₿ "), (
-        f"Expected status line to start with '₿ ' once loaded, got {open_text!r}"
+    assert open_text == "0.00000000 BTC", (
+        f"Expected the empty wallet's BTC balance once loaded, got {open_text!r}"
     )
     checkpoints.checkpoint("loaded wallet shows balance in selector", gui)
 

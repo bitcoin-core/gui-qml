@@ -304,16 +304,16 @@ void TransactionActivityModelTests::formatsDisplayAmountsForLocale()
 
     f.wallet->setDisplayUnit(3);
     row = Find(*model, Id(batch));
-    QCOMPARE(row.data(Model::AmountRole).toString(), QString("101.000 sat"));
-    QCOMPARE(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString(), QString("60.000 sat"));
-    QCOMPARE(model->transactionDetails(Id(batch)).value("amount").toString(), QString("101.000 sat"));
+    QCOMPARE(row.data(Model::AmountRole).toString(), QString("101.000 sats"));
+    QCOMPARE(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString(), QString("60.000 sats"));
+    QCOMPARE(model->transactionDetails(Id(batch)).value("amount").toString(), QString("101.000 sats"));
 
     model->requestTransactionDetails(Id(batch));
     Wait(model);
     const auto flow = model->transactionDetails(Id(batch), true).value("flow").toMap();
-    QCOMPARE(flow.value("inputs").toList()[0].toMap().value("amount").toString(), QString("120.000 sat"));
-    QCOMPARE(flow.value("outputs").toList()[0].toMap().value("amount").toString(), QString("60.000 sat"));
-    QCOMPARE(flow.value("feeAmount").toString(), QString("1.000 sat"));
+    QCOMPARE(flow.value("inputs").toList()[0].toMap().value("amount").toString(), QString("120.000 sats"));
+    QCOMPARE(flow.value("outputs").toList()[0].toMap().value("amount").toString(), QString("60.000 sats"));
+    QCOMPARE(flow.value("feeAmount").toString(), QString("1.000 sats"));
 }
 void TransactionActivityModelTests::historyReadsLeaveTheEventLoopFreeAndDiscardStaleSnapshots()
 {
@@ -637,7 +637,7 @@ void TransactionActivityModelTests::loadsFlowLazilyAndRefreshesOutputAssociation
     f.wallet->setDisplayUnit(3);
     output = model->transactionDetails(Id(tx), true).value("flow").toMap().value("outputs").toList()[1].toMap();
     QVERIFY(output.value("label").toString().isEmpty());
-    QVERIFY(output.value("amount").toString().endsWith(" sat"));
+    QVERIFY(output.value("amount").toString().endsWith(" sats"));
     QCOMPARE(f.state->parent_reads, 1);
     QCOMPARE(f.state->address_writes, 0);
     f.state->notify(tx, CT_UPDATED);
@@ -681,8 +681,8 @@ void TransactionActivityModelTests::exposesParentsAndActionsWithoutAllocatingFee
     QCOMPARE(source->transactionDetails(Id(batch)).value("actions").toList(), actions);
     QCOMPARE(f.state->status_reads + f.state->label_reads + f.state->snapshots, reads);
     f.wallet->setDisplayUnit(3);
-    QVERIFY(row.data(Model::AmountRole).toString().endsWith(" sat"));
-    QVERIFY(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString().endsWith(" sat"));
+    QVERIFY(row.data(Model::AmountRole).toString().endsWith(" sats"));
+    QVERIFY(row.data(Model::ActionsRole).toList()[0].toMap().value("amount").toString().endsWith(" sats"));
     QCOMPARE(row.data(Model::NetAmountSatRole).toLongLong(), -101'000);
 }
 

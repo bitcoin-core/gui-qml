@@ -154,6 +154,7 @@ Popup {
                 required property int loadState;
                 required property string errorMessage;
                 required property string balance;
+                required property var balanceSatoshi;
                 required property int keySchemeKind;
 
                 readonly property string iconSource: {
@@ -174,9 +175,8 @@ Popup {
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
-                        return optionsModel.displayUnit === 0
-                            ? optionsModel.displayUnitLabelForAmount(0) + " " + balance
-                            : balance + " " + optionsModel.displayUnitLabel
+                        return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
+                            ? (balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
@@ -267,7 +267,7 @@ Popup {
                             }
                         }
 
-                        CoreText {
+                        BitcoinAmountDisplayLabel {
                             objectName: "walletSelectStatus_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                             Layout.fillWidth: true
                             text: delegate.statusText
@@ -278,6 +278,7 @@ Popup {
                             wrap: false
                             elide: Text.ElideRight
                             visible: text.length > 0
+                            animateUnitChanges: delegate.loadState === WalletListModel.Open
                         }
                     }
 

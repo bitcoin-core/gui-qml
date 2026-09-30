@@ -93,13 +93,13 @@ Button {
                 wrap: false
                 elide: Text.ElideRight
             }
-            CoreText {
+            BitcoinAmountDisplayLabel {
                 objectName: "walletBadgeBalanceText"
                 Layout.fillWidth: true
                 visible: !root.loading && !root.noWalletLoaded
-                text: optionsModel.displayUnit === 0
-                    ? optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) + " " + root.balance
-                    : root.balance + " " + optionsModel.displayUnitLabelForAmount(root.balanceSatoshi)
+                amount: root.balance
+                unit: optionsModel.displayUnit === BitcoinAmount.SAT
+                    ? (root.balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel
                 color: Theme.color.neutral8
                 font.family: optionsModel.moneyFont.family
                 font.weight: optionsModel.moneyFont.weight

@@ -2,7 +2,7 @@
 # Copyright (c) 2026 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""End-to-end GUI tests for PSBT import routing into send review pages."""
+"""End-to-end GUI tests for PSBT import routing into transaction review."""
 
 import argparse
 import base64
@@ -208,65 +208,51 @@ def run_test():
 
         import_psbt(gui, fixtures["single_review_path"])
         checkpoints.checkpoint("single-recipient PSBT submitted", gui)
-        gui.wait_for_page("sendReviewPage", timeout_ms=20000)
-        assert gui.get_current_page() == "sendReviewPage", "Expected single-recipient PSBT to open SendReview"
+        gui.wait_for_property("transactionReviewPopup", "visible", True, timeout_ms=20000)
+        gui.wait_for_property("sendTransactionReviewRecipient0", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("single-recipient review displayed", gui)
-        gui.click("sendReviewBackButton")
+        gui.click("sendTransactionReviewCloseButton")
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("returned from single review to send page", gui)
 
         import_psbt(gui, fixtures["multiple_review_path"])
         checkpoints.checkpoint("multi-recipient PSBT submitted", gui)
-        gui.wait_for_page("sendReviewPage", timeout_ms=20000)
-        gui.wait_for_property("multipleRecipientsSummary", "visible", True, timeout_ms=10000)
-        assert gui.get_current_page() == "sendReviewPage", (
-            "Expected multi-recipient PSBT to open the review page"
-        )
+        gui.wait_for_property("transactionReviewPopup", "visible", True, timeout_ms=20000)
+        gui.wait_for_property("sendTransactionReviewRecipient1", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("multiple-recipient review displayed", gui)
-        gui.click("sendReviewBackButton")
+        gui.click("sendTransactionReviewCloseButton")
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("returned from multiple review to send page", gui)
 
         import_psbt(gui, fixtures["review_only_path"])
         checkpoints.checkpoint("review-only PSBT submitted", gui)
-        gui.wait_for_property("reviewOnlyPsbtPopup", "visible", True, timeout_ms=20000)
-        gui.wait_for_page("sendReviewPage", timeout_ms=10000)
-        gui.wait_for_property("sendReviewCannotSignBanner", "visible", True, timeout_ms=10000)
-        checkpoints.checkpoint("review-only SendReview modal displayed", gui)
-        assert gui.get_property("sendReviewCannotSignBanner", "message") == (
+        gui.wait_for_property("transactionReviewPopup", "visible", True, timeout_ms=20000)
+        gui.wait_for_property("sendTransactionReviewWarning", "visible", True, timeout_ms=10000)
+        checkpoints.checkpoint("review-only transaction modal displayed", gui)
+        assert gui.get_property("sendTransactionReviewWarning", "message") == (
             "This wallet does not have the keys to sign this transaction."
         )
-        assert gui.get_property("sendReviewBackButton", "visible") is False
-        assert gui.get_property("sendReviewSendButton", "visible") is False
-        assert gui.get_property("sendReviewBroadcastButton", "visible") is False
-        assert gui.get_property("sendReviewDoneButton", "visible") is True
-        assert gui.get_property("sendReviewDoneButton", "enabled") is True
-        gui.click("sendReviewDoneButton")
-        gui.wait_for_property("reviewOnlyPsbtPopup", "visible", False, timeout_ms=10000)
+        assert gui.get_property("sendTransactionReviewSendButton", "visible") is False
+        assert gui.get_property("sendTransactionReviewSaveButton", "visible") is True
+        gui.click("sendTransactionReviewCloseButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False, timeout_ms=10000)
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         assert gui.get_property("sendAddressInput", "text") == ""
         assert gui.get_property("sendAmountInput", "text") == ""
-        checkpoints.checkpoint("review-only SendReview modal dismissed", gui)
+        checkpoints.checkpoint("review-only transaction modal dismissed", gui)
 
         import_psbt(gui, fixtures["signed_foreign_path"])
         checkpoints.checkpoint("signed foreign PSBT submitted", gui)
-        gui.wait_for_property("reviewOnlyPsbtPopup", "visible", True, timeout_ms=20000)
-        gui.wait_for_page("sendReviewPage", timeout_ms=10000)
-        gui.wait_for_property("sendReviewBroadcastButton", "visible", True, timeout_ms=10000)
-        assert gui.get_property("sendReviewCannotSignBanner", "visible") is False
-        assert gui.get_property("sendReviewBackButton", "visible") is False
-        assert gui.get_property("sendReviewSendButton", "visible") is False
-        assert gui.get_property("sendReviewDoneButton", "visible") is True
-        assert gui.get_property("sendReviewBroadcastButton", "enabled") is True
+        gui.wait_for_property("transactionReviewPopup", "visible", True, timeout_ms=20000)
+        gui.wait_for_property("sendTransactionReviewSendButton", "visible", True, timeout_ms=10000)
+        assert gui.get_property("sendTransactionReviewWarning", "visible") is False
+        assert gui.get_property("sendTransactionReviewSendButton", "text") == "Broadcast transaction"
+        assert gui.get_property("sendTransactionReviewSendButton", "enabled") is True
         checkpoints.checkpoint("signed foreign PSBT ready to broadcast", gui)
-        gui.click("sendReviewBroadcastButton")
-        gui.wait_for_property("reviewOnlyPsbtPopup", "visible", False, timeout_ms=10000)
-        gui.wait_for_property("psbtBroadcastSuccessPopup", "visible", True, timeout_ms=10000)
-        assert gui.get_property("psbtBroadcastSuccessMessage", "text") == (
-            "The transaction was submitted to the Bitcoin network."
-        )
-        gui.click("psbtBroadcastSuccessOkButton")
-        gui.wait_for_property("psbtBroadcastSuccessPopup", "visible", False, timeout_ms=10000)
+        gui.click("sendTransactionReviewSendButton")
+        gui.wait_for_property("sendCompletePage", "visible", True, timeout_ms=10000)
+        gui.click("sendResultDoneButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False, timeout_ms=10000)
         gui.wait_for_property("sendOptionsButton", "visible", True, timeout_ms=10000)
         checkpoints.checkpoint("signed foreign PSBT broadcast confirmed", gui)
 

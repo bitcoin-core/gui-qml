@@ -69,18 +69,18 @@ def run_tests():
             f"?amount=0.01234567&label=clip-label&message=clipboard-note"
         )
         gui.set_clipboard_text(uri_clip)
-        gui.wait_for_property("clipboardUriBanner", "visible", True, timeout_ms=5000)
+        gui.wait_for_property("clipboardUriPasteButton", "visible", True, timeout_ms=5000)
         gui.click("clipboardUriPasteButton")
         gui.wait_for_property(
             "sendPaymentRequestStatusText", "text",
             lambda v: "clipboard" in str(v), timeout_ms=10000,
         )
         gui.wait_for_property(
-            "sendNoteInput", "text",
+            "sendPaymentRequestPayTo", "value",
             lambda v: "clip-label" in str(v), timeout_ms=5000,
         )
         gui.wait_for_property(
-            "sendPaymentRequestMessageText", "text",
+            "sendPaymentRequestMessageText", "value",
             lambda v: "clipboard-note" in str(v), timeout_ms=5000,
         )
         print("Test 1 PASSED: clipboard banner Fill button.")
@@ -103,7 +103,7 @@ def run_tests():
             lambda v: "manual entry" in str(v), timeout_ms=10000,
         )
         gui.wait_for_property(
-            "sendNoteInput", "text",
+            "sendPaymentRequestPayTo", "value",
             lambda v: "manual-label" in str(v), timeout_ms=5000,
         )
         print("Test 2 PASSED: manual URI popup.")
@@ -145,7 +145,7 @@ def run_tests():
                 lambda v: "file" in str(v), timeout_ms=10000,
             )
             gui.wait_for_property(
-                "sendNoteInput", "text",
+                "sendPaymentRequestPayTo", "value",
                 lambda v: "file-label" in str(v), timeout_ms=5000,
             )
             print("Test 4 PASSED: file import.")
@@ -166,7 +166,7 @@ def run_tests():
             lambda v: "drag and drop" in str(v), timeout_ms=10000,
         )
         gui.wait_for_property(
-            "sendNoteInput", "text",
+            "sendPaymentRequestPayTo", "value",
             lambda v: "drop-label" in str(v), timeout_ms=5000,
         )
         print("Test 5 PASSED: drag-drop simulation.")
@@ -190,7 +190,7 @@ def run_tests():
                 lambda v: "file" in str(v), timeout_ms=10000,
             )
             gui.wait_for_property(
-                "sendNoteInput", "text",
+                "sendPaymentRequestPayTo", "value",
                 lambda v: "drop-file" in str(v), timeout_ms=5000,
             )
             print("Test 6 PASSED: DropArea hasUrls + file:// branch.")
@@ -212,7 +212,7 @@ def run_tests():
             lambda v: "drag and drop" in str(v), timeout_ms=10000,
         )
         gui.wait_for_property(
-            "sendNoteInput", "text",
+            "sendPaymentRequestPayTo", "value",
             lambda v: "drop-url" in str(v), timeout_ms=5000,
         )
         print("Test 7 PASSED: DropArea hasUrls + non-file URL branch.")
@@ -228,6 +228,10 @@ def run_tests():
         )
         gui.set_clipboard_text(amount_field_uri)
         gui.click("sendAmountInput")
+        # A synthetic click can miss a field outside the viewport. The
+        # native paste path requires active focus to process the edit.
+        gui.invoke("sendAmountInput", "forceActiveFocus")
+        gui.wait_for_property("sendAmountInput", "activeFocus", True)
         gui.invoke("sendAmountInput", "paste")
         gui.wait_for_property(
             "sendAmountInput", "text",
@@ -240,9 +244,11 @@ def run_tests():
         )
         gui.set_clipboard_text(label_field_uri)
         gui.click("sendNoteInput")
+        gui.invoke("sendNoteInput", "forceActiveFocus")
+        gui.wait_for_property("sendNoteInput", "activeFocus", True)
         gui.invoke("sendNoteInput", "paste")
         gui.wait_for_property(
-            "sendNoteInput", "text", "field-paste", timeout_ms=5000,
+            "sendPaymentRequestPayTo", "value", "field-paste", timeout_ms=5000,
         )
 
         address_field_uri = (
@@ -251,9 +257,11 @@ def run_tests():
         )
         gui.set_clipboard_text(address_field_uri)
         gui.click("sendAddressInput")
+        gui.invoke("sendAddressInput", "forceActiveFocus")
+        gui.wait_for_property("sendAddressInput", "activeFocus", True)
         gui.invoke("sendAddressInput", "paste")
         gui.wait_for_property(
-            "sendPaymentRequestMessageText", "text",
+            "sendPaymentRequestMessageText", "value",
             "address-field-paste", timeout_ms=5000,
         )
         print("Test 8 PASSED: native paste from recipient fields.")

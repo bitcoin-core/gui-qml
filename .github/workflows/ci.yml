@@ -16,6 +16,7 @@ jobs:
         include:
           - job_name: 'Ubuntu 22.04, Qt 6.2'
             image: ubuntu-22.04
+            effects_package: ''
             # Jammy's default GCC 11 is below Bitcoin Core's GCC 12.1 minimum.
             extra_packages: 'g++-12 xvfb xauth'
             svg_package: 'libqt6svg6-dev'
@@ -24,10 +25,12 @@ jobs:
             test_wrapper: 'xvfb-run -a'
           - job_name: 'Ubuntu 24.04, Qt 6.4'
             image: ubuntu-24.04
+            effects_package: ''
             svg_package: 'qt6-svg-dev'
           - job_name: 'Ubuntu 26.04, Qt 6.10'
             image: ubuntu-26.04
             svg_package: 'qt6-svg-dev'
+            effects_package: 'qml6-module-qtquick-effects'
 
     env:
       BUILD_APP_TESTS: ON
@@ -64,6 +67,7 @@ jobs:
             qml6-module-qtquick-window \
             qml6-module-qtqml-models qml6-module-qtqml \
             qml6-module-qtqml-workerscript \
+            ${{ matrix.effects_package }} \
             libgl-dev \
             libqrencode-dev \
             ${{ matrix.extra_packages }}

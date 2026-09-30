@@ -19,8 +19,9 @@ class SendRecipient : public QObject
     Q_PROPERTY(BitcoinAddress* address READ address CONSTANT)
     Q_PROPERTY(QString label READ label WRITE setLabel NOTIFY labelChanged)
     Q_PROPERTY(QString message READ message WRITE setMessage NOTIFY messageChanged)
+    Q_PROPERTY(QString paymentRequestLabel READ paymentRequestLabel NOTIFY paymentRequestChanged)
+    Q_PROPERTY(bool hasPaymentRequest READ hasPaymentRequest NOTIFY paymentRequestChanged)
     Q_PROPERTY(BitcoinAmount* amount READ amount CONSTANT)
-    Q_PROPERTY(bool subtractFeeFromAmount READ subtractFeeFromAmount WRITE setSubtractFeeFromAmount NOTIFY subtractFeeFromAmountChanged)
 
     Q_PROPERTY(QString addressError READ addressError NOTIFY addressErrorChanged)
     Q_PROPERTY(QString amountError READ amountError NOTIFY amountErrorChanged)
@@ -47,20 +48,20 @@ public:
 
     CAmount cAmount() const;
 
-    bool subtractFeeFromAmount() const;
-    void setSubtractFeeFromAmount(bool subtract);
-
     bool isValid() const;
 
+    QString paymentRequestLabel() const { return m_request_label; }
+    bool hasPaymentRequest() const { return !m_request_address.isEmpty(); }
+    Q_INVOKABLE void applyPaymentRequest(const QString& address, const QString& pay_to, const QString& message);
     Q_INVOKABLE void clear();
 
 Q_SIGNALS:
+    void paymentRequestChanged();
     void addressChanged();
     void addressErrorChanged();
     void amountErrorChanged();
     void labelChanged();
     void messageChanged();
-    void subtractFeeFromAmountChanged();
     void isValidChanged();
 
 private:
@@ -72,9 +73,10 @@ private:
     QString m_addressError{""};
     QString m_label{""};
     QString m_message{""};
+    QString m_request_label;
+    QString m_request_address;
     BitcoinAmount* m_amount;
     QString m_amountError{""};
-    bool m_subtractFeeFromAmount{false};
 };
 
 #endif // BITCOIN_QML_MODELS_SENDRECIPIENT_H

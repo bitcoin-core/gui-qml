@@ -4,12 +4,17 @@
 
 #include <QtTest/QtTest>
 
+#include <QLocale>
+#include <QScopeGuard>
+
 #include <qml/bitcoinamount.h>
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
 
 #include <consensus/amount.h>
+#include <key_io.h>
+#include <addresstype.h>
 
 class WalletQmlModelTransactionTests : public QObject
 {
@@ -19,8 +24,10 @@ private Q_SLOTS:
     void singleRecipientReviewAmountsInheritRecipientUnit();
     void multipleRecipientReviewAmountsInheritSharedUnit();
     void recipientRolesExposeFormattedAddressAndUnitLabel();
+    void reviewDisplayStringsUseLocale();
     void removingRecipientUpdatesTotalOnce();
     void txidTracksAssignedTransaction();
+    void reviewedRecipientsStayBoundToPreparedOutputs();
 };
 
 void WalletQmlModelTransactionTests::singleRecipientReviewAmountsInheritRecipientUnit()
@@ -78,6 +85,22 @@ void WalletQmlModelTransactionTests::recipientRolesExposeFormattedAddressAndUnit
         QString("sats"));
 }
 
+void WalletQmlModelTransactionTests::reviewDisplayStringsUseLocale()
+{
+    const QLocale previous;
+    const auto restore_locale = qScopeGuard([previous] { QLocale::setDefault(previous); });
+    QLocale::setDefault(QLocale{"de_DE"});
+
+    SendRecipientsListModel recipients;
+    recipients.currentRecipient()->amount()->setSatoshi(123'456'789);
+    WalletQmlModelTransaction transaction(&recipients);
+    transaction.setTransactionFee(1'000);
+
+    QCOMPARE(transaction.amount(), QStringLiteral("1,23456789 BTC"));
+    QCOMPARE(transaction.fee(), QStringLiteral("0,00001000 BTC"));
+    QCOMPARE(transaction.total(), QStringLiteral("1,23457789 BTC"));
+}
+
 void WalletQmlModelTransactionTests::removingRecipientUpdatesTotalOnce()
 {
     SendRecipientsListModel recipients;
@@ -109,6 +132,34 @@ void WalletQmlModelTransactionTests::txidTracksAssignedTransaction()
 
     transaction.setWtx(wallet_transaction);
     QCOMPARE(txid_changed_spy.count(), 1);
+}
+
+void WalletQmlModelTransactionTests::reviewedRecipientsStayBoundToPreparedOutputs()
+{
+    const QString address{QStringLiteral("1BoatSLRHtKNngkdXEeobR76b53LETtpyT")};
+    const QString edited_address{QStringLiteral("1BitcoinEaterAddressDontSendf59kuE")};
+    SendRecipientsListModel recipients;
+    auto* recipient = recipients.currentRecipient();
+    recipient->setAddress(address);
+    recipient->setLabel(QStringLiteral("Original note"));
+    recipient->amount()->setSatoshi(1'000);
+
+    CMutableTransaction prepared;
+    prepared.vout.emplace_back(900, GetScriptForDestination(DecodeDestination(address.toStdString())));
+    WalletQmlModelTransaction transaction(&recipients);
+    transaction.setWtx(MakeTransactionRef(std::move(prepared)));
+    QVERIFY(transaction.captureReviewedRecipients(recipients));
+
+    recipient->setAddress(edited_address);
+    recipient->setLabel(QStringLiteral("Edited note"));
+    recipient->amount()->setSatoshi(1'500);
+
+    const QVariantMap snapshot{transaction.reviewedRecipients().at(0).toMap()};
+    QCOMPARE(snapshot.value(QStringLiteral("address")).toString(), address);
+    QCOMPARE(snapshot.value(QStringLiteral("label")).toString(), QStringLiteral("Original note"));
+    QCOMPARE(snapshot.value(QStringLiteral("amount")).toString(), QStringLiteral("0.00000900 BTC"));
+    QVERIFY(transaction.isReviewedRecipient(address));
+    QVERIFY(!transaction.isReviewedRecipient(edited_address));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

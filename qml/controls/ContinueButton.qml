@@ -31,6 +31,7 @@ Button {
     property color borderPressedColor: "transparent"
     property bool bold: true
     property bool busy: false
+    property int backgroundRadius: 5
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -43,6 +44,7 @@ Button {
         RowLayout {
             id: contentRow
             anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width)
             spacing: 4
 
             SpinningIndicator {
@@ -61,6 +63,10 @@ Button {
             }
 
             CoreText {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                wrap: false
+                elide: Text.ElideRight
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
                 color: root.textColor
@@ -75,7 +81,7 @@ Button {
         implicitHeight: 46
         color: backgroundColor
         border.color: borderColor
-        radius: 5
+        radius: root.backgroundRadius
 
         states: [
             State {
@@ -94,6 +100,20 @@ Button {
 
         Behavior on color {
             ColorAnimation { duration: 150 }
+        }
+
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            visible: (Qt.colorEqual(root.backgroundColor, Theme.color.orange)
+                || Qt.colorEqual(root.backgroundColor, Theme.color.red))
+                && Qt.colorEqual(bg.border.color, "transparent")
+            surfaceColor: bg.color
+            referenceColor: Qt.colorEqual(root.backgroundColor, Theme.color.red)
+                ? Theme.color.red : Theme.color.orange
+            colors: Qt.colorEqual(root.backgroundColor, Theme.color.red)
+                ? Theme.color.destructiveButtonBorderGradient
+                : Theme.color.primaryButtonBorderGradient
+            cornerRadius: bg.radius
         }
 
         FocusBorder {

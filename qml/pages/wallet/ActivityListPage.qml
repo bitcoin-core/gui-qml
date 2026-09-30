@@ -256,7 +256,6 @@ Page {
             OverflowMenuButton {
                 id: moreButton
                 objectName: "activityMoreButton"
-                iconColor: Theme.color.neutral7
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
             }
@@ -608,6 +607,12 @@ Page {
             border.color: Theme.color.neutral4
             border.width: 1
             radius: 5
+            SurfaceGradientBorder {
+                anchors.fill: parent
+                surfaceColor: parent.color
+                referenceColor: Theme.color.neutral1
+                cornerRadius: parent.radius
+            }
         }
 
         contentItem: ColumnLayout {

@@ -14,9 +14,12 @@ ColumnLayout {
 
     property var address
     property string errorText: ""
+    property bool showErrorMessage: true
     property string labelText: qsTr("Send to")
     property bool enabled: true
     property bool embedded: false
+    property bool isOnSurface: false
+    property color surfaceColor: Theme.color.neutral1
     property bool showLabel: true
     property var textStyle: Theme.text.monoBody
     property alias inputObjectName: addressInput.objectName
@@ -45,7 +48,20 @@ ColumnLayout {
     }
 
     function paste() {
-        addressInput.paste()
+        const clipboardText = Clipboard.text()
+        if (!clipboardText.length || !addressInput.enabled || addressInput.readOnly) return
+        const selected = addressInput.selectedText.length > 0
+        const start = selected ? addressInput.selectionStart : addressInput.cursorPosition
+        const end = selected ? addressInput.selectionEnd : start
+        const nextText = addressInput.text.slice(0, start) + clipboardText + addressInput.text.slice(end)
+        const cursor = start + clipboardText.length
+        if (root.address) {
+            addressInput.cursorPosition = root.address.setAddress(nextText, cursor)
+            addressInput.syncFromAddress()
+        } else {
+            addressInput.text = nextText
+            addressInput.cursorPosition = cursor
+        }
     }
 
     function syncFromAddress() {
@@ -104,6 +120,7 @@ ColumnLayout {
             text: ""
             Component.onCompleted: syncFromAddress()
             wrapMode: Text.WrapAnywhere
+            verticalAlignment: TextEdit.AlignVCenter
             leftPadding: root.embedded ? 16 : 0
             topPadding: root.embedded ? 14 : 0
             rightPadding: root.embedded ? 16 : 0
@@ -113,7 +130,8 @@ ColumnLayout {
             color: Theme.color.neutral9
             placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
             background: Rectangle {
-                color: root.embedded ? Theme.color.neutral2 : "transparent"
+                color: root.isOnSurface ? root.surfaceColor
+                    : root.embedded ? Theme.color.neutral2 : "transparent"
                 radius: root.embedded ? 10 : 0
                 border.width: root.embedded && addressInput.activeFocus ? 2 : 0
                 border.color: Theme.color.orange
@@ -165,7 +183,7 @@ ColumnLayout {
     RowLayout {
         id: addressIssue
         Layout.fillWidth: true
-        visible: root.errorText.length > 0
+        visible: root.showErrorMessage && root.errorText.length > 0
         spacing: 8
         Layout.topMargin: 4
 

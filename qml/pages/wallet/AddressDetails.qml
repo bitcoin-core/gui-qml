@@ -87,6 +87,7 @@ ColumnLayout {
 
         ValueRow {
             objectName: "addressDetailsAmountRow"
+            amountValue: true
             Layout.fillWidth: true
             title: qsTr("Amount")
             value: root.amount

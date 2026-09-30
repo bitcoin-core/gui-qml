@@ -204,13 +204,12 @@ SettingsPage {
                 width: logList.width
                 height: debugLogModel.hasMoreLines ? 44 : 0
 
-                OutlineButton {
+                NeutralButton {
                     objectName: "debugLogLoadMoreButton"
                     anchors.centerIn: parent
-                    height: 32
+                    buttonSize: NeutralButton.Medium
                     visible: parent.height > 0
                     text: qsTr("Load older messages")
-                    textFontPixelSize: 13
                     onClicked: debugLogModel.loadMore()
                 }
             }
@@ -280,15 +279,14 @@ SettingsPage {
                 color: Theme.color.neutral2
             }
 
-            OutlineButton {
+            NeutralButton {
                 id: scrollToBottomButton
                 objectName: "debugLogScrollToBottomButton"
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                height: 32
+                buttonSize: NeutralButton.Medium
                 text: qsTr("Scroll to bottom")
-                textFontPixelSize: 13
                 enabled: logList.count > 0 && !logList.atYEnd
                 onClicked: root.scrollToBottom()
             }

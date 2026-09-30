@@ -34,6 +34,7 @@ public:
                                     const QLocale& locale = QLocale());
     static Unit fromDisplayUnit(int display_unit);
     static QString label(Unit unit);
+    static QString label(Unit unit, CAmount amount);
     static QString displayLabel(Unit unit, CAmount amount);
 
 private:

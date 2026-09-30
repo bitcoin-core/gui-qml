@@ -22,7 +22,6 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
-    signal sendTransaction(bool multipleRecipientsEnabled)
 
     function navigateToTransaction(txid, outputIndex) {
         activityTabButton.checked = true
@@ -271,10 +270,10 @@ Page {
                     property bool headerSyncActive: nodeModel.headerSyncActive
 
                     anchors.top: blockClockTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: blockClockTabButton.horizontalCenter
 
-                    visible: blockClockTabButton.hovered
+                    shown: blockClockTabButton.hovered
                     text: {
                         if (faulted) {
                             qsTr("Error")
@@ -313,9 +312,9 @@ Page {
 
                 Tooltip {
                     anchors.top: peersTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: peersTabButton.horizontalCenter
-                    visible: peersTabButton.hovered
+                    shown: peersTabButton.hovered
                     text: qsTr("Peers")
                 }
             }
@@ -330,9 +329,9 @@ Page {
 
                 Tooltip {
                     anchors.top: settingsTabButton.bottom
-                    anchors.topMargin: -5
+                    anchors.topMargin: 8
                     anchors.horizontalCenter: settingsTabButton.horizontalCenter
-                    visible: settingsTabButton.hovered
+                    shown: settingsTabButton.hovered
                     text: qsTr("Settings")
                 }
             }
@@ -352,11 +351,8 @@ Page {
         ActivityList {
             id: activityPage
         }
-        Send {
+        SendCreate {
             id: sendPage
-            onTransactionPrepared: (multipleRecipientsEnabled) => {
-                root.sendTransaction(multipleRecipientsEnabled)
-            }
             onViewTransactionInActivity: (txid) => {
                 root.navigateToTransaction(txid)
             }

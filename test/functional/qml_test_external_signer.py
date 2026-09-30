@@ -420,14 +420,13 @@ def prepare_signed_mock_psbt(harness, external_wallet_name, destination_address)
 
 
 def set_multiple_recipients(gui, enabled):
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", True, timeout_ms=5000)
-    current = gui.get_property("sendOptionsMultipleRecipientsToggle", "checked")
-    if bool(current) != enabled:
-        gui.click("sendOptionsMultipleRecipientsToggle")
-        gui.wait_for_property("sendOptionsMultipleRecipientsToggle", "checked", enabled, timeout_ms=5000)
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", False, timeout_ms=5000)
+    if enabled:
+        if not gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendAddRecipientButton")
+    else:
+        while gui.object_exists("sendRecipientCard_1"):
+            gui.click("sendRemoveRecipient_1")
+    gui.settle()
 
 
 def set_amount_unit(gui, unit_label):
@@ -441,12 +440,12 @@ def open_external_signer_review(gui, destination_address, amount_text):
     gui.click("sendTabButton")
     gui.wait_for_page("sendPage", timeout_ms=10000)
     set_multiple_recipients(gui, False)
-    set_amount_unit(gui, "₿")
+    set_amount_unit(gui, "BTC")
     gui.set_text("sendAddressInput", destination_address)
     gui.set_text("sendAmountInput", amount_text)
     gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
     gui.click("sendReviewButton")
-    gui.wait_for_page("sendReviewPage", timeout_ms=10000)
+    gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
 
 
 def assert_signer_status(gui, object_name, expected_text):

@@ -13,10 +13,12 @@ ColumnLayout {
     property string description: ""
     property string footerText: ""
     property bool showBackground: true
+    property bool showGradientBorder: true
+    property bool isOnSurface: false
     property int rowSpacing: 0
     property int sectionSpacing: 8
     property int cornerRadius: 16
-    property color backgroundColor: Theme.color.neutral1
+    property color backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
     property var titleTextStyle: Theme.text.subheading
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption
@@ -72,6 +74,14 @@ ColumnLayout {
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
             clip: true
+
+            SurfaceGradientBorder {
+                anchors.fill: parent
+                visible: root.showBackground && root.showGradientBorder
+                    && Qt.colorEqual(root.backgroundColor, Theme.color.neutral2)
+                surfaceColor: card.color
+                cornerRadius: card.radius
+            }
 
             Behavior on color {
                 ColorAnimation { duration: 150 }

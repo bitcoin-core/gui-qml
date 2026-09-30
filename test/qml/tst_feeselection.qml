@@ -28,20 +28,14 @@ TestCase {
         id: feeChangedSpy
     }
 
-    SignalSpy {
-        id: includeFeeInAmountToggledSpy
-    }
-
     function init() {
         testWalletModel.clearFeeEstimates()
-        testWalletModel.setFeeEstimate(1, "0.00000750 ₿")
-        testWalletModel.setFeeEstimate(2, "0.00000500 ₿")
-        testWalletModel.setFeeEstimate(6, "0.00000250 ₿")
+        testWalletModel.setFeeEstimate(1, "0.00000750 BTC")
+        testWalletModel.setFeeEstimate(2, "0.00000500 BTC")
+        testWalletModel.setFeeEstimate(6, "0.00000250 BTC")
         testWalletModel.customFeeEnabled = false
         testWalletModel.customFeeRate = ""
         testWalletModel.targetBlocks = 2
-        includeFeeInAmountToggledSpy.target = null
-        includeFeeInAmountToggledSpy.signalName = ""
     }
 
     function test_feeSelection_has_stable_selectors() {
@@ -55,7 +49,7 @@ TestCase {
         verify(findChild(control, "feeSelectionDropdownButton") !== null)
         verify(findChild(control, "feeSelectionPopup") !== null)
         verify(findChild(control, "feeSelectionList") !== null)
-        verify(findChild(control, "feeSelectionIncludeFeeToggle") !== null)
+        compare(findChild(control, "feeSelectionIncludeFeeToggle"), null)
 
         const customFeeRateInput = findChild(control, "feeSelectionCustomRateInput")
         compare(customFeeRateInput.maximumLength, control.customFeeRateMaximumLength)
@@ -70,11 +64,11 @@ TestCase {
         compare(control.selectedIndex, 1)
         compare(control.selectedLabel, "Default")
         compare(control.selectedDuration, "(~20 mins)")
-        compare(control.selectedEstimate, "0.00000500 ₿")
+        compare(control.selectedEstimate, "0.00000500 BTC")
 
         const estimateLabel = findChild(control, "feeSelectionEstimateLabel")
         verify(estimateLabel !== null)
-        compare(estimateLabel.text, "0.00000500 ₿")
+        compare(estimateLabel.text, "0.00000500 BTC")
     }
 
     function test_feeSelection_selecting_option_updates_state_and_emits() {
@@ -100,7 +94,7 @@ TestCase {
         const lowFeeOption = picker.itemAtIndex(2)
         verify(lowFeeOption !== null)
         compare(lowFeeOption.objectName, "feeSelectionOption2")
-        compare(lowFeeOption.subtitle, "0.00000250 ₿")
+        compare(lowFeeOption.subtitle, "0.00000250 BTC")
         verify(findChild(lowFeeOption, "feeSelectionOptionEstimate2") !== null)
 
         mouseClick(lowFeeOption, lowFeeOption.width / 2, lowFeeOption.height / 2)
@@ -108,7 +102,7 @@ TestCase {
         compare(control.selectedIndex, 2)
         compare(control.selectedLabel, "Low")
         compare(control.selectedDuration, "(~60 mins)")
-        compare(control.selectedEstimate, "0.00000250 ₿")
+        compare(control.selectedEstimate, "0.00000250 BTC")
         compare(feeChangedSpy.count, 1)
         compare(feeChangedSpy.signalArguments[0][0], 6)
         tryCompare(popup, "visible", false)
@@ -130,13 +124,13 @@ TestCase {
                 && picker.itemAtIndex(2) !== null
         })
 
-        compare(picker.itemAtIndex(0).subtitle, "0.00000750 ₿")
-        compare(picker.itemAtIndex(1).subtitle, "0.00000500 ₿")
-        compare(picker.itemAtIndex(2).subtitle, "0.00000250 ₿")
+        compare(picker.itemAtIndex(0).subtitle, "0.00000750 BTC")
+        compare(picker.itemAtIndex(1).subtitle, "0.00000500 BTC")
+        compare(picker.itemAtIndex(2).subtitle, "0.00000250 BTC")
         compare(picker.itemAtIndex(3).subtitle, "")
 
-        testWalletModel.setFeeEstimate(1, "0.00009999 ₿")
-        tryCompare(picker.itemAtIndex(0), "subtitle", "0.00009999 ₿")
+        testWalletModel.setFeeEstimate(1, "0.00009999 BTC")
+        tryCompare(picker.itemAtIndex(0), "subtitle", "0.00009999 BTC")
     }
 
     function test_feeSelection_current_target_syncs_selected_preset() {
@@ -148,13 +142,13 @@ TestCase {
         compare(control.selectedIndex, 2)
         compare(control.selectedLabel, "Low")
         compare(control.selectedDuration, "(~60 mins)")
-        compare(control.selectedEstimate, "0.00000250 ₿")
+        compare(control.selectedEstimate, "0.00000250 BTC")
 
         testWalletModel.targetBlocks = 1
         compare(control.selectedIndex, 0)
         compare(control.selectedLabel, "High")
         compare(control.selectedDuration, "(~10 mins)")
-        compare(control.selectedEstimate, "0.00000750 ₿")
+        compare(control.selectedEstimate, "0.00000750 BTC")
     }
 
     function test_feeSelection_custom_option_switches_to_fee_rate_mode() {
@@ -216,7 +210,7 @@ TestCase {
         customFeeRateInput.text = "2"
         compare(testWalletModel.customFeeRate, "2")
         compare(testWalletModel.customFeeRateValid, true)
-        tryCompare(customEstimateLabel, "text", "0.00000400 ₿")
+        tryCompare(customEstimateLabel, "text", "0.00000400 BTC")
 
         customFeeRateInput.text = "12345678901234567890"
         compare(customFeeRateInput.text.length, control.customFeeRateMaximumLength)
@@ -232,33 +226,6 @@ TestCase {
         compare(testWalletModel.customFeeEnabled, false)
         compare(control.selectedIndex, 2)
         compare(control.selectedLabel, "Low")
-        compare(control.selectedEstimate, "0.00000250 ₿")
-    }
-
-    function test_feeSelection_include_fee_toggle_tracks_state_and_emits() {
-        const control = createTemporaryObject(feeSelectionComponent, this, {
-            "includeFeeInAmount": false
-        })
-        verify(control !== null)
-
-        const popup = findChild(control, "feeSelectionPopup")
-        const picker = findChild(control, "feeSelectionList")
-        const toggle = findChild(control, "feeSelectionIncludeFeeToggle")
-        verify(popup !== null)
-        verify(picker !== null)
-        verify(toggle !== null)
-
-        includeFeeInAmountToggledSpy.target = control
-        includeFeeInAmountToggledSpy.signalName = "includeFeeInAmountToggled"
-        includeFeeInAmountToggledSpy.clear()
-
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        mouseClick(toggle, toggle.width / 2, toggle.height / 2)
-
-        compare(includeFeeInAmountToggledSpy.count, 1)
-        compare(includeFeeInAmountToggledSpy.signalArguments[0][0], true)
-        tryCompare(popup, "visible", false)
+        compare(control.selectedEstimate, "0.00000250 BTC")
     }
 }

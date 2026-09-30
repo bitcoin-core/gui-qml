@@ -288,12 +288,18 @@ Page {
                 "updating": walletController.selectedWallet.isEncrypted
             })
             onSignVerifyMessageRequested: pageContainer.push(signVerifyPage)
+            onCoinsRequested: pageContainer.push(coinsPage)
             onAddressesRequested: {
                 if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
                 walletController.selectedWallet.addressListModel.refresh()
                 pageContainer.push(addressListPage)
             }
         }
+    }
+
+    Component {
+        id: coinsPage
+        WalletPages.WalletCoins { onBack: pageContainer.pop() }
     }
 
     Component {

@@ -43,6 +43,23 @@ TestCase {
         return data
     }
 
+    function test_amount_labels_survive_unit_changes() {
+        const flow = createTemporaryObject(flowComponent, this, {flow: snapshot(), displayUnit: BitcoinAmount.SAT})
+        verify(waitForRendering(flow))
+        const node = findChild(flow, "transactionFlowOutput_0")
+        const label = findChild(node, "transactionFlowAmountWide")
+        verify(label.visible)
+        for (const unit of [BitcoinAmount.BTC, BitcoinAmount.SAT]) {
+            flow.displayUnit = unit
+            // The model publishes a fresh snapshot when formatting changes.
+            flow.flow = snapshot()
+            compare(findChild(flow, "transactionFlowOutput_0"), node)
+            tryCompare(label, "animating", true)
+            tryCompare(label, "animating", false)
+            verify(label.text.endsWith(unit === BitcoinAmount.SAT ? " sats" : " BTC"))
+        }
+    }
+
     function test_output_grouping_threshold_data() {
         return [
             { tag: "below_threshold", count: 9, walletCount: 2, collapsed: false, visibleCount: 10 },
@@ -112,7 +129,8 @@ TestCase {
         compare(flow.outputEntries.length, 4)
         compare(toggle.text, "Show all outputs")
         flow.displayUnit = BitcoinAmount.SAT
-        tryCompare(findChild(flow, "transactionFlowOutput_2"), "amountText", "100000 sats")
+        tryCompare(findChild(flow, "transactionFlowOutput_2"), "amountText",
+                   Number(100000).toLocaleString(Qt.locale(), "f", 0) + " sats")
         compare(data.outputs.length, 12)
         compare(data.outputs[2].label, "Recipient note")
 

@@ -38,6 +38,10 @@ Control {
         required property color neutral7
         required property color neutral8
         required property color neutral9
+        required property var neutral1SurfaceBorderGradient
+        required property var neutral2SurfaceBorderGradient
+        required property var primaryButtonBorderGradient
+        required property var destructiveButtonBorderGradient
         required property var confirmationColors
     }
 
@@ -87,6 +91,10 @@ Control {
         neutral7: "#B0B0B0"
         neutral8: "#CCCCCC"
         neutral9: "#FFFFFF"
+        neutral1SurfaceBorderGradient: ["#272727", "#1B1B1B"]
+        neutral2SurfaceBorderGradient: ["#373737", "#2B2B2B"]
+        primaryButtonBorderGradient: ["#FFBA4A", "#FFA433"]
+        destructiveButtonBorderGradient: ["#FF8080", "#F36D6D"]
         confirmationColors: [
             "#FF1C1C", // red
             "#ED6E46",
@@ -120,6 +128,10 @@ Control {
         neutral7: "#777777"
         neutral8: "#404040"
         neutral9: "#000000"
+        neutral1SurfaceBorderGradient: ["#F5F5F5", "#E6E6E6"]
+        neutral2SurfaceBorderGradient: ["#EDEDED", "#DEDEDE"]
+        primaryButtonBorderGradient: ["#FFB33A", "#FF9C23"]
+        destructiveButtonBorderGradient: ["#FF7474", "#F36262"]
         confirmationColors: [
             "#FF1C1C", // red
             "#ED6E46",

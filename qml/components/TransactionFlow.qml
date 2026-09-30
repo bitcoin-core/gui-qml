@@ -41,7 +41,7 @@ ColumnLayout {
     readonly property bool canCollapseOutputs: outputPresentation.collapsible
     readonly property var outputEntries: outputPresentation.entries.map(function(entry) {
         return entry.kind === "output-group" && nonWalletOutputGroup
-            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.displayWithUnit : ""}) : entry
+            ? Object.assign({}, entry, {amount: entry.amountKnown ? groupedAmount.localizedDisplayWithUnit : ""}) : entry
     })
     readonly property real diagramWidth: Math.max(560, width - 48)
     readonly property real inputCardWidth: diagramWidth * 0.35
@@ -170,43 +170,45 @@ ColumnLayout {
                                 root.ribbonObjects = root.ribbonObjects.filter(function(item) { return item !== object })
                             }
                         }
+                        // Keep the cards alive when unit changes publish new
+                        // snapshots, so amount labels retain their previous frame.
                         Repeater {
                             id: inputs
-                            model: root.inputEntries
+                            model: root.inputEntries.length
                             onItemAdded: Qt.callLater(root.updateNodeMeasurements)
                             onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
                             delegate: TransactionFlowNode {
-                                required property var modelData
                                 required property int index
                                 objectName: "transactionFlowInput_" + index
-                                entry: modelData
+                                entry: root.inputEntries[index] || ({})
+                                displayUnit: root.displayUnit
                                 input: true
                                 width: root.inputCardWidth
                                 onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
                                 y: root.geometry.inputs[index] ? root.geometry.inputs[index].y : 0
                                 walletName: root.walletName
-                                accentColor: root.ownershipColor(modelData.ownership)
+                                accentColor: root.ownershipColor(entry.ownership)
                                 interactive: root.interactive
                             }
                         }
                         Repeater {
                             id: outputs
-                            model: root.outputEntries
+                            model: root.outputEntries.length
                             onItemAdded: Qt.callLater(root.updateNodeMeasurements)
                             onItemRemoved: Qt.callLater(root.updateNodeMeasurements)
                             delegate: TransactionFlowNode {
-                                required property var modelData
                                 required property int index
                                 objectName: "transactionFlowOutput_" + index
-                                entry: modelData
+                                entry: root.outputEntries[index] || ({})
+                                displayUnit: root.displayUnit
                                 width: root.outputCardWidth
                                 onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
                                 x: root.geometry.outputX
                                 y: root.geometry.outputs[index] ? root.geometry.outputs[index].y : 0
                                 walletName: root.walletName
-                                accentColor: modelData.kind === "data" ? root.dataColor : root.ownershipColor(modelData.ownership)
+                                accentColor: entry.kind === "data" ? root.dataColor : root.ownershipColor(entry.ownership)
                                 interactive: root.interactive
-                                selected: root.selectedEntryId === modelData.id
+                                selected: root.selectedEntryId === entry.id
                                 onPaymentRequestRequested: function(requestId) { root.paymentRequestRequested(requestId) }
                             }
                         }

@@ -26,33 +26,45 @@ ColumnLayout {
         Layout.preferredHeight: 64
         Layout.alignment: Qt.AlignHCenter
     }
-    RowLayout {
-        Layout.fillWidth: false
-        Layout.alignment: Qt.AlignHCenter
-        Layout.maximumWidth: root.width
-        spacing: 12
-        CoreText {
-            objectName: "transactionSummaryAmount"
-            Layout.fillWidth: true
-            Layout.minimumWidth: 0
-            Layout.alignment: Qt.AlignBaseline
-            text: root.amountValue
-            color: root.amountColor
-            font.family: Theme.text.monoLead.font.family
-            font.styleName: Theme.text.monoLead.font.styleName
-            font.pixelSize: 48
-            font.letterSpacing: -1.5
-            fontSizeMode: Text.HorizontalFit
-            minimumPixelSize: 22
-            wrap: false
-        }
-        CoreText {
-            visible: root.amountUnit.length > 0
-            Layout.alignment: Qt.AlignBaseline
-            text: root.amountUnit
-            color: Theme.color.neutral7
-            font.pixelSize: root.width < 500 ? 18 : 22
-            wrap: false
+    Item {
+        Layout.fillWidth: true
+        implicitHeight: amountRow.implicitHeight
+
+        RowLayout {
+            id: amountRow
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(parent.width, amountText.implicitWidth
+                + (amountUnit.visible ? spacing + amountUnit.implicitWidth : 0))
+            spacing: 12
+
+            BitcoinAmountDisplayLabel {
+                id: amountText
+                objectName: "transactionSummaryAmount"
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.alignment: Qt.AlignBaseline
+                animationAvailableWidth: Math.max(0, amountRow.parent.width
+                    - (amountUnit.visible ? amountRow.spacing + amountUnit.implicitWidth : 0))
+                text: root.amountValue
+                color: root.amountColor
+                font.family: Theme.text.monoLead.font.family
+                font.styleName: Theme.text.monoLead.font.styleName
+                font.pixelSize: 48
+                font.letterSpacing: -1.5
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: 22
+                wrap: false
+            }
+            BitcoinAmountDisplayLabel {
+                id: amountUnit
+                objectName: "transactionSummaryUnit"
+                visible: root.amountUnit.length > 0
+                Layout.alignment: Qt.AlignBaseline
+                text: root.amountUnit
+                color: Theme.color.neutral7
+                font.pixelSize: root.width < 500 ? 18 : 22
+                wrap: false
+            }
         }
     }
     CoreText {

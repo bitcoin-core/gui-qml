@@ -8,6 +8,12 @@
 #include <qml/models/sendrecipient.h>
 #include <qml/models/sendrecipientslistmodel.h>
 
+#include <key_io.h>
+#include <addresstype.h>
+
+#include <algorithm>
+#include <QVariantMap>
+
 WalletQmlModelTransaction::WalletQmlModelTransaction(const SendRecipientsListModel* recipient, QObject* parent)
     : QObject(parent),
       m_amount(recipient->totalAmountSatoshi()),
@@ -39,8 +45,8 @@ BitcoinAmount* WalletQmlModelTransaction::amountAmount() const
 QString WalletQmlModelTransaction::formatWithUnit(CAmount value, int display_unit)
 {
     const QmlBitcoinUnits::Unit unit = QmlBitcoinUnits::fromDisplayUnit(display_unit);
-    const QString num = QmlBitcoinUnits::format(unit, value, false, QmlBitcoinUnits::SeparatorStyle::STANDARD);
-    return num + " " + QmlBitcoinUnits::displayLabel(unit, value);
+    return QmlBitcoinUnits::formatForDisplay(unit, value) + QLatin1Char(' ')
+        + QmlBitcoinUnits::label(unit, value);
 }
 
 QString WalletQmlModelTransaction::amount() const
@@ -78,6 +84,64 @@ QString WalletQmlModelTransaction::txid() const
     return m_wtx ? QString::fromStdString(m_wtx->GetHash().ToString()) : QString{};
 }
 
+QVariantList WalletQmlModelTransaction::reviewedRecipients() const
+{
+    QVariantList result;
+    result.reserve(m_reviewed_recipients.size());
+    for (const auto& recipient : m_reviewed_recipients) {
+        result.push_back(QVariantMap{
+            {QStringLiteral("address"), recipient.address},
+            {QStringLiteral("formattedAddress"), BitcoinAddress::formattedAddress(recipient.address)},
+            {QStringLiteral("label"), recipient.label},
+            {QStringLiteral("amount"), formatWithUnit(recipient.amount, m_display_unit)},
+            {QStringLiteral("hasPaymentRequest"), recipient.payment_request},
+        });
+    }
+    return result;
+}
+
+bool WalletQmlModelTransaction::isReviewedRecipient(const QString& address) const
+{
+    return std::any_of(m_reviewed_recipients.begin(), m_reviewed_recipients.end(), [&address](const auto& recipient) {
+        return recipient.address == address;
+    });
+}
+
+bool WalletQmlModelTransaction::captureReviewedRecipients(const SendRecipientsListModel& recipients)
+{
+    if (!m_wtx) return false;
+    std::vector<ReviewedRecipient> snapshot;
+    std::vector<bool> used(m_wtx->vout.size(), false);
+    for (const auto* recipient : recipients.recipients()) {
+        if (!recipient) return false;
+        const QString address = recipient->address()->address();
+        const CTxDestination destination = DecodeDestination(address.toStdString());
+        if (!IsValidDestination(destination)) return false;
+        const CScript script = GetScriptForDestination(destination);
+        size_t match = m_wtx->vout.size();
+        for (size_t i = 0; i < m_wtx->vout.size(); ++i) {
+            if (used[i] || m_wtx->vout[i].scriptPubKey != script) continue;
+            if (match == m_wtx->vout.size()) match = i;
+            if (m_wtx->vout[i].nValue == recipient->cAmount()) {
+                match = i;
+                break;
+            }
+        }
+        if (match == m_wtx->vout.size()) return false;
+        used[match] = true;
+        snapshot.push_back({address, recipient->label(), m_wtx->vout[match].nValue, recipient->hasPaymentRequest()});
+    }
+    m_reviewed_recipients = std::move(snapshot);
+    Q_EMIT reviewedRecipientsChanged();
+    return true;
+}
+
+void WalletQmlModelTransaction::setReviewFeeDetails(int target_blocks, const QString& fee_rate)
+{
+    m_review_target_blocks = target_blocks;
+    m_review_fee_rate = fee_rate;
+}
+
 void WalletQmlModelTransaction::setDisplayUnit(int unit)
 {
     if (unit != m_display_unit) {
@@ -85,6 +149,7 @@ void WalletQmlModelTransaction::setDisplayUnit(int unit)
         Q_EMIT amountChanged();
         Q_EMIT feeChanged();
         Q_EMIT totalChanged();
+        Q_EMIT reviewedRecipientsChanged();
     }
 }
 

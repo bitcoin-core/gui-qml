@@ -46,6 +46,7 @@ add_executable(bitcoinqml_unit_tests
   test_rpcconsolemodel.cpp
   test_sendrecipientslistmodel.cpp
   test_syncprogresstracker.cpp
+  test_coinslistmodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src/util/chaintype.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/bitcoinuri.cpp
 )

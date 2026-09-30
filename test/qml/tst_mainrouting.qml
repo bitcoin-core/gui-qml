@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/pages"
 import "../../qml/pages/wallet"
 
@@ -108,11 +109,27 @@ TestCase {
         compare(activityTab.checked, true)
     }
 
+    function test_edit_menu_toggles_display_unit() {
+        const window = createMain(true)
+        const menuActions = findChild(window, "desktopMenuActions")
+        verify(menuActions !== null)
+
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        menuActions.toggleDisplayUnit.trigger()
+        compare(optionsModel.displayUnit, BitcoinAmount.SAT)
+        menuActions.toggleDisplayUnit.trigger()
+        compare(optionsModel.displayUnit, BitcoinAmount.BTC)
+    }
+
     function test_undo_does_not_modify_hidden_send_field() {
         const window = createMain(true)
         const menuActions = findChild(window, "desktopMenuActions")
         const activityTab = findChild(window, "activityTabButton")
-        const noteInput = findChild(window, "sendNoteInput")
+        window.show()
+        menuActions.sendView.trigger()
+        testRecipientsModel.clearToFront()
+        tryVerify(function() { return findChild(window.contentItem, "sendNoteInput") !== null })
+        const noteInput = findChild(window.contentItem, "sendNoteInput")
 
         verify(menuActions !== null)
         verify(activityTab !== null)

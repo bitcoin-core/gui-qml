@@ -14,7 +14,6 @@ ColumnLayout {
     objectName: "feeSelectionControl"
 
     property var walletModel: null
-    property bool includeFeeInAmount: false
     property int currentTarget: 2
     property bool customSelected: walletModel ? walletModel.customFeeEnabled : false
     property int selectedIndex: customSelected
@@ -52,7 +51,6 @@ ColumnLayout {
     }
 
     signal feeChanged(int target)
-    signal includeFeeInAmountToggled(bool checked)
 
     spacing: 12
 
@@ -175,20 +173,6 @@ ColumnLayout {
                 if (value !== -1) {
                     root.feeChanged(value)
                 }
-                feePopup.close()
-            }
-        }
-
-        ContextMenuDivider {}
-
-        ContextMenuToggle {
-            id: includeFeeToggle
-            objectName: "feeSelectionIncludeFeeToggle"
-            checkable: false
-            text: qsTr("Include fee in amount")
-            checked: root.includeFeeInAmount
-            onClicked: {
-                root.includeFeeInAmountToggled(!root.includeFeeInAmount)
                 feePopup.close()
             }
         }

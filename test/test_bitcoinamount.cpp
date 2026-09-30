@@ -4,6 +4,9 @@
 
 #include <QtTest/QtTest>
 
+#include <QLocale>
+#include <QScopeGuard>
+
 #include <qml/bitcoinamount.h>
 
 class BitcoinAmountTests : public QObject {
@@ -18,6 +21,7 @@ private Q_SLOTS:
     void display_flow_mbtc_and_ubtc();
     void display_flow_sat();
     void displayWithUnit_formatsAmountAndUnit();
+    void localizedDisplayWithUnit_usesLocaleAndKeepsCanonicalDisplay();
     void flipUnit_changesLabelAndDisplaySignal();
 };
 
@@ -94,13 +98,33 @@ void BitcoinAmountTests::displayWithUnit_formatsAmountAndUnit()
     QVERIFY(amt.displayWithUnit().isEmpty());
 
     amt.setSatoshi(COIN);
-    QCOMPARE(amt.displayWithUnit(), QStringLiteral("1.00000000 ₿"));
+    QCOMPARE(amt.displayWithUnit(), QStringLiteral("1.00000000 BTC"));
 
     amt.setUnit(BitcoinAmount::Unit::SAT);
     QCOMPARE(amt.displayWithUnit(), QStringLiteral("100000000 sats"));
 
     amt.setSatoshi(1);
     QCOMPARE(amt.displayWithUnit(), QStringLiteral("1 sat"));
+}
+
+void BitcoinAmountTests::localizedDisplayWithUnit_usesLocaleAndKeepsCanonicalDisplay()
+{
+    const QLocale previous;
+    const auto restore_locale = qScopeGuard([previous] { QLocale::setDefault(previous); });
+    QLocale::setDefault(QLocale{"de_DE"});
+
+    BitcoinAmount amount;
+    QVERIFY(amount.localizedDisplayWithUnit().isEmpty());
+    QVERIFY(amount.localizedDisplay().isEmpty());
+    amount.setSatoshi(123'456'789);
+    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("1,23456789 BTC"));
+    QCOMPARE(amount.localizedDisplay(), QStringLiteral("1,23456789"));
+    QCOMPARE(amount.displayWithUnit(), QStringLiteral("1.23456789 BTC"));
+
+    amount.setUnit(BitcoinAmount::Unit::SAT);
+    QCOMPARE(amount.localizedDisplayWithUnit(), QStringLiteral("123.456.789 sats"));
+    QCOMPARE(amount.localizedDisplay(), QStringLiteral("123.456.789"));
+    QCOMPARE(amount.displayWithUnit(), QStringLiteral("123456789 sats"));
 }
 
 void BitcoinAmountTests::flipUnit_changesLabelAndDisplaySignal()

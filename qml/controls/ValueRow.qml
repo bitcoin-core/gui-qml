@@ -15,14 +15,32 @@ FormRow {
     property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color valueIconColor: valueColor
     property var valueTextStyle: Theme.text.description
+    property bool amountValue: false
+    property string valueUnit: ""
 
     trailingItem: RowLayout {
         spacing: 6
 
         CoreText {
-            objectName: root.objectName.length > 0 ? root.objectName + "Value" : ""
+            objectName: !root.amountValue && root.objectName.length > 0 ? root.objectName + "Value" : ""
+            visible: !root.amountValue
             Layout.maximumWidth: root.valueMaximumWidth
             text: root.value
+            color: root.valueColor
+            font: root.valueTextStyle.font
+            lineHeight: root.valueTextStyle.lineHeight
+            lineHeightMode: Text.FixedHeight
+            horizontalAlignment: Text.AlignRight
+            wrap: false
+            elide: Text.ElideMiddle
+        }
+
+        BitcoinAmountDisplayLabel {
+            objectName: root.amountValue && root.objectName.length > 0 ? root.objectName + "Value" : ""
+            visible: root.amountValue
+            Layout.maximumWidth: root.valueMaximumWidth
+            amount: root.value
+            unit: root.value === "—" ? "" : root.valueUnit
             color: root.valueColor
             font: root.valueTextStyle.font
             lineHeight: root.valueTextStyle.lineHeight

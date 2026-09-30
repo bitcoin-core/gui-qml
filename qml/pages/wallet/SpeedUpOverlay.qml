@@ -69,6 +69,11 @@ Popup {
         radius: 10
         border.color: Theme.color.neutral3
         border.width: 1
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     property string newTxid: ""
@@ -121,6 +126,7 @@ Popup {
             backgroundColor: Theme.color.neutral2
             ValueRow {
                 objectName: "speedUpOriginalFeeRow"
+                amountValue: true
                 Layout.fillWidth: true
                 title: qsTr("Original fee")
                 value: root.bumpModel ? root.bumpModel.oldFee : ""
@@ -130,6 +136,7 @@ Popup {
             }
             ValueRow {
                 objectName: "speedUpNewFeeRow"
+                amountValue: true
                 Layout.fillWidth: true
                 title: qsTr("New fee")
                 value: root.bumpModel ? root.bumpModel.newFee : ""

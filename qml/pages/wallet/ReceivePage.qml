@@ -81,7 +81,6 @@ Page {
                 OverflowMenuButton {
                     id: receiveMoreButton
                     objectName: "receiveMoreButton"
-                    iconColor: Theme.color.neutral7
                     checked: receiveMoreMenu.opened
                     onClicked: receiveMoreMenu.opened ? receiveMoreMenu.close() : receiveMoreMenu.open()
                     ContextMenu {

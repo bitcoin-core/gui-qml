@@ -42,6 +42,11 @@ Pane {
         color: Theme.color.neutral1
         border.width: 1
         border.color: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     function resetFields() {
@@ -200,10 +205,9 @@ Pane {
                 circular: true
                 size: 30
                 iconSize: 24
-                iconColor: Theme.color.neutral6
+                iconColor: Theme.color.neutral7
                 activeIconColor: Theme.color.neutral8
-                backgroundColor: Theme.color.neutral2
-                hoverBackgroundColor: Theme.color.neutral3
+                isOnSurface: true
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
                 ContextMenu {
@@ -242,6 +246,7 @@ Pane {
             }
             CloseButton {
                 objectName: "paymentRequestModalClose"
+                iconColor: Theme.color.neutral7
                 Accessible.name: qsTr("Close payment request")
                 onClicked: root.closeRequested()
             }
@@ -422,6 +427,7 @@ Pane {
                     minimumRowHeight: 56
                     value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                     showDivider: true
+                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
                 }
                 PaymentRequestField {
                     id: amountInput
@@ -434,45 +440,17 @@ Pane {
                     fieldObjectName: "requestPaymentAmountInput"
                     editable: !root.paymentReceived
                     showDivider: true
+                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
                     fieldTextStyle: Theme.text.monoDescription
                     inputMethodHints: Qt.ImhFormattedNumbersOnly
                     maximumLength: 32
                     validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
                     onEditingFinished: if (!root.saved) root.saveField("amount", this)
-                    unitControl: TextButton {
+                    unitControl: AmountUnitButton {
                         id: unitButton
                         objectName: "requestPaymentAmountUnitToggle"
-                        text: root.amountUnit === BitcoinAmount.SAT ? qsTr("sats")
-                            : root.amountUnit === BitcoinAmount.mBTC ? "mBTC"
-                            : root.amountUnit === BitcoinAmount.uBTC ? qsTr("bits") : "BTC"
-                        textSize: 14
-                        textColor: !enabled ? Theme.color.neutral4
-                            : hovered ? Theme.color.orange : Theme.color.neutral9
-                        bgColor: Theme.color.neutral2
-                        states: []
-                        padding: 6
-                        horizontalPadding: 8
-                        contentItem: RowLayout {
-                            spacing: 4
-                            CoreText {
-                                text: unitButton.text
-                                font: Theme.text.caption.font
-                                color: unitButton.textColor
-                            }
-                            Icon {
-                                objectName: "requestPaymentAmountUnitIcon"
-                                Layout.minimumWidth: 12
-                                Layout.preferredWidth: 12
-                                Layout.maximumWidth: 12
-                                Layout.minimumHeight: 12
-                                Layout.preferredHeight: 12
-                                Layout.maximumHeight: 12
-                                source: "qrc:/icons/arrow-up-down.svg"
-                                size: 12
-                                color: unitButton.textColor
-                            }
-                        }
-                        Accessible.name: qsTr("Change amount unit")
+                        iconObjectName: "requestPaymentAmountUnitIcon"
+                        unit: root.amountUnit
                         onClicked: root.toggleAmountUnit()
                     }
                 }
@@ -482,6 +460,7 @@ Pane {
                     Layout.fillWidth: true
                     label: qsTr("Pay to")
                     showDivider: true
+                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
                     value: root.request ? root.request.label : ""
                     placeholderText: qsTr("Your name or business")
                     fieldObjectName: "requestPaymentYourNameInput"

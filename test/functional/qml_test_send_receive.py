@@ -5,6 +5,7 @@
 """End-to-end GUI test for send preview fee parity."""
 
 import argparse
+import base64
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import os
@@ -81,9 +82,9 @@ class CheckpointRecorder:
 
 
 def assert_review_values(gui, *, expected_fee_sats, expected_amount_sats, expected_total_sats):
-    review_amount_text = gui.get_text("sendReviewAmountField")
-    review_fee_text = gui.get_text("sendReviewFeeField")
-    review_total_text = gui.get_text("sendReviewTotalField")
+    review_amount_text = gui.get_property("sendTransactionReviewRecipient0Amount", "text")
+    review_fee_text = gui.get_property("sendTransactionReviewFee", "value")
+    review_total_text = gui.get_property("sendTransactionReviewTotal", "value")
 
     review_amount_sats = amount_text_to_sats(review_amount_text)
     review_fee_sats = amount_text_to_sats(review_fee_text)
@@ -205,29 +206,18 @@ def assert_receiver_output(port, txid, receiver_address, expected_sats):
     return matched_outputs[0]["n"]
 
 
-def enable_coin_control_and_select_first_coin(gui, checkpoints):
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", True, timeout_ms=5000)
-    if not gui.get_property("sendOptionsCoinControlToggle", "checked"):
-        gui.click("sendOptionsCoinControlToggle")
-        gui.wait_for_property("sendOptionsCoinControlToggle", "checked", True, timeout_ms=5000)
-    gui.click("sendOptionsButton")
-    gui.wait_for_property("sendOptionsPopup", "opened", False, timeout_ms=5000)
-    gui.wait_for_property("sendCoinControlButtonText", "text", "Select", timeout_ms=10000)
-
-    gui.click("sendCoinControlButton")
-    gui.wait_for_page("coinSelectionPage", timeout_ms=10000)
+def enable_coin_control_and_select_first_coin(gui, checkpoints, coin_id=None):
+    gui.click("sendCoinControlPickerOption_1")
+    gui.click("sendSelectInputsButton")
+    gui.wait_for_property("coinSelectionPopup", "opened", True, timeout_ms=10000)
+    if coin_id:
+        gui.set_text("coinBrowserSearch", coin_id)
     gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
-    gui.wait_for_property(
-        "coinSelectionTotalSelectedText",
-        "text",
-        lambda text: text != "0.00000000",
-        timeout_ms=10000,
-    )
+    gui.wait_for_property("coinSelectionDoneButton", "enabled", True, timeout_ms=10000)
     checkpoints.checkpoint("one input selected", gui)
     gui.click("coinSelectionDoneButton")
-    gui.wait_for_page("sendPage", timeout_ms=10000)
-    gui.wait_for_property("sendCoinControlButtonText", "text", "1 coin selected", timeout_ms=10000)
+    gui.wait_for_property("coinSelectionPopup", "visible", False, timeout_ms=10000)
+    gui.wait_for_property("sendInputsSelectedText", "text", "1 input selected", timeout_ms=10000)
 
 
 def run_test(*, save_screenshots=False, screenshot_root=None):
@@ -260,9 +250,10 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         mining_address = rpc_call(
             harness.gui_rpc_port,
             "getnewaddress",
+            ["Review input"],
             wallet=GUI_WALLET_NAME,
         )
-        rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, mining_address])
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [103, mining_address])
         wait_for_wallet_balance(
             harness.gui_rpc_port,
             GUI_WALLET_NAME,
@@ -273,43 +264,180 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("sendTabButton")
         gui.wait_for_page("sendPage", timeout_ms=10000)
         checkpoints.checkpoint("send page opened", gui)
-        enable_coin_control_and_select_first_coin(gui, checkpoints)
 
+        # Maximum can prefill the gross amount before an address is entered.
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendAmountStatusText", "text", "Sending maximum available")
+        gui.wait_for_property("sendUseMaximumButton", "enabled", False)
+        wait_until(lambda: amount_text_to_sats(gui.get_text("sendAmountInput")) == 150 * 100000000,
+                   description="maximum without an address")
+        assert not gui.get_property("sendReviewButton", "enabled")
         gui.set_text("sendAddressInput", receiver_address)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        initial_fee = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 150 * 100000000 - initial_fee
+        # With no selection, maximum uses all spendable inputs without changing
+        # the coin-control mode or action label, matching Core's sendall RPC.
+        gui.wait_for_property("sendUseMaximumButton", "text", "Use maximum")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        assert gui.get_property("sendCoinControlPicker", "currentIndex") == 0
+        assert gui.get_property("sendUseMaximumButton", "text") == "Use maximum"
+        all_fee = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 150 * 100000000 - all_fee
+        utxos = rpc_call(harness.gui_rpc_port, "listunspent", wallet=GUI_WALLET_NAME)
+        inputs = [{"txid": coin["txid"], "vout": coin["vout"]} for coin in utxos]
+        reference = rpc_call(harness.gui_rpc_port, "sendall", {
+            "recipients": [receiver_address], "fee_rate": 1,
+            "options": {"inputs": inputs, "add_to_wallet": False},
+        }, wallet=GUI_WALLET_NAME)
+        reference_tx = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [reference["hex"]])
+        assert len(reference_tx["vin"]) == 3 and len(reference_tx["vout"]) == 1
+        assert int(Decimal(str(reference_tx["vout"][0]["value"])) * 100000000) == 150 * 100000000 - all_fee
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == []
+        checkpoints.checkpoint("automatic maximum preserves mode and matches sendall RPC", gui)
+        # Same-wallet recipients skip the sweep warning. With the same inputs,
+        # an external recipient must warn for both maximum actions, even with a lock.
+        self_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=GUI_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "lockunspent", [False, [inputs[0]]], wallet=GUI_WALLET_NAME)
+        for manual in (False, True):
+            gui.set_text("sendAddressInput", self_address)
+            if manual:
+                gui.click("sendCoinControlPickerOption_1")
+                gui.click("sendSelectInputsButton")
+                gui.wait_for_property("coinSelectionPopup", "opened", True)
+                for coin in inputs[1:]:
+                    gui.set_text("coinBrowserSearch", f"{coin['txid']}:{coin['vout']}")
+                    gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
+                gui.set_text("coinBrowserSearch", "")
+                gui.click("coinSelectionDoneButton")
+                gui.wait_for_property("coinSelectionPopup", "visible", False)
+            gui.wait_for_property("sendUseMaximumButton", "text",
+                                  "Use maximum from selected coins" if manual else "Use maximum")
+            gui.wait_for_property("sendAmountStatusText", "text",
+                                  "Sending maximum from selected coins" if manual else "Sending maximum available")
+            gui.wait_for_property("sendUseMaximumButton", "enabled", False)
+            gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+            gui.click("sendReviewButton")
+            wait_until(lambda: gui.get_property("sendReviewSweepAlert", "opened")
+                       or gui.get_property("transactionReviewPopup", "opened"),
+                       description="self-send review or warning")
+            assert not gui.get_property("sendReviewSweepAlert", "opened"), (
+                f"Same-wallet recipient incorrectly triggered the warning (manual={manual})")
+            gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+            gui.click("sendTransactionReviewCloseButton")
+            gui.wait_for_property("transactionReviewPopup", "visible", False)
+            gui.set_text("sendAddressInput", receiver_address)
+            gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+            gui.click("sendReviewButton")
+            gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+            gui.click("sendReviewSweepConfirmButton")
+            gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+            gui.click("sendTransactionReviewSendButton")
+            gui.wait_for_property("sendSweepAlert", "opened", True)
+            gui.click("sendSweepCancelButton")
+            gui.wait_for_property("sendSweepAlert", "visible", False)
+            gui.click("sendTransactionReviewCloseButton")
+            gui.wait_for_property("transactionReviewPopup", "visible", False)
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == []
+        gui.click("sendCoinControlPickerOption_0")
+        rpc_call(harness.gui_rpc_port, "lockunspent", [True, [inputs[0]]], wallet=GUI_WALLET_NAME)
+        gui.set_text("sendAddressInput", receiver_address)
+        checkpoints.checkpoint("both maximum actions exempt self-sends and warn for external recipients", gui)
+        # A smaller payment returns change and must open review without
+        # claiming that the wallet will be swept.
+        gui.set_text("sendAmountInput", SEND_AMOUNT)
+        gui.wait_for_property("sendUseMaximumButton", "enabled", True)
+        gui.wait_for_property("sendAmountStatusText", "visible", False)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        gui.click("sendReviewButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        gui.wait_for_property("transactionFlowInput_0", "title", "Review input", timeout_ms=10000)
+        assert gui.get_property("sendTransactionReviewTargetBlocks", "value") == "6 blocks"
+        assert gui.get_property("sendTransactionReviewFeeRate", "value").endswith(" sat/vB")
+        gui.click("sendTransactionReviewCloseButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False)
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        second_address = rpc_call(harness.source_rpc_port, "getnewaddress", wallet=RECEIVER_WALLET_NAME)
+        gui.click("sendAddRecipientButton")
+        gui.set_text("sendAddressInput", second_address)
+        gui.set_text("sendAmountInput", "2")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        multiple_fee = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        assert gui.get_property("sendReviewSweepAlert", "title") == "Use all available funds?"
+        gui.click("sendReviewSweepCancelButton")
+        gui.wait_for_property("sendReviewSweepAlert", "visible", False)
+        assert gui.get_property("transactionReviewPopup", "opened") is False
+        assert gui.get_property("sendCoinControlPicker", "currentIndex") == 0
+        assert gui.get_property("sendUseMaximumButton", "text") == "Use maximum"
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 2 * 100000000
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        gui.click("sendReviewSweepConfirmButton")
+        gui.wait_for_property("sendReviewSweepAlert", "visible", False)
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text")) == 148 * 100000000 - multiple_fee
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient1Amount", "text")) == 2 * 100000000
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewTotal", "value")) == 150 * 100000000
+        gui.click("sendTransactionReviewSendButton")
+        gui.wait_for_property("sendSweepAlert", "opened", True)
+        assert gui.get_property("sendSweepAlert", "title") == "Send all available funds?"
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == []
+        gui.click("sendSweepCancelButton")
+        gui.wait_for_property("sendSweepAlert", "visible", False)
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewTotal", "value")) == 150 * 100000000
+        gui.click("sendTransactionReviewCloseButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False)
+        gui.click("sendRemoveRecipient_1")
+        checkpoints.checkpoint("maximum preserves the fixed amount of another recipient", gui)
+        # Automatic maximum skips locked outputs, like Core's default sendall.
+        gui.click("sendCoinControlPickerOption_0")
+        rpc_call(harness.gui_rpc_port, "lockunspent", [False, [inputs[0]]], wallet=GUI_WALLET_NAME)
+        gui.set_text("sendAddressInput", "")
+        wait_until(lambda: amount_text_to_sats(gui.get_text("sendAmountInput")) == 100 * 100000000,
+                   description="maximum before address excludes locked coins")
+        gui.set_text("sendAddressInput", receiver_address)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        assert gui.get_property("sendCoinControlPicker", "currentIndex") == 0
+        assert gui.get_property("sendUseMaximumButton", "text") == "Use maximum"
+        locked_fee = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 100 * 100000000 - locked_fee
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        gui.click("sendReviewSweepConfirmButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        gui.click("sendTransactionReviewSendButton")
+        gui.wait_for_property("sendSweepAlert", "opened", True)
+        gui.click("sendSweepCancelButton")
+        gui.wait_for_property("sendSweepAlert", "visible", False)
+        gui.click("sendTransactionReviewCloseButton")
+        gui.wait_for_property("transactionReviewPopup", "visible", False)
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == []
+        checkpoints.checkpoint("automatic maximum excludes locked coins and shows both warnings", gui)
+        rpc_call(harness.gui_rpc_port, "lockunspent", [True, [inputs[0]]], wallet=GUI_WALLET_NAME)
+        gui.click("sendCoinControlPickerOption_0")
+        gui.set_text("sendAmountInput", "")
+        # Select inputs before entering an amount.
+        enable_coin_control_and_select_first_coin(gui, checkpoints)
         gui.set_text("sendAmountInput", SEND_AMOUNT)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         checkpoints.checkpoint("send form populated", gui)
         assert_no_fee_preview_label(harness.gui_rpc_port, GUI_WALLET_NAME)
 
-        gui.wait_for_property("feeSelectionControl", "selectedLabel", DEFAULT_FEE_LABEL, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedDuration", DEFAULT_FEE_DURATION, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedTarget", 2, timeout_ms=5000)
+        gui.wait_for_property("feeSelectionControl", "currentTarget", 6, timeout_ms=5000)
+        gui.click("feeSelectionPickerButton")
+        gui.click("feeSelectionOption2")
+        gui.wait_for_property("feeSelectionControl", "currentTarget", 10, timeout_ms=5000)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        checkpoints.checkpoint("flexible fee selected", gui)
+        estimated_fee_sats = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert estimated_fee_sats > 0
 
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown opened", gui)
-        high_fee_option_estimate = wait_for_non_empty_text(gui, "feeSelectionOptionEstimate0")
-        default_fee_option_estimate = wait_for_non_empty_text(gui, "feeSelectionOptionEstimate1")
-        low_fee_option_estimate = wait_for_non_empty_text(gui, f"feeSelectionOptionEstimate{LOW_FEE_OPTION_INDEX}")
-        assert high_fee_option_estimate, "Expected High option estimate to render in the dropdown"
-        assert default_fee_option_estimate, "Expected Default option estimate to render in the dropdown"
-        gui.click(f"feeSelectionOption{LOW_FEE_OPTION_INDEX}")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedIndex", LOW_FEE_OPTION_INDEX, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedLabel", LOW_FEE_LABEL, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedDuration", LOW_FEE_DURATION, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedTarget", LOW_FEE_TARGET_BLOCKS, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionEstimateLabel", "text", low_fee_option_estimate, timeout_ms=20000)
-        checkpoints.checkpoint("low fee option selected", gui)
-
-        estimated_fee_text = gui.get_text("feeSelectionEstimateLabel")
-        estimated_fee_sats = btc_text_to_sats(estimated_fee_text)
-        assert estimated_fee_sats > 0, f"Expected a positive estimated fee, got {estimated_fee_text!r}"
-
-        gui.wait_for_property("feeSelectionControl", "includeFeeInAmount", False, timeout_ms=5000)
         gui.click("sendReviewButton")
-        gui.wait_for_page("sendReviewPage", timeout_ms=10000)
-        checkpoints.checkpoint("review page with include-fee off", gui)
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        checkpoints.checkpoint("review page with fixed amount", gui)
         assert_review_values(
             gui,
             expected_fee_sats=estimated_fee_sats,
@@ -317,44 +445,72 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
             expected_total_sats=SEND_AMOUNT_SATS + estimated_fee_sats,
         )
 
-        gui.click("sendReviewBackButton")
+        gui.click("sendTransactionReviewCloseButton")
         gui.wait_for_page("sendPage", timeout_ms=10000)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
         checkpoints.checkpoint("returned to send page", gui)
 
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown reopened", gui)
-        gui.click("feeSelectionIncludeFeeToggle")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "includeFeeInAmount", True, timeout_ms=5000)
-        checkpoints.checkpoint("include fee in amount enabled", gui)
+        gui.wait_for_property("sendUseMaximumButton", "text", "Use maximum from selected coins")
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendAmountStatusText", "text", "Sending maximum from selected coins")
+        gui.wait_for_property("sendUseMaximumButton", "enabled", False)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        checkpoints.checkpoint("maximum from selected input filled after fees", gui)
+        gui.set_text("sendAddressInput", "")
+        wait_until(lambda: amount_text_to_sats(gui.get_text("sendAmountInput")) == 50 * 100000000,
+                   description="selected maximum without an address")
+        assert not gui.get_property("sendReviewButton", "enabled")
+        gui.set_text("sendAddressInput", receiver_address)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        maximum_fee_sats = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert maximum_fee_sats > 0
 
-        gui.click("feeSelectionDropdownButton")
-        gui.wait_for_property("feeSelectionPopup", "opened", True, timeout_ms=5000)
-        checkpoints.checkpoint("fee dropdown with include fee enabled", gui)
-        gui.click(f"feeSelectionOption{LOW_FEE_OPTION_INDEX}")
-        gui.wait_for_property("feeSelectionPopup", "opened", False, timeout_ms=5000)
-        gui.wait_for_property("feeSelectionControl", "selectedIndex", LOW_FEE_OPTION_INDEX, timeout_ms=5000)
-
-        estimated_fee_with_subtract_text = wait_for_non_empty_text(gui, "feeSelectionEstimateLabel")
-        estimated_fee_with_subtract_sats = btc_text_to_sats(estimated_fee_with_subtract_text)
-        assert estimated_fee_with_subtract_sats > 0, (
-            f"Expected a positive estimated fee with subtract-fee enabled, got "
-            f"{estimated_fee_with_subtract_text!r}"
-        )
-
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 50 * 100000000 - maximum_fee_sats
+        # Cancel must restore both the inputs and the maximum-send mode.
+        gui.click("sendSelectInputsButton")
+        gui.wait_for_property("coinSelectionPopup", "opened", True)
+        gui.click_list_item("coinSelectionListView", 1, "coinSelectionCheckbox")
+        gui.wait_for_property("sendInputsSelectedText", "text", "2 inputs selected")
+        gui.click("coinSelectionCancelButton")
+        gui.wait_for_property("coinSelectionPopup", "visible", False)
+        gui.wait_for_property("sendInputsSelectedText", "text", "1 input selected")
+        gui.wait_for_property("sendAmountStatusText", "text", "Sending maximum from selected coins")
+        gui.wait_for_property("sendUseMaximumButton", "enabled", False)
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        # Repricing maximum must refresh the net amount without leaving maximum mode.
+        gui.click("feeSelectionPickerButton")
+        gui.click("feeSelectionOption3")
+        gui.set_text("feeSelectionCustomRateInput", "2")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        custom_fee = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
+        assert custom_fee == maximum_fee_sats * 2
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 50 * 100000000 - custom_fee
+        gui.click("feeSelectionPickerButton")
+        gui.click("feeSelectionOption1")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == 50 * 100000000 - maximum_fee_sats
+        # A manual amount edit leaves maximum mode; the fixed amount survives
+        # a subsequent fee change.
+        gui.set_text("sendAmountInput", SEND_AMOUNT)
+        gui.wait_for_property("sendUseMaximumButton", "enabled", True)
+        gui.wait_for_property("sendAmountStatusText", "visible", False)
+        gui.click("feeSelectionPickerButton")
+        gui.click("feeSelectionOption2")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        assert amount_text_to_sats(gui.get_text("sendAmountInput")) == SEND_AMOUNT_SATS
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         gui.click("sendReviewButton")
-        gui.wait_for_page("sendReviewPage", timeout_ms=10000)
-        checkpoints.checkpoint("review page with include-fee on", gui)
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        checkpoints.checkpoint("review page with sendall", gui)
         assert_review_values(
             gui,
-            expected_fee_sats=estimated_fee_with_subtract_sats,
-            expected_amount_sats=SEND_AMOUNT_SATS - estimated_fee_with_subtract_sats,
-            expected_total_sats=SEND_AMOUNT_SATS,
+            expected_fee_sats=maximum_fee_sats,
+            expected_amount_sats=50 * 100000000 - maximum_fee_sats,
+            expected_total_sats=50 * 100000000,
         )
 
-        gui.click("sendReviewSendButton")
+        gui.click("sendTransactionReviewSendButton")
         checkpoints.checkpoint("transaction submitted from review", gui)
 
         txid = wait_for_single_mempool_tx(harness.gui_rpc_port)
@@ -364,19 +520,21 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
                 abs(Decimal(str(tx_details["fee"]))) * Decimal("100000000")
             ).to_integral_value()
         )
-        assert rpc_fee_sats == estimated_fee_with_subtract_sats, (
+        assert rpc_fee_sats == maximum_fee_sats, (
             f"Broadcast fee {rpc_fee_sats} sats did not match preview estimate "
-            f"{estimated_fee_with_subtract_sats} sats"
+            f"{maximum_fee_sats} sats"
         )
         receiver_output_index = assert_receiver_output(
             harness.gui_rpc_port,
             txid,
             receiver_address,
-            SEND_AMOUNT_SATS - estimated_fee_with_subtract_sats,
+            50 * 100000000 - maximum_fee_sats,
         )
+        sent_tx = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [tx_details["hex"]])
+        assert len(sent_tx["vin"]) == 1 and len(sent_tx["vout"]) == 1, "sendall must have no change"
         checkpoints.checkpoint("broadcast fee verified", gui)
 
-        gui.wait_for_page("sendResultPopup", timeout_ms=10000)
+        gui.wait_for_page("sendCompletePage", timeout_ms=10000)
         gui.click("sendResultViewTransactionButton")
         gui.wait_for_page("activityDetailsPage", timeout_ms=10000)
         assert gui.get_property("activityDetailsPage", "txid") == txid
@@ -390,7 +548,7 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("activityStack", "depth", 1, timeout_ms=10000)
         gui.click("sendTabButton")
         gui.wait_for_page("sendPage", timeout_ms=10000)
-        gui.wait_for_property("sendCoinControlButtonText", "text", "Select", timeout_ms=10000)
+        gui.wait_for_property("sendUseAutomaticInputsButton", "visible", False, timeout_ms=10000)
         checkpoints.checkpoint("coin control selection cleared after send", gui)
         gui.click("activityTabButton")
         gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)
@@ -405,16 +563,135 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         )
         activity_amount_text = gui.get_property(f"activityItem_{txid}", "amount")
         activity_amount_sats = amount_text_to_sats(activity_amount_text)
-        assert activity_amount_sats == SEND_AMOUNT_SATS, (
+        assert activity_amount_sats == 50 * 100000000, (
             f"Expected Activity to show the total sent magnitude, got {activity_amount_text!r}"
         )
-        assert gui.get_property(f"activityItem_{txid}", "netAmountSat") == -SEND_AMOUNT_SATS
+        assert gui.get_property(f"activityItem_{txid}", "netAmountSat") == -50 * 100000000
         assert gui.get_property(f"activityItem_{txid}", "incoming") is False
         checkpoints.checkpoint("sent Activity amount and outgoing wallet impact verified", gui)
 
+        # Manually select all available inputs with one other input locked,
+        # then enter a fixed net amount without Use maximum. Both warnings apply.
+        remaining = rpc_call(harness.gui_rpc_port, "listunspent", wallet=GUI_WALLET_NAME)
+        locked_input = {"txid": remaining[0]["txid"], "vout": remaining[0]["vout"]}
+        rpc_call(harness.gui_rpc_port, "lockunspent", [False, [locked_input]], wallet=GUI_WALLET_NAME)
+        gui.click("sendTabButton")
+        gui.wait_for_page("sendPage", timeout_ms=10000)
+        gui.set_text("sendAddressInput", receiver_address)
+        enable_coin_control_and_select_first_coin(gui, checkpoints,
+                                                 f"{remaining[1]['txid']}:{remaining[1]['vout']}")
+        remaining = remaining[1:]
+        manual_reference = rpc_call(harness.gui_rpc_port, "sendall", {
+            "recipients": [receiver_address], "fee_rate": 1,
+            "options": {"inputs": [{"txid": coin["txid"], "vout": coin["vout"]} for coin in remaining],
+                        "add_to_wallet": False},
+        }, wallet=GUI_WALLET_NAME)
+        manual_tx = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [manual_reference["hex"]])
+        # Fixed-amount construction reserves space for potential change during
+        # selection. Leave 100 sats of headroom; this is below the change dust
+        # threshold and is paid as fee, so the transaction still sweeps fully.
+        manual_amount = Decimal(str(manual_tx["vout"][0]["value"])) - Decimal("0.00000100")
+        review_password = "send-flow-review-test-password"
+        rpc_call(harness.gui_rpc_port, "encryptwallet", [review_password], wallet=GUI_WALLET_NAME)
+        gui.set_text("sendAmountInput", format(manual_amount, ".8f"))
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        gui.click("sendReviewButton")
+        wait_until(lambda: gui.get_property("sendReviewSweepAlert", "opened")
+                   or gui.get_property("transactionReviewPopup", "opened")
+                   or gui.get_text("sendPrepareTransactionErrorText"), description="manual sweep preparation")
+        assert gui.get_property("sendReviewSweepAlert", "opened"), (
+            f"Manual sweep did not warn: error={gui.get_text('sendPrepareTransactionErrorText')!r}, "
+            f"review={gui.get_property('transactionReviewPopup', 'opened')}, "
+            f"amount={gui.get_text('sendAmountInput')}, fee={gui.get_property('sendTotalFeesValue', 'value')}"
+        )
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == [txid]
+        assert not gui.get_property("reviewPassphrasePopup", "visible")
+        assert gui.get_property("sendReviewSweepConfirmButton", "text") == "Use maximum"
+        gui.click("sendReviewSweepCancelButton")
+        gui.wait_for_property("sendReviewSweepAlert", "visible", False)
+        assert not gui.get_property("reviewPassphrasePopup", "visible")
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        gui.click("sendReviewSweepConfirmButton")
+        gui.wait_for_property("sendReviewSweepAlert", "visible", False)
+        gui.wait_for_property("reviewPassphrasePopup", "opened", True)
+        gui.set_text("reviewPassphraseField", review_password)
+        gui.click("reviewPassphraseConfirmButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        assert not gui.get_property("sendReviewSweepAlert", "visible")
+        gui.click("sendTransactionReviewSendButton")
+        gui.wait_for_property("sendSweepAlert", "opened", True)
+        assert rpc_call(harness.gui_rpc_port, "getrawmempool") == [txid]
+        gui.click("sendSweepConfirmButton")
+        gui.wait_for_page("sendCompletePage", timeout_ms=10000)
+        wait_until(lambda: len(rpc_call(harness.gui_rpc_port, "getrawmempool")) == 2,
+                   description="confirmed sweep broadcast")
+        assert rpc_call(harness.gui_rpc_port, "getbalance", wallet=GUI_WALLET_NAME) == 50
+        assert rpc_call(harness.gui_rpc_port, "listlockunspent", wallet=GUI_WALLET_NAME) == [locked_input]
+        checkpoints.checkpoint("sweep warning precedes passphrase and final send confirmation", gui)
+
+        # A later payment must not change the recipients of a transaction that
+        # is already prepared and open for review.
+        gui.click("sendResultDoneButton")
+        gui.wait_for_page("sendPage", timeout_ms=10000)
+        funding_wallet = "review_funding_wallet"
+        rpc_call(harness.gui_rpc_port, "createwallet", {"wallet_name": funding_wallet})
+        funding_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=funding_wallet)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [101, funding_address])
+        gui.wait_for_property("walletBadge", "text", funding_wallet, timeout_ms=20000)
+        gui.click("walletBadge")
+        gui.wait_for_property("walletSelectPopup", "opened", True)
+        gui.wait_for_property("walletSelectList", "count", 2)
+        for row_index in range(2):
+            if gui.get_list_item_property(view_object_name="walletSelectList", row_index=row_index, prop="name") == GUI_WALLET_NAME:
+                gui.click_list_item(view_object_name="walletSelectList", row_index=row_index)
+                break
+        else:
+            raise AssertionError(f"Wallet {GUI_WALLET_NAME!r} missing from wallet picker")
+        gui.wait_for_property("walletBadge", "text", GUI_WALLET_NAME, timeout_ms=20000)
+        gui.wait_for_property("walletSelectPopup", "opened", False)
+        rpc_call(harness.gui_rpc_port, "lockunspent", [True, [locked_input]], wallet=GUI_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "walletpassphrase", [review_password, 600], wallet=GUI_WALLET_NAME)
+        gui.set_text("sendAddressInput", receiver_address)
+        gui.click("sendUseMaximumButton")
+        gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        gui.click("sendReviewButton")
+        gui.wait_for_property("sendReviewSweepAlert", "opened", True)
+        gui.click("sendReviewSweepConfirmButton")
+        gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
+        prepared_amount = amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text"))
+        prepared_destination = gui.get_property("sendTransactionReviewRecipient0Description", "text")
+
+        incoming_address = rpc_call(harness.gui_rpc_port, "getnewaddress", wallet=GUI_WALLET_NAME)
+        rpc_call(harness.gui_rpc_port, "sendtoaddress", [incoming_address, 0.5], wallet=funding_wallet)
+        rpc_call(harness.gui_rpc_port, "generatetoaddress", [1, funding_address])
+        wait_until(lambda: amount_text_to_sats(gui.get_text("sendAmountInput")) > prepared_amount,
+                   description="live maximum amount refreshing after payment")
+        assert amount_text_to_sats(gui.get_property("sendTransactionReviewRecipient0Amount", "text")) == prepared_amount
+        assert gui.get_property("sendTransactionReviewRecipient0Description", "text") == prepared_destination
+
+        review_psbt_path = os.path.join(harness.tmpdir, "review-snapshot.psbt")
+        gui.set_text("sendTransactionReviewSavePsbtPathField", review_psbt_path)
+        gui.click("sendTransactionReviewSaveButton")
+        wait_until(lambda: os.path.exists(review_psbt_path), description="prepared PSBT export")
+        with open(review_psbt_path, "rb") as psbt_file:
+            decoded_psbt = rpc_call(harness.gui_rpc_port, "decodepsbt", [base64.b64encode(psbt_file.read()).decode("ascii")])
+        if "tx" in decoded_psbt:
+            outputs = [(output["scriptPubKey"].get("address"), output["value"])
+                       for output in decoded_psbt["tx"]["vout"]]
+        else:
+            outputs = [(output["script"].get("address"), output["amount"])
+                       for output in decoded_psbt["outputs"]]
+        recipient_outputs = [value for address, value in outputs if address == receiver_address]
+        assert len(recipient_outputs) == 1
+        psbt_amount = int((Decimal(str(recipient_outputs[0])) * Decimal("100000000")).to_integral_value())
+        assert psbt_amount == prepared_amount
+        checkpoints.checkpoint("review remains equal to prepared PSBT after receiving funds", gui)
+        gui.click("sendTransactionReviewCloseButton")
+
         print(
-            "Send flow passed: preview totals were correct with include-fee off and on, "
-            "the broadcast fee matched the subtract-fee preview, and Activity showed "
+            "Send flow passed: preview totals were correct for fixed amounts and sendall, "
+            "the broadcast fee matched the sendall preview, and Activity showed "
             "the outgoing amount with the correct wallet impact."
         )
         return 0

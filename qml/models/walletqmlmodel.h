@@ -33,6 +33,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QStringList>
 #include <QThread>
@@ -44,6 +45,15 @@ class Node;
 } // namespace interfaces
 
 class PsbtQmlModel;
+
+struct SendFeePreview {
+    CAmount fee{0};
+    int inputs{0};
+    CAmount rate_per_kvb{0};
+    std::optional<CAmount> maximum_amount;
+    bool sweeps_wallet{false};
+    bool operator==(const SendFeePreview&) const = default;
+};
 
 class WalletQmlModel : public QObject
 {
@@ -83,7 +93,17 @@ private:
     Q_PROPERTY(ReceiveRequestHistoryModel* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending READ receiveRequestReconciliationPending NOTIFY receiveRequestReconciliationPendingChanged)
     Q_PROPERTY(WalletQmlModelTransaction* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
+    Q_PROPERTY(QVariantMap currentTransactionFlow READ currentTransactionFlow NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool sendDraftSweepsWallet READ sendDraftSweepsWallet NOTIFY feeEstimateRevisionChanged)
+    Q_PROPERTY(bool currentTransactionSweepsWallet READ currentTransactionSweepsWallet NOTIFY currentTransactionChanged)
+    Q_PROPERTY(bool currentTransactionIsImportedPsbt READ currentTransactionIsImportedPsbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(unsigned int targetBlocks READ feeTargetBlocks WRITE setFeeTargetBlocks NOTIFY feeTargetBlocksChanged)
+    Q_PROPERTY(qint64 estimatedFeeSatoshi READ estimatedFeeSatoshi NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(QString estimatedFeeRate READ estimatedFeeRate NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(int estimatedInputCount READ estimatedInputCount NOTIFY estimatedFeeChanged)
+    Q_PROPERTY(qint64 sendTotalSatoshi READ sendTotalSatoshi NOTIFY sendAmountExhaustsBalanceChanged)
+    Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
+    Q_PROPERTY(SendRecipient* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString estimatedFee READ estimatedFee NOTIFY estimatedFeeChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
@@ -146,7 +166,19 @@ public:
     bool receiveRequestReconciliationPending() const { return m_receive_reconciliation_thread != nullptr || m_receive_reconciliation_applying; }
     bool receiveRequestReconciliationApplying() const { return m_receive_reconciliation_applying; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
+    QVariantMap currentTransactionFlow() const;
+    bool sendDraftSweepsWallet() const;
+    bool currentTransactionSweepsWallet() const { return m_current_transaction && m_current_transaction_source == CurrentTransactionSource::SendDraft && m_current_transaction_sweeps_wallet; }
+    bool currentTransactionIsImportedPsbt() const { return m_current_transaction_source == CurrentTransactionSource::ImportedPsbt; }
     QString estimatedFee() const;
+    qint64 estimatedFeeSatoshi() const;
+    QString estimatedFeeRate() const;
+    int estimatedInputCount() const;
+    qint64 sendTotalSatoshi() const;
+    qint64 availableSendBalanceSatoshi() const;
+    SendRecipient* maximumRecipient() const { return m_maximum_recipient.data(); }
+    Q_INVOKABLE void useMaximum();
+    Q_INVOKABLE void setCustomFeeTarget(unsigned int target);
     CFeeRate dustRelayFee() const;
     bool sendAmountExhaustsBalance() const;
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
@@ -221,7 +253,8 @@ public:
     void unselectCoin(const COutPoint& output);
     bool isSelectedCoin(const COutPoint& output);
     std::vector<COutPoint> listSelectedCoins() const;
-    void clearSelectedCoins();
+    Q_INVOKABLE void clearSelectedCoins();
+    void setSelectedCoins(const std::vector<COutPoint>& outputs);
     unsigned int feeTargetBlocks() const;
     void setFeeTargetBlocks(unsigned int target_blocks);
     void setCustomFeeEnabled(bool enabled);
@@ -261,6 +294,7 @@ Q_SIGNALS:
     void customFeeRateValidChanged();
     void feeEstimatePendingChanged();
     void feeEstimateRevisionChanged();
+    void maximumRecipientChanged();
     void walletIsLoadedChanged();
     void receiveRequestReconciliationPendingChanged();
     void externalSignerApprovalSucceeded();
@@ -285,11 +319,14 @@ private:
     };
 
     void initializeFeeEstimator();
+    void setMaximumRecipient(SendRecipient* recipient);
+    void updateMaximumAmount();
     void requestFeeEstimatesNow();
-    void applyFeeEstimates(const QHash<unsigned int, CAmount>& estimates,
-                           const std::optional<CAmount>& custom_estimate,
+    void applyFeeEstimates(const QHash<unsigned int, SendFeePreview>& estimates,
+                           const std::optional<SendFeePreview>& custom_estimate,
                            quint64 request_id);
     std::optional<CAmount> selectedFeeEstimate() const;
+    std::optional<SendFeePreview> selectedFeePreview() const;
     void clearFeeEstimates();
     unsigned int nextPaymentRequestId() const;
     void subscribeToWalletSignals();
@@ -344,16 +381,21 @@ private:
     std::atomic<int> m_receive_request_notifications_pending{0};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
+    QPointer<SendRecipient> m_maximum_recipient;
+    QMetaObject::Connection m_maximum_amount_connection;
+    QMetaObject::Connection m_maximum_recipient_destroyed_connection;
+    bool m_updating_maximum{false};
     std::unique_ptr<PartiallySignedTransaction> m_current_psbt;
     CurrentTransactionSource m_current_transaction_source{CurrentTransactionSource::None};
     bool m_current_transaction_can_send{false};
+    bool m_current_transaction_sweeps_wallet{false};
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
     QObject* m_fee_estimation_worker{nullptr};
     QThread* m_fee_estimation_thread{nullptr};
     QTimer* m_fee_estimation_timer{nullptr};
-    QHash<unsigned int, CAmount> m_fee_estimates;
-    std::optional<CAmount> m_custom_fee_estimate;
+    QHash<unsigned int, SendFeePreview> m_fee_estimates;
+    std::optional<SendFeePreview> m_custom_fee_estimate;
     QString m_custom_fee_rate;
     quint64 m_fee_estimate_request_id{0};
     int m_fee_estimate_revision{0};

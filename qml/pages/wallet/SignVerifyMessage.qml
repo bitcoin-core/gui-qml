@@ -175,9 +175,9 @@ SettingsPage {
                         onClicked: root.submitSign()
                     }
 
-                    OutlineButton {
+                    NeutralButton {
                         objectName: "signMessageClearButton"
-                        isOnSurface: true
+                        buttonSize: NeutralButton.Large
                         Layout.preferredWidth: 140
                         text: qsTr("Clear all")
                         onClicked: root.clearSignForm()
@@ -278,9 +278,9 @@ SettingsPage {
                         onClicked: root.submitVerify()
                     }
 
-                    OutlineButton {
+                    NeutralButton {
                         objectName: "verifyMessageClearButton"
-                        isOnSurface: true
+                        buttonSize: NeutralButton.Large
                         Layout.preferredWidth: 140
                         text: qsTr("Clear all")
                         onClicked: root.clearVerifyForm()

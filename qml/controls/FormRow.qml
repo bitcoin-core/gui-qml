@@ -15,6 +15,7 @@ Control {
     property string errorText: ""
     property alias leadingItem: leadingContainer.data
     readonly property Item loadedLeadingItem: leadingContainer.children.length > 0 ? leadingContainer.children[0] : null
+    property bool showLeadingItem: true
     property alias trailingItem: trailingContainer.data
     readonly property Item loadedTrailingItem: trailingContainer.children.length > 0 ? trailingContainer.children[0] : null
     property alias bodyItem: bodyContainer.data
@@ -75,7 +76,7 @@ Control {
 
             RowLayout {
                 id: leadingContainer
-                visible: children.length > 0
+                visible: root.showLeadingItem && children.length > 0
                 enabled: root.enabled
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 0

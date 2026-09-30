@@ -99,6 +99,11 @@ Popup {
         radius: 10
         border.color: Theme.color.neutral2
         border.width: 1
+        SurfaceGradientBorder {
+            anchors.fill: parent
+            surfaceColor: parent.color
+            cornerRadius: parent.radius
+        }
     }
 
     ColumnLayout {

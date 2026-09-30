@@ -111,6 +111,12 @@ Control {
                 color: Theme.color.neutral2
                 radius: 10
                 border.width: 0
+
+                FieldBorderRings {
+                    anchors.fill: parent
+                    visible: searchField.activeFocus
+                    cornerRadius: parent.radius
+                }
             }
 
             Icon {

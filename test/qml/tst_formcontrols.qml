@@ -322,23 +322,19 @@ TestCase {
         compare(picker.currentValue, "dark")
     }
 
-    function test_outlineButtonSupportsOnSurfaceAppearance() {
+    function test_outlineButtonUsesLargeNeutralAppearance() {
         const button = createTemporaryObject(outlineButtonComponent, host)
         verify(button !== null)
         const background = findChild(button, "exampleOutlineButtonBackground")
         verify(background !== null)
 
-        compare(button.isOnSurface, false)
-        compare(background.color, Qt.rgba(0, 0, 0, 0))
-        compare(background.border.width, 1)
-        compare(background.border.color, Theme.color.neutral2)
-
-        button.isOnSurface = true
-        tryCompare(background, "color", Theme.color.neutral2)
-        compare(background.border.width, 0)
+        compare(button.buttonSize, NeutralButton.Large)
+        compare(button.backgroundColor, Theme.color.neutral2)
+        compare(button.currentBackgroundColor, Theme.color.neutral2)
+        compare(button.implicitHeight, 46)
 
         button.down = true
-        tryCompare(background, "color", Theme.color.neutral3)
+        compare(button.currentBackgroundColor, Theme.color.neutral3)
         tryCompare(button, "scale", 0.98)
 
         button.down = false

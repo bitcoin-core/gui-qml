@@ -434,7 +434,7 @@ QString TransactionActivityModel::formatAmount(CAmount amount, bool receive) con
 {
     const auto unit = QmlBitcoinUnits::fromDisplayUnit(m_display_unit);
     return QmlBitcoinUnits::formatForDisplay(unit, qAbs(amount), receive) + QLatin1Char(' ')
-        + QmlBitcoinUnits::label(unit);
+        + QmlBitcoinUnits::label(unit, amount);
 }
 
 void TransactionActivityModel::setDisplayUnit(int unit)
