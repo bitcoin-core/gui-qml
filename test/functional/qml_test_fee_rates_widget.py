@@ -21,7 +21,8 @@ def run_tests():
         gui = prepare(first)
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        gui.click("widgetPickerAdd_fee-rates")
+        gui.click("widgetPickerRow_fee-rates")
+        gui.click("widgetPickerSize_fee-rates_2x1")
         gui.wait_for_object("feeRatesWidget")
         assert geometry(gui)[2:] == (2, 1)
         assert gui.get_property("widget_fee-rates", "supportedSizes") == [
@@ -40,10 +41,10 @@ def run_tests():
         gui.settle()
         assert geometry(gui)[2:] == (3, 2)
         screenshot(gui, "fee-rates-portrait.png")
-        gui.set_property("appWindow", "width", 1200)
-        gui.set_property("appWindow", "height", 950)
+        gui.set_property("appWindow", "width", 1400)
+        gui.set_property("appWindow", "height", 800)
         gui.settle()
-        assert geometry(gui) == expected
+        assert geometry(gui) == expected, (geometry(gui), expected, gui.get_property("widgetGrid", "columns"))
         choose_action(gui, "editWidgetsButton")
         screenshot(gui, "fee-rates-edit.png")
         first.stop(cleanup=False)
@@ -51,10 +52,10 @@ def run_tests():
         reopened = QmlTestHarness(extra_args=["-disablewallet"], datadir=first.datadir)
         gui = prepare(reopened)
         gui.wait_for_object("feeRatesWidget")
-        assert geometry(gui) == expected
+        assert geometry(gui) == expected, (geometry(gui), expected, gui.get_property("widgetGrid", "columns"))
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        assert gui.get_property("widgetPickerAdd_fee-rates", "enabled") is False
+        assert gui.get_property("widgetPickerRow_fee-rates", "enabled") is True
         gui.invoke("widgetPicker", "close")
         gui.click("widgetRemove_fee-rates")
         assert not gui.object_exists("feeRatesWidget")

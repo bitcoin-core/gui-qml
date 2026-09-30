@@ -172,19 +172,19 @@ Item {
                 cellSize: root.cellSize
                 coordinateItem: surface
                 editing: root.editing
-                interacting: root.layoutModel.activeId === widgetId
+                interacting: root.layoutModel.activeId === instanceId
                 dragActive: interacting && root.gestureKind === "move"
                 animatePlacement: root.gestureKind !== ""
                 availableColumns: root.columns - gridColumn
                 availableRows: root.rows - gridRow
                 onEditRequested: root.editRequested()
-                onRemoveRequested: root.layoutModel.removeWidget(widgetId)
-                onGestureStarted: function(kind, x, y) { root.beginGesture(widgetId, kind, x, y) }
+                onRemoveRequested: root.layoutModel.removeWidget(instanceId)
+                onGestureStarted: function(kind, x, y) { root.beginGesture(instanceId, kind, x, y) }
                 onGestureMoved: function(x, y) { root.updateGesture(x, y) }
                 onGestureEnded: root.layoutModel.commitInteraction()
                 onGestureCanceled: root.cancelGesture()
-                onMoveRequested: function(dx, dy) { root.moveBy(widgetId, dx, dy) }
-                onResizeRequested: function(columns, rows) { root.resizeTo(widgetId, columns, rows) }
+                onMoveRequested: function(dx, dy) { root.moveBy(instanceId, dx, dy) }
+                onResizeRequested: function(columns, rows) { root.resizeTo(instanceId, columns, rows) }
             }
         }
     }

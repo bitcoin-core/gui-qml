@@ -12,7 +12,8 @@ from qml_wallet_test_lib import RPC_USER, RPC_PASS, rpc_call, wait_for_rpc
 def add(gui, widget_id):
     choose_action(gui, "addWidgetButton")
     gui.wait_for_property("widgetPicker", "opened", True)
-    gui.click("widgetPickerAdd_" + widget_id)
+    gui.click("widgetPickerRow_" + widget_id)
+    gui.click("widgetPickerSize_" + widget_id + "_2x1")
     gui.wait_for_object("widget_" + widget_id)
     choose_action(gui, "editWidgetsButton")
 

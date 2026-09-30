@@ -26,7 +26,7 @@ class WidgetLayoutModel : public QAbstractListModel
     Q_PROPERTY(QString persistenceError READ persistenceError NOTIFY persistenceErrorChanged)
 
 public:
-    enum Role { WidgetIdRole = Qt::UserRole + 1, TitleRole, SourceRole, ColumnRole, RowRole, ColumnSpanRole, RowSpanRole, SizesRole };
+    enum Role { WidgetIdRole = Qt::UserRole + 1, TitleRole, SourceRole, ColumnRole, RowRole, ColumnSpanRole, RowSpanRole, SizesRole, InstanceIdRole };
     explicit WidgetLayoutModel(QObject* parent = nullptr, const QString& settings_file = {});
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -45,6 +45,7 @@ public:
     QString persistenceError() const { return m_persistence_error; }
 
     Q_INVOKABLE void restore();
+    // Catalog IDs identify widget types; editing methods below use instance IDs.
     Q_INVOKABLE bool contains(const QString& id) const;
     Q_INVOKABLE bool addWidget(const QString& id, int size_index = -1);
     Q_INVOKABLE bool removeWidget(const QString& id);
@@ -67,6 +68,7 @@ private:
     struct Entry {
         QString id;
         QRect rect;
+        QString widget_id;
         bool operator==(const Entry&) const = default;
     };
     QVariantMap definition(const QString& id) const;

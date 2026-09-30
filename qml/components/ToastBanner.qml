@@ -36,6 +36,8 @@ Rectangle {
     implicitHeight: contentRow.implicitHeight + 16
     opacity: 0
 
+    Component.onCompleted: if (visible) fadeInAnim.restart()
+
     onVisibleChanged: {
         if (visible) {
             fadeOutAnim.stop()

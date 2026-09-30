@@ -51,17 +51,35 @@ TestCase {
         nodeModel.blockTipHeight = 0
     }
 
-    function test_leaving_peers_tab_stops_refresh() {
+    function test_widgets_and_node_routes_and_peers_navigation() {
         const page = createDesktopWallets()
-        const peers = findChild(page, "peersTabButton")
-        const activity = findChild(page, "activityTabButton")
-        verify(peers !== null)
-        verify(activity !== null)
-        peers.checked = true
-        tryCompare(peerTableModel, "autoRefreshActive", true)
-        activity.checked = true
-        tryCompare(peers, "checked", false)
-        tryCompare(peerTableModel, "autoRefreshActive", false)
+        const widgets = findChild(page, "widgetsTabButton")
+        const node = findChild(page, "blockClockTabButton")
+        const overview = findChild(page, "nodeOverview")
+        const dashboard = findChild(page, "widgetDashboard")
+        verify(widgets !== null)
+        compare(findChild(page, "peersTabButton"), null)
+        compare(overview.visible, true)
+        compare(dashboard.visible, false)
+        widgets.checked = true
+        tryCompare(dashboard, "visible", true)
+        compare(overview.visible, false)
+        page.openPeers()
+        compare(node.checked, true)
+        const stack = findChild(page, "nodeNavigationStack")
+        tryCompare(stack, "depth", 2)
+        tryCompare(stack, "busy", false)
+        compare(stack.currentItem.objectName, "peers")
+        compare(overview.visible, false)
+        compare(peerTableModel.autoRefreshActive, true)
+        const back = findChild(stack.currentItem, "peersNodeBackButton")
+        compare(back.text, "Node")
+        mouseClick(back)
+        tryCompare(stack, "depth", 1)
+        tryCompare(stack, "busy", false)
+        compare(peerTableModel.autoRefreshActive, false)
+        compare(node.checked, true)
+        compare(overview.visible, true)
     }
 
     function createDesktopWallets() {
@@ -141,17 +159,18 @@ TestCase {
         const page = createDesktopWallets()
         const tabs = [
             findChild(page, "blockClockTabButton"),
-            findChild(page, "peersTabButton"),
+            findChild(page, "widgetsTabButton"),
             findChild(page, "desktopWalletSettingsTabButton")
         ]
 
         for (let i = 0; i < tabs.length; ++i) {
             verify(tabs[i] !== null)
-            tryCompare(tabs[i], "width", 30)
+            tryCompare(tabs[i], "width", 40)
             compare(tabs[i].height, 60)
         }
 
-        compare(tabs[1].iconSize, 24)
+        compare(tabs[1].iconSize, 18)
+        compare(tabs[1].iconSource, "image://images/widgets.svg")
         compare(tabs[2].iconSize, 30)
         compare(tabs[2].iconSource, "image://images/gear-outline")
         compare(findChild(page, "consoleTabButton"), null)
@@ -160,15 +179,17 @@ TestCase {
         compare(findChild(page, "nodeInformationButton"), null)
     }
 
-    function test_network_chip_opens_node_information() {
+    function test_network_chip_is_read_only() {
         const page = createDesktopWallets()
         const networkIndicator = findChild(page, "desktopNetworkIndicator")
-        const informationPopup = findChild(page, "nodeInformationPopup")
+        const informationPopup = findChild(page, "nodeOverviewInformationPopup")
         verify(networkIndicator !== null)
         verify(informationPopup !== null)
 
+        compare(networkIndicator.enabled, false)
+        compare(networkIndicator.focusPolicy, Qt.NoFocus)
         networkIndicator.clicked()
-        tryCompare(informationPopup, "opened", true)
+        compare(informationPopup.opened, false)
     }
 
     function test_settings_is_lazilyLoadedAndRetained() {

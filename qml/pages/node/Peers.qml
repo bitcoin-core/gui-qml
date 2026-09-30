@@ -305,9 +305,9 @@ Page {
                         }
                     }
                     contentItem: Icon {
-                        source: "image://images/flip-vertical"
+                        source: "qrc:/icons/arrow-up-down.svg"
                         color: Theme.color.neutral9
-                        size: 20
+                        size: 16
                     }
                     onClicked: sortMenu.open()
                     ContextMenu {

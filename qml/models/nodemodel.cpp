@@ -489,6 +489,7 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         m_runtime_dialogs_enabled = true;
         refreshWarnings();
         showStartupWarnings();
+        m_block_tip_time = tip_info.block_time;
         setBlockTipHeight(tip_info.block_height);
         setVerificationProgress(tip_info.verification_progress);
         // Core's IBD result is authoritative. Verification progress remains an
@@ -542,6 +543,7 @@ void NodeModel::ConnectToBlockTipSignal()
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this]([[maybe_unused]] SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             QMetaObject::invokeMethod(this, [this, state, block_height = tip.block_height, block_time = tip.block_time, verification_progress] {
+                m_block_tip_time = block_time;
                 setBlockTipHeight(block_height);
                 setVerificationProgress(verification_progress);
                 setBlockSyncActive(state != SynchronizationState::POST_INIT);
@@ -663,11 +665,10 @@ bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
 
 QVariantList NodeModel::nodeInformationRows()
 {
-    int header_height{m_header_tip_height};
-    int64_t header_time{m_header_tip_time};
-    if (m_node_ready && header_height == 0) {
-        m_node.getHeaderTip(header_height, header_time);
-    }
+    // Initialization and tip notifications already carry this information.
+    // Reading the chain here would acquire cs_main on the GUI thread.
+    const int header_height{m_header_tip_height};
+    const int64_t header_time{m_header_tip_time};
 
     QString local_addresses;
     if (m_node_ready) {
@@ -685,8 +686,8 @@ QVariantList NodeModel::nodeInformationRows()
         local_addresses = tr("None");
     }
 
-    const int block_height{m_node_ready ? std::max(m_block_tip_height, m_node.getNumBlocks()) : m_block_tip_height};
-    const int64_t last_block_time{m_node_ready ? m_node.getLastBlockTime() : 0};
+    const int block_height{m_block_tip_height};
+    const int64_t last_block_time{m_block_tip_time};
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
@@ -694,7 +695,7 @@ QVariantList NodeModel::nodeInformationRows()
     rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
     rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
     rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
+    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString(), QStringLiteral("startup-time")));
     rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString()), QStringLiteral("network")));
     rows.push_back(InformationRow(tr("Block height"), QString::number(block_height), QStringLiteral("block-height")));
     rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));

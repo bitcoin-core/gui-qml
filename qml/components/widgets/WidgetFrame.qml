@@ -10,6 +10,7 @@ import "WidgetMetrics.js" as WidgetMetrics
 
 FocusScope {
     id: root
+    required property string instanceId
     required property string widgetId
     required property string widgetTitle
     required property url widgetSource
@@ -32,7 +33,7 @@ FocusScope {
     property int availableRows: 6
     readonly property DashboardWidget widgetContent: content.item instanceof DashboardWidget ? content.item : null
     readonly property bool contentActive: visible && (!Window.window || (Window.window.visible && Window.window.visibility !== Window.Minimized))
-    objectName: "widget_" + widgetId
+    objectName: "widget_" + instanceId
     activeFocusOnTab: editing
     Accessible.role: Accessible.Grouping
     Accessible.name: widgetTitle
@@ -84,7 +85,7 @@ FocusScope {
     ]
 
     Rectangle {
-        objectName: "widgetBorder_" + root.widgetId
+        objectName: "widgetBorder_" + root.instanceId
         anchors.fill: parent
         radius: root.cornerRadius
         color: Theme.color.background
@@ -112,7 +113,7 @@ FocusScope {
     }
 
     CoreText {
-        objectName: "widgetContentError_" + root.widgetId
+        objectName: "widgetContentError_" + root.instanceId
         anchors.centerIn: parent
         width: Math.max(0, parent.width - 32)
         visible: content.status === Loader.Error || (content.status === Loader.Ready && root.widgetContent === null)
@@ -123,7 +124,7 @@ FocusScope {
 
     MouseArea {
         id: moveArea
-        objectName: "widgetMove_" + root.widgetId
+        objectName: "widgetMove_" + root.instanceId
         anchors.fill: parent
         preventStealing: root.editing || longPressActivated
         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
@@ -174,7 +175,7 @@ FocusScope {
 
     CloseButton {
         id: removeControl
-        objectName: "widgetRemove_" + root.widgetId
+        objectName: "widgetRemove_" + root.instanceId
         // Place edit handles on the scroll surface so their overhanging parts
         // receive pointer events outside the widget's content bounds.
         parent: root.coordinateItem.parent
@@ -207,7 +208,7 @@ FocusScope {
 
     Button {
         id: resizeControl
-        objectName: "widgetResize_" + root.widgetId
+        objectName: "widgetResize_" + root.instanceId
         parent: root.coordinateItem.parent
         visible: root.editing && root.visible && root.supportedSizes.length > 1
         enabled: root.editing && !root.liftActive
@@ -282,7 +283,7 @@ FocusScope {
 
     ContextMenu {
         id: sizeMenu
-        objectName: "widgetSizeMenu_" + root.widgetId
+        objectName: "widgetSizeMenu_" + root.instanceId
         property bool showActions: false
         property point pointerPosition
         modal: true
@@ -301,7 +302,7 @@ FocusScope {
                 return {
                     text: size.label,
                     value: value,
-                    objectName: "widgetSize_" + root.widgetId + "_" + value,
+                    objectName: "widgetSize_" + root.instanceId + "_" + value,
                     enabled: size.columns <= root.availableColumns && size.rows <= root.availableRows
                 }
             })
@@ -319,7 +320,7 @@ FocusScope {
         ContextMenuDivider { visible: sizeMenu.showActions }
 
         ContextMenuButton {
-            objectName: "widgetMenuRemove_" + root.widgetId
+            objectName: "widgetMenuRemove_" + root.instanceId
             visible: sizeMenu.showActions
             text: qsTr("Remove Widget")
             role: ContextMenuButton.Destructive

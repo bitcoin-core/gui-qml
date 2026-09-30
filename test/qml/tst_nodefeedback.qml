@@ -24,11 +24,6 @@ TestCase {
     }
 
     Component {
-        id: actionsComponent
-        NodeStatusActions {}
-    }
-
-    Component {
         id: nodeRunnerComponent
         NodeRunner {}
     }
@@ -48,8 +43,12 @@ TestCase {
     }
 
     Component {
-        id: warningsPopupComponent
-        NodeWarningsPopup {}
+        id: notificationsPopupComponent
+        NodeNotificationsPopup {
+            notifications: nodeModel.warningList.map(function(text) {
+                return {text: text, icon: "alert-filled", color: Theme.color.amber}
+            })
+        }
     }
 
     Component {
@@ -164,23 +163,7 @@ TestCase {
         verify(destructiveAlertTriggered)
     }
 
-    function test_warning_action_visibility_follows_warning_state() {
-        const actions = createTemporaryObject(actionsComponent, testWindow.contentItem)
-        verify(actions !== null)
-        wait(0)
-
-        const warningButton = findChild(actions, "nodeWarningsButton")
-        const infoButton = findChild(actions, "nodeInformationButton")
-        verify(warningButton !== null)
-        verify(infoButton !== null)
-        compare(warningButton.visible, false)
-        compare(infoButton.visible, true)
-
-        nodeModel.setWarningsForTest(["Clock skew warning"])
-        tryCompare(warningButton, "visible", true)
-    }
-
-    function test_node_runner_uses_network_chip_for_node_information() {
+    function test_node_runner_network_chip_is_read_only() {
         nodeModel.setWarningsForTest(["Clock skew warning"])
 
         const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem)
@@ -199,10 +182,154 @@ TestCase {
         verify(settingsButton !== null)
         compare(findChild(runner, "consoleTabButton"), null)
 
+        compare(networkIndicator.enabled, false)
+        compare(networkIndicator.focusPolicy, Qt.NoFocus)
         networkIndicator.clicked()
-        const informationPopup = waitForChild(testWindow.contentItem, "nodeInformationPopup")
+        const informationPopup = waitForChild(testWindow.contentItem, "nodeOverviewInformationPopup")
         verify(informationPopup !== null)
-        tryCompare(informationPopup, "opened", true)
+        compare(informationPopup.opened, false)
+    }
+
+    function test_overview_summaries_and_notification_modals() {
+        testWindow.width = 1200
+        testWindow.height = 800
+        const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem, { width: 1200, height: 800 })
+        verify(runner !== null)
+        const overview = findChild(runner, "nodeOverview")
+        verify(overview !== null)
+        compare(overview.compact, false)
+        compare(overview.overviewContentWidth, 1100)
+        compare(overview.informationRows.length, 4)
+        compare(overview.informationRows[2].id, "startup-time")
+        compare(findChild(overview, "nodeOverviewValue_startup-time").text, "Wed Sep 30 13:00:00 2026")
+        compare(findChild(overview, "nodeOverviewValue_block-height"), null)
+        compare(findChild(overview, "nodeOverviewTitle").text, "Node")
+        compare(findChild(overview, "nodeOverviewTitle").font.pixelSize, Theme.text.headline.pixelSize)
+        const pause = findChild(overview, "nodePauseButton")
+        pause.clicked()
+        compare(nodeModel.pause, true)
+        compare(pause.text, "Resume node")
+        pause.clicked()
+        compare(nodeModel.pause, false)
+
+        nodeModel.setWarningsForTest([longWarningText(), "Second warning"])
+        const top = findChild(overview, "nodeTopNotification")
+        tryCompare(findChild(overview, "nodeTopNotificationBanner"), "opacity", 1)
+        tryCompare(top, "text", longWarningText())
+        verifyWraps(top)
+        mouseClick(findChild(overview, "nodeNotificationsSectionTitle"))
+        const popup = findChild(testWindow.contentItem, "nodeNotificationsPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        compare(popup.notificationCount, 2)
+        const second = waitForChild(testWindow.contentItem, "nodeNotificationText_1")
+        verify(second !== null)
+        compare(second.text, "Second warning")
+        nodeModel.setWarningsForTest(["Updated warning"])
+        tryCompare(popup, "notificationCount", 1)
+        tryCompare(top, "text", "Updated warning")
+        findChild(popup, "nodeNotificationsCloseButton").clicked()
+        tryCompare(popup, "visible", false)
+
+        mouseClick(findChild(overview, "nodeInformationSectionTitle"))
+        const information = findChild(testWindow.contentItem, "nodeOverviewInformationPopup")
+        tryCompare(information, "opened", true)
+        information.close()
+        tryCompare(information, "visible", false)
+
+        runner.width = 640
+        tryCompare(overview, "compact", true)
+        verify(waitForItemPolished(overview))
+        const clock = findChild(overview, "nodeOverviewClockPanel")
+        const sections = findChild(overview, "nodeOverviewSections")
+        tryVerify(function() { return sections.y >= clock.y + clock.height })
+        nodeModel.setWarningsForTest([])
+        tryCompare(top, "text", "No current notifications.")
+        nodeModel.numPeers = 1
+        nodeModel.verificationProgress = 0.9999
+        nodeModel.initialSyncComplete = false
+        tryCompare(top, "text", "No current notifications.")
+        nodeModel.initialSyncComplete = true
+        tryCompare(top, "text", "Your node is up to date. All blocks verified.")
+        nodeModel.verificationProgress = 0.75
+        tryCompare(top, "text", "Your node is up to date. All blocks verified.")
+        nodeModel.initialSyncComplete = false
+        tryCompare(top, "text", "No current notifications.")
+        nodeModel.numPeers = 0
+    }
+
+    function test_overview_pushes_peers_and_stops_refresh_when_hidden() {
+        testWindow.width = 1200
+        testWindow.height = 800
+        const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem, { width: 1200, height: 800 })
+        const overview = findChild(runner, "nodeOverview")
+        compare(findChild(runner, "peersTabButton"), null)
+        const stack = findChild(runner, "nodeNavigationStack")
+        compare(stack.depth, 1)
+        verify(waitForItemPolished(overview))
+        for (const name of ["nodePeersSectionTitle", "nodeConnectedPeers", "nodeOutboundPeers", "nodeInboundPeers"]) {
+            mouseClick(findChild(overview, name))
+            tryCompare(stack, "depth", 2)
+            tryCompare(stack, "busy", false)
+            compare(stack.currentItem.objectName, "peers")
+            compare(overview.visible, false)
+            compare(peerTableModel.autoRefreshActive, true)
+            const back = findChild(stack.currentItem, "peersNodeBackButton")
+            compare(back.text, "Node")
+            compare(findChild(stack.currentItem, "peersCloseButton"), null)
+            mouseClick(back)
+            tryCompare(stack, "depth", 1)
+            tryCompare(stack, "busy", false)
+            compare(stack.currentItem, overview)
+            compare(peerTableModel.autoRefreshActive, false)
+        }
+        const peersSection = findChild(overview, "nodePeersSection")
+        testWindow.requestActivate()
+        tryCompare(testWindow, "active", true)
+        peersSection.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(peersSection, "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        tryCompare(stack, "depth", 2)
+        tryCompare(stack, "busy", false)
+        const peers = stack.currentItem
+        compare(peers.width, stack.width)
+        compare(peers.height, stack.height)
+        compare(peers.header, null)
+        const split = findChild(peers, "peersNavigationSplitView")
+        const separator = findChild(split, "navigationSplitSeparator")
+        compare(split.y, 0)
+        compare(split.height, peers.height)
+        compare(separator.height, peers.height)
+        compare(separator.mapToItem(peers, 0, 0).y, 0)
+        const nodeBack = findChild(peers, "peersNodeBackButton")
+        verify(nodeBack.mapToItem(peers, nodeBack.width, 0).x < separator.x)
+        compare(peerTableModel.autoRefreshActive, true)
+        runner.openPeers()
+        compare(stack.depth, 2)
+        compare(stack.currentItem, peers)
+        runner.width = 390
+        tryCompare(split, "isCompact", true)
+        verify(nodeBack.visible)
+        mouseClick(findChild(peers, "peersNodeBackButton"))
+        tryCompare(stack, "depth", 1)
+        tryCompare(stack, "busy", false)
+        compare(peerTableModel.autoRefreshActive, false)
+        runner.width = 1200
+        verify(waitForItemPolished(overview))
+        mouseClick(peersSection, peersSection.width - 2, peersSection.height - 2)
+        tryCompare(stack, "depth", 2)
+        tryCompare(stack, "busy", false)
+        const retainedPeers = stack.currentItem
+        findChild(runner, "widgetsTabButton").checked = true
+        tryCompare(retainedPeers, "visible", false)
+        compare(peerTableModel.autoRefreshActive, false)
+        findChild(runner, "blockClockTabButton").checked = true
+        tryCompare(retainedPeers, "visible", true)
+        compare(peerTableModel.autoRefreshActive, true)
+        runner.openNode()
+        compare(stack.depth, 1)
+        compare(stack.currentItem, overview)
+        compare(peerTableModel.autoRefreshActive, false)
     }
 
     function test_node_runner_clock_follows_stack_visibility() {
@@ -225,55 +352,50 @@ TestCase {
         tryCompare(clock, "renderingActive", true)
     }
 
-    function test_warning_popup_lists_current_warnings() {
+    function test_notifications_popup_lists_current_warnings() {
         nodeModel.setWarningsForTest(["Warning one", "Warning two"])
 
-        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
+        const popup = createTemporaryObject(notificationsPopupComponent, testWindow.contentItem)
         verify(popup !== null)
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "warningCount", 2)
-        compare(popup.firstWarningText, "Warning one")
+        tryCompare(popup, "notificationCount", 2)
+        compare(waitForChild(testWindow.contentItem, "nodeNotificationText_0").text, "Warning one")
     }
 
-    function test_warning_popup_wraps_long_warning_text() {
+    function test_notifications_popup_wraps_long_warning_text() {
         nodeModel.setWarningsForTest([longWarningText()])
 
-        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
+        const popup = createTemporaryObject(notificationsPopupComponent, testWindow.contentItem)
         verify(popup !== null)
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "warningCount", 1)
-        tryCompare(popup, "firstWarningWrapMode", Text.WordWrap)
-        for (let i = 0; i < 20; ++i) {
-            if (popup.firstWarningLineCount > 1) {
-                return
-            }
-            wait(25)
-        }
-        verify(popup.firstWarningLineCount > 1)
+        tryCompare(popup, "notificationCount", 1)
+        const text = waitForChild(testWindow.contentItem, "nodeNotificationText_0")
+        compare(text.wrapMode, Text.WordWrap)
+        tryVerify(function() { return text.lineCount > 1 })
     }
 
     function test_feedback_popups_expand_in_wide_window() {
         testWindow.width = 900
         wait(0)
 
-        const warningsPopup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
+        const notificationsPopup = createTemporaryObject(notificationsPopupComponent, testWindow.contentItem)
         const informationPopup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
         const runtimePopup = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem)
         const fatalPopup = createTemporaryObject(fatalPopupComponent, testWindow.contentItem)
-        verify(warningsPopup !== null)
+        verify(notificationsPopup !== null)
         verify(informationPopup !== null)
         verify(runtimePopup !== null)
         verify(fatalPopup !== null)
 
-        compare(warningsPopup.contentMargin, 28)
+        compare(notificationsPopup.contentMargin, 24)
         compare(informationPopup.contentMargin, 24)
         compare(runtimePopup.contentMargin, 28)
         compare(fatalPopup.contentMargin, 28)
-        verify(warningsPopup.width > 460)
+        verify(notificationsPopup.width > 460)
         verify(informationPopup.width > 520)
         verify(runtimePopup.width > 420)
         verify(fatalPopup.width > 420)
@@ -285,7 +407,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 5)
+        tryCompare(popup, "informationRowCount", 6)
         compare(popup.firstInformationValue, "Bitcoin Core test")
 
         const surface = findChild(popup, "nodeInformationSurface")
@@ -310,7 +432,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 5)
+        tryCompare(popup, "informationRowCount", 6)
         const warningBanner = findChild(popup, "nodeInformationWarningBanner")
         const warningText = findChild(popup, "nodeInformationWarningText")
         verify(warningBanner !== null)

@@ -16,8 +16,9 @@ DashboardWidget {
     readonly property int queuedBlocks: ready ? Math.ceil(activityModel.queuedVbytes / 1000000) : -1
     readonly property real memoryFraction: ready && nodeModelRef.mempoolMaxUsageMB > 0
         ? Math.max(0, Math.min(1, nodeModelRef.mempoolUsageMB / nodeModelRef.mempoolMaxUsageMB)) : 0
-    Binding { target: root.activityModel; property: "summaryActive"; value: root.active && root.available; when: root.activityModel !== null }
-    Component.onDestruction: if (activityModel) activityModel.summaryActive = false
+    activityTarget: activityModel
+    activityProperty: "summaryActive"
+    activityRequested: active && available
     function number(value, decimals) { return Number(value).toLocaleString(Qt.locale(), 'f', decimals) }
     function feeText() {
         if (!ready || activityModel.minimumFee < 0) return "—"

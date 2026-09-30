@@ -21,7 +21,8 @@ def run_tests():
         wait_for_rpc(port)
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        gui.click("widgetPickerAdd_difficulty-period")
+        gui.click("widgetPickerRow_difficulty-period")
+        gui.click("widgetPickerSize_difficulty-period_2x1")
         gui.wait_for_object("difficultyPeriodWidget")
         assert gui.get_property("widget_difficulty-period", "supportedSizes") == [
             {"columns": 2, "rows": 1, "label": "Medium"}, {"columns": 3, "rows": 2, "label": "Large"},
@@ -73,7 +74,7 @@ def run_tests():
         screenshot(gui, "difficulty-portrait.png")
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        assert gui.get_property("widgetPickerAdd_difficulty-period", "enabled") is False
+        assert gui.get_property("widgetPickerRow_difficulty-period", "enabled") is True
         gui.invoke("widgetPicker", "close")
         gui.click("widgetRemove_difficulty-period")
         assert not gui.object_exists("difficultyPeriodWidget")

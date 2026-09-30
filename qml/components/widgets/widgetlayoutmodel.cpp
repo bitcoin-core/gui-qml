@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QSettings>
+#include <QUuid>
 
 #include <algorithm>
 #include <cmath>
@@ -41,14 +42,15 @@ QVariant WidgetLayoutModel::data(const QModelIndex& index, int role) const
     if (!index.isValid() || index.row() < 0 || index.row() >= m_entries.size()) return {};
     const auto& entry = m_entries[index.row()];
     switch (role) {
-    case WidgetIdRole: return entry.id;
-    case TitleRole: return definition(entry.id).value("title");
-    case SourceRole: return definition(entry.id).value("source");
+    case WidgetIdRole: return entry.widget_id;
+    case InstanceIdRole: return entry.id;
+    case TitleRole: return definition(entry.widget_id).value("title");
+    case SourceRole: return definition(entry.widget_id).value("source");
     case ColumnRole: return entry.rect.x();
     case RowRole: return entry.rect.y();
     case ColumnSpanRole: return entry.rect.width();
     case RowSpanRole: return entry.rect.height();
-    case SizesRole: return definition(entry.id).value("sizes");
+    case SizesRole: return definition(entry.widget_id).value("sizes");
     default: return {};
     }
 }
@@ -57,7 +59,7 @@ QHash<int, QByteArray> WidgetLayoutModel::roleNames() const
 {
     return {{WidgetIdRole, "widgetId"}, {TitleRole, "widgetTitle"}, {SourceRole, "widgetSource"},
             {ColumnRole, "gridColumn"}, {RowRole, "gridRow"}, {ColumnSpanRole, "columnSpan"},
-            {RowSpanRole, "rowSpan"}, {SizesRole, "supportedSizes"}};
+            {RowSpanRole, "rowSpan"}, {SizesRole, "supportedSizes"}, {InstanceIdRole, "instanceId"}};
 }
 
 void WidgetLayoutModel::setCatalog(const QVariantList& catalog)
@@ -131,7 +133,7 @@ int WidgetLayoutModel::indexOf(const QString& id) const
 
 bool WidgetLayoutModel::contains(const QString& id) const
 {
-    return indexOf(id) >= 0 || std::any_of(m_saved.begin(), m_saved.end(), [&](const Entry& entry) { return entry.id == id; });
+    return std::any_of(m_saved.begin(), m_saved.end(), [&](const Entry& entry) { return entry.widget_id == id; });
 }
 
 QRect WidgetLayoutModel::nearestFree(QRect rect, const QList<Entry>& occupied) const
@@ -311,25 +313,26 @@ void WidgetLayoutModel::restore()
     const auto object = m_storage_key.isEmpty() ? QJsonObject{} : QJsonDocument::fromJson(settings->value(m_storage_key).toByteArray()).object();
     m_saved.clear();
     m_arrangements.clear();
+    const int version = object.value("version").toInt();
     const auto read_entries = [&](const QJsonArray& widgets) {
         QList<Entry> entries;
         QSet<QString> seen;
         for (const auto value : widgets) {
             const auto item = value.toObject();
             const QString id = item.value("id").toString();
-            if (seen.contains(id) || definition(id).isEmpty()) continue;
+            const QString widget_id = version >= 3 ? item.value("widgetId").toString() : id;
+            if (id.isEmpty() || seen.contains(id) || definition(widget_id).isEmpty()) continue;
             seen.insert(id);
             QSize size(item.value("columns").toInt(), item.value("rows").toInt());
-            if (!sizes(id).contains(size)) size = defaultSize(id);
-            entries.append({id, QRect(QPoint(std::clamp(item.value("column").toInt(), 0, 11), std::clamp(item.value("row").toInt(), 0, MAX_ROW)), size)});
+            if (!sizes(widget_id).contains(size)) size = defaultSize(widget_id);
+            entries.append({id, QRect(QPoint(std::clamp(item.value("column").toInt(), 0, 11), std::clamp(item.value("row").toInt(), 0, MAX_ROW)), size), widget_id});
         }
         return entries;
     };
-    const int version = object.value("version").toInt();
-    m_persist_reflow = (version == 1 || version == 2) && object.value("widgets").isArray();
-    if ((version == 1 || version == 2) && object.value("widgets").isArray()) {
+    m_persist_reflow = (version >= 1 && version <= 3) && object.value("widgets").isArray();
+    if ((version >= 1 && version <= 3) && object.value("widgets").isArray()) {
         m_saved = read_entries(object.value("widgets").toArray());
-        if (version == 2) {
+        if (version >= 2) {
             const auto layouts = object.value("layouts").toObject();
             for (int columns = 3; columns <= 6; ++columns) {
                 if (layouts.value(QString::number(columns)).isArray()) {
@@ -344,7 +347,7 @@ void WidgetLayoutModel::restore()
         }
     } else if (!m_catalog.isEmpty()) {
         const QString id = m_catalog.first().toMap().value("id").toString();
-        m_saved.append({id, QRect(QPoint(0, 0), defaultSize(id))});
+        m_saved.append({id, QRect(QPoint(0, 0), defaultSize(id)), id});
     }
     applyArrangement();
     m_restored = true;
@@ -364,7 +367,7 @@ void WidgetLayoutModel::save(bool user_edit)
     const auto write_entries = [](const QList<Entry>& entries) {
         QJsonArray widgets;
         for (const auto& entry : entries) {
-            widgets.append(QJsonObject{{"id", entry.id}, {"column", entry.rect.x()}, {"row", entry.rect.y()},
+            widgets.append(QJsonObject{{"id", entry.id}, {"widgetId", entry.widget_id}, {"column", entry.rect.x()}, {"row", entry.rect.y()},
                                        {"columns", entry.rect.width()}, {"rows", entry.rect.height()}});
         }
         return widgets;
@@ -374,7 +377,7 @@ void WidgetLayoutModel::save(bool user_edit)
         layouts.insert(QString::number(it.key()), write_entries(it.value()));
     }
     const auto settings = Settings(m_settings_file);
-    settings->setValue(m_storage_key, QJsonDocument(QJsonObject{{"version", 2}, {"widgets", write_entries(m_saved)}, {"layouts", layouts}}).toJson(QJsonDocument::Compact));
+    settings->setValue(m_storage_key, QJsonDocument(QJsonObject{{"version", 3}, {"widgets", write_entries(m_saved)}, {"layouts", layouts}}).toJson(QJsonDocument::Compact));
     settings->sync();
     //: Error shown on the widget dashboard when saving the arrangement fails.
     const QString error = settings->status() == QSettings::NoError ? QString{} : tr("Your widget arrangement could not be saved.");
@@ -386,13 +389,16 @@ void WidgetLayoutModel::save(bool user_edit)
 
 bool WidgetLayoutModel::addWidget(const QString& id, int size_index)
 {
-    if (contains(id) || definition(id).isEmpty()) return false;
+    if (definition(id).isEmpty()) return false;
     cancelInteraction();
     const auto allowed = sizes(id);
     const QSize size = size_index < 0 ? defaultSize(id) : allowed.value(size_index);
     if (!size.isValid()) return false;
     auto entries = m_entries;
-    entries.append({id, QRect(QPoint(0, 0), size)});
+    // Preserve the original ID for a first instance, including legacy layouts.
+    const bool used = std::any_of(m_saved.begin(), m_saved.end(), [&](const Entry& entry) { return entry.id == id; });
+    const QString instance_id = used ? QUuid::createUuid().toString(QUuid::WithoutBraces) : id;
+    entries.append({instance_id, QRect(QPoint(0, 0), size), id});
     const auto layout = arrange(entries);
     if (!layout) return false;
     publish(*layout);
@@ -402,7 +408,7 @@ bool WidgetLayoutModel::addWidget(const QString& id, int size_index)
 
 bool WidgetLayoutModel::removeWidget(const QString& id)
 {
-    if (!contains(id)) return false;
+    if (std::none_of(m_saved.begin(), m_saved.end(), [&](const Entry& entry) { return entry.id == id; })) return false;
     cancelInteraction();
     m_saved.removeIf([&](const Entry& entry) { return entry.id == id; });
     for (auto& entries : m_arrangements) entries.removeIf([&](const Entry& entry) { return entry.id == id; });
@@ -445,7 +451,7 @@ void WidgetLayoutModel::previewResize(double columns, double rows)
     const QPoint origin = m_before[i].rect.topLeft();
     const auto distance = [&](QSize size) { return std::pow(columns - size.width(), 2) + std::pow(rows - size.height(), 2); };
     QSize best = m_entries[i].rect.size();
-    for (const auto& candidate : sizes(m_active_id)) {
+    for (const auto& candidate : sizes(m_before[i].widget_id)) {
         if (origin.x() + candidate.width() > m_columns || origin.y() + candidate.height() > this->rows()) continue;
         // Hysteresis prevents jitter near an equally close pair of sizes.
         if (distance(candidate) + 0.15 < distance(best)) best = candidate;

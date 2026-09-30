@@ -36,7 +36,7 @@ TestCase {
 
     function test_cellResize(data) {
         const frame = createTemporaryObject(frameComponent, testCase, {
-            widgetId: data.file, widgetTitle: data.file,
+            instanceId: data.file, widgetId: data.file, widgetTitle: data.file,
             widgetSource: "qrc:/qml/components/widgets/" + data.file + ".qml",
             supportedSizes: [], coordinateItem: testCase,
             columnSpan: data.columns, rowSpan: data.rows,

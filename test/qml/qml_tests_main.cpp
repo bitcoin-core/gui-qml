@@ -2684,6 +2684,9 @@ public:
         rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("block-height")},
                                   {QStringLiteral("label"), QStringLiteral("Block height")},
                                   {QStringLiteral("value"), QString::number(m_block_tip_height)}});
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("startup-time")},
+                                  {QStringLiteral("label"), QStringLiteral("Startup time")},
+                                  {QStringLiteral("value"), QStringLiteral("Wed Sep 30 13:00:00 2026")}});
         rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("last-block-time")},
                                   {QStringLiteral("label"), QStringLiteral("Last block time")},
                                   {QStringLiteral("value"), QStringLiteral("Unknown")}});

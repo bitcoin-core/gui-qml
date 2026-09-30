@@ -194,22 +194,14 @@ Page {
                     }
                 }
 
-                IconButton {
+                OverflowMenuButton {
                     id: actionButton
                     objectName: "peerActionsButton"
                     Layout.alignment: Qt.AlignTop
-                    size: 40
-                    iconSize: 20
-                    focusPolicy: Qt.StrongFocus
-                    iconSource: "image://images/ellipsis"
-                    iconColor: Theme.color.neutral8
-                    onClicked: actionMenu.open()
-                    FocusBorder {
-                        objectName: "peerActionsButtonFocusBorder"
-                        visible: actionButton.visualFocus
-                        borderRadius: 12
-                        z: 1
-                    }
+                    focusBorderObjectName: "peerActionsButtonFocusBorder"
+                    checked: actionMenu.opened
+                    onClicked: actionMenu.opened ? actionMenu.close() : actionMenu.open()
+                    onVisibleChanged: if (!visible) actionMenu.close()
                     PeerActionsMenu {
                         id: actionMenu
                         objectName: "peerActionsMenu"

@@ -17,8 +17,7 @@ DashboardWidget {
     readonly property real previousChange: available ? periodModel.previousChange : NaN
     Accessible.description: qsTr("Difficulty period progress, estimated next adjustment, previous change, blocks left, estimated time remaining and average block time.")
 
-    Binding { target: root.periodModel; property: "active"; value: root.active; when: root.periodModel !== null }
-    Component.onDestruction: if (periodModel) periodModel.active = false
+    activityTarget: periodModel
 
     function number(value, decimals) { return Number(value).toLocaleString(Qt.locale(), 'f', decimals) }
     function changeText(value) {

@@ -39,7 +39,7 @@ void VerifyLayout(const WidgetLayoutModel& model)
     QList<QRect> occupied;
     QSet<QString> seen;
     for (int i = 0; i < model.rowCount(); ++i) {
-        const QString id = model.data(model.index(i), WidgetLayoutModel::WidgetIdRole).toString();
+        const QString id = model.data(model.index(i), WidgetLayoutModel::InstanceIdRole).toString();
         QVERIFY(!seen.contains(id));
         seen.insert(id);
         const QRect rect = Rect(model.geometry(id));
@@ -67,7 +67,14 @@ private Q_SLOTS:
         model.restore();
         QCOMPARE(model.count(), 1);
         QCOMPARE(Rect(model.geometry("clock")), QRect(0, 0, 3, 3));
-        QVERIFY(!model.addWidget("clock"));
+        QVERIFY(model.addWidget("clock", 0));
+        const QString copy = model.data(model.index(1), WidgetLayoutModel::InstanceIdRole).toString();
+        QVERIFY(copy != "clock");
+        QCOMPARE(model.data(model.index(1), WidgetLayoutModel::WidgetIdRole).toString(), QString("clock"));
+        QCOMPARE(Rect(model.geometry(copy)).size(), QSize(2, 2));
+        VerifyLayout(model);
+        QVERIFY(model.removeWidget(copy));
+        QVERIFY(model.contains("clock"));
         QVERIFY(!model.addWidget("missing"));
         QVERIFY(!model.addWidget("small", 100));
         QVERIFY(model.addWidget("small", 1));
@@ -75,6 +82,56 @@ private Q_SLOTS:
         VerifyLayout(model);
         QVERIFY(model.removeWidget("clock"));
         QVERIFY(model.addWidget("clock", 0));
+        VerifyLayout(model);
+    }
+
+    void duplicateInstancesStayIndependentAcrossRestartAndBoards()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath("settings.ini");
+        WidgetLayoutModel model(nullptr, file);
+        model.setCatalog(Catalog());
+        model.restore();
+        QVERIFY(model.removeWidget("clock"));
+        QVERIFY(model.addWidget("small", 0));
+        QVERIFY(model.addWidget("small", 1));
+        const QString copy = model.data(model.index(1), WidgetLayoutModel::InstanceIdRole).toString();
+        QVERIFY(copy != "small");
+        QVERIFY(model.beginInteraction(copy));
+        model.previewMove(4, 1);
+        model.commitInteraction();
+        QCOMPARE(Rect(model.geometry("small")).size(), QSize(1, 1));
+        QVERIFY(model.beginInteraction(copy));
+        model.previewResize(2, 2);
+        model.commitInteraction();
+        QCOMPARE(Rect(model.geometry(copy)).size(), QSize(2, 2));
+        const auto original = model.geometry("small");
+        const auto duplicate = model.geometry(copy);
+        for (int columns : {3, 4, 5, 6}) {
+            model.setColumns(columns);
+            QCOMPARE(model.count(), 2);
+            VerifyLayout(model);
+        }
+        QCOMPARE(model.geometry("small"), original);
+        QCOMPARE(model.geometry(copy), duplicate);
+        WidgetLayoutModel reopened(nullptr, file);
+        reopened.setCatalog(Catalog());
+        reopened.restore();
+        QCOMPARE(reopened.count(), 2);
+        QCOMPARE(reopened.geometry(copy), duplicate);
+        QCOMPARE(reopened.data(reopened.index(1), WidgetLayoutModel::SourceRole),
+                 reopened.data(reopened.index(0), WidgetLayoutModel::SourceRole));
+        QVERIFY(reopened.removeWidget("small"));
+        QVERIFY(reopened.contains("small"));
+        QCOMPARE(reopened.geometry(copy), duplicate);
+        for (int columns : {3, 4, 5, 6}) {
+            reopened.setColumns(columns);
+            QCOMPARE(reopened.count(), 1);
+            QVERIFY(!reopened.geometry(copy).isEmpty());
+        }
+        model.restore();
+        QCOMPARE(model.count(), 1);
+        QCOMPARE(model.data(model.index(0), WidgetLayoutModel::InstanceIdRole).toString(), copy);
         VerifyLayout(model);
     }
 
@@ -266,7 +323,10 @@ private Q_SLOTS:
         model.setColumns(6);
         QCOMPARE(model.unplacedCount(), 1);
         QVERIFY(model.contains("wide"));
-        QVERIFY(!model.addWidget("wide"));
+        QVERIFY(model.addWidget("wide", 0));
+        const QString copy = model.data(model.index(model.count() - 1), WidgetLayoutModel::InstanceIdRole).toString();
+        QCOMPARE(model.unplacedCount(), 1);
+        QVERIFY(model.removeWidget(copy));
         VerifyLayout(model);
         model.setColumns(3);
         QCOMPARE(model.unplacedCount(), 0);
@@ -399,6 +459,32 @@ private Q_SLOTS:
         reopened.setCatalog(Catalog());
         reopened.restore();
         QCOMPARE(Rect(reopened.geometry("clock")), QRect(3, 0, 3, 3));
+    }
+
+    void migrateVersionTwoAndAddAnotherInstance()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath("settings.ini");
+        QSettings settings(file, QSettings::IniFormat);
+        settings.setValue("dashboard/layout", QByteArray(R"({"version":2,
+            "widgets":[{"id":"clock","column":3,"row":0,"columns":2,"rows":2}],
+            "layouts":{"6":[{"id":"clock","column":3,"row":0,"columns":2,"rows":2}],
+                       "3":[{"id":"clock","column":0,"row":3,"columns":2,"rows":2}]}})"));
+        settings.sync();
+        WidgetLayoutModel model(nullptr, file);
+        model.setCatalog(Catalog());
+        model.restore();
+        QCOMPARE(Rect(model.geometry("clock")), QRect(3, 0, 2, 2));
+        model.setColumns(3);
+        QCOMPARE(Rect(model.geometry("clock")), QRect(0, 3, 2, 2));
+        model.setColumns(6);
+        QVERIFY(model.addWidget("clock", 0));
+        WidgetLayoutModel reopened(nullptr, file);
+        reopened.setCatalog(Catalog());
+        reopened.restore();
+        QCOMPARE(reopened.count(), 2);
+        QCOMPARE(Rect(reopened.geometry("clock")), QRect(3, 0, 2, 2));
+        VerifyLayout(reopened);
     }
 
     void gridSwitchDoesNotOverwriteUnsupportedSettings()

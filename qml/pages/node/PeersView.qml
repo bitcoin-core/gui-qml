@@ -11,26 +11,11 @@ Page {
     id: root
     objectName: "peers"
 
-    signal back
-
     property bool showHeader: true
-    property bool showBackButton: true
     property int selectedNodeId: -1
     property PeerDetailsModel selectedDetails
 
     background: Rectangle { color: Theme.color.neutral0 }
-
-    header: NavigationBar2 {
-        visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "peersBackButton"
-            visible: root.showBackButton
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
-        centerItem: Header { headerBold: true; headerSize: 18; header: qsTr("Peers") }
-    }
 
     function selectPeer(peerDetails) {
         if (!peerDetails) return
@@ -51,7 +36,15 @@ Page {
         }
     }
 
-    Component.onCompleted: Qt.callLater(root.reconcileSelection)
+    Component.onCompleted: {
+        if (visible) peerTableModel.startAutoRefresh()
+        Qt.callLater(root.reconcileSelection)
+    }
+    onVisibleChanged: {
+        if (visible) peerTableModel.startAutoRefresh()
+        else peerTableModel.stopAutoRefresh()
+    }
+    Component.onDestruction: if (visible) peerTableModel.stopAutoRefresh()
 
     Connections {
         target: peerListModelProxy
@@ -76,7 +69,23 @@ Page {
         primaryComponent: Component {
             Peers {
                 compact: splitView.isCompact
-                showHeader: false
+                header: Item {
+                    visible: root.showHeader
+                    implicitHeight: nodeBackButton.implicitHeight + 12
+
+                    NavButton {
+                        id: nodeBackButton
+                        objectName: "peersNodeBackButton"
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.leftMargin: 12
+                        anchors.topMargin: 8
+                        iconSource: "image://images/caret-left"
+                        //: Back button in the peer list pane. Returns to the Node overview.
+                        text: qsTr("Node")
+                        onClicked: if (root.StackView.view) root.StackView.view.goBack()
+                    }
+                }
                 popupParent: root
                 selectedNodeId: root.selectedNodeId
                 onPeerSelected: (peerDetails) => root.selectPeer(peerDetails)

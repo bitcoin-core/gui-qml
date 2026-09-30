@@ -30,7 +30,8 @@ def run_tests():
         wait_for_rpc(port)
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        gui.click("widgetPickerAdd_mempool")
+        gui.click("widgetPickerRow_mempool")
+        gui.click("widgetPickerSize_mempool_2x1")
         gui.wait_for_object("mempoolWidget")
         assert geometry(gui)[2:] == (2, 1)
         assert gui.get_property("widget_mempool", "supportedSizes") == [
@@ -77,7 +78,7 @@ def run_tests():
         assert geometry(gui)[2:] == (3, 2)
         choose_action(gui, "addWidgetButton")
         gui.wait_for_property("widgetPicker", "opened", True)
-        assert gui.get_property("widgetPickerAdd_mempool", "enabled") is False
+        assert gui.get_property("widgetPickerRow_mempool", "enabled") is True
         gui.invoke("widgetPicker", "close")
         gui.click("widgetRemove_mempool")
         assert not gui.object_exists("mempoolWidget")

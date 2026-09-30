@@ -18,8 +18,8 @@ DashboardWidget {
     readonly property var samples: ready ? activityModel.history : []
     Accessible.description: qsTr("Incoming virtual bytes per second. The dashed line is approximately one block of capacity per ten minutes.")
 
-    Binding { target: root.activityModel; property: "active"; value: root.active && root.available; when: root.activityModel !== null }
-    Component.onDestruction: if (activityModel) activityModel.active = false
+    activityTarget: activityModel
+    activityRequested: active && available
 
     function number(value, decimals) { return Number(value).toLocaleString(Qt.locale(), 'f', decimals) }
     ColumnLayout {
@@ -65,7 +65,7 @@ DashboardWidget {
                 capacityBaseline: root.capacityBaseline
                 expanded: root.expanded
                 showAxes: !root.compact
-                active: root.active
+                active: root.active || root.preview
                 visible: root.ready && hasSamples
             }
             CoreText {

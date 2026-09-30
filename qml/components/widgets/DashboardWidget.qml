@@ -5,10 +5,27 @@
 import QtQuick 2.15
 import "../../controls"
 import "WidgetMetrics.js" as WidgetMetrics
+import "WidgetActivity.js" as WidgetActivity
 
 // Content contract. WidgetFrame supplies these values; placement and saving
 // belong to the dashboard. Bind expensive visual work to active when needed.
 Item {
+    id: root
+    property bool preview: false
+    property var activityTarget: null
+    property string activityProperty: "active"
+    property bool activityRequested: active
+    property bool activityInitialized: false
+    function updateActivity() {
+        if (activityInitialized) WidgetActivity.update(root, preview ? null : activityTarget, activityProperty, activityRequested)
+    }
+    onActivityTargetChanged: updateActivity()
+    onActivityPropertyChanged: updateActivity()
+    onActivityRequestedChanged: updateActivity()
+    onPreviewChanged: updateActivity()
+    Component.onCompleted: { activityInitialized = true; updateActivity() }
+    Component.onDestruction: WidgetActivity.remove(root)
+
     property int columnSpan: 1
     property int rowSpan: 1
     property bool active: true

@@ -24,6 +24,7 @@
 #include <thread>
 #include <vector>
 
+#include <QDateTime>
 #include <QVariantMap>
 #include <QTimer>
 
@@ -140,6 +141,7 @@ private Q_SLOTS:
     void runawayExceptionSetsFatalStartupError();
     void nodeInformationRowsAvoidChainmanBeforeInitialization();
     void nodeInformationRowsExposeDiagnostics();
+    void nodeInformationUsesCachedChainTips();
     void initEmitsRequestedInitialize();
     void initGuardBlocksSecondEmission();
     void shutdownPollingStartsShutdownBeforeEmittingSignal();
@@ -1530,14 +1532,65 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
 
     bool saw_network_active{false};
     bool saw_peer_counts{false};
+    bool saw_startup_time{false};
     for (const QVariant& row : rows) {
         const QVariantMap map{row.toMap()};
         const QString value{map.value(QStringLiteral("value")).toString()};
         saw_network_active |= value == QStringLiteral("Yes");
         saw_peer_counts |= value == QStringLiteral("3 total (1 inbound, 2 outbound)");
+        saw_startup_time |= map.value(QStringLiteral("id")).toString() == QStringLiteral("startup-time") && !value.isEmpty();
     }
     QVERIFY(saw_network_active);
     QVERIFY(saw_peer_counts);
+    QVERIFY(saw_startup_time);
+}
+
+void NodeModelTests::nodeInformationUsesCachedChainTips()
+{
+    MockNode node;
+    MempoolState mempool;
+    interfaces::Node::NotifyBlockTipFn block_tip;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn fn) {
+        block_tip = std::move(fn);
+        return MakeNoopHandler();
+    };
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.ExpectNoCalls(node.calls.getNumBlocks);
+    node.ExpectNoCalls(node.calls.getLastBlockTime);
+    node.ExpectNoCalls(node.calls.getHeaderTip);
+
+    NodeModel model{node};
+    WaitForInitialMempoolRefresh(mempool);
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 320, .block_time = 1'700'000'320,
+        .header_height = 0, .header_time = 0, .verification_progress = 0.5,
+    });
+    const auto value = [&](const QString& id) {
+        for (const auto& row : model.nodeInformationRows()) {
+            const auto map = row.toMap();
+            if (map.value("id") == id) return map.value("value").toString();
+        }
+        return QString{};
+    };
+    QCOMPARE(value("block-height"), QString{"320"});
+    QCOMPARE(value("last-block-time"), QDateTime::fromSecsSinceEpoch(1'700'000'320).toString());
+    // Height-change consumers must see the new timestamp in the same snapshot.
+    QString time_at_height_change;
+    connect(&model, &NodeModel::blockTipHeightChanged, &model, [&] {
+        time_at_height_change = value("last-block-time");
+    });
+    QSignalSpy times{&model, &NodeModel::blockTipTimeChanged};
+    QVERIFY(block_tip);
+    block_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{321, 1'700'000'321, uint256{}}, 0.6);
+    QTRY_COMPARE(times.count(), 1);
+    QCOMPARE(value("block-height"), QString{"321"});
+    QCOMPARE(time_at_height_change, QDateTime::fromSecsSinceEpoch(1'700'000'321).toString());
+    // A reorg can replace the tip without changing its height.
+    block_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{321, 1'700'000'322, uint256{}}, 0.6);
+    QTRY_COMPARE(times.count(), 2);
+    QCOMPARE(value("last-block-time"), QDateTime::fromSecsSinceEpoch(1'700'000'322).toString());
 }
 
 void NodeModelTests::initEmitsRequestedInitialize()

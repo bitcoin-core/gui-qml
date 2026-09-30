@@ -20,13 +20,7 @@ DashboardWidget {
     }
     readonly property var targets: [qsTr("2 blocks"), qsTr("4 blocks"), qsTr("6 blocks"), qsTr("100+ blocks")]
 
-    Binding {
-        target: root.feeRatesModelRef
-        property: "active"
-        value: root.active
-        when: root.feeRatesModelRef !== null
-    }
-    Component.onDestruction: if (feeRatesModelRef) feeRatesModelRef.active = false
+    activityTarget: feeRatesModelRef
 
     function rateAt(index) {
         const rate = Number(rates[index])
@@ -112,7 +106,7 @@ DashboardWidget {
                 objectName: "feeRatesCurve"
                 anchors.fill: parent
                 visible: root.hasEstimates
-                active: root.active
+                active: root.active || root.preview
                 smooth: true
                 showPoints: true
                 lineWidth: 3

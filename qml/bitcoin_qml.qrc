@@ -21,6 +21,7 @@
         <file>components/widgets/MempoolSummaryWidget.qml</file>
         <file>components/widgets/DashboardWidget.qml</file>
         <file>components/widgets/WidgetMetrics.js</file>
+        <file>components/widgets/WidgetActivity.js</file>
         <file>components/widgets/WidgetDefinition.qml</file>
         <file>components/widgets/WidgetSize.qml</file>
         <file>components/widgets/WidgetRegistry.qml</file>
@@ -57,8 +58,7 @@
         <file>components/NodeFatalErrorPopup.qml</file>
         <file>components/NodeInformationPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
-        <file>components/NodeStatusActions.qml</file>
-        <file>components/NodeWarningsPopup.qml</file>
+        <file>components/NodeNotificationsPopup.qml</file>
         <file>components/OptionPopup.qml</file>
         <file>components/PeersIndicator.qml</file>
         <file>components/ProxySettings.qml</file>
@@ -191,6 +191,7 @@
         <file>pages/node/CommandConsole.qml</file>
         <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
+        <file>pages/node/NodeOverview.qml</file>
         <file>pages/node/Peers.qml</file>
         <file>pages/node/PeersView.qml</file>
         <file>pages/node/PeerDetails.qml</file>
@@ -278,8 +279,6 @@
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="onboarding-bitcoin.svg">res/src/onboarding-bitcoin.svg</file>
         <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>
-        <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
-        <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
         <file alias="onboarding-clock-face-dark.svg">res/src/onboarding-clock-face-dark.svg</file>
         <file alias="onboarding-clock-face-light.svg">res/src/onboarding-clock-face-light.svg</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>

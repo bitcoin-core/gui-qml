@@ -192,6 +192,7 @@ private:
 
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+    int64_t m_block_tip_time{0};
     int m_num_peers{0};
     int m_num_inbound_peers{0};
     int m_num_outbound_peers{0};

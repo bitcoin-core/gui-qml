@@ -159,6 +159,23 @@ TestCase {
         compare(widget.rateColors[3], Theme.color.green)
     }
 
+    function test_sharedActivityAndPreviews() {
+        const first = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
+        const second = createTemporaryObject(widgetComponent, testCase, {width: 148, height: 148})
+        const preview = createTemporaryObject(widgetComponent, testCase, {preview: true, active: false, width: 330, height: 148})
+        compare(estimates.active, true)
+        first.active = false
+        compare(estimates.active, true)
+        preview.destroy()
+        wait(0)
+        compare(estimates.active, true)
+        second.destroy()
+        wait(0)
+        compare(estimates.active, false)
+        first.active = true
+        compare(estimates.active, true)
+    }
+
     function test_activityRestoredAfterRemoval() {
         const widget = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
         compare(estimates.active, true)
