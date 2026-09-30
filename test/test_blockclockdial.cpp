@@ -9,7 +9,10 @@
 #include <QImage>
 #include <QPainter>
 #include <QPoint>
+#include <QQuickWindow>
+#include <QtMath>
 
+#include <atomic>
 #include <cmath>
 
 namespace {
@@ -22,6 +25,19 @@ const QList<QColor> CONFIRMATION_COLORS{
     QColor{QStringLiteral("#EFA148")},
     QColor{QStringLiteral("#F0BB49")},
     QColor{QStringLiteral("#F1D54A")},
+};
+
+class TestableBlockClockDial : public BlockClockDial
+{
+public:
+    using BlockClockDial::BlockClockDial;
+    void complete() { componentComplete(); }
+    void paint(QPainter* painter) override
+    {
+        BlockClockDial::paint(painter);
+        ++paint_count;
+    }
+    std::atomic<int> paint_count{0};
 };
 
 int ColorDistance(const QColor& a, const QColor& b)
@@ -40,6 +56,17 @@ void ConfigureDial(BlockClockDial& dial)
     dial.setConfirmationColors(CONFIRMATION_COLORS);
     dial.setTimeTickColor(Qt::black);
     dial.setShowTimeTicks(false);
+}
+
+void ConfigureSyncedDial(BlockClockDial& dial, qreal current_fraction,
+                         const QList<qreal>& block_fractions)
+{
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(current_fraction);
+    dial.setBlockTimeFractions(block_fractions);
 }
 
 QImage RenderDial(BlockClockDial& dial)
@@ -69,6 +96,24 @@ int CountConfirmationPixels(const QImage& image)
     }
     return count;
 }
+
+QPoint DialPoint(qreal fraction)
+{
+    constexpr qreal center{DIAL_SIZE / 2.0};
+    constexpr qreal radius{DIAL_SIZE / 2.0 - 7.0};
+    const qreal angle{fraction * 2.0 * M_PI};
+    return {qRound(center + qSin(angle) * radius), qRound(center - qCos(angle) * radius)};
+}
+
+void VerifyDialColor(const QImage& image, qreal fraction, const QColor& expected)
+{
+    const QColor actual{image.pixelColor(DialPoint(fraction))};
+    QVERIFY2(ColorDistance(actual, expected) < 10,
+             qPrintable(QStringLiteral("expected %1 at %2, got %3")
+                            .arg(expected.name(QColor::HexArgb))
+                            .arg(fraction)
+                            .arg(actual.name(QColor::HexArgb))));
+}
 } // namespace
 
 class BlockClockDialTests : public QObject
@@ -78,8 +123,22 @@ class BlockClockDialTests : public QObject
 private Q_SLOTS:
     void ibdProgressRendersImmediateHalfArc();
     void syncedGradientToggleChangesRenderedColors();
+    void syncedGradientRunsFromOlderToNewerConfirmationColors();
+    void syncedGradientSpansCurrentPeriodAndUpdatesWithTime();
     void syncedGradientUpdatesWhenConfirmationColorsChange();
     void connectingDelayControlsInitialAnimation();
+    void inactiveDialStopsAnimationAndRetainsLatestState();
+    void reactivatedStaticDialRequestsRepaint_data();
+    void reactivatedStaticDialRequestsRepaint();
+    void paintDoesNotAdvanceAnimationState();
+    void equalBlockTimestampsPreserveConfirmationDepth();
+    void distinctBlocksUseExactConfirmationColors();
+    void futureBlocksPreserveConfirmationDepth_data();
+    void futureBlocksPreserveConfirmationDepth();
+    void coalescedBlocksUseConfirmationGradient();
+    void coalescedBlocksSaturateAtHighestConfirmationColor();
+    void blocksCoalescedWithCurrentTimePreserveConfirmationDepth();
+    void blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth();
 };
 
 void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
@@ -89,7 +148,7 @@ void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
     dial.setAnimateDial(false);
     dial.setConnected(true);
     dial.setSynced(false);
-    dial.setVerificationProgress(0.5);
+    dial.setSyncProgress(0.5);
 
     const QImage image{RenderDial(dial)};
     const QColor active_pixel{image.pixelColor(QPoint{DIAL_SIZE - 7, DIAL_SIZE / 2})};
@@ -109,7 +168,7 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
     dial.setConnected(true);
     dial.setSynced(true);
     dial.setShowBlockSegments(false);
-    dial.setTimeRatioList({1.0, 0.0});
+    dial.setCurrentTimeFraction(1.0);
 
     dial.setUseGradientArcWhenSynced(false);
     const QImage uniform_image{RenderDial(dial)};
@@ -129,6 +188,32 @@ void BlockClockDialTests::syncedGradientToggleChangesRenderedColors()
                             .arg(gradient_right.name(QColor::HexArgb), gradient_bottom.name(QColor::HexArgb))));
 }
 
+void BlockClockDialTests::syncedGradientRunsFromOlderToNewerConfirmationColors()
+{
+    BlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setShowBlockSegments(false);
+    dial.setUseGradientArcWhenSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+
+    const QImage image{RenderDial(dial)};
+    const QColor older_color{image.pixelColor(DialPoint(0.05))};
+    const QColor middle_color{image.pixelColor(DialPoint(0.375))};
+    const QColor newer_color{image.pixelColor(DialPoint(0.70))};
+
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(newer_color, CONFIRMATION_COLORS[0]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[5]) <
+            ColorDistance(newer_color, CONFIRMATION_COLORS[5]));
+    QVERIFY(older_color.green() > middle_color.green());
+    QVERIFY(middle_color.green() > newer_color.green());
+}
+
 void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
 {
     BlockClockDial dial;
@@ -138,7 +223,7 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
     dial.setSynced(true);
     dial.setShowBlockSegments(false);
     dial.setUseGradientArcWhenSynced(true);
-    dial.setTimeRatioList({1.0, 0.0});
+    dial.setCurrentTimeFraction(1.0);
 
     const QColor initial_color{RenderDial(dial).pixelColor(QPoint{DIAL_SIZE - 7, DIAL_SIZE / 2})};
 
@@ -158,23 +243,234 @@ void BlockClockDialTests::syncedGradientUpdatesWhenConfirmationColorsChange()
                             .arg(initial_color.name(QColor::HexArgb), updated_color.name(QColor::HexArgb))));
 }
 
+void BlockClockDialTests::syncedGradientSpansCurrentPeriodAndUpdatesWithTime()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 1.0, {});
+    dial.setShowBlockSegments(false);
+    dial.setUseGradientArcWhenSynced(true);
+
+    // Reuse the dial across time changes, including a period rollover, so stale
+    // cached gradients or stops from a previous span cannot pass this test.
+    for (const qreal current : {0.25, 0.50, 0.75, 1.0, 0.25}) {
+        dial.setCurrentTimeFraction(current);
+        const QImage image{RenderDial(dial)};
+        VerifyDialColor(image, current * 0.08, CONFIRMATION_COLORS[5]);
+        VerifyDialColor(image, current * 0.32, CONFIRMATION_COLORS[4]);
+        VerifyDialColor(image, current * 0.48, CONFIRMATION_COLORS[3]);
+        VerifyDialColor(image, current * 0.64, CONFIRMATION_COLORS[2]);
+        VerifyDialColor(image, current * 0.80, CONFIRMATION_COLORS[1]);
+        VerifyDialColor(image, current * 0.995, CONFIRMATION_COLORS[0]);
+        if (current < 1.0) VerifyDialColor(image, current + 0.10, BACKGROUND_COLOR);
+    }
+}
+
 void BlockClockDialTests::connectingDelayControlsInitialAnimation()
 {
-    BlockClockDial delayed_dial;
+    TestableBlockClockDial delayed_dial;
     ConfigureDial(delayed_dial);
     delayed_dial.setConnected(false);
     delayed_dial.setAnimateDial(true);
     delayed_dial.setConnectingAnimationDelayMs(5000);
+    delayed_dial.complete();
     QCOMPARE(CountConfirmationPixels(RenderDial(delayed_dial)), 0);
 
-    BlockClockDial immediate_dial;
+    TestableBlockClockDial immediate_dial;
     ConfigureDial(immediate_dial);
     immediate_dial.setConnected(false);
     immediate_dial.setAnimateDial(true);
     immediate_dial.setConnectingAnimationDelayMs(0);
+    immediate_dial.complete();
 
-    RenderDial(immediate_dial);
-    QVERIFY(CountConfirmationPixels(RenderDial(immediate_dial)) > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(CountConfirmationPixels(RenderDial(immediate_dial)) > 0, 250);
+}
+
+void BlockClockDialTests::inactiveDialStopsAnimationAndRetainsLatestState()
+{
+    TestableBlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setConnectingAnimationDelayMs(0);
+    dial.complete();
+    QTest::qWait(20);
+
+    QTimer* animation_timer{nullptr};
+    for (QTimer* timer : dial.findChildren<QTimer*>()) {
+        if (timer->interval() == 16) animation_timer = timer;
+    }
+    QVERIFY(animation_timer);
+    QVERIFY(animation_timer->isActive());
+
+    dial.setRenderingActive(false);
+    QVERIFY(!animation_timer->isActive());
+
+    dial.setCurrentTimeFraction(0.75);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    QCOMPARE(dial.currentTimeFraction(), 0.75);
+
+    dial.setRenderingActive(true);
+    QVERIFY(!animation_timer->isActive());
+    const QImage image{RenderDial(dial)};
+    QVERIFY(CountConfirmationPixels(image) > 0);
+}
+
+void BlockClockDialTests::reactivatedStaticDialRequestsRepaint_data()
+{
+    QTest::addColumn<bool>("paused");
+    QTest::newRow("non-animated") << false;
+    QTest::newRow("paused") << true;
+}
+
+void BlockClockDialTests::reactivatedStaticDialRequestsRepaint()
+{
+    QFETCH(bool, paused);
+    QQuickWindow window;
+    window.resize(DIAL_SIZE, DIAL_SIZE);
+    TestableBlockClockDial dial{window.contentItem()};
+    ConfigureDial(dial);
+    dial.setAnimateDial(paused);
+    dial.setPaused(paused);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setShowBlockSegments(false);
+    dial.setCurrentTimeFraction(0.25);
+    dial.complete();
+    window.show();
+    QTRY_VERIFY(dial.paint_count.load() > 0);
+    QTest::qWait(50);
+
+    dial.setRenderingActive(false);
+    const int paints_before{dial.paint_count.load()};
+    dial.setCurrentTimeFraction(0.75);
+    QTest::qWait(50);
+    QCOMPARE(dial.paint_count.load(), paints_before);
+
+    dial.setRenderingActive(true);
+    QTRY_VERIFY(dial.paint_count.load() > paints_before);
+    for (const QTimer* timer : dial.findChildren<QTimer*>()) {
+        QVERIFY(!timer->isActive());
+    }
+}
+
+void BlockClockDialTests::equalBlockTimestampsPreserveConfirmationDepth()
+{
+    BlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setAnimateDial(false);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+    dial.setBlockTimeFractions({0.25, 0.50, 0.50});
+    QCOMPARE(dial.blockTimeFractions().size(), 3);
+    const QImage image{RenderDial(dial)};
+    QVERIFY(ColorDistance(image.pixelColor(DialPoint(0.125)), CONFIRMATION_COLORS[3]) < 10);
+    QVERIFY(ColorDistance(image.pixelColor(DialPoint(0.625)), CONFIRMATION_COLORS[0]) < 10);
+}
+
+void BlockClockDialTests::paintDoesNotAdvanceAnimationState()
+{
+    TestableBlockClockDial dial;
+    ConfigureDial(dial);
+    dial.setRenderingActive(false);
+    dial.complete();
+
+    const QImage first{RenderDial(dial)};
+    const QImage second{RenderDial(dial)};
+    QCOMPARE(first, second);
+}
+
+void BlockClockDialTests::distinctBlocksUseExactConfirmationColors()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.90, {0.15, 0.30, 0.45, 0.60, 0.75});
+
+    const QImage image{RenderDial(dial)};
+    for (int i{0}; i < 6; ++i) {
+        VerifyDialColor(image, 0.075 + 0.15 * i, CONFIRMATION_COLORS[5 - i]);
+    }
+}
+
+void BlockClockDialTests::futureBlocksPreserveConfirmationDepth_data()
+{
+    QTest::addColumn<QList<qreal>>("blocks");
+    QTest::addColumn<int>("future_confirmations");
+
+    QTest::newRow("ahead-of-now") << QList<qreal>{0.25, 0.50, 0.76} << 1;
+    QTest::newRow("equal-future-timestamps") << QList<qreal>{0.25, 0.50, 0.76, 0.76} << 2;
+    QTest::newRow("exactly-now") << QList<qreal>{0.25, 0.50, 0.75} << 1;
+    QTest::newRow("period-end") << QList<qreal>{0.25, 0.50, 1.0} << 1;
+    QTest::newRow("several-future-blocks") << QList<qreal>{0.25, 0.50, 0.76, 0.80} << 2;
+    QTest::newRow("saturated") << QList<qreal>{0.25, 0.50, 0.76, 0.80, 0.85, 0.90, 0.95, 1.0} << 6;
+}
+
+void BlockClockDialTests::futureBlocksPreserveConfirmationDepth()
+{
+    QFETCH(QList<qreal>, blocks);
+    QFETCH(int, future_confirmations);
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.75, blocks);
+
+    const QImage image{RenderDial(dial)};
+    VerifyDialColor(image, 0.125, CONFIRMATION_COLORS[qMin(5, future_confirmations + 2)]);
+    VerifyDialColor(image, 0.375, CONFIRMATION_COLORS[qMin(5, future_confirmations + 1)]);
+    VerifyDialColor(image, 0.625, CONFIRMATION_COLORS[qMin(5, future_confirmations)]);
+    VerifyDialColor(image, 0.875, BACKGROUND_COLOR);
+}
+
+void BlockClockDialTests::coalescedBlocksUseConfirmationGradient()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.75, {0.25, 0.2501, 0.2502});
+
+    const QImage image{RenderDial(dial)};
+    const QColor older_color{image.pixelColor(DialPoint(0.05))};
+    const QColor middle_color{image.pixelColor(DialPoint(0.125))};
+    const QColor newer_color{image.pixelColor(DialPoint(0.20))};
+
+    QCOMPARE(dial.blockTimeFractions().size(), 3);
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[3]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(newer_color, CONFIRMATION_COLORS[0]) <
+            ColorDistance(newer_color, CONFIRMATION_COLORS[3]));
+    QVERIFY(older_color.green() > middle_color.green());
+    QVERIFY(middle_color.green() > newer_color.green());
+    QVERIFY(ColorDistance(older_color, newer_color) > 50);
+    VerifyDialColor(image, 0.50, CONFIRMATION_COLORS[0]);
+}
+
+void BlockClockDialTests::coalescedBlocksSaturateAtHighestConfirmationColor()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.75, {0.25, 0.2501, 0.2502, 0.2503, 0.2504, 0.2505});
+
+    const QImage image{RenderDial(dial)};
+    VerifyDialColor(image, 0.025, CONFIRMATION_COLORS[5]);
+    VerifyDialColor(image, 0.50, CONFIRMATION_COLORS[0]);
+}
+
+void BlockClockDialTests::blocksCoalescedWithCurrentTimePreserveConfirmationDepth()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.75, {0.7498, 0.7499});
+
+    const QImage image{RenderDial(dial)};
+    const QColor older_color{image.pixelColor(DialPoint(0.10))};
+    const QColor current_color{image.pixelColor(DialPoint(0.70))};
+
+    QVERIFY(ColorDistance(older_color, CONFIRMATION_COLORS[2]) <
+            ColorDistance(older_color, CONFIRMATION_COLORS[0]));
+    QVERIFY(ColorDistance(current_color, CONFIRMATION_COLORS[0]) <
+            ColorDistance(current_color, CONFIRMATION_COLORS[2]));
+}
+
+void BlockClockDialTests::blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth()
+{
+    BlockClockDial dial;
+    ConfigureSyncedDial(dial, 0.75, {0.0001, 0.25});
+
+    const QImage image{RenderDial(dial)};
+    VerifyDialColor(image, 0.125, CONFIRMATION_COLORS[1]);
+    VerifyDialColor(image, 0.50, CONFIRMATION_COLORS[0]);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
