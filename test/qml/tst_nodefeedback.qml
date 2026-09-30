@@ -285,7 +285,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 3)
+        tryCompare(popup, "informationRowCount", 5)
         compare(popup.firstInformationValue, "Bitcoin Core test")
 
         const surface = findChild(popup, "nodeInformationSurface")
@@ -310,7 +310,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 3)
+        tryCompare(popup, "informationRowCount", 5)
         const warningBanner = findChild(popup, "nodeInformationWarningBanner")
         const warningText = findChild(popup, "nodeInformationWarningText")
         verify(warningBanner !== null)

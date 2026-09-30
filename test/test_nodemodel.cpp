@@ -880,6 +880,20 @@ void NodeModelTests::alertNotificationsRefreshWarningList()
     QCOMPARE(model.warningList(), QStringList({QStringLiteral("translated first"), QStringLiteral("translated second")}));
     QCOMPARE(model.warnings(), QStringLiteral("translated first<hr />translated second"));
     QVERIFY(model.hasWarnings());
+
+    warnings = bilingual_str{
+        "This is a pre-release test build - use at your own risk<hr />clock skew",
+        "Translated build notice<hr />Translated clock warning"};
+    alert_changed_fn();
+    QTRY_COMPARE_WITH_TIMEOUT(warnings_spy.count(), 2, ASYNC_TIMEOUT_MS);
+    const auto notifications = model.notificationWarnings();
+    QCOMPARE(notifications.size(), 2);
+    QCOMPARE(notifications[0].toMap().value(QStringLiteral("text")).toString(), QStringLiteral("Translated build notice"));
+    QCOMPARE(notifications[0].toMap().value(QStringLiteral("priority")).toInt(), 20);
+    QCOMPARE(notifications[1].toMap().value(QStringLiteral("text")).toString(), QStringLiteral("Translated clock warning"));
+    QCOMPARE(notifications[1].toMap().value(QStringLiteral("priority")).toInt(), 80);
+    // Keep the complete diagnostics in Core's original order.
+    QCOMPARE(model.warningList(), QStringList({QStringLiteral("Translated build notice"), QStringLiteral("Translated clock warning")}));
 }
 
 void NodeModelTests::headerTipNotificationsExposeHeaderSyncProgress()

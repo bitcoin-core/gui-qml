@@ -2578,6 +2578,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString startupError MEMBER m_startup_error NOTIFY startupErrorChanged)
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
+    Q_PROPERTY(QVariantList notificationWarnings READ notificationWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible MEMBER m_runtime_dialog_visible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle MEMBER m_runtime_dialog_title NOTIFY runtimeDialogChanged)
@@ -2633,6 +2634,14 @@ public:
     bool m_ban_peer_result{true};
     int m_disconnect_peer_calls{0};
     int m_ban_peer_calls{0};
+    QVariantList notificationWarnings() const
+    {
+        QVariantList notifications;
+        for (const auto& warning : m_warning_list) {
+            notifications.push_back(QVariantMap{{QStringLiteral("text"), warning}, {QStringLiteral("priority"), 80}});
+        }
+        return notifications;
+    }
     bool hasWarnings() const { return !m_warning_list.isEmpty(); }
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
     int disconnectPeerCalls() const { return m_disconnect_peer_calls; }
@@ -2655,10 +2664,12 @@ public:
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;
+        version.insert(QStringLiteral("id"), QStringLiteral("client-version"));
         version.insert(QStringLiteral("label"), QStringLiteral("Client version"));
         version.insert(QStringLiteral("value"), QStringLiteral("Bitcoin Core test"));
 
         QVariantMap network;
+        network.insert(QStringLiteral("id"), QStringLiteral("network"));
         network.insert(QStringLiteral("label"), QStringLiteral("Network"));
         network.insert(QStringLiteral("value"), QStringLiteral("regtest"));
 
@@ -2670,6 +2681,12 @@ public:
         rows.push_back(QVariant::fromValue(version));
         rows.push_back(QVariant::fromValue(network));
         rows.push_back(QVariant::fromValue(peers));
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("block-height")},
+                                  {QStringLiteral("label"), QStringLiteral("Block height")},
+                                  {QStringLiteral("value"), QString::number(m_block_tip_height)}});
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("last-block-time")},
+                                  {QStringLiteral("label"), QStringLiteral("Last block time")},
+                                  {QStringLiteral("value"), QStringLiteral("Unknown")}});
         if (!m_warning_list.isEmpty()) {
             QVariantMap warnings;
             warnings.insert(QStringLiteral("id"), QStringLiteral("warnings"));

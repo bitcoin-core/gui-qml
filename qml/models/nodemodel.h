@@ -63,6 +63,7 @@ class NodeModel : public QObject
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
+    Q_PROPERTY(QVariantList notificationWarnings READ notificationWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible READ runtimeDialogVisible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle READ runtimeDialogTitle NOTIFY runtimeDialogChanged)
@@ -109,6 +110,7 @@ public:
     void addStartupWarnings(const QStringList& warnings);
     QString warnings() const { return m_warnings; }
     QStringList warningList() const { return m_warning_list; }
+    QVariantList notificationWarnings() const { return m_notification_warnings; }
     bool hasWarnings() const { return !m_warning_list.empty(); }
     bool runtimeDialogVisible() const { return m_runtime_dialog_visible; }
     QString runtimeDialogTitle() const { return m_runtime_dialog_title; }
@@ -209,6 +211,7 @@ private:
     QStringList m_startup_warning_messages;
     QString m_warnings;
     QStringList m_warning_list;
+    QVariantList m_notification_warnings;
     bool m_header_sync_active{false};
     bool m_header_presync{false};
     double m_header_sync_progress{0.0};
@@ -261,7 +264,7 @@ private:
     void recordStartupErrorMessage(const QString& message);
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();
-    void setWarnings(const QString& warnings);
+    void setWarnings(const bilingual_str& warnings);
     void setNodeReady(bool ready);
     void setBlockSyncActive(bool active);
     void setHeaderSyncState(int height, int64_t block_time, bool presync);

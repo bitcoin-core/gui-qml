@@ -380,21 +380,34 @@ void NodeModel::addStartupWarnings(const QStringList& warnings)
     }
 }
 
-void NodeModel::setWarnings(const QString& warnings)
+void NodeModel::setWarnings(const bilingual_str& warnings)
 {
-    const QStringList warning_list{SplitWarnings(warnings)};
-    if (m_warnings == warnings && m_warning_list == warning_list) {
+    const QString translated{QString::fromStdString(warnings.translated)};
+    const QStringList warning_list{SplitWarnings(translated)};
+    const QStringList originals{SplitWarnings(QString::fromStdString(warnings.original))};
+    QVariantList notification_warnings;
+    for (int i = 0; i < warning_list.size(); ++i) {
+        // Classify the original Core message, so translations cannot change
+        // priority. Build notices sit below actionable node warnings.
+        const bool build_notice{i < originals.size() && originals[i].startsWith(QStringLiteral("This is a pre-release test build"))};
+        notification_warnings.push_back(QVariantMap{
+            {QStringLiteral("text"), warning_list[i]},
+            {QStringLiteral("priority"), build_notice ? 20 : 80},
+        });
+    }
+    if (m_warnings == translated && m_warning_list == warning_list && m_notification_warnings == notification_warnings) {
         return;
     }
-    m_warnings = warnings;
+    m_warnings = translated;
     m_warning_list = warning_list;
+    m_notification_warnings = notification_warnings;
     Q_EMIT warningsChanged();
 }
 
 void NodeModel::refreshWarnings()
 {
     // Keep "current warnings" tied to Core's active warning set.
-    setWarnings(QString::fromStdString(m_node.getWarnings().translated));
+    setWarnings(m_node.getWarnings());
 }
 
 void NodeModel::showStartupWarnings()
@@ -677,16 +690,16 @@ QVariantList NodeModel::nodeInformationRows()
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
-    rows.push_back(InformationRow(tr("Client version"), fullClientVersion()));
+    rows.push_back(InformationRow(tr("Client version"), fullClientVersion(), QStringLiteral("client-version")));
     rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
     rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
     rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
     rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
-    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
-    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
+    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString()), QStringLiteral("network")));
+    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height), QStringLiteral("block-height")));
     rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
     rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown"), QStringLiteral("last-block-time")));
     rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
     rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
     rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
