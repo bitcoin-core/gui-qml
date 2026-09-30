@@ -10,6 +10,7 @@ Text {
     property bool wrap: true
     property string fontStyleName: bold ? "Semi Bold" : "Regular"
     color: enabled ? Theme.color.neutral9 : Theme.color.neutral4
+    textFormat: Text.PlainText
     font.family: "BitcoinCoreSans"
     font.styleName: fontStyleName
     font.pixelSize: 13
