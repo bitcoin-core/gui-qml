@@ -206,6 +206,40 @@ TestCase {
         compare(testSendRecipient.address.address, "bcrt1qreviewaddress")
     }
 
+    function test_review_shows_request_markup_literally() {
+        const page = makeVisibleSendPage()
+        const review = findChild(page, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+
+        const label = "<b>Alice</b>"
+        // Rich text would reserve the image size and try to load it.
+        const message = "<img src=\"http://127.0.0.1:9/pixel.png\" width=\"400\" height=\"400\">"
+        page.applyPaymentRequest(
+            "bitcoin:bcrt1qreviewaddress?label=" + encodeURIComponent(label)
+                + "&message=" + encodeURIComponent(message),
+            "command line")
+        tryCompare(review, "opened", true)
+
+        const labelText = findChild(review, "paymentRequestReviewLabel")
+        const messageText = findChild(review, "paymentRequestReviewMessage")
+        verify(labelText !== null)
+        verify(messageText !== null)
+        compare(labelText.text, label)
+        compare(labelText.textFormat, Text.PlainText)
+        compare(messageText.text, message)
+        compare(messageText.textFormat, Text.PlainText)
+        verify(messageText.contentHeight < 400)
+
+        findChild(review, "paymentRequestReviewApplyButton").clicked()
+        tryCompare(review, "opened", false)
+
+        const bannerText = findChild(page, "sendPaymentRequestMessageTextValue")
+        verify(bannerText !== null)
+        tryCompare(bannerText, "text", message)
+        compare(bannerText.textFormat, Text.PlainText)
+        verify(bannerText.contentHeight < 400)
+    }
+
     function test_wallet_change_during_review_reports_the_request_as_interrupted() {
         const page = makeVisibleSendPage()
         const review = findChild(page, "sendPaymentRequestReviewPopup")

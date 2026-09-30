@@ -14,7 +14,10 @@ Requires:
 """
 
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import quote
 
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
@@ -48,6 +51,24 @@ def wait_for_wallet(gui):
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=30000)
     gui.wait_for_property("walletBadge", "text", WALLET_NAME, timeout_ms=30000)
     gui.wait_for_property("walletBadge", "noWalletLoaded", False, timeout_ms=10000)
+
+
+class ImageRequestRecorder(BaseHTTPRequestHandler):
+    requests = []
+
+    def do_GET(self):
+        ImageRequestRecorder.requests.append(self.path)
+        self.send_response(404)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+def start_image_server():
+    server = HTTPServer(("127.0.0.1", 0), ImageRequestRecorder)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def run_tests():
@@ -379,7 +400,44 @@ def run_tests():
         print("Test 11 PASSED: request delivered after wallet creation closed.")
 
         # ----------------------------------------------------------------
-        # Test 12: started without wallet support there is nowhere to send
+        # Test 12: markup in a request is shown as typed. An image tag in
+        # the label or message must not reach the network, which would
+        # bypass the node's proxy settings.
+        # ----------------------------------------------------------------
+        image_server = start_image_server()
+        try:
+            image_url = f"http://127.0.0.1:{image_server.server_port}"
+            markup_label = f'<b>markup</b><img src="{image_url}/label.png">'
+            markup_message = f'<img src="{image_url}/message.png">'
+            harness.restart_gui(extra_args=[
+                f"bitcoin:{first_address}"
+                f"?label={quote(markup_label, safe='')}"
+                f"&message={quote(markup_message, safe='')}"
+            ])
+            wait_for_rpc(harness.gui_rpc_port)
+            gui = harness.driver
+            wait_for_wallet(gui)
+            gui.wait_for_page("sendPage", timeout_ms=20000)
+            wait_for_review(gui)
+            assert gui.get_property("paymentRequestReviewLabel", "text") == markup_label
+            assert gui.get_property("paymentRequestReviewMessage", "text") == markup_message
+            apply_review(gui)
+            gui.wait_for_property(
+                "sendPaymentRequestMessageTextValue", "text", markup_message,
+                timeout_ms=10000,
+            )
+            # Image loads are asynchronous; give a fetch time to arrive.
+            time.sleep(3)
+            assert not ImageRequestRecorder.requests, (
+                f"Markup triggered network requests: {ImageRequestRecorder.requests}"
+            )
+        finally:
+            image_server.shutdown()
+            image_server.server_close()
+        print("Test 12 PASSED: markup shown literally, no network request.")
+
+        # ----------------------------------------------------------------
+        # Test 13: started without wallet support there is nowhere to send
         # the request, so it is reported instead of waiting forever. Runs
         # last because it leaves the application without a wallet.
         # ----------------------------------------------------------------
@@ -396,7 +454,7 @@ def run_tests():
         gui.wait_for_property(
             "paymentUriWalletDisabledPopup", "opened", False, timeout_ms=10000,
         )
-        print("Test 12 PASSED: request reported in node-only mode.")
+        print("Test 13 PASSED: request reported in node-only mode.")
 
         print("\n" + "=" * 50)
         print("All tests PASSED")
