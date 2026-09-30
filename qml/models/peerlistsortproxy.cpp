@@ -154,40 +154,85 @@ void PeerListSortProxy::setSortAscending(bool ascending)
 void PeerListSortProxy::setSearchText(const QString& search_text)
 {
     if (m_search_text == search_text) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+
     m_search_text = search_text;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     Q_EMIT searchTextChanged(search_text);
 }
 
 void PeerListSortProxy::setDirectionFilters(const QStringList& filters)
 {
     if (m_direction_filters == filters) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+
     m_direction_filters = filters;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     Q_EMIT directionFiltersChanged(filters);
 }
 
 void PeerListSortProxy::setConnectionTypeFilters(const QStringList& filters)
 {
     if (m_connection_type_filters == filters) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+
     m_connection_type_filters = filters;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     Q_EMIT connectionTypeFiltersChanged(filters);
 }
 
 void PeerListSortProxy::setNetworkFilters(const QStringList& filters)
 {
     if (m_network_filters == filters) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+
     m_network_filters = filters;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     Q_EMIT networkFiltersChanged(filters);
 }
 
 void PeerListSortProxy::setTransportFilters(const QStringList& filters)
 {
     if (m_transport_filters == filters) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    beginFilterChange();
+#endif
+
     m_transport_filters = filters;
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
+#else
     invalidateFilter();
+#endif
     Q_EMIT transportFiltersChanged(filters);
 }
 
