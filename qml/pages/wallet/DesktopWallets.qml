@@ -247,6 +247,7 @@ Page {
             spacing: 5
             NetworkIndicator {
                 id: networkIndicator
+                Layout.rightMargin: 8
                 objectName: "desktopNetworkIndicator"
                 textSize: 11
                 shorten: true

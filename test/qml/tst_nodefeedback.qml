@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/node"
@@ -207,6 +208,11 @@ TestCase {
         compare(findChild(overview, "nodeOverviewTitle").font.pixelSize, Theme.text.headline.pixelSize)
         const pause = findChild(overview, "nodePauseButton")
         pause.clicked()
+        compare(nodeModel.pause, false)
+        const confirmation = findChild(testWindow.contentItem, "nodePauseConfirmationPopup")
+        tryCompare(confirmation, "opened", true)
+        waitForChild(testWindow.contentItem, "nodePauseConfirmButton").clicked()
+        tryCompare(confirmation, "visible", false)
         compare(nodeModel.pause, true)
         compare(pause.text, "Resume node")
         pause.clicked()
@@ -256,6 +262,89 @@ TestCase {
         nodeModel.initialSyncComplete = false
         tryCompare(top, "text", "No current notifications.")
         nodeModel.numPeers = 0
+    }
+
+    function test_pause_confirmation_data() {
+        return [
+            { tag: "wallet-enabled", walletEnabled: true },
+            { tag: "wallet-disabled", walletEnabled: false }
+        ]
+    }
+
+    function test_pause_confirmation(data) {
+        const previousWalletEnabled = AppMode.walletEnabled
+        const previousPeers = nodeModel.numPeers
+        const previousPause = nodeModel.pause
+        try {
+            AppMode.walletEnabled = data.walletEnabled
+            nodeModel.numPeers = 10
+            nodeModel.pause = false
+            const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem, { width: 1200, height: 800 })
+            const overview = findChild(runner, "nodeOverview")
+            const button = findChild(overview, "nodePauseButton")
+            const popup = findChild(testWindow.contentItem, "nodePauseConfirmationPopup")
+            button.clicked()
+            tryCompare(popup, "opened", true)
+            compare(popup.title, "Pause node?")
+            const expectedMessage = "This will disconnect all 10 peers.\n\n"
+                + "Your node will stop receiving and broadcasting blocks and transactions until you resume."
+                + (data.walletEnabled ? "\n\nYour wallet balances and confirmations may become out of date." : "")
+            compare(popup.message, expectedMessage)
+            compare(nodeModel.pause, false)
+            nodeModel.numPeers = 1
+            tryVerify(function() { return popup.message.startsWith("This will disconnect 1 peer.") })
+            waitForChild(testWindow.contentItem, "nodePauseCancelButton").clicked()
+            tryCompare(popup, "visible", false)
+            compare(nodeModel.pause, false)
+
+            button.clicked()
+            tryCompare(popup, "opened", true)
+            waitForChild(testWindow.contentItem, "nodePauseConfirmButton").clicked()
+            tryCompare(popup, "visible", false)
+            compare(nodeModel.pause, true)
+            compare(button.text, "Resume node")
+            button.clicked()
+            compare(nodeModel.pause, false)
+            compare(popup.visible, false)
+
+            button.clicked()
+            tryCompare(popup, "opened", true)
+            findChild(runner, "widgetsTabButton").checked = true
+            tryCompare(popup, "visible", false)
+            compare(nodeModel.pause, false)
+        } finally {
+            AppMode.walletEnabled = previousWalletEnabled
+            nodeModel.numPeers = previousPeers
+            nodeModel.pause = previousPause
+        }
+    }
+
+    function test_clock_uses_pause_confirmation() {
+        const previousPause = nodeModel.pause
+        try {
+            nodeModel.pause = false
+            testWindow.width = 1200
+            testWindow.height = 800
+            const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem, { width: 1200, height: 800 })
+            const area = findChild(runner, "blockClockToggleArea")
+            const popup = findChild(testWindow.contentItem, "nodePauseConfirmationPopup")
+            mouseClick(area, area.width / 2, area.height / 2)
+            tryCompare(popup, "opened", true)
+            compare(nodeModel.pause, false)
+            waitForChild(testWindow.contentItem, "nodePauseCancelButton").clicked()
+            tryCompare(popup, "visible", false)
+            compare(nodeModel.pause, false)
+            mouseClick(area, area.width / 2, area.height / 2)
+            tryCompare(popup, "opened", true)
+            waitForChild(testWindow.contentItem, "nodePauseConfirmButton").clicked()
+            tryCompare(popup, "visible", false)
+            compare(nodeModel.pause, true)
+            mouseClick(area, area.width / 2, area.height / 2)
+            compare(nodeModel.pause, false)
+            compare(popup.visible, false)
+        } finally {
+            nodeModel.pause = previousPause
+        }
     }
 
     function test_overview_pushes_peers_and_stops_refresh_when_hidden() {

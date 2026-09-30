@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -56,6 +57,7 @@ Page {
         else {
             informationPopup.close()
             notificationsPopup.close()
+            pausePopup.close()
         }
     }
     Timer {
@@ -104,7 +106,10 @@ Page {
                         objectName: "nodePauseButton"
                         text: nodeModel.pause ? qsTr("Resume node") : qsTr("Pause node")
                         enabled: !nodeModel.faulted
-                        onClicked: nodeModel.pause = !nodeModel.pause
+                        onClicked: {
+                            if (nodeModel.pause) nodeModel.pause = false
+                            else pausePopup.open()
+                        }
                     }
                 }
 
@@ -127,6 +132,8 @@ Page {
                             parentHeight: Math.min(clockPanel.height, 520)
                             fillAvailableSpace: true
                             showNetworkIndicator: false
+                            confirmPause: true
+                            onPauseRequested: pausePopup.open()
                             renderingActive: root.visible
                         }
                     }
@@ -222,6 +229,29 @@ Page {
                     }
                 }
             }
+        }
+    }
+
+    AlertPopup {
+        id: pausePopup
+        objectName: "nodePauseConfirmationPopup"
+        parent: Overlay.overlay
+        width: Math.min(480, parent ? parent.width - 40 : 480)
+        title: qsTr("Pause node?")
+        messageObjectName: "nodePauseConfirmationMessage"
+        message: (nodeModel.numPeers === 1 ? qsTr("This will disconnect 1 peer.")
+                    : qsTr("This will disconnect all %1 peers.").arg(nodeModel.numPeers))
+            + "\n\n" + qsTr("Your node will stop receiving and broadcasting blocks and transactions until you resume.")
+            + (AppMode.walletEnabled ? "\n\n" + qsTr("Your wallet balances and confirmations may become out of date.") : "")
+        AlertAction {
+            text: qsTr("Cancel")
+            role: AlertAction.Cancel
+            buttonObjectName: "nodePauseCancelButton"
+        }
+        AlertAction {
+            text: qsTr("Pause node")
+            buttonObjectName: "nodePauseConfirmButton"
+            onTriggered: nodeModel.pause = true
         }
     }
 

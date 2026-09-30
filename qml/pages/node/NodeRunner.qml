@@ -30,17 +30,18 @@ Page {
 
     ButtonGroup { id: navigationTabs }
     header: NavigationBar2 {
-        leftItem: NetworkIndicator {
-            objectName: "nodeRunnerNetworkIndicator"
-            textSize: 11
-            shorten: true
-            enabled: false
-            focusPolicy: Qt.NoFocus
-            Accessible.name: text
-            Accessible.role: Accessible.StaticText
-        }
         rightItem: RowLayout {
             spacing: 5
+            NetworkIndicator {
+                Layout.rightMargin: 8
+                objectName: "nodeRunnerNetworkIndicator"
+                textSize: 11
+                shorten: true
+                enabled: false
+                focusPolicy: Qt.NoFocus
+                Accessible.name: text
+                Accessible.role: Accessible.StaticText
+            }
             NavigationTab {
                 id: nodeTabButton
                 objectName: "blockClockTabButton"

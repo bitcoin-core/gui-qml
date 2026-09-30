@@ -19,6 +19,8 @@ Item {
     property real parentHeight: 600
     property bool fillAvailableSpace: false
     property bool showNetworkIndicator: true
+    property bool confirmPause: false
+    signal pauseRequested()
     // Backing models remain current while false; only presentation work stops.
     property bool renderingActive: true
     // Node and Dashboard share typography; hosts can supply their value size.
@@ -328,7 +330,8 @@ Item {
 
     function togglePause() {
         if (!root.faulted && root.nodeModelRef !== null) {
-            root.nodeModelRef.pause = !root.paused
+            if (root.confirmPause && !root.paused) root.pauseRequested()
+            else root.nodeModelRef.pause = !root.paused
         }
     }
 }
