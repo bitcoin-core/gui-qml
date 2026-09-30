@@ -6,14 +6,15 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
 import "../../qml/controls"
+import "../../qml/components"
 import "../../qml/pages/wallet"
 
 TestCase {
     name: "WalletCreationFlow"
     when: windowShown
     visible: true
-    width: 760
-    height: 700
+    width: 800
+    height: 665
 
     readonly property string validXpub:
         "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"
@@ -21,6 +22,11 @@ TestCase {
     Component {
         id: flowComponent
         WalletCreationFlow { width: 720; height: 660; modalView: true }
+    }
+
+    Component {
+        id: modalComponent
+        WalletCreationModal { }
     }
 
     function init() {
@@ -32,6 +38,55 @@ TestCase {
         const flow = createTemporaryObject(flowComponent, this)
         verify(flow !== null)
         return flow
+    }
+
+    function tabToItem(item, modifiers) {
+        for (let i = 0; i < 20 && !item.activeFocus; ++i) {
+            keyClick(Qt.Key_Tab, modifiers)
+        }
+        verify(item.activeFocus, "Keyboard navigation must reach " + item.objectName)
+    }
+
+    function verifyItemInViewport(item, viewport) {
+        tryVerify(function() {
+            const position = item.mapToItem(viewport, 0, 0)
+            return position.y >= 8 && position.y + item.height <= viewport.height - 8
+        }, 1000, "Focused control and its focus outline must be visible")
+    }
+
+    function test_keyboard_navigation_scrolls_wallet_form_at_minimum_window_size() {
+        const modal = createTemporaryObject(modalComponent, this)
+        verify(modal !== null)
+        modal.open()
+        tryCompare(modal, "opened", true)
+        compare(modal.width, 768)
+        compare(modal.height, 625)
+        mouseClick(findChild(modal, "walletTypeRegular"))
+        tryCompare(modal.flow.currentItem, "objectName", "createWalletFormPage")
+        tryCompare(modal.flow, "busy", false)
+        const form = modal.flow.currentItem
+        const name = findChild(form, "createWalletNameInput")
+        const password = findChild(form, "createWalletPasswordInput")
+        const confirm = findChild(form, "createWalletPasswordRepeatInput")
+        const acknowledgement = findChild(form, "createWalletPasswordConfirmToggle")
+        mouseClick(name)
+        verify(name.activeFocus)
+        verifyItemInViewport(name, form.scrollView)
+        tabToItem(password, Qt.NoModifier)
+        verifyItemInViewport(password, form.scrollView)
+        tabToItem(confirm, Qt.NoModifier)
+        verifyItemInViewport(confirm, form.scrollView)
+        tabToItem(acknowledgement, Qt.NoModifier)
+        verifyItemInViewport(acknowledgement, form.scrollView)
+        verify(form.scrollView.contentItem.contentY > 0)
+        tabToItem(confirm, Qt.ShiftModifier)
+        verifyItemInViewport(confirm, form.scrollView)
+        tabToItem(password, Qt.ShiftModifier)
+        verifyItemInViewport(password, form.scrollView)
+        tabToItem(name, Qt.ShiftModifier)
+        verifyItemInViewport(name, form.scrollView)
+        modal.close()
+        tryCompare(modal, "visible", false)
     }
 
     function test_watch_only_validates_key_and_finishes_on_ready_page() {

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 
 Page {
     id: root
@@ -61,6 +62,33 @@ Page {
         else navigationStack.pop()
     }
 
+    function ensureFocusedItemVisible() {
+        const window = root.Window.window
+        const item = window ? window.activeFocusItem : null
+        let ancestor = item
+        while (ancestor && ancestor !== contentFrame) ancestor = ancestor.parent
+        if (!ancestor) return
+
+        const flickable = scrollView.contentItem
+        const position = item.mapToItem(contentFrame, 0, 0)
+        const margin = 8
+        let contentY = flickable.contentY
+        if (position.y - margin < contentY) {
+            contentY = position.y - margin
+        } else if (position.y + item.height + margin > contentY + flickable.height) {
+            contentY = position.y + item.height + margin - flickable.height
+        }
+        flickable.contentY = Math.max(0, Math.min(contentY,
+            flickable.contentHeight - flickable.height))
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            Qt.callLater(root.ensureFocusedItemVisible)
+        }
+    }
+
     padding: 0
     background: null
 
@@ -88,6 +116,8 @@ Page {
         clip: true
         contentWidth: availableWidth
         contentHeight: contentFrame.height
+        onHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
+        onContentHeightChanged: Qt.callLater(root.ensureFocusedItemVisible)
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Item {
