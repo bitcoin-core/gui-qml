@@ -87,7 +87,6 @@ add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/widgetlayoutmodel.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${QMLTESTS_QRC_CPP}
 )
 
@@ -171,3 +170,13 @@ add_executable(halvingmodel_tests
 target_include_directories(halvingmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(halvingmodel_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME halvingmodel_tests COMMAND halvingmodel_tests)
+
+add_executable(networktraffictower_tests test_networktraffictower.cpp)
+target_include_directories(networktraffictower_tests PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src/univalue/include
+  ${CMAKE_CURRENT_BINARY_DIR}/../bitcoin/src
+)
+target_link_libraries(networktraffictower_tests PRIVATE bitcoinqml Qt6::Test)
+add_test(NAME networktraffictower_tests COMMAND networktraffictower_tests -platform minimal)

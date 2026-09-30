@@ -29,7 +29,6 @@
 
 #include <qml/components/blockclockdial.h>
 #include <qml/components/widgets/widgetlayoutmodel.h>
-#include <qml/controls/linegraph.h>
 
 class MockAppMode : public QObject
 {
@@ -2823,6 +2822,7 @@ private:
 class MockNetworkTrafficTower : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList history MEMBER m_history NOTIFY historyChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(quint64 totalBytesReceived MEMBER m_total_bytes_received NOTIFY totalBytesReceivedChanged)
     Q_PROPERTY(quint64 totalBytesSent MEMBER m_total_bytes_sent NOTIFY totalBytesSentChanged)
@@ -2841,6 +2841,10 @@ public:
         Q_EMIT activeChanged();
     }
 
+    QVariantList m_history{
+        QVariantMap{{"time", 1'000.0}, {"received", 30.0}, {"sent", 35.0}},
+        QVariantMap{{"time", 2'000.0}, {"received", 20.0}, {"sent", 25.0}},
+        QVariantMap{{"time", 3'000.0}, {"received", 10.0}, {"sent", 15.0}}};
     bool m_active{false};
     quint64 m_total_bytes_received{1'000};
     quint64 m_total_bytes_sent{2'000};
@@ -2857,6 +2861,7 @@ public:
     }
 
 Q_SIGNALS:
+    void historyChanged();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
@@ -4139,7 +4144,6 @@ public Q_SLOTS:
             "Test stub type"
         );
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
-        qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
         qmlRegisterType<WidgetLayoutModel>("org.bitcoincore.qt", 1, 0, "WidgetLayoutModel");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);

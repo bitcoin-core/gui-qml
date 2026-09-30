@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QQueue>
+#include <QVariantList>
 
 namespace interfaces {
 class Node;
@@ -20,6 +21,7 @@ class NetworkTrafficTower : public QObject
     Q_OBJECT
     // Raw samples are always retained by the worker. Active only controls
     // whether derived history snapshots are copied to the GUI thread.
+    Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(quint64 totalBytesReceived READ totalBytesReceived NOTIFY totalBytesReceivedChanged)
     Q_PROPERTY(quint64 totalBytesSent READ totalBytesSent NOTIFY totalBytesSentChanged)
@@ -32,6 +34,7 @@ public:
     explicit NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms = 1000);
     ~NetworkTrafficTower() override;
 
+    QVariantList history() const { return m_history; }
     bool active() const { return m_active; }
     quint64 totalBytesReceived() const { return m_total_bytes_received; }
     quint64 totalBytesSent() const { return m_total_bytes_sent; }
@@ -46,6 +49,7 @@ public Q_SLOTS:
     Q_INVOKABLE void updateFilterWindowSize(int new_size);
 
 Q_SIGNALS:
+    void historyChanged();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
@@ -63,6 +67,7 @@ private:
     quint64 m_total_bytes_sent{0};
     float m_max_received_rate_bps{0.0f};
     float m_max_sent_rate_bps{0.0f};
+    QVariantList m_history;
     QQueue<float> m_received_rate_list;
     QQueue<float> m_sent_rate_list;
 };

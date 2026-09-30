@@ -39,7 +39,6 @@
 #include <qml/components/widgets/mempoolactivitysource.h>
 #include <qml/components/widgets/difficultyperiodsource.h>
 #include <qml/components/widgets/halvingmodel.h>
-#include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
@@ -274,7 +273,6 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return bitcoin_uri_model_instance;
     });
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
-    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterType<WidgetLayoutModel>("org.bitcoincore.qt", 1, 0, "WidgetLayoutModel");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
     qmlRegisterUncreatableType<DebugLogModel>("org.bitcoincore.qt", 1, 0, "DebugLogModel", "");

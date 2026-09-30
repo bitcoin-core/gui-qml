@@ -11,6 +11,8 @@ Control {
 
     property var model: []
     property int currentIndex: 0
+    property color activeBackgroundColor: Theme.color.orange
+    property color activeTextColor: Theme.color.white
     readonly property string currentText: model.length > currentIndex ? optionText(model[currentIndex]) : ""
 
     signal selected(int index, var option)
@@ -57,11 +59,11 @@ Control {
                 text: root.optionText(modelData)
                 bgRadius: 5
                 textColor: Theme.color.neutral9
-                textHoverColor: checked ? Theme.color.white : Theme.color.neutral9
-                textActiveColor: Theme.color.white
+                textHoverColor: checked ? root.activeTextColor : Theme.color.neutral9
+                textActiveColor: root.activeTextColor
                 textActiveBold: true
-                bgHoverColor: checked ? Theme.color.orange : Theme.color.neutral4
-                bgActiveColor: Theme.color.orange
+                bgHoverColor: checked ? root.activeBackgroundColor : Theme.color.neutral4
+                bgActiveColor: root.activeBackgroundColor
                 bgDefaultColor: Theme.color.neutral2
 
                 onClicked: {

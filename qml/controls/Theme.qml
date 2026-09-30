@@ -247,6 +247,14 @@ Control {
             lineHeight: 22
         }
 
+        // Chart readings — Roboto Mono Regular
+        readonly property TextStyle chartValue: TextStyle {
+            family: textSetRoot.monoFamily
+            styleName: "Regular"
+            pixelSize: 28
+            lineHeight: 34
+        }
+
         // Headers — Semi Bold
         readonly property TextStyle display: TextStyle {
             family: textSetRoot.family

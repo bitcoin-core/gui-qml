@@ -9,7 +9,13 @@
 
 #include <qml/models/networktraffictower.h>
 
+#include <algorithm>
 #include <atomic>
+
+#ifndef BITCOINQML_NO_TEST_MAIN
+#include <util/translation.h>
+const TranslateFn G_TRANSLATION_FUN{nullptr};
+#endif
 
 #include <QSignalSpy>
 #include <QThread>
@@ -28,6 +34,7 @@ private Q_SLOTS:
     void activeControlsPublishingWithoutDiscardingBackgroundHistory();
     void filterWindowChangesPreserveTotalsAndHistory();
     void stopsSamplingWhenDestroyedWhileActive();
+    void timestampedHistoryPairsSamplesAndPreservesExtrema();
 };
 
 void NetworkTrafficTowerTests::samplesOffGuiThreadWithoutPublishingWhileInactive()
@@ -174,6 +181,39 @@ void NetworkTrafficTowerTests::stopsSamplingWhenDestroyedWhileActive()
     const int calls_after_destruction{received_calls.load()};
     QTest::qWait(TEST_SAMPLE_INTERVAL_MS * 3);
     QCOMPARE(received_calls.load(), calls_after_destruction);
+}
+
+void NetworkTrafficTowerTests::timestampedHistoryPairsSamplesAndPreservesExtrema()
+{
+    MockNode node;
+    std::atomic<int64_t> received{0}, sent{0};
+    node.get_total_bytes_recv_fn = [&] { return received.fetch_add(10); };
+    node.get_total_bytes_sent_fn = [&] { return sent.fetch_add(20); };
+    NetworkTrafficTower tower{node, 1};
+    tower.updateFilterWindowSize(8640);
+    tower.setActive(true);
+    QTRY_VERIFY_WITH_TIMEOUT(tower.receivedRateList().size() > 3000, 10000);
+    const auto history = tower.history();
+    QVERIFY(!history.isEmpty());
+    QVERIFY(history.size() <= 2880);
+    qint64 previous_time{0};
+    float max_received{0}, max_sent{0};
+    for (const auto& point : history) {
+        const auto sample = point.toMap();
+        const qint64 time{sample.value("time").toLongLong()};
+        QVERIFY2(time > previous_time, qPrintable(QString("Time %1 follows %2, sample %3").arg(time).arg(previous_time).arg(sample.size())));
+        previous_time = time;
+        max_received = std::max(max_received, sample.value("received").toFloat());
+        max_sent = std::max(max_sent, sample.value("sent").toFloat());
+        QCOMPARE(sample.value("sent").toFloat(), sample.value("received").toFloat() * 2);
+    }
+    QCOMPARE(max_received, tower.maxReceivedRateBps());
+    QCOMPARE(max_sent, tower.maxSentRateBps());
+    QCOMPARE(history.back().toMap().value("received").toFloat(), tower.receivedRateList().front());
+    tower.setActive(false);
+    const auto paused = tower.history();
+    QTest::qWait(30);
+    QCOMPARE(tower.history(), paused);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

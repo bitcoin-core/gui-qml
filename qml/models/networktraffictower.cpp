@@ -15,6 +15,10 @@
 #include <QObject>
 #include <QThread>
 #include <QTimer>
+#include <QDateTime>
+#include <QElapsedTimer>
+#include <QVariantMap>
+#include <vector>
 
 namespace {
 constexpr int MAX_SAMPLES{86400};
@@ -28,6 +32,7 @@ struct TrafficSnapshot {
     float max_sent_rate_bps{0.0f};
     QQueue<float> received_rate_list;
     QQueue<float> sent_rate_list;
+    QVariantList history;
 };
 
 quint64 NonNegativeTotal(int64_t total)
@@ -192,12 +197,16 @@ private:
             m_previous_total_bytes_sent = total_sent;
             m_total_bytes_received = total_received;
             m_total_bytes_sent = total_sent;
+            m_rate_timer.start();
             if (m_active) publishSnapshot();
             return;
         }
 
-        m_received_rate_list.push_front(RateDelta(total_received, m_previous_total_bytes_received));
-        m_sent_rate_list.push_front(RateDelta(total_sent, m_previous_total_bytes_sent));
+        const float seconds{static_cast<float>(std::max<qint64>(1, m_rate_timer.restart())) / 1000.0f};
+        m_received_rate_list.push_front(RateDelta(total_received, m_previous_total_bytes_received) / seconds);
+        m_sent_rate_list.push_front(RateDelta(total_sent, m_previous_total_bytes_sent) / seconds);
+        const qint64 now{QDateTime::currentMSecsSinceEpoch()};
+        m_sample_times.push_front(m_sample_times.isEmpty() ? now : std::max(now, m_sample_times.front() + 1));
         m_previous_total_bytes_received = total_received;
         m_previous_total_bytes_sent = total_sent;
         m_total_bytes_received = total_received;
@@ -208,6 +217,7 @@ private:
         }
         while (m_sent_rate_list.size() > MAX_SAMPLES) {
             m_sent_rate_list.pop_back();
+            m_sample_times.pop_back();
         }
 
         if (!m_active) {
@@ -223,6 +233,33 @@ private:
         publishSnapshot();
     }
 
+    QVariantList visiblePointHistory() const
+    {
+        const qsizetype count{std::min<qsizetype>(m_sample_times.size(), m_filter_window_size * 10)};
+        // Bound the GUI snapshot while preserving extrema for both directions.
+        const qsizetype bucket_size{std::max<qsizetype>(1, (count + 479) / 480)};
+        QVariantList history;
+        for (qsizetype first = count - 1; first >= 0; first -= bucket_size) {
+            const qsizetype last{std::max<qsizetype>(0, first - bucket_size + 1)};
+            qsizetype min_received{first}, max_received{first}, min_sent{first}, max_sent{first};
+            for (qsizetype i = first; i >= last; --i) {
+                if (m_smoothed_received_rate_list[i] < m_smoothed_received_rate_list[min_received]) min_received = i;
+                if (m_smoothed_received_rate_list[i] > m_smoothed_received_rate_list[max_received]) max_received = i;
+                if (m_smoothed_sent_rate_list[i] < m_smoothed_sent_rate_list[min_sent]) min_sent = i;
+                if (m_smoothed_sent_rate_list[i] > m_smoothed_sent_rate_list[max_sent]) max_sent = i;
+            }
+            std::vector<qsizetype> indices{first, last, min_received, max_received, min_sent, max_sent};
+            std::sort(indices.begin(), indices.end(), std::greater<>());
+            indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+            for (const qsizetype i : indices) {
+                history.push_back(QVariantMap{{QStringLiteral("time"), m_sample_times[i]},
+                    {QStringLiteral("received"), m_smoothed_received_rate_list[i]},
+                    {QStringLiteral("sent"), m_smoothed_sent_rate_list[i]}});
+            }
+        }
+        return history;
+    }
+
     void publishSnapshot()
     {
         if (!m_active) return;
@@ -235,6 +272,7 @@ private:
             m_max_sent_rate_bps,
             visibleHistory(m_smoothed_received_rate_list),
             visibleHistory(m_smoothed_sent_rate_list),
+            visiblePointHistory(),
         });
     }
 
@@ -252,6 +290,8 @@ private:
     int m_filter_window_size{DEFAULT_FILTER_WINDOW_SIZE};
     float m_max_received_rate_bps{0.0f};
     float m_max_sent_rate_bps{0.0f};
+    QElapsedTimer m_rate_timer;
+    QQueue<qint64> m_sample_times;
     QQueue<float> m_received_rate_list;
     QQueue<float> m_smoothed_received_rate_list;
     QQueue<float> m_sent_rate_list;
@@ -286,6 +326,8 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_inte
             m_sent_rate_list = std::move(snapshot.sent_rate_list);
             Q_EMIT receivedRateListChanged();
             Q_EMIT sentRateListChanged();
+            m_history = std::move(snapshot.history);
+            Q_EMIT historyChanged();
         }, Qt::QueuedConnection);
     });
     m_worker->moveToThread(m_worker_thread);

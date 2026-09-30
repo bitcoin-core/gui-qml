@@ -72,7 +72,6 @@
         <file>components/StorageSettings.qml</file>
         <file>components/ToastBanner.qml</file>
         <file>components/ToastPopup.qml</file>
-        <file>components/TotalBytesIndicator.qml</file>
         <file>components/DetailEditRow.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/QRCodePopup.qml</file>
