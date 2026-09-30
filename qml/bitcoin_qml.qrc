@@ -170,6 +170,7 @@
         <file>controls/OnboardingNavigationBar.qml</file>
         <file>controls/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
+        <file>controls/LineChart.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/ToggleButton.qml</file>
