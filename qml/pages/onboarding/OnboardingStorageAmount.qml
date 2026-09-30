@@ -80,9 +80,14 @@ OnboardingView {
         id: storagePopup
         objectName: "onboardingStorageSettingsPopup"
         closeButtonObjectName: "onboardingStorageSettingsCloseButton"
+        onAboutToShow: pageStack.currentItem.resetPruneTarget()
         initialPage: StorageSettingsPage {
             settingsModel: root.settingsModel
             onboarding: true
+            onPruneTargetCommitted: function(target) {
+                root.customStorage = target !== 2
+                root.customStorageAmount = target
+            }
         }
     }
 }

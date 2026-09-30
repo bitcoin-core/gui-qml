@@ -35,6 +35,13 @@ SettingsPage {
     property string pruneTargetText: String(pruneSetting.value)
     property string pruneTargetError: ""
 
+    signal pruneTargetCommitted(int target)
+
+    function resetPruneTarget() {
+        pruneTargetText = String(pruneSetting.value)
+        pruneTargetError = ""
+    }
+
     function validatePruneTarget(value) {
         if (isNaN(value) || value < 1) {
             return qsTr("Choose a storage limit of at least 1 GB.")
@@ -89,6 +96,7 @@ SettingsPage {
                 if (root.pruneTargetError.length === 0) {
                     root.pruneSetting.value = parsed
                     root.pruneTargetText = String(parsed)
+                    root.pruneTargetCommitted(parsed)
                 }
             }
         }

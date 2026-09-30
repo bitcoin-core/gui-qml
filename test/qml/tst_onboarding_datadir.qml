@@ -11,6 +11,7 @@ import "../../qml/pages/onboarding"
 TestCase {
     name: "OnboardingDataDir"
     when: windowShown
+    visible: true
     width: 640
     height: 665
 
@@ -109,6 +110,72 @@ TestCase {
             if (found) return found
         }
         return null
+    }
+
+    function openStorageSettings(page) {
+        mouseClick(findChild(page, "onboardingStorageSettingsButton"))
+        const popup = findChild(page, "onboardingStorageSettingsPopup")
+        tryCompare(popup, "opened", true)
+        return popup
+    }
+
+    function editStorageTarget(popup, target) {
+        const input = findChild(popup, "pruneTargetInput")
+        mouseClick(input)
+        verify(input.activeFocus)
+        input.selectAll()
+        keyClick(Qt.Key_Backspace)
+        for (let i = 0; i < target.length; ++i) keyClick(target.charAt(i))
+        mouseClick(findChild(popup, "onboardingStorageSettingsCloseButton"))
+        tryCompare(popup, "visible", false)
+    }
+
+    function test_storage_popup_commits_latest_custom_target_after_selecting_reduce() {
+        const page = createTemporaryObject(storageAmount, this)
+        verify(page !== null)
+        const popup = openStorageSettings(page)
+        editStorageTarget(popup, "7")
+        compare(optionsModel.pruneSizeGB, 7)
+        compare(page.customStorage, true)
+        compare(page.customStorageAmount, 7)
+
+        mouseClick(findChild(page, "storageReduceOption"))
+        compare(optionsModel.pruneSizeGB, 2)
+        openStorageSettings(page)
+        editStorageTarget(popup, "10")
+        compare(optionsModel.pruneSizeGB, 10)
+        compare(page.customStorageAmount, 10)
+        const custom = findChild(page, "storageCustomOption")
+        compare(custom.description, "Storing recent blocks up to 10 GB.")
+        compare(custom.checked, true)
+
+        mouseClick(findChild(page, "storageReduceOption"))
+        compare(optionsModel.pruneSizeGB, 2)
+        mouseClick(custom)
+        compare(optionsModel.pruneSizeGB, 10)
+    }
+
+    function test_storage_popup_reopens_with_current_target_and_no_stale_error() {
+        const page = createTemporaryObject(storageAmount, this)
+        verify(page !== null)
+        const popup = openStorageSettings(page)
+        editStorageTarget(popup, "7")
+        compare(optionsModel.pruneSizeGB, 7)
+        mouseClick(findChild(page, "storageReduceOption"))
+        compare(optionsModel.pruneSizeGB, 2)
+        openStorageSettings(page)
+        compare(findChild(popup, "pruneTargetInput").text, "2")
+
+        editStorageTarget(popup, "200")
+        compare(optionsModel.pruneSizeGB, 2)
+        compare(page.customStorageAmount, 7)
+        const settings = findChild(popup, "storageSettingsPage")
+        verify(settings.pruneTargetError.length > 0)
+        openStorageSettings(page)
+        compare(findChild(popup, "pruneTargetInput").text, "2")
+        compare(settings.pruneTargetError, "")
+        popup.close()
+        tryCompare(popup, "visible", false)
     }
 
     function test_preinit_onboarding_starts_at_cover() {
