@@ -123,12 +123,8 @@ def prepare_managed_wallet(harness, wallet_name, password):
 
 
 def dismiss_create_wallet_wizard(gui):
-    try:
-        gui.wait_for_property("createWalletWizardExitButton", "visible", True, timeout_ms=1000)
-        gui.click("createWalletWizardExitButton")
-    except QmlDriverError:
-        gui.wait_for_property("typeSelectorCancelButton", "visible", True, timeout_ms=10000)
-        gui.click("typeSelectorCancelButton")
+    gui.wait_for_property("onboardingCloseButton", "visible", True, timeout_ms=10000)
+    gui.click("onboardingCloseButton")
 
 
 def wait_for_wallet_ready(harness, gui):
@@ -215,9 +211,8 @@ def run_case(case_name, port_offset, case_body, save_screenshots=False, screensh
         harness.stop()
 
 
-def case_rename_persists_across_restart(harness, checkpoints):
-    wallet_name = "settings_rename_wallet"
-    display_name = "Daily spending"
+def case_wallet_name_is_read_only(harness, checkpoints):
+    wallet_name = "settings_read_only_name_wallet"
 
     prepare_managed_wallet(harness, wallet_name, WALLET_PASSWORD)
     checkpoints.checkpoint("managed wallet fixture prepared")
@@ -234,18 +229,10 @@ def case_rename_persists_across_restart(harness, checkpoints):
     open_wallet_settings(gui)
     checkpoints.checkpoint("wallet settings opened", gui)
 
-    gui.wait_for_property("walletNameInput", "visible", True, timeout_ms=5000)
-    gui.set_text("walletNameInput", display_name)
-    gui.invoke("walletNameInput", "editingFinished")
-    gui.wait_for_property("walletBadge", "text", display_name, timeout_ms=5000)
-    checkpoints.checkpoint("wallet renamed", gui)
-
-    harness.stop_gui()
-    harness.start_gui()
-    gui = harness.driver
-    load_wallet(gui, harness, wallet_name)
-    gui.wait_for_property("walletBadge", "text", display_name, timeout_ms=20000)
-    checkpoints.checkpoint("display name persisted after restart", gui)
+    gui.wait_for_property("walletNameRow", "visible", True, timeout_ms=5000)
+    assert gui.get_text("walletNameRowValue") == wallet_name
+    assert not gui.object_exists("walletNameInput"), "Wallet name must not be editable in settings"
+    checkpoints.checkpoint("wallet name shown as read-only", gui)
 
 
 def case_backup_uses_automation_path(harness, checkpoints):
@@ -361,7 +348,7 @@ def case_subpages_close_when_wallet_becomes_unselected(harness, checkpoints):
     select_wallet(gui, wallet_name)
     wait_for_wallet_ready(harness, gui)
     gui.wait_for_property("walletBadge", "noWalletLoaded", False, timeout_ms=5000)
-    gui.wait_for_property("walletNameInput", "visible", True, timeout_ms=5000)
+    gui.wait_for_property("walletNameRow", "visible", True, timeout_ms=5000)
     checkpoints.checkpoint("wallet reselected from settings page", gui)
 
 
@@ -438,7 +425,7 @@ def run_test(args):
         print(f"Checkpoint screenshots will be saved under: {screenshot_root}")
 
     cases = [
-        ("qml_wallet_settings_rename", 400, case_rename_persists_across_restart),
+        ("qml_wallet_settings_read_only_name", 400, case_wallet_name_is_read_only),
         ("qml_wallet_settings_backup", 410, case_backup_uses_automation_path),
         ("qml_wallet_settings_sign_verify_message", 420, case_sign_verify_message),
         ("qml_wallet_settings_subpage_close", 430, case_subpages_close_when_wallet_becomes_unselected),

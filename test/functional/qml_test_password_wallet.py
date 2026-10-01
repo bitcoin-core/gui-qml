@@ -133,27 +133,20 @@ def create_password_wallet(gui, wallet_name, password):
         pass
     gui.wait_for_property("walletTypeRegular", "visible", True, timeout_ms=5000)
     gui.click("walletTypeRegular")
-    gui.click("createWalletIntroStartButton")
+    gui.wait_for_page("createWalletFormPage", timeout_ms=5000)
     gui.set_text("createWalletNameInput", wallet_name)
-    gui.click("createWalletNameContinueButton")
     gui.set_text("createWalletPasswordInput", password)
     gui.set_text("createWalletPasswordRepeatInput", password)
     gui.click("createWalletPasswordConfirmToggle")
-    gui.wait_for_property("createWalletPasswordContinueButton", "enabled", True, timeout_ms=25000)
-    gui.click("createWalletPasswordContinueButton")
-    gui.wait_for_page("createWalletConfirmPage", timeout_ms=20000)
-    gui.click("createWalletConfirmNextButton")
-    gui.wait_for_page("createWalletBackupPage", timeout_ms=10000)
-    gui.click("createWalletBackupDoneButton")
+    gui.wait_for_property("createWalletFormCreateButton", "enabled", True, timeout_ms=25000)
+    gui.click("createWalletFormCreateButton")
+    gui.wait_for_page("walletCreationReadyPage", timeout_ms=20000)
+    gui.click("createWalletReadyDoneButton")
 
 
 def dismiss_create_wallet_wizard(gui):
-    try:
-        gui.wait_for_property("createWalletWizardExitButton", "visible", True, timeout_ms=1000)
-        gui.click("createWalletWizardExitButton")
-    except QmlDriverError:
-        gui.wait_for_property("typeSelectorCancelButton", "visible", True, timeout_ms=10000)
-        gui.click("typeSelectorCancelButton")
+    gui.wait_for_property("onboardingCloseButton", "visible", True, timeout_ms=10000)
+    gui.click("onboardingCloseButton")
 
 
 def wait_for_wallet_ready(harness, gui):
@@ -233,7 +226,8 @@ def open_wallet_settings_page(gui):
     gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
-def open_import_wallet_page(gui):
+def import_wallet_from_creation_flow(gui, backup_path):
+    gui.set_text("importWalletPathField", backup_path)
     try:
         gui.wait_for_property("importWalletButton", "visible", True, timeout_ms=1000)
         gui.wait_for_property("importWalletButton", "enabled", True, timeout_ms=25000)
@@ -241,12 +235,6 @@ def open_import_wallet_page(gui):
     except QmlDriverError:
         gui.wait_for_property("walletTypeImport", "visible", True, timeout_ms=10000)
         gui.click("walletTypeImport")
-    gui.wait_for_page("importWalletOptions", timeout_ms=10000)
-
-
-def trigger_automated_import(gui, backup_path):
-    gui.set_text("importWalletPathField", backup_path)
-    gui.click("importWalletChooseFileButton")
 
 
 def drain_change_keypool(gui_rpc_port, wallet_name):
@@ -381,6 +369,7 @@ def case_created_wallet_send(harness, checkpoints):
 
     open_send_tab(gui)
     fill_send_form(gui, recipient_addr, "1")
+    gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
     gui.click("sendReviewButton")
     gui.wait_for_property("reviewPassphrasePopup", "opened", True, timeout_ms=10000)
     checkpoints.checkpoint("review passphrase prompt displayed", gui)
@@ -420,6 +409,7 @@ def case_locked_review_fallback(harness, checkpoints):
 
     open_send_tab(gui)
     fill_send_form(gui, recipient_addr, "1")
+    gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
     gui.click("sendReviewButton")
     gui.wait_for_property("reviewPassphrasePopup", "opened", True, timeout_ms=10000)
     checkpoints.checkpoint("review fallback passphrase prompt displayed", gui)
@@ -452,10 +442,8 @@ def case_import_encrypted_wallet(harness, checkpoints):
     gui = harness.driver
     checkpoints.checkpoint("GUI launched", gui)
     harness.finish_onboarding()
-    open_import_wallet_page(gui)
-    checkpoints.checkpoint("import flow opened", gui)
-
-    trigger_automated_import(gui, backup_path)
+    import_wallet_from_creation_flow(gui, backup_path)
+    checkpoints.checkpoint("wallet file submitted", gui)
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=20000)
     gui.click("importWalletSuccessOverviewButton")
     gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)

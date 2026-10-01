@@ -57,6 +57,9 @@
         <file>components/QRCodePopup.qml</file>
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestModal.qml</file>
+        <file>components/OnboardingSettingsPopup.qml</file>
+        <file>components/WalletCreationModal.qml</file>
+        <file>components/WalletSuccessBadge.qml</file>
         <file>components/ReceivingAddressCard.qml</file>
         <file>components/PaymentRequestField.qml</file>
         <file>components/SearchBar.qml</file>
@@ -148,6 +151,10 @@
         <file>controls/TextButton.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
+        <file>controls/OnboardingFooter.qml</file>
+        <file>controls/OnboardingBackButton.qml</file>
+        <file>controls/OnboardingNavigationBar.qml</file>
+        <file>controls/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
@@ -155,7 +162,7 @@
         <file>controls/utils.js</file>
         <file>controls/ValueInput.qml</file>
         <file>controls/ValueRow.qml</file>
-        <file>controls/WalletTypeListItem.qml</file>
+        <file>controls/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
@@ -167,6 +174,8 @@
         <file>pages/node/PeerDetails.qml</file>
         <file>pages/node/Shutdown.qml</file>
         <file>pages/onboarding/OnboardingBlockclock.qml</file>
+        <file>pages/onboarding/OnboardingBlockchain.qml</file>
+        <file>pages/onboarding/OnboardingMotion.qml</file>
         <file>pages/onboarding/OnboardingConnection.qml</file>
         <file>pages/onboarding/OnboardingCover.qml</file>
         <file>pages/onboarding/OnboardingStorageAmount.qml</file>
@@ -206,18 +215,14 @@
         <file>pages/wallet/SendComplete.qml</file>
         <file>pages/wallet/SpeedUpComplete.qml</file>
         <file>pages/wallet/WalletCoins.qml</file>
-        <file>pages/wallet/CreateBackup.qml</file>
-        <file>pages/wallet/CreateConfirm.qml</file>
-        <file>pages/wallet/CreateExternalWallet.qml</file>
-        <file>pages/wallet/CreateIntro.qml</file>
-        <file>pages/wallet/CreateName.qml</file>
-        <file>pages/wallet/CreatePassword.qml</file>
-        <file>pages/wallet/ImportWalletOptions.qml</file>
-        <file>pages/wallet/ImportWalletSuccess.qml</file>
-        <file>pages/wallet/CreateTypeSelector.qml</file>
-        <file>pages/wallet/CreateWalletWizard.qml</file>
-        <file>pages/wallet/WatchOnlyIntro.qml</file>
-        <file>pages/wallet/WatchOnlyXpub.qml</file>
+        <file>pages/wallet/CreateWalletForm.qml</file>
+        <file>pages/wallet/WalletCreationTypePage.qml</file>
+        <file>pages/wallet/WalletCreationReadyPage.qml</file>
+        <file>pages/wallet/WalletCreationFlow.qml</file>
+        <file>pages/wallet/ExternalSignerWalletForm.qml</file>
+        <file>pages/wallet/WalletCreationExternalReadyPage.qml</file>
+        <file>pages/wallet/WalletImportErrorPage.qml</file>
+        <file>pages/wallet/WalletImportCompletePage.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
         <file>pages/wallet/SendTransactionReview.qml</file>
@@ -248,9 +253,12 @@
         <file alias="lock.fill.svg">res/src/lock.fill.svg</file>
         <file alias="activity-invoice.svg">res/src/activity-invoice.svg</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
+        <file alias="onboarding-bitcoin.svg">res/src/onboarding-bitcoin.svg</file>
         <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
         <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
+        <file alias="onboarding-clock-face-dark.svg">res/src/onboarding-clock-face-dark.svg</file>
+        <file alias="onboarding-clock-face-light.svg">res/src/onboarding-clock-face-light.svg</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
         <file alias="bitcoin">res/icons/bitcoin.png</file>
@@ -268,6 +276,7 @@
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
+        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="cross-circle-filled">res/icons/cross-circle-filled.png</file>
         <file alias="cross-filled">res/icons/cross-filled.png</file>
         <file alias="devices-filled">res/icons/devices-filled.png</file>

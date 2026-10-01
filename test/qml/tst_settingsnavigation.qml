@@ -402,6 +402,33 @@ TestCase {
         compare(view.pageContainer.currentItem.objectName, "walletSettingsPage")
     }
 
+    function test_walletSettingsEmptyStateMatchesWalletAvailability() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("wallet")
+        walletController.setWalletLoaded(false)
+
+        const heading = findChild(view, "walletSettingsEmptyHeading")
+        const title = findChild(view, "walletSettingsEmptyHeadingTitle")
+        const action = findChild(view, "walletSettingsEmptyAction")
+        verify(heading !== null)
+        verify(title !== null)
+        verify(action !== null)
+        compare(title.horizontalAlignment, Text.AlignHCenter)
+
+        walletController.noWalletsFound = true
+        compare(heading.title, "")
+        compare(title.visible, false)
+        compare(heading.description, "Add a wallet to manage its settings.")
+        compare(action.text, "Add wallet")
+
+        walletController.noWalletsFound = false
+        compare(heading.title, "No wallet selected")
+        compare(title.visible, true)
+        compare(heading.description, "Select a wallet to manage wallet-specific settings.")
+        compare(action.text, "Select wallet")
+    }
+
     function test_settingsViewPinsSidebarAndLetsPageContainerGrow() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
@@ -814,6 +841,8 @@ TestCase {
         verify(saveButton !== null)
         compare(saveButton.text, "Save")
         compare(saveButton.enabled, false)
+        compare(saveButton.parent, torProxySection.parent)
+        verify(saveButton.y >= torProxySection.y + torProxySection.height)
         compare(proxyAddressRow.titleTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(proxyAddressRow.enabled, false)
 

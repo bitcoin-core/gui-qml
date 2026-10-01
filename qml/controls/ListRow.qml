@@ -18,6 +18,7 @@ AbstractButton {
     property alias trailingItem: row.trailingItem
     property alias loadedTrailingItem: row.loadedTrailingItem
     property alias showDivider: row.showDivider
+    property alias dividerColor: row.dividerColor
     property alias showsDisclosureIndicator: row.showsDisclosureIndicator
     property alias disclosureIndicatorObjectName: row.disclosureIndicatorObjectName
     property alias disclosureIndicatorColor: row.disclosureIndicatorColor

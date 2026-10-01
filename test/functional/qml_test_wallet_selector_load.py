@@ -15,7 +15,6 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "bitcoin", "test", "functional"))
 
-from qml_driver import QmlDriverError
 from qml_test_harness import dump_qml_tree
 from qml_wallet_test_lib import (
     WalletFlowHarness,
@@ -50,12 +49,8 @@ def stop_node(process, rpc_port):
 
 
 def dismiss_create_wallet_wizard(gui):
-    try:
-        gui.wait_for_property("createWalletWizardExitButton", "visible", True, timeout_ms=1000)
-        gui.click("createWalletWizardExitButton")
-    except QmlDriverError:
-        gui.wait_for_property("typeSelectorCancelButton", "visible", True, timeout_ms=10000)
-        gui.click("typeSelectorCancelButton")
+    gui.wait_for_property("onboardingCloseButton", "visible", True, timeout_ms=10000)
+    gui.click("onboardingCloseButton")
 
 
 def wait_for_wallet_ready(harness, gui):

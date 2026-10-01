@@ -16,23 +16,27 @@ SettingsPage {
     showBackButton: false
 
     property var settingsModel: optionsModel
+    property bool onboardingModal: false
     property var coreSettingsModel: settingsModel.coreSettings
     readonly property var listenSetting: coreSettingsModel.entry("listen")
     readonly property var natpmpSetting: coreSettingsModel.entry("natpmp")
     readonly property var serverSetting: coreSettingsModel.entry("server")
 
     SettingsRestartNotice {
-        visible: root.settingsModel.connectionSettingsDirty
+        visible: !root.onboardingModal && root.settingsModel.connectionSettingsDirty
         Layout.fillWidth: true
     }
 
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Incoming connections")
+        isOnSurface: root.onboardingModal
+        showGradientBorder: false
 
         FormRow {
             Layout.fillWidth: true
             title: qsTr("Enable listening")
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             description: qsTr("Allow incoming peer connections.")
             supportingText: root.listenSetting.infoText
             enabled: root.listenSetting.canEdit
@@ -46,6 +50,7 @@ SettingsPage {
         FormRow {
             Layout.fillWidth: true
             title: qsTr("Map port using NAT-PMP")
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             supportingText: root.natpmpSetting.infoText
             enabled: root.natpmpSetting.canEdit
             trailingItem: OptionSwitch {
@@ -72,6 +77,8 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Privacy")
+        isOnSurface: root.onboardingModal
+        showGradientBorder: false
 
         ListRow {
             objectName: "proxySettingsRow"
@@ -89,6 +96,7 @@ SettingsPage {
 
         ProxySettingsPage {
             settingsModel: root.settingsModel
+            onboardingModal: root.onboardingModal
             onCloseRequested: root.StackView.view.pop()
         }
     }

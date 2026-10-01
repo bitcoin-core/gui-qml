@@ -92,13 +92,11 @@ ApplicationWindow {
         appWindow.routeToShell("openSettings", section)
     }
 
-    function openCreateWalletWizard() {
+    function openWalletCreation() {
         if (!appWindow.menuNavigationEnabled) {
             return
         }
-        main.push(createWalletWizard, {
-            "launchContext": CreateWalletWizard.Context.Main
-        })
+        walletCreationModal.open()
     }
 
     function resolvePostOnboardingWalletRoute() {
@@ -112,11 +110,9 @@ ApplicationWindow {
             return
         }
         appWindow.postOnboardingWalletRouteResolved = true
-        main.replace(desktopWallets, {}, StackView.Immediate)
         if (walletController.noWalletsFound) {
-            main.push(createWalletWizard, {
-                "launchContext": CreateWalletWizard.Context.Onboarding
-            }, StackView.Immediate)
+            main.currentItem.openNode()
+            Qt.callLater(function() { walletCreationModal.openForOnboarding() })
         }
     }
 
@@ -184,7 +180,7 @@ ApplicationWindow {
         shuttingDown: appWindow.shutdownInProgress
         isMacOs: Qt.platform.os === "osx"
 
-        onCreateWalletRequested: appWindow.openCreateWalletWizard()
+        onCreateWalletRequested: appWindow.openWalletCreation()
         onCloseWalletRequested: appWindow.routeToShell("requestCloseWallet")
         onBackupWalletRequested: appWindow.routeToShell("startWalletBackup")
         onOpenUriRequested: appWindow.routeToShell("openUriImporter")
@@ -290,9 +286,7 @@ ApplicationWindow {
     PageStack {
         id: main
         objectName: "mainPageStack"
-        initialItem: appWindow.waitForPostOnboardingWalletRoute
-            ? postOnboardingStartup
-            : (appWindow.desktopWalletMode ? desktopWallets : node)
+        initialItem: appWindow.desktopWalletMode ? desktopWallets : node
         anchors.fill: parent
         focus: true
         Keys.onReleased: (event) => {
@@ -343,37 +337,19 @@ ApplicationWindow {
     }
 
     Component {
-        id: postOnboardingStartup
-        Page {
-            objectName: "postOnboardingStartupPage"
-            background: Rectangle {
-                color: "black"
-            }
-
-            BusyIndicator {
-                objectName: "postOnboardingStartupBusyIndicator"
-                anchors.centerIn: parent
-                running: true
-            }
-        }
-    }
-
-    Component {
         id: desktopWallets
         DesktopWallets {
             objectName: "desktopWalletsPage"
             onAddWallet: {
-                main.push(createWalletWizard, { "launchContext": CreateWalletWizard.Context.Main })
+                walletCreationModal.open()
             }
         }
     }
 
-    Component {
-        id: createWalletWizard
-        CreateWalletWizard {
-            onFinished: {
-                main.pop()
-            }
+    WalletCreationModal {
+        id: walletCreationModal
+        onFinished: function(openActivity) {
+            if (openActivity) appWindow.routeToShell("openActivity")
         }
     }
 

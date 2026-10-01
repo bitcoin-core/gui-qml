@@ -22,9 +22,11 @@ def click_to_storage_location(gui):
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     for button, expected_page in [
         ("onboardingCoverButton", "onboardingStrengthen"),
-        ("onboardingStrengthenButton", "onboardingBlockclock"),
+        ("onboardingStrengthenButton", "onboardingBlockchain"),
+        ("onboardingBlockchainButton", "onboardingBlockclock"),
         ("onboardingBlockclockButton", "onboardingStorageLocation"),
     ]:
+        gui.wait_for_property(button, "enabled", True, timeout_ms=5000)
         gui.click(button)
         gui.wait_for_page(expected_page, timeout_ms=5000)
 
@@ -46,6 +48,7 @@ def select_custom_datadir(gui, datadir):
 
 
 def click_to_connection(gui):
+    gui.wait_for_property("onboardingStorageLocationButton", "enabled", True, timeout_ms=10000)
     gui.click("onboardingStorageLocationButton")
     gui.wait_for_page("onboardingStorageAmount", timeout_ms=5000)
     gui.wait_for_property("onboardingStorageAmountButton", "enabled", True, timeout_ms=10000)
@@ -55,22 +58,23 @@ def click_to_connection(gui):
 
 def open_connection_settings(gui):
     gui.click("connectionSettingsButton")
-    gui.wait_for_page("gotoProxy", timeout_ms=5000)
+    gui.wait_for_page("proxySettingsRow", timeout_ms=5000)
 
 
 def open_proxy_settings(gui):
-    gui.click("gotoProxy")
-    gui.wait_for_page("settingsProxy", timeout_ms=5000)
+    gui.click("proxySettingsRow")
+    gui.wait_for_page("proxySettingsPage", timeout_ms=5000)
 
 
 def close_proxy_settings(gui):
-    gui.wait_for_property("settingsProxyDone", "enabled", True, timeout_ms=2000)
-    gui.click("settingsProxyDone")
-    gui.wait_for_page("gotoProxy", timeout_ms=5000)
+    gui.wait_for_property("proxySettingsSaveButton", "enabled", True, timeout_ms=2000)
+    gui.click("proxySettingsSaveButton")
+    gui.wait_for_page("proxySettingsRow", timeout_ms=5000)
 
 
 def close_connection_settings(gui):
-    gui.click("connectionSettingsDoneButton")
+    gui.click("onboardingConnectionSettingsCloseButton")
+    gui.wait_for_property("onboardingConnectionSettingsPopup", "visible", False, timeout_ms=5000)
     gui.wait_for_page("onboardingConnectionButton", timeout_ms=5000)
 
 
@@ -114,10 +118,12 @@ def run_first_reset_onboarding(tmpdir, custom_datadir):
         open_proxy_settings(gui)
         set_switch(gui, "proxyEnableSwitch", True)
         gui.set_text("proxyAddressInput", "10.0.0.1:9050")
-        gui.wait_for_property("proxyAddressInput", "validInput", True, timeout_ms=2000)
+        gui.wait_for_property("proxySettingsPage", "draftProxyAddress", "10.0.0.1:9050", timeout_ms=2000)
+        gui.wait_for_property("proxySettingsPage", "draftProxyValidationError", "", timeout_ms=2000)
         set_switch(gui, "torEnableSwitch", True)
         gui.set_text("torAddressInput", "127.0.0.1:9150")
-        gui.wait_for_property("torAddressInput", "validInput", True, timeout_ms=2000)
+        gui.wait_for_property("proxySettingsPage", "draftTorAddress", "127.0.0.1:9150", timeout_ms=2000)
+        gui.wait_for_property("proxySettingsPage", "draftTorValidationError", "", timeout_ms=2000)
         close_proxy_settings(gui)
         close_connection_settings(gui)
 

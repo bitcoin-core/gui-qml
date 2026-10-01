@@ -70,7 +70,7 @@ class CheckpointRecorder:
         )
 
 
-def open_import_wallet_page(gui):
+def import_wallet_from_type_selector(gui, backup_path):
     gui.wait_for_property("walletBadge", "loading", False, timeout_ms=20000)
     assert gui.get_property("walletBadge", "noWalletLoaded") is True, "Expected no wallet to be loaded at startup"
 
@@ -81,13 +81,8 @@ def open_import_wallet_page(gui):
     except QmlDriverError:
         pass
     gui.wait_for_property("walletTypeImport", "visible", True, timeout_ms=10000)
-    gui.click("walletTypeImport")
-    gui.wait_for_page("importWalletOptions", timeout_ms=10000)
-
-
-def trigger_automated_import(gui, backup_path):
     gui.set_text("importWalletPathField", backup_path)
-    gui.click("importWalletChooseFileButton")
+    gui.click("walletTypeImport")
 
 
 def wait_for_text_contains(gui, object_name, expected_substring, timeout_ms=20000):
@@ -140,16 +135,13 @@ def case_bad_format(harness, checkpoints):
     harness.start_gui()
     gui = harness.driver
     checkpoints.checkpoint("GUI launched", gui)
-    open_import_wallet_page(gui)
-    checkpoints.checkpoint("import wallet page opened", gui)
-
-    trigger_automated_import(gui, backup_path)
+    import_wallet_from_type_selector(gui, backup_path)
     checkpoints.checkpoint("bad-format backup submitted", gui)
 
     gui.wait_for_property("importWalletErrorView", "visible", True, timeout_ms=20000)
     checkpoints.checkpoint("bad-format error screen displayed", gui)
 
-    assert gui.get_current_page() == "importWalletOptions", "Bad-format restore should remain on the import flow page"
+    gui.wait_for_property("createWalletWizard", "currentItem.objectName", "walletImportErrorPage", timeout_ms=20000)
     assert gui.get_property("walletBadge", "noWalletLoaded") is True, "Bad-format restore should not load a wallet"
     assert gui.get_text("importWalletErrorTitle") == "This wallet type is not supported"
     assert gui.get_text("importWalletErrorDescription") == (
@@ -197,16 +189,13 @@ def case_legacy_wallet(harness, checkpoints):
     harness.start_gui()
     gui = harness.driver
     checkpoints.checkpoint("GUI launched", gui)
-    open_import_wallet_page(gui)
-    checkpoints.checkpoint("import wallet page opened", gui)
-
-    trigger_automated_import(gui, backup_path)
+    import_wallet_from_type_selector(gui, backup_path)
     checkpoints.checkpoint("legacy backup submitted", gui)
 
     gui.wait_for_property("importWalletErrorView", "visible", True, timeout_ms=20000)
     checkpoints.checkpoint("legacy-wallet error screen displayed", gui)
 
-    assert gui.get_current_page() == "importWalletOptions", "Legacy restore failure should remain on the import flow page"
+    gui.wait_for_property("createWalletWizard", "currentItem.objectName", "walletImportErrorPage", timeout_ms=20000)
     assert gui.get_property("walletBadge", "noWalletLoaded") is True, "Legacy restore failure should not load a wallet"
     assert gui.get_text("importWalletErrorTitle") == "This wallet needs to be migrated"
     assert gui.get_text("importWalletErrorDescription") == (
@@ -233,10 +222,7 @@ def case_successful_import(harness, checkpoints):
     harness.start_gui()
     gui = harness.driver
     checkpoints.checkpoint("GUI launched", gui)
-    open_import_wallet_page(gui)
-    checkpoints.checkpoint("import wallet page opened", gui)
-
-    trigger_automated_import(gui, backup_path)
+    import_wallet_from_type_selector(gui, backup_path)
     checkpoints.checkpoint("valid backup submitted", gui)
 
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=20000)

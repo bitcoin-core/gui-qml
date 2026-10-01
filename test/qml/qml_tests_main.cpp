@@ -1802,7 +1802,7 @@ public:
             Q_EMIT walletLoadErrorChanged();
             return false;
         }
-        Q_EMIT walletCreateSucceeded();
+        Q_EMIT walletLoadSucceeded();
         return true;
     }
     Q_INVOKABLE void importWallet(const QString&)
@@ -1949,6 +1949,7 @@ Q_SIGNALS:
     void openReceiveRequested();
     void openWalletSettingsRequested();
     void walletCreateSucceeded();
+    void walletLoadSucceeded();
     void walletImportSucceeded();
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
@@ -2208,6 +2209,12 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
+    Q_PROPERTY(int dbcacheSizeMiB MEMBER m_dbcache_size_mib NOTIFY dbcacheSizeMiBChanged)
+    Q_PROPERTY(int minDbcacheSizeMiB MEMBER m_min_dbcache_size_mib CONSTANT)
+    Q_PROPERTY(int maxDbcacheSizeMiB MEMBER m_max_dbcache_size_mib CONSTANT)
+    Q_PROPERTY(int scriptThreads MEMBER m_script_threads NOTIFY scriptThreadsChanged)
+    Q_PROPERTY(int minScriptThreads MEMBER m_min_script_threads CONSTANT)
+    Q_PROPERTY(int maxScriptThreads MEMBER m_max_script_threads CONSTANT)
     Q_PROPERTY(int maxMempoolSizeMB READ maxMempoolSizeMB WRITE setMaxMempoolSizeMB NOTIFY maxMempoolSizeMBChanged)
     Q_PROPERTY(int maxMaxMempoolSizeMB MEMBER m_max_max_mempool_size_mb CONSTANT)
     Q_PROPERTY(int minMaxMempoolSizeMB MEMBER m_min_max_mempool_size_mb CONSTANT)
@@ -2256,6 +2263,12 @@ public:
     bool m_listen{true};
     bool m_natpmp{false};
     bool m_server{false};
+    int m_dbcache_size_mib{450};
+    int m_min_dbcache_size_mib{4};
+    int m_max_dbcache_size_mib{1024};
+    int m_script_threads{0};
+    int m_min_script_threads{-8};
+    int m_max_script_threads{15};
     int m_max_mempool_size_mb{300};
     int m_max_max_mempool_size_mb{99999};
     int m_min_max_mempool_size_mb{1};
@@ -2486,6 +2499,8 @@ Q_SIGNALS:
     void listenChanged();
     void natpmpChanged();
     void serverChanged();
+    void dbcacheSizeMiBChanged();
+    void scriptThreadsChanged();
     void maxMempoolSizeMBChanged(int value);
     void pruneChanged();
     void pruneSizeGBChanged();
@@ -4002,7 +4017,8 @@ public:
 
     QPixmap requestPixmap(const QString& id, QSize* size, const QSize& requested_size) override
     {
-        const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") + id).pixmap(requested_size);
+        const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") +
+            (id == QStringLiteral("app") ? QStringLiteral("bitcoin") : id)).pixmap(requested_size);
         if (size) *size = pixmap.size();
         return pixmap;
     }

@@ -14,16 +14,25 @@ Button {
     property bool recommended: false
     property string image: ""
     property string customDir: ""
+    property bool surfaceSelectionStyle: false
     padding: 15
     checkable: true
     hoverEnabled: enabled
     implicitWidth: 450
     background: Rectangle {
         objectName: "optionButtonBackground"
-        border.width: 1
+        border.width: button.surfaceSelectionStyle ? 0 : 1
         border.color: !button.enabled ? Theme.color.neutral4 : button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
         radius: 10
-        color: "transparent"
+        color: button.surfaceSelectionStyle
+            ? button.checked
+                ? Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
+                : button.hovered ? Theme.color.neutral2 : Theme.color.neutral1
+            : "transparent"
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
         FocusBorder {
             visible: button.enabled && button.visualFocus
             borderRadius: 14
@@ -62,6 +71,7 @@ Button {
                 header: button.text
                 headerSize: 18
                 headerMargin: 0
+                headerColor: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
                 description: button.description
                 descriptionSize: 15
                 descriptionMargin: 0
@@ -143,7 +153,7 @@ Button {
             Icon {
                 anchors.centerIn: parent
                 source: "image://images/check"
-                color: Theme.color.neutral9
+                color: button.surfaceSelectionStyle ? Theme.color.orange : Theme.color.neutral9
                 size: 24
             }
         }

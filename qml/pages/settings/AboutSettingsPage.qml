@@ -13,8 +13,9 @@ import "../../components"
 SettingsPage {
     id: root
     objectName: "aboutSettingsPage"
-    title: qsTr("About")
+    title: onboardingModal ? qsTr("About Bitcoin Core") : qsTr("About")
     showBackButton: false
+    property bool onboardingModal: false
 
     PageHeading {
         Layout.fillWidth: true
@@ -23,9 +24,12 @@ SettingsPage {
 
     FormSection {
         Layout.fillWidth: true
+        isOnSurface: root.onboardingModal
+        showGradientBorder: false
 
         LinkRow {
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Website")
             value: "bitcoincore.org"
             link: "https://bitcoincore.org"
@@ -34,6 +38,7 @@ SettingsPage {
 
         LinkRow {
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Source code")
             value: "github.com/bitcoin/bitcoin"
             link: "https://github.com/bitcoin/bitcoin"
@@ -42,6 +47,7 @@ SettingsPage {
 
         LinkRow {
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("License")
             value: "MIT"
             link: "https://opensource.org/licenses/MIT"
@@ -51,6 +57,7 @@ SettingsPage {
         LinkRow {
             objectName: "aboutVersionRow"
             Layout.fillWidth: true
+            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
             title: qsTr("Version")
             value: BuildInfo.fullClientVersion
             link: "https://bitcoin.org/en/download"
@@ -87,6 +94,7 @@ SettingsPage {
         id: developerPage
 
         SettingsDeveloper {
+            onboarding: root.onboardingModal
             onBack: root.StackView.view.pop()
         }
     }

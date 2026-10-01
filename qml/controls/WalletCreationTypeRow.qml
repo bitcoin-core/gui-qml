@@ -1,4 +1,4 @@
-// Copyright (c) 2025 The Bitcoin Core developers
+// Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,21 +8,27 @@ import QtQuick.Layouts 1.15
 
 AbstractButton {
     id: root
-
     property string title: ""
     property string description: ""
     property string iconSource: ""
-    property color iconColor: Theme.color.neutral9
 
-    padding: 15
-    implicitWidth: 450
-    opacity: enabled ? 1.0 : 0.4
+    implicitHeight: Math.max(72, content.implicitHeight + topPadding + bottomPadding)
+    padding: 16
+    opacity: enabled ? 1 : 0.4
+    hoverEnabled: true
+    focusPolicy: Qt.StrongFocus
+    Accessible.name: title
+    Accessible.description: description
 
     background: Rectangle {
-        border.width: 1
-        border.color: root.hovered && root.enabled ? Theme.color.neutral9 : Theme.color.neutral5
-        radius: 10
-        color: "transparent"
+        radius: 12
+        color: root.down || root.hovered ? Theme.color.neutral3 : Theme.color.neutral2
+        border.width: 0
+
+        Behavior on color {
+            ColorAnimation { duration: 150 }
+        }
+
         FocusBorder {
             visible: root.visualFocus
             borderRadius: 14
@@ -30,34 +36,33 @@ AbstractButton {
     }
 
     contentItem: RowLayout {
-        spacing: 10
+        id: content
+        spacing: 16
+
         Icon {
             source: root.iconSource
-            color: root.iconColor
+            color: Theme.color.neutral9
             size: 24
+            Layout.alignment: Qt.AlignVCenter
         }
         ColumnLayout {
-            spacing: 2
             Layout.fillWidth: true
+            spacing: 2
             CoreText {
                 Layout.fillWidth: true
                 text: root.title
-                font.pixelSize: 18
-                bold: true
+                font: Theme.text.subheading.font
                 color: Theme.color.neutral9
                 horizontalAlignment: Text.AlignLeft
             }
             CoreText {
                 Layout.fillWidth: true
                 text: root.description
-                font.pixelSize: 15
+                font: Theme.text.caption.font
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignLeft
                 wrapMode: Text.WordWrap
             }
-        }
-        CaretRightIcon {
-            Layout.alignment: Qt.AlignVCenter
         }
     }
 }

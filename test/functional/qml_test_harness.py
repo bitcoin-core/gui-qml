@@ -336,7 +336,8 @@ def walk_onboarding_to_connection(gui):
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     steps = [
         ("onboardingCoverButton",           "onboardingStrengthen"),
-        ("onboardingStrengthenButton",      "onboardingBlockclock"),
+        ("onboardingStrengthenButton",      "onboardingBlockchain"),
+        ("onboardingBlockchainButton",      "onboardingBlockclock"),
         ("onboardingBlockclockButton",      "onboardingStorageLocation"),
         ("onboardingStorageLocationButton", "onboardingStorageAmount"),
         ("onboardingStorageAmountButton",   "onboardingConnection"),
@@ -386,14 +387,14 @@ def assert_wallet_shell_visible(gui, timeout_ms=30000):
 
 
 def assert_onboarding_wallet_creation_visible(gui, timeout_ms=30000):
-    """Assert full onboarding landed in the wallet shell with create-wallet flow open."""
+    """Assert setup finished on the node tab with wallet creation open as a modal."""
     gui.wait_for_object("mainPageStack", timeout_ms=timeout_ms)
     gui.wait_for_object("walletBadge", timeout_ms=timeout_ms)
+    gui.wait_for_property("walletCreationModal", "visible", True, timeout_ms=timeout_ms)
     gui.wait_for_object("createWalletWizard", timeout_ms=timeout_ms)
-    gui.wait_for_property("createWalletButton", "visible", True, timeout_ms=timeout_ms)
-    gui.wait_for_property("createWalletButton", "enabled", True, timeout_ms=timeout_ms)
+    gui.wait_for_page("walletCreationTypePage", timeout_ms=timeout_ms)
     assert gui.object_exists("walletBadge"), "Expected wallet shell behind create wallet wizard"
-    assert gui.object_exists("createWalletWizard"), "Expected create wallet wizard after onboarding"
+    assert gui.get_property("blockClockTabButton", "checked"), "Expected node tab behind wallet creation"
     assert not gui.object_exists("nodeRunner"), "Expected wallet onboarding flow, but nodeRunner is present"
 
 
