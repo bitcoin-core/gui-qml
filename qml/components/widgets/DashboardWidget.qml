@@ -29,6 +29,9 @@ Item {
     property int columnSpan: 1
     property int rowSpan: 1
     property bool active: true
+    // Picker previews render without activating live model polling. The picker
+    // overrides this binding to pause previews outside its scroll viewport.
+    property bool renderingActive: active || preview
     // The host supplies the actual cell size. The fallback also supports previews.
     property real cellSize: Math.min((width + 2 * WidgetMetrics.contentPadding - (columnSpan - 1) * 12) / columnSpan,
                                     (height + 2 * WidgetMetrics.contentPadding - (rowSpan - 1) * 12) / rowSpan)

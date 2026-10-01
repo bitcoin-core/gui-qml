@@ -10,7 +10,7 @@ DashboardWidget {
     id: root
     objectName: "networkTrafficWidget"
     property var trafficModel: typeof networkTrafficTower !== "undefined" ? networkTrafficTower : null
-    readonly property var samples: trafficModel ? trafficModel.widgetHistory : []
+    readonly property var samples: renderingActive && trafficModel ? trafficModel.widgetHistory : []
     readonly property bool ready: samples.length > 0
     readonly property var latest: ready ? samples[samples.length - 1] : null
     readonly property var received: formatRate(latest ? latest.received : -1)
@@ -162,7 +162,7 @@ DashboardWidget {
                 id: chart
                 objectName: "networkTrafficWidgetChart"
                 anchors.fill: parent
-                active: root.active || root.preview
+                active: root.renderingActive
                 series: root.series
                 xMinimum: root.startTime
                 xMaximum: root.endTime

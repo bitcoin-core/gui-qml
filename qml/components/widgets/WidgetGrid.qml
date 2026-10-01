@@ -115,6 +115,7 @@ Item {
 
     Flickable {
         id: viewport
+        objectName: "widgetGridViewport"
         anchors.fill: parent
         clip: true
         contentWidth: Math.max(width, surface.width + 2 * root.edgePadding)
@@ -169,6 +170,12 @@ Item {
                 height: rowSpan * root.pitch - root.gap
                 z: interacting ? 2 : 1
                 opacity: interacting && root.gestureKind === "move" ? 0.85 : 1
+                // Flickable clipping does not change Item.visible. Pause consumers
+                // once their entire frame leaves the visible content rectangle.
+                inViewport: surface.x + x + width > viewport.contentX
+                    && surface.x + x < viewport.contentX + viewport.width
+                    && surface.y + y + height > viewport.contentY
+                    && surface.y + y < viewport.contentY + viewport.height
                 cellSize: root.cellSize
                 coordinateItem: surface
                 editing: root.editing

@@ -2834,10 +2834,6 @@ class MockNetworkTrafficTower : public QObject
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(quint64 totalBytesReceived MEMBER m_total_bytes_received NOTIFY totalBytesReceivedChanged)
     Q_PROPERTY(quint64 totalBytesSent MEMBER m_total_bytes_sent NOTIFY totalBytesSentChanged)
-    Q_PROPERTY(double maxReceivedRateBps MEMBER m_max_received_rate_bps NOTIFY maxReceivedRateBpsChanged)
-    Q_PROPERTY(double maxSentRateBps MEMBER m_max_sent_rate_bps NOTIFY maxSentRateBpsChanged)
-    Q_PROPERTY(QVariantList receivedRateList MEMBER m_received_rate_list NOTIFY receivedRateListChanged)
-    Q_PROPERTY(QVariantList sentRateList MEMBER m_sent_rate_list NOTIFY sentRateListChanged)
     Q_PROPERTY(int lastFilterWindowSize MEMBER m_last_filter_window_size NOTIFY lastFilterWindowSizeChanged)
 
 public:
@@ -2858,10 +2854,6 @@ public:
     bool m_active{false};
     quint64 m_total_bytes_received{1'000};
     quint64 m_total_bytes_sent{2'000};
-    double m_max_received_rate_bps{100.0};
-    double m_max_sent_rate_bps{200.0};
-    QVariantList m_received_rate_list{10.0, 20.0, 30.0};
-    QVariantList m_sent_rate_list{15.0, 25.0, 35.0};
     int m_last_filter_window_size{30};
 
     Q_INVOKABLE void updateFilterWindowSize(const int window_size)
@@ -2876,10 +2868,6 @@ Q_SIGNALS:
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
-    void maxReceivedRateBpsChanged();
-    void maxSentRateBpsChanged();
-    void receivedRateListChanged();
-    void sentRateListChanged();
     void lastFilterWindowSizeChanged();
 };
 

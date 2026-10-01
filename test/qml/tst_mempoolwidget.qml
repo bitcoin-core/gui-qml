@@ -123,4 +123,17 @@ TestCase {
         wait(0)
         compare(activity.active, false)
     }
+
+    function test_inactiveCopiesReleaseChartData() {
+        const first = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
+        const second = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
+        first.active = false
+        compare(activity.active, true)
+        compare(first.samples.length, 0)
+        activity.history = [{time: 200000, rate: 1234}]
+        compare(first.samples.length, 0)
+        compare(second.samples, activity.history)
+        first.active = true
+        compare(first.samples, activity.history)
+    }
 }

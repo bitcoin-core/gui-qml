@@ -98,4 +98,29 @@ TestCase {
         fixture.chart.active = true
         verify(!render(fixture).equals(dark))
     }
+
+    function test_inactiveAndHiddenUpdatesDoNotSchedulePaints() {
+        const fixture = createTemporaryObject(fixtureComponent, testCase)
+        const chart = fixture.chart
+        chart.slices = [{value: 1, color: "red"}]
+        render(fixture)
+        wait(50)
+        chart.active = false
+        paintSpy.clear()
+        chart.slices = [{value: 1, color: "blue"}]
+        chart.gap = 4
+        chart.requestPaint()
+        wait(50)
+        compare(paintSpy.count, 0)
+        chart.active = true
+        verify(render(fixture).blue(100, 100) > 200)
+        chart.visible = false
+        paintSpy.clear()
+        chart.slices = [{value: 1, color: "red"}]
+        chart.requestPaint()
+        wait(50)
+        compare(paintSpy.count, 0)
+        chart.visible = true
+        verify(render(fixture).red(100, 100) > 200)
+    }
 }

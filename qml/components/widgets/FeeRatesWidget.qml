@@ -98,7 +98,7 @@ DashboardWidget {
                 objectName: "feeRatesCurve"
                 anchors.fill: parent
                 visible: root.hasEstimates
-                active: root.active || root.preview
+                active: root.renderingActive
                 smooth: true
                 showPoints: true
                 lineWidth: 3

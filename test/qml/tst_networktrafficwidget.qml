@@ -165,6 +165,30 @@ TestCase {
         compare(traffic.widgetActive, false)
         verify(preview.preview)
     }
+    function test_inactiveCopiesReleaseChartData() {
+        const first = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
+        const second = createTemporaryObject(widgetComponent, testCase, {width: 330, height: 148})
+        first.active = false
+        compare(traffic.widgetActive, true)
+        compare(first.samples.length, 0)
+        traffic.widgetHistory = [{time: 200000, received: 123, sent: 456}]
+        compare(first.series[0].points.length, 0)
+        compare(second.received.amount, "123")
+        first.active = true
+        compare(first.samples, traffic.widgetHistory)
+        compare(first.received.amount, "123")
+
+        const preview = createTemporaryObject(widgetComponent, testCase, {
+            width: 330, height: 148, preview: true, active: false
+        })
+        compare(preview.samples, traffic.widgetHistory)
+        preview.renderingActive = false
+        compare(preview.samples.length, 0)
+        traffic.widgetHistory = [{time: 201000, received: 789, sent: 10}]
+        compare(preview.samples.length, 0)
+        preview.renderingActive = true
+        compare(preview.received.amount, "789")
+    }
     function test_registry() {
         const registry = createTemporaryObject(registryComponent, testCase)
         const definitions = registry.catalog.filter(function(entry) { return entry.id === "network-traffic" })

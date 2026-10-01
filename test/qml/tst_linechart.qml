@@ -124,6 +124,36 @@ TestCase {
         fixture.height = 4
         render(fixture)
     }
+
+    function test_inactiveAndHiddenUpdatesDoNotSchedulePaints() {
+        const fixture = createTemporaryObject(chartComponent, testCase)
+        const chart = fixture.chart
+        chart.points = [{x: 0, y: 5}, {x: 10, y: 5}]
+        render(fixture)
+        wait(50)
+        compare(chart.selectionSeries.length, 0)
+        chart.interactive = true
+        compare(chart.selectionSeries[0].length, 2)
+        chart.active = false
+        paintSpy.clear()
+        chart.points = [{x: 0, y: 8}, {x: 10, y: 8}]
+        chart.lineWidth = 5
+        chart.requestPaint()
+        wait(50)
+        compare(paintSpy.count, 0)
+        compare(chart.selectionSeries.length, 0)
+        chart.active = true
+        verify(render(fixture).red(100, 26) > 200)
+
+        chart.visible = false
+        paintSpy.clear()
+        chart.points = [{x: 0, y: 2}, {x: 10, y: 2}]
+        chart.requestPaint()
+        wait(50)
+        compare(paintSpy.count, 0)
+        chart.visible = true
+        verify(render(fixture).red(100, 74) > 200)
+    }
     function test_selectionMatchesFractionalDomains() {
         const fixture = createTemporaryObject(chartComponent, testCase)
         const chart = fixture.chart

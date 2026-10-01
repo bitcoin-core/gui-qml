@@ -267,6 +267,11 @@ Popup {
                                         onLoaded: {
                                             if (item instanceof DashboardWidget) {
                                                 item.cellSize = Qt.binding(function() { return previews.cellSize })
+                                                item.renderingActive = Qt.binding(function() {
+                                                    return root.visible && preview.visible
+                                                        && preview.y + preview.height > previewScroll.contentItem.contentY
+                                                        && preview.y < previewScroll.contentItem.contentY + previewScroll.availableHeight
+                                                })
                                             }
                                         }
                                     }

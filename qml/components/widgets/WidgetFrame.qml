@@ -32,7 +32,8 @@ FocusScope {
     property int availableColumns: 6
     property int availableRows: 6
     readonly property DashboardWidget widgetContent: content.item instanceof DashboardWidget ? content.item : null
-    readonly property bool contentActive: visible && (!Window.window || (Window.window.visible && Window.window.visibility !== Window.Minimized))
+    property bool inViewport: true
+    readonly property bool contentActive: visible && inViewport && (!Window.window || (Window.window.visible && Window.window.visibility !== Window.Minimized))
     objectName: "widget_" + instanceId
     activeFocusOnTab: editing
     Accessible.role: Accessible.Grouping

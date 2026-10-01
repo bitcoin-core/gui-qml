@@ -20,11 +20,11 @@ Item {
     readonly property bool scrubbing: pointer.pressed || activeFocus
     readonly property bool selectionVisible: interactive && active && isFinite(selectedX)
         && selectedX >= xMinimum && selectedX <= xMaximum
-    readonly property var selectionSeries: plottedSeries.map(function(source) {
+    readonly property var selectionSeries: interactive && active && visible ? plottedSeries.map(function(source) {
         return (source.points || []).filter(function(point) {
             return point && typeof point.x === "number" && isFinite(point.x)
         })
-    })
+    }) : []
     readonly property var selectedPoints: selectionSeries.map(function(values, index) {
         return root.selectionVisible ? root.pointAt(values, root.selectedX,
             root.option(root.plottedSeries[index], "maximumGap")) : null
@@ -89,7 +89,9 @@ Item {
     property int yLabelCount: plot.height >= 48 ? 3 : plot.height >= 28 ? 2 : 1
 
     signal painted()
-    function requestPaint() { plot.requestPaint() }
+    function requestPaint() {
+        if (active && visible && plot.available && plot.width > 0 && plot.height > 0) plot.requestPaint()
+    }
     function validPoint(point) {
         return !!point && typeof point.x === "number" && isFinite(point.x)
             && typeof point.y === "number" && isFinite(point.y)
@@ -200,13 +202,13 @@ Item {
         width: Math.max(0, root.width - x)
         height: Math.max(0, root.height - root.bottomInset)
         antialiasing: true
-        onAvailableChanged: if (available) requestPaint()
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-        onVisibleChanged: if (visible) requestPaint()
+        onAvailableChanged: if (available) root.requestPaint()
+        onWidthChanged: root.requestPaint()
+        onHeightChanged: root.requestPaint()
+        onVisibleChanged: if (visible) root.requestPaint()
         onPainted: root.painted()
         onPaint: {
-            if (!available || !root.active) return
+            if (!available || !root.active || !root.visible) return
             const ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
             const padding = root.plotPadding

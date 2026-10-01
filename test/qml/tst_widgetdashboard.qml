@@ -153,6 +153,49 @@ TestCase {
         compare(frame.widgetContent, content)
     }
 
+    function test_scrolledWidgetsPauseAndResume() {
+        const dashboard = createDashboard()
+        dashboard.width = 400
+        dashboard.height = 300
+        const grid = findChild(dashboard, "widgetGrid")
+        const viewport = findChild(dashboard, "widgetGridViewport")
+        const surface = findChild(dashboard, "widgetGridSurface")
+        tryCompare(grid, "columns", 3)
+        dashboard.layoutModel.removeWidget("clock")
+        for (let i = 0; i < 9; ++i) verify(dashboard.layoutModel.addWidget("fixed"))
+        waitForPolish(dashboard)
+        const frames = surface.children.filter(function(child) { return child.widgetId === "fixed" })
+        const first = frames.filter(function(frame) { return frame.gridRow === 0 && frame.gridColumn === 0 })[0]
+        const last = frames.filter(function(frame) { return frame.gridRow === 2 && frame.gridColumn === 0 })[0]
+        const content = last.widgetContent
+        compare(first.contentActive, true)
+        compare(last.visible, true) // Clipping alone does not pause a widget.
+        compare(content.active, false)
+
+        viewport.contentY = surface.y + last.y + last.height - 1
+        tryCompare(content, "active", true) // One visible pixel is enough.
+        compare(first.widgetContent.active, false)
+        viewport.contentY += 1
+        tryCompare(content, "active", false)
+        viewport.contentY = surface.y + last.y
+        tryCompare(content, "active", true)
+        compare(last.widgetContent, content)
+        dashboard.visible = false
+        compare(content.active, false)
+        dashboard.visible = true
+        compare(content.active, true)
+
+        // Horizontal clipping follows the same contract on a narrow board.
+        dashboard.width = 180
+        waitForPolish(dashboard)
+        viewport.contentY = 0
+        const right = frames.filter(function(frame) { return frame.gridRow === 0 && frame.gridColumn === 2 })[0]
+        tryCompare(right.widgetContent, "active", false)
+        viewport.contentX = surface.x + right.x
+        tryCompare(right.widgetContent, "active", true)
+        compare(first.widgetContent.active, false)
+    }
+
     function test_registryIsMetadataOnlyAndContentContractIsEnforced() {
         const dashboard = createDashboard()
         const definition = dashboard.widgetRegistry.definitions[3]
@@ -352,6 +395,25 @@ TestCase {
         mouseClick(findChild(picker.contentItem, "widgetPickerSize_fixed_1x1"))
         tryCompare(picker, "visible", false)
         verify(dashboard.layoutModel.contains("fixed"))
+    }
+
+    function test_pickerPausesOffscreenPreviews() {
+        const dashboard = createDashboard()
+        chooseAction(dashboard, "addWidgetButton")
+        const picker = findChild(dashboard, "widgetPicker")
+        tryCompare(picker, "opened", true)
+        mouseClick(findChild(picker.contentItem, "widgetPickerRow_small"))
+        const first = findChild(picker.contentItem, "widgetPickerSize_small_1x1")
+        const last = findChild(picker.contentItem, "widgetPickerSize_small_3x3")
+        const scroll = findChild(picker.contentItem, "widgetPickerScroll")
+        waitForPolish(picker.contentItem)
+        tryCompare(first.contentItem.item, "renderingActive", true)
+        tryCompare(last.contentItem.item, "renderingActive", false)
+        compare(first.contentItem.item.active, false)
+        scroll.contentItem.contentY = last.y
+        tryCompare(last.contentItem.item, "renderingActive", true)
+        tryCompare(first.contentItem.item, "renderingActive", false)
+        compare(last.contentItem.item.active, false)
     }
 
     function test_pickerKeepsOpenWhenBoardIsFull() {

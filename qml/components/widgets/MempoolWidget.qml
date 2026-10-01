@@ -15,7 +15,7 @@ DashboardWidget {
     readonly property bool ready: available && activityModel !== null && activityModel.ready
     readonly property real capacityBaseline: activityModel ? activityModel.baseline : 1000000 / 600
     readonly property real currentRate: ready ? activityModel.incomingRate : -1
-    readonly property var samples: ready ? activityModel.history : []
+    readonly property var samples: renderingActive && ready ? activityModel.history : []
     Accessible.description: qsTr("Incoming virtual bytes per second. The dashed line is approximately one block of capacity per ten minutes.")
 
     activityTarget: activityModel
@@ -65,7 +65,7 @@ DashboardWidget {
                 capacityBaseline: root.capacityBaseline
                 expanded: root.expanded
                 showAxes: !root.compact
-                active: root.active || root.preview
+                active: root.renderingActive
                 visible: root.ready && hasSamples
             }
             CoreText {

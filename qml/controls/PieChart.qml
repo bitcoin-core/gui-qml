@@ -39,7 +39,9 @@ Item {
     readonly property bool hasSlices: segments.length > 0
     readonly property real total: segments.reduce(function(sum, slice) { return sum + slice.value }, 0)
     signal painted()
-    function requestPaint() { plot.requestPaint() }
+    function requestPaint() {
+        if (active && visible && plot.available && plot.width > 0 && plot.height > 0) plot.requestPaint()
+    }
     onSegmentsChanged: requestPaint()
     onInnerRatioChanged: requestPaint()
     onGapChanged: requestPaint()
@@ -50,13 +52,13 @@ Item {
         id: plot
         anchors.fill: parent
         antialiasing: true
-        onAvailableChanged: if (available) requestPaint()
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-        onVisibleChanged: if (visible) requestPaint()
+        onAvailableChanged: if (available) root.requestPaint()
+        onWidthChanged: root.requestPaint()
+        onHeightChanged: root.requestPaint()
+        onVisibleChanged: if (visible) root.requestPaint()
         onPainted: root.painted()
         onPaint: {
-            if (!available || !root.active) return
+            if (!available || !root.active || !root.visible) return
             const ctx = getContext("2d")
             ctx.reset()
             ctx.clearRect(0, 0, width, height)

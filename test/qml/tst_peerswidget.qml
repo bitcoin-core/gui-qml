@@ -230,6 +230,23 @@ TestCase {
         compare(peers.widgetActive, false)
         verify(preview.preview)
     }
+    function test_largePreviewRendersWithoutPolling() {
+        const widget = createTemporaryObject(widgetComponent, testCase, {
+            width: 500, height: 330, columnSpan: 3, rowSpan: 2, preview: true, active: false
+        })
+        waitForPolish(widget)
+        const chart = findChild(widget, "peersWidgetChart")
+        compare(peers.widgetActive, false)
+        verify(chart.active)
+        paintSpy.target = chart
+        paintSpy.clear()
+        chart.requestPaint()
+        paintSpy.wait()
+        widget.renderingActive = false
+        compare(chart.active, false)
+        compare(peers.widgetActive, false)
+    }
+
     function test_registry() {
         const registry = createTemporaryObject(registryComponent, testCase)
         const definitions = registry.catalog.filter(function(entry) { return entry.id === "peers" })

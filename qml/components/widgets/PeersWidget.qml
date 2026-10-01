@@ -264,7 +264,7 @@ DashboardWidget {
                         height: width
                         style: PieChart.Donut
                         slices: root.groups
-                        active: root.active && root.expanded
+                        active: root.renderingActive && root.expanded
                     }
                 }
                 GridLayout {
