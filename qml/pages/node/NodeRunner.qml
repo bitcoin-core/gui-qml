@@ -19,6 +19,7 @@ Page {
         nodeTabButton.checked = true
         nodeNavigationStack.pop(null, StackView.Immediate)
     }
+    function openDashboard() { widgetsTabButton.checked = true }
     function openPeers() { nodeTabButton.checked = true; nodeOverview.openPeers() }
     function openSettings(section) {
         if (section) settingsLoader.pendingSection = section

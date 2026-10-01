@@ -182,7 +182,14 @@ Platform.MenuBar {
             shortcut: root.actions.receiveView.shortcut
             onTriggered: root.actions.receiveView.trigger()
         }
-        Platform.MenuSeparator { visible: root.actions.walletMode }
+        Platform.MenuItem {
+            objectName: "menuDashboard"
+            text: root.actions.dashboardView.text
+            enabled: root.actions.dashboardView.enabled
+            shortcut: root.actions.dashboardView.shortcut
+            onTriggered: root.actions.dashboardView.trigger()
+        }
+        Platform.MenuSeparator {}
         Platform.MenuItem {
             objectName: "menuInformation"
             text: root.actions.information.text

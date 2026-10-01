@@ -85,6 +85,10 @@ Page {
         activityTabButton.checked = true
     }
 
+    function openDashboard() {
+        widgetsTabButton.checked = true
+    }
+
     function openSend() {
         sendTabButton.checked = true
     }

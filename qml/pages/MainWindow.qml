@@ -205,6 +205,7 @@ ApplicationWindow {
         }
         onMainWindowRequested: desktopTrayIconController.showMainWindow()
         onNodeRequested: appWindow.routeToShell("openNode")
+        onDashboardRequested: appWindow.routeToShell("openDashboard")
         onActivityRequested: appWindow.routeToShell("openActivity")
         onSendRequested: appWindow.routeToShell("openSend")
         onReceiveRequested: appWindow.routeToShell("openReceive")
