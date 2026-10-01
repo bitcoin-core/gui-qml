@@ -34,6 +34,7 @@
         <file>tst_monospaceoutputview.qml</file>
         <file>tst_navbutton.qml</file>
         <file>tst_linechart.qml</file>
+        <file>tst_piechart.qml</file>
         <file>tst_networktraffic.qml</file>
         <file>tst_networktrafficwidget.qml</file>
         <file>tst_navigationsplitview.qml</file>
