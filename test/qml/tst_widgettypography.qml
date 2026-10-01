@@ -25,9 +25,22 @@ TestCase {
         return null
     }
 
+    function checkPeersPadding(frame, widget) {
+        if (widget.objectName !== "peersWidget") return
+        for (const name of ["peersWidgetTitle", "peersWidgetTotal", "peersWidgetTotalLabel",
+            "peersWidgetDirectionSection", "peersWidgetLegend", "peersWidgetChart"]) {
+            const item = findChild(widget, name)
+            if (!item.visible) continue
+            const position = item.mapToItem(frame, 0, 0)
+            verify(position.x >= frame.contentPadding - 1 && position.y >= frame.contentPadding - 1, name + " top/left padding")
+            verify(position.x + item.width <= frame.width - frame.contentPadding + 1, name + " right padding")
+            verify(position.y + item.height <= frame.height - frame.contentPadding + 1, name + " bottom padding")
+        }
+    }
+
     function test_cellResize_data() {
         const cases = []
-        for (const file of ["FeeRatesWidget", "MempoolWidget", "MempoolSummaryWidget", "DifficultyPeriodWidget", "HalvingWidget", "NetworkTrafficWidget", "BlockClockWidget"]) {
+        for (const file of ["FeeRatesWidget", "MempoolWidget", "MempoolSummaryWidget", "DifficultyPeriodWidget", "HalvingWidget", "NetworkTrafficWidget", "PeersWidget", "BlockClockWidget"]) {
             const sizes = file === "BlockClockWidget" ? [[2, 2], [3, 3]] : [[1, 1], [2, 1], [3, 2]]
             for (const size of sizes) cases.push({tag: file + size.join("x"), file: file, columns: size[0], rows: size[1]})
         }
@@ -59,6 +72,7 @@ TestCase {
         compare(originalSize, expectedStyle.pixelSize)
         compare(title.font.styleName, expectedStyle.styleName)
         compare(widget.fontScale, 1)
+        checkPeersPadding(frame, widget)
         const valueStyle = data.columns >= 3 && data.rows >= 2
             ? Theme.text.widgetPrimaryValueLarge : Theme.text.widgetPrimaryValue
         compare(widget.primaryValueFont, valueStyle.font)
@@ -74,7 +88,7 @@ TestCase {
         compare(widget.footerValueFont, footerValueStyle.font)
         const valueNames = {FeeRatesWidget: "feeRatesHeadline", MempoolWidget: "incomingTransactionsPrimaryValue",
             MempoolSummaryWidget: "mempoolSummaryCount", DifficultyPeriodWidget: "difficultyNextChange",
-            HalvingWidget: "halvingHeadline", NetworkTrafficWidget: data.columns === 1 && data.rows === 1 ? "networkTrafficCompactReceived" : "networkTrafficReceivedRate", BlockClockWidget: "blockClockPrimaryValue"}
+            HalvingWidget: "halvingHeadline", NetworkTrafficWidget: data.columns === 1 && data.rows === 1 ? "networkTrafficCompactReceived" : "networkTrafficReceivedRate", PeersWidget: "peersWidgetTotal", BlockClockWidget: "blockClockPrimaryValue"}
         const value = findChild(widget, valueNames[data.file])
         verify(value !== null)
         compare(value.font.pixelSize, valueStyle.pixelSize)
@@ -91,6 +105,7 @@ TestCase {
         frame.height += data.rows * 160
         waitForPolish(widget)
         compare(widget.fontScale, 2)
+        checkPeersPadding(frame, widget)
         compare(widget.secondaryValueFont.pixelSize, secondaryValueStyle.pixelSize * 2)
         compare(widget.primaryLabelFont, primaryLabelStyle.font)
         compare(widget.footerLabelFont, footerLabelStyle.font)

@@ -55,6 +55,8 @@ private Q_SLOTS:
     void refreshHandlesGetNodesStatsFailure();
     void startStopAutoRefresh();
     void sortProxySortsByRoles();
+    void summarizesNetworksAndDirections();
+    void widgetAndTableShareRefreshLifecycle();
 };
 
 void PeerListModelTests::mapsRoleData()
@@ -202,6 +204,94 @@ void PeerListModelTests::startStopAutoRefresh()
     QTest::qWait(AUTO_REFRESH_STOP_WAIT);
     QCOMPARE(get_nodes_stats_calls, calls_after_stop);
     QVERIFY(node.calls.getNodesStats.load() >= 2);
+}
+
+void PeerListModelTests::summarizesNetworksAndDirections()
+{
+    auto stats{MakeStats({
+        MakeNodeStats(1, "ipv4", true, ConnectionType::INBOUND, NET_IPV4),
+        MakeNodeStats(2, "manual ipv4", false, ConnectionType::MANUAL, NET_IPV4),
+        MakeNodeStats(3, "ipv6", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_IPV6),
+        MakeNodeStats(4, "tor", false, ConnectionType::BLOCK_RELAY, NET_ONION),
+        MakeNodeStats(5, "i2p", true, ConnectionType::INBOUND, NET_I2P),
+        MakeNodeStats(6, "cjdns", true, ConnectionType::INBOUND, NET_CJDNS),
+        MakeNodeStats(7, "other", false, ConnectionType::FEELER, NET_UNROUTABLE),
+    })};
+    bool available{true};
+    MockNode node;
+    node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats& result) {
+        result = stats;
+        return available;
+    };
+    PeerListModel model{node, nullptr};
+    const auto summary = model.summary();
+    QCOMPARE(summary.value("ready").toBool(), true);
+    QCOMPARE(summary.value("total").toInt(), 7);
+    QCOMPARE(summary.value("inbound").toInt(), 3);
+    QCOMPARE(summary.value("outbound").toInt(), 4);
+    const auto groups = summary.value("groups").toList();
+    QCOMPARE(groups.size(), 6);
+    QCOMPARE(groups[0].toMap().value("id").toString(), QString{"ipv4"});
+    QCOMPARE(groups[0].toMap().value("count").toInt(), 2);
+    int sum{0};
+    for (const auto& group : groups) sum += group.toMap().value("count").toInt();
+    QCOMPARE(sum, summary.value("total").toInt());
+
+    QSignalSpy changed{&model, &PeerListModel::summaryChanged};
+    model.refresh();
+    QCOMPARE(changed.count(), 0);
+    // Changes to a peer's network or direction matter even when the total is unchanged.
+    std::get<0>(stats[0]).m_network = NET_IPV6;
+    std::get<0>(stats[0]).fInbound = false;
+    model.refresh();
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(model.summary().value("inbound").toInt(), 2);
+    QCOMPARE(model.summary().value("groups").toList()[0].toMap().value("count").toInt(), 1);
+
+    available = false;
+    model.refresh();
+    QVERIFY(!model.summary().value("ready").toBool());
+    available = true;
+    stats.clear();
+    model.refresh();
+    QVERIFY(model.summary().value("ready").toBool());
+    QCOMPARE(model.summary().value("total").toInt(), 0);
+    QVERIFY(model.summary().value("groups").toList().isEmpty());
+}
+
+void PeerListModelTests::widgetAndTableShareRefreshLifecycle()
+{
+    MockNode node;
+    node.get_nodes_stats_fn = [](interfaces::Node::NodesStats& result) {
+        result.clear();
+        return true;
+    };
+    PeerListModel model{node, nullptr};
+    const auto calls = [&] { return node.calls.getNodesStats.load(); };
+    model.setWidgetActive(true);
+    QCOMPARE(calls(), 2); // Immediate snapshot on activation.
+    model.startAutoRefresh();
+    model.stopAutoRefresh(); // Closing the table must not stop an active widget.
+    const int widget_calls = calls();
+    QTRY_VERIFY_WITH_TIMEOUT(calls() > widget_calls, AUTO_REFRESH_TRIGGER_TIMEOUT);
+    model.startAutoRefresh();
+    model.setWidgetActive(false); // Hiding the dashboard must not stop the table.
+    const int table_calls = calls();
+    QTRY_VERIFY_WITH_TIMEOUT(calls() > table_calls, AUTO_REFRESH_TRIGGER_TIMEOUT);
+    model.stopAutoRefresh();
+    const int stopped_calls = calls();
+    QTest::qWait(AUTO_REFRESH_STOP_WAIT);
+    QCOMPARE(calls(), stopped_calls);
+    model.setWidgetActive(true);
+    model.stopForShutdown();
+    const int shutdown_calls = calls();
+    model.refresh();
+    model.startAutoRefresh();
+    model.setWidgetActive(false);
+    model.setWidgetActive(true);
+    QTest::qWait(AUTO_REFRESH_STOP_WAIT);
+    QCOMPARE(calls(), shutdown_calls);
+    QVERIFY(!model.summary().value("ready").toBool());
 }
 
 void PeerListModelTests::sortProxySortsByRoles()

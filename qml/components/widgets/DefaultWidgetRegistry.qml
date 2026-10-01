@@ -66,6 +66,13 @@ WidgetRegistry {
             title: qsTr("Network traffic")
             source: Qt.resolvedUrl("NetworkTrafficWidget.qml")
             sizes: [WidgetSize { columns: 2; rows: 1 }, WidgetSize { columns: 3; rows: 2 }, WidgetSize { columns: 1; rows: 1 }]
+        },
+        WidgetDefinition {
+            widgetId: "peers"
+            //: Name of the peer connections widget in the dashboard picker.
+            title: qsTr("Peers")
+            source: Qt.resolvedUrl("PeersWidget.qml")
+            sizes: [WidgetSize { columns: 2; rows: 1 }, WidgetSize { columns: 3; rows: 2 }, WidgetSize { columns: 1; rows: 1 }]
         }
     ]
 }

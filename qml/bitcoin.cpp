@@ -704,6 +704,8 @@ int QmlGuiMain(int argc, char* argv[])
     });
 
     PeerListModel peer_model{*node, nullptr};
+    QObject::connect(&node_model, &NodeModel::nodeInitialized, &peer_model, &PeerListModel::refresh);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &peer_model, &PeerListModel::stopForShutdown);
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 

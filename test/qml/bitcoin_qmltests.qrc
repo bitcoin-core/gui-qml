@@ -37,6 +37,7 @@
         <file>tst_piechart.qml</file>
         <file>tst_networktraffic.qml</file>
         <file>tst_networktrafficwidget.qml</file>
+        <file>tst_peerswidget.qml</file>
         <file>tst_navigationsplitview.qml</file>
         <file>tst_nodefeedback.qml</file>
         <file>tst_onboarding_datadir.qml</file>

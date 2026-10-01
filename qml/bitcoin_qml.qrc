@@ -19,6 +19,7 @@
         <file>components/widgets/DifficultyPeriodWidget.qml</file>
         <file>components/widgets/HalvingWidget.qml</file>
         <file>components/widgets/NetworkTrafficWidget.qml</file>
+        <file>components/widgets/PeersWidget.qml</file>
         <file>components/widgets/MempoolSummaryWidget.qml</file>
         <file>components/widgets/DashboardWidget.qml</file>
         <file>components/widgets/WidgetMetrics.js</file>

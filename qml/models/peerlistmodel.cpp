@@ -10,6 +10,7 @@
 #include <QList>
 #include <QTimer>
 
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <utility>
@@ -32,12 +33,48 @@ PeerListModel::~PeerListModel() = default;
 
 void PeerListModel::startAutoRefresh()
 {
-    m_timer->start();
+    m_auto_refresh = true;
+    updateRefreshTimer();
 }
 
 void PeerListModel::stopAutoRefresh()
 {
+    m_auto_refresh = false;
+    updateRefreshTimer();
+}
+
+void PeerListModel::setWidgetActive(bool active)
+{
+    if (m_widget_active == active) return;
+    m_widget_active = active;
+    Q_EMIT widgetActiveChanged();
+    updateRefreshTimer();
+    if (active) refresh();
+}
+
+void PeerListModel::updateRefreshTimer()
+{
+    if (m_shutting_down || (!m_auto_refresh && !m_widget_active)) {
+        m_timer->stop();
+        return;
+    }
+    // The detailed table keeps its existing cadence; the dashboard only needs
+    // one snapshot per second. Neither consumer can stop the other's refreshes.
+    m_timer->start(m_auto_refresh ? MODEL_UPDATE_DELAY : std::chrono::milliseconds{1000});
+}
+
+void PeerListModel::setSummary(QVariantMap summary)
+{
+    if (m_summary == summary) return;
+    m_summary = std::move(summary);
+    Q_EMIT summaryChanged();
+}
+
+void PeerListModel::stopForShutdown()
+{
+    m_shutting_down = true;
     m_timer->stop();
+    setSummary({{"ready", false}});
 }
 
 int PeerListModel::rowCount(const QModelIndex& parent) const
@@ -107,15 +144,40 @@ Qt::ItemFlags PeerListModel::flags(const QModelIndex& index) const
 
 void PeerListModel::refresh()
 {
+    if (m_shutting_down) return;
     interfaces::Node::NodesStats nodes_stats;
-    if (!m_node.getNodesStats(nodes_stats)) return;
+    if (!m_node.getNodesStats(nodes_stats)) {
+        setSummary({{"ready", false}});
+        return;
+    }
 
     decltype(m_peers_data) new_peers_data;
     new_peers_data.reserve(nodes_stats.size());
+    constexpr std::array ids{"ipv4", "ipv6", "tor", "i2p", "cjdns", "other"};
+    std::array<int, ids.size()> counts{};
+    int inbound{0};
     for (const auto& node_stats : nodes_stats) {
         const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
         new_peers_data.append(stats);
+        inbound += stats.nodeStats.fInbound;
+        size_t bucket{5};
+        switch (stats.nodeStats.m_network) {
+        case NET_IPV4: bucket = 0; break;
+        case NET_IPV6: bucket = 1; break;
+        case NET_ONION: bucket = 2; break;
+        case NET_I2P: bucket = 3; break;
+        case NET_CJDNS: bucket = 4; break;
+        default: break;
+        }
+        ++counts[bucket];
     }
+    QVariantList groups;
+    for (size_t i{0}; i < counts.size(); ++i) {
+        if (counts[i]) groups.append(QVariantMap{{"id", ids[i]}, {"count", counts[i]}});
+    }
+    const int total = new_peers_data.size();
+    setSummary({{"ready", true}, {"total", total}, {"inbound", inbound},
+                {"outbound", total - inbound}, {"groups", groups}});
 
     const bool count_changed = m_peers_data.size() != new_peers_data.size();
     bool order_changed{false};

@@ -2792,10 +2792,14 @@ Q_SIGNALS:
 class MockPeerTableModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantMap summary MEMBER m_summary NOTIFY summaryChanged)
+    Q_PROPERTY(bool widgetActive MEMBER m_widget_active NOTIFY widgetActiveChanged)
     Q_PROPERTY(bool autoRefreshActive MEMBER m_auto_refresh_active NOTIFY autoRefreshActiveChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
 public:
+    QVariantMap m_summary{{"ready", true}, {"total", 0}, {"inbound", 0}, {"outbound", 0}, {"groups", QVariantList{}}};
+    bool m_widget_active{false};
     Q_INVOKABLE void startAutoRefresh() { m_auto_refresh_active = true; Q_EMIT autoRefreshActiveChanged(); }
     Q_INVOKABLE void stopAutoRefresh() { m_auto_refresh_active = false; Q_EMIT autoRefreshActiveChanged(); }
     Q_INVOKABLE void refresh()
@@ -2811,6 +2815,8 @@ public:
     int refreshCalls() const { return m_refresh_calls; }
 
 Q_SIGNALS:
+    void summaryChanged();
+    void widgetActiveChanged();
     void refreshCallsChanged();
     void autoRefreshActiveChanged();
 

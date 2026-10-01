@@ -106,7 +106,9 @@ DashboardWidget {
                     Layout.preferredWidth: 1
                     spacing: 2
                     RowLayout {
-                        Layout.fillWidth: true
+                        Layout.fillWidth: reading.index === 0
+                        Layout.alignment: reading.index === 0 ? Qt.AlignLeft : Qt.AlignRight
+                        Layout.maximumWidth: reading.width
                         spacing: 6
                         Icon {
                             visible: !root.expanded
