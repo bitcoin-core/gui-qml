@@ -3082,14 +3082,14 @@ void WalletQmlModel::setCustomFeeRate(const QString& fee_rate)
                 wallet::CCoinControl control{m_coin_control};
                 control.m_feerate.reset();
                 control.m_confirm_target = CUSTOM_FEE_TARGETS[i];
-                target_rates[i] = m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, nullptr);
+                FeeReason reason{FeeReason::NONE};
+                const CAmount rate = m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, &reason);
+                target_rates[i] = reason == FeeReason::FALLBACK ? 0 : rate;
             }
 
-            // When the estimator has no target-specific data, moving the thumb
-            // would imply a confirmation estimate we do not actually have.
-            if (std::any_of(target_rates.begin() + 1, target_rates.end(), [&](CAmount rate) {
-                    return rate != target_rates.front();
-                })) {
+            // Equal estimates are valid: the fastest affordable target wins.
+            // Fallback fees cannot tell us how quickly a transaction will confirm.
+            if (std::any_of(target_rates.begin(), target_rates.end(), [](CAmount rate) { return rate > 0; })) {
                 unsigned int inferred_target = CUSTOM_FEE_TARGETS.back();
                 for (size_t i = 0; i < CUSTOM_FEE_TARGETS.size(); ++i) {
                     if (target_rates[i] > 0 && *requested_rate >= target_rates[i]) {

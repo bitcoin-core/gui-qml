@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
+import "../../controls/FeeRateColors.js" as FeeRateColors
 
 DashboardWidget {
     id: root
@@ -38,16 +39,7 @@ DashboardWidget {
     }
 
     function colorForRate(rate) {
-        if (!(rate > 0) || !isFinite(rate) || !(referenceRate > 0)) return Theme.color.neutral6
-        // Half the recent median is cool; each doubling moves one palette stop.
-        const level = Math.max(0, Math.min(3, Math.log(rate / referenceRate) / Math.LN2 + 1))
-        const lower = Math.floor(level)
-        const blend = level - lower
-        const palette = Theme.color.feeRateColors
-        const a = palette[lower]
-        const b = palette[Math.min(lower + 1, 3)]
-        return Qt.rgba(a.r + (b.r - a.r) * blend, a.g + (b.g - a.g) * blend,
-                       a.b + (b.b - a.b) * blend, 1)
+        return FeeRateColors.colorForRate(rate, referenceRate, Theme.color.feeRateColors, Theme.color.neutral6)
     }
 
     FontMetrics { id: headlineMetrics; font: headline.font }

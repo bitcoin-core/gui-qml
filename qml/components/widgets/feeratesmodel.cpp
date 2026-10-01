@@ -63,6 +63,7 @@ void FeeRatesModel::setReady(bool ready)
         // No estimator call may overlap destruction of the node's estimator.
         QMetaObject::invokeMethod(m_worker, [] {}, Qt::BlockingQueuedConnection);
         m_rates = {-1.0, -1.0, -1.0, -1.0};
+        m_block_target_rates = {-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
         Q_EMIT ratesChanged();
     }
     Q_EMIT readyChanged();
@@ -165,7 +166,7 @@ void FeeRatesModel::refresh()
     Q_EMIT pendingChanged();
     QMetaObject::invokeMethod(m_worker, [this, generation = m_generation] {
         QVariantList rates;
-        for (const int target : {2, 4, 6, 144}) {
+        for (const int target : {2, 3, 4, 6, 10, 25, 50, 144}) {
             const qint64 per_kvb = m_estimate(target);
             rates.append(per_kvb > 0 ? per_kvb / 1000.0 : -1.0);
         }
@@ -176,9 +177,13 @@ void FeeRatesModel::refresh()
                 refresh();
                 return;
             }
-            recordObservation(rates);
-            if (rates != m_rates) {
-                m_rates = rates;
+            const QVariantList widget_rates{rates[0], rates[2], rates[3], rates[7]};
+            const QVariantList block_target_rates = rates.mid(0, 7);
+            // Keep the dashboard's historical baseline independent of slider targets.
+            recordObservation(widget_rates);
+            if (widget_rates != m_rates || block_target_rates != m_block_target_rates) {
+                m_rates = widget_rates;
+                m_block_target_rates = block_target_rates;
                 Q_EMIT ratesChanged();
             }
         }, Qt::QueuedConnection);

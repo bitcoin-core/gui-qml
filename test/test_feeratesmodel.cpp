@@ -81,10 +81,42 @@ private Q_SLOTS:
         QVERIFY(!model.pending()); // No node access before initialization.
         model.setReady(true);
         QTRY_VERIFY(!model.pending());
-        QCOMPARE(targets, QList<int>({2, 4, 6, 144}));
+        QCOMPARE(targets, QList<int>({2, 3, 4, 6, 10, 25, 50, 144}));
         QCOMPARE(model.rates(), QVariantList({12.345, 0.5, -1.0, 0.001}));
+        QCOMPARE(model.blockTargetRates(), QVariantList({12.345, 0.001, 0.5, -1.0, 0.001, 0.001, 0.001}));
         model.setReady(false);
         QCOMPARE(model.rates(), QVariantList({-1.0, -1.0, -1.0, -1.0}));
+        QCOMPARE(model.blockTargetRates(), QVariantList({-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0}));
+    }
+
+    void sliderUpdatesDoNotChangeDashboardHistory()
+    {
+        QTemporaryDir settings;
+        qint64 now{864000};
+        qint64 slider_rate{100000};
+        FeeRatesModel model([&](int target) -> qint64 {
+            if (target == 2) return 8000;
+            if (target == 4) return 4000;
+            if (target == 6) return 2000;
+            if (target == 144) return 250;
+            return slider_rate;
+        }, nullptr, settings.filePath("fees.ini"), [&] { return now; });
+        model.setReady(true);
+        model.setActive(true);
+        QTRY_VERIFY(!model.pending());
+        QSignalSpy changed(&model, &FeeRatesModel::ratesChanged);
+        now += 60;
+        slider_rate = 500;
+        model.refresh();
+        QTRY_VERIFY(!model.pending());
+        QCOMPARE(changed.count(), 1); // Slider-only changes still notify consumers.
+        QCOMPARE(model.rates(), QVariantList({8.0, 4.0, 2.0, 0.25}));
+        QCOMPARE(model.blockTargetRates(), QVariantList({8.0, 0.5, 4.0, 2.0, 0.5, 0.5, 0.5}));
+        QCOMPARE(model.referenceRate(), 3.0); // Median of dashboard estimates, independent of extra targets.
+        now += 60;
+        model.refresh();
+        QTRY_VERIFY(!model.pending());
+        QCOMPARE(model.referenceRate(), 3.0);
     }
 
     void inactiveWidgetsDoNotPoll()
@@ -97,13 +129,13 @@ private Q_SLOTS:
         QCOMPARE(calls.load(), 0);
         model.setActive(true);
         QTRY_VERIFY(!model.pending());
-        QCOMPARE(calls.load(), 4);
+        QCOMPARE(calls.load(), 8);
         model.setActive(false);
         model.refresh();
-        QCOMPARE(calls.load(), 4);
+        QCOMPARE(calls.load(), 8);
         model.setActive(true);
         QTRY_VERIFY(!model.pending());
-        QCOMPARE(calls.load(), 8);
+        QCOMPARE(calls.load(), 16);
     }
 
     void staleResultsAreDiscardedAndRefreshesCoalesce()
@@ -125,7 +157,7 @@ private Q_SLOTS:
         release.release(); // Always release the worker before any test assertion.
         QVERIFY(entered);
         QTRY_VERIFY(!model.pending());
-        QCOMPARE(calls.load(), 4);
+        QCOMPARE(calls.load(), 8);
         QCOMPARE(model.rates(), QVariantList({-1.0, -1.0, -1.0, -1.0}));
     }
 
@@ -147,10 +179,10 @@ private Q_SLOTS:
         const int drained_calls = calls.load();
         unblock.join();
         QVERIFY(entered);
-        QCOMPARE(drained_calls, 4);
+        QCOMPARE(drained_calls, 8);
         QTRY_VERIFY(!model.pending());
         model.refresh();
-        QCOMPARE(calls.load(), 4);
+        QCOMPARE(calls.load(), 8);
         QCOMPARE(model.rates(), QVariantList({-1.0, -1.0, -1.0, -1.0}));
     }
 };

@@ -980,6 +980,16 @@ void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
 
     wallet->get_minimum_fee_fn = [](const wallet::CCoinControl&) { return CAmount{1'000}; };
     model->setCustomFeeRate("2");
+    QCOMPARE(model->feeTargetBlocks(), 2U);
+
+    wallet->minimum_fee_reason = FeeReason::FALLBACK;
+    model->setFeeTargetBlocks(50);
+    model->setCustomFeeRate("4");
+    QCOMPARE(model->feeTargetBlocks(), 50U);
+
+    wallet->minimum_fee_reason = FeeReason::NONE;
+    wallet->get_minimum_fee_fn = [](const wallet::CCoinControl&) { return CAmount{0}; };
+    model->setCustomFeeRate("5");
     QCOMPARE(model->feeTargetBlocks(), 50U);
 }
 
