@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_COMPONENTS_WIDGETS_FEERATESMODEL_H
 #define BITCOIN_QML_COMPONENTS_WIDGETS_FEERATESMODEL_H
 
+#include <qml/components/widgets/asyncsettingswriter.h>
+
 #include <QObject>
 #include <QThread>
 #include <QTimer>
@@ -14,7 +16,7 @@
 
 /** Wallet-independent estimates for the dashboard and Send block targets, in sat/vB.
  * Negative values mean unavailable. The estimator returns sat/kvB and runs on
- * a worker; setReady(false) drains it before the node shuts down. */
+ * a worker; stopForShutdown() asynchronously drains it before the node shuts down. */
 class FeeRatesModel : public QObject
 {
     Q_OBJECT
@@ -26,6 +28,7 @@ class FeeRatesModel : public QObject
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
 
 public:
+    bool persistencePending() const { return m_settings_writer.pending(); }
     using EstimateFn = std::function<qint64(int)>;
     using NowFn = std::function<qint64()>;
     explicit FeeRatesModel(EstimateFn estimate, QObject* parent = nullptr,
@@ -40,8 +43,10 @@ public:
     void setReady(bool ready);
     void setActive(bool active);
     void refresh();
+    void stopForShutdown();
 
 Q_SIGNALS:
+    void shutdownFinished();
     void ratesChanged();
     void referenceRateChanged();
     void readyChanged();
@@ -49,6 +54,7 @@ Q_SIGNALS:
     void activeChanged();
 
 private:
+    AsyncSettingsWriter m_settings_writer;
     void updatePolling();
     void restoreHistory();
     void recordObservation(const QVariantList& rates);

@@ -43,7 +43,7 @@ void QmlInitExecutor::initialize()
             qDebug() << "Running initialization in thread";
             interfaces::BlockAndHeaderTipInfo tip_info;
             bool rv = m_node.appInitMain(&tip_info);
-            Q_EMIT initializeResult(rv, tip_info);
+            Q_EMIT initializeResult(rv, tip_info, rv && m_node.isInitialBlockDownload());
         } catch (const std::exception& e) {
             handleRunawayException(&e);
         } catch (...) {

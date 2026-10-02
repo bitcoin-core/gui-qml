@@ -28,7 +28,7 @@ std::unique_ptr<QSettings> Settings(const QString& file)
 } // namespace
 
 WidgetLayoutModel::WidgetLayoutModel(QObject* parent, const QString& settings_file)
-    : QAbstractListModel(parent), m_settings_file(settings_file)
+    : QAbstractListModel(parent), m_settings_writer(settings_file), m_settings_file(settings_file)
 {
 }
 
@@ -364,27 +364,28 @@ void WidgetLayoutModel::save(bool user_edit)
     Q_EMIT layoutChanged();
     if (user_edit) m_persist_reflow = true;
     if (m_storage_key.isEmpty() || !m_persist_reflow) return;
-    const auto write_entries = [](const QList<Entry>& entries) {
-        QJsonArray widgets;
-        for (const auto& entry : entries) {
-            widgets.append(QJsonObject{{"id", entry.id}, {"widgetId", entry.widget_id}, {"column", entry.rect.x()}, {"row", entry.rect.y()},
-                                       {"columns", entry.rect.width()}, {"rows", entry.rect.height()}});
+    m_settings_writer.save(m_storage_key, [saved = m_saved, arrangements = m_arrangements] {
+        const auto write_entries = [](const QList<Entry>& entries) {
+            QJsonArray widgets;
+            for (const auto& entry : entries) {
+                widgets.append(QJsonObject{{"id", entry.id}, {"widgetId", entry.widget_id}, {"column", entry.rect.x()}, {"row", entry.rect.y()},
+                                           {"columns", entry.rect.width()}, {"rows", entry.rect.height()}});
+            }
+            return widgets;
+        };
+        QJsonObject layouts;
+        for (auto it = arrangements.cbegin(); it != arrangements.cend(); ++it) {
+            layouts.insert(QString::number(it.key()), write_entries(it.value()));
         }
-        return widgets;
-    };
-    QJsonObject layouts;
-    for (auto it = m_arrangements.cbegin(); it != m_arrangements.cend(); ++it) {
-        layouts.insert(QString::number(it.key()), write_entries(it.value()));
-    }
-    const auto settings = Settings(m_settings_file);
-    settings->setValue(m_storage_key, QJsonDocument(QJsonObject{{"version", 3}, {"widgets", write_entries(m_saved)}, {"layouts", layouts}}).toJson(QJsonDocument::Compact));
-    settings->sync();
-    //: Error shown on the widget dashboard when saving the arrangement fails.
-    const QString error = settings->status() == QSettings::NoError ? QString{} : tr("Your widget arrangement could not be saved.");
-    if (error != m_persistence_error) {
-        m_persistence_error = error;
-        Q_EMIT persistenceErrorChanged();
-    }
+        return QJsonDocument(QJsonObject{{"version", 3}, {"widgets", write_entries(saved)}, {"layouts", layouts}}).toJson(QJsonDocument::Compact);
+    }, [this](bool success) {
+        //: Error shown on the widget dashboard when saving the arrangement fails.
+        const QString error = success ? QString{} : tr("Your widget arrangement could not be saved.");
+        if (error != m_persistence_error) {
+            m_persistence_error = error;
+            Q_EMIT persistenceErrorChanged();
+        }
+    });
 }
 
 bool WidgetLayoutModel::addWidget(const QString& id, int size_index)

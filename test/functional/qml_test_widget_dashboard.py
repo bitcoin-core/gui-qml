@@ -18,6 +18,7 @@ def prepare(harness):
     gui.set_property("appWindow", "width", 1400)
     gui.set_property("appWindow", "height", 800)
     gui.settle()
+    gui.wait_for_property("widgetGrid", "columns", 6)
     return gui
 
 

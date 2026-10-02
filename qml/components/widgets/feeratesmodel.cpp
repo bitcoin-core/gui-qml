@@ -34,7 +34,7 @@ double Median(QList<double> values)
 } // namespace
 
 FeeRatesModel::FeeRatesModel(EstimateFn estimate, QObject* parent, const QString& settings_file, NowFn now)
-    : QObject(parent), m_settings_file(settings_file),
+    : QObject(parent), m_settings_writer(settings_file), m_settings_file(settings_file),
       m_now(now ? std::move(now) : NowFn{QDateTime::currentSecsSinceEpoch}),
       m_estimate(std::move(estimate)), m_worker(new QObject)
 {
@@ -60,8 +60,6 @@ void FeeRatesModel::setReady(bool ready)
     ++m_generation;
     if (!ready) {
         m_timer.stop();
-        // No estimator call may overlap destruction of the node's estimator.
-        QMetaObject::invokeMethod(m_worker, [] {}, Qt::BlockingQueuedConnection);
         m_rates = {-1.0, -1.0, -1.0, -1.0};
         m_block_target_rates = {-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0};
         Q_EMIT ratesChanged();
@@ -150,13 +148,11 @@ void FeeRatesModel::recordObservation(const QVariantList& rates)
 
 void FeeRatesModel::saveHistory()
 {
-    QJsonArray samples;
-    for (const auto& sample : m_history) {
-        samples.append(QJsonObject{{"time", sample.time}, {"rate", sample.rate}});
-    }
-    const auto settings = Settings(m_settings_file);
-    settings->setValue(HISTORY_KEY, QJsonDocument(QJsonObject{{"version", 1}, {"samples", samples}}).toJson(QJsonDocument::Compact));
-    settings->sync();
+    m_settings_writer.save(HISTORY_KEY, [history = m_history] {
+        QJsonArray samples;
+        for (const auto& sample : history) samples.append(QJsonObject{{"time", sample.time}, {"rate", sample.rate}});
+        return QJsonDocument(QJsonObject{{"version", 1}, {"samples", samples}}).toJson(QJsonDocument::Compact);
+    });
 }
 
 void FeeRatesModel::refresh()
@@ -187,5 +183,14 @@ void FeeRatesModel::refresh()
                 Q_EMIT ratesChanged();
             }
         }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
+
+void FeeRatesModel::stopForShutdown()
+{
+    setReady(false);
+    // A queued fence acknowledges all earlier samples without blocking input.
+    QMetaObject::invokeMethod(m_worker, [this] {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT shutdownFinished(); }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
 }

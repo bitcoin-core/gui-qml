@@ -37,6 +37,8 @@ class Node;
 class NodeModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList overviewInformationRows READ overviewInformationRows NOTIFY overviewInformationChanged)
+    Q_PROPERTY(QVariantList informationRows READ nodeInformationRows NOTIFY informationChanged)
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
     Q_PROPERTY(int numPeers READ numPeers NOTIFY numPeersChanged)
@@ -133,17 +135,23 @@ public:
     Q_INVOKABLE QString defaultProxyAddress();
     Q_INVOKABLE bool disconnectPeer(int nodeId);
     Q_INVOKABLE bool banPeer(const QString& rawAddress, int64_t banDuration);
-    Q_INVOKABLE QVariantList nodeInformationRows();
+    QVariantList overviewInformationRows() const;
+    Q_INVOKABLE QVariantList nodeInformationRows() const;
+    Q_INVOKABLE void refreshNodeInformation();
+    void stopForShutdown();
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
     Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
 #endif
 
 public Q_SLOTS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool block_sync_active = false);
     void handleRunawayException(const QString& message);
 
 Q_SIGNALS:
+    void overviewInformationChanged();
+    void informationChanged();
+    void shutdownFinished();
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -207,6 +215,9 @@ private:
     bool m_block_sync_active{false};
     bool m_pause{false};
     bool m_faulted{false};
+    QString m_startup_time;
+    QString m_local_addresses;
+    bool m_information_pending{false};
     QString m_startup_error;
     QStringList m_startup_error_messages;
     QStringList m_startup_warning_messages;

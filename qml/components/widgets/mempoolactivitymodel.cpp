@@ -55,7 +55,6 @@ void MempoolActivityModel::setReady(bool ready)
         m_timer.start();
     } else {
         m_timer.stop();
-        QMetaObject::invokeMethod(m_worker, [] {}, Qt::BlockingQueuedConnection);
         m_queued_vbytes = -1;
         m_minimum_fee = -1;
         m_incoming_rate = -1;
@@ -134,4 +133,13 @@ void MempoolActivityModel::applySnapshot(const Snapshot& snapshot, qint64 time)
     while (m_history.size() > MAX_SAMPLES) m_history.removeFirst();
     Q_EMIT snapshotChanged();
     if (m_active) Q_EMIT historyChanged();
+}
+
+void MempoolActivityModel::stopForShutdown()
+{
+    setReady(false);
+    // A queued fence acknowledges all earlier samples without blocking input.
+    QMetaObject::invokeMethod(m_worker, [this] {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT shutdownFinished(); }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
 }

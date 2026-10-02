@@ -36,8 +36,6 @@ void DifficultyPeriodModel::setReady(bool ready)
     ++m_generation;
     if (!ready) {
         m_timer.stop();
-        // Drain in-process RPC/header queries before node shutdown.
-        QMetaObject::invokeMethod(m_worker, [] {}, Qt::BlockingQueuedConnection);
         m_snapshot = {};
         Q_EMIT snapshotChanged();
     }
@@ -126,4 +124,13 @@ double DifficultyPeriodModel::previousChange() const
 {
     if (!available() || m_snapshot.previous_target <= 0 || m_snapshot.current_target <= 0) return UNKNOWN;
     return (m_snapshot.previous_target / m_snapshot.current_target - 1) * 100;
+}
+
+void DifficultyPeriodModel::stopForShutdown()
+{
+    setReady(false);
+    // A queued fence acknowledges all earlier samples without blocking input.
+    QMetaObject::invokeMethod(m_worker, [this] {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT shutdownFinished(); }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
 }

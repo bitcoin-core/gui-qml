@@ -8,6 +8,9 @@
 #include <QRandomGenerator>
 #include <QSettings>
 #include <QSignalSpy>
+#include <QSemaphore>
+#include <QTimer>
+#include <atomic>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
@@ -59,6 +62,67 @@ class WidgetLayoutModelTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void persistenceUsesDefaultSettingsScope()
+    {
+        QTemporaryDir dir;
+        const auto format = QSettings::defaultFormat();
+        const auto organization = QCoreApplication::organizationName();
+        const auto domain = QCoreApplication::organizationDomain();
+        const auto application = QCoreApplication::applicationName();
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
+        QCoreApplication::setOrganizationName("WidgetTests");
+        QCoreApplication::setOrganizationDomain("widget-tests.example");
+        QCoreApplication::setApplicationName("regtest");
+        bool saved{false};
+        {
+            AsyncSettingsWriter writer;
+            writer.save("layout", [] { return QByteArray("snapshot"); });
+            for (int i = 0; i < 1000 && writer.pending(); ++i) QTest::qWait(1);
+            QSettings settings;
+            saved = settings.value("layout").toByteArray() == QByteArray("snapshot");
+        }
+        QSettings::setDefaultFormat(format);
+        QCoreApplication::setOrganizationName(organization);
+        QCoreApplication::setOrganizationDomain(domain);
+        QCoreApplication::setApplicationName(application);
+        QVERIFY(saved);
+    }
+
+    void persistenceCoalescesSnapshotsWithoutBlockingGui()
+    {
+        QTemporaryDir dir;
+        const auto file = dir.filePath("settings.ini");
+        QSemaphore entered, release;
+        std::atomic<int> writes{0};
+        std::atomic<bool> off_gui{false};
+        AsyncSettingsWriter writer(file);
+        writer.save("layout", [&] {
+            off_gui = QThread::currentThread() != QCoreApplication::instance()->thread();
+            ++writes;
+            entered.release();
+            release.acquire();
+            return QByteArray("first");
+        });
+        const bool started = entered.tryAcquire(1, 1000);
+        for (int i = 0; i < 20; ++i) {
+            writer.save("layout", [&, i] { ++writes; return QByteArray::number(i); });
+        }
+        int ticks{0};
+        QTimer heartbeat;
+        connect(&heartbeat, &QTimer::timeout, this, [&] { ++ticks; });
+        heartbeat.start(1);
+        QTest::qWait(30);
+        release.release();
+        QTRY_VERIFY(!writer.pending());
+        QVERIFY(started);
+        QVERIFY(off_gui.load());
+        QVERIFY(ticks > 0);
+        QCOMPARE(writes.load(), 2);
+        QSettings settings(file, QSettings::IniFormat);
+        QCOMPARE(settings.value("layout").toByteArray(), QByteArray("19"));
+    }
+
     void addRemoveAndUniqueIds()
     {
         WidgetLayoutModel model;
@@ -114,6 +178,7 @@ private Q_SLOTS:
         }
         QCOMPARE(model.geometry("small"), original);
         QCOMPARE(model.geometry(copy), duplicate);
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(Catalog());
         reopened.restore();
@@ -129,6 +194,7 @@ private Q_SLOTS:
             QCOMPARE(reopened.count(), 1);
             QVERIFY(!reopened.geometry(copy).isEmpty());
         }
+        QTRY_VERIFY(!reopened.persistencePending());
         model.restore();
         QCOMPARE(model.count(), 1);
         QCOMPARE(model.data(model.index(0), WidgetLayoutModel::InstanceIdRole).toString(), copy);
@@ -182,7 +248,7 @@ private Q_SLOTS:
         VerifyLayout(model);
     }
 
-    void changesSurviveReopeningImmediately()
+    void changesSurviveReopeningAfterAsyncSave()
     {
         QTemporaryDir dir;
         const QString file = dir.filePath("settings.ini");
@@ -198,6 +264,7 @@ private Q_SLOTS:
         model.commitInteraction();
         const auto saved = Snapshot(model);
         // Reopen while the writer is still alive: saving must not depend on destruction.
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(Catalog());
         reopened.restore();
@@ -208,9 +275,11 @@ private Q_SLOTS:
         QCOMPARE(Snapshot(reopened), saved); // Uncommitted previews never reach disk.
         model.cancelInteraction();
         model.removeWidget("clock");
+        QTRY_VERIFY(!model.persistencePending());
         reopened.restore();
         QVERIFY(!reopened.contains("clock"));
         model.removeWidget("wide");
+        QTRY_VERIFY(!model.persistencePending());
         reopened.restore();
         QCOMPARE(reopened.count(), 0); // An empty saved dashboard is intentional.
     }
@@ -335,6 +404,7 @@ private Q_SLOTS:
         model.removeWidget("small"); // Frees room for the preserved widget.
         QCOMPARE(model.unplacedCount(), 0);
         QVERIFY(!model.geometry("wide").isEmpty());
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(catalog);
         reopened.restore();
@@ -384,6 +454,7 @@ private Q_SLOTS:
             saved.insert(columns, model.geometry("clock"));
             VerifyLayout(model);
         }
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(Catalog());
         reopened.restore();
@@ -430,6 +501,7 @@ private Q_SLOTS:
         model.setColumns(6);
         QCOMPARE(model.count(), 18);
         QCOMPARE(model.unplacedCount(), 2);
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(catalog);
         reopened.restore();
@@ -455,6 +527,7 @@ private Q_SLOTS:
         VerifyLayout(model);
         model.setColumns(6);
         QCOMPARE(Rect(model.geometry("clock")), QRect(3, 0, 3, 3));
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(Catalog());
         reopened.restore();
@@ -479,6 +552,7 @@ private Q_SLOTS:
         QCOMPARE(Rect(model.geometry("clock")), QRect(0, 3, 2, 2));
         model.setColumns(6);
         QVERIFY(model.addWidget("clock", 0));
+        QTRY_VERIFY(!model.persistencePending());
         WidgetLayoutModel reopened(nullptr, file);
         reopened.setCatalog(Catalog());
         reopened.restore();

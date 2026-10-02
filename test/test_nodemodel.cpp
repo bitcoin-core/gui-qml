@@ -641,11 +641,9 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
     MockNode node;
     MempoolState mempool;
     interfaces::Node::NotifyBlockTipFn block_tip_fn;
-    bool initial_block_download{true};
 
     ConfigureNodeModelDefaults(node);
     ConfigureMempoolGetters(node, mempool);
-    node.is_initial_block_download_fn = [&] { return initial_block_download; };
     node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn fn) {
         block_tip_fn = std::move(fn);
         return MakeNoopHandler();
@@ -665,7 +663,7 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
         .header_height = 100,
         .header_time = GetTime(),
         .verification_progress = 0.25,
-    });
+    }, true);
 
     QCOMPARE(block_sync_spy.count(), 1);
     QVERIFY(model.blockSyncActive());
@@ -1515,7 +1513,11 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
     };
     node.get_last_block_time_fn = [] { return int64_t{1'700'000'321}; };
     node.get_network_active_fn = [] { return true; };
-    node.get_net_local_addresses_fn = [] { return std::map<CNetAddr, LocalServiceInfo>{}; };
+    std::atomic<bool> addresses_off_gui{false};
+    node.get_net_local_addresses_fn = [&] {
+        addresses_off_gui = QThread::currentThread() != QCoreApplication::instance()->thread();
+        return std::map<CNetAddr, LocalServiceInfo>{};
+    };
 
     NodeModel model{node};
     WaitForInitialMempoolRefresh(mempool);
@@ -1527,6 +1529,13 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
         .verification_progress = 0.5,
     });
 
+    QCOMPARE(node.calls.getNetLocalAddresses.load(), 0);
+    QCOMPARE(node.calls.getNetworkActive.load(), 0);
+    QCOMPARE(model.overviewInformationRows().size(), 4);
+    QSignalSpy info_changed(&model, &NodeModel::informationChanged);
+    model.refreshNodeInformation();
+    QTRY_COMPARE(info_changed.count(), 1);
+    QVERIFY(addresses_off_gui.load());
     const QVariantList rows = model.nodeInformationRows();
     QVERIFY(!rows.empty());
 

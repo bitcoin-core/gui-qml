@@ -29,7 +29,7 @@ public Q_SLOTS:
     void shutdown();
 
 Q_SIGNALS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool block_sync_active);
     void shutdownResult();
     void runawayException(const QString& message);
 

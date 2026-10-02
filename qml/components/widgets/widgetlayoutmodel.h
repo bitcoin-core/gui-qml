@@ -5,6 +5,8 @@
 #ifndef BITCOIN_QML_COMPONENTS_WIDGETS_WIDGETLAYOUTMODEL_H
 #define BITCOIN_QML_COMPONENTS_WIDGETS_WIDGETLAYOUTMODEL_H
 
+#include <qml/components/widgets/asyncsettingswriter.h>
+
 #include <QAbstractListModel>
 #include <QRect>
 #include <QMap>
@@ -26,6 +28,7 @@ class WidgetLayoutModel : public QAbstractListModel
     Q_PROPERTY(QString persistenceError READ persistenceError NOTIFY persistenceErrorChanged)
 
 public:
+    bool persistencePending() const { return m_settings_writer.pending(); }
     enum Role { WidgetIdRole = Qt::UserRole + 1, TitleRole, SourceRole, ColumnRole, RowRole, ColumnSpanRole, RowSpanRole, SizesRole, InstanceIdRole };
     explicit WidgetLayoutModel(QObject* parent = nullptr, const QString& settings_file = {});
     int rowCount(const QModelIndex& parent = {}) const override;
@@ -65,6 +68,7 @@ Q_SIGNALS:
     void persistenceErrorChanged();
 
 private:
+    AsyncSettingsWriter m_settings_writer;
     struct Entry {
         QString id;
         QRect rect;

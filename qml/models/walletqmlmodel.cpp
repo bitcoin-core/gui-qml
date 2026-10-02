@@ -638,6 +638,7 @@ WalletQmlModel::~WalletQmlModel()
     if (m_fee_estimation_timer) {
         m_fee_estimation_timer->stop();
     }
+    if (m_target_fee_timer) m_target_fee_timer->stop();
     if (m_fee_estimation_thread) {
         m_fee_estimation_thread->quit();
         m_fee_estimation_thread->wait();
@@ -686,6 +687,77 @@ void WalletQmlModel::initializeFeeEstimator()
     m_fee_estimation_timer->setSingleShot(true);
     m_fee_estimation_timer->setInterval(FEE_ESTIMATE_DEBOUNCE_MS);
     connect(m_fee_estimation_timer, &QTimer::timeout, this, &WalletQmlModel::requestFeeEstimatesNow);
+    m_target_fee_timer = new QTimer(this);
+    m_target_fee_timer->setInterval(60000);
+    connect(m_target_fee_timer, &QTimer::timeout, this, &WalletQmlModel::refreshTargetFeeRates);
+    m_target_fee_timer->start();
+    QTimer::singleShot(0, this, &WalletQmlModel::refreshTargetFeeRates);
+}
+
+void WalletQmlModel::refreshTargetFeeRates()
+{
+    if (!m_wallet) return;
+    ++m_target_fee_generation;
+    if (m_target_fee_pending) return;
+    m_target_fee_pending = true;
+    const auto generation = m_target_fee_generation;
+    wallet::CCoinControl control{m_coin_control};
+    control.m_feerate.reset();
+    const auto explicit_target = m_pending_custom_fee_target;
+    interfaces::Wallet* const wallet = m_wallet.get();
+    QMetaObject::invokeMethod(m_fee_estimation_worker, [this, wallet, control, generation, explicit_target]() mutable {
+        QHash<unsigned int, TargetFeeRate> rates;
+        const auto sample = [&](unsigned int target) {
+            control.m_confirm_target = target;
+            FeeReason reason{FeeReason::NONE};
+            const CAmount effective = wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, &reason);
+            // The effective reason can be overwritten by a wallet/policy floor.
+            // Retain the raw estimator result using the same mode and RBF default
+            // as GetMinimumFeeRate rather than treating a floor as an estimate.
+            bool estimated{false};
+            if (auto* raw_wallet = wallet->wallet()) {
+                bool conservative;
+                {
+                    LOCK(raw_wallet->cs_wallet);
+                    conservative = !control.m_signal_bip125_rbf.value_or(raw_wallet->m_signal_rbf);
+                }
+                if (control.m_fee_mode == FeeEstimateMode::CONSERVATIVE) conservative = true;
+                else if (control.m_fee_mode == FeeEstimateMode::ECONOMICAL) conservative = false;
+                estimated = raw_wallet->chain().estimateSmartFee(target, conservative).GetFeePerK() > 0;
+            } else {
+                // Interfaces without a backing CWallet cannot expose the raw
+                // estimator. Only unambiguous estimation reasons are usable.
+                estimated = reason == FeeReason::NONE || reason == FeeReason::HALF_ESTIMATE ||
+                            reason == FeeReason::FULL_ESTIMATE || reason == FeeReason::DOUBLE_ESTIMATE ||
+                            reason == FeeReason::CONSERVATIVE;
+            }
+            rates.insert(target, {effective, estimated && effective > 0});
+        };
+        for (const auto target : CUSTOM_FEE_TARGETS) sample(target);
+        if (explicit_target && !rates.contains(*explicit_target)) sample(*explicit_target);
+        QMetaObject::invokeMethod(this, [this, rates = std::move(rates), generation] {
+            m_target_fee_pending = false;
+            if (generation != m_target_fee_generation) { refreshTargetFeeRates(); return; }
+            m_target_fee_rates = rates;
+            if (m_pending_custom_fee_target) setCustomFeeTarget(*m_pending_custom_fee_target);
+            else if (m_infer_custom_fee_target) inferCustomFeeTarget();
+        }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
+
+void WalletQmlModel::inferCustomFeeTarget()
+{
+    const auto requested = ParseCustomFeeRatePerKvB(m_custom_fee_rate);
+    if (!requested) return;
+    bool available{false};
+    unsigned int inferred = CUSTOM_FEE_TARGETS.back();
+    for (const auto target : CUSTOM_FEE_TARGETS) {
+        const auto rate = m_target_fee_rates.value(target);
+        if (!rate.estimated) continue;
+        available = true;
+        if (*requested >= rate.effective) { inferred = target; break; }
+    }
+    if (available) setFeeTargetBlocks(inferred);
 }
 
 QString WalletQmlModel::balance() const
@@ -804,15 +876,19 @@ void WalletQmlModel::setCustomFeeTarget(unsigned int target)
     if (!m_wallet || target < 1 || target > 1008) return;
     wallet::CCoinControl control{m_coin_control};
     control.m_feerate.reset();
-    control.m_confirm_target = target;
     ApplyRegtestStaticFeeOverride(control);
-    const CAmount rate = control.m_feerate ? control.m_feerate->GetFeePerK()
-        : m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, nullptr);
+    const auto it = m_target_fee_rates.constFind(target);
+    if (!control.m_feerate && it == m_target_fee_rates.cend()) {
+        m_pending_custom_fee_target = target;
+        refreshTargetFeeRates();
+        return;
+    }
+    m_pending_custom_fee_target.reset();
+    const CAmount rate = control.m_feerate ? control.m_feerate->GetFeePerK() : it->effective;
     setCustomFeeEnabled(true);
-    // Leave an unavailable estimate blank instead of suggesting a zero fee.
     setCustomFeeRate(rate > 0 ? QString::number(rate / 1000.0, 'f', 3) : QString{});
-    // Explicit slider selection takes precedence over an inferred target when
-    // several targets currently have the same estimated fee rate.
+    // An explicit target takes precedence over inference when rates are equal.
+    m_infer_custom_fee_target = false;
     setFeeTargetBlocks(target);
 }
 
@@ -2051,6 +2127,7 @@ void WalletQmlModel::scheduleFeeEstimates()
     if (m_updating_maximum || m_fee_estimation_timer == nullptr) {
         return;
     }
+    refreshTargetFeeRates();
     m_fee_estimation_timer->stop();
 
     // Until a destination is entered, show the gross remainder. A valid
@@ -3075,32 +3152,9 @@ void WalletQmlModel::setCustomFeeRate(const QString& fee_rate)
     m_custom_fee_rate = trimmed_fee_rate;
     m_custom_fee_estimate.reset();
 
-    if (m_wallet) {
-        if (const auto requested_rate = ParseCustomFeeRatePerKvB(m_custom_fee_rate)) {
-            std::array<CAmount, CUSTOM_FEE_TARGETS.size()> target_rates{};
-            for (size_t i = 0; i < CUSTOM_FEE_TARGETS.size(); ++i) {
-                wallet::CCoinControl control{m_coin_control};
-                control.m_feerate.reset();
-                control.m_confirm_target = CUSTOM_FEE_TARGETS[i];
-                FeeReason reason{FeeReason::NONE};
-                const CAmount rate = m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, &reason);
-                target_rates[i] = reason == FeeReason::FALLBACK ? 0 : rate;
-            }
-
-            // Equal estimates are valid: the fastest affordable target wins.
-            // Fallback fees cannot tell us how quickly a transaction will confirm.
-            if (std::any_of(target_rates.begin(), target_rates.end(), [](CAmount rate) { return rate > 0; })) {
-                unsigned int inferred_target = CUSTOM_FEE_TARGETS.back();
-                for (size_t i = 0; i < CUSTOM_FEE_TARGETS.size(); ++i) {
-                    if (target_rates[i] > 0 && *requested_rate >= target_rates[i]) {
-                        inferred_target = CUSTOM_FEE_TARGETS[i];
-                        break;
-                    }
-                }
-                setFeeTargetBlocks(inferred_target);
-            }
-        }
-    }
+    m_pending_custom_fee_target.reset();
+    m_infer_custom_fee_target = true;
+    inferCustomFeeTarget();
 
     Q_EMIT customFeeRateChanged();
     if (was_valid != customFeeRateValid()) {

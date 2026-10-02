@@ -44,6 +44,7 @@ def run_tests():
         gui.set_property("appWindow", "width", 1400)
         gui.set_property("appWindow", "height", 800)
         gui.settle()
+        gui.wait_for_property("widgetGrid", "columns", 6)
         assert geometry(gui) == expected, (geometry(gui), expected, gui.get_property("widgetGrid", "columns"))
         choose_action(gui, "editWidgetsButton")
         screenshot(gui, "fee-rates-edit.png")

@@ -54,6 +54,32 @@ TestCase {
             }
         }
     }
+    Component {
+        id: frameComponent
+        WidgetFrame {
+            width: 160; height: 160
+            instanceId: "hidden"; widgetId: "fixture"; widgetTitle: "Fixture"
+            widgetSource: Qt.resolvedUrl("WidgetFixture.qml")
+            columnSpan: 1; rowSpan: 1; supportedSizes: []
+            coordinateItem: testCase
+        }
+    }
+    function test_hiddenFrameStartsInactive_data() {
+        return [{ tag: "hidden", visible: false, inViewport: true },
+                { tag: "offscreen", visible: true, inViewport: false }]
+    }
+    function test_hiddenFrameStartsInactive(data) {
+        const frame = createTemporaryObject(frameComponent, testCase, { visible: data.visible, inViewport: data.inViewport })
+        verify(frame !== null)
+        tryVerify(function() { return frame.widgetContent !== null })
+        compare(frame.widgetContent.activationCount, 0)
+        compare(frame.widgetContent.active, false)
+        frame.visible = true
+        frame.inViewport = true
+        tryCompare(frame.widgetContent, "active", true)
+        compare(frame.widgetContent.activationCount, 1)
+    }
+
     Component { id: defaultRegistryComponent; DefaultWidgetRegistry {} }
 
     function init() {

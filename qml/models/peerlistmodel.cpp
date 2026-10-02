@@ -22,6 +22,11 @@ constexpr auto MODEL_UPDATE_DELAY{std::chrono::milliseconds{250}};
 PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent)
     : QAbstractListModel(parent), m_node(node)
 {
+    m_worker = new QObject;
+    m_worker->moveToThread(&m_thread);
+    connect(&m_thread, &QThread::finished, m_worker, &QObject::deleteLater);
+    m_thread.setObjectName("qml-peers");
+    m_thread.start();
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &PeerListModel::refresh);
     m_timer->setInterval(MODEL_UPDATE_DELAY);
@@ -29,7 +34,11 @@ PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent)
     refresh();
 }
 
-PeerListModel::~PeerListModel() = default;
+PeerListModel::~PeerListModel()
+{
+    m_thread.quit();
+    m_thread.wait();
+}
 
 void PeerListModel::startAutoRefresh()
 {
@@ -75,6 +84,9 @@ void PeerListModel::stopForShutdown()
     m_shutting_down = true;
     m_timer->stop();
     setSummary({{"ready", false}});
+    QMetaObject::invokeMethod(m_worker, [this] {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT shutdownFinished(); }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
 }
 
 int PeerListModel::rowCount(const QModelIndex& parent) const
@@ -144,41 +156,56 @@ Qt::ItemFlags PeerListModel::flags(const QModelIndex& index) const
 
 void PeerListModel::refresh()
 {
-    if (m_shutting_down) return;
-    interfaces::Node::NodesStats nodes_stats;
-    if (!m_node.getNodesStats(nodes_stats)) {
-        setSummary({{"ready", false}});
-        return;
-    }
-
-    decltype(m_peers_data) new_peers_data;
-    new_peers_data.reserve(nodes_stats.size());
-    constexpr std::array ids{"ipv4", "ipv6", "tor", "i2p", "cjdns", "other"};
-    std::array<int, ids.size()> counts{};
-    int inbound{0};
-    for (const auto& node_stats : nodes_stats) {
-        const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
-        new_peers_data.append(stats);
-        inbound += stats.nodeStats.fInbound;
-        size_t bucket{5};
-        switch (stats.nodeStats.m_network) {
-        case NET_IPV4: bucket = 0; break;
-        case NET_IPV6: bucket = 1; break;
-        case NET_ONION: bucket = 2; break;
-        case NET_I2P: bucket = 3; break;
-        case NET_CJDNS: bucket = 4; break;
-        default: break;
+    if (m_shutting_down || m_pending) return;
+    m_pending = true;
+    QMetaObject::invokeMethod(m_worker, [this] {
+        interfaces::Node::NodesStats nodes_stats;
+        if (!m_node.getNodesStats(nodes_stats)) {
+            QMetaObject::invokeMethod(this, [this] {
+                m_pending = false;
+                if (!m_shutting_down) setSummary({{"ready", false}});
+            }, Qt::QueuedConnection);
+            return;
         }
-        ++counts[bucket];
-    }
-    QVariantList groups;
-    for (size_t i{0}; i < counts.size(); ++i) {
-        if (counts[i]) groups.append(QVariantMap{{"id", ids[i]}, {"count", counts[i]}});
-    }
-    const int total = new_peers_data.size();
-    setSummary({{"ready", true}, {"total", total}, {"inbound", inbound},
-                {"outbound", total - inbound}, {"groups", groups}});
 
+        decltype(m_peers_data) new_peers_data;
+        new_peers_data.reserve(nodes_stats.size());
+        constexpr std::array ids{"ipv4", "ipv6", "tor", "i2p", "cjdns", "other"};
+        std::array<int, ids.size()> counts{};
+        int inbound{0};
+        for (const auto& node_stats : nodes_stats) {
+            const CNodeCombinedStats stats{std::get<0>(node_stats), std::get<2>(node_stats), std::get<1>(node_stats)};
+            new_peers_data.append(stats);
+            inbound += stats.nodeStats.fInbound;
+            size_t bucket{5};
+            switch (stats.nodeStats.m_network) {
+            case NET_IPV4: bucket = 0; break;
+            case NET_IPV6: bucket = 1; break;
+            case NET_ONION: bucket = 2; break;
+            case NET_I2P: bucket = 3; break;
+            case NET_CJDNS: bucket = 4; break;
+            default: break;
+            }
+            ++counts[bucket];
+        }
+        QVariantList groups;
+        for (size_t i{0}; i < counts.size(); ++i) {
+            if (counts[i]) groups.append(QVariantMap{{"id", ids[i]}, {"count", counts[i]}});
+        }
+        const int total = new_peers_data.size();
+        QVariantMap summary{{"ready", true}, {"total", total}, {"inbound", inbound},
+                            {"outbound", total - inbound}, {"groups", groups}};
+        QMetaObject::invokeMethod(this, [this, peers = std::move(new_peers_data), summary = std::move(summary)]() mutable {
+            m_pending = false;
+            if (!m_shutting_down) applySnapshot(std::move(peers), std::move(summary));
+        }, Qt::QueuedConnection);
+
+    }, Qt::QueuedConnection);
+}
+
+void PeerListModel::applySnapshot(QList<CNodeCombinedStats> new_peers_data, QVariantMap summary)
+{
+    setSummary(std::move(summary));
     const bool count_changed = m_peers_data.size() != new_peers_data.size();
     bool order_changed{false};
     if (!count_changed) {

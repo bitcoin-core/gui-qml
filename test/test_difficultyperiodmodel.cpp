@@ -9,7 +9,6 @@
 
 #include <cmath>
 #include <stdexcept>
-#include <thread>
 
 class DifficultyPeriodModelTests : public QObject
 {
@@ -106,19 +105,27 @@ private Q_SLOTS:
     void shutdownDrainsQueries()
     {
         QSemaphore entered, release;
+        std::atomic<int> calls{0};
         DifficultyPeriodModel model([&] {
-            entered.release();
-            release.acquire();
-            DifficultyPeriodModel::Snapshot sample;
-            sample.height = 1253;
-            return sample;
+            if (++calls == 1) { entered.release(); release.acquire(); }
+            return DifficultyPeriodModel::Snapshot{.height = 1253};
         });
         model.setActive(true);
         model.setReady(true);
-        QVERIFY(entered.tryAcquire(1, 5000));
-        std::thread unblock([&] { release.release(); });
-        model.setReady(false);
-        unblock.join();
+        const bool started = entered.tryAcquire(1, 1000);
+        QSignalSpy drained(&model, &DifficultyPeriodModel::shutdownFinished);
+        int ticks{0};
+        QTimer heartbeat;
+        connect(&heartbeat, &QTimer::timeout, &model, [&] { ++ticks; });
+        heartbeat.start(1);
+        model.stopForShutdown();
+        QTest::qWait(30);
+        const int before_release = drained.count();
+        release.release();
+        QTRY_COMPARE(drained.count(), 1);
+        QVERIFY(started);
+        QCOMPARE(before_release, 0);
+        QVERIFY(ticks > 0);
         QTRY_VERIFY(!model.pending());
         QVERIFY(!model.available());
     }

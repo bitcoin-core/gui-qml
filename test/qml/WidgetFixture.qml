@@ -6,6 +6,9 @@ import QtQuick 2.15
 import "../../qml/components/widgets"
 
 DashboardWidget {
+    property int activationCount: 0
+    onActivityRequestedChanged: if (activityRequested && activityInitialized) ++activationCount
+    Component.onCompleted: if (activityRequested) ++activationCount
     Rectangle {
         anchors.fill: parent
         color: "#122d29"

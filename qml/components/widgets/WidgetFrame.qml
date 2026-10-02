@@ -98,7 +98,12 @@ FocusScope {
         id: content
         anchors.fill: parent
         anchors.margins: root.contentPadding
-        source: root.widgetSource
+        function loadContent() { setSource(root.widgetSource, { active: false }) }
+        Component.onCompleted: loadContent()
+        Connections {
+            target: root
+            function onWidgetSourceChanged() { content.loadContent() }
+        }
         visible: root.widgetContent !== null
         clip: true
         onLoaded: {

@@ -575,20 +575,21 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    PeerListModel peer_model{*node, nullptr};
+    bool chain_ready{false};
     HalvingModel halving_model{Params().GetConsensus().nSubsidyHalvingInterval,
                                int(Params().GetConsensus().nPowTargetSpacing)};
     const auto refresh_halving = [&] {
-        halving_model.setHeight(node->isInitialBlockDownload() ? -1 : node_model.blockTipHeight());
+        halving_model.setHeight(!chain_ready || node_model.blockSyncActive() ? -1 : node_model.blockTipHeight());
     };
     QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &halving_model, refresh_halving);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &halving_model, [&] { halving_model.setHeight(-1); });
+    QObject::connect(&node_model, &NodeModel::blockSyncActiveChanged, &halving_model, refresh_halving);
+    QObject::connect(&node_model, &NodeModel::chainStateReady, &halving_model, [&] { chain_ready = true; refresh_halving(); });
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &halving_model, [&] { chain_ready = false; halving_model.setHeight(-1); });
     DifficultyPeriodModel difficulty_period_model{[node = node.get(), chain = chain.get()] {
         return ReadDifficultyPeriod(*node, *chain);
     }};
     QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &difficulty_period_model, &DifficultyPeriodModel::refresh);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &difficulty_period_model, [&] {
-        difficulty_period_model.setReady(false);
-    });
     auto mempool_activity_source = std::make_shared<MempoolActivitySource>();
     std::unique_ptr<interfaces::Handler> mempool_activity_handler;
     MempoolActivityModel mempool_activity_model{[source = mempool_activity_source, chain = chain.get(), node = node.get(), loaded = false]() mutable {
@@ -605,24 +606,13 @@ int QmlGuiMain(int argc, char* argv[])
     }, 1000000.0 / Params().GetConsensus().nPowTargetSpacing};
     QObject::connect(&mempool_activity_model, &MempoolActivityModel::statsRefreshRequested,
                      &node_model, &NodeModel::refreshMempoolInfo);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &mempool_activity_model, [&] {
-        mempool_activity_model.setReady(false);
-        mempool_activity_handler.reset();
-    });
     FeeRatesModel fee_rates_model{[chain = chain.get()](int target) -> qint64 {
         if (chain->isInitialBlockDownload()) return 0;
         return chain->estimateSmartFee(target, /*conservative=*/true).GetFeePerK();
     }};
-    // Register before the shutdown executor so estimator work finishes first.
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &fee_rates_model, [&] {
-        fee_rates_model.setReady(false);
-    });
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
-    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &halving_model, [&](bool success) {
-        if (success && !shutdown_requested && !node->shutdownRequested()) refresh_halving();
-    });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &difficulty_period_model, [&](bool success) {
         if (success && !shutdown_requested && !node->shutdownRequested()) difficulty_period_model.setReady(true);
     });
@@ -651,17 +641,31 @@ int QmlGuiMain(int argc, char* argv[])
     }
 #endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, [&] {
-        if (shutdown_requested) {
-            return;
-        }
-        shutdown_requested = true;
+    // Node teardown starts only after every node-query worker acknowledges its
+    // queued fence. Keeping the event loop running allows the shutdown UI to draw.
+    int workers_to_drain{0};
+    const auto worker_drained = [&] {
+        if (--workers_to_drain != 0) return;
+        mempool_activity_handler.reset();
 #ifdef ENABLE_WALLET
-        if (wallet_controller) {
-            wallet_controller->unloadWallets();
-        }
+        if (wallet_controller) wallet_controller->unloadWallets();
 #endif
         init_executor.shutdown();
+    };
+    QObject::connect(&fee_rates_model, &FeeRatesModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&difficulty_period_model, &DifficultyPeriodModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&mempool_activity_model, &MempoolActivityModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&peer_model, &PeerListModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&node_model, &NodeModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, [&] {
+        if (shutdown_requested) return;
+        shutdown_requested = true;
+        workers_to_drain = 5;
+        fee_rates_model.stopForShutdown();
+        difficulty_period_model.stopForShutdown();
+        mempool_activity_model.stopForShutdown();
+        peer_model.stopForShutdown();
+        node_model.stopForShutdown();
     });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &QmlInitExecutor::shutdownResult, qGuiApp, [] {
@@ -703,9 +707,7 @@ int QmlGuiMain(int argc, char* argv[])
         node_model.requestShutdown();
     });
 
-    PeerListModel peer_model{*node, nullptr};
     QObject::connect(&node_model, &NodeModel::nodeInitialized, &peer_model, &PeerListModel::refresh);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, &peer_model, &PeerListModel::stopForShutdown);
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 

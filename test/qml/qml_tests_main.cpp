@@ -2660,6 +2660,18 @@ public:
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }
+    Q_PROPERTY(QVariantList overviewInformationRows READ overviewInformationRows NOTIFY informationChanged)
+    Q_INVOKABLE void refreshNodeInformation() {}
+    QVariantList overviewInformationRows() const
+    {
+        QVariantList overview;
+        for (const auto& row : nodeInformationRows()) {
+            const auto id = row.toMap().value("id").toString();
+            if (id == "network" || id == "client-version" || id == "startup-time" || id == "last-block-time") overview.append(row);
+        }
+        return overview;
+    }
+    Q_SIGNAL void informationChanged();
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;

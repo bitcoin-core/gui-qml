@@ -45,7 +45,9 @@ public:
     void setReady(bool ready);
     void setActive(bool active);
     void refresh();
+    void stopForShutdown();
 Q_SIGNALS:
+    void shutdownFinished();
     void historyChanged();
     void snapshotChanged();
     void readyChanged();

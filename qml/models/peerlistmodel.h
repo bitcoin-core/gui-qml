@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QVariant>
 #include <QVariantMap>
+#include <QThread>
 
 namespace interfaces {
 class Node;
@@ -39,6 +40,7 @@ class PeerListModel : public QAbstractListModel
 public:
     explicit PeerListModel(interfaces::Node& node, QObject* parent);
     ~PeerListModel();
+    bool pending() const { return m_pending; }
     QVariantMap summary() const { return m_summary; }
     bool widgetActive() const { return m_widget_active; }
     void setWidgetActive(bool active);
@@ -73,13 +75,18 @@ public Q_SLOTS:
     void stopForShutdown();
 
 Q_SIGNALS:
+    void shutdownFinished();
     void summaryChanged();
     void widgetActiveChanged();
 
 private:
+    void applySnapshot(QList<CNodeCombinedStats> peers, QVariantMap summary);
     void updateRefreshTimer();
     void setSummary(QVariantMap summary);
     QVariantMap m_summary;
+    QThread m_thread;
+    QObject* m_worker{nullptr};
+    bool m_pending{false};
     bool m_widget_active{false};
     bool m_auto_refresh{false};
     bool m_shutting_down{false};

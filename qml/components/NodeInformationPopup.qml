@@ -36,8 +36,14 @@ Popup {
     }
 
     onAboutToShow: {
+        nodeModel.refreshNodeInformation()
         refreshRows()
         if (informationScroll.contentItem) informationScroll.contentItem.contentY = 0
+    }
+
+    Connections {
+        target: nodeModel
+        function onInformationChanged() { if (root.visible) root.refreshRows() }
     }
 
     width: Math.min(560, parent ? parent.width - 32 : 560)

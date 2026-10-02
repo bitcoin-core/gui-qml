@@ -18,7 +18,7 @@ Page {
     readonly property real pageSidePadding: width < 640 ? 16 : 40
     readonly property real overviewContentWidth: Math.max(0, Math.min(1100, overviewScroll.availableWidth - pageSidePadding * 2))
     readonly property bool compact: overviewContentWidth < 720
-    property var informationRows: []
+    readonly property var informationRows: nodeModel.overviewInformationRows
     readonly property var notifications: {
         const items = []
         if (nodeModel.faulted) {
@@ -39,38 +39,18 @@ Page {
         return items.sort(function(a, b) { return b.priority - a.priority })
     }
 
-    function refreshInformation() {
-        const rows = nodeModel.nodeInformationRows()
-        informationRows = ["network", "client-version", "startup-time", "last-block-time"].map(function(id) {
-            return rows.find(function(row) { return row.id === id })
-        }).filter(function(row) { return row !== undefined })
-    }
-
     function openPeers() {
         const stack = root.StackView.view
         if (stack && !stack.busy && stack.depth === 1) stack.push(peersPage)
     }
 
-    Component.onCompleted: refreshInformation()
     onVisibleChanged: {
-        if (visible) refreshInformation()
-        else {
+        if (!visible) {
             informationPopup.close()
             notificationsPopup.close()
             pausePopup.close()
         }
     }
-    Timer {
-        interval: 5000
-        running: root.visible
-        repeat: true
-        onTriggered: root.refreshInformation()
-    }
-    Connections {
-        target: nodeModel
-        function onBlockTipHeightChanged() { if (root.visible) root.refreshInformation() }
-    }
-
     ScrollView {
         id: overviewScroll
         objectName: "nodeOverviewScroll"

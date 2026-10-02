@@ -184,6 +184,7 @@ public:
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
     QString customFeeRate() const { return m_custom_fee_rate; }
     bool customFeeRateValid() const;
+    bool targetFeeRatesPending() const { return m_target_fee_pending; }
     bool feeEstimatePending() const { return m_fee_estimate_pending; }
     int feeEstimateRevision() const { return m_fee_estimate_revision; }
     Q_INVOKABLE bool prepareTransaction();
@@ -319,6 +320,8 @@ private:
     };
 
     void initializeFeeEstimator();
+    void refreshTargetFeeRates();
+    void inferCustomFeeTarget();
     void setMaximumRecipient(SendRecipient* recipient);
     void updateMaximumAmount();
     void requestFeeEstimatesNow();
@@ -391,6 +394,13 @@ private:
     bool m_current_transaction_sweeps_wallet{false};
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
+    struct TargetFeeRate { CAmount effective{0}; bool estimated{false}; };
+    QHash<unsigned int, TargetFeeRate> m_target_fee_rates;
+    QTimer* m_target_fee_timer{nullptr};
+    quint64 m_target_fee_generation{0};
+    bool m_target_fee_pending{false};
+    bool m_infer_custom_fee_target{false};
+    std::optional<unsigned int> m_pending_custom_fee_target;
     QObject* m_fee_estimation_worker{nullptr};
     QThread* m_fee_estimation_thread{nullptr};
     QTimer* m_fee_estimation_timer{nullptr};
