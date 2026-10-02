@@ -18,14 +18,39 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QSemaphore>
 #include <QTemporaryDir>
+#include <atomic>
+#include <mutex>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
 const TranslateFn G_TRANSLATION_FUN{nullptr};
 #endif
 
 namespace {
+
+// Keep the borrowed node and fake wallet state alive until asynchronous wallet
+// retirement completes, including after a test assertion returns early.
+class TestWalletController : public WalletQmlController
+{
+public:
+    explicit TestWalletController(interfaces::Node& node) : WalletQmlController(node)
+    {
+        connect(this, &WalletQmlController::walletsDrained, this, [this] { m_drained = true; });
+    }
+    ~TestWalletController()
+    {
+        disconnect(this, nullptr, nullptr, nullptr);
+        QSignalSpy drained{this, &WalletQmlController::walletsDrained};
+        beginShutdown();
+        if (!m_drained && drained.empty()) QVERIFY(drained.wait(10000));
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+private:
+    bool m_drained{false};
+};
+
 constexpr auto NOT_INITIALIZED_ERROR{"Wallets are still loading. Try again in a moment."};
 
 std::unique_ptr<interfaces::Handler> MakeNoopHandler()
@@ -144,9 +169,13 @@ class FakeWallet : public interfaces::Wallet
 {
 public:
     struct State {
-        int remove_calls{0};
-        CAmount balance{0};
+        std::atomic<int> remove_calls{0};
+        std::atomic<CAmount> balance{0};
+        std::mutex mutex;
         interfaces::Wallet::UnloadFn unload_fn;
+        void setUnload(interfaces::Wallet::UnloadFn fn) { std::lock_guard lock(mutex); unload_fn = std::move(fn); }
+        bool hasUnload() { std::lock_guard lock(mutex); return bool(unload_fn); }
+        void notifyUnload() { interfaces::Wallet::UnloadFn fn; { std::lock_guard lock(mutex); fn = unload_fn; } if (fn) fn(); }
     };
 
     explicit FakeWallet(std::string wallet_name, State* state)
@@ -213,7 +242,7 @@ public:
     }
     interfaces::WalletBalances getBalances() override { return {}; }
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
-    CAmount getBalance() override { return m_state ? m_state->balance : 0; }
+    CAmount getBalance() override { return m_state ? m_state->balance.load() : 0; }
     CAmount getAvailableBalance(const wallet::CCoinControl&) override { return 0; }
     bool txinIsMine(const CTxIn&) override { return false; }
     bool txoutIsMine(const CTxOut&) override { return false; }
@@ -240,9 +269,9 @@ public:
     std::unique_ptr<interfaces::Handler> handleUnload(UnloadFn fn) override
     {
         if (m_state) {
-            m_state->unload_fn = std::move(fn);
+            m_state->setUnload(std::move(fn));
             return interfaces::MakeCleanupHandler([state = m_state] {
-                state->unload_fn = nullptr;
+                state->setUnload({});
             });
         }
         return MakeNoopHandler();
@@ -265,7 +294,8 @@ void ConfigureExpectedControllerInitialization(MockNode& node, FakeWalletLoader&
     node.force_setting_fn = [](const std::string&, const common::SettingsValue&) {};
     node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
     node.ExpectAtLeast(node.calls.walletLoader, 2);
-    node.ExpectExactly(node.calls.getPersistentSetting, 1);
+    node.ExpectAtLeast(node.calls.getPersistentSetting, 1);
+    node.get_dust_relay_fee_fn = [] { return CFeeRate{3000}; };
     node.ExpectExactly(node.calls.forceSetting, 1);
     node.ExpectExactly(node.calls.listExternalSigners, 1);
 }
@@ -280,6 +310,10 @@ class WalletQmlControllerTests : public QObject
 
 private Q_SLOTS:
     void initTestCase();
+    void shutdownDrainsWalletQueueAndPlaceholder();
+    void shutdownRetiresQueuedLoadNotificationOffGui();
+    void shutdownReleasesNotificationsBeforeMigrationRollback();
+    void shutdownWaitsForNotificationRetirement();
     void validateXpubAcceptsValidKey();
     void validateXpubRejectsGarbage();
     void validateXpubRejectsEmpty();
@@ -328,10 +362,157 @@ void WalletQmlControllerTests::initTestCase()
     SelectParams(ChainType::MAIN);
 }
 
+void WalletQmlControllerTests::shutdownDrainsWalletQueueAndPlaceholder()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+    TestWalletController controller(node);
+    controller.initialize();
+    QSemaphore entered, release;
+    const auto empty_executor = controller.selectedWallet()->backendExecutor();
+    const auto gui_thread = QThread::currentThread();
+    std::atomic_bool off_gui{false};
+    empty_executor->submit(&controller, [&] {
+        off_gui = QThread::currentThread() != gui_thread;
+        entered.release();
+        release.acquire();
+    }, [] {});
+    struct Release { QSemaphore& semaphore; ~Release() { semaphore.release(); } } release_on_exit{release};
+    QTRY_VERIFY(entered.available() > 0);
+    QSignalSpy drained{&controller, &WalletQmlController::walletsDrained};
+    controller.beginShutdown();
+    bool heartbeat{false};
+    QTimer::singleShot(0, &controller, [&] { heartbeat = true; });
+    QTRY_VERIFY(heartbeat);
+    QVERIFY(off_gui.load());
+    QVERIFY(drained.empty());
+    release.release();
+    QTRY_COMPARE(drained.size(), 1);
+    QVERIFY(empty_executor->isDrained());
+}
+
+void WalletQmlControllerTests::shutdownRetiresQueuedLoadNotificationOffGui()
+{
+    FakeWallet::State state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+    TestWalletController controller(node);
+    controller.initialize();
+    struct Probe { std::atomic_bool destroyed{false}, off_gui{false}; };
+    const auto probe = std::make_shared<Probe>();
+    struct RetiringWallet : FakeWallet {
+        std::shared_ptr<Probe> probe;
+        QThread* gui;
+        RetiringWallet(State* state, std::shared_ptr<Probe> result)
+            : FakeWallet("late-wallet", state), probe(std::move(result)), gui(QThread::currentThread()) {}
+        ~RetiringWallet() override { probe->off_gui = QThread::currentThread() != gui; probe->destroyed = true; }
+    };
+    QVERIFY(loader.captured_load_wallet_fn);
+    loader.captured_load_wallet_fn(std::make_unique<RetiringWallet>(&state, probe));
+    QSignalSpy drained{&controller, &WalletQmlController::walletsDrained};
+    controller.beginShutdown();
+    QTRY_COMPARE(drained.size(), 1);
+    QVERIFY(probe->destroyed.load());
+    QVERIFY(probe->off_gui.load());
+    QVERIFY(!controller.isWalletOpen("late-wallet"));
+}
+
+void WalletQmlControllerTests::shutdownReleasesNotificationsBeforeMigrationRollback()
+{
+    FakeWallet::State state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+    loader.wallet_dir_entries = {{"legacy_wallet", "bdb"}};
+    TestWalletController controller(node);
+    controller.initialize();
+    struct Probe {
+        QSemaphore notification_queued, wallet_released;
+        std::atomic_bool destroyed{false}, off_gui{false}, migration_returned{false};
+    };
+    const auto probe = std::make_shared<Probe>();
+    const auto gui_thread = QThread::currentThread();
+    struct NotificationWallet : FakeWallet {
+        std::shared_ptr<Probe> probe;
+        QThread* gui_thread;
+        NotificationWallet(State* state, std::shared_ptr<Probe> probe, QThread* gui_thread)
+            : FakeWallet("legacy_wallet_watchonly", state), probe(std::move(probe)), gui_thread(gui_thread) {}
+        ~NotificationWallet() override {
+            probe->off_gui = QThread::currentThread() != gui_thread;
+            probe->destroyed = true;
+            probe->wallet_released.release();
+        }
+    };
+    loader.migrate_wallet_fn = [&, probe, gui_thread](const std::string&, const SecureString&) -> util::Result<interfaces::WalletMigrationResult> {
+        loader.captured_load_wallet_fn(std::make_unique<NotificationWallet>(&state, probe, gui_thread));
+        probe->notification_queued.release();
+        // Core's rollback waits in WaitForDeleteWallet when loading a later
+        // migrated wallet fails. The GUI notification must release its owner
+        // before the migration command can finish.
+        probe->wallet_released.acquire();
+        probe->migration_returned = true;
+        return util::Error{Untranslated("Later migrated wallet failed to load")};
+    };
+    const auto release_on_failure = qScopeGuard([probe] { probe->wallet_released.release(); });
+    controller.migrateWallet("legacy_wallet", "");
+    // Keep the notification queued on the GUI until shutdown begins.
+    QVERIFY(probe->notification_queued.tryAcquire(1, 5000));
+    QSignalSpy drained{&controller, &WalletQmlController::walletsDrained};
+    controller.beginShutdown();
+    QTRY_COMPARE_WITH_TIMEOUT(drained.size(), 1, 5000);
+    QVERIFY(probe->destroyed.load());
+    QVERIFY(probe->off_gui.load());
+    QVERIFY(probe->migration_returned.load());
+    QVERIFY(!controller.isWalletOpen("legacy_wallet_watchonly"));
+}
+
+void WalletQmlControllerTests::shutdownWaitsForNotificationRetirement()
+{
+    FakeWallet::State state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+    TestWalletController controller(node);
+    controller.initialize();
+    struct Probe { QSemaphore entered, release; std::atomic_bool destroyed{false}; };
+    const auto probe = std::make_shared<Probe>();
+    struct NotificationWallet : FakeWallet {
+        std::shared_ptr<Probe> probe;
+        NotificationWallet(State* state, std::shared_ptr<Probe> probe)
+            : FakeWallet("late-wallet", state), probe(std::move(probe)) {}
+        ~NotificationWallet() override {
+            probe->entered.release();
+            probe->release.acquire();
+            probe->destroyed = true;
+        }
+    };
+    const auto release_on_failure = qScopeGuard([probe] { probe->release.release(); });
+    loader.captured_load_wallet_fn(std::make_unique<NotificationWallet>(&state, probe));
+    QSignalSpy drained{&controller, &WalletQmlController::walletsDrained};
+    controller.beginShutdown();
+    QTRY_VERIFY(probe->entered.available() > 0);
+    // Give the command queue and placeholder time to drain while retirement
+    // remains blocked, and verify that the GUI continues dispatching events.
+    bool heartbeat{false};
+    QTimer::singleShot(50, &controller, [&] { heartbeat = true; });
+    QTRY_VERIFY(heartbeat);
+    QVERIFY(drained.empty());
+    QVERIFY(!probe->destroyed.load());
+    probe->release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(drained.size(), 1, 5000);
+    QVERIFY(probe->destroyed.load());
+}
+
 void WalletQmlControllerTests::validateXpubAcceptsValidKey()
 {
     MockNode node;
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     QVERIFY(controller.validateXpub(VALID_XPUB));
 }
@@ -339,7 +520,7 @@ void WalletQmlControllerTests::validateXpubAcceptsValidKey()
 void WalletQmlControllerTests::validateXpubRejectsGarbage()
 {
     MockNode node;
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     QVERIFY(!controller.validateXpub("not-an-xpub"));
 }
@@ -347,7 +528,7 @@ void WalletQmlControllerTests::validateXpubRejectsGarbage()
 void WalletQmlControllerTests::validateXpubRejectsEmpty()
 {
     MockNode node;
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     QVERIFY(!controller.validateXpub(""));
 }
@@ -355,7 +536,7 @@ void WalletQmlControllerTests::validateXpubRejectsEmpty()
 void WalletQmlControllerTests::validateXpubTrimsWhitespace()
 {
     MockNode node;
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     QVERIFY(controller.validateXpub("  " + VALID_XPUB + "  "));
 }
@@ -367,7 +548,7 @@ void WalletQmlControllerTests::createWatchOnlyInvalidXpubSetsError()
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy error_spy(&controller, &WalletQmlController::walletLoadErrorChanged);
@@ -380,16 +561,16 @@ void WalletQmlControllerTests::createWatchOnlyInvalidXpubSetsError()
 
 void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
     QVERIFY(loader.captured_load_wallet_fn);
 
-    FakeWallet::State wallet_state;
     loader.create_wallet_fn = [&](const std::string& name,
                                   const SecureString&,
                                   uint64_t,
@@ -413,7 +594,7 @@ void WalletQmlControllerTests::createWatchOnlyCleansUpWhenDescriptorImportFails(
 
     QTRY_COMPARE_WITH_TIMEOUT(error_spy.count(), 1, 5000);
     QVERIFY(!controller.walletLoadError().isEmpty());
-    QCOMPARE(wallet_state.remove_calls, 1);
+    QCOMPARE(wallet_state.remove_calls.load(), 1);
     QCOMPARE(create_spy.count(), 0);
     QVERIFY(!controller.isWalletLoaded());
     QVERIFY(!controller.walletLoadInProgress());
@@ -427,7 +608,7 @@ void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()
     node.list_external_signers_fn = [] { return MakeSigners({"Ledger Nano X"}); };
     node.ExpectExactly(node.calls.listExternalSigners, 1);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.refreshExternalSignerStatus();
 
     QVERIFY(!controller.canCreateExternalSignerWallet());
@@ -445,7 +626,7 @@ void WalletQmlControllerTests::externalSignerCreationRequiresExactlyOneSigner()
     node.list_external_signers_fn = [] { return MakeSigners({"Signer A", "Signer B"}); };
     node.ExpectExactly(node.calls.listExternalSigners, 1);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.refreshExternalSignerStatus();
 
     QVERIFY(!controller.canCreateExternalSignerWallet());
@@ -463,7 +644,7 @@ void WalletQmlControllerTests::externalSignerSuggestionUsesSignerName()
     node.list_external_signers_fn = [] { return MakeSigners({"Coldcard Mk4"}); };
     node.ExpectExactly(node.calls.listExternalSigners, 1);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.refreshExternalSignerStatus();
 
     QVERIFY(controller.canCreateExternalSignerWallet());
@@ -479,7 +660,7 @@ void WalletQmlControllerTests::initializedControllerSignalsMigrationForLegacyWal
     loader.wallet_dir_entries = {{"legacy_wallet", "bdb"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy migration_spy(&controller, &WalletQmlController::walletMigrationRequired);
@@ -496,7 +677,7 @@ void WalletQmlControllerTests::createWalletBeforeInitializationReturnsFalseAndSe
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     controller.createSingleSigWallet("test_wallet", "secret");
     QCOMPARE(controller.walletCreateError(), QString{NOT_INITIALIZED_ERROR});
@@ -508,7 +689,7 @@ void WalletQmlControllerTests::importWalletBeforeInitializationSetsLoadError()
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     controller.importWallet("/tmp/test_wallet.dat");
     QCOMPARE(controller.walletLoadError(), QString{NOT_INITIALIZED_ERROR});
@@ -518,7 +699,7 @@ void WalletQmlControllerTests::migrateWalletBeforeInitializationSetsMigrationErr
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     controller.migrateWallet("legacy_wallet", "secret");
     QCOMPARE(controller.walletMigrationError(), QString{NOT_INITIALIZED_ERROR});
@@ -528,7 +709,7 @@ void WalletQmlControllerTests::selectWalletBeforeInitializationSetsLoadError()
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     controller.setSelectedWallet("test_wallet");
     QCOMPARE(controller.walletLoadError(), QString{NOT_INITIALIZED_ERROR});
@@ -541,7 +722,7 @@ void WalletQmlControllerTests::initializedControllerPropagatesCreateErrors()
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QVERIFY(controller.initialized());
@@ -577,7 +758,7 @@ void WalletQmlControllerTests::initializedControllerForwardsMigrationPassphrase(
     loader.wallet_dir_entries = {{"legacy_wallet", "bdb"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy failed_spy(&controller, &WalletQmlController::walletMigrationFailed);
@@ -607,7 +788,7 @@ void WalletQmlControllerTests::initializedControllerForwardsUtf8CreatePassphrase
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     const QString passphrase{QString::fromUtf8("pässwörd-₿")};
@@ -633,16 +814,16 @@ void WalletQmlControllerTests::initializedControllerForwardsUtf8CreatePassphrase
 
 void WalletQmlControllerTests::initializedControllerEmitsWalletCreateSucceeded()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
     QVERIFY(loader.captured_load_wallet_fn);
 
-    FakeWallet::State wallet_state;
     loader.create_wallet_fn = [&](const std::string& name,
                                   const SecureString&,
                                   uint64_t,
@@ -663,19 +844,19 @@ void WalletQmlControllerTests::initializedControllerEmitsWalletCreateSucceeded()
 
 void WalletQmlControllerTests::initializedControllerDoesNotCompleteCreateForUnrelatedLoadNotification()
 {
+    FakeWallet::State created_state;
+    FakeWallet::State unrelated_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
     QVERIFY(loader.captured_load_wallet_fn);
 
     QSemaphore create_started;
     QSemaphore allow_create_return;
-    FakeWallet::State created_state;
-    FakeWallet::State unrelated_state;
     loader.create_wallet_fn = [&](const std::string& name,
                                   const SecureString&,
                                   uint64_t,
@@ -706,20 +887,20 @@ void WalletQmlControllerTests::initializedControllerDoesNotCompleteCreateForUnre
 
 void WalletQmlControllerTests::initializedControllerDoesNotCompleteLoadForUnrelatedLoadNotification()
 {
+    FakeWallet::State loaded_state;
+    FakeWallet::State unrelated_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     loader.wallet_dir_entries = {{"target_wallet", "sqlite"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
     QVERIFY(loader.captured_load_wallet_fn);
 
     QSemaphore load_started;
     QSemaphore allow_load_return;
-    FakeWallet::State loaded_state;
-    FakeWallet::State unrelated_state;
     loader.load_wallet_fn = [&](const std::string& name,
                                 std::vector<bilingual_str>&) {
         load_started.release();
@@ -753,7 +934,7 @@ void WalletQmlControllerTests::initializedControllerReportsCreateWarnings()
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     loader.create_wallet_fn = [](const std::string&,
@@ -779,7 +960,7 @@ void WalletQmlControllerTests::initializedControllerIgnoresDuplicateCreateWhileI
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     loader.create_wallet_fn = [](const std::string&,
@@ -804,7 +985,7 @@ void WalletQmlControllerTests::watchOnlyCreateBeforeInitializationSetsLoadError(
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     controller.createWatchOnlyWallet("watch_only", VALID_XPUB);
 
@@ -814,17 +995,17 @@ void WalletQmlControllerTests::watchOnlyCreateBeforeInitializationSetsLoadError(
 
 void WalletQmlControllerTests::watchOnlyCreateWhileWalletLoadInProgressIsIgnored()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSemaphore create_started;
     QSemaphore allow_create_return;
-    FakeWallet::State wallet_state;
     loader.create_wallet_fn = [&](const std::string& name,
                                   const SecureString&,
                                   uint64_t,
@@ -850,17 +1031,17 @@ void WalletQmlControllerTests::watchOnlyCreateWhileWalletLoadInProgressIsIgnored
 
 void WalletQmlControllerTests::watchOnlyCreateFailureAfterCreateDoesNotPublishWallet()
 {
+    FakeWallet::State returned_state;
+    FakeWallet::State notified_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
     QVERIFY(loader.captured_load_wallet_fn);
 
-    FakeWallet::State returned_state;
-    FakeWallet::State notified_state;
     loader.create_wallet_fn = [&](const std::string& name,
                                   const SecureString&,
                                   uint64_t,
@@ -881,7 +1062,7 @@ void WalletQmlControllerTests::watchOnlyCreateFailureAfterCreateDoesNotPublishWa
     QVERIFY(!controller.walletLoadInProgress());
     QVERIFY(!controller.walletLoadError().isEmpty());
     QCOMPARE(controller.selectedWallet()->name(), QString{});
-    QCOMPARE(returned_state.remove_calls, 1);
+    QCOMPARE(returned_state.remove_calls.load(), 1);
 }
 
 void WalletQmlControllerTests::initializedControllerRequestsPassphraseBeforeEncryptedMigration()
@@ -895,7 +1076,7 @@ void WalletQmlControllerTests::initializedControllerRequestsPassphraseBeforeEncr
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy passphrase_spy(&controller, &WalletQmlController::walletMigrationPassphraseRequired);
@@ -920,7 +1101,7 @@ void WalletQmlControllerTests::initializedControllerMigratesUnencryptedWalletWit
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy failed_spy(&controller, &WalletQmlController::walletMigrationFailed);
@@ -943,11 +1124,11 @@ void WalletQmlControllerTests::initializedControllerMigratesUnencryptedWalletWit
 
 void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelectsRemainingLoadedWallet()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -956,7 +1137,7 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QCOMPARE(controller.selectedWallet()->name(), QString{"alpha_wallet"});
@@ -976,8 +1157,8 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
 
     controller.closeWallet("alpha_wallet");
 
-    QCOMPARE(alpha_state.remove_calls, 1);
-    QCOMPARE(beta_state.remove_calls, 0);
+    QTRY_COMPARE(alpha_state.remove_calls.load(), 1);
+    QCOMPARE(beta_state.remove_calls.load(), 0);
     QCOMPARE(selected_spy.count(), 1);
     QCOMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
@@ -991,11 +1172,11 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
 
 void WalletQmlControllerTests::initializedControllerClosesNonSelectedWalletWithoutChangingSelection()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -1004,7 +1185,7 @@ void WalletQmlControllerTests::initializedControllerClosesNonSelectedWalletWitho
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
@@ -1012,8 +1193,8 @@ void WalletQmlControllerTests::initializedControllerClosesNonSelectedWalletWitho
 
     controller.closeWallet("beta_wallet");
 
-    QCOMPARE(alpha_state.remove_calls, 0);
-    QCOMPARE(beta_state.remove_calls, 1);
+    QCOMPARE(alpha_state.remove_calls.load(), 0);
+    QTRY_COMPARE(beta_state.remove_calls.load(), 1);
     QCOMPARE(selected_spy.count(), 0);
     QCOMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"beta_wallet"});
@@ -1026,11 +1207,11 @@ void WalletQmlControllerTests::initializedControllerClosesNonSelectedWalletWitho
 
 void WalletQmlControllerTests::initializedControllerEmitsWalletLoadStateChanged()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -1039,7 +1220,7 @@ void WalletQmlControllerTests::initializedControllerEmitsWalletLoadStateChanged(
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
 
     controller.initialize();
@@ -1054,11 +1235,11 @@ void WalletQmlControllerTests::initializedControllerEmitsWalletLoadStateChanged(
 
 void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -1067,14 +1248,14 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
-    QVERIFY(alpha_state.unload_fn);
+    QTRY_VERIFY(alpha_state.hasUnload());
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
 
-    alpha_state.unload_fn();
+    alpha_state.notifyUnload();
 
     QTRY_COMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
@@ -1084,17 +1265,17 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     QVERIFY(!controller.isWalletOpen("alpha_wallet"));
     QVERIFY(controller.isWalletOpen("beta_wallet"));
     QVERIFY(controller.isWalletLoaded());
-    QCOMPARE(alpha_state.remove_calls, 0);
-    QCOMPARE(beta_state.remove_calls, 0);
+    QCOMPARE(alpha_state.remove_calls.load(), 0);
+    QCOMPARE(beta_state.remove_calls.load(), 0);
 }
 
 void WalletQmlControllerTests::initializedControllerUnloadWalletsClearsSelectionAndOpenWallets()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
@@ -1103,7 +1284,7 @@ void WalletQmlControllerTests::initializedControllerUnloadWalletsClearsSelection
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
@@ -1120,8 +1301,8 @@ void WalletQmlControllerTests::initializedControllerUnloadWalletsClearsSelection
     QCOMPARE(controller.selectedWallet()->name(), QString{});
     QVERIFY(!controller.isWalletOpen("alpha_wallet"));
     QVERIFY(!controller.isWalletOpen("beta_wallet"));
-    QCOMPARE(alpha_state.remove_calls, 0);
-    QCOMPARE(beta_state.remove_calls, 0);
+    QCOMPARE(alpha_state.remove_calls.load(), 0);
+    QCOMPARE(beta_state.remove_calls.load(), 0);
 }
 
 void WalletQmlControllerTests::initializedControllerEmitsLoadingThenLoadErrorOnFailedLoad()
@@ -1132,7 +1313,7 @@ void WalletQmlControllerTests::initializedControllerEmitsLoadingThenLoadErrorOnF
     loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
@@ -1159,11 +1340,11 @@ void WalletQmlControllerTests::initializedControllerEmitsLoadingThenLoadErrorOnF
 
 void WalletQmlControllerTests::publishOpenWalletsInfoEmitsWalletInfoChangedForEachOpenWallet()
 {
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
-    FakeWallet::State alpha_state;
-    FakeWallet::State beta_state;
     alpha_state.balance = 13900000000LL;
     beta_state.balance = 1;
     loader.get_wallets_fn = [&]() {
@@ -1174,9 +1355,11 @@ void WalletQmlControllerTests::publishOpenWalletsInfoEmitsWalletInfoChangedForEa
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
+    controller.setSelectedWallet("alpha_wallet", "sqlite");
+    controller.setSelectedWallet("beta_wallet", "sqlite");
     QSignalSpy info_spy(&controller, &WalletQmlController::walletInfoChanged);
     controller.publishOpenWalletsInfo();
 
@@ -1208,7 +1391,7 @@ void WalletQmlControllerTests::walletNameAvailabilityErrorRejectsEmptyAndWhitesp
     FakeWalletLoader loader;
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QCOMPARE(controller.walletNameAvailabilityError(""), QString{"Enter a wallet name."});
@@ -1224,7 +1407,7 @@ void WalletQmlControllerTests::walletNameAvailabilityErrorRejectsExistingNameWit
     loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QCOMPARE(controller.walletNameAvailabilityError("alpha_wallet"),
@@ -1243,7 +1426,7 @@ void WalletQmlControllerTests::walletNameAvailabilityErrorReturnsEmptyForAvailab
     loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QCOMPARE(controller.walletNameAvailabilityError("brand_new_wallet"), QString{});
@@ -1251,6 +1434,7 @@ void WalletQmlControllerTests::walletNameAvailabilityErrorReturnsEmptyForAvailab
 
 void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
@@ -1258,7 +1442,6 @@ void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
     QVERIFY(wallet_dir.isValid());
     QVERIFY(QDir{wallet_dir.path()}.mkpath("created_wallet"));
     loader.wallet_dir = wallet_dir.path().toStdString();
-    FakeWallet::State wallet_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("created_wallet", &wallet_state));
@@ -1266,7 +1449,7 @@ void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QString opened_path;
@@ -1282,6 +1465,7 @@ void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
 
 void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
@@ -1289,7 +1473,6 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
     QVERIFY(wallet_dir.isValid());
     QVERIFY(QDir{wallet_dir.path()}.mkpath("created_wallet"));
     loader.wallet_dir = wallet_dir.path().toStdString();
-    FakeWallet::State wallet_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("created_wallet", &wallet_state));
@@ -1297,7 +1480,7 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     QString opened_path;
@@ -1313,13 +1496,13 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
 
 void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingWalletPath()
 {
+    FakeWallet::State wallet_state;
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     FakeWalletLoader loader;
     QTemporaryDir wallet_dir;
     QVERIFY(wallet_dir.isValid());
     loader.wallet_dir = wallet_dir.path().toStdString();
-    FakeWallet::State wallet_state;
     loader.get_wallets_fn = [&]() {
         std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
         wallets.emplace_back(std::make_unique<FakeWallet>("missing_wallet", &wallet_state));
@@ -1327,7 +1510,7 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingWalletPat
     };
     ConfigureExpectedControllerInitialization(node, loader);
 
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
     controller.initialize();
 
     bool opened{false};
@@ -1345,7 +1528,7 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingSelectedW
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    WalletQmlController controller(node);
+    TestWalletController controller(node);
 
     QVERIFY(!controller.openSelectedWalletLocation());
     QCOMPARE(controller.walletLocationOpenError(), QString{"No wallet file is available to view."});

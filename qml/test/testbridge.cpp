@@ -523,6 +523,12 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
         return cmdListObjects();
     } else if (cmd == QLatin1String("close_window")) {
         return cmdCloseWindow();
+    } else if (cmd == QLatin1String("request_quit")) {
+        // Exercise the application event used by native Quit (including before
+        // QApplication::exec), rather than the separate window-close path.
+        QEvent quit{QEvent::Quit};
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &quit);
+        return okResponse();
     } else if (cmd == QLatin1String("set_clipboard_text")) {
         return cmdSetClipboardText(obj.value(QStringLiteral("text")).toString());
     }

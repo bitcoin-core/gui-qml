@@ -74,6 +74,8 @@ public:
     void updateCurrentTime(const QDateTime& current_time);
 
 public Q_SLOTS:
+    void stop();
+
     /** Load the current period's active-chain block history. */
     void initializeHistory();
 
@@ -99,6 +101,7 @@ private:
     qreal m_current_time_fraction{0.0};
     QList<qreal> m_block_time_fractions;
     bool m_history_initialized{false};
+    bool m_stopped{false};
 };
 
 /** Read active-chain block timestamps belonging to the requested dial period. */

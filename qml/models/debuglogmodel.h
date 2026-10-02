@@ -90,6 +90,7 @@ public:
     void stop();
 
 Q_SIGNALS:
+    void drained();
     void hasMoreLinesChanged();
     void activeChanged();
     void loadLimitChanged();

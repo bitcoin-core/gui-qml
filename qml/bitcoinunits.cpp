@@ -69,8 +69,9 @@ QString QmlBitcoinUnits::format(Unit unit, CAmount amount, bool plussign, Separa
 QString QmlBitcoinUnits::formatForDisplay(Unit unit, CAmount amount, bool plussign, const QLocale& locale)
 {
     // Split the integer amount before formatting: converting BTC through a
-    // double can round away satoshis. Unsigned arithmetic also handles INT64_MIN.
-    const quint64 magnitude = amount < 0 ? quint64{0} - static_cast<quint64>(amount)
+    // double can round away satoshis. Add one before negating INT64_MIN to avoid
+    // signed overflow, then restore it after converting to unsigned.
+    const quint64 magnitude = amount < 0 ? static_cast<quint64>(-(amount + 1)) + 1
                                          : static_cast<quint64>(amount);
     const quint64 divisor = factor(unit);
     QString result = locale.toString(magnitude / divisor);

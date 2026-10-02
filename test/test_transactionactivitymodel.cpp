@@ -234,6 +234,13 @@ struct Fixture {
         // address-book model has loaded during wallet construction.
         state->blocking_read_on_gui = false;
     }
+    ~Fixture()
+    {
+        if (!wallet) return;
+        QSignalSpy drained{wallet.get(), &WalletQmlModel::shutdownFinished};
+        wallet->beginShutdown();
+        if (!wallet->backendExecutor()->isDrained() && drained.empty()) QVERIFY(drained.wait(10000));
+    }
     Model* model() { auto* result = wallet->transactionActivityModel(); Wait(result); return result; }
     void request(const QmlRecentRequestEntry& request) { wallet->receiveRequests()->prependOrReplace(request); }
 };
@@ -333,9 +340,11 @@ void TransactionActivityModelTests::historyReadsLeaveTheEventLoopFreeAndDiscardS
     QTimer::singleShot(0, [&] { heartbeat = true; });
     QTRY_VERIFY(heartbeat);
     QVERIFY(model->loading());
-    // The worker captured old_tx before the gate. Supersede that snapshot.
-    f.state->transactions.clear();
-    f.state->put(new_tx);
+    // Supersede the captured snapshot, ordering the replacement after its read.
+    QVERIFY(f.wallet->backendExecutor()->submit(model, [state = f.state, new_tx] {
+        state->transactions.clear();
+        state->put(new_tx);
+    }, [] {}));
     model->reload();
     bool inserted_stale{false};
     connect(model, &Model::rowsInserted, model, [&] {

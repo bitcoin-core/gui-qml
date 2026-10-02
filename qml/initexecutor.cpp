@@ -5,65 +5,118 @@
 #include <qml/initexecutor.h>
 
 #include <interfaces/node.h>
-#include <util/exception.h>
+#include <interfaces/handler.h>
 #include <util/threadnames.h>
 
-#include <QDebug>
-#include <QMetaObject>
-#include <QObject>
 #include <QString>
-#include <QThread>
 
-QmlInitExecutor::QmlInitExecutor(interfaces::Node& node)
-    : QObject(), m_node(node)
+#include <atomic>
+#include <utility>
+
+struct QmlInitExecutor::WorkerState {
+    SubscriptionFactory factory;
+    std::unique_ptr<interfaces::Handler> subscription;
+    std::atomic_bool stopping{false};
+
+    explicit WorkerState(SubscriptionFactory subscribe) : factory(std::move(subscribe)) {}
+    void retire()
+    {
+        subscription.reset();
+        factory = {};
+    }
+};
+
+QmlInitExecutor::QmlInitExecutor(interfaces::Node& node, SubscriptionFactory subscribe)
+    : QObject(), m_node(node), m_worker_state(std::make_shared<WorkerState>(std::move(subscribe)))
 {
-    m_context.moveToThread(&m_thread);
-    m_thread.start();
+    connect(&m_backend, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
+    connect(&m_control, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
 }
 
 QmlInitExecutor::~QmlInitExecutor()
 {
-    qDebug() << __func__ << ": Stopping thread";
-    m_thread.quit();
-    m_thread.wait();
-    qDebug() << __func__ << ": Stopped thread";
+    m_worker_state->stopping = true;
+    // Accepted init work retains the state after this QObject is gone. Retire
+    // its token and factory on that same queue before the executor drains.
+    m_backend.submit(this, [state = std::move(m_worker_state)] { state->retire(); }, [] {});
 }
 
-void QmlInitExecutor::handleRunawayException(const std::exception* e)
+void QmlInitExecutor::handleRunawayException(std::exception_ptr error)
 {
-    PrintExceptionContinue(e, "Runaway exception");
-    Q_EMIT runawayException(e ? QString::fromUtf8(e->what()) : tr("Unknown exception"));
+    m_runaway_exception = true;
+    QString message{tr("Unknown exception")};
+    try {
+        std::rethrow_exception(error);
+    } catch (const std::exception& e) {
+        message = QString::fromUtf8(e.what());
+    } catch (...) {
+    }
+    Q_EMIT runawayException(message);
 }
 
 void QmlInitExecutor::initialize()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
-        try {
-            util::ThreadRename("qml-init");
-            qDebug() << "Running initialization in thread";
-            interfaces::BlockAndHeaderTipInfo tip_info;
-            bool rv = m_node.appInitMain(&tip_info);
-            Q_EMIT initializeResult(rv, tip_info);
-        } catch (const std::exception& e) {
-            handleRunawayException(&e);
-        } catch (...) {
-            handleRunawayException(nullptr);
+    if (m_initialize_requested || m_shutdown_requested || m_runaway_exception) return;
+    m_initialize_requested = true;
+    struct Result {
+        bool success;
+        interfaces::BlockAndHeaderTipInfo tip;
+        bool initial_block_download;
+        bool shutdown_requested;
+    };
+    m_backend.submit(this, [node = &m_node, state = m_worker_state] {
+        util::ThreadRename("qml-init");
+        Result result{};
+        result.success = node->appInitMain(&result.tip);
+        if (result.success && state->factory && !state->stopping && !node->shutdownRequested()) {
+            // Consume before invoking: a registration failure cannot be retried
+            // accidentally, and the factory uses local RAII while seeding.
+            auto subscribe{std::exchange(state->factory, {})};
+            state->subscription = subscribe();
         }
+        result.initial_block_download = result.success && node->isInitialBlockDownload();
+        result.shutdown_requested = node->shutdownRequested();
+        return result;
+    }, [this](Result result) {
+        if (!m_runaway_exception) {
+            Q_EMIT initializeResult(result.success, result.tip, result.initial_block_download, result.shutdown_requested);
+        }
+    }, [this](std::exception_ptr error) { handleRunawayException(error); });
+}
+
+void QmlInitExecutor::interrupt()
+{
+    if (m_interrupt_requested || m_runaway_exception) return;
+    m_interrupt_requested = true;
+    m_worker_state->stopping = true;
+    m_control.submit(this, [node = &m_node] {
+        util::ThreadRename("qml-control");
+        node->startShutdown();
+    }, [this] {
+        if (!m_runaway_exception) Q_EMIT interruptResult();
+    }, [this](std::exception_ptr error) {
+        handleRunawayException(error);
     });
 }
 
 void QmlInitExecutor::shutdown()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
-        try {
-            qDebug() << "Running shutdown in thread";
-            m_node.appShutdown();
-            qDebug() << "Shutdown finished";
-            Q_EMIT shutdownResult();
-        } catch (const std::exception& e) {
-            handleRunawayException(&e);
-        } catch (...) {
-            handleRunawayException(nullptr);
-        }
-    });
+    if (m_shutdown_requested || m_runaway_exception) return;
+    m_shutdown_requested = true;
+    m_worker_state->stopping = true;
+    m_backend.submit(this, [node = &m_node, state = m_worker_state] {
+        state->retire();
+        node->appShutdown();
+    }, [this] {
+        m_shutdown_complete = true;
+        m_backend.shutdown();
+        m_control.shutdown();
+    }, [this](std::exception_ptr error) { handleRunawayException(error); });
+}
+
+void QmlInitExecutor::finishShutdown()
+{
+    if (m_runaway_exception || !m_shutdown_complete || m_shutdown_emitted || !m_backend.isDrained() || !m_control.isDrained()) return;
+    m_shutdown_emitted = true;
+    Q_EMIT shutdownResult();
 }

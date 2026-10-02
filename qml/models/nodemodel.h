@@ -61,6 +61,7 @@ class NodeModel : public QObject
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
+    Q_PROPERTY(bool fatalException READ fatalException NOTIFY fatalExceptionChanged)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
@@ -72,8 +73,10 @@ class NodeModel : public QObject
     Q_PROPERTY(bool runtimeDialogQuestion READ runtimeDialogQuestion NOTIFY runtimeDialogChanged)
 
 public:
-    explicit NodeModel(interfaces::Node& node);
+    // Pass false while appInitMain can still install backend services.
+    explicit NodeModel(interfaces::Node& node, bool backend_ready = true);
     ~NodeModel() override;
+    void beginShutdown();
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
@@ -105,6 +108,7 @@ public:
     bool errorState() const { return m_faulted; }
     void setErrorState(bool new_error);
     QString startupError() const { return m_startup_error; }
+    bool fatalException() const { return m_fatal_exception; }
     void setStartupError(const QString& error);
     void addStartupWarnings(const QStringList& warnings);
     QString warnings() const { return m_warnings; }
@@ -138,10 +142,12 @@ public:
 #endif
 
 public Q_SLOTS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info,
+                          bool initial_block_download = false, bool shutdown_requested = false);
     void handleRunawayException(const QString& message);
 
 Q_SIGNALS:
+    void drained();
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -158,6 +164,7 @@ Q_SIGNALS:
     void pauseChanged(bool new_pause);
     void errorStateChanged(bool new_error_state);
     void startupErrorChanged();
+    void fatalExceptionChanged();
     void warningsChanged();
     void runtimeDialogChanged();
 
@@ -198,6 +205,7 @@ private:
     double m_mempool_usage_mb{0.0};
     double m_mempool_max_usage_mb{0.0};
     bool m_mempool_info_polling_active{false};
+    bool m_workers_stopping{false};
     bool m_mempool_information_available{true};
     qint64 m_remaining_sync_time{0};
     double m_verification_progress{0.0};
@@ -215,9 +223,11 @@ private:
     int m_header_tip_height{0};
     int64_t m_header_tip_time{0};
     bool m_node_ready{false};
+    bool m_backend_queries_ready;
     bool m_initial_sync_complete{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
+    bool m_fatal_exception{false};
     bool m_runtime_dialogs_enabled{false};
     bool m_startup_failure_dialog_shown{false};
     bool m_runtime_dialog_visible{false};

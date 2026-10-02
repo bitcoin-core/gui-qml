@@ -29,7 +29,8 @@ public:
         BanUntilRole
     };
 
-    explicit BanListModel(interfaces::Node& node, QObject* parent = nullptr);
+    explicit BanListModel(interfaces::Node& node, QObject* parent = nullptr, bool backend_ready = true);
+    void backendInitialized();
 
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -39,6 +40,7 @@ public:
     int count() const { return m_ban_list.size(); }
 
     Q_INVOKABLE bool unbanAt(int row);
+    void beginShutdown() { m_stopping = true; }
 
 public Q_SLOTS:
     void refresh();
@@ -49,6 +51,8 @@ Q_SIGNALS:
 private:
     interfaces::Node& m_node;
     QList<BanListEntry> m_ban_list;
+    bool m_stopping{false};
+    bool m_backend_ready;
 };
 
 #endif // BITCOIN_QML_MODELS_BANLISTMODEL_H

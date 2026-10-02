@@ -126,6 +126,7 @@ public:
     Q_INVOKABLE QString defaultProxyAddress() const;
 
     bool applyToArgs(ArgsManager& args, QString* error = nullptr) const;
+    QmlOnboardingSettings::ApplyRequest applyRequest() const;
 
 Q_SIGNALS:
     void customDataDirStringChanged(QString path);
