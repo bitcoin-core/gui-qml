@@ -28,6 +28,10 @@ def run_tests():
         assert gui.get_property("blockClock", "subText") == "Please wait"
 
         gui.click("blockClockToggleArea")
+        gui.wait_for_property("nodePauseConfirmationPopup", "opened", True, timeout_ms=5000)
+        # The Node overview asks for confirmation before disconnecting peers.
+        gui.wait_for_property("blockClock", "state", "CONNECTING", timeout_ms=5000)
+        gui.click("nodePauseConfirmButton")
         gui.wait_for_property("blockClock", "state", "PAUSE", timeout_ms=5000)
         assert gui.get_property("blockClock", "header") == "Paused"
         assert gui.get_property("blockClock", "subText") == "Tap to resume"

@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "MempoolWidget"
     when: windowShown
@@ -75,7 +75,7 @@ TestCase {
         })
         verify(widget !== null)
         waitForRendering(widget)
-        waitForPolish(widget)
+        waitForLayout(widget)
         const chart = findChild(widget, "incomingTransactionsChart")
         compare(chart.showAxes, !widget.compact)
         compare(chart.labelFont, widget.footerLabelFont)

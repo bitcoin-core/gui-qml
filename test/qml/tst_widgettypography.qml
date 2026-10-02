@@ -6,7 +6,7 @@ import QtTest 1.2
 import "../../qml/controls"
 import "../../qml/components/widgets"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "WidgetTypography"
     when: windowShown
@@ -58,7 +58,7 @@ TestCase {
         })
         tryVerify(function() { return frame.widgetContent !== null })
         const widget = frame.widgetContent
-        waitForPolish(frame)
+        waitForLayout(frame)
         compare(frame.contentPadding, 16)
         const position = widget.mapToItem(frame, 0, 0)
         compare(position.x, 16)
@@ -103,7 +103,7 @@ TestCase {
         if (footerValue) compare(footerValue.font, widget.footerValueFont)
         frame.width += data.columns * 160
         frame.height += data.rows * 160
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(widget.fontScale, 2)
         checkPeersPadding(frame, widget)
         compare(widget.secondaryValueFont.pixelSize, secondaryValueStyle.pixelSize * 2)
@@ -118,7 +118,7 @@ TestCase {
         compare(title.font.family, Theme.text.family)
         frame.width -= data.columns * 160
         frame.height -= data.rows * 160
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(title.font.pixelSize, originalSize)
     }
 }

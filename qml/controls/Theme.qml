@@ -4,6 +4,15 @@ import QtQuick.Controls 2.15
 
 Control {
     id: root
+
+    function fontWithStyle(family, styleName, pixelSize) {
+        // Older Qt.font() constructors omit styleName. Assign it through the
+        // font value type, which supports it on every supported Qt version.
+        const result = Qt.font({family: family, pixelSize: pixelSize})
+        result.styleName = styleName
+        return result
+    }
+
     property bool dark: true
     property real blockclocksize: (5 / 12)
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
@@ -63,11 +72,7 @@ Control {
         // Use with `lineHeightMode: Text.FixedHeight` on the consumer Text element.
         property int lineHeight: Math.round(pixelSize * 1.4)
 
-        readonly property font font: Qt.font({
-            family: family,
-            styleName: styleName,
-            pixelSize: pixelSize
-        })
+        readonly property font font: Theme.fontWithStyle(family, styleName, pixelSize)
     }
 
     ColorSet {

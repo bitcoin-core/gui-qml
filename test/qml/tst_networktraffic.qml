@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/pages/node"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "NetworkTraffic"
     when: windowShown
@@ -45,7 +45,7 @@ TestCase {
         const page = fixture.page
         page.trafficGraphScale = 300
         page.overlay = overlay
-        waitForPolish(page)
+        waitForLayout(page)
         return page
     }
     function test_layouts_data() {
@@ -87,7 +87,7 @@ TestCase {
         const graph = data.overlay ? combined : received
         verify(graph.lineChart.width <= graph.width)
         page.inspect(data.overlay ? "overlay" : "received", 101000)
-        waitForPolish(page)
+        waitForLayout(page)
         const readout = findChild(graph, "networkTrafficReadout")
         verify(readout.visible)
         verify(readout.x >= 0 && readout.x + readout.width <= graph.width)

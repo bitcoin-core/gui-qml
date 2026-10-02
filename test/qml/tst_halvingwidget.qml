@@ -6,7 +6,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "HalvingWidget"
     when: windowShown
@@ -39,7 +39,7 @@ TestCase {
         Theme.dark = data.dark
         const widget = createTemporaryObject(fixture, testCase, {columnSpan: data.columns, rowSpan: data.rows, width: data.width, height: data.height})
         waitForRendering(widget)
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(widget.percent, 61)
         for (const name of ["halvingHeadline", "halvingBlocksRemaining", "halvingArrival", "halvingSubsidy", "halvingProgressBar"]) {
             const item = findChild(widget, name)

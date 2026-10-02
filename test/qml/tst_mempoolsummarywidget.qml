@@ -6,7 +6,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "MempoolSummaryWidget"
     when: windowShown
@@ -42,7 +42,7 @@ TestCase {
         Theme.dark = data.dark
         const widget = createTemporaryObject(fixture, testCase, {columnSpan: data.columns, rowSpan: data.rows, width: data.width, height: data.height})
         waitForRendering(widget)
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(widget.queuedBlocks, 2)
         for (const name of ["mempoolSummaryCount", "mempoolSummaryFee", "mempoolSummaryMemory", "mempoolQueuedBlocks", "mempoolSummaryCompactFee", "mempoolSummaryCountLabel", "mempoolSummaryInlineCountLabel", "mempoolQueuedBlocksLabel"]) {
             const item = findChild(widget, name)
@@ -56,14 +56,14 @@ TestCase {
     }
     function test_hierarchyAndResize() {
         const widget = createTemporaryObject(fixture, testCase, {columnSpan: 1, rowSpan: 1, width: 112, height: 112})
-        waitForPolish(widget)
+        waitForLayout(widget)
         const compactFee = findChild(widget, "mempoolSummaryCompactFee")
         verify(compactFee.visible)
         compare(compactFee.text, "0.1 sat/vB")
         verify(!findChild(widget, "mempoolQueuedBlocks").visible)
         widget.columnSpan = 2
         widget.width = 260
-        waitForPolish(widget)
+        waitForLayout(widget)
         const count = findChild(widget, "mempoolSummaryCount")
         const label = findChild(widget, "mempoolSummaryInlineCountLabel")
         tryVerify(function() {
@@ -76,7 +76,7 @@ TestCase {
         widget.rowSpan = 2
         widget.width = 392
         widget.height = 244
-        waitForPolish(widget)
+        waitForLayout(widget)
         verify(findChild(widget, "mempoolSummaryDivider").visible)
         const fee = findChild(widget, "mempoolSummaryFee")
         const memory = findChild(widget, "mempoolSummaryMemory")
@@ -96,7 +96,7 @@ TestCase {
         const originalTableHeight = table.height
         widget.width = 992
         widget.height = 644
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(fee.font.pixelSize, originalSize)
         compare(fee.font, memory.font)
         tryVerify(function() { return !fee.truncated && !memory.truncated })

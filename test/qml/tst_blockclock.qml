@@ -8,7 +8,7 @@ import QtTest 1.2
 import "../../qml/components"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     name: "BlockClock"
     when: windowShown
     width: 800
@@ -288,7 +288,7 @@ TestCase {
         compare(label.font.pixelSize, Math.round(dial.width * 0.08))
         clock.parentWidth = 300
         clock.parentHeight = 300
-        waitForPolish(clock)
+        waitForLayout(clock)
         compare(label.font.styleName, "Semi Bold")
         compare(label.font.pixelSize, Math.round(dial.width * 0.08))
         compare(value.font.pixelSize, Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * clock.fontScale))

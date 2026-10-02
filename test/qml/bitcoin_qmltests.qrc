@@ -1,5 +1,6 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/test/qml">
+        <file>RenderTestCase.qml</file>
         <file>tst_transactionflow.qml</file>
         <file>tst_transactiondetail.qml</file>
         <file>tst_activitylist.qml</file>

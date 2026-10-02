@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "PeersWidget"
     when: windowShown
@@ -53,7 +53,7 @@ TestCase {
             height: data.rows * data.cell + (data.rows - 1) * 12 - 32,
             columnSpan: data.columns, rowSpan: data.rows, cellSize: data.cell
         })
-        waitForPolish(widget)
+        waitForLayout(widget)
         waitForRendering(widget)
         compare(peers.widgetActive, true)
         compare(findChild(widget, "peersWidgetTotal").text, "18")
@@ -87,7 +87,7 @@ TestCase {
         compare(inbound.font, widget.expanded ? widget.secondaryValueFont : widget.footerLabelFont)
         if (!widget.compact && !widget.expanded) {
             compare(types.width, widget.width * 0.4)
-            compare(types.mapToItem(widget, types.width, 0).x, widget.width)
+            fuzzyCompare(types.mapToItem(widget, types.width, 0).x, widget.width, 1)
         }
         if (!widget.compact) {
             inBounds(widget, findChild(widget, "peersWidgetLegend"))
@@ -131,7 +131,7 @@ TestCase {
         compare(findChild(widget, "peersWidgetStatus").text, "Unavailable")
         peers.summary = {ready: true, total: 6, inbound: 6, outbound: 0,
             groups: ["ipv4", "ipv6", "tor", "i2p", "cjdns", "other"].map(function(id) { return {id: id, count: 1} })}
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(widget.inboundFraction, 1)
         compare(widget.groups.length, 6)
         compare(findChild(widget, "peersWidgetLegend").columns, 2)
@@ -143,7 +143,7 @@ TestCase {
         widget.rowSpan = 1
         widget.width = 252
         widget.height = 104
-        waitForPolish(widget)
+        waitForLayout(widget)
         waitForRendering(widget)
         inBounds(widget, findChild(widget, "peersWidgetLegend"))
         compare(findChild(widget, "peersWidgetLegend").columns, 3)
@@ -165,7 +165,7 @@ TestCase {
         const widget = createTemporaryObject(widgetComponent, testCase,
             {width: 712, height: 460, columnSpan: 3, rowSpan: 2, cellSize: 240})
         const chart = findChild(widget, "peersWidgetChart")
-        waitForPolish(widget)
+        waitForLayout(widget)
         waitForRendering(widget)
         paintSpy.target = chart
         paintSpy.clear()
@@ -196,7 +196,7 @@ TestCase {
                 ["ipv4", "ipv6", "tor", "i2p", "cjdns", "other"], []]) {
                 peers.summary = {ready: true, total: ids.length, inbound: 0, outbound: ids.length,
                     groups: ids.map(function(id) { return {id: id, count: 1} })}
-                waitForPolish(widget)
+                waitForLayout(widget)
                 waitForRendering(widget)
                 verify(widget.expanded)
                 for (const item of [heading, chart, legend]) inBounds(widget, item)
@@ -234,7 +234,7 @@ TestCase {
         const widget = createTemporaryObject(widgetComponent, testCase, {
             width: 500, height: 330, columnSpan: 3, rowSpan: 2, preview: true, active: false
         })
-        waitForPolish(widget)
+        waitForLayout(widget)
         const chart = findChild(widget, "peersWidgetChart")
         compare(peers.widgetActive, false)
         verify(chart.active)

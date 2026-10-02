@@ -53,7 +53,7 @@ Item {
     readonly property font footerValueFont: footerValueStyle.font
     readonly property real fontScale: Math.max(0.85, cellSize / 160)
     function scaledFont(style) {
-        return Qt.font({family: style.family, styleName: style.styleName, pixelSize: scaledPixelSize(style)})
+        return Theme.fontWithStyle(style.family, style.styleName, scaledPixelSize(style))
     }
     function scaledPixelSize(style) { return Math.round(style.pixelSize * fontScale) }
 

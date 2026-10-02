@@ -7,7 +7,7 @@ import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/components/widgets"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "WidgetDashboard"
     when: windowShown
@@ -189,7 +189,7 @@ TestCase {
         tryCompare(grid, "columns", 3)
         dashboard.layoutModel.removeWidget("clock")
         for (let i = 0; i < 9; ++i) verify(dashboard.layoutModel.addWidget("fixed"))
-        waitForPolish(dashboard)
+        waitForLayout(dashboard)
         const frames = surface.children.filter(function(child) { return child.widgetId === "fixed" })
         const first = frames.filter(function(frame) { return frame.gridRow === 0 && frame.gridColumn === 0 })[0]
         const last = frames.filter(function(frame) { return frame.gridRow === 2 && frame.gridColumn === 0 })[0]
@@ -213,7 +213,7 @@ TestCase {
 
         // Horizontal clipping follows the same contract on a narrow board.
         dashboard.width = 180
-        waitForPolish(dashboard)
+        waitForLayout(dashboard)
         viewport.contentY = 0
         const right = frames.filter(function(frame) { return frame.gridRow === 0 && frame.gridColumn === 2 })[0]
         tryCompare(right.widgetContent, "active", false)
@@ -410,7 +410,7 @@ TestCase {
         const picker = findChild(dashboard, "widgetPicker")
         tryCompare(picker, "opened", true)
         const split = findChild(picker.contentItem, "widgetPickerNavigationSplitView")
-        compare(split.isCompact, true)
+        tryCompare(split, "isCompact", true)
         compare(picker.selectedWidget.id, "clock")
         compare(split.compactColumn, 1)
         mouseClick(findChild(picker.contentItem, "widgetPickerBack"))
@@ -432,7 +432,7 @@ TestCase {
         const first = findChild(picker.contentItem, "widgetPickerSize_small_1x1")
         const last = findChild(picker.contentItem, "widgetPickerSize_small_3x3")
         const scroll = findChild(picker.contentItem, "widgetPickerScroll")
-        waitForPolish(picker.contentItem)
+        waitForLayout(picker.contentItem)
         tryCompare(first.contentItem.item, "renderingActive", true)
         tryCompare(last.contentItem.item, "renderingActive", false)
         compare(first.contentItem.item.active, false)

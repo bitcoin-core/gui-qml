@@ -6,7 +6,7 @@ import QtQml 2.15
 
 QtObject {
     id: root
-    property list<WidgetDefinition> definitions: []
+    property list<WidgetDefinition> definitions
 
     // Adapt the typed definitions to the layout model's data-only catalog.
     readonly property var catalog: {

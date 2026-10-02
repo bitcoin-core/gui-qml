@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "NetworkTrafficWidget"
     when: windowShown
@@ -55,7 +55,7 @@ TestCase {
             height: data.rows * data.cell + (data.rows - 1) * 12 - 32,
             columnSpan: data.columns, rowSpan: data.rows, cellSize: data.cell
         })
-        waitForPolish(widget)
+        waitForLayout(widget)
         waitForRendering(widget)
         compare(traffic.widgetActive, true)
         compare(traffic.active, false)

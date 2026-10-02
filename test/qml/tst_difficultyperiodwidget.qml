@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "DifficultyPeriodWidget"
     when: windowShown
@@ -56,7 +56,7 @@ TestCase {
             width: data.width, height: data.height, columnSpan: data.columns, rowSpan: data.rows
         })
         waitForRendering(widget)
-        waitForPolish(widget)
+        waitForLayout(widget)
         compare(findChild(widget, "difficultyProgress").text, "62%")
         compare(findChild(widget, "difficultyAverageBlockTime").text, "10m 12s")
         compare(findChild(widget, "difficultyAverageBlockTime").horizontalAlignment, Text.AlignRight)
@@ -109,7 +109,7 @@ TestCase {
         let previousTop = 0
         for (const height of [330, 650]) {
             widget.height = height
-            waitForPolish(widget)
+            waitForLayout(widget)
             const top = values.mapToItem(widget, 0, 0).y
             const topGap = top - title.mapToItem(widget, 0, title.height).y
             const bottomGap = section.mapToItem(widget, 0, 0).y - values.mapToItem(widget, 0, values.height).y

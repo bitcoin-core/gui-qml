@@ -25,12 +25,12 @@ Item {
     property bool renderingActive: true
     // Node and Dashboard share typography; hosts can supply their value size.
     readonly property real fontScale: Math.max(0.85, Math.min(parentWidth, parentHeight) / 480)
-    property font primaryValueFont: Qt.font({family: Theme.text.widgetPrimaryValueLarge.family,
-        styleName: Theme.text.widgetPrimaryValueLarge.styleName,
-        pixelSize: Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * fontScale)})
-    property font accompanyingFont: Qt.font({family: Theme.text.widgetPrimaryValueLarge.family,
-        styleName: Theme.text.widgetPrimaryValueLarge.styleName,
-        pixelSize: Math.max(1, Math.round(dial.width * 0.08))})
+    property font primaryValueFont: Theme.fontWithStyle(Theme.text.widgetPrimaryValueLarge.family,
+        Theme.text.widgetPrimaryValueLarge.styleName,
+        Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * fontScale))
+    property font accompanyingFont: Theme.fontWithStyle(Theme.text.widgetPrimaryValueLarge.family,
+        Theme.text.widgetPrimaryValueLarge.styleName,
+        Math.max(1, Math.round(dial.width * 0.08)))
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
@@ -150,14 +150,10 @@ Item {
         elide: Text.ElideRight
         readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
         readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
-        font: Qt.font({
-            family: root.accompanyingFont.family,
-            styleName: root.accompanyingFont.styleName,
-            weight: root.accompanyingFont.weight,
-            pixelSize: subText.desiredTextWidth > subText.width
+        font: Theme.fontWithStyle(root.accompanyingFont.family, root.accompanyingFont.styleName,
+            subText.desiredTextWidth > subText.width
                 ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
-                : subText.desiredPixelSize
-        })
+                : subText.desiredPixelSize)
         color: Theme.color.neutral4
 
         Behavior on color {

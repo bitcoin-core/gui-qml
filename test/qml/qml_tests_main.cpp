@@ -15,9 +15,12 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickImageProvider>
+#include <QQuickItem>
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
+#include <QSettings>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
@@ -4067,9 +4070,27 @@ class QmlTestsSetup : public QObject
 {
     Q_OBJECT
 
+public:
+    Q_INVOKABLE bool waitForLayout(QQuickItem* item)
+    {
+        if (!item) return false;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
+        return QQuickTest::qWaitForPolish(item);
+#else
+        return QQuickTest::qWaitForItemPolished(item);
+#endif
+    }
+
 public Q_SLOTS:
     void applicationAvailable()
     {
+        // Give QML Settings a valid, isolated scope on every platform.
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinQmlTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("bitcoinqml_qmltests"));
+        if (!m_settings_dir.isValid()) qFatal("Cannot create the QML test settings directory");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings_dir.path());
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, m_settings_dir.path());
         // Match production font metrics so layout tests catch real text overflow.
         QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/regular"));
         QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/semibold"));
@@ -4080,6 +4101,7 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->rootContext()->setContextProperty(QStringLiteral("renderTestHelper"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
@@ -4184,6 +4206,9 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
+
+private:
+    QTemporaryDir m_settings_dir;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)

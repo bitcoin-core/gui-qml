@@ -302,6 +302,6 @@ void NetworkTrafficTowerTests::widgetAndPagePublishingAreIndependent()
 #ifdef BITCOINQML_NO_TEST_MAIN
 BITCOINQML_REGISTER_QT_TEST(NetworkTrafficTowerTests)
 #else
-QTEST_MAIN(NetworkTrafficTowerTests)
+QTEST_GUILESS_MAIN(NetworkTrafficTowerTests)
 #endif
 #include "test_networktraffictower.moc"

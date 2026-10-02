@@ -7,7 +7,7 @@ import QtTest 1.2
 import "../../qml/components/widgets"
 import "../../qml/controls"
 
-TestCase {
+RenderTestCase {
     id: testCase
     name: "FeeRatesWidget"
     when: windowShown
@@ -72,7 +72,7 @@ TestCase {
         })
         verify(widget !== null)
         waitForRendering(widget)
-        waitForPolish(widget)
+        waitForLayout(widget)
         if (widget.compact) {
             const headline = findChild(widget, "feeRatesHeadline")
             const unit = findChild(widget, "feeRatesHeadlineUnit")
