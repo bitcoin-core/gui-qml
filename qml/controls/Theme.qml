@@ -4,6 +4,15 @@ import QtQuick.Controls 2.15
 
 Control {
     id: root
+
+    function fontWithStyle(family, styleName, pixelSize) {
+        // Older Qt.font() constructors omit styleName. Assign it through the
+        // font value type, which supports it on every supported Qt version.
+        const result = Qt.font({family: family, pixelSize: pixelSize})
+        result.styleName = styleName
+        return result
+    }
+
     property bool dark: true
     property real blockclocksize: (5 / 12)
     readonly property ColorSet color: dark ? darkColorSet : lightColorSet
@@ -43,6 +52,8 @@ Control {
         required property var primaryButtonBorderGradient
         required property var destructiveButtonBorderGradient
         required property var confirmationColors
+        required property var feeRateColors
+        required property var incomingRateColors
     }
 
     component ImageSet: QtObject {
@@ -61,15 +72,13 @@ Control {
         // Use with `lineHeightMode: Text.FixedHeight` on the consumer Text element.
         property int lineHeight: Math.round(pixelSize * 1.4)
 
-        readonly property font font: Qt.font({
-            family: family,
-            styleName: styleName,
-            pixelSize: pixelSize
-        })
+        readonly property font font: Theme.fontWithStyle(family, styleName, pixelSize)
     }
 
     ColorSet {
         id: darkColorSet
+        feeRateColors: [green, blue, orange, red]
+        incomingRateColors: [green, blue, red]
         white: "#FFFFFF"
         background: "black"
         orange: "#F89B2A"
@@ -107,6 +116,8 @@ Control {
 
     ColorSet {
         id: lightColorSet
+        feeRateColors: [green, blue, orange, red]
+        incomingRateColors: [green, blue, red]
         white: "#FFFFFF"
         background: "white"
         orange: "#F7931A"
@@ -162,6 +173,92 @@ Control {
         id: textSetRoot
         readonly property string family: "BitcoinCoreSans"
         readonly property string monoFamily: "Roboto Mono"
+
+        // Dashboard widget typography
+        readonly property TextStyle widgetTitle: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetPrimaryValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 28
+            lineHeight: 34
+        }
+
+        readonly property TextStyle widgetPrimaryValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 52
+            lineHeight: 60
+        }
+
+        readonly property TextStyle widgetPrimaryLabel: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 15
+            lineHeight: 22
+        }
+
+        readonly property TextStyle widgetPrimaryLabelLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 18
+            lineHeight: 26
+        }
+
+        readonly property TextStyle widgetSecondaryValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 18
+            lineHeight: 21
+        }
+
+        readonly property TextStyle widgetSecondaryValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 28
+            lineHeight: 34
+        }
+
+        readonly property TextStyle widgetFooterLabel: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetFooterLabelLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Regular"
+            pixelSize: 15
+            lineHeight: 22
+        }
+
+        readonly property TextStyle widgetFooterValue: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        readonly property TextStyle widgetFooterValueLarge: TextStyle {
+            family: textSetRoot.family
+            styleName: "Semi Bold"
+            pixelSize: 15
+            lineHeight: 22
+        }
+
+        // Chart readings — Roboto Mono Regular
+        readonly property TextStyle chartValue: TextStyle {
+            family: textSetRoot.monoFamily
+            styleName: "Regular"
+            pixelSize: 28
+            lineHeight: 34
+        }
 
         // Headers — Semi Bold
         readonly property TextStyle display: TextStyle {

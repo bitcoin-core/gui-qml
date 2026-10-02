@@ -7,6 +7,7 @@
 #include <QAbstractListModel>
 #include <QDateTime>
 #include <QFont>
+#include <QFontDatabase>
 #include <QHash>
 #include <QIcon>
 #include <QLocale>
@@ -14,9 +15,12 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickImageProvider>
+#include <QQuickItem>
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
+#include <QSettings>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
@@ -27,7 +31,7 @@
 #include <vector>
 
 #include <qml/components/blockclockdial.h>
-#include <qml/controls/linegraph.h>
+#include <qml/components/widgets/widgetlayoutmodel.h>
 
 class MockAppMode : public QObject
 {
@@ -2576,6 +2580,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString startupError MEMBER m_startup_error NOTIFY startupErrorChanged)
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
+    Q_PROPERTY(QVariantList notificationWarnings READ notificationWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible MEMBER m_runtime_dialog_visible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle MEMBER m_runtime_dialog_title NOTIFY runtimeDialogChanged)
@@ -2631,6 +2636,14 @@ public:
     bool m_ban_peer_result{true};
     int m_disconnect_peer_calls{0};
     int m_ban_peer_calls{0};
+    QVariantList notificationWarnings() const
+    {
+        QVariantList notifications;
+        for (const auto& warning : m_warning_list) {
+            notifications.push_back(QVariantMap{{QStringLiteral("text"), warning}, {QStringLiteral("priority"), 80}});
+        }
+        return notifications;
+    }
     bool hasWarnings() const { return !m_warning_list.isEmpty(); }
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
     int disconnectPeerCalls() const { return m_disconnect_peer_calls; }
@@ -2650,13 +2663,27 @@ public:
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }
+    Q_PROPERTY(QVariantList overviewInformationRows READ overviewInformationRows NOTIFY informationChanged)
+    Q_INVOKABLE void refreshNodeInformation() {}
+    QVariantList overviewInformationRows() const
+    {
+        QVariantList overview;
+        for (const auto& row : nodeInformationRows()) {
+            const auto id = row.toMap().value("id").toString();
+            if (id == "network" || id == "client-version" || id == "startup-time" || id == "last-block-time") overview.append(row);
+        }
+        return overview;
+    }
+    Q_SIGNAL void informationChanged();
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;
+        version.insert(QStringLiteral("id"), QStringLiteral("client-version"));
         version.insert(QStringLiteral("label"), QStringLiteral("Client version"));
         version.insert(QStringLiteral("value"), QStringLiteral("Bitcoin Core test"));
 
         QVariantMap network;
+        network.insert(QStringLiteral("id"), QStringLiteral("network"));
         network.insert(QStringLiteral("label"), QStringLiteral("Network"));
         network.insert(QStringLiteral("value"), QStringLiteral("regtest"));
 
@@ -2668,8 +2695,18 @@ public:
         rows.push_back(QVariant::fromValue(version));
         rows.push_back(QVariant::fromValue(network));
         rows.push_back(QVariant::fromValue(peers));
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("block-height")},
+                                  {QStringLiteral("label"), QStringLiteral("Block height")},
+                                  {QStringLiteral("value"), QString::number(m_block_tip_height)}});
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("startup-time")},
+                                  {QStringLiteral("label"), QStringLiteral("Startup time")},
+                                  {QStringLiteral("value"), QStringLiteral("Wed Sep 30 13:00:00 2026")}});
+        rows.push_back(QVariantMap{{QStringLiteral("id"), QStringLiteral("last-block-time")},
+                                  {QStringLiteral("label"), QStringLiteral("Last block time")},
+                                  {QStringLiteral("value"), QStringLiteral("Unknown")}});
         if (!m_warning_list.isEmpty()) {
             QVariantMap warnings;
+            warnings.insert(QStringLiteral("id"), QStringLiteral("warnings"));
             warnings.insert(QStringLiteral("label"), QStringLiteral("Warnings"));
             warnings.insert(QStringLiteral("value"), m_warning_list.join(QStringLiteral("\n")));
             rows.push_back(QVariant::fromValue(warnings));
@@ -2770,10 +2807,14 @@ Q_SIGNALS:
 class MockPeerTableModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantMap summary MEMBER m_summary NOTIFY summaryChanged)
+    Q_PROPERTY(bool widgetActive MEMBER m_widget_active NOTIFY widgetActiveChanged)
     Q_PROPERTY(bool autoRefreshActive MEMBER m_auto_refresh_active NOTIFY autoRefreshActiveChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
 public:
+    QVariantMap m_summary{{"ready", true}, {"total", 0}, {"inbound", 0}, {"outbound", 0}, {"groups", QVariantList{}}};
+    bool m_widget_active{false};
     Q_INVOKABLE void startAutoRefresh() { m_auto_refresh_active = true; Q_EMIT autoRefreshActiveChanged(); }
     Q_INVOKABLE void stopAutoRefresh() { m_auto_refresh_active = false; Q_EMIT autoRefreshActiveChanged(); }
     Q_INVOKABLE void refresh()
@@ -2789,6 +2830,8 @@ public:
     int refreshCalls() const { return m_refresh_calls; }
 
 Q_SIGNALS:
+    void summaryChanged();
+    void widgetActiveChanged();
     void refreshCallsChanged();
     void autoRefreshActiveChanged();
 
@@ -2800,13 +2843,12 @@ private:
 class MockNetworkTrafficTower : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList history MEMBER m_history NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList widgetHistory READ widgetHistory NOTIFY historyChanged)
+    Q_PROPERTY(bool widgetActive MEMBER m_widget_active NOTIFY widgetActiveChanged)
     Q_PROPERTY(bool active READ active WRITE setActive NOTIFY activeChanged)
     Q_PROPERTY(quint64 totalBytesReceived MEMBER m_total_bytes_received NOTIFY totalBytesReceivedChanged)
     Q_PROPERTY(quint64 totalBytesSent MEMBER m_total_bytes_sent NOTIFY totalBytesSentChanged)
-    Q_PROPERTY(double maxReceivedRateBps MEMBER m_max_received_rate_bps NOTIFY maxReceivedRateBpsChanged)
-    Q_PROPERTY(double maxSentRateBps MEMBER m_max_sent_rate_bps NOTIFY maxSentRateBpsChanged)
-    Q_PROPERTY(QVariantList receivedRateList MEMBER m_received_rate_list NOTIFY receivedRateListChanged)
-    Q_PROPERTY(QVariantList sentRateList MEMBER m_sent_rate_list NOTIFY sentRateListChanged)
     Q_PROPERTY(int lastFilterWindowSize MEMBER m_last_filter_window_size NOTIFY lastFilterWindowSizeChanged)
 
 public:
@@ -2818,13 +2860,15 @@ public:
         Q_EMIT activeChanged();
     }
 
+    QVariantList widgetHistory() const { return m_history; }
+    bool m_widget_active{false};
+    QVariantList m_history{
+        QVariantMap{{"time", 1'000.0}, {"received", 30.0}, {"sent", 35.0}},
+        QVariantMap{{"time", 2'000.0}, {"received", 20.0}, {"sent", 25.0}},
+        QVariantMap{{"time", 3'000.0}, {"received", 10.0}, {"sent", 15.0}}};
     bool m_active{false};
     quint64 m_total_bytes_received{1'000};
     quint64 m_total_bytes_sent{2'000};
-    double m_max_received_rate_bps{100.0};
-    double m_max_sent_rate_bps{200.0};
-    QVariantList m_received_rate_list{10.0, 20.0, 30.0};
-    QVariantList m_sent_rate_list{15.0, 25.0, 35.0};
     int m_last_filter_window_size{30};
 
     Q_INVOKABLE void updateFilterWindowSize(const int window_size)
@@ -2834,13 +2878,11 @@ public:
     }
 
 Q_SIGNALS:
+    void historyChanged();
+    void widgetActiveChanged();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
-    void maxReceivedRateBpsChanged();
-    void maxSentRateBpsChanged();
-    void receivedRateListChanged();
-    void sentRateListChanged();
     void lastFilterWindowSizeChanged();
 };
 
@@ -4028,15 +4070,38 @@ class QmlTestsSetup : public QObject
 {
     Q_OBJECT
 
+public:
+    Q_INVOKABLE bool waitForLayout(QQuickItem* item)
+    {
+        if (!item) return false;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 4, 0)
+        return QQuickTest::qWaitForPolish(item);
+#else
+        return QQuickTest::qWaitForItemPolished(item);
+#endif
+    }
+
 public Q_SLOTS:
     void applicationAvailable()
     {
+        // Give QML Settings a valid, isolated scope on every platform.
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinQmlTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("bitcoinqml_qmltests"));
+        if (!m_settings_dir.isValid()) qFatal("Cannot create the QML test settings directory");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings_dir.path());
+        QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, m_settings_dir.path());
+        // Match production font metrics so layout tests catch real text overflow.
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/regular"));
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/bitcoincoresans/semibold"));
+        QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/robotomono/regular"));
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->rootContext()->setContextProperty(QStringLiteral("renderTestHelper"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
@@ -4112,7 +4177,7 @@ public Q_SLOTS:
             "Test stub type"
         );
         qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
-        qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+        qmlRegisterType<WidgetLayoutModel>("org.bitcoincore.qt", 1, 0, "WidgetLayoutModel");
         engine->rootContext()->setContextProperty(QStringLiteral("optionsModel"), &options_model);
         engine->rootContext()->setContextProperty(QStringLiteral("chainModel"), &chain_model);
         engine->rootContext()->setContextProperty(QStringLiteral("blockClockModel"), &block_clock_model);
@@ -4141,6 +4206,9 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
+
+private:
+    QTemporaryDir m_settings_dir;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)

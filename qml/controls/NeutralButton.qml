@@ -84,11 +84,7 @@ AbstractButton {
                 elide: Text.ElideRight
                 visible: root.text.length > 0
                 text: root.text
-                font: Qt.font({
-                    family: root.textStyle.family,
-                    styleName: root.textStyle.styleName,
-                    pixelSize: root.textFontPixelSize
-                })
+                font: Theme.fontWithStyle(root.textStyle.family, root.textStyle.styleName, root.textFontPixelSize)
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
             }

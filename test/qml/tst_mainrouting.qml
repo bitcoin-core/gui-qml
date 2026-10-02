@@ -76,6 +76,49 @@ TestCase {
         compare(menuActions.settings.enabled, true)
     }
 
+    function test_node_only_settings_switches_tabs_and_retains_section() {
+        const window = createMain(false)
+        const main = findChild(window, "mainPageStack")
+        const runner = findChild(window, "nodeRunner")
+        const settings = findChild(runner, "nodeSettingsButton")
+        const loader = findChild(runner, "nodeSettingsLoader")
+        const overview = findChild(runner, "nodeOverview")
+        const menuActions = findChild(window, "desktopMenuActions")
+        compare(loader.active, false)
+        compare(loader.item, null)
+        compare(settings.width, 40)
+        compare(settings.height, 60)
+        compare(settings.iconSize, 30)
+        compare(settings.iconSource, "image://images/gear-outline")
+
+        mouseClick(settings)
+        tryCompare(settings, "checked", true)
+        tryVerify(function() { return loader.item !== null })
+        const view = loader.item
+        compare(view.showDoneButton, false)
+        compare(findChild(view, "settingsDoneButton").visible, false)
+        compare(main.depth, 1)
+        compare(main.currentItem, runner)
+        compare(overview.visible, false)
+        compare(settings.visible, true)
+
+        window.openSettings("display")
+        tryCompare(view, "selectedSectionId", "display")
+        menuActions.nodeView.trigger()
+        tryCompare(overview, "visible", true)
+        compare(view.visible, false)
+        compare(loader.item, view)
+        mouseClick(settings)
+        tryCompare(view, "visible", true)
+        compare(view.selectedSectionId, "display")
+
+        menuActions.consoleView.trigger()
+        tryCompare(view, "selectedSectionId", "rpc-console")
+        menuActions.networkTraffic.trigger()
+        tryCompare(view, "selectedSectionId", "network-traffic")
+        compare(main.depth, 1)
+    }
+
     function test_add_wallet_menu_command_opens_wallet_wizard() {
         const window = createMain(true)
         const menuActions = findChild(window, "desktopMenuActions")

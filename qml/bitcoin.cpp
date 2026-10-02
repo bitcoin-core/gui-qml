@@ -12,12 +12,15 @@
 #include <chainparams.h>
 #include <init.h>
 #include <interfaces/chain.h>
+#include <interfaces/handler.h>
 #include <interfaces/init.h>
 #include <interfaces/node.h>
 #include <logging.h>
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
+#include <policy/feerate.h>
+#include <univalue.h>
 #include <qml/appmode.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buildinfo.h>
@@ -30,7 +33,12 @@
 #include <qml/androidnotifier.h>
 #endif
 #include <qml/components/blockclockdial.h>
-#include <qml/controls/linegraph.h>
+#include <qml/components/widgets/widgetlayoutmodel.h>
+#include <qml/components/widgets/feeratesmodel.h>
+#include <qml/components/widgets/mempoolactivitymodel.h>
+#include <qml/components/widgets/mempoolactivitysource.h>
+#include <qml/components/widgets/difficultyperiodsource.h>
+#include <qml/components/widgets/halvingmodel.h>
 #include <qml/guiconstants.h>
 #include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
@@ -265,7 +273,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return bitcoin_uri_model_instance;
     });
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
-    qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
+    qmlRegisterType<WidgetLayoutModel>("org.bitcoincore.qt", 1, 0, "WidgetLayoutModel");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
     qmlRegisterUncreatableType<DebugLogModel>("org.bitcoincore.qt", 1, 0, "DebugLogModel", "");
     qmlRegisterUncreatableType<RpcConsoleModel>("org.bitcoincore.qt", 1, 0, "RpcConsoleModel", "");
@@ -567,9 +575,57 @@ int QmlGuiMain(int argc, char* argv[])
     app_mode.setWalletEnabled(wallet_enabled);
 
     NodeModel node_model{*node};
+    PeerListModel peer_model{*node, nullptr};
+    bool chain_ready{false};
+    HalvingModel halving_model{Params().GetConsensus().nSubsidyHalvingInterval,
+                               int(Params().GetConsensus().nPowTargetSpacing)};
+    const auto refresh_halving = [&] {
+        halving_model.setHeight(!chain_ready || node_model.blockSyncActive() ? -1 : node_model.blockTipHeight());
+    };
+    QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &halving_model, refresh_halving);
+    QObject::connect(&node_model, &NodeModel::blockSyncActiveChanged, &halving_model, refresh_halving);
+    QObject::connect(&node_model, &NodeModel::chainStateReady, &halving_model, [&] { chain_ready = true; refresh_halving(); });
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &halving_model, [&] { chain_ready = false; halving_model.setHeight(-1); });
+    DifficultyPeriodModel difficulty_period_model{[node = node.get(), chain = chain.get()] {
+        return ReadDifficultyPeriod(*node, *chain);
+    }};
+    QObject::connect(&node_model, &NodeModel::blockTipHeightChanged, &difficulty_period_model, &DifficultyPeriodModel::refresh);
+    auto mempool_activity_source = std::make_shared<MempoolActivitySource>();
+    std::unique_ptr<interfaces::Handler> mempool_activity_handler;
+    MempoolActivityModel mempool_activity_model{[source = mempool_activity_source, chain = chain.get(), node = node.get(), loaded = false]() mutable {
+        // Mempool loading continues after appInitMain returns. The interfaces
+        // expose its completion through getmempoolinfo, not the init signal.
+        const auto info = node->executeRpc("getmempoolinfo", UniValue{UniValue::VARR}, "");
+        if (!loaded) {
+            if (!info["loaded"].get_bool()) return MempoolActivityModel::Snapshot{0, -1, false};
+            chain->waitForNotifications();
+            loaded = true;
+        }
+        const auto minimum = std::max(chain->mempoolMinFee().GetFeePerK(), chain->relayMinFee().GetFeePerK());
+        return MempoolActivityModel::Snapshot{source->incomingVbytes(), minimum / 1000.0, true, info["bytes"].getInt<int64_t>()};
+    }, 1000000.0 / Params().GetConsensus().nPowTargetSpacing};
+    QObject::connect(&mempool_activity_model, &MempoolActivityModel::statsRefreshRequested,
+                     &node_model, &NodeModel::refreshMempoolInfo);
+    FeeRatesModel fee_rates_model{[chain = chain.get()](int target) -> qint64 {
+        if (chain->isInitialBlockDownload()) return 0;
+        return chain->estimateSmartFee(target, /*conservative=*/true).GetFeePerK();
+    }};
     node_model.addStartupWarnings(startup_warnings);
     QmlInitExecutor init_executor{*node};
     bool shutdown_requested{false};
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &difficulty_period_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested()) difficulty_period_model.setReady(true);
+    });
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &mempool_activity_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested() && node_model.mempoolInformationAvailable()) {
+            // The sampler waits for the saved mempool and its notifications.
+            mempool_activity_handler = chain->handleNotifications(mempool_activity_source);
+            mempool_activity_model.setReady(true);
+        }
+    });
+    QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &fee_rates_model, [&](bool success) {
+        if (success && !shutdown_requested && !node->shutdownRequested()) fee_rates_model.setReady(true);
+    });
     DebugLogModel debug_log_model{gArgs.GetDataDirNet() / "debug.log"};
 #ifdef ENABLE_WALLET
     std::unique_ptr<WalletQmlController> wallet_controller;
@@ -585,17 +641,31 @@ int QmlGuiMain(int argc, char* argv[])
     }
 #endif
     QObject::connect(&node_model, &NodeModel::requestedInitialize, &init_executor, &QmlInitExecutor::initialize);
-    QObject::connect(&node_model, &NodeModel::requestedShutdown, [&] {
-        if (shutdown_requested) {
-            return;
-        }
-        shutdown_requested = true;
+    // Node teardown starts only after every node-query worker acknowledges its
+    // queued fence. Keeping the event loop running allows the shutdown UI to draw.
+    int workers_to_drain{0};
+    const auto worker_drained = [&] {
+        if (--workers_to_drain != 0) return;
+        mempool_activity_handler.reset();
 #ifdef ENABLE_WALLET
-        if (wallet_controller) {
-            wallet_controller->unloadWallets();
-        }
+        if (wallet_controller) wallet_controller->unloadWallets();
 #endif
         init_executor.shutdown();
+    };
+    QObject::connect(&fee_rates_model, &FeeRatesModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&difficulty_period_model, &DifficultyPeriodModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&mempool_activity_model, &MempoolActivityModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&peer_model, &PeerListModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&node_model, &NodeModel::shutdownFinished, &init_executor, worker_drained);
+    QObject::connect(&node_model, &NodeModel::requestedShutdown, &init_executor, [&] {
+        if (shutdown_requested) return;
+        shutdown_requested = true;
+        workers_to_drain = 5;
+        fee_rates_model.stopForShutdown();
+        difficulty_period_model.stopForShutdown();
+        mempool_activity_model.stopForShutdown();
+        peer_model.stopForShutdown();
+        node_model.stopForShutdown();
     });
     QObject::connect(&init_executor, &QmlInitExecutor::initializeResult, &node_model, &NodeModel::initializeResult);
     QObject::connect(&init_executor, &QmlInitExecutor::shutdownResult, qGuiApp, [] {
@@ -637,7 +707,7 @@ int QmlGuiMain(int argc, char* argv[])
         node_model.requestShutdown();
     });
 
-    PeerListModel peer_model{*node, nullptr};
+    QObject::connect(&node_model, &NodeModel::nodeInitialized, &peer_model, &PeerListModel::refresh);
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 
@@ -659,6 +729,10 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("nodeModel", &node_model);
     engine->rootContext()->setContextProperty("chainModel", &chain_model);
     engine->rootContext()->setContextProperty("blockClockModel", &block_clock_model);
+    engine->rootContext()->setContextProperty("feeRatesModel", &fee_rates_model);
+    engine->rootContext()->setContextProperty("mempoolActivityModel", &mempool_activity_model);
+    engine->rootContext()->setContextProperty("difficultyPeriodModel", &difficulty_period_model);
+    engine->rootContext()->setContextProperty("halvingModel", &halving_model);
     engine->rootContext()->setContextProperty("peerTableModel", &peer_model);
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);

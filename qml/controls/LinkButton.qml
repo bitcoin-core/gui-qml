@@ -12,6 +12,7 @@ AbstractButton {
 
     property url iconSource: ""
     property int iconSize: 14
+    property bool iconOnRight: false
     property var textStyle: Theme.text.captionStrong
     property color textColor: enabled ? Theme.color.orange : Theme.color.neutral5
 
@@ -26,9 +27,12 @@ AbstractButton {
     HoverHandler { cursorShape: Qt.PointingHandCursor }
 
     contentItem: RowLayout {
+        layoutDirection: root.iconOnRight ? Qt.RightToLeft : Qt.LeftToRight
         spacing: 6
         Icon {
             visible: root.iconSource.toString().length > 0
+            Layout.preferredWidth: root.iconSize
+            Layout.preferredHeight: root.iconSize
             source: root.iconSource
             size: root.iconSize
             color: root.textColor

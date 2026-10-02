@@ -51,6 +51,7 @@ void QmlInitExecutorApiTests::initializeEmitsResultAndRunsOffMainThread()
         return true;
     };
 
+    node.is_initial_block_download_fn = [] { return false; };
     QmlInitExecutor executor{node};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);
@@ -83,6 +84,7 @@ void QmlInitExecutorApiTests::initializeEmitsRunawayExceptionOnFailure()
         throw std::runtime_error{"init failed"};
     };
 
+    node.is_initial_block_download_fn = [] { return false; };
     QmlInitExecutor executor{node};
     QSignalSpy initialize_spy(&executor, &QmlInitExecutor::initializeResult);
     QSignalSpy runaway_spy(&executor, &QmlInitExecutor::runawayException);

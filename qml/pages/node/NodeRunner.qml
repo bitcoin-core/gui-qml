@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,62 +6,128 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
-import "../../controls/utils.js" as Utils
 import "../../components"
+import "../../components/widgets"
 
 Page {
-    signal settingsClicked
-    signal peersClicked
     id: root
     objectName: "nodeRunner"
     background: null
     clip: true
+
+    function openNode() {
+        nodeTabButton.checked = true
+        nodeNavigationStack.pop(null, StackView.Immediate)
+    }
+    function openDashboard() { widgetsTabButton.checked = true }
+    function openPeers() { nodeTabButton.checked = true; nodeOverview.openPeers() }
+    function openSettings(section) {
+        if (section) settingsLoader.pendingSection = section
+        settingsTabButton.checked = true
+        Qt.callLater(settingsLoader.applyPendingSection)
+    }
+    function openConsole() { root.openSettings("rpc-console") }
+    function openNetworkTraffic() { root.openSettings("network-traffic") }
+
+    ButtonGroup { id: navigationTabs }
     header: NavigationBar2 {
-        rightItem: Item {
-            implicitWidth: actionsRow.implicitWidth + 12
-            implicitHeight: actionsRow.implicitHeight + 10
-
-            RowLayout {
-                id: actionsRow
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: 8
-                anchors.rightMargin: 12
-                spacing: 4
-
-                NodeStatusActions {
-                    Layout.alignment: Qt.AlignVCenter
+        rightItem: RowLayout {
+            spacing: 5
+            NetworkIndicator {
+                Layout.rightMargin: 8
+                objectName: "nodeRunnerNetworkIndicator"
+                textSize: 11
+                shorten: true
+                enabled: false
+                focusPolicy: Qt.NoFocus
+                Accessible.name: text
+                Accessible.role: Accessible.StaticText
+            }
+            NavigationTab {
+                id: nodeTabButton
+                objectName: "blockClockTabButton"
+                checked: true
+                property int index: 0
+                Layout.preferredWidth: 40
+                ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Node")
+                customContent: MiniBlockClock { pageSelected: nodeTabButton.checked }
+                Tooltip {
+                    anchors.top: nodeTabButton.bottom
+                    anchors.topMargin: 8
+                    anchors.horizontalCenter: nodeTabButton.horizontalCenter
+                    shown: nodeTabButton.hovered
+                    text: qsTr("Node")
                 }
-                IconButton {
-                    objectName: "peersTabButton"
-                    iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
-                    iconColor: Theme.color.neutral7
-                    hoverColor: Theme.color.neutral9
-                    size: 34
-                    iconSize: 24
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: root.peersClicked()
+            }
+            NavigationTab {
+                id: widgetsTabButton
+                objectName: "widgetsTabButton"
+                iconSource: "image://images/widgets.svg"
+                iconColor: Theme.color.neutral7
+                iconSize: 18
+                property int index: 1
+                Layout.preferredWidth: 40
+                ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Dashboard")
+                Tooltip {
+                    anchors.top: widgetsTabButton.bottom
+                    anchors.topMargin: 8
+                    anchors.horizontalCenter: widgetsTabButton.horizontalCenter
+                    shown: widgetsTabButton.hovered
+                    text: qsTr("Dashboard")
                 }
-                IconButton {
-                    objectName: "nodeSettingsButton"
-                    iconSource: "image://images/gear"
-                    iconColor: Theme.color.neutral9
-                    hoverColor: Theme.color.neutral9
-                    size: 34
-                    iconSize: 34
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: root.settingsClicked()
+            }
+            NavigationTab {
+                id: settingsTabButton
+                objectName: "nodeSettingsButton"
+                iconSource: "image://images/gear-outline"
+                iconColor: Theme.color.neutral7
+                Layout.preferredWidth: 40
+                property int index: 2
+                ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Settings")
+                Tooltip {
+                    anchors.top: settingsTabButton.bottom
+                    anchors.topMargin: 8
+                    anchors.horizontalCenter: settingsTabButton.horizontalCenter
+                    shown: settingsTabButton.hovered
+                    text: qsTr("Settings")
                 }
             }
         }
     }
+    Component.onCompleted: nodeModel.startNodeInitializionThread()
+    StackLayout {
+        anchors.fill: parent
+        currentIndex: navigationTabs.checkedButton.index
+        PageStack {
+            id: nodeNavigationStack
+            objectName: "nodeNavigationStack"
+            initialItem: NodeOverview { id: nodeOverview }
+        }
+        WidgetDashboard {}
+        Item {
+            Loader {
+                id: settingsLoader
+                objectName: "nodeSettingsLoader"
+                anchors.fill: parent
+                property bool retainItem: false
+                property string pendingSection: ""
 
-    Component.onCompleted: nodeModel.startNodeInitializionThread();
+                function applyPendingSection() {
+                    if (!item || pendingSection.length === 0) return
+                    item.selectSection(pendingSection)
+                    pendingSection = ""
+                }
 
-    BlockClock {
-        parentWidth: parent.width - 40
-        parentHeight: parent.height
-        anchors.centerIn: parent
-        renderingActive: root.visible
+                active: settingsTabButton.checked || retainItem
+                onLoaded: {
+                    retainItem = true
+                    Qt.callLater(applyPendingSection)
+                }
+                sourceComponent: SettingsView { showDoneButton: false }
+            }
+        }
     }
 }

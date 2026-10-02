@@ -6,11 +6,29 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
+import "../controls/FeeRateColors.js" as FeeRateColors
+import "widgets/WidgetActivity.js" as WidgetActivity
 
 ColumnLayout {
     id: root
     objectName: "feeSelectionControl"
     property var walletModel: null
+    property var feeRatesModelRef: typeof feeRatesModel !== "undefined" ? feeRatesModel : null
+    readonly property var targetRates: feeRatesModelRef ? feeRatesModelRef.blockTargetRates : []
+    readonly property real referenceRate: feeRatesModelRef ? feeRatesModelRef.referenceRate : -1
+    readonly property var targetColors: blockTargets.map(function(target, index) {
+        return FeeRateColors.colorForRate(Number(root.targetRates[index]), root.referenceRate,
+                                          Theme.color.feeRateColors, Theme.color.neutral6)
+    })
+    property bool feeActivityInitialized: false
+    readonly property bool feeActivityRequested: visible && customSelected
+    function updateFeeActivity() {
+        if (feeActivityInitialized) WidgetActivity.update(root, feeRatesModelRef, "active", feeActivityRequested)
+    }
+    onFeeRatesModelRefChanged: updateFeeActivity()
+    onFeeActivityRequestedChanged: updateFeeActivity()
+    Component.onCompleted: { feeActivityInitialized = true; updateFeeActivity() }
+    Component.onDestruction: WidgetActivity.remove(root)
     property int currentTarget: walletModel ? walletModel.targetBlocks : 6
     readonly property bool customSelected: walletModel ? walletModel.customFeeEnabled : false
     readonly property var blockTargets: [2, 3, 4, 6, 10, 25, 50]
@@ -75,6 +93,17 @@ ColumnLayout {
                 from: 0
                 to: root.blockTargets.length - 1
                 value: root.blockTargets.indexOf(root.nearestBlockTarget(root.currentTarget))
+                trackGradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    // Each stop uses the live estimate for its block target.
+                    GradientStop { position: 0; color: root.targetColors[0] }
+                    GradientStop { position: 1 / 6; color: root.targetColors[1] }
+                    GradientStop { position: 2 / 6; color: root.targetColors[2] }
+                    GradientStop { position: 3 / 6; color: root.targetColors[3] }
+                    GradientStop { position: 4 / 6; color: root.targetColors[4] }
+                    GradientStop { position: 5 / 6; color: root.targetColors[5] }
+                    GradientStop { position: 1; color: root.targetColors[6] }
+                }
                 Accessible.name: qsTr("Targeted blocks")
                 onMoved: root.walletModel.setCustomFeeTarget(root.blockTargets[Math.round(value)])
             }

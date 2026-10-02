@@ -86,7 +86,7 @@ qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
 add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
-  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/widgetlayoutmodel.cpp
   ${QMLTESTS_QRC_CPP}
 )
 
@@ -111,13 +111,16 @@ target_include_directories(bitcoinqml_qmltests
     ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
-add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
+# Rendering tests need fonts and image capture, which the minimal plugin omits.
+set(QML_TEST_RENDERING_PLATFORM "offscreen" CACHE STRING "Qt platform for QML rendering tests")
+add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform ${QML_TEST_RENDERING_PLATFORM})
+set_tests_properties(bitcoinqml_qmltests PROPERTIES ENVIRONMENT "QT_QUICK_BACKEND=software")
 
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_unit_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_qml_plugins(bitcoinqml_unit_tests)
-  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
+  qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QOffscreenIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
   qt6_import_qml_plugins(bitcoinqml_qmltests)
   target_link_libraries(bitcoinqml_qmltests PRIVATE
     Qt6::LabsPlatformplugin
@@ -129,3 +132,54 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
     target_link_libraries(bitcoinqml_qmltests PRIVATE Qt6::qmlsettingsplugin)
   endif()
 endif()
+
+# Widget placement and persistence can be exercised without a Bitcoin node.
+add_executable(widgetlayoutmodel_tests
+  test_widgetlayoutmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/widgetlayoutmodel.cpp
+)
+target_include_directories(widgetlayoutmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(widgetlayoutmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME widgetlayoutmodel_tests COMMAND widgetlayoutmodel_tests)
+
+add_executable(feeratesmodel_tests
+  test_feeratesmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/feeratesmodel.cpp
+)
+target_include_directories(feeratesmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(feeratesmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME feeratesmodel_tests COMMAND feeratesmodel_tests)
+
+add_executable(mempoolactivitymodel_tests
+  test_mempoolactivitymodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/mempoolactivitymodel.cpp
+)
+target_include_directories(mempoolactivitymodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(mempoolactivitymodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME mempoolactivitymodel_tests COMMAND mempoolactivitymodel_tests)
+
+add_executable(difficultyperiodmodel_tests
+  test_difficultyperiodmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/difficultyperiodmodel.cpp
+)
+target_include_directories(difficultyperiodmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(difficultyperiodmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME difficultyperiodmodel_tests COMMAND difficultyperiodmodel_tests)
+
+add_executable(halvingmodel_tests
+  test_halvingmodel.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/widgets/halvingmodel.cpp
+)
+target_include_directories(halvingmodel_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(halvingmodel_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME halvingmodel_tests COMMAND halvingmodel_tests)
+
+add_executable(networktraffictower_tests test_networktraffictower.cpp)
+target_include_directories(networktraffictower_tests PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../bitcoin/src/univalue/include
+  ${CMAKE_CURRENT_BINARY_DIR}/../bitcoin/src
+)
+target_link_libraries(networktraffictower_tests PRIVATE bitcoinqml Qt6::Test)
+add_test(NAME networktraffictower_tests COMMAND networktraffictower_tests)

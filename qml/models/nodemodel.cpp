@@ -85,9 +85,12 @@ bool HasMultipleRuntimeDialogButtons(unsigned int buttons)
     return (buttons & (buttons - 1)) != 0;
 }
 
-QVariant InformationRow(const QString& label, const QString& value)
+QVariant InformationRow(const QString& label, const QString& value, const QString& id = {})
 {
     QVariantMap row;
+    if (!id.isEmpty()) {
+        row.insert(QStringLiteral("id"), id);
+    }
     row.insert(QStringLiteral("label"), label);
     row.insert(QStringLiteral("value"), value);
     return QVariant::fromValue(row);
@@ -97,6 +100,13 @@ QVariant InformationRow(const QString& label, const QString& value)
 NodeModel::NodeModel(interfaces::Node& node)
     : m_node{node}
 {
+    m_startup_time = QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString();
+    connect(this, &NodeModel::headerSyncChanged, this, &NodeModel::informationChanged);
+    connect(this, &NodeModel::numPeersChanged, this, &NodeModel::informationChanged);
+    connect(this, &NodeModel::numInboundPeersChanged, this, &NodeModel::informationChanged);
+    connect(this, &NodeModel::numOutboundPeersChanged, this, &NodeModel::informationChanged);
+    connect(this, &NodeModel::pauseChanged, this, &NodeModel::informationChanged);
+    connect(this, &NodeModel::warningsChanged, this, &NodeModel::informationChanged);
     m_sync_progress_clock.start();
     m_mempool_information_available = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
     initializeMempoolInfoPolling();
@@ -169,6 +179,7 @@ void NodeModel::refreshMempoolInfo()
 
 void NodeModel::setMempoolInfoPollingActive(bool active)
 {
+    if (active && m_shutdown_requested) return;
     if (m_mempool_info_polling_active == active) {
         return;
     }
@@ -217,7 +228,7 @@ void NodeModel::initializeMempoolInfoPolling()
 
 void NodeModel::requestMempoolInfoRefresh()
 {
-    if (!m_mempool_info_worker) {
+    if (m_shutdown_requested || !m_mempool_info_worker) {
         return;
     }
 
@@ -377,21 +388,34 @@ void NodeModel::addStartupWarnings(const QStringList& warnings)
     }
 }
 
-void NodeModel::setWarnings(const QString& warnings)
+void NodeModel::setWarnings(const bilingual_str& warnings)
 {
-    const QStringList warning_list{SplitWarnings(warnings)};
-    if (m_warnings == warnings && m_warning_list == warning_list) {
+    const QString translated{QString::fromStdString(warnings.translated)};
+    const QStringList warning_list{SplitWarnings(translated)};
+    const QStringList originals{SplitWarnings(QString::fromStdString(warnings.original))};
+    QVariantList notification_warnings;
+    for (int i = 0; i < warning_list.size(); ++i) {
+        // Classify the original Core message, so translations cannot change
+        // priority. Build notices sit below actionable node warnings.
+        const bool build_notice{i < originals.size() && originals[i].startsWith(QStringLiteral("This is a pre-release test build"))};
+        notification_warnings.push_back(QVariantMap{
+            {QStringLiteral("text"), warning_list[i]},
+            {QStringLiteral("priority"), build_notice ? 20 : 80},
+        });
+    }
+    if (m_warnings == translated && m_warning_list == warning_list && m_notification_warnings == notification_warnings) {
         return;
     }
-    m_warnings = warnings;
+    m_warnings = translated;
     m_warning_list = warning_list;
+    m_notification_warnings = notification_warnings;
     Q_EMIT warningsChanged();
 }
 
 void NodeModel::refreshWarnings()
 {
     // Keep "current warnings" tied to Core's active warning set.
-    setWarnings(QString::fromStdString(m_node.getWarnings().translated));
+    setWarnings(m_node.getWarnings());
 }
 
 void NodeModel::showStartupWarnings()
@@ -444,7 +468,7 @@ void NodeModel::requestShutdown()
     Q_EMIT requestedShutdown();
 }
 
-void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info)
+void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool block_sync_active)
 {
     if (success && (m_shutdown_requested || m_node.shutdownRequested())) {
         requestShutdown();
@@ -473,13 +497,16 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         m_runtime_dialogs_enabled = true;
         refreshWarnings();
         showStartupWarnings();
+        m_block_tip_time = tip_info.block_time;
         setBlockTipHeight(tip_info.block_height);
         setVerificationProgress(tip_info.verification_progress);
         // Core's IBD result is authoritative. Verification progress remains an
         // estimate for display and must not decide when initial sync completes.
-        setBlockSyncActive(m_node.isInitialBlockDownload());
+        setBlockSyncActive(block_sync_active);
         setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
         setNodeReady(true);
+        Q_EMIT overviewInformationChanged();
+        Q_EMIT informationChanged();
         refreshMempoolInfo();
         Q_EMIT chainStateReady();
     }
@@ -526,10 +553,13 @@ void NodeModel::ConnectToBlockTipSignal()
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
         [this]([[maybe_unused]] SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
             QMetaObject::invokeMethod(this, [this, state, block_height = tip.block_height, block_time = tip.block_time, verification_progress] {
+                m_block_tip_time = block_time;
                 setBlockTipHeight(block_height);
                 setVerificationProgress(verification_progress);
                 setBlockSyncActive(state != SynchronizationState::POST_INIT);
 
+                Q_EMIT overviewInformationChanged();
+                Q_EMIT informationChanged();
                 Q_EMIT blockTipTimeChanged(block_time);
             }, Qt::QueuedConnection);
         });
@@ -645,50 +675,69 @@ bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
     return result;
 }
 
-QVariantList NodeModel::nodeInformationRows()
+QVariantList NodeModel::overviewInformationRows() const
 {
-    int header_height{m_header_tip_height};
-    int64_t header_time{m_header_tip_time};
-    if (m_node_ready && header_height == 0) {
-        m_node.getHeaderTip(header_height, header_time);
-    }
+    return {InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString()), QStringLiteral("network")),
+            InformationRow(tr("Client version"), fullClientVersion(), QStringLiteral("client-version")),
+            InformationRow(tr("Startup time"), m_startup_time, QStringLiteral("startup-time")),
+            InformationRow(tr("Last block time"), m_block_tip_time > 0 ? QDateTime::fromSecsSinceEpoch(m_block_tip_time).toString() : tr("Unknown"), QStringLiteral("last-block-time"))};
+}
 
-    QString local_addresses;
-    if (m_node_ready) {
+void NodeModel::refreshNodeInformation()
+{
+    if (!m_node_ready || m_shutdown_requested || m_information_pending) return;
+    m_information_pending = true;
+    QMetaObject::invokeMethod(m_mempool_info_worker, [this] {
+        QString addresses;
         for (const auto& [addr, info] : m_node.getNetLocalAddresses()) {
-            local_addresses += QString::fromStdString(addr.ToStringAddr());
-            if (!addr.IsI2P()) {
-                local_addresses += QStringLiteral(":") + QString::number(info.nPort);
-            }
-            local_addresses += QStringLiteral(", ");
+            addresses += QString::fromStdString(addr.ToStringAddr());
+            if (!addr.IsI2P()) addresses += QStringLiteral(":") + QString::number(info.nPort);
+            addresses += QStringLiteral(", ");
         }
-    }
-    if (!local_addresses.isEmpty()) {
-        local_addresses.chop(2);
-    } else {
-        local_addresses = tr("None");
-    }
+        if (!addresses.isEmpty()) addresses.chop(2);
+        QMetaObject::invokeMethod(this, [this, addresses] {
+            m_information_pending = false;
+            if (m_shutdown_requested) return;
+            m_local_addresses = addresses;
+            Q_EMIT informationChanged();
+        }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
 
-    const int block_height{m_node_ready ? std::max(m_block_tip_height, m_node.getNumBlocks()) : m_block_tip_height};
-    const int64_t last_block_time{m_node_ready ? m_node.getLastBlockTime() : 0};
+void NodeModel::stopForShutdown()
+{
+    setMempoolInfoPollingActive(false);
+    QMetaObject::invokeMethod(m_mempool_info_worker, [this] {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT shutdownFinished(); }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
+}
+
+QVariantList NodeModel::nodeInformationRows() const
+{
+    const int header_height{m_header_tip_height};
+    const int64_t header_time{m_header_tip_time};
+    const QString local_addresses = m_local_addresses.isEmpty() ? tr("None") : m_local_addresses;
+
+    const int block_height{m_block_tip_height};
+    const int64_t last_block_time{m_block_tip_time};
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
-    rows.push_back(InformationRow(tr("Client version"), fullClientVersion()));
+    rows.push_back(InformationRow(tr("Client version"), fullClientVersion(), QStringLiteral("client-version")));
     rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
     rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
     rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
-    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
-    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
+    rows.push_back(InformationRow(tr("Startup time"), m_startup_time, QStringLiteral("startup-time")));
+    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString()), QStringLiteral("network")));
+    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height), QStringLiteral("block-height")));
     rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
     rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown"), QStringLiteral("last-block-time")));
     rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
     rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
-    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (!m_pause ? tr("Yes") : tr("No")) : tr("Unknown")));
     rows.push_back(InformationRow(tr("Local addresses"), local_addresses));
-    rows.push_back(InformationRow(tr("Warnings"), warning_text));
+    rows.push_back(InformationRow(tr("Warnings"), warning_text, QStringLiteral("warnings")));
     return rows;
 }
 

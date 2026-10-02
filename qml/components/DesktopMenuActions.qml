@@ -48,6 +48,7 @@ QtObject {
     signal zoomRequested()
     signal mainWindowRequested()
     signal nodeRequested()
+    signal dashboardRequested()
     signal activityRequested()
     signal sendRequested()
     signal receiveRequested()
@@ -187,6 +188,12 @@ QtObject {
         visible: root.walletMode
         enabled: root.loadedWalletEnabled
         onTriggered: root.receiveRequested()
+    }
+    readonly property MenuCommand dashboardView: MenuCommand {
+        text: qsTr("&Dashboard")
+        shortcut: qsTr("Ctrl+D")
+        enabled: root.routeEnabled
+        onTriggered: root.dashboardRequested()
     }
     readonly property MenuCommand information: MenuCommand {
         text: qsTr("Information")

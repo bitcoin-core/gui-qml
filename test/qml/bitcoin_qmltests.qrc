@@ -1,10 +1,20 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/test/qml">
+        <file>RenderTestCase.qml</file>
         <file>tst_transactionflow.qml</file>
         <file>tst_transactiondetail.qml</file>
         <file>tst_activitylist.qml</file>
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
+        <file>tst_widgetdashboard.qml</file>
+        <file>tst_widgettypography.qml</file>
+        <file>tst_feerateswidget.qml</file>
+        <file>tst_mempoolwidget.qml</file>
+        <file>tst_difficultyperiodwidget.qml</file>
+        <file>tst_halvingwidget.qml</file>
+        <file>tst_mempoolsummarywidget.qml</file>
+        <file>WidgetFixture.qml</file>
+        <file>InvalidWidgetFixture.qml</file>
         <file>tst_contextmenubutton.qml</file>
         <file>tst_contextmenudivider.qml</file>
         <file>tst_contextmenupicker.qml</file>
@@ -24,6 +34,11 @@
         <file>tst_mempoolinformationrows.qml</file>
         <file>tst_monospaceoutputview.qml</file>
         <file>tst_navbutton.qml</file>
+        <file>tst_linechart.qml</file>
+        <file>tst_piechart.qml</file>
+        <file>tst_networktraffic.qml</file>
+        <file>tst_networktrafficwidget.qml</file>
+        <file>tst_peerswidget.qml</file>
         <file>tst_navigationsplitview.qml</file>
         <file>tst_nodefeedback.qml</file>
         <file>tst_onboarding_datadir.qml</file>

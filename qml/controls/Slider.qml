@@ -14,6 +14,8 @@ Controls.Slider {
     property bool discrete: false
     property color trackColor: Theme.color.neutral2
     property color trackHighlightColor: Theme.color.orange
+    property Gradient trackGradient: null
+    property real trackGradientOpacity: 0.5
     property color thumbColor: Theme.color.white
 
     implicitWidth: 260
@@ -44,19 +46,33 @@ Controls.Slider {
         }
     }
 
-    background: Rectangle {
+    background: Item {
+        id: track
         x: root.leftPadding + root.handle.width / 2
         y: root.topPadding + (root.availableHeight - height) / 2
         width: Math.max(0, root.availableWidth - root.handle.width)
         height: 6
-        radius: 3
-        color: root.trackColor
-
         Rectangle {
-            width: root.visualPosition * parent.width
-            height: parent.height
-            radius: parent.radius
-            color: root.trackHighlightColor
+            anchors.fill: parent
+            radius: 3
+            color: root.trackColor
+            gradient: root.trackGradient
+            opacity: root.trackGradient ? root.trackGradientOpacity : 1
+        }
+
+        Item {
+            width: root.visualPosition * track.width
+            height: track.height
+            clip: true
+
+            Rectangle {
+                // Keep the gradient aligned with the whole track as the highlight grows.
+                width: root.trackGradient ? track.width : parent.width
+                height: parent.height
+                radius: 3
+                color: root.trackHighlightColor
+                gradient: root.trackGradient
+            }
         }
     }
 }

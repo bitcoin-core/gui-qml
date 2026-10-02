@@ -13,21 +13,26 @@
 #include <utility>
 
 #include <QObject>
+#include <QQueue>
 #include <QThread>
 #include <QTimer>
+#include <QDateTime>
+#include <QElapsedTimer>
+#include <QVariantMap>
+#include <vector>
 
 namespace {
 constexpr int MAX_SAMPLES{86400};
 constexpr int DEFAULT_FILTER_WINDOW_SIZE{30};
+constexpr int WIDGET_HISTORY_SAMPLES{3600};
+constexpr qint64 WIDGET_HISTORY_MS{5 * 60 * 1000};
 
 struct TrafficSnapshot {
     quint64 generation{0};
     quint64 total_bytes_received{0};
     quint64 total_bytes_sent{0};
-    float max_received_rate_bps{0.0f};
-    float max_sent_rate_bps{0.0f};
-    QQueue<float> received_rate_list;
-    QQueue<float> sent_rate_list;
+    QVariantList history;
+    QVariantList widget_history;
 };
 
 quint64 NonNegativeTotal(int64_t total)
@@ -69,18 +74,18 @@ public:
         m_timer->stop();
     }
 
-    void setActive(bool active, quint64 generation)
+    void setActive(bool active, bool widget_active, quint64 generation)
     {
         m_active = active;
+        m_widget_active = widget_active;
         m_generation = generation;
         if (!m_active) {
             // Raw samples continue in the background. Derived history is rebuilt
             // on the worker when the page becomes active again.
             m_smoothed_history_valid = false;
-            return;
+        } else {
+            ensureSmoothedHistory();
         }
-
-        ensureSmoothedHistory();
         publishSnapshot();
     }
 
@@ -135,35 +140,12 @@ private:
         return smoothed;
     }
 
-    float calculateMaxRate(const QQueue<float>& smoothed_rates) const
-    {
-        const qsizetype lookback{std::min<qsizetype>(smoothed_rates.size(), m_filter_window_size * 10)};
-        float max_rate{0.0f};
-        for (qsizetype i = 0; i < lookback; ++i) {
-            max_rate = std::max(max_rate, smoothed_rates.at(i));
-        }
-        return max_rate;
-    }
-
-    QQueue<float> visibleHistory(const QQueue<float>& smoothed_rates) const
-    {
-        const qsizetype sample_count{std::min<qsizetype>(smoothed_rates.size(), m_filter_window_size * 10)};
-        QQueue<float> visible_rates;
-        visible_rates.reserve(sample_count);
-        for (qsizetype i = 0; i < sample_count; ++i) {
-            visible_rates.push_back(smoothed_rates.at(i));
-        }
-        return visible_rates;
-    }
-
     void ensureSmoothedHistory()
     {
         if (m_smoothed_history_valid) return;
 
         m_smoothed_received_rate_list = calculateSmoothedHistory(m_received_rate_list);
         m_smoothed_sent_rate_list = calculateSmoothedHistory(m_sent_rate_list);
-        m_max_received_rate_bps = calculateMaxRate(m_smoothed_received_rate_list);
-        m_max_sent_rate_bps = calculateMaxRate(m_smoothed_sent_rate_list);
         m_smoothed_history_valid = true;
     }
 
@@ -177,8 +159,6 @@ private:
         while (m_smoothed_sent_rate_list.size() > m_sent_rate_list.size()) {
             m_smoothed_sent_rate_list.pop_back();
         }
-        m_max_received_rate_bps = calculateMaxRate(m_smoothed_received_rate_list);
-        m_max_sent_rate_bps = calculateMaxRate(m_smoothed_sent_rate_list);
     }
 
     void sample()
@@ -192,12 +172,16 @@ private:
             m_previous_total_bytes_sent = total_sent;
             m_total_bytes_received = total_received;
             m_total_bytes_sent = total_sent;
-            if (m_active) publishSnapshot();
+            m_rate_timer.start();
+            publishSnapshot();
             return;
         }
 
-        m_received_rate_list.push_front(RateDelta(total_received, m_previous_total_bytes_received));
-        m_sent_rate_list.push_front(RateDelta(total_sent, m_previous_total_bytes_sent));
+        const float seconds{static_cast<float>(std::max<qint64>(1, m_rate_timer.restart())) / 1000.0f};
+        m_received_rate_list.push_front(RateDelta(total_received, m_previous_total_bytes_received) / seconds);
+        m_sent_rate_list.push_front(RateDelta(total_sent, m_previous_total_bytes_sent) / seconds);
+        const qint64 now{QDateTime::currentMSecsSinceEpoch()};
+        m_sample_times.push_front(m_sample_times.isEmpty() ? now : std::max(now, m_sample_times.front() + 1));
         m_previous_total_bytes_received = total_received;
         m_previous_total_bytes_sent = total_sent;
         m_total_bytes_received = total_received;
@@ -208,14 +192,12 @@ private:
         }
         while (m_sent_rate_list.size() > MAX_SAMPLES) {
             m_sent_rate_list.pop_back();
+            m_sample_times.pop_back();
         }
 
         if (!m_active) {
             m_smoothed_history_valid = false;
-            return;
-        }
-
-        if (m_smoothed_history_valid) {
+        } else if (m_smoothed_history_valid) {
             appendSmoothedSample();
         } else {
             ensureSmoothedHistory();
@@ -223,18 +205,53 @@ private:
         publishSnapshot();
     }
 
+    QVariantList pointHistory(const QQueue<float>& received, const QQueue<float>& sent, int lookback) const
+    {
+        const qsizetype count{std::min<qsizetype>(m_sample_times.size(), lookback)};
+        // Bound the GUI snapshot while preserving extrema for both directions.
+        const qsizetype bucket_size{std::max<qsizetype>(1, (count + 479) / 480)};
+        QVariantList history;
+        for (qsizetype first = count - 1; first >= 0; first -= bucket_size) {
+            const qsizetype last{std::max<qsizetype>(0, first - bucket_size + 1)};
+            qsizetype min_received{first}, max_received{first}, min_sent{first}, max_sent{first};
+            for (qsizetype i = first; i >= last; --i) {
+                if (received[i] < received[min_received]) min_received = i;
+                if (received[i] > received[max_received]) max_received = i;
+                if (sent[i] < sent[min_sent]) min_sent = i;
+                if (sent[i] > sent[max_sent]) max_sent = i;
+            }
+            std::vector<qsizetype> indices{first, last, min_received, max_received, min_sent, max_sent};
+            std::sort(indices.begin(), indices.end(), std::greater<>());
+            indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+            for (const qsizetype i : indices) {
+                history.push_back(QVariantMap{{QStringLiteral("time"), m_sample_times[i]},
+                    {QStringLiteral("received"), received[i]},
+                    {QStringLiteral("sent"), sent[i]}});
+            }
+        }
+        return history;
+    }
+
+    int widgetLookback() const
+    {
+        if (m_sample_times.isEmpty()) return 0;
+        // Keep the raw day-long history for the traffic page, but only convert
+        // the widget's five-minute window into QVariant maps for the GUI.
+        const auto end = std::upper_bound(m_sample_times.cbegin(), m_sample_times.cend(),
+            m_sample_times.front() - WIDGET_HISTORY_MS, std::greater<qint64>{});
+        return static_cast<int>(std::min<qsizetype>(end - m_sample_times.cbegin(), WIDGET_HISTORY_SAMPLES));
+    }
+
     void publishSnapshot()
     {
-        if (!m_active) return;
+        if (!m_active && !m_widget_active) return;
 
         m_publish(TrafficSnapshot{
             m_generation,
             m_total_bytes_received,
             m_total_bytes_sent,
-            m_max_received_rate_bps,
-            m_max_sent_rate_bps,
-            visibleHistory(m_smoothed_received_rate_list),
-            visibleHistory(m_smoothed_sent_rate_list),
+            m_active ? pointHistory(m_smoothed_received_rate_list, m_smoothed_sent_rate_list, m_filter_window_size * 10) : QVariantList{},
+            m_widget_active ? pointHistory(m_received_rate_list, m_sent_rate_list, widgetLookback()) : QVariantList{},
         });
     }
 
@@ -242,6 +259,7 @@ private:
     PublishFn m_publish;
     QTimer* m_timer;
     bool m_active{false};
+    bool m_widget_active{false};
     bool m_has_baseline{false};
     bool m_smoothed_history_valid{false};
     quint64 m_generation{0};
@@ -250,8 +268,8 @@ private:
     quint64 m_total_bytes_received{0};
     quint64 m_total_bytes_sent{0};
     int m_filter_window_size{DEFAULT_FILTER_WINDOW_SIZE};
-    float m_max_received_rate_bps{0.0f};
-    float m_max_sent_rate_bps{0.0f};
+    QElapsedTimer m_rate_timer;
+    QQueue<qint64> m_sample_times;
     QQueue<float> m_received_rate_list;
     QQueue<float> m_smoothed_received_rate_list;
     QQueue<float> m_sent_rate_list;
@@ -263,7 +281,7 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_inte
 {
     m_worker = new NetworkTrafficWorker(node, sample_interval_ms, [this](TrafficSnapshot snapshot) {
         QMetaObject::invokeMethod(this, [this, snapshot = std::move(snapshot)]() mutable {
-            if (!m_active || snapshot.generation != m_activation_generation) return;
+            if ((!m_active && !m_widget_active) || snapshot.generation != m_activation_generation) return;
 
             if (m_total_bytes_received != snapshot.total_bytes_received) {
                 m_total_bytes_received = snapshot.total_bytes_received;
@@ -273,19 +291,14 @@ NetworkTrafficTower::NetworkTrafficTower(interfaces::Node& node, int sample_inte
                 m_total_bytes_sent = snapshot.total_bytes_sent;
                 Q_EMIT totalBytesSentChanged();
             }
-            if (m_max_received_rate_bps != snapshot.max_received_rate_bps) {
-                m_max_received_rate_bps = snapshot.max_received_rate_bps;
-                Q_EMIT maxReceivedRateBpsChanged();
+            if (m_active) {
+                m_history = std::move(snapshot.history);
+                Q_EMIT historyChanged();
             }
-            if (m_max_sent_rate_bps != snapshot.max_sent_rate_bps) {
-                m_max_sent_rate_bps = snapshot.max_sent_rate_bps;
-                Q_EMIT maxSentRateBpsChanged();
+            if (m_widget_active) {
+                m_widget_history = std::move(snapshot.widget_history);
+                Q_EMIT widgetHistoryChanged();
             }
-
-            m_received_rate_list = std::move(snapshot.received_rate_list);
-            m_sent_rate_list = std::move(snapshot.sent_rate_list);
-            Q_EMIT receivedRateListChanged();
-            Q_EMIT sentRateListChanged();
         }, Qt::QueuedConnection);
     });
     m_worker->moveToThread(m_worker_thread);
@@ -313,11 +326,23 @@ void NetworkTrafficTower::setActive(bool active)
     if (m_active == active) return;
 
     m_active = active;
-    ++m_activation_generation;
     Q_EMIT activeChanged();
+    updateConsumers();
+}
 
-    QMetaObject::invokeMethod(m_worker, [worker = m_worker, active, generation = m_activation_generation] {
-        worker->setActive(active, generation);
+void NetworkTrafficTower::setWidgetActive(bool active)
+{
+    if (m_widget_active == active) return;
+    m_widget_active = active;
+    Q_EMIT widgetActiveChanged();
+    updateConsumers();
+}
+
+void NetworkTrafficTower::updateConsumers()
+{
+    ++m_activation_generation;
+    QMetaObject::invokeMethod(m_worker, [worker = m_worker, active = m_active, widget_active = m_widget_active, generation = m_activation_generation] {
+        worker->setActive(active, widget_active, generation);
     }, Qt::QueuedConnection);
 }
 

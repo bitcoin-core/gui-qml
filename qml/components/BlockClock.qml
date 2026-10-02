@@ -17,9 +17,20 @@ Item {
     objectName: "blockClock"
     property real parentWidth: 600
     property real parentHeight: 600
+    property bool fillAvailableSpace: false
     property bool showNetworkIndicator: true
+    property bool confirmPause: false
+    signal pauseRequested()
     // Backing models remain current while false; only presentation work stops.
     property bool renderingActive: true
+    // Node and Dashboard share typography; hosts can supply their value size.
+    readonly property real fontScale: Math.max(0.85, Math.min(parentWidth, parentHeight) / 480)
+    property font primaryValueFont: Theme.fontWithStyle(Theme.text.widgetPrimaryValueLarge.family,
+        Theme.text.widgetPrimaryValueLarge.styleName,
+        Math.round(Theme.text.widgetPrimaryValueLarge.pixelSize * fontScale))
+    property font accompanyingFont: Theme.fontWithStyle(Theme.text.widgetPrimaryValueLarge.family,
+        Theme.text.widgetPrimaryValueLarge.styleName,
+        Math.max(1, Math.round(dial.width * 0.08)))
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property var blockClockModelRef: typeof blockClockModel !== "undefined" ? blockClockModel : null
@@ -65,8 +76,10 @@ Item {
         objectName: "blockClockDial"
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
-                Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
+        width: root.fillAvailableSpace
+            ? Math.max(1, Math.min(root.parentWidth, root.parentHeight) - 24)
+            : Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
+                       Math.min(root.parentWidth * dial.scale, root.parentHeight * dial.scale))
         height: dial.width
         penWidth: dial.width / 50
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
@@ -105,9 +118,13 @@ Item {
     Label {
         id: mainText
         anchors.centerIn: dial
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: dial.width * (4/25)
+        objectName: "blockClockPrimaryValue"
+        width: dial.width * 0.8
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.NoWrap
+        font: root.primaryValueFont
+        fontSizeMode: Text.Fit
+        minimumPixelSize: Theme.text.widgetSecondaryValue.pixelSize
         color: Theme.color.neutral9
 
         Behavior on color {
@@ -117,9 +134,7 @@ Item {
 
     TextMetrics {
         id: subTextMetrics
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
+        font: root.accompanyingFont
         text: subText.text
     }
 
@@ -129,16 +144,16 @@ Item {
         anchors.top: mainText.bottom
         property bool estimating: root.estimating
         anchors.horizontalCenter: root.horizontalCenter
-        width: dial.width * (4/5)
+        width: dial.width * 0.8
         horizontalAlignment: Text.AlignHCenter
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        wrapMode: Text.NoWrap
+        elide: Text.ElideRight
         readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
         readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
-        font.pixelSize: subText.desiredTextWidth > subText.width
-            ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
-            : subText.desiredPixelSize
-        elide: Text.ElideRight
+        font: Theme.fontWithStyle(root.accompanyingFont.family, root.accompanyingFont.styleName,
+            subText.desiredTextWidth > subText.width
+                ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
+                : subText.desiredPixelSize)
         color: Theme.color.neutral4
 
         Behavior on color {
@@ -221,7 +236,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Paused"
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: "Tap to resume"
                 estimating: false
             }
@@ -240,7 +255,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: "Error"
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
             }
             PropertyChanges {
                 target: bitcoinIcon
@@ -254,7 +269,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Offline")
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: qsTr("Check network")
                 estimating: false
             }
@@ -274,7 +289,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Connecting")
-                headerSize: dial.width * (3/25)
+                headerSize: root.primaryValueFont.pixelSize
                 subText: qsTr("Please wait")
                 estimating: false
             }
@@ -311,7 +326,8 @@ Item {
 
     function togglePause() {
         if (!root.faulted && root.nodeModelRef !== null) {
-            root.nodeModelRef.pause = !root.paused
+            if (root.confirmPause && !root.paused) root.pauseRequested()
+            else root.nodeModelRef.pause = !root.paused
         }
     }
 }

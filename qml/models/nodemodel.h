@@ -37,6 +37,8 @@ class Node;
 class NodeModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList overviewInformationRows READ overviewInformationRows NOTIFY overviewInformationChanged)
+    Q_PROPERTY(QVariantList informationRows READ nodeInformationRows NOTIFY informationChanged)
     Q_PROPERTY(int blockTipHeight READ blockTipHeight NOTIFY blockTipHeightChanged)
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
     Q_PROPERTY(int numPeers READ numPeers NOTIFY numPeersChanged)
@@ -63,6 +65,7 @@ class NodeModel : public QObject
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
+    Q_PROPERTY(QVariantList notificationWarnings READ notificationWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible READ runtimeDialogVisible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle READ runtimeDialogTitle NOTIFY runtimeDialogChanged)
@@ -109,6 +112,7 @@ public:
     void addStartupWarnings(const QStringList& warnings);
     QString warnings() const { return m_warnings; }
     QStringList warningList() const { return m_warning_list; }
+    QVariantList notificationWarnings() const { return m_notification_warnings; }
     bool hasWarnings() const { return !m_warning_list.empty(); }
     bool runtimeDialogVisible() const { return m_runtime_dialog_visible; }
     QString runtimeDialogTitle() const { return m_runtime_dialog_title; }
@@ -131,17 +135,23 @@ public:
     Q_INVOKABLE QString defaultProxyAddress();
     Q_INVOKABLE bool disconnectPeer(int nodeId);
     Q_INVOKABLE bool banPeer(const QString& rawAddress, int64_t banDuration);
-    Q_INVOKABLE QVariantList nodeInformationRows();
+    QVariantList overviewInformationRows() const;
+    Q_INVOKABLE QVariantList nodeInformationRows() const;
+    Q_INVOKABLE void refreshNodeInformation();
+    void stopForShutdown();
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
     Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
 #endif
 
 public Q_SLOTS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool block_sync_active = false);
     void handleRunawayException(const QString& message);
 
 Q_SIGNALS:
+    void overviewInformationChanged();
+    void informationChanged();
+    void shutdownFinished();
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -190,6 +200,7 @@ private:
 
     // Properties that are exposed to QML.
     int m_block_tip_height{0};
+    int64_t m_block_tip_time{0};
     int m_num_peers{0};
     int m_num_inbound_peers{0};
     int m_num_outbound_peers{0};
@@ -204,11 +215,15 @@ private:
     bool m_block_sync_active{false};
     bool m_pause{false};
     bool m_faulted{false};
+    QString m_startup_time;
+    QString m_local_addresses;
+    bool m_information_pending{false};
     QString m_startup_error;
     QStringList m_startup_error_messages;
     QStringList m_startup_warning_messages;
     QString m_warnings;
     QStringList m_warning_list;
+    QVariantList m_notification_warnings;
     bool m_header_sync_active{false};
     bool m_header_presync{false};
     double m_header_sync_progress{0.0};
@@ -261,7 +276,7 @@ private:
     void recordStartupErrorMessage(const QString& message);
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();
-    void setWarnings(const QString& warnings);
+    void setWarnings(const bilingual_str& warnings);
     void setNodeReady(bool ready);
     void setBlockSyncActive(bool active);
     void setHeaderSyncState(int height, int64_t block_time, bool presync);

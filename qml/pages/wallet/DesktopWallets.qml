@@ -11,6 +11,7 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../controls/utils.js" as Utils
 import "../../components"
+import "../../components/widgets"
 import "../node"
 
 Page {
@@ -67,7 +68,8 @@ Page {
     }
 
     function openPeers() {
-        peersTabButton.checked = true
+        blockClockTabButton.checked = true
+        nodeOverview.openPeers()
     }
 
     function openNetworkTraffic() {
@@ -76,10 +78,15 @@ Page {
 
     function openNode() {
         blockClockTabButton.checked = true
+        nodeNavigationStack.pop(null, StackView.Immediate)
     }
 
     function openActivity() {
         activityTabButton.checked = true
+    }
+
+    function openDashboard() {
+        widgetsTabButton.checked = true
     }
 
     function openSend() {
@@ -243,14 +250,22 @@ Page {
         rightItem: RowLayout {
             spacing: 5
             NetworkIndicator {
+                id: networkIndicator
+                Layout.rightMargin: 8
+                objectName: "desktopNetworkIndicator"
                 textSize: 11
                 shorten: true
+                enabled: false
+                focusPolicy: Qt.NoFocus
+                Accessible.name: text
+                Accessible.role: Accessible.StaticText
             }
             NavigationTab {
                 id: blockClockTabButton
                 objectName: "blockClockTabButton"
+                Accessible.name: qsTr("Node")
                 checked: true
-                Layout.preferredWidth: 30
+                Layout.preferredWidth: 40
                 property int index: 3
                 ButtonGroup.group: navigationTabs
                 customContent: MiniBlockClock {
@@ -294,28 +309,21 @@ Page {
                 }
             }
             NavigationTab {
-                id: peersTabButton
-                objectName: "peersTabButton"
-                iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
+                id: widgetsTabButton
+                objectName: "widgetsTabButton"
+                iconSource: "image://images/widgets.svg"
                 iconColor: Theme.color.neutral7
-                iconSize: 24
-                Layout.preferredWidth: 30
+                iconSize: 18
+                Layout.preferredWidth: 40
                 property int index: 4
                 ButtonGroup.group: navigationTabs
-                onCheckedChanged: {
-                    if (checked) {
-                        peerTableModel.startAutoRefresh()
-                    } else {
-                        peerTableModel.stopAutoRefresh()
-                    }
-                }
-
+                Accessible.name: qsTr("Dashboard")
                 Tooltip {
-                    anchors.top: peersTabButton.bottom
+                    anchors.top: widgetsTabButton.bottom
                     anchors.topMargin: 8
-                    anchors.horizontalCenter: peersTabButton.horizontalCenter
-                    shown: peersTabButton.hovered
-                    text: qsTr("Peers")
+                    anchors.horizontalCenter: widgetsTabButton.horizontalCenter
+                    shown: widgetsTabButton.hovered
+                    text: qsTr("Dashboard")
                 }
             }
             NavigationTab {
@@ -323,7 +331,7 @@ Page {
                 objectName: "desktopWalletSettingsTabButton"
                 iconSource: "image://images/gear-outline"
                 iconColor: Theme.color.neutral7
-                Layout.preferredWidth: 30
+                Layout.preferredWidth: 40
                 property int index: 5
                 ButtonGroup.group: navigationTabs
 
@@ -366,27 +374,12 @@ Page {
                 root.openSettingsRoute("addresses")
             }
         }
-        Item {
-            id: blockClockTab
-            NodeStatusActions {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: 16
-                anchors.rightMargin: 16
-                z: 2
-            }
-            BlockClock {
-                parentWidth: blockClockTab.width - 40
-                parentHeight: blockClockTab.height
-                anchors.centerIn: blockClockTab
-                showNetworkIndicator: false
-                renderingActive: root.visible && blockClockTabButton.checked
-            }
+        PageStack {
+            id: nodeNavigationStack
+            objectName: "nodeNavigationStack"
+            initialItem: NodeOverview { id: nodeOverview }
         }
-        PeersView {
-            showHeader: false
-            showBackButton: false
-        }
+        WidgetDashboard {}
         Item {
             Loader {
                 id: settingsLoader

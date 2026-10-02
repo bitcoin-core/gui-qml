@@ -212,11 +212,11 @@ def walk_connection_settings(gui, checkpoints):
 
 
 def walk_peers(gui, checkpoints):
-    print("  Opening Peers (header icon)")
-    gui.click("peersTabButton")
+    print("  Opening Peers (Node overview)")
+    gui.click("nodePeersSection")
     gui.wait_for_page("peers", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("peers opened", gui)
-    gui.click("peersBackButton")
+    gui.click("peersNodeBackButton")
     gui.wait_for_page("nodeRunner", timeout_ms=SETTINGS_TIMEOUT_MS)
     checkpoints.checkpoint("returned from peers", gui)
 
@@ -260,8 +260,8 @@ def run_node_only_flow(harness, checkpoints, *, full_walk):
             walk_network_traffic_settings(gui, checkpoints)
             walk_debug_log_settings(gui, checkpoints)
 
-        gui.click("settingsDoneButton")
-        gui.wait_for_page("nodeSettingsButton", timeout_ms=SETTINGS_TIMEOUT_MS)
+        gui.click("blockClockTabButton")
+        gui.wait_for_page("nodeOverview", timeout_ms=SETTINGS_TIMEOUT_MS)
         checkpoints.checkpoint("node settings closed", gui)
 
     except Exception as e:

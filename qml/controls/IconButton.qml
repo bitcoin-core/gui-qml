@@ -40,16 +40,18 @@ Button {
         }
     }
 
-    contentItem: Icon {
-        id: icon
-        anchors.fill: parent
-        source: ""
-        size: root.iconSize
-        color: root.iconColor
-        hoverEnabled: false
+    contentItem: Item {
+        Icon {
+            id: icon
+            anchors.centerIn: parent
+            source: ""
+            size: root.iconSize
+            color: root.iconColor
+            hoverEnabled: false
 
-        Behavior on color {
-            ColorAnimation { duration: 150 }
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
         }
     }
 

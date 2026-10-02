@@ -461,8 +461,8 @@ class PeerQmlTestHarness:
 
 def navigate_to_peers(gui):
     """From the NodeRunner main screen, navigate to the Peers list page."""
-    # Peers moved out of node settings into a dedicated NodeRunner header tab.
-    gui.click("peersTabButton")
+    # Push the Peers page from the Node overview.
+    gui.click("nodePeersSection")
     gui.wait_for_page("peers")
     _wait_for_page_stack_idle(gui)
 
@@ -470,7 +470,7 @@ def navigate_to_peers(gui):
 def _wait_for_page_stack_idle(gui, timeout_ms=PEER_ACTION_TIMEOUT_SECS * 1000) -> None:
     """Wait until page-stack transitions to/from the Peers page have settled.
 
-    Peers live on the main page stack, so wait
+    Peers live on the Node page stack, so wait
     on the app's stack views via settle() (missing stacks are ignored)."""
     gui.settle(timeout_ms=timeout_ms)
 

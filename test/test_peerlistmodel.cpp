@@ -10,6 +10,11 @@
 #include <qml/models/peerlistmodel.h>
 #include <util/translation.h>
 
+#include <QSemaphore>
+#include <QTimer>
+#include <atomic>
+#include <thread>
+
 #include <algorithm>
 #include <map>
 #include <utility>
@@ -50,12 +55,48 @@ class PeerListModelTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void pollingCoalescesAndShutdownKeepsGuiResponsive();
     void mapsRoleData();
     void refreshUpdatesRows();
     void refreshHandlesGetNodesStatsFailure();
     void startStopAutoRefresh();
     void sortProxySortsByRoles();
+    void summarizesNetworksAndDirections();
+    void widgetAndTableShareRefreshLifecycle();
 };
+
+void PeerListModelTests::pollingCoalescesAndShutdownKeepsGuiResponsive()
+{
+    MockNode node;
+    QSemaphore entered, release;
+    std::atomic<bool> off_gui{false};
+    node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats&) {
+        off_gui = QThread::currentThread() != QCoreApplication::instance()->thread();
+        entered.release();
+        release.acquire();
+        return true;
+    };
+    PeerListModel model{node, nullptr};
+    const bool started = entered.tryAcquire(1, 1000);
+    model.refresh();
+    model.refresh();
+    QSignalSpy drained(&model, &PeerListModel::shutdownFinished);
+    int ticks{0};
+    QTimer heartbeat;
+    connect(&heartbeat, &QTimer::timeout, &model, [&] { ++ticks; });
+    heartbeat.start(1);
+    model.stopForShutdown();
+    QTest::qWait(30);
+    const int before_release = drained.count();
+    release.release();
+    QTRY_COMPARE(drained.count(), 1);
+    QVERIFY(started);
+    QVERIFY(off_gui.load());
+    QCOMPARE(before_release, 0);
+    QVERIFY(ticks > 0);
+    QCOMPARE(node.calls.getNodesStats.load(), 1);
+    QVERIFY(!model.summary().value("ready").toBool());
+}
 
 void PeerListModelTests::mapsRoleData()
 {
@@ -72,6 +113,7 @@ void PeerListModelTests::mapsRoleData()
     };
 
     PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.rowCount(model.index(0, 0)), 0);
 
@@ -140,15 +182,18 @@ void PeerListModelTests::refreshUpdatesRows()
     };
 
     PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
     QCOMPARE(model.data(model.index(1, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
 
     model.refresh();
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
 
     model.refresh();
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 2);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 2LL);
     QCOMPARE(model.data(model.index(1, 0), PeerListModel::NetNodeId).toLongLong(), 3LL);
@@ -169,10 +214,12 @@ void PeerListModelTests::refreshHandlesGetNodesStatsFailure()
     };
 
     PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
 
     model.refresh();
+    QTRY_VERIFY(!model.pending());
     QCOMPARE(model.rowCount(), 1);
     QCOMPARE(model.data(model.index(0, 0), PeerListModel::NetNodeId).toLongLong(), 1LL);
     QCOMPARE(node.calls.getNodesStats.load(), 2);
@@ -183,7 +230,7 @@ void PeerListModelTests::startStopAutoRefresh()
     const auto stats{MakeStats({MakeNodeStats(1, "10.0.0.1:8333", true, ConnectionType::INBOUND, NET_IPV4)})};
 
     MockNode node;
-    int get_nodes_stats_calls{0};
+    std::atomic<int> get_nodes_stats_calls{0};
     node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats& out_stats) {
         ++get_nodes_stats_calls;
         out_stats = stats;
@@ -191,17 +238,116 @@ void PeerListModelTests::startStopAutoRefresh()
     };
 
     PeerListModel model{node, nullptr};
-    const int calls_after_ctor = get_nodes_stats_calls;
+    QTRY_VERIFY(!model.pending());
+    const int calls_after_ctor = get_nodes_stats_calls.load();
     QCOMPARE(calls_after_ctor, 1);
 
     model.startAutoRefresh();
     QTRY_VERIFY_WITH_TIMEOUT(get_nodes_stats_calls > calls_after_ctor, AUTO_REFRESH_TRIGGER_TIMEOUT);
 
     model.stopAutoRefresh();
-    const int calls_after_stop = get_nodes_stats_calls;
+    const int calls_after_stop = get_nodes_stats_calls.load();
     QTest::qWait(AUTO_REFRESH_STOP_WAIT);
-    QCOMPARE(get_nodes_stats_calls, calls_after_stop);
+    QCOMPARE(get_nodes_stats_calls.load(), calls_after_stop);
     QVERIFY(node.calls.getNodesStats.load() >= 2);
+}
+
+void PeerListModelTests::summarizesNetworksAndDirections()
+{
+    auto stats{MakeStats({
+        MakeNodeStats(1, "ipv4", true, ConnectionType::INBOUND, NET_IPV4),
+        MakeNodeStats(2, "manual ipv4", false, ConnectionType::MANUAL, NET_IPV4),
+        MakeNodeStats(3, "ipv6", false, ConnectionType::OUTBOUND_FULL_RELAY, NET_IPV6),
+        MakeNodeStats(4, "tor", false, ConnectionType::BLOCK_RELAY, NET_ONION),
+        MakeNodeStats(5, "i2p", true, ConnectionType::INBOUND, NET_I2P),
+        MakeNodeStats(6, "cjdns", true, ConnectionType::INBOUND, NET_CJDNS),
+        MakeNodeStats(7, "other", false, ConnectionType::FEELER, NET_UNROUTABLE),
+    })};
+    bool available{true};
+    MockNode node;
+    node.get_nodes_stats_fn = [&](interfaces::Node::NodesStats& result) {
+        result = stats;
+        return available;
+    };
+    PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
+    const auto summary = model.summary();
+    QCOMPARE(summary.value("ready").toBool(), true);
+    QCOMPARE(summary.value("total").toInt(), 7);
+    QCOMPARE(summary.value("inbound").toInt(), 3);
+    QCOMPARE(summary.value("outbound").toInt(), 4);
+    const auto groups = summary.value("groups").toList();
+    QCOMPARE(groups.size(), 6);
+    QCOMPARE(groups[0].toMap().value("id").toString(), QString{"ipv4"});
+    QCOMPARE(groups[0].toMap().value("count").toInt(), 2);
+    int sum{0};
+    for (const auto& group : groups) sum += group.toMap().value("count").toInt();
+    QCOMPARE(sum, summary.value("total").toInt());
+
+    QSignalSpy changed{&model, &PeerListModel::summaryChanged};
+    model.refresh();
+    QTRY_VERIFY(!model.pending());
+    QCOMPARE(changed.count(), 0);
+    // Changes to a peer's network or direction matter even when the total is unchanged.
+    std::get<0>(stats[0]).m_network = NET_IPV6;
+    std::get<0>(stats[0]).fInbound = false;
+    model.refresh();
+    QTRY_VERIFY(!model.pending());
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(model.summary().value("inbound").toInt(), 2);
+    QCOMPARE(model.summary().value("groups").toList()[0].toMap().value("count").toInt(), 1);
+
+    available = false;
+    model.refresh();
+    QTRY_VERIFY(!model.pending());
+    QVERIFY(!model.summary().value("ready").toBool());
+    available = true;
+    stats.clear();
+    model.refresh();
+    QTRY_VERIFY(!model.pending());
+    QVERIFY(model.summary().value("ready").toBool());
+    QCOMPARE(model.summary().value("total").toInt(), 0);
+    QVERIFY(model.summary().value("groups").toList().isEmpty());
+}
+
+void PeerListModelTests::widgetAndTableShareRefreshLifecycle()
+{
+    MockNode node;
+    node.get_nodes_stats_fn = [](interfaces::Node::NodesStats& result) {
+        result.clear();
+        return true;
+    };
+    PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
+    const auto calls = [&] { return node.calls.getNodesStats.load(); };
+    model.setWidgetActive(true);
+    QTRY_VERIFY(!model.pending());
+    QCOMPARE(calls(), 2); // Immediate snapshot on activation.
+    model.startAutoRefresh();
+    model.stopAutoRefresh(); // Closing the table must not stop an active widget.
+    const int widget_calls = calls();
+    QTRY_VERIFY_WITH_TIMEOUT(calls() > widget_calls, AUTO_REFRESH_TRIGGER_TIMEOUT);
+    model.startAutoRefresh();
+    model.setWidgetActive(false); // Hiding the dashboard must not stop the table.
+    const int table_calls = calls();
+    QTRY_VERIFY_WITH_TIMEOUT(calls() > table_calls, AUTO_REFRESH_TRIGGER_TIMEOUT);
+    model.stopAutoRefresh();
+    const int stopped_calls = calls();
+    QTest::qWait(AUTO_REFRESH_STOP_WAIT);
+    QCOMPARE(calls(), stopped_calls);
+    model.setWidgetActive(true);
+    QSignalSpy drained(&model, &PeerListModel::shutdownFinished);
+    model.stopForShutdown();
+    QTRY_COMPARE(drained.count(), 1);
+    const int shutdown_calls = calls();
+    model.refresh();
+    QTRY_VERIFY(!model.pending());
+    model.startAutoRefresh();
+    model.setWidgetActive(false);
+    model.setWidgetActive(true);
+    QTest::qWait(AUTO_REFRESH_STOP_WAIT);
+    QCOMPARE(calls(), shutdown_calls);
+    QVERIFY(!model.summary().value("ready").toBool());
 }
 
 void PeerListModelTests::sortProxySortsByRoles()
@@ -242,6 +388,7 @@ void PeerListModelTests::sortProxySortsByRoles()
     };
 
     PeerListModel model{node, nullptr};
+    QTRY_VERIFY(!model.pending());
     PeerListSortProxy proxy{nullptr};
     proxy.setSourceModel(&model);
 

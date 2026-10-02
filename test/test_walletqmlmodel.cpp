@@ -605,6 +605,7 @@ private Q_SLOTS:
     void cleanupTestCase();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
+    void customFeeRateCacheCoalescesWithoutBlockingGui();
     void maximumKeepsAmountWhenValidAddressCannotBeEstimated() {
         auto [wallet, model] = MakeWalletModel();
         SetValidRecipient(*model);
@@ -945,8 +946,10 @@ void WalletQmlModelTests::feeTargetIndex_mapsStandardTargets()
 
 void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
 {
+    std::atomic<int> gui_calls{0};
     auto [wallet, model] = MakeWalletModel();
-    wallet->get_minimum_fee_fn = [](const wallet::CCoinControl& control) {
+    wallet->get_minimum_fee_fn = [&](const wallet::CCoinControl& control) {
+        if (QThread::currentThread() == QCoreApplication::instance()->thread()) ++gui_calls;
         switch (control.m_confirm_target.value_or(0)) {
         case 2: return CAmount{10'000};
         case 3: return CAmount{7'000};
@@ -960,27 +963,82 @@ void WalletQmlModelTests::customFeeRateUpdatesEstimatedTarget()
     };
 
     model->setCustomFeeRate("5.1");
-    QCOMPARE(model->feeTargetBlocks(), 4U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 4U);
     model->setCustomFeeRate("3");
-    QCOMPARE(model->feeTargetBlocks(), 6U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 6U);
     model->setCustomFeeRate("0.5");
-    QCOMPARE(model->feeTargetBlocks(), 25U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 25U);
     model->setCustomFeeRate("0.1");
-    QCOMPARE(model->feeTargetBlocks(), 50U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 50U);
     model->setCustomFeeRate("12");
-    QCOMPARE(model->feeTargetBlocks(), 2U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 2U);
 
     model->setCustomFeeTarget(3);
-    QCOMPARE(model->feeTargetBlocks(), 3U);
-    QCOMPARE(model->customFeeRate(), QStringLiteral("7.000"));
+    QTRY_COMPARE(model->feeTargetBlocks(), 3U);
+    QTRY_COMPARE(model->customFeeRate(), QStringLiteral("7.000"));
 
     model->setCustomFeeTarget(50);
-    QCOMPARE(model->feeTargetBlocks(), 50U);
-    QCOMPARE(model->customFeeRate(), QStringLiteral("0.200"));
+    QTRY_COMPARE(model->feeTargetBlocks(), 50U);
+    QTRY_COMPARE(model->customFeeRate(), QStringLiteral("0.200"));
 
+    QTRY_VERIFY(!model->targetFeeRatesPending());
     wallet->get_minimum_fee_fn = [](const wallet::CCoinControl&) { return CAmount{1'000}; };
+    model->scheduleFeeEstimates();
     model->setCustomFeeRate("2");
-    QCOMPARE(model->feeTargetBlocks(), 50U);
+    QTRY_COMPARE(model->feeTargetBlocks(), 2U);
+
+    QTRY_VERIFY(!model->targetFeeRatesPending());
+    QCOMPARE(gui_calls.load(), 0);
+    wallet->minimum_fee_reason = FeeReason::FALLBACK;
+    model->scheduleFeeEstimates();
+    QTRY_VERIFY(!model->targetFeeRatesPending());
+    model->setFeeTargetBlocks(50);
+    model->setCustomFeeRate("4");
+    QTRY_COMPARE(model->feeTargetBlocks(), 50U);
+    QTRY_VERIFY(!model->targetFeeRatesPending());
+
+    // Both policy floors can overwrite FALLBACK even without estimator data.
+    for (const auto reason : {FeeReason::MEMPOOL_MIN, FeeReason::REQUIRED}) {
+        wallet->minimum_fee_reason = reason;
+        model->setCustomFeeRate(reason == FeeReason::MEMPOOL_MIN ? "5" : "6");
+        model->scheduleFeeEstimates();
+        QTRY_VERIFY(!model->targetFeeRatesPending());
+        QCOMPARE(model->feeTargetBlocks(), 50U);
+    }
+    wallet->minimum_fee_reason = FeeReason::NONE;
+    wallet->get_minimum_fee_fn = [](const wallet::CCoinControl&) { return CAmount{0}; };
+    model->setCustomFeeRate("5");
+    QTRY_COMPARE(model->feeTargetBlocks(), 50U);
+    QTRY_VERIFY(!model->targetFeeRatesPending());
+}
+
+void WalletQmlModelTests::customFeeRateCacheCoalescesWithoutBlockingGui()
+{
+    QSemaphore entered, release;
+    std::atomic<int> calls{0};
+    std::atomic<int> gui_calls{0};
+    auto [wallet, model] = MakeWalletModel();
+    wallet->get_minimum_fee_fn = [&](const wallet::CCoinControl& control) {
+        if (QThread::currentThread() == QCoreApplication::instance()->thread()) ++gui_calls;
+        if (++calls == 1) { entered.release(); release.acquire(); }
+        return CAmount{5000};
+    };
+    model->setCustomFeeRate("2");
+    const bool started = entered.tryAcquire(1, 1000);
+    model->setCustomFeeRate("3");
+    model->setCustomFeeRate("6");
+    int ticks{0};
+    QTimer heartbeat;
+    connect(&heartbeat, &QTimer::timeout, model.get(), [&] { ++ticks; });
+    heartbeat.start(1);
+    QTest::qWait(30);
+    release.release();
+    QTRY_VERIFY(!model->targetFeeRatesPending());
+    QVERIFY(started);
+    QVERIFY(ticks > 0);
+    QCOMPARE(gui_calls.load(), 0);
+    QCOMPARE(calls.load(), 14); // One in-flight snapshot and one coalesced refresh.
+    QCOMPARE(model->feeTargetBlocks(), 2U);
 }
 
 void WalletQmlModelTests::estimatedFeeForTarget_returnsEmptyWhenUnavailable()
