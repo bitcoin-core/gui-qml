@@ -738,15 +738,25 @@ int QmlGuiMain(int argc, char* argv[])
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 
-    BanListModel ban_list_model{*node, nullptr, backend_ready};
+    BanListModel ban_list_model{*node, nullptr, backend_ready, node_model.peerCommandExecutor()};
     QObject::connect(&node_model, &NodeModel::bannedListChanged,
                      &ban_list_model, &BanListModel::refresh);
+    QObject::connect(&node_model, &NodeModel::peerActionPendingChanged, &ban_list_model, [&] {
+        if (node_model.peerActionPending()) ban_list_model.setExternalActionPending(true);
+    });
+    QObject::connect(&node_model, &NodeModel::peerActionFinished, &peer_model,
+                     [&](const QString& action, bool success, const QString&) {
+        if (success) peer_model.refresh();
+        ban_list_model.finishExternalAction(action == QStringLiteral("ban"));
+    });
+    QObject::connect(&ban_list_model, &BanListModel::unbanFinished,
+                     &node_model, &NodeModel::acknowledgeBanNotification);
     QObject::connect(&node_model, &NodeModel::chainStateReady,
                      &ban_list_model, &BanListModel::backendInitialized);
 
+    shutdown_coordinator.addParticipant(&peer_model, &PeerListModel::drained, [&] { peer_model.beginShutdown(); });
+    shutdown_coordinator.addParticipant(&ban_list_model, &BanListModel::drained, [&] { ban_list_model.beginShutdown(); });
     QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &peer_model, [&] {
-        peer_model.beginShutdown();
-        ban_list_model.beginShutdown();
         block_clock_model.stop();
         QObject::disconnect(&node_model, nullptr, &ban_list_model, nullptr);
         QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
@@ -770,6 +780,8 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
 
     RpcConsoleModel rpc_console_model{*node};
+    QObject::connect(&rpc_console_model, &RpcConsoleModel::shutdownRequested,
+                     &node_model, &NodeModel::requestShutdown);
     shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
                                         [&] { rpc_console_model.beginShutdown(); });
     QObject::connect(&node_model, &NodeModel::nodeInitialized,

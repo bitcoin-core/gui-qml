@@ -20,6 +20,7 @@ Page {
     property bool compact: width <= SizeClass.compactWidthMax
     property Item popupParent: null
     property int sectionIndex: 0
+    property string submittedPeerAction: ""
     property var pendingBanTarget: null
     property var pendingDisconnectTarget: null
     property int pendingBanDuration: 3600
@@ -99,30 +100,41 @@ Page {
         peerActionError.open()
     }
     function disconnectPeer() {
-        if (pendingDisconnectTarget && nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
-            peerTableModel.refresh()
-        } else {
-            showActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
+        if (nodeModel.peerActionPending || banListModel.actionPending) return
+        submittedPeerAction = "disconnect"
+        if (!pendingDisconnectTarget || !nodeModel.disconnectPeer(pendingDisconnectTarget.nodeId)) {
+            submittedPeerAction = ""
+            showActionError(nodeModel.peerActionError || qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
     function requestDisconnect() {
-        if (!details) return
+        if (!details || nodeModel.peerActionPending || banListModel.actionPending) return
         pendingDisconnectTarget = { nodeId: details.nodeId, address: details.address }
         disconnectConfirmation.open()
     }
     function requestBan(duration, label) {
-        if (!details) return
+        if (!details || nodeModel.peerActionPending || banListModel.actionPending) return
         pendingBanTarget = { rawAddress: details.rawAddress, address: details.address }
         pendingBanDuration = duration
         pendingBanLabel = label
         banConfirmation.open()
     }
     function confirmBan() {
-        if (pendingBanTarget && nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
-        } else {
-            showActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
+        if (nodeModel.peerActionPending || banListModel.actionPending) return
+        submittedPeerAction = "ban"
+        if (!pendingBanTarget || !nodeModel.banPeer(pendingBanTarget.rawAddress, pendingBanDuration)) {
+            submittedPeerAction = ""
+            showActionError(nodeModel.peerActionError || qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
+        }
+    }
+
+    onVisibleChanged: if (!visible) submittedPeerAction = ""
+    Connections {
+        target: nodeModel
+        function onPeerActionFinished(action, success, error) {
+            if (root.submittedPeerAction !== action) return
+            root.submittedPeerAction = ""
+            if (!success && root.visible) root.showActionError(error)
         }
     }
 
@@ -148,6 +160,15 @@ Page {
         ColumnLayout {
             anchors.fill: parent
             spacing: 16
+
+            CoreText {
+                objectName: "peerActionStatus"
+                Layout.fillWidth: true
+                visible: nodeModel.peerActionPending
+                text: qsTr("Updating peer…")
+                color: Theme.color.neutral6
+                font: Theme.text.description.font
+            }
 
             NavButton {
                 objectName: "peerDetailsBackButton"
@@ -196,6 +217,7 @@ Page {
 
                 IconButton {
                     id: actionButton
+                    enabled: !nodeModel.peerActionPending && !banListModel.actionPending
                     objectName: "peerActionsButton"
                     Layout.alignment: Qt.AlignTop
                     size: 40

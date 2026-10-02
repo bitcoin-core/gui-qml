@@ -49,7 +49,7 @@ void DrainNodeModel(NodeModel& model)
     while (!model.isDrained()) loop.exec();
 }
 
-QString InformationValue(NodeModel& model, const QString& label)
+QString InformationValue(const NodeModel& model, const QString& label)
 {
     for (const auto& row : model.nodeInformationRows()) {
         const auto values = row.toMap();
@@ -133,10 +133,12 @@ class NodeModelTests : public QObject
 
 private Q_SLOTS:
     void initTestCase() { SelectParams(ChainType::REGTEST); }
+    void cachedInformationRemainsResponsiveDuringGatedRefresh();
     void latestNotificationsSurviveStaleInitializationAndReorg();
     void caughtUpInitializationClearsEarlierInitialDownloadNotification();
     void networkCommandsCoalesceDesiredStateWithoutBlockingGui();
     void newerNetworkNotificationSupersedesBlockedCommandResult();
+    void peerCommandsCaptureIdentityAndRejectDuplicatesWithoutBlockingGui();
     void statusNotificationBurstUsesOneFollowupSnapshot();
     void refreshMempoolInfoUpdatesProperties();
     void activatingMempoolPollingEmitsSignalsAndRefreshesImmediately();
@@ -316,9 +318,14 @@ void NodeModelTests::disconnectPeerReturnsNodeResult()
         return id == 7;
     };
     node.ExpectExactly(node.calls.disconnectById, 2);
+    QSignalSpy completed{&model, &NodeModel::peerActionFinished};
     QVERIFY(model.disconnectPeer(7));
-
-    QVERIFY(!model.disconnectPeer(8));
+    QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 1, ASYNC_TIMEOUT_MS);
+    QVERIFY(completed.at(0).at(1).toBool());
+    QVERIFY(model.disconnectPeer(8));
+    QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 2, ASYNC_TIMEOUT_MS);
+    QVERIFY(!completed.at(1).at(1).toBool());
+    QVERIFY(!model.peerActionError().isEmpty());
     QCOMPARE(disconnected_ids, std::vector<NodeId>({7, 8}));
 }
 
@@ -362,7 +369,10 @@ void NodeModelTests::banPeerReturnsFalseWithoutDisconnectWhenBackendFails()
     node.ExpectExactly(node.calls.ban, 1);
     node.ExpectNoCalls(node.calls.disconnectByAddress);
 
-    QVERIFY(!model.banPeer(QStringLiteral("127.0.0.1"), 3600));
+    QSignalSpy completed{&model, &NodeModel::peerActionFinished};
+    QVERIFY(model.banPeer(QStringLiteral("127.0.0.1"), 3600));
+    QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 1, ASYNC_TIMEOUT_MS);
+    QVERIFY(!completed.at(0).at(1).toBool());
     QVERIFY(received_expected_ban);
 }
 
@@ -391,7 +401,10 @@ void NodeModelTests::banPeerDisconnectsAddressAfterSuccessfulBan()
     node.ExpectExactly(node.calls.ban, 1);
     node.ExpectExactly(node.calls.disconnectByAddress, 1);
 
+    QSignalSpy completed{&model, &NodeModel::peerActionFinished};
     QVERIFY(model.banPeer(QStringLiteral("127.0.0.1"), 3600));
+    QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 1, ASYNC_TIMEOUT_MS);
+    QVERIFY(completed.at(0).at(1).toBool());
     QVERIFY(received_expected_ban);
     QVERIFY(received_expected_disconnect);
 }
@@ -1814,7 +1827,8 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
         .verification_progress = 0.5,
     });
 
-    QTRY_COMPARE_WITH_TIMEOUT(model.numPeers(), 3, ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"), ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(node.calls.getNetLocalAddresses.load(), 1, ASYNC_TIMEOUT_MS);
     const QVariantList rows = model.nodeInformationRows();
     QVERIFY(!rows.empty());
 
@@ -1880,6 +1894,47 @@ void NodeModelTests::shutdownPollingOnlyRequestsLifecycleControl()
     QCOMPARE(shutdown_spy.count(), 1);
 }
 
+void NodeModelTests::cachedInformationRemainsResponsiveDuringGatedRefresh()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.get_network_active_fn = [] { return true; };
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_bool queried_off_gui{false};
+    const auto gui_thread = QThread::currentThread();
+    node.get_net_local_addresses_fn = [&] {
+        queried_off_gui = QThread::currentThread() != gui_thread;
+        if (node.calls.getNetLocalAddresses.load() == 1) {
+            entered.release();
+            release.acquire();
+        }
+        return std::map<CNetAddr, LocalServiceInfo>{};
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    model.initializeResult(true, {});
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    const int queries = node.calls.getNetLocalAddresses.load();
+    for (int attempt = 0; attempt < 100; ++attempt) {
+        QVERIFY(!model.nodeInformationRows().isEmpty());
+        model.refreshNodeInformation();
+    }
+    bool gui_progress{false};
+    QTimer::singleShot(0, this, [&] { gui_progress = true; });
+    QTRY_VERIFY_WITH_TIMEOUT(gui_progress, ASYNC_TIMEOUT_MS);
+    QCOMPARE(node.calls.getNetLocalAddresses.load(), queries);
+    QVERIFY(queried_off_gui.load());
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(node.calls.getNetLocalAddresses.load(), 2, ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Local addresses")), QStringLiteral("None"), ASYNC_TIMEOUT_MS);
+    QCOMPARE(node.calls.getNumBlocks.load(), 0);
+    QCOMPARE(node.calls.getHeaderTip.load(), 0);
+    QCOMPARE(node.calls.getLastBlockTime.load(), 0);
+}
 
 void NodeModelTests::latestNotificationsSurviveStaleInitializationAndReorg()
 {
@@ -1990,9 +2045,7 @@ void NodeModelTests::networkCommandsCoalesceDesiredStateWithoutBlockingGui()
     NodeModel model{node, false};
     const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     const auto unblock = qScopeGuard([&] { release.release(); });
-    QSignalSpy status_ready{&model, &NodeModel::nodeInformationChanged};
     model.initializeResult(true, {}, false, false);
-    QTRY_VERIFY_WITH_TIMEOUT(!status_ready.isEmpty(), ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"), ASYNC_TIMEOUT_MS);
     QSignalSpy pending{&model, &NodeModel::networkActionPendingChanged};
     model.setPause(true);
@@ -2051,9 +2104,7 @@ void NodeModelTests::newerNetworkNotificationSupersedesBlockedCommandResult()
     NodeModel model{node, false};
     const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     const auto unblock = qScopeGuard([&] { release.release(); });
-    QSignalSpy status_ready{&model, &NodeModel::nodeInformationChanged};
     model.initializeResult(true, {}, false, false);
-    QTRY_VERIFY_WITH_TIMEOUT(!status_ready.isEmpty(), ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Local addresses")), QStringLiteral("None"), ASYNC_TIMEOUT_MS);
     QCOMPARE(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"));
     QVERIFY(network_changed);
@@ -2073,6 +2124,53 @@ void NodeModelTests::newerNetworkNotificationSupersedesBlockedCommandResult()
     QVERIFY(model.networkActionError().isEmpty());
 }
 
+void NodeModelTests::peerCommandsCaptureIdentityAndRejectDuplicatesWithoutBlockingGui()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic<NodeId> captured_id{-1};
+    std::atomic_bool off_gui{false};
+    const auto gui_thread = QThread::currentThread();
+    node.disconnect_by_id_fn = [&](NodeId id) {
+        captured_id = id;
+        off_gui = QThread::currentThread() != gui_thread;
+        entered.release();
+        release.acquire();
+        return false;
+    };
+    NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    QSignalSpy completed{&model, &NodeModel::peerActionFinished};
+    int selected_id{42};
+    QVERIFY(model.disconnectPeer(selected_id));
+    selected_id = 99;
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    QVERIFY(model.peerActionPending());
+    QVERIFY(!model.disconnectPeer(selected_id));
+    QVERIFY(!model.banPeer(QStringLiteral("127.0.0.1"), 3600));
+    bool heartbeat{false};
+    QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+    QTRY_VERIFY_WITH_TIMEOUT(heartbeat, ASYNC_TIMEOUT_MS);
+    QCOMPARE(captured_id.load(), NodeId{42});
+    QCOMPARE(node.calls.disconnectById.load(), 1);
+    QCOMPARE(node.calls.ban.load(), 0);
+    QCOMPARE(completed.count(), 0);
+    QVERIFY(off_gui.load());
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 1, ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.peerActionPending());
+    QCOMPARE(completed.at(0).at(0).toString(), QStringLiteral("disconnect"));
+    QVERIFY(!completed.at(0).at(1).toBool());
+    QVERIFY(!model.peerActionError().isEmpty());
+    model.beginShutdown();
+    QVERIFY(!model.disconnectPeer(selected_id));
+    QCOMPARE(node.calls.disconnectById.load(), 1);
+}
 
 void NodeModelTests::statusNotificationBurstUsesOneFollowupSnapshot()
 {
@@ -2114,8 +2212,8 @@ void NodeModelTests::statusNotificationBurstUsesOneFollowupSnapshot()
     QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
     QVERIFY(connections_changed);
     QVERIFY(warnings_changed);
-    QCOMPARE(model.numPeers(), 0);
-    QVERIFY(model.warnings().isEmpty());
+    QCOMPARE(InformationValue(model, QStringLiteral("Peers")), QStringLiteral("Unknown"));
+    QCOMPARE(InformationValue(model, QStringLiteral("Warnings")), QStringLiteral("Unknown"));
     version = 1;
     for (int notification = 1; notification <= 10'000; ++notification) {
         connections_changed(notification);

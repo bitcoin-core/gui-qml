@@ -50,7 +50,9 @@ Pane {
                 root.errorText = qsTr("The QR code could not be saved. Please try again.")
         })
     }
-    Connections {
+    // Keep the handlers reachable while no wallet is selected and the QML
+    // engine may collect garbage before the first request becomes available.
+    readonly property Connections requestConnections: Connections {
         target: root.request
         function onAddressChanged() { qrMenu.close(); saveDialog.close() }
         function onPaymentReceivedChanged() {
