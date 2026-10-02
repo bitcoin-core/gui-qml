@@ -738,6 +738,10 @@ TestCase {
         compare(testWalletModel.customFeeEnabled, true)
         testWalletModel.customFeeRate = "0"
         compare(review.enabled, false)
+        testWalletModel.customFeeRate = "0.099"
+        compare(review.enabled, false)
+        testWalletModel.customFeeRate = "0.1"
+        compare(review.enabled, true)
         testWalletModel.customFeeRate = "2.5"
         compare(review.enabled, true)
         selectFee(1)

@@ -640,12 +640,16 @@ private Q_SLOTS:
     void scheduleFeeEstimates_populatesFormattedEstimates();
     void scheduleFeeEstimates_fallsBackWhenNetworkFeeEstimatesUnavailable();
     void scheduleFeeEstimates_usesStaticRegtestFeeOverride();
+    void customFeeRateValid_data();
+    void customFeeRateValid();
+    void scheduleFeeEstimates_usesCustomFeeRateWhenEnabled_data();
     void scheduleFeeEstimates_usesCustomFeeRateWhenEnabled();
     void scheduleFeeEstimates_neverUsesSubtractFeeFallback();
     void sendAmountExhaustsBalance_requiresFeeBuffer();
     void sendAmountExhaustsBalance_usesCoinControlAvailableBalance();
     void scheduleFeeEstimates_usesDummyPreviewChangeDestination();
     void prepareTransaction_usesStaticRegtestFeeOverride();
+    void prepareTransaction_usesCustomFeeRateWithoutRegtestOverride_data();
     void prepareTransaction_usesCustomFeeRateWithoutRegtestOverride();
     void prepareTransaction_neverSubtractsFeeFromRecipient();
     void walletQmlModelTransaction_reassignAmounts_excludesChangeOutput();
@@ -1138,8 +1142,45 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesStaticRegtestFeeOverride()
                                               });
 }
 
+void WalletQmlModelTests::customFeeRateValid_data()
+{
+    QTest::addColumn<QString>("rate");
+    QTest::addColumn<bool>("valid");
+    QTest::newRow("empty") << QString{} << false;
+    QTest::newRow("zero") << QStringLiteral("0.000") << false;
+    QTest::newRow("negative") << QStringLiteral("-0.1") << false;
+    QTest::newRow("below-minimum") << QStringLiteral("0.099") << false;
+    QTest::newRow("minimum") << QStringLiteral("0.1") << true;
+    QTest::newRow("minimum-padded") << QStringLiteral(" 0.100 ") << true;
+    QTest::newRow("fractional") << QStringLiteral("0.123") << true;
+    QTest::newRow("whole") << QStringLiteral("2") << true;
+    QTest::newRow("excess-precision") << QStringLiteral("0.1001") << false;
+}
+
+void WalletQmlModelTests::customFeeRateValid()
+{
+    QFETCH(QString, rate);
+    QFETCH(bool, valid);
+    auto [wallet, model] = MakeWalletModel();
+    model->setCustomFeeRate(rate);
+    QCOMPARE(model->customFeeRateValid(), valid);
+}
+
+void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled_data()
+{
+    QTest::addColumn<QString>("rate");
+    QTest::addColumn<qlonglong>("per_kvb");
+    QTest::addColumn<QString>("formatted_fee");
+    QTest::newRow("whole") << QStringLiteral("2") << qlonglong{2000} << QStringLiteral("0.00000500 BTC");
+    QTest::newRow("minimum") << QStringLiteral("0.1") << qlonglong{100} << QStringLiteral("0.00000025 BTC");
+    QTest::newRow("fractional") << QStringLiteral("0.123") << qlonglong{123} << QStringLiteral("0.00000031 BTC");
+}
+
 void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
 {
+    QFETCH(QString, rate);
+    QFETCH(qlonglong, per_kvb);
+    QFETCH(QString, formatted_fee);
     auto [wallet, model] = MakeWalletModel();
     SetValidRecipient(*model);
 
@@ -1159,6 +1200,9 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
             coin_control.m_feerate ? std::optional<CAmount>{coin_control.m_feerate->GetFeePerK()} : std::nullopt,
             recipients.size(),
         });
+        if (coin_control.m_feerate && !coin_control.fOverrideFeeRate) {
+            return util::Error{Untranslated("custom fee must override the wallet minimum")};
+        }
         change_pos = -1;
         fee = coin_control.m_feerate.has_value()
             ? coin_control.m_feerate->GetFee(250)
@@ -1167,10 +1211,10 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
     };
 
     model->setCustomFeeEnabled(true);
-    model->setCustomFeeRate(QStringLiteral("2"));
+    model->setCustomFeeRate(rate);
     model->scheduleFeeEstimates();
 
-    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFee(), QStringLiteral("0.00000500 BTC"), FEE_ESTIMATE_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(model->estimatedFee(), formatted_fee, FEE_ESTIMATE_TIMEOUT_MS);
     const auto recorded_calls{calls.Snapshot()};
     QCOMPARE(recorded_calls.size(), 4U);
     for (const FeeEstimateCall& call : recorded_calls) {
@@ -1179,7 +1223,7 @@ void WalletQmlModelTests::scheduleFeeEstimates_usesCustomFeeRateWhenEnabled()
         QCOMPARE(call.recipient_count, 1U);
         if (call.target == 0) {
             QVERIFY(call.fee_rate.has_value());
-            QCOMPARE(*call.fee_rate, CAmount{2000});
+            QCOMPARE(*call.fee_rate, CAmount{per_kvb});
         } else {
             QVERIFY(!call.fee_rate.has_value());
         }
@@ -1374,8 +1418,15 @@ void WalletQmlModelTests::prepareTransaction_usesStaticRegtestFeeOverride()
                                      });
 }
 
+void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOverride_data()
+{
+    scheduleFeeEstimates_usesCustomFeeRateWhenEnabled_data();
+}
+
 void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOverride()
 {
+    QFETCH(QString, rate);
+    QFETCH(qlonglong, per_kvb);
     ChainSelectionGuard chain_guard{ChainType::REGTEST};
     auto [wallet, model] = MakeWalletModel();
     SetValidRecipient(*model, VALID_REGTEST_ADDRESS);
@@ -1398,7 +1449,7 @@ void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOver
         };
         change_pos = -1;
 
-        if (!coin_control.m_feerate.has_value()) {
+        if (!coin_control.m_feerate.has_value() || !coin_control.fOverrideFeeRate) {
             return util::Error{Untranslated("missing custom fee override")};
         }
 
@@ -1407,14 +1458,14 @@ void WalletQmlModelTests::prepareTransaction_usesCustomFeeRateWithoutRegtestOver
     };
 
     model->setCustomFeeEnabled(true);
-    model->setCustomFeeRate(QStringLiteral("2"));
+    model->setCustomFeeRate(rate);
 
     QVERIFY(model->prepareTransaction());
     QVERIFY(model->currentTransaction() != nullptr);
-    QCOMPARE(model->currentTransaction()->feeAmount()->satoshi(), CAmount{500});
+    QCOMPARE(model->currentTransaction()->feeAmount()->satoshi(), CFeeRate{per_kvb}.GetFee(250));
     QVERIFY(call.has_value());
     CompareFeeEstimateCalls({*call}, {
-                                         {0, true, false, CAmount{2000}, 1},
+                                         {0, true, false, CAmount{per_kvb}, 1},
                                      });
 }
 
