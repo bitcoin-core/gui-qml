@@ -10,7 +10,17 @@ TestCase {
     visible: true
     width: 900; height: 700
     Component { id: factory; SendFeeSelection { walletModel: testWalletModel; width: 800 } }
-    function init() { testWalletModel.customFeeEnabled = false; testWalletModel.customFeeRate = ""; testWalletModel.targetBlocks = 6; testWalletModel.feeEstimatePending = false }
+    function init() { testWalletModel.minimumCustomFeeRate = 0.1; testWalletModel.customFeeEnabled = false; testWalletModel.customFeeRate = ""; testWalletModel.targetBlocks = 6; testWalletModel.feeEstimatePending = false }
+    function cleanup() { testWalletModel.minimumCustomFeeRate = 0.1 }
+    function test_custom_rate_error_uses_configured_minimum() {
+        const control = createTemporaryObject(factory, this)
+        selectOption(control, 3)
+        testWalletModel.minimumCustomFeeRate = 1
+        testWalletModel.customFeeRate = "0.1"
+        compare(findChild(control, "feeSelectionCustomRateRow").errorText, "Enter a fee rate of at least 1 sat/vB.")
+        testWalletModel.customFeeRate = "1"
+        compare(findChild(control, "feeSelectionCustomRateRow").errorText, "")
+    }
     function selectOption(control, index) {
         const picker = findChild(control, "feeSelectionPicker")
         picker.open()

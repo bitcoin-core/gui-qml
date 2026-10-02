@@ -110,6 +110,7 @@ private:
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
     Q_PROPERTY(QString customFeeRate READ customFeeRate WRITE setCustomFeeRate NOTIFY customFeeRateChanged)
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
+    Q_PROPERTY(double minimumCustomFeeRate READ minimumCustomFeeRate CONSTANT)
     Q_PROPERTY(bool feeEstimatePending READ feeEstimatePending NOTIFY feeEstimatePendingChanged)
     Q_PROPERTY(int feeEstimateRevision READ feeEstimateRevision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(BumpTransactionModel* bumpModel READ bumpModel CONSTANT)
@@ -185,6 +186,7 @@ public:
     bool customFeeEnabled() const { return m_custom_fee_enabled; }
     QString customFeeRate() const { return m_custom_fee_rate; }
     bool customFeeRateValid() const;
+    double minimumCustomFeeRate() const;
     bool feeEstimatePending() const { return m_fee_estimate_pending; }
     int feeEstimateRevision() const { return m_fee_estimate_revision; }
     Q_INVOKABLE bool prepareTransaction();

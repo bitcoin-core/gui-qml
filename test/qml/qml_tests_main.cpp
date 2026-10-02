@@ -1173,6 +1173,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
     Q_PROPERTY(QString customFeeRate READ customFeeRate WRITE setCustomFeeRate NOTIFY customFeeRateChanged)
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
+    Q_PROPERTY(double minimumCustomFeeRate MEMBER m_minimum_custom_fee_rate NOTIFY customFeeRateValidChanged)
     Q_PROPERTY(bool feeEstimatePending MEMBER m_fee_estimate_pending NOTIFY feeEstimatePendingChanged)
     Q_PROPERTY(int feeEstimateRevision MEMBER m_fee_estimate_revision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance WRITE setSendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
@@ -1353,8 +1354,9 @@ public:
         static const QRegularExpression pattern{
             QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")
         };
-        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate != QStringLiteral("0");
+        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate.toDouble() >= m_minimum_custom_fee_rate;
     }
+    double m_minimum_custom_fee_rate{0.1};
     int prepareTransactionCalls() const { return m_prepare_transaction_calls; }
     int scheduleFeeEstimatesCalls() const { return m_schedule_fee_estimates_calls; }
     int sendTransactionCalls() const { return m_send_transaction_calls; }
