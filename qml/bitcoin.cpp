@@ -45,6 +45,7 @@
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
 #include <qml/models/blockclockmodel.h>
+#include <qml/models/blockclockhistory.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
@@ -400,6 +401,12 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 
     // Freeze the completed form before dispatching its owned settings values.
     if (context.window) context.window->contentItem()->setEnabled(false);
+    QEventLoop preview_drain;
+    bool preview_drained{false};
+    QObject::connect(context.onboarding_options_model.get(), &OnboardingOptionsModel::shutdownFinished,
+                     &preview_drain, [&] { preview_drained = true; preview_drain.quit(); });
+    context.onboarding_options_model->beginShutdown();
+    while (!preview_drained) preview_drain.exec();
     const auto request = context.onboarding_options_model->applyRequest();
     QString error;
     try {
@@ -666,7 +673,10 @@ int QmlGuiMain(int argc, char* argv[])
 
     NodeModel node_model{*node, /*backend_ready=*/false};
     node_model.addStartupWarnings(startup_warnings);
-    QmlInitExecutor init_executor{*node};
+    auto block_clock_history{std::make_shared<BlockClockHistory>()};
+    QmlInitExecutor init_executor{*node, [history = block_clock_history, node = node.get(), chain = chain.get()] {
+        return SubscribeBlockClockHistory(*node, *chain, history);
+    }};
     QmlShutdownCoordinator shutdown_coordinator{init_executor};
     QPointer<QQuickWindow> window;
     bool shutdown_requested{false};
@@ -725,9 +735,7 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
-    BlockClockModel block_clock_model{[chain = chain.get()](qint64 period_start, qint64 period_end) {
-        return LoadBlockClockHistory(*chain, period_start, period_end);
-    }};
+    BlockClockModel block_clock_model{block_clock_history};
     setupChainQSettings(&app, chain_model.networkName());
     // Settings reset must happen before model instantiation so the models
     // read clean defaults from QSettings.
@@ -743,8 +751,6 @@ int QmlGuiMain(int argc, char* argv[])
         if (!reset_saved) node_model.addStartupWarnings({QObject::tr("Unable to save window settings after reset.")});
     }
 
-    QObject::connect(&node_model, &NodeModel::blockTipTimeChanged, &block_clock_model, &BlockClockModel::recordBlockTime);
-    QObject::connect(&node_model, &NodeModel::chainStateReady, &block_clock_model, &BlockClockModel::initializeHistory);
 
 
     DesktopWindowBehaviorModel desktop_window_behavior_model;
@@ -848,7 +854,8 @@ int QmlGuiMain(int argc, char* argv[])
 #else
     engine->rootContext()->setContextProperty("testAutomationEnabled", false);
 #endif
-    install_language(options_model.language());
+    // Keep the startup language until the settings snapshot is ready.
+    if (options_model.settingsReady()) install_language(options_model.language());
 
     // Retranslate the QML UI immediately when the user picks a new language.
     QObject::connect(&options_model, &OptionsQmlModel::languageChanged, [&]() {

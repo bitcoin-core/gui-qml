@@ -13,6 +13,7 @@
 #include <QVariantMap>
 
 #include <cstdint>
+#include <functional>
 
 class ArgsManager;
 namespace interfaces {
@@ -101,6 +102,13 @@ void SetRwSetting(ArgsManager& args, const QString& name, const common::Settings
 void UpdateRwSetting(interfaces::Node& node, const QString& name, const common::SettingsValue& value);
 bool WriteCoreSettingOverride(ArgsManager& args, const QString& name, const common::SettingsValue& value);
 bool WriteProxySetting(ArgsManager& args, const QString& key, bool enabled, const QString& address);
+
+/** Worker-only persistence. Serialize GUI writers and restore only the named
+ * keys after failure, without overwriting unrelated or subsequently changed
+ * settings. mutation must only change these keys and must not call this helper.
+ */
+bool PersistSettings(ArgsManager& args, const QStringList& keys,
+                     const std::function<bool()>& mutation, QString* error = nullptr);
 
 class Session
 {

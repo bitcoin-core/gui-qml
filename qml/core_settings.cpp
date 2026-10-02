@@ -21,6 +21,9 @@
 
 #include <cctype>
 #include <optional>
+#include <map>
+#include <mutex>
+#include <exception>
 #include <string>
 #include <utility>
 
@@ -902,6 +905,69 @@ bool Session::commitTorLocation(const QString& location)
 void Session::setPruneRecommendation(bool prune, int prune_size_gb, bool mark_touched)
 {
     changePruneRecommendation(prune, prune_size_gb, mark_touched);
+}
+
+bool PersistSettings(ArgsManager& args, const QStringList& keys,
+                     const std::function<bool()>& mutation, QString* error)
+{
+    // This lock is independent of cs_args: ArgsManager methods acquire that
+    // non-recursive lock internally. Backend writers remain free to update
+    // unrelated settings while GUI commands are serialized here.
+    static std::mutex writer_mutex;
+    const std::lock_guard lock{writer_mutex};
+    using Saved = std::map<std::string, std::optional<common::SettingsValue>>;
+    auto read = [&] {
+        Saved values;
+        args.LockSettings([&](common::Settings& settings) {
+            for (const auto& key : keys) {
+                const std::string name{key.toStdString()};
+                const auto it = settings.rw_settings.find(name);
+                values.emplace(name, it == settings.rw_settings.end()
+                    ? std::nullopt : std::make_optional(it->second));
+            }
+        });
+        return values;
+    };
+    const Saved before = read();
+    QString failure;
+    Saved attempted;
+    try {
+        const bool accepted = mutation();
+        attempted = read();
+        if (!accepted) {
+            failure = QCoreApplication::translate("OptionsQmlModel", "This setting cannot be changed.");
+        } else {
+            std::vector<std::string> errors;
+            if (args.WriteSettingsFile(&errors)) {
+                if (error) error->clear();
+                return true;
+            }
+            for (const auto& message : errors) {
+                if (!failure.isEmpty()) failure += QLatin1Char('\n');
+                failure += QString::fromStdString(message);
+            }
+        }
+    } catch (const std::exception& exception) {
+        failure = QString::fromUtf8(exception.what());
+    } catch (...) {
+        failure = QCoreApplication::translate("OptionsQmlModel", "Unable to save settings.");
+    }
+    if (attempted.empty()) attempted = read();
+    args.LockSettings([&](common::Settings& settings) {
+        for (const auto& [key, old_value] : before) {
+            const auto current = settings.rw_settings.find(key);
+            const auto& written = attempted.at(key);
+            const bool still_ours = written
+                ? current != settings.rw_settings.end() && current->second.write() == written->write()
+                : current == settings.rw_settings.end();
+            if (!still_ours) continue;
+            if (old_value) settings.rw_settings[key] = *old_value;
+            else settings.rw_settings.erase(key);
+        }
+    });
+    if (failure.isEmpty()) failure = QCoreApplication::translate("OptionsQmlModel", "Unable to save settings.");
+    if (error) *error = failure;
+    return false;
 }
 
 bool Session::writeToArgs(ArgsManager& args, const QString& name) const

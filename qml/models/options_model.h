@@ -9,12 +9,14 @@
 #include <txdb.h>
 #include <common/settings.h>
 #include <node/caches.h>
+#include <node/chainstatemanager_args.h>
 #include <kernel/caches.h>
 #include <kernel/mempool_options.h>
 #include <common/system.h>
 #include <policy/policy.h>
 #include <validation.h>
 
+#include <qml/backendexecutor.h>
 #include <qml/core_settings.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/models/settings_keys.h>
@@ -36,6 +38,12 @@ class Node;
 class OptionsQmlModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool settingsReady READ settingsReady NOTIFY settingsReadyChanged)
+    Q_PROPERTY(bool settingsPending READ settingsPending NOTIFY settingsPendingChanged)
+    Q_PROPERTY(QString settingsError READ settingsError NOTIFY settingsErrorChanged)
+    Q_PROPERTY(bool validationPending READ validationPending NOTIFY validationPendingChanged)
+    Q_PROPERTY(bool signerPathValidationPending READ signerPathValidationPending NOTIFY signerPathValidationChanged)
+    Q_PROPERTY(QString signerPathError READ signerPathError NOTIFY signerPathValidationChanged)
     Q_PROPERTY(int dbcacheSizeMiB READ dbcacheSizeMiB WRITE setDbcacheSizeMiB NOTIFY dbcacheSizeMiBChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(int maxMempoolSizeMB READ maxMempoolSizeMB WRITE setMaxMempoolSizeMB NOTIFY maxMempoolSizeMBChanged)
@@ -51,8 +59,8 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(int scriptThreads READ scriptThreads WRITE setScriptThreads NOTIFY scriptThreadsChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
-    Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
-    Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
+    Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString NOTIFY dataDirDefaultsChanged)
+    Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory NOTIFY dataDirDefaultsChanged)
     Q_PROPERTY(bool proxyEnabled READ proxyEnabled WRITE setProxyEnabled NOTIFY proxyEnabledChanged)
     Q_PROPERTY(QString proxyAddress READ proxyAddress WRITE setProxyAddress NOTIFY proxyAddressChanged)
     Q_PROPERTY(bool torEnabled READ torEnabled WRITE setTorEnabled NOTIFY torEnabledChanged)
@@ -77,8 +85,17 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
 
 public:
-    void beginShutdown();
     explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs);
+
+    ~OptionsQmlModel() override;
+    bool settingsReady() const { return m_ready; }
+    bool settingsPending() const { return m_pending; }
+    QString settingsError() const { return m_error; }
+    bool validationPending() const { return m_validation_pending; }
+    bool signerPathValidationPending() const { return m_signer_validation_pending; }
+    QString signerPathError() const { return m_signer_validation_error; }
+    Q_INVOKABLE void requestExternalSignerPathValidation(const QString& path);
+    void beginShutdown();
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
@@ -169,6 +186,13 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
+    void settingsReadyChanged();
+    void settingsPendingChanged();
+    void settingsErrorChanged();
+    void validationPendingChanged();
+    void signerPathValidationChanged();
+    void dataDirSelectionFinished(bool success, const QString& error);
+    void dataDirDefaultsChanged();
     void shutdownFinished();
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
     void listenChanged(bool new_listen);
@@ -200,7 +224,6 @@ Q_SIGNALS:
     void moneyFontChanged();
 
 private:
-    bool m_stopping{false};
     struct DirtySnapshot {
         bool connection{false};
         bool storage{false};
@@ -214,12 +237,38 @@ private:
     interfaces::Node& m_node;
     ArgsManager& m_args;
     CoreSettingsModel m_core_settings;
+    BackendExecutor m_executor;
+    struct Snapshot;
+    static Snapshot readSnapshot(interfaces::Node& node, ArgsManager& args);
+    void applySnapshot(Snapshot snapshot);
+    void runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command);
+    void setPending(bool pending);
+    void setError(const QString& error);
+    void persistGuiSetting(const QString& key, const QVariant& value);
+    void startSignerValidation();
+    bool m_ready{false};
+    bool m_pending{false};
+    int m_pending_commands{0};
+    quint64 m_command_revision{0};
+    bool m_stopping{false};
+    bool m_applying_snapshot{false};
+    bool m_validation_pending{false};
+    bool m_signer_validation_pending{false};
+    bool m_signer_validation_in_flight{false};
+    QString m_requested_signer_path;
+    quint64 m_signer_validation_revision{0};
+    QString m_error;
+    QString m_default_data_dir;
+    QString m_validated_data_dir;
+    QString m_data_dir_validation_error;
+    QString m_validated_signer_path;
+    QString m_signer_validation_error;
 
     // Properties that are exposed to QML.
-    int m_dbcache_size_mib;
+    int m_dbcache_size_mib{DEFAULT_DB_CACHE >> 20};
     const int m_min_dbcache_size_mib{MIN_DB_CACHE >> 20};
     const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE >> 20};
-    int m_max_mempool_size_mb;
+    int m_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
     const int m_min_max_mempool_size_mb{
         static_cast<int>((DEFAULT_CLUSTER_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
     };
@@ -228,14 +277,14 @@ private:
     };
     const int m_max_script_threads{MAX_SCRIPTCHECK_THREADS};
     const int m_min_script_threads{-GetNumCores()};
-    int m_script_threads;
+    int m_script_threads{DEFAULT_SCRIPTCHECK_THREADS};
     QString m_custom_datadir_string;
     QString m_dataDir;
     QString m_external_signer_path;
     QmlCoreSettings::Values m_initial_core_values;
-    int m_initial_dbcache_size_mib;
-    int m_initial_max_mempool_size_mb;
-    int m_initial_script_threads;
+    int m_initial_dbcache_size_mib{DEFAULT_DB_CACHE >> 20};
+    int m_initial_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
+    int m_initial_script_threads{DEFAULT_SCRIPTCHECK_THREADS};
     QString m_initial_external_signer_path;
     QString m_language;
     QStringList m_available_languages;

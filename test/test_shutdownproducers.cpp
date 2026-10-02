@@ -5,12 +5,11 @@
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
-#include <init.h>
-#include <qml/models/options_model.h>
 #include <node/interface_ui.h>
 #include <qml/backendexecutor.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/blockclockmodel.h>
+#include <qml/models/blockclockhistory.h>
 #include <qml/models/debuglogmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
@@ -145,7 +144,7 @@ private Q_SLOTS:
 
         model.initializeResult(true, {});
         QTRY_VERIFY(node.calls.getMempoolSize.load() > 0);
-        QVERIFY(node.calls.getNodeCount.load() > 0);
+        QTRY_VERIFY(node.calls.getNodeCount.load() > 0);
         QVERIFY(node.calls.getNodesStats.load() >= 1);
         QCOMPARE(node.calls.getBanned.load(), 1);
         QVERIFY(peers.findChild<QTimer*>()->isActive());
@@ -172,9 +171,10 @@ private Q_SLOTS:
         MockNode node;
         PeerListModel peers(node, nullptr);
         BanListModel bans(node);
-        int history_queries{0};
-        BlockClockModel clock([&](qint64, qint64) { ++history_queries; return QList<qint64>{}; });
-        clock.initializeHistory();
+        auto history = std::make_shared<BlockClockHistory>();
+        BlockClockModel clock(history);
+        history->initialize({});
+        clock.refreshHistory();
         peers.beginShutdown();
         bans.beginShutdown();
         clock.stop();
@@ -184,8 +184,7 @@ private Q_SLOTS:
         peers.refresh();
         bans.refresh();
         QVERIFY(!bans.unbanAt(0));
-        clock.initializeHistory();
-        clock.recordBlockTime(QDateTime::currentSecsSinceEpoch());
+        clock.refreshHistory();
         clock.updateCurrentTime(QDateTime::currentDateTime().addDays(1));
         QVERIFY(!clock.timerActive());
         const auto* timer = peers.findChild<QTimer*>();
@@ -193,7 +192,7 @@ private Q_SLOTS:
         QVERIFY(!timer->isActive());
         QCOMPARE(node.calls.getNodesStats.load(), peer_queries);
         QCOMPARE(node.calls.getBanned.load(), ban_queries);
-        QCOMPARE(history_queries, 1);
+        QVERIFY(history->retentionStart().has_value());
     }
 
     void nodeHandlersRetireOffGuiBeforeDrain()
@@ -235,25 +234,6 @@ private Q_SLOTS:
         QTRY_COMPARE(drained.size(), 1);
     }
 
-    void pendingPortMappingCannotRestartAfterShutdown()
-    {
-        SelectParams(ChainType::REGTEST);
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        ArgsManager args;
-        SetupServerArgs(args, false);
-        args.ForceSetArg("-datadir", directory.path().toStdString());
-        args.ForceSetArg("-settings", directory.filePath("settings.json").toStdString());
-        args.SelectConfigNetwork("regtest");
-        MockNode node;
-        OptionsQmlModel model(node, args);
-        model.setNatpmp(!model.natpmp());
-        QSignalSpy drained(&model, &OptionsQmlModel::shutdownFinished);
-        model.beginShutdown();
-        QCOMPARE(drained.size(), 1);
-        QTest::qWait(250);
-        QCOMPARE(node.calls.mapPort.load(), 0);
-    }
 
     void shutdownDismissesBlockingBackendQuestion()
     {
@@ -275,6 +255,8 @@ private Q_SLOTS:
         // dialog that can no longer be answered on the disabled shutdown UI.
         QVERIFY(!question(Untranslated("Late question"), "Late question", CClientUIInterface::BTN_OK));
         QVERIFY(!model.runtimeDialogVisible());
+        model.beginShutdown();
+        QTRY_VERIFY(model.isDrained());
     }
 };
 

@@ -16,7 +16,8 @@ SettingsPage {
     showBackButton: false
 
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
-    readonly property string signerPathError: optionsModel.externalSignerPathValidationError(signerPathInput.text)
+    property bool checkAfterSave: false
+    readonly property string signerPathError: optionsModel.signerPathError || ""
     readonly property bool signerConnected: root.signerPathError.length === 0
         && walletController.canCreateExternalSignerWallet
     readonly property string signerStatusText: {
@@ -49,7 +50,18 @@ SettingsPage {
     }
 
     function checkDevice() {
-        if (root.commitSignerPath()) walletController.refreshExternalSignerStatus()
+        if (!root.commitSignerPath()) return
+        if (optionsModel.settingsPending) root.checkAfterSave = true
+        else walletController.refreshExternalSignerStatus()
+    }
+
+    Connections {
+        target: optionsModel
+        function onSettingsPendingChanged() {
+            if (optionsModel.settingsPending || !root.checkAfterSave) return
+            root.checkAfterSave = false
+            if (!optionsModel.settingsError) walletController.refreshExternalSignerStatus()
+        }
     }
 
     PageHeading {
@@ -113,6 +125,7 @@ SettingsPage {
                                 rightMargin: -2
                             }
                         }
+                        onTextChanged: optionsModel.requestExternalSignerPathValidation(text)
                         onEditingFinished: root.checkDevice()
                         onAccepted: focus = false
                     }
@@ -156,7 +169,7 @@ SettingsPage {
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("Check device")
                     textStyle: Theme.text.subheading
-                    enabled: root.signerPathError.length === 0
+                    enabled: root.signerPathError.length === 0 && !optionsModel.settingsPending
                         && root.signerStatus.canEdit !== false
                     onClicked: root.checkDevice()
                 }

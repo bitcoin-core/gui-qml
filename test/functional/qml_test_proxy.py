@@ -38,9 +38,12 @@ def navigate_to_proxy_settings(gui):
     gui.settle()
     gui.wait_for_property("settingsSidebar_connection", "visible", True, timeout_ms=5000)
     gui.click("settingsSidebar_connection")
+    # Visibility can become true while the outgoing page is still transitioning.
     gui.wait_for_page("proxySettingsRow", timeout_ms=5000)
+    gui.settle(stack_view_names=("settingsNavigationStack_connection",))
     gui.click("proxySettingsRow")
     gui.wait_for_page("proxySettingsPage", timeout_ms=5000)
+    gui.settle(stack_view_names=("settingsNavigationStack_connection",))
     print("  Navigated to Proxy Settings page.")
 
 
@@ -49,6 +52,7 @@ def leave_proxy_settings_with_done(gui):
     gui.wait_for_property("proxySettingsSaveButton", "enabled", True, timeout_ms=2000)
     gui.click("proxySettingsSaveButton")
     gui.wait_for_page("proxySettingsRow", timeout_ms=5000)
+    gui.settle(stack_view_names=("settingsNavigationStack_connection",))
 
 
 def navigate_back_from_connection_settings(gui):
@@ -194,8 +198,10 @@ def test_back_discards_proxy_draft(gui):
     gui.wait_for_property("discardProxyChangesPopup", "visible", True, timeout_ms=2000)
     gui.click("discardProxyChangesConfirmButton")
     gui.wait_for_page("proxySettingsRow", timeout_ms=5000)
+    gui.settle(stack_view_names=("settingsNavigationStack_connection",))
     gui.click("proxySettingsRow")
     gui.wait_for_page("proxySettingsPage", timeout_ms=5000)
+    gui.settle(stack_view_names=("settingsNavigationStack_connection",))
     gui.wait_for_property("proxyEnableSwitch", "checked", False, timeout_ms=2000)
     gui.wait_for_property("proxySettingsPage", "proxyDraftDirty", False, timeout_ms=2000)
     print("  Back discard leaves persisted settings unchanged: OK")

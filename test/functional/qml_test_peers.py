@@ -764,6 +764,10 @@ def run_tests():
         gui.wait_for_page("peers")
         _wait_for_page_stack_idle(gui)
 
+        # Node notifications reach the GUI through a queued delivery. Wait for
+        # the model update, not just the popup's closing animation.
+        gui.wait_for_property("viewBannedPeersButton", "visible", False,
+                              timeout_ms=PEER_ACTION_TIMEOUT_SECS * 1000)
         assert not gui.get_property("viewBannedPeersButton", "visible"), \
             "viewBannedPeersButton should be hidden after UI unban"
         print("  Verified: viewBannedPeersButton hidden (ban cleared via UI)")

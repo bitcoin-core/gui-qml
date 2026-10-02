@@ -119,6 +119,9 @@ TestCase {
         nodeModel.mempoolInformationAvailable = true
         Theme.dark = true
         Theme.blockclocksize = 5 / 12
+        optionsModel.settingsReady = true
+        optionsModel.settingsPending = false
+        optionsModel.settingsError = ""
         optionsModel.displayUnit = 0
         optionsModel.moneyFontChoice = "embedded"
         optionsModel.maxMempoolSizeMB = 300
@@ -137,6 +140,21 @@ TestCase {
         onionSetting.address = onionSetting.defaultAddress()
         testNetworkTrafficTower.active = false
         testDebugLogModel.active = false
+    }
+
+    function test_pendingSettingsAndSaveErrorRemainVisible() {
+        const view = createTemporaryObject(settingsViewComponent, host)
+        verify(view !== null)
+        const status = findChild(view, "settingsOperationStatus")
+        verify(status !== null)
+        optionsModel.settingsPending = true
+        tryCompare(view.pageContainer, "enabled", false)
+        compare(status.text, "Saving settings…")
+        optionsModel.settingsError = "The settings file could not be written."
+        optionsModel.settingsPending = false
+        tryCompare(view.pageContainer, "enabled", true)
+        compare(status.text, optionsModel.settingsError)
+        optionsModel.settingsError = ""
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {

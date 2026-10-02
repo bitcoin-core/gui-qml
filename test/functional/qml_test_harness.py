@@ -331,6 +331,12 @@ class QmlTestHarness:
         raise QmlDriverError(f"Could not reconnect to main QML window: {last_error}")
 
 
+def click_onboarding_button(gui, object_name):
+    """Wait for entrance animations or pending previews before clicking."""
+    gui.wait_for_property(object_name, "enabled", True, timeout_ms=5000)
+    gui.click(object_name)
+
+
 def walk_onboarding_to_connection(gui):
     """Click through onboarding pages up to the connection page."""
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
@@ -343,9 +349,7 @@ def walk_onboarding_to_connection(gui):
         ("onboardingStorageAmountButton",   "onboardingConnection"),
     ]
     for button, expected_page in steps:
-        # The cover footer stays disabled until its entrance animation ends.
-        gui.wait_for_property(button, "enabled", True)
-        gui.click(button)
+        click_onboarding_button(gui, button)
         gui.wait_for_page(expected_page, timeout_ms=5000)
 
 
@@ -364,14 +368,14 @@ def complete_visible_onboarding(gui):
             "and QmlTestHarness.wait_for_main_window_reconnect() instead."
         )
     walk_onboarding_to_connection(gui)
-    gui.click("onboardingConnectionButton")
+    click_onboarding_button(gui, "onboardingConnectionButton")
     time.sleep(1)  # Allow navigation to the post-onboarding screen to settle.
 
 
 def complete_preinit_onboarding(gui):
     """Finish full pre-init onboarding; caller must reconnect afterwards."""
     walk_onboarding_to_connection(gui)
-    gui.click("onboardingConnectionButton")
+    click_onboarding_button(gui, "onboardingConnectionButton")
 
 
 def complete_onboarding(gui):
