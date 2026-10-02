@@ -1238,6 +1238,11 @@ public:
                 {QStringLiteral("label"), QStringLiteral("Base58 (P2SH-SegWit)")},
                 {QStringLiteral("description"), QStringLiteral("Backward compatible")},
             },
+            QVariantMap{
+                {QStringLiteral("id"), QStringLiteral("legacy")},
+                {QStringLiteral("label"), QStringLiteral("Base58 (Legacy)")},
+                {QStringLiteral("description"), QStringLiteral("Older wallet compatibility")},
+            },
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }

@@ -1234,8 +1234,6 @@ bool WalletQmlModel::commitReceivingPaymentRequest()
     // address if a payment landed while the user was filling out the form.
     for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
     if (m_receiving_address->address().isEmpty() || m_receiving_address->paymentReceived()) return false;
-    if (m_current_payment_request->amount()->satoshi() == 0 && m_current_payment_request->label().trimmed().isEmpty()
-        && m_current_payment_request->message().trimmed().isEmpty() && m_current_payment_request->noteSelf().trimmed().isEmpty()) return false;
     m_current_payment_request->setDestination(m_receiving_address->destination());
     if (!savePaymentRequest(m_current_payment_request)) return false;
     // Reserve this address for the saved request. The next Receive view must

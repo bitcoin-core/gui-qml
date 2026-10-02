@@ -676,6 +676,7 @@ private Q_SLOTS:
     void availableReceiveAddressTypesHideUnavailableTaproot();
     void receiveAddressTypeDefaultPersistsPerWallet();
     void receivingAddressIsStableUntilRotatedOrPaid();
+    void receivingAddressCreationAndRequestPersistenceAreSeparate_data();
     void receivingAddressCreationAndRequestPersistenceAreSeparate();
     void removeReceiveRequestRemovesPendingActivityRow();
     void editedReceiveRequestNameShownInActivityMetadata();
@@ -897,8 +898,16 @@ void WalletQmlModelTests::receivingAddressIsStableUntilRotatedOrPaid()
     settings.remove("receiveAddressTypes/fake-wallet");
 }
 
+void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSeparate_data()
+{
+    QTest::addColumn<QString>("note");
+    QTest::newRow("empty") << QString{};
+    QTest::newRow("private-note") << QStringLiteral("Only a private note");
+}
+
 void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSeparate()
 {
+    QFETCH(QString, note);
     QSettings settings;
     settings.remove("receiveAddressTypes/fake-wallet");
     auto [wallet, model] = MakePasswordWalletModel();
@@ -912,8 +921,7 @@ void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSepara
     QVERIFY(restored_model->ensureReceivingAddress());
     QCOMPARE(restored_model->receivingAddress()->address(), address);
     QCOMPARE(restored_wallet->get_new_destination_calls, 0);
-    QVERIFY(!model->commitReceivingPaymentRequest());
-    model->currentPaymentRequest()->setNoteSelf("Only a private note");
+    model->currentPaymentRequest()->setNoteSelf(note);
     wallet->set_address_receive_request_result = false;
     QVERIFY(!model->commitReceivingPaymentRequest());
     QCOMPARE(model->receivingAddress()->address(), address);
@@ -923,6 +931,11 @@ void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSepara
     QCOMPARE(model->currentPaymentRequest()->address(), address);
     QCOMPARE(wallet->get_new_destination_calls, 1);
     QCOMPARE(model->receiveRequests()->count(), 1);
+    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), CAmount{0});
+    QCOMPARE(model->currentPaymentRequest()->label(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->message(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), note);
+    QVERIFY(!model->commitReceivingPaymentRequest());
     QVERIFY(model->receivingAddress()->address().isEmpty());
     QVERIFY(!settings.contains("receiveAddressTypes/fake-wallet/address"));
     model->currentPaymentRequest()->clear();

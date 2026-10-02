@@ -16,6 +16,9 @@ Pane {
     property var wallet
     property var request
     property bool modalView: false
+    property bool showAmount: true
+    property bool showMessage: true
+    property bool showRecipientName: false
     property var clipboard: Clipboard
     readonly property int amountUnit: optionsModel.displayUnit
     property string errorText: ""
@@ -28,6 +31,7 @@ Pane {
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
     readonly property bool hasDetails: amountInSatoshis(amountInput.text) > 0 || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
+    signal retryAddressRequested()
     signal requestAgain(string requestId)
     signal created(string requestId)
     signal closeRequested()
@@ -56,7 +60,25 @@ Pane {
         messageInput.reset()
         noteInput.reset()
     }
-    onRequestChanged: resetFields()
+    function clearForm() {
+        if (!request || saved) return
+        request.amount.satoshi = 0
+        request.label = ""
+        request.message = ""
+        request.noteSelf = ""
+        resetFields()
+    }
+    function revealTemplateFields() {
+        if (!request || saved || !request.isEditing) return
+        if (request.amount.satoshi > 0) showAmount = true
+        if (request.message.trim() !== "") showMessage = true
+        if (request.label.trim() !== "") showRecipientName = true
+    }
+    onRequestChanged: {
+        resetFields()
+        if (request && request.label.trim() !== "") showRecipientName = true
+        revealTemplateFields()
+    }
     Component.onCompleted: resetFields()
 
     function amountInSatoshis(text) {
@@ -112,7 +134,7 @@ Pane {
         if (!saved) saveField("amount", amountInput)
     }
     function createRequest() {
-        if (!wallet || !request || saved || !hasFields || !saveFields()) return
+        if (!wallet || !request || saved || !saveFields()) return
         errorText = ""
         if (wallet.commitReceivingPaymentRequest()) created(request.id)
         else errorText = qsTr("The payment request could not be created. Please try again.")
@@ -171,6 +193,11 @@ Pane {
     }
     Connections {
         target: root.request
+        function onIsEditingChanged() { root.revealTemplateFields() }
+        function onLabelChanged() {
+            // Make a recipient name supplied by "Request again" visible in the draft.
+            if (!root.modalView && root.request.label.trim() !== "") root.showRecipientName = true
+        }
         function onPaymentReceivedChanged() {
             if (!root.paymentReceived) return
             amountInput.reset()
@@ -182,6 +209,64 @@ Pane {
             qrMenu.close()
         }
         function onIdChanged() { if (!root.saved) root.resetFields() }
+    }
+
+    Component {
+        id: customizationControl
+
+        LinkButton {
+            id: customizeButton
+            objectName: "requestPaymentCustomizeButton"
+            text: qsTr("Customize")
+            iconSource: "qrc:/icons/slider.horizontal.svg"
+            onClicked: fieldsMenu.opened ? fieldsMenu.close() : fieldsMenu.open()
+
+            ContextMenu {
+                id: fieldsMenu
+                objectName: "requestPaymentFieldsMenu"
+                x: customizeButton.width - width
+                y: customizeButton.height + 6
+                modal: true
+                dim: false
+
+                ContextMenuPicker {
+                    objectName: "requestPaymentFieldsPicker"
+                    objectNameRole: "objectName"
+                    multiSelect: true
+                    selectedValues: {
+                        const fields = []
+                        if (root.showAmount) fields.push("amount")
+                        if (root.showMessage) fields.push("message")
+                        if (root.showRecipientName) fields.push("recipient")
+                        return fields
+                    }
+                    model: [
+                        { text: qsTr("Amount"), value: "amount", objectName: "requestPaymentShowAmount" },
+                        { text: qsTr("Message"), value: "message", objectName: "requestPaymentShowMessage" },
+                        { text: qsTr("Recipient Name"), value: "recipient", objectName: "requestPaymentShowRecipientName" }
+                    ]
+                    onActivated: function(value) {
+                        if (value === "amount") root.showAmount = !root.showAmount
+                        else if (value === "message") root.showMessage = !root.showMessage
+                        else if (value === "recipient") root.showRecipientName = !root.showRecipientName
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: noteRecommendation
+
+        CoreText {
+            objectName: "requestPaymentNoteRecommendation"
+            text: qsTr("Recommended")
+            font: Theme.text.caption.font
+            lineHeight: Theme.text.caption.lineHeight
+            lineHeightMode: Text.FixedHeight
+            color: Theme.color.neutral6
+            wrap: false
+        }
     }
 
     contentItem: ColumnLayout {
@@ -359,149 +444,136 @@ Pane {
             }
         }
 
-        RowLayout {
-            visible: !root.modalView
+        ColumnLayout {
             Layout.fillWidth: true
-            spacing: 12
-            CoreText {
-                text: qsTr("Payment request")
-                font: Theme.text.title.font
-                horizontalAlignment: Text.AlignLeft
-            }
-            Rectangle {
-                implicitWidth: optionalLabel.implicitWidth + 24
-                implicitHeight: optionalLabel.implicitHeight + 12
-                radius: height / 2
-                color: Theme.color.neutral2
-                CoreText {
-                    id: optionalLabel
-                    anchors.centerIn: parent
-                    text: qsTr("Optional")
-                    font: Theme.text.caption.font
-                    color: Theme.color.neutral6
-                }
-            }
-            Item { Layout.fillWidth: true }
-        }
-        CoreText {
-            visible: !root.modalView
-            Layout.fillWidth: true
-            text: qsTr("Add payment details for this address")
-            font: Theme.text.description.font
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
-            wrap: true
-        }
-        RowLayout {
-            visible: !root.modalView
-            Layout.bottomMargin: -8
-            spacing: 6
-            Icon {
-                Layout.preferredWidth: 13
-                Layout.preferredHeight: 13
-                source: "qrc:/icons/globe.svg"
-                size: 13
-                color: Theme.color.neutral6
-            }
-            CoreText {
-                text: qsTr("Included in the request")
-                font: Theme.text.caption.font
-                color: Theme.color.neutral6
-            }
-        }
-
-        Pane {
-            objectName: "requestPaymentFieldsSection"
-            Layout.fillWidth: true
-            padding: 0
-            background: Rectangle { color: root.modalView ? Theme.color.neutral2 : Theme.color.neutral1; radius: 12 }
-            contentItem: ColumnLayout {
-                spacing: 0
-                ValueRow {
-                    visible: root.modalView
+            spacing: 8
+            FormSection {
+                objectName: "requestPaymentFieldsSection"
+                Layout.fillWidth: true
+                //: Heading for the amount, recipient name, and message included in a payment request.
+                title: root.modalView ? "" : qsTr("Payment details")
+                headerTrailingItem: root.modalView ? null : customizationControl
+                isOnSurface: root.modalView
+                cornerRadius: root.modalView ? 12 : 16
+                showGradientBorder: false
+                ColumnLayout {
                     Layout.fillWidth: true
-                    title: qsTr("Address type")
-                    titleTextStyle: Theme.text.description
-                    titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
-                    valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
-                    minimumRowHeight: 56
-                    value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
-                    showDivider: true
-                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
-                }
-                PaymentRequestField {
-                    id: amountInput
-                    objectName: "requestPaymentAmountField"
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    label: root.modalView ? qsTr("Requested amount") : qsTr("Amount")
-                    value: root.request && root.request.amount.satoshi > 0 ? displayAmount.display : ""
-                    placeholderText: "0"
-                    fieldObjectName: "requestPaymentAmountInput"
-                    editable: !root.paymentReceived
-                    showDivider: true
-                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
-                    fieldTextStyle: Theme.text.monoDescription
-                    inputMethodHints: Qt.ImhFormattedNumbersOnly
-                    maximumLength: 32
-                    validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
-                    onEditingFinished: if (!root.saved) root.saveField("amount", this)
-                    unitControl: AmountUnitButton {
-                        id: unitButton
-                        objectName: "requestPaymentAmountUnitToggle"
-                        iconObjectName: "requestPaymentAmountUnitIcon"
-                        unit: root.amountUnit
-                        onClicked: root.toggleAmountUnit()
+                    spacing: 0
+                    ValueRow {
+                        visible: root.modalView
+                        Layout.fillWidth: true
+                        title: qsTr("Address type")
+                        titleTextStyle: Theme.text.description
+                        titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
+                        valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
+                        minimumRowHeight: 56
+                        value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
+                        showDivider: true
+                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                    }
+                    PaymentRequestField {
+                        id: amountInput
+                        objectName: "requestPaymentAmountField"
+                        visible: root.modalView || root.showAmount
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        label: root.modalView ? qsTr("Requested amount") : qsTr("Amount")
+                        value: root.request && root.request.amount.satoshi > 0 ? displayAmount.display : ""
+                        placeholderText: "0"
+                        fieldObjectName: "requestPaymentAmountInput"
+                        editable: !root.paymentReceived
+                        showDivider: labelInput.visible || messageInput.visible
+                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        fieldTextStyle: Theme.text.monoDescription
+                        inputMethodHints: Qt.ImhFormattedNumbersOnly
+                        maximumLength: 32
+                        validator: RegularExpressionValidator { regularExpression: /^0*\d{0,16}(\.\d{0,8})?$/ }
+                        onEditingFinished: if (!root.saved) root.saveField("amount", this)
+                        unitControl: AmountUnitButton {
+                            id: unitButton
+                            objectName: "requestPaymentAmountUnitToggle"
+                            iconObjectName: "requestPaymentAmountUnitIcon"
+                            unit: root.amountUnit
+                            onClicked: root.toggleAmountUnit()
+                        }
+                    }
+                    PaymentRequestField {
+                        id: labelInput
+                        objectName: "requestPaymentLabelRow"
+                        visible: root.modalView || root.showRecipientName
+                        Layout.fillWidth: true
+                        label: qsTr("Pay to")
+                        showDivider: messageInput.visible
+                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        value: root.request ? root.request.label : ""
+                        placeholderText: qsTr("Your name or business")
+                        fieldObjectName: "requestPaymentYourNameInput"
+                        editable: !root.paymentReceived
+                        onEditingFinished: if (!root.saved) root.saveField("label", this)
+                    }
+                    PaymentRequestField {
+                        id: messageInput
+                        objectName: "requestPaymentMessageRow"
+                        visible: root.modalView || root.showMessage
+                        Layout.fillWidth: true
+                        label: qsTr("Message")
+                        value: root.request ? root.request.message : ""
+                        placeholderText: qsTr("Lunch split")
+                        fieldObjectName: "requestPaymentMessageInput"
+                        editable: !root.paymentReceived
+                        onEditingFinished: if (!root.saved) root.saveField("message", this)
                     }
                 }
-                PaymentRequestField {
-                    id: labelInput
-                    objectName: "requestPaymentLabelRow"
-                    Layout.fillWidth: true
-                    label: qsTr("Pay to")
-                    showDivider: true
-                    dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
-                    value: root.request ? root.request.label : ""
-                    placeholderText: qsTr("Your name or business")
-                    fieldObjectName: "requestPaymentYourNameInput"
-                    editable: !root.paymentReceived
-                    onEditingFinished: if (!root.saved) root.saveField("label", this)
+            }
+            RowLayout {
+                objectName: "requestPaymentDetailsFooter"
+                visible: !root.modalView && (root.showAmount || root.showMessage || root.showRecipientName)
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                spacing: 6
+                Icon {
+                    Layout.preferredWidth: 13
+                    Layout.preferredHeight: 13
+                    source: "qrc:/icons/globe.svg"
+                    size: 13
+                    color: Theme.color.neutral7
                 }
-                PaymentRequestField {
-                    id: messageInput
-                    objectName: "requestPaymentMessageRow"
+                CoreText {
                     Layout.fillWidth: true
-                    label: qsTr("For")
-                    value: root.request ? root.request.message : ""
-                    placeholderText: qsTr("Lunch split")
-                    fieldObjectName: "requestPaymentMessageInput"
-                    editable: !root.paymentReceived
-                    onEditingFinished: if (!root.saved) root.saveField("message", this)
+                    //: Footer explaining that the payment details above are shared with the person paying.
+                    text: qsTr("These details appear in the payment link and QR code.")
+                    font: Theme.text.caption.font
+                    lineHeight: Theme.text.caption.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    color: Theme.color.neutral7
+                    horizontalAlignment: Text.AlignLeft
+                    wrap: true
                 }
             }
         }
-        RowLayout {
+        Separator {
+            objectName: "requestPaymentDetailsSeparator"
             visible: !root.modalView
-            Layout.bottomMargin: -8
-            spacing: 6
-            Icon {
-                Layout.preferredWidth: 13
-                Layout.preferredHeight: 13
-                source: "qrc:/icons/lock.fill.svg"
-                size: 13
-                color: Theme.color.neutral6
-            }
-            CoreText {
-                text: qsTr("Only visible to you")
-                font: Theme.text.caption.font
-                color: Theme.color.neutral6
-            }
-        }
-        Pane {
             Layout.fillWidth: true
-            padding: 0
-            background: Rectangle { color: root.modalView ? Theme.color.neutral2 : Theme.color.neutral1; radius: 12 }
-            contentItem: ColumnLayout {
+            Layout.preferredHeight: 1
+            Layout.topMargin: 8
+            Layout.bottomMargin: 8
+            color: Theme.color.neutral2
+        }
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            FormSection {
+                objectName: "requestPaymentNoteSection"
+                Layout.fillWidth: true
+                title: root.modalView ? "" : qsTr("Private details")
+                headerTrailingItem: root.modalView ? null : noteRecommendation
+                isOnSurface: root.modalView
+                cornerRadius: root.modalView ? 12 : 16
+                showGradientBorder: false
+
                 PaymentRequestField {
                     id: noteInput
                     objectName: "requestPaymentNoteRow"
@@ -512,7 +584,33 @@ Pane {
                     fieldObjectName: "requestPaymentNoteSelfInput"
                     onEditingFinished: if (!root.saved) root.saveField("noteSelf", this)
                 }
+            }
 
+            RowLayout {
+                objectName: "requestPaymentNoteFooter"
+                visible: !root.modalView
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+                spacing: 6
+
+                Icon {
+                    Layout.preferredWidth: 13
+                    Layout.preferredHeight: 13
+                    source: "qrc:/icons/lock.fill.svg"
+                    size: 13
+                    color: Theme.color.neutral6
+                }
+                CoreText {
+                    Layout.fillWidth: true
+                    text: qsTr("Your note stays in this wallet. Only you can see it.")
+                    font: Theme.text.caption.font
+                    lineHeight: Theme.text.caption.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    color: Theme.color.neutral6
+                    horizontalAlignment: Text.AlignLeft
+                    wrap: true
+                }
             }
         }
         CoreText {
@@ -525,10 +623,19 @@ Pane {
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }
+        TextButton {
+            visible: !root.modalView && !!root.wallet && !!root.wallet.receivingAddress
+                && (root.wallet.receivingAddress.address === "" || root.wallet.receivingAddress.paymentReceived)
+            Layout.alignment: Qt.AlignHCenter
+            //: Retry generating the receiving address after a failure.
+            text: qsTr("Try again")
+            onClicked: root.retryAddressRequested()
+        }
         ContinueButton {
             objectName: "requestPaymentGenerateButton"
             visible: !root.saved
-            enabled: root.hasFields && !!root.wallet && !!root.wallet.receivingAddress
+            Layout.topMargin: root.modalView ? 0 : 16
+            enabled: !!root.wallet && !!root.wallet.receivingAddress
                 && root.wallet.receivingAddress.address !== "" && !root.wallet.receivingAddress.paymentReceived
             Layout.fillWidth: true
             text: qsTr("Create payment request")

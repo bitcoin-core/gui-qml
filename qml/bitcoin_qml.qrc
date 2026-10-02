@@ -60,7 +60,6 @@
         <file>components/OnboardingSettingsPopup.qml</file>
         <file>components/WalletCreationModal.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
-        <file>components/ReceivingAddressCard.qml</file>
         <file>components/PaymentRequestField.qml</file>
         <file>components/SearchBar.qml</file>
         <file>components/Tooltip.qml</file>
@@ -250,6 +249,8 @@
         <file alias="activity-split.svg">res/src/activity-split.svg</file>
         <file alias="activity-internal.svg">res/src/activity-internal.svg</file>
         <file alias="globe.svg">res/src/globe.svg</file>
+        <file alias="slider.horizontal.svg">res/src/slider.horizontal.svg</file>
+        <file alias="address-settings.svg">res/src/address-settings.svg</file>
         <file alias="lock.fill.svg">res/src/lock.fill.svg</file>
         <file alias="activity-invoice.svg">res/src/activity-invoice.svg</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
