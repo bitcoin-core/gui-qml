@@ -202,6 +202,17 @@ Page {
         }
     }
 
+    footer: CoreText {
+        objectName: "settingsOperationStatus"
+        visible: text.length > 0
+        padding: 16
+        wrapMode: Text.WordWrap
+        text: typeof optionsModel === "undefined" ? ""
+            : optionsModel.settingsError || (optionsModel.settingsReady === false ? qsTr("Loading settings…")
+            : optionsModel.settingsPending ? qsTr("Saving settings…") : "")
+        color: optionsModel.settingsError ? Theme.color.red : Theme.color.neutral7
+    }
+
     contentItem: RowLayout {
         spacing: 0
 
@@ -273,6 +284,8 @@ Page {
         SettingsPageContainer {
             id: pageContainer
             objectName: "settingsPageContainer"
+            enabled: typeof optionsModel === "undefined"
+                || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
             Layout.minimumWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
