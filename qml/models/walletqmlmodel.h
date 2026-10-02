@@ -6,6 +6,7 @@
 #define BITCOIN_QML_MODELS_WALLETQMLMODEL_H
 
 #include <qml/models/addresslistmodel.h>
+#include <qml/backendexecutor.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/coinslistmodel.h>
 #include <qml/models/paymentrequest.h>
@@ -163,7 +164,7 @@ public:
     Q_INVOKABLE bool commitReceivingPaymentRequest();
     PaymentRequest* detailPaymentRequest() const { return m_detail_payment_request; }
     ReceiveRequestHistoryModel* receiveRequests() const { return m_receive_requests; }
-    bool receiveRequestReconciliationPending() const { return m_receive_reconciliation_thread != nullptr || m_receive_reconciliation_applying; }
+    bool receiveRequestReconciliationPending() const { return m_receive_reconciliation_pending || m_receive_reconciliation_applying; }
     bool receiveRequestReconciliationApplying() const { return m_receive_reconciliation_applying; }
     WalletQmlModelTransaction* currentTransaction() const { return m_current_transaction; }
     QVariantMap currentTransactionFlow() const;
@@ -212,6 +213,8 @@ public:
     // Background readers retain the interface until their current read finishes.
     std::shared_ptr<interfaces::Wallet> walletHandle() const { return m_wallet; }
     interfaces::Node* node() const { return m_node; }
+    std::shared_ptr<BackendExecutor> backendExecutor() const { return m_backend_executor; }
+    void beginShutdown(bool remove_wallet = false);
     void removeWallet();
 
     std::set<interfaces::WalletTx> getWalletTxs() const;
@@ -282,6 +285,7 @@ public:
     void setNode(interfaces::Node* node);
 
 Q_SIGNALS:
+    void shutdownFinished();
     void nameChanged();
     void displayNameChanged();
     void balanceChanged();
@@ -318,6 +322,7 @@ private:
         ImportedPsbt,
     };
 
+    void initializeBackend();
     void initializeFeeEstimator();
     void setMaximumRecipient(SendRecipient* recipient);
     void updateMaximumAmount();
@@ -353,6 +358,9 @@ private:
     QString persistedReceiveAddressTypeKey() const;
     bool tryImportPsbtToReview(const PartiallySignedTransaction& psbt, PsbtImportResult& result, QString& reason);
 
+    std::shared_ptr<BackendExecutor> m_backend_executor{std::make_shared<BackendExecutor>()};
+    std::shared_ptr<QObject> m_notification_bridge;
+    bool m_stopping{false};
     std::shared_ptr<interfaces::Wallet> m_wallet;
     interfaces::Node* m_node{nullptr};
     TransactionActivityModel* m_transaction_activity_model{nullptr};
@@ -371,14 +379,14 @@ private:
     std::map<QString, std::set<Txid>> m_receive_request_txids_by_address;
     std::set<Txid> m_receive_request_unconfirmed_txids;
     QTimer m_receive_payment_poll_timer;
-    QThread* m_receive_payment_poll_thread{nullptr};
+    bool m_receive_payment_poll_pending{false};
     quint64 m_receive_payment_revision{0};
     QSet<QString> m_receive_request_addresses;
-    QThread* m_receive_reconciliation_thread{nullptr};
+    bool m_receive_reconciliation_pending{false};
     bool m_receive_reconciliation_applying{false};
     bool m_receive_reconciliation_requested{false};
     std::map<Txid, bool> m_receive_reconciliation_updates;
-    std::atomic<int> m_receive_request_notifications_pending{0};
+    std::shared_ptr<std::atomic<int>> m_receive_request_notifications_pending{std::make_shared<std::atomic<int>>(0)};
     WalletQmlModelTransaction* m_current_transaction{nullptr};
     wallet::CCoinControl m_coin_control;
     QPointer<SendRecipient> m_maximum_recipient;
@@ -391,8 +399,6 @@ private:
     bool m_current_transaction_sweeps_wallet{false};
     bool m_current_transaction_can_broadcast{false};
     QString m_current_transaction_review_message;
-    QObject* m_fee_estimation_worker{nullptr};
-    QThread* m_fee_estimation_thread{nullptr};
     QTimer* m_fee_estimation_timer{nullptr};
     QHash<unsigned int, SendFeePreview> m_fee_estimates;
     std::optional<SendFeePreview> m_custom_fee_estimate;

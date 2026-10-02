@@ -4,66 +4,126 @@
 
 #include <qml/initexecutor.h>
 
+#ifdef ENABLE_TEST_AUTOMATION
+#include <common/args.h>
+#include <stdexcept>
+#endif
+
 #include <interfaces/node.h>
 #include <util/exception.h>
 #include <util/threadnames.h>
 
-#include <QDebug>
-#include <QMetaObject>
-#include <QObject>
 #include <QString>
-#include <QThread>
+
+struct QmlInitExecutor::WorkerState {
+    // Only accessed on the shared initialization/shutdown worker.
+    bool initialization_threw{false};
+};
 
 QmlInitExecutor::QmlInitExecutor(interfaces::Node& node)
-    : QObject(), m_node(node)
+    : QObject(), m_node(node), m_worker_state(std::make_shared<WorkerState>())
 {
-    m_context.moveToThread(&m_thread);
-    m_thread.start();
+    m_init_and_shutdown_executor.setObjectName(QStringLiteral("node-init-shutdown"));
+    m_interrupt_executor.setObjectName(QStringLiteral("node-interrupt"));
+    connect(&m_init_and_shutdown_executor, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
+    connect(&m_interrupt_executor, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
 }
 
-QmlInitExecutor::~QmlInitExecutor()
+void QmlInitExecutor::handleRunawayException(std::exception_ptr error)
 {
-    qDebug() << __func__ << ": Stopping thread";
-    m_thread.quit();
-    m_thread.wait();
-    qDebug() << __func__ << ": Stopped thread";
-}
-
-void QmlInitExecutor::handleRunawayException(const std::exception* e)
-{
-    PrintExceptionContinue(e, "Runaway exception");
-    Q_EMIT runawayException(e ? QString::fromUtf8(e->what()) : tr("Unknown exception"));
+    m_runaway_exception = true;
+    QString message{tr("Unknown exception")};
+    try {
+        std::rethrow_exception(error);
+    } catch (const std::exception& e) {
+        PrintExceptionContinue(&e, "Runaway exception");
+        message = QString::fromUtf8(e.what());
+    } catch (...) {
+        PrintExceptionContinue(nullptr, "Runaway exception");
+    }
+    Q_EMIT runawayException(message);
 }
 
 void QmlInitExecutor::initialize()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
+    if (m_initialize_requested || m_shutdown_requested || m_runaway_exception) return;
+    m_initialize_requested = true;
+    struct Result {
+        bool success;
+        interfaces::BlockAndHeaderTipInfo tip;
+        bool initial_block_download;
+        bool shutdown_requested;
+    };
+    m_init_and_shutdown_executor.submit(this, [node = &m_node, state = m_worker_state] {
         try {
             util::ThreadRename("qml-init");
-            qDebug() << "Running initialization in thread";
-            interfaces::BlockAndHeaderTipInfo tip_info;
-            bool rv = m_node.appInitMain(&tip_info);
-            Q_EMIT initializeResult(rv, tip_info);
-        } catch (const std::exception& e) {
-            handleRunawayException(&e);
+            Result result{};
+            result.success = node->appInitMain(&result.tip);
+#ifdef ENABLE_TEST_AUTOMATION
+            if (result.success && gArgs.IsArgSet("-test-automation") && gArgs.GetArg("-test-fatal-exception", "") == "initialize") {
+                throw std::runtime_error("Test fatal exception after initialization");
+            }
+#endif
+            result.initial_block_download = result.success && node->isInitialBlockDownload();
+            result.shutdown_requested = node->shutdownRequested();
+            return result;
         } catch (...) {
-            handleRunawayException(nullptr);
+            // Shutdown may already be queued behind this task before the GUI
+            // receives runawayException. Never clean up a fatally failed node.
+            state->initialization_threw = true;
+            throw;
         }
+    }, [this](Result result) {
+        if (!m_runaway_exception) {
+            Q_EMIT initializeResult(result.success, result.tip, result.initial_block_download, result.shutdown_requested);
+        }
+    }, [this](std::exception_ptr error) { handleRunawayException(error); });
+}
+
+void QmlInitExecutor::interrupt()
+{
+    if (m_interrupt_requested || m_runaway_exception) return;
+    m_interrupt_requested = true;
+    m_interrupt_executor.submit(this, [node = &m_node] {
+        util::ThreadRename("qml-control");
+        node->startShutdown();
+#ifdef ENABLE_TEST_AUTOMATION
+        if (gArgs.IsArgSet("-test-automation") && gArgs.GetArg("-test-fatal-exception", "") == "interrupt") {
+            throw std::runtime_error("Test fatal exception during interruption");
+        }
+#endif
+    }, [this] {
+        if (!m_runaway_exception) Q_EMIT interruptResult();
+    }, [this](std::exception_ptr error) {
+        handleRunawayException(error);
     });
 }
 
 void QmlInitExecutor::shutdown()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
-        try {
-            qDebug() << "Running shutdown in thread";
-            m_node.appShutdown();
-            qDebug() << "Shutdown finished";
-            Q_EMIT shutdownResult();
-        } catch (const std::exception& e) {
-            handleRunawayException(&e);
-        } catch (...) {
-            handleRunawayException(nullptr);
+    if (m_shutdown_requested || m_runaway_exception) return;
+    m_shutdown_requested = true;
+    m_init_and_shutdown_executor.submit(this, [node = &m_node, state = m_worker_state] {
+        if (state->initialization_threw) return false;
+#ifdef ENABLE_TEST_AUTOMATION
+        if (gArgs.IsArgSet("-test-automation") && gArgs.GetArg("-test-fatal-exception", "") == "shutdown") {
+            throw std::runtime_error("Test fatal exception before shutdown");
         }
-    });
+#endif
+        node->appShutdown();
+        return true;
+    }, [this](bool completed) {
+        if (!completed) return;
+        m_app_shutdown_complete = true;
+        m_init_and_shutdown_executor.shutdown();
+        m_interrupt_executor.shutdown();
+    }, [this](std::exception_ptr error) { handleRunawayException(error); });
+}
+
+void QmlInitExecutor::finishShutdown()
+{
+    if (m_runaway_exception || !m_app_shutdown_complete || m_shutdown_result_emitted) return;
+    if (!m_init_and_shutdown_executor.isDrained() || !m_interrupt_executor.isDrained()) return;
+    m_shutdown_result_emitted = true;
+    Q_EMIT shutdownResult();
 }

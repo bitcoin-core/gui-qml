@@ -4,6 +4,7 @@
 
 #include <qml/models/onboardingoptionsmodel.h>
 
+#include <qml/backendexecutor.h>
 #include <qml/core_settings.h>
 #include <qml/datadir.h>
 #include <qml/guiconstants.h>
@@ -17,6 +18,8 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <exception>
+#include <utility>
 
 namespace {
 QmlOnboardingSettings::OnboardingStartupStatus InitialStartupStatus(const std::vector<std::string>& argv, bool can_listen_ipc)
@@ -27,10 +30,12 @@ QmlOnboardingSettings::OnboardingStartupStatus InitialStartupStatus(const std::v
 
 OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bool can_listen_ipc, QObject* parent)
     : QObject{parent}
+    , m_executor{std::make_unique<BackendExecutor>()}
     , m_argv{std::move(argv)}
     , m_can_listen_ipc{can_listen_ipc}
     , m_data_dir{QmlDataDir::DefaultDataDirString()}
 {
+    m_executor->setObjectName(QStringLiteral("onboarding"));
     const QmlOnboardingSettings::OnboardingStartupStatus status{InitialStartupStatus(m_argv, m_can_listen_ipc)};
     m_data_dir = status.active_data_dir.isEmpty() ? QmlDataDir::ReadGuiDataDir() : status.active_data_dir;
     m_data_dir_source = status.data_dir_source;
@@ -48,6 +53,41 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
         m_custom_datadir_string = m_data_dir;
     }
     refreshPreview();
+}
+
+OnboardingOptionsModel::~OnboardingOptionsModel() = default;
+
+void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool()> prepare_node)
+{
+    if (m_preparing) return;
+    m_preparing = true;
+    Q_EMIT canFinishChanged();
+    m_executor->submit(this, [&args, request = applyRequest(), prepare_node = std::move(prepare_node)] {
+        QString error;
+        if (!QmlOnboardingSettings::ApplyToArgs(args, request.data_dir, request.touched_settings, request.values, &error)) {
+            if (error.isEmpty()) error = tr("Onboarding settings could not be applied.");
+            return std::pair{false, error};
+        }
+        return std::pair{prepare_node(), QString{}};
+    }, [this](const std::pair<bool, QString>& result) {
+        finishNodePreparation(result.first, result.second);
+    }, [this](std::exception_ptr failure) {
+        try {
+            std::rethrow_exception(failure);
+        } catch (const std::exception& e) {
+            finishNodePreparation(false, QString::fromUtf8(e.what()));
+        } catch (...) {
+            finishNodePreparation(false, tr("Unknown exception preparing the node."));
+        }
+    });
+}
+
+void OnboardingOptionsModel::finishNodePreparation(bool success, const QString& error)
+{
+    connect(m_executor.get(), &BackendExecutor::drained, this, [this, success, error] {
+        Q_EMIT nodePrepared(success, error);
+    });
+    m_executor->shutdown();
 }
 
 QString OnboardingOptionsModel::getDefaultDataDirString() const
@@ -386,4 +426,9 @@ bool OnboardingOptionsModel::applyToArgs(ArgsManager& args, QString* error) cons
         m_core_settings.touchedSettings(),
         coreValues(),
         error);
+}
+
+QmlOnboardingSettings::ApplyRequest OnboardingOptionsModel::applyRequest() const
+{
+    return {{m_data_dir, m_data_dir_source}, m_core_settings.touchedSettings(), coreValues()};
 }

@@ -8,6 +8,9 @@
 #include <test/qt_test_registry.h>
 
 #include <qml/models/nodemodel.h>
+#include <qml/initexecutor.h>
+#include <qml/quithandler.h>
+#include <qml/shutdowncoordinator.h>
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -18,14 +21,18 @@
 #include <validation.h>
 
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
 #include <QVariantMap>
 #include <QTimer>
+#include <QSemaphore>
 
 namespace {
 constexpr int ASYNC_TIMEOUT_MS{1'000};
@@ -138,11 +145,13 @@ private Q_SLOTS:
     void initializeFailureShowsStartupWarningsWithoutMakingThemCurrentWarnings();
     void initializeFailureUsesNodeErrorMessages();
     void runawayExceptionSetsFatalStartupError();
+    void fatalExceptionExitsWithoutDraining_data();
+    void fatalExceptionExitsWithoutDraining();
     void nodeInformationRowsAvoidChainmanBeforeInitialization();
     void nodeInformationRowsExposeDiagnostics();
     void initEmitsRequestedInitialize();
     void initGuardBlocksSecondEmission();
-    void shutdownPollingStartsShutdownBeforeEmittingSignal();
+    void shutdownPollingOnlyRequestsLifecycleControl();
 };
 
 void NodeModelTests::refreshMempoolInfoUpdatesProperties()
@@ -380,7 +389,7 @@ void NodeModelTests::initializationFailureRequestsShutdownWhenCoreWasInterrupted
     QSignalSpy error_state_spy{&model, &NodeModel::errorStateChanged};
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
     QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
-    model.initializeResult(false, {});
+    model.initializeResult(false, {}, false, true);
 
     QCOMPARE(error_state_spy.count(), 1);
     QVERIFY(model.errorState());
@@ -424,7 +433,7 @@ void NodeModelTests::initializationSuccessDuringCoreShutdownSkipsReadyState()
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
     QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
     QSignalSpy ready_state_spy{&model, &NodeModel::chainStateReady};
-    model.initializeResult(true, {});
+    model.initializeResult(true, {}, false, true);
 
     QCOMPARE(shutdown_spy.count(), 1);
     QCOMPARE(initialized_spy.count(), 0);
@@ -663,7 +672,7 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
         .header_height = 100,
         .header_time = GetTime(),
         .verification_progress = 0.25,
-    });
+    }, initial_block_download, false);
 
     QCOMPARE(block_sync_spy.count(), 1);
     QVERIFY(model.blockSyncActive());
@@ -1445,7 +1454,90 @@ void NodeModelTests::runawayExceptionSetsFatalStartupError()
 
     model.handleRunawayException(QStringLiteral("std::runtime_error: boom"));
     QVERIFY(model.errorState());
-    QCOMPARE(model.startupError(), QStringLiteral("std::runtime_error: boom"));
+    QVERIFY(model.fatalException());
+    QVERIFY(model.startupError().contains(QStringLiteral("can no longer continue safely")));
+    QVERIFY(model.startupError().endsWith(QStringLiteral("std::runtime_error: boom")));
+}
+
+void NodeModelTests::fatalExceptionExitsWithoutDraining_data()
+{
+    QTest::addColumn<QString>("phase");
+    QTest::addColumn<bool>("native_quit");
+    for (const auto* phase : {"initialize", "interrupt", "shutdown", "unknown", "empty"}) {
+        for (const bool native_quit : {false, true}) {
+            const QByteArray tag = QByteArray{phase} + (native_quit ? "-quit" : "-dialog");
+            QTest::newRow(tag.constData()) << QString::fromLatin1(phase) << native_quit;
+        }
+    }
+}
+
+void NodeModelTests::fatalExceptionExitsWithoutDraining()
+{
+    QFETCH(QString, phase);
+    QFETCH(bool, native_quit);
+    if (!qEnvironmentVariableIsSet("BITCOIN_QML_FATAL_EXCEPTION_CHILD")) {
+        QSKIP("Executed by bitcoinqml_fatal_exception_tests in child processes.");
+    }
+    QCOMPARE(std::atexit([] { std::_Exit(93); }), 0);
+
+    MockNode node;
+    ConfigureNodeModelDefaults(node);
+    std::atomic_bool core_shutdown{false};
+    const auto fail = [&]() -> void {
+        core_shutdown = true;
+        if (phase == "unknown") throw 42;
+        throw std::runtime_error(phase == "empty" ? "" : "fatal test exception");
+    };
+    node.app_init_main_fn = [&](interfaces::BlockAndHeaderTipInfo*) -> bool { fail(); return false; };
+    node.start_shutdown_fn = [&] { if (phase == "interrupt") fail(); };
+    node.app_shutdown_fn = [&] { if (phase == "shutdown") fail(); };
+    node.shutdown_requested_fn = [&] { return core_shutdown.load(); };
+
+    const bool backend_ready{false};
+    NodeModel model{node, backend_ready};
+    QmlInitExecutor executor{node};
+    QmlShutdownCoordinator coordinator{executor};
+    QmlQuitHandler quit_handler;
+    connect(&quit_handler, &QmlQuitHandler::quitRequested, &model, &NodeModel::requestShutdown);
+    connect(&model, &NodeModel::requestedShutdown, &coordinator, &QmlShutdownCoordinator::requestShutdown);
+    connect(&executor, &QmlInitExecutor::runawayException, &model, &NodeModel::handleRunawayException);
+    connect(&coordinator, &QmlShutdownCoordinator::finished, this, [] { std::_Exit(86); });
+
+    QSemaphore entered, release;
+    BackendExecutor stalled;
+    stalled.submit(this, [&] { entered.release(); release.acquire(); }, [] {});
+    if (!entered.tryAcquire(1, 5'000)) std::_Exit(87);
+    const auto request_quit = [] {
+        QEvent quit{QEvent::Quit};
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &quit);
+    };
+    connect(&model, &NodeModel::startupErrorChanged, this, [&] {
+        const QString detail = phase == "unknown" ? QStringLiteral("Unknown exception")
+            : phase == "empty" ? QString{} : QStringLiteral("fatal test exception");
+        if (!model.fatalException() || !model.errorState()
+            || !model.startupError().contains(QStringLiteral("can no longer continue safely"))
+            || !model.startupError().contains(detail)) std::_Exit(88);
+        constexpr int acknowledgement_after_shutdown_poll_ms{300};
+        QTimer::singleShot(acknowledgement_after_shutdown_poll_ms, this, [&] {
+            if (phase == "interrupt" && node.calls.appShutdown.load() != 0) std::_Exit(89);
+            std::puts("fatal notification acknowledged");
+            std::fflush(stdout);
+            if (native_quit) request_quit();
+            else model.requestShutdown();
+            std::_Exit(90);
+        });
+    });
+    model.startShutdownPolling();
+    if (phase == "interrupt" || phase == "shutdown") {
+        if (native_quit) request_quit();
+        else model.requestShutdown();
+    } else {
+        executor.initialize();
+    }
+    QTimer::singleShot(5'000, this, [] { std::_Exit(91); });
+    QEventLoop loop;
+    loop.exec();
+    std::_Exit(92);
 }
 
 void NodeModelTests::nodeInformationRowsAvoidChainmanBeforeInitialization()
@@ -1549,7 +1641,7 @@ void NodeModelTests::initGuardBlocksSecondEmission()
     QCOMPARE(spy.count(), 1);
 }
 
-void NodeModelTests::shutdownPollingStartsShutdownBeforeEmittingSignal()
+void NodeModelTests::shutdownPollingOnlyRequestsLifecycleControl()
 {
     MockNode node;
     MempoolState mempool;
@@ -1561,17 +1653,13 @@ void NodeModelTests::shutdownPollingStartsShutdownBeforeEmittingSignal()
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
-    bool started_before_signal{false};
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    node.start_shutdown_fn = [&] {
-        started_before_signal = shutdown_spy.count() == 0;
-    };
-    node.ExpectExactly(node.calls.startShutdown, 1);
+    node.ExpectExactly(node.calls.startShutdown, 0);
 
     model.startShutdownPolling();
 
     QTRY_COMPARE_WITH_TIMEOUT(shutdown_spy.count(), 1, ASYNC_TIMEOUT_MS);
-    QVERIFY(started_before_signal);
+    QCOMPARE(node.calls.startShutdown.load(), 0);
 
     model.requestShutdown();
     QCOMPARE(shutdown_spy.count(), 1);

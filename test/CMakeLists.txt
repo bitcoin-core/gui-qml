@@ -3,9 +3,25 @@ cmake_minimum_required(VERSION 3.22)
 # Tests for the QML/Qt6 app
 
 find_package(Qt 6.2 MODULE REQUIRED COMPONENTS Core Gui Network Test Qml Quick QuickTest Widgets)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+add_test(NAME bitcoinqml_process_checks
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/test_qml_process_checks.py
+)
+
+add_executable(bitcoinqml_bootstrap_tests
+  test_bootstrap.cpp
+  ../qml/backendexecutor.cpp
+  ../qml/quithandler.h
+)
+target_include_directories(bitcoinqml_bootstrap_tests PRIVATE ..)
+target_link_libraries(bitcoinqml_bootstrap_tests PRIVATE Qt6::Widgets Qt6::Quick Qt6::Test)
+add_test(NAME bitcoinqml_bootstrap_tests COMMAND bitcoinqml_bootstrap_tests -platform minimal)
+set_tests_properties(bitcoinqml_bootstrap_tests PROPERTIES TIMEOUT 30)
 
 add_executable(bitcoinqml_unit_tests
   test_unit_tests_main.cpp
+  test_backendexecutor.cpp
   test_bitcoinaddress.cpp
   test_blockclockdial.cpp
   test_blockclockmodel.cpp
@@ -27,6 +43,7 @@ add_executable(bitcoinqml_unit_tests
   test_networkstatusmodel.cpp
   test_networktraffictower.cpp
   test_qmlinitexecutor_api.cpp
+  test_shutdownproducers.cpp
   test_guiargs.cpp
   test_options_model.cpp
   test_onboarding_storage.cpp
@@ -82,10 +99,31 @@ target_link_libraries(bitcoinqml_unit_tests
 
 add_test(NAME bitcoinqml_unit_tests COMMAND bitcoinqml_unit_tests -platform minimal)
 
+add_test(NAME bitcoinqml_fatal_exception_tests
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_fatal_exceptions.py
+    $<TARGET_FILE:bitcoinqml_unit_tests>
+)
+set_tests_properties(bitcoinqml_fatal_exception_tests PROPERTIES TIMEOUT 120)
+
+if(ENABLE_TEST_AUTOMATION AND UNIX)
+  add_test(NAME bitcoinqml_configured_datadir_tests
+    COMMAND ${CMAKE_COMMAND} -E env BITCOIN_CORE_APP=$<TARGET_FILE:bitcoin-core-app>
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_configured_datadir.py
+  )
+  set_tests_properties(bitcoinqml_configured_datadir_tests PROPERTIES TIMEOUT 180)
+
+  add_test(NAME bitcoinqml_fatal_shutdown_tests
+    COMMAND ${CMAKE_COMMAND} -E env BITCOIN_CORE_APP=$<TARGET_FILE:bitcoin-core-app>
+      ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_fatal_shutdown.py
+  )
+  set_tests_properties(bitcoinqml_fatal_shutdown_tests PROPERTIES TIMEOUT 180)
+endif()
+
 qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
 
 add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${QMLTESTS_QRC_CPP}
@@ -116,6 +154,7 @@ add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
+  qt6_import_plugins(bitcoinqml_bootstrap_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_plugins(bitcoinqml_unit_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
   qt6_import_qml_plugins(bitcoinqml_unit_tests)
   qt6_import_plugins(bitcoinqml_qmltests INCLUDE Qt6::QMinimalIntegrationPlugin Qt6::QSvgPlugin Qt6::QSvgIconPlugin)

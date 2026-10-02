@@ -115,6 +115,19 @@ def wait_for_rpc(port, timeout=30):
     raise RuntimeError(f"RPC on port {port} did not become ready: {last_error}")
 
 
+def wait_for_loaded_wallets(port, wallet_names, timeout=30):
+    """Wait for asynchronous wallet operations to update Core's loaded set."""
+    expected = set(wallet_names)
+    deadline = time.monotonic() + timeout
+    while True:
+        loaded = rpc_call(port, "listwallets")
+        if set(loaded) == expected:
+            return
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"Expected loaded wallets {sorted(expected)}, got {loaded}")
+        time.sleep(0.05)
+
+
 def write_datadir(datadir, rpc_port, p2p_port, extra_lines=None):
     os.makedirs(datadir, exist_ok=True)
     conf_path = os.path.join(datadir, "bitcoin.conf")

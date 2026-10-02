@@ -74,6 +74,7 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     assert_preinit_cover_about_available(gui)
 
+    gui.wait_for_property("onboardingCoverButton", "enabled", True)
     gui.click("onboardingCoverButton")
     gui.wait_for_page("onboardingStrengthen", timeout_ms=5000)
     gui.click("onboardingStrengthenButton")

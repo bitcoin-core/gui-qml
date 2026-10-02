@@ -17,6 +17,7 @@ QtObject {
     property bool canPaste: false
     property bool navigationEnabled: true
     property bool shuttingDown: false
+    property bool fatalException: false
     property bool isMacOs: false
 
     readonly property bool commandEnabled: !shuttingDown
@@ -103,7 +104,7 @@ QtObject {
     readonly property MenuCommand exit: MenuCommand {
         text: qsTr("E&xit")
         shortcut: qsTr("Ctrl+Q")
-        enabled: root.commandEnabled
+        enabled: root.commandEnabled || root.fatalException
         onTriggered: root.exitRequested()
     }
 

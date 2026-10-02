@@ -34,13 +34,15 @@ class PeerListModel : public QAbstractListModel
     Q_OBJECT
 
 public:
-    explicit PeerListModel(interfaces::Node& node, QObject* parent);
+    explicit PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready = true);
+    void backendInitialized();
     ~PeerListModel();
 
     Q_INVOKABLE
     void startAutoRefresh();
     Q_INVOKABLE
     void stopAutoRefresh();
+    void beginShutdown();
 
     enum Role {
         StatsRole = Qt::UserRole,
@@ -69,6 +71,9 @@ private:
     QList<CNodeCombinedStats> m_peers_data{};
     interfaces::Node& m_node;
     QTimer* m_timer{nullptr};
+    bool m_stopping{false};
+    bool m_backend_ready;
+    bool m_auto_refresh_requested{false};
 };
 
 #endif // BITCOIN_QML_MODELS_PEERLISTMODEL_H

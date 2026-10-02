@@ -18,8 +18,8 @@ namespace {
 constexpr auto MODEL_UPDATE_DELAY{std::chrono::milliseconds{250}};
 }
 
-PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent)
-    : QAbstractListModel(parent), m_node(node)
+PeerListModel::PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready)
+    : QAbstractListModel(parent), m_node(node), m_backend_ready(backend_ready)
 {
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &PeerListModel::refresh);
@@ -32,12 +32,29 @@ PeerListModel::~PeerListModel() = default;
 
 void PeerListModel::startAutoRefresh()
 {
-    m_timer->start();
+    if (m_stopping) return;
+    m_auto_refresh_requested = true;
+    if (m_backend_ready) m_timer->start();
 }
 
 void PeerListModel::stopAutoRefresh()
 {
+    m_auto_refresh_requested = false;
     m_timer->stop();
+}
+
+void PeerListModel::backendInitialized()
+{
+    if (m_stopping || m_backend_ready) return;
+    m_backend_ready = true;
+    refresh();
+    if (m_auto_refresh_requested) m_timer->start();
+}
+
+void PeerListModel::beginShutdown()
+{
+    m_stopping = true;
+    stopAutoRefresh();
 }
 
 int PeerListModel::rowCount(const QModelIndex& parent) const
@@ -107,6 +124,7 @@ Qt::ItemFlags PeerListModel::flags(const QModelIndex& index) const
 
 void PeerListModel::refresh()
 {
+    if (m_stopping || !m_backend_ready) return;
     interfaces::Node::NodesStats nodes_stats;
     if (!m_node.getNodesStats(nodes_stats)) return;
 

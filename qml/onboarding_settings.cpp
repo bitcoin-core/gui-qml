@@ -297,7 +297,6 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
 
     const bool reset_gui_settings = preview_args.GetBoolArg("-resetguisettings", false);
     const bool explicit_datadir = HasExplicitDataDirArg(preview_args);
-    const bool force_show_onboarding = reset_gui_settings || QmlDataDir::ShouldShowDataDirChooser(preview_args);
     if (explicit_datadir) {
         status.active_data_dir = ExplicitDataDirString(preview_args);
         status.data_dir_source = DataDirSource::ExplicitArg;
@@ -346,7 +345,10 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         return status;
     }
 
-    if (force_show_onboarding) {
+    // A config file can select an existing profile even when the default data
+    // directory is absent. Check the resolved path, retaining command-line
+    // -datadir precedence over chooser requests (except -resetguisettings).
+    if (reset_gui_settings || (!explicit_datadir && QmlDataDir::ShouldShowDataDirChooser(preview_args, status.active_data_dir))) {
         status.ok = true;
         status.qml_onboarded = false;
         status.should_show_onboarding = true;

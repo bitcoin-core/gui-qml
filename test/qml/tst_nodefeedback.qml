@@ -91,11 +91,18 @@ TestCase {
 
     property bool destructiveAlertTriggered: false
 
+    SignalSpy {
+        id: shutdownSpy
+        target: nodeModel
+        signalName: "requestedShutdown"
+    }
+
     function init() {
         testWindow.width = 640
         testWindow.height = 520
         nodeModel.setWarningsForTest([])
         nodeModel.setStartupErrorForTest("")
+        shutdownSpy.clear()
         nodeModel.answerRuntimeDialog(DialogButtonBox.Cancel)
         destructiveAlertTriggered = false
     }
@@ -388,6 +395,10 @@ TestCase {
         const text = findChild(popup, "nodeFatalErrorText")
         verify(text !== null)
         compare(text.text, "Fatal init failure")
+        const button = findChild(popup, "nodeFatalShutdownButton")
+        verify(button !== null)
+        mouseClick(button)
+        compare(shutdownSpy.count, 1)
     }
 
     function test_fatal_popup_wraps_long_startup_error() {
