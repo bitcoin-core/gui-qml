@@ -11,6 +11,8 @@
 
 class NetworkStyle;
 
+//! Every QML engine must be created through this function so that it cannot
+//! access the network.
 std::unique_ptr<QQmlApplicationEngine> CreateQmlEngine();
 
 std::unique_ptr<QQmlApplicationEngine> CreateInitErrorEngine();
