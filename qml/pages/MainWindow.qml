@@ -177,7 +177,8 @@ ApplicationWindow {
             && appWindow.menuEditTarget.readOnly !== true
             && appWindow.menuEditTarget.enabled !== false
         navigationEnabled: appWindow.menuNavigationEnabled
-        shuttingDown: appWindow.shutdownInProgress
+        shuttingDown: appWindow.shutdownInProgress || nodeModel.fatalException
+        fatalException: nodeModel.fatalException
         isMacOs: Qt.platform.os === "osx"
 
         onCreateWalletRequested: appWindow.openWalletCreation()
@@ -225,7 +226,7 @@ ApplicationWindow {
 
     onClosing: (close) => {
         close.accepted = false
-        if (desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
+        if (!nodeModel.fatalException && desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
             showMinimized()
         } else {
             nodeModel.requestShutdown()
@@ -286,6 +287,7 @@ ApplicationWindow {
     PageStack {
         id: main
         objectName: "mainPageStack"
+        enabled: !appWindow.shutdownInProgress && !nodeModel.fatalException
         initialItem: appWindow.desktopWalletMode ? desktopWallets : node
         anchors.fill: parent
         focus: true
@@ -299,6 +301,13 @@ ApplicationWindow {
 
     Connections {
         target: nodeModel
+        function onFatalExceptionChanged() {
+            if (!nodeModel.fatalException) return
+            appWindow.contentItem.enabled = true
+            appWindow.showNormal()
+            appWindow.raise()
+            appWindow.requestActivate()
+        }
         function onRequestedShutdown() {
             appWindow.shutdownInProgress = true
             main.clear()

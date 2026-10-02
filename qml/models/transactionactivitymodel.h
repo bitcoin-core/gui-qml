@@ -8,10 +8,10 @@
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivity.h>
 
-#include <QFutureWatcher>
+#include <atomic>
+#include <memory>
 #include <QAbstractListModel>
 #include <QMap>
-#include <QPromise>
 #include <QSet>
 #include <QTimer>
 #include <QVariantMap>
@@ -110,6 +110,7 @@ public:
     Q_INVOKABLE QVariantMap transactionDetails(const QString& txid, bool include_flow = false) const;
     Q_INVOKABLE void requestTransactionDetails(const QString& txid);
     void setDisplayUnit(int unit);
+    void stop();
 
 Q_SIGNALS:
     void loadingChanged();
@@ -152,10 +153,9 @@ private:
     };
     static bool updateStatus(interfaces::Wallet& wallet, Record& record);
     static void updateLabels(interfaces::Wallet& wallet, Record& record);
-    static Snapshot readSnapshot(interfaces::Wallet& wallet, Snapshot snapshot, const Work& work, const QPromise<Snapshot>& promise);
+    static Snapshot readSnapshot(interfaces::Wallet& wallet, Snapshot snapshot, const Work& work, const std::atomic_bool& cancelled);
     void schedule();
     void startWork();
-    void stop();
     void poll();
     void rebuildRows();
     QString formatAmount(CAmount amount, bool receive) const;
@@ -174,7 +174,8 @@ private:
     QMap<QString, QString> m_detail_labels;
     bool m_detail_can_bump{false}, m_detail_missing{false}, m_details_loading{false};
     Work m_pending;
-    QFutureWatcher<Snapshot>* m_watcher{nullptr};
+    bool m_work_pending{false};
+    std::shared_ptr<std::atomic_bool> m_cancelled{std::make_shared<std::atomic_bool>(false)};
     quint64 m_generation{0}, m_detail_generation{0};
     bool m_scheduled{false}, m_stopped{false}, m_loading{false};
     bool m_request_rebuild_pending{false};

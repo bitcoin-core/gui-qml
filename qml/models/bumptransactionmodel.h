@@ -28,6 +28,7 @@ class BumpTransactionModel : public QObject
     Q_OBJECT
 
 public:
+    void detachWallet() { m_wallet = nullptr; }
     enum State { Idle, Preparing, NeedsConfirmation, Committing, Succeeded, Failed };
     Q_ENUM(State)
 

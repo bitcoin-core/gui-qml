@@ -343,6 +343,7 @@ def walk_onboarding_to_connection(gui):
         ("onboardingStorageAmountButton",   "onboardingConnection"),
     ]
     for button, expected_page in steps:
+        gui.wait_for_property(button, "enabled", True)
         gui.click(button)
         gui.wait_for_page(expected_page, timeout_ms=5000)
 

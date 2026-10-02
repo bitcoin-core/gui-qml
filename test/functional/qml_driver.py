@@ -308,6 +308,11 @@ class QmlDriver:
         if "error" in resp:
             raise QmlDriverError(f"close_window failed: {resp['error']}")
 
+    def request_quit(self):
+        resp = self._send({"cmd": "request_quit"})
+        if "error" in resp:
+            raise QmlDriverError(f"request_quit failed: {resp['error']}")
+
     def set_clipboard_text(self, text):
         """Set the system clipboard to the given text string."""
         resp = self._send({"cmd": "set_clipboard_text", "text": text})
