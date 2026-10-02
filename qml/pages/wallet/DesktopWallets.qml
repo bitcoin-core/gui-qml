@@ -22,6 +22,7 @@ Page {
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
+    signal paymentRequestOutcome(string outcome)
 
     function navigateToTransaction(txid, outputIndex) {
         activityTabButton.checked = true
@@ -80,6 +81,15 @@ Page {
 
     function openActivity() {
         activityTabButton.checked = true
+    }
+
+    function canAcceptPaymentUri() {
+        return walletController.isWalletLoaded && sendPage.canAcceptPaymentRequest()
+    }
+
+    function applyIncomingPaymentUri(uri, source) {
+        sendTabButton.checked = true
+        sendPage.applyPaymentRequest(uri, source)
     }
 
     function openSend() {
@@ -353,6 +363,7 @@ Page {
         }
         SendCreate {
             id: sendPage
+            onPaymentRequestOutcome: (outcome) => root.paymentRequestOutcome(outcome)
             onViewTransactionInActivity: (txid) => {
                 root.navigateToTransaction(txid)
             }
