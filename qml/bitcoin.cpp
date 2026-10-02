@@ -32,7 +32,6 @@
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/guiconstants.h>
-#include <qml/imageprovider.h>
 #include <qml/initexecutor.h>
 #include <qml/models/activityfilterproxymodel.h>
 #include <qml/models/addresslistmodel.h>
@@ -60,7 +59,7 @@
 #include <qml/models/walletlistmodel.h>
 #include <qml/models/walletqmlmodel.h>
 #include <qml/models/walletqmlmodeltransaction.h>
-#include <qml/qrimageprovider.h>
+#include <qml/qmlengine.h>
 #include <qml/networkstyle.h>
 #include <qml/util.h>
 #include <qml/walletqmlcontroller.h>
@@ -170,11 +169,11 @@ bool InitErrorMessageBox(
     static BitcoinUriModel error_bitcoin_uri_model;
     RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_bitcoin_uri_model);
 
-    QQmlApplicationEngine engine;
+    const auto engine = CreateInitErrorEngine();
 
-    engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
-    engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
-    if (engine.rootObjects().isEmpty()) {
+    engine->rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
+    engine->load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
+    if (engine->rootObjects().isEmpty()) {
         return EXIT_FAILURE;
     }
     qGuiApp->exec();
@@ -349,8 +348,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     context.network_style.reset(NetworkStyle::instantiate(Params().GetChainType()));
     assert(!context.network_style.isNull());
 
-    context.engine = std::make_unique<QQmlApplicationEngine>();
-    context.engine->addImageProvider(QStringLiteral("images"), new ImageProvider{context.network_style.data()});
+    context.engine = CreatePreInitEngine(context.network_style.data());
     context.engine->rootContext()->setContextProperty("optionsModel", context.onboarding_options_model.get());
     context.engine->load(QUrl(QStringLiteral("qrc:///qml/pages/preinit.qml")));
     if (context.engine->rootObjects().isEmpty()) {
@@ -647,12 +645,9 @@ int QmlGuiMain(int argc, char* argv[])
     QObject::connect(&node_model, &NodeModel::nodeInitialized,
                      &ban_list_model, &BanListModel::refresh);
 
-    auto engine = std::make_unique<QQmlApplicationEngine>();
-
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
-    engine->addImageProvider(QStringLiteral("images"), new ImageProvider{network_style.data()});
-    engine->addImageProvider(QStringLiteral("qr"), new QRImageProvider);
+    auto engine = CreateMainEngine(network_style.data());
 
     engine->rootContext()->setContextProperty("networkTrafficTower", &network_traffic_tower);
     engine->rootContext()->setContextProperty("networkStatusModel", &network_status_model);
