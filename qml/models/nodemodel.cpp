@@ -24,10 +24,14 @@
 #include <chrono>
 #include <cstdlib>
 #include <vector>
+#include <mutex>
+#include <optional>
+#include <utility>
 
 #include <QDateTime>
 #include <QEventLoop>
 #include <QMetaObject>
+#include <QScopedValueRollback>
 #include <QThread>
 #include <QTimer>
 #include <QTimerEvent>
@@ -97,14 +101,53 @@ QVariant InformationRow(const QString& label, const QString& value)
 }
 } // namespace
 
+// Core callbacks share a bounded mailbox and coalesce changes into one pending
+// GUI delivery. The mutex also protects the receiver until shutdown detaches it.
+struct NodeModel::Notifications {
+    struct Block { SynchronizationState state; interfaces::BlockTip tip; double progress; };
+    struct Header { interfaces::BlockTip tip; bool presync; };
+    std::mutex mutex;
+    NodeModel* receiver{nullptr};
+    bool delivery_pending{false};
+    std::optional<Block> block;
+    std::optional<Header> header;
+    std::optional<int> peers;
+    std::optional<int> last_peer_total;
+    std::optional<bool> network_active;
+    bool warnings{false};
+    bool bans{false};
+    uint64_t status_generation{0};
+    uint64_t network_generation{0};
+
+    // Called with mutex held, so detaching the receiver cannot race dispatch.
+    void schedule()
+    {
+        if (!receiver || delivery_pending) return;
+        delivery_pending = true;
+        QMetaObject::invokeMethod(receiver, [target = receiver] {
+            {
+                std::lock_guard lock{target->m_notifications->mutex};
+                target->m_notifications->delivery_pending = false;
+            }
+            target->publishNotifications();
+        }, Qt::QueuedConnection);
+    }
+};
+
+struct NodeModel::StatusSnapshot {
+    int inbound;
+    int outbound;
+    QString warnings;
+    std::optional<bool> network_active;
+    bool mempool_available;
+};
+
 NodeModel::NodeModel(interfaces::Node& node, bool backend_ready)
-    : m_backend_queries_ready{backend_ready}, m_node{node}
+    : m_notifications{std::make_shared<Notifications>()}, m_backend_queries_ready{backend_ready}, m_node{node}
 {
+    m_notifications->receiver = this;
     m_sync_progress_clock.start();
-    m_mempool_information_available = !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY);
     initializeMempoolInfoPolling();
-    refreshPeerCounts();
-    refreshWarnings();
     ConnectToBlockTipSignal();
     ConnectToHeaderTipSignal();
     ConnectToNumConnectionsChangedSignal();
@@ -112,11 +155,17 @@ NodeModel::NodeModel(interfaces::Node& node, bool backend_ready)
     ConnectToAlertChangedSignal();
     ConnectToRuntimeDialogSignals();
     ConnectToBannedListChangedSignal();
+    connect(&m_snapshots, &BackendExecutor::drained, this, &NodeModel::finishDrain);
+    connect(m_commands.get(), &BackendExecutor::drained, this, &NodeModel::finishDrain);
+    refreshStatus();
     refreshMempoolInfo();
 }
 
 NodeModel::~NodeModel()
 {
+    detachNotifications();
+    m_snapshots.shutdown();
+    m_commands->shutdown();
     unsubscribeFromCoreSignals();
     setMempoolInfoPollingActive(false);
     if (m_mempool_info_thread) {
@@ -128,12 +177,16 @@ NodeModel::~NodeModel()
 void NodeModel::beginShutdown()
 {
     if (m_workers_stopping) return;
+    detachNotifications();
     setMempoolInfoPollingActive(false);
     m_workers_stopping = true;
+    Q_EMIT networkActionReadyChanged();
+    m_snapshots.shutdown();
+    m_commands->shutdown();
     setNodeReady(false);
     stopShutdownPolling();
     if (!m_mempool_info_thread) {
-        Q_EMIT workDrained();
+        finishDrain();
         return;
     }
     auto handlers = std::make_shared<std::vector<std::unique_ptr<interfaces::Handler>>>();
@@ -149,7 +202,7 @@ void NodeModel::beginShutdown()
         m_mempool_info_thread = nullptr;
         m_mempool_info_worker = nullptr;
         m_mempool_info_timer = nullptr;
-        Q_EMIT workDrained();
+        finishDrain();
     });
     QMetaObject::invokeMethod(m_mempool_info_worker,
         [handlers = std::move(handlers), timer = m_mempool_info_timer, thread = m_mempool_info_thread] {
@@ -160,6 +213,122 @@ void NodeModel::beginShutdown()
             handlers->clear();
             QMetaObject::invokeMethod(thread, &QThread::quit, Qt::QueuedConnection);
         }, Qt::QueuedConnection);
+}
+
+void NodeModel::finishDrain()
+{
+    if (!m_workers_stopping || m_drained || m_mempool_info_thread ||
+        !m_snapshots.isDrained() || !m_commands->isDrained()) return;
+    m_drained = true;
+    Q_EMIT workDrained();
+}
+
+void NodeModel::detachNotifications()
+{
+    std::lock_guard lock{m_notifications->mutex};
+    m_notifications->receiver = nullptr;
+}
+
+void NodeModel::publishNotifications()
+{
+    if (m_workers_stopping || m_shutdown_requested) return;
+    std::optional<Notifications::Block> block;
+    std::optional<Notifications::Header> header;
+    std::optional<int> peers;
+    std::optional<bool> network_active;
+    bool warnings;
+    bool bans;
+    {
+        std::lock_guard lock{m_notifications->mutex};
+        block = std::exchange(m_notifications->block, {});
+        header = std::exchange(m_notifications->header, {});
+        peers = std::exchange(m_notifications->peers, {});
+        network_active = std::exchange(m_notifications->network_active, {});
+        warnings = std::exchange(m_notifications->warnings, false);
+        bans = std::exchange(m_notifications->bans, false);
+    }
+    {
+        // Decide sync completion only after both heights belong to this snapshot.
+        const QScopedValueRollback applying{m_applying_sync_snapshot, true};
+        if (header) {
+            m_seen_header_tip = true;
+            setHeaderSyncState(header->tip.block_height, header->tip.block_time, header->presync);
+        }
+        if (block) {
+            m_seen_block_tip = true;
+            m_block_tip_time = block->tip.block_time;
+            setBlockTipHeight(block->tip.block_height);
+            setVerificationProgress(block->progress);
+            setBlockSyncActive(block->state != SynchronizationState::POST_INIT);
+            Q_EMIT blockTipTimeChanged(m_block_tip_time);
+        }
+    }
+    updateSyncCompletion();
+    if (peers || warnings) refreshStatus();
+    if (network_active) {
+        m_network_known = true;
+        if (m_pause != !*network_active) {
+            m_pause = !*network_active;
+            Q_EMIT pauseChanged(m_pause);
+        }
+    }
+    if (bans) Q_EMIT bannedListChanged();
+    if (block || header || peers || warnings || network_active) Q_EMIT nodeInformationChanged();
+}
+
+void NodeModel::refreshStatus()
+{
+    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return;
+    if (m_status_pending) {
+        m_status_again = true;
+        return;
+    }
+    m_status_pending = true;
+    uint64_t generation;
+    {
+        std::lock_guard lock{m_notifications->mutex};
+        generation = m_notifications->status_generation;
+    }
+    m_snapshots.submit(this, [node = &m_node, ready = m_node_ready] {
+        return StatusSnapshot{static_cast<int>(node->getNodeCount(ConnectionDirection::In)),
+                              static_cast<int>(node->getNodeCount(ConnectionDirection::Out)),
+                              QString::fromStdString(node->getWarnings().translated),
+                              ready ? std::optional<bool>{node->getNetworkActive()} : std::nullopt,
+                              !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY)};
+    }, [this, generation](StatusSnapshot snapshot) {
+        m_status_pending = false;
+        if (m_shutdown_requested) return;
+        bool current;
+        std::optional<int> total;
+        {
+            std::lock_guard lock{m_notifications->mutex};
+            current = generation == m_notifications->status_generation;
+            total = m_notifications->last_peer_total;
+        }
+        if (current) {
+            m_status_ready = true;
+            setNumInboundPeers(snapshot.inbound);
+            setNumOutboundPeers(snapshot.outbound);
+            setNumPeers(total.value_or(snapshot.inbound + snapshot.outbound));
+            setWarnings(snapshot.warnings);
+            if (snapshot.network_active) {
+                m_network_known = true;
+                if (m_pause != !*snapshot.network_active) {
+                    m_pause = !*snapshot.network_active;
+                    Q_EMIT pauseChanged(m_pause);
+                }
+            }
+            if (m_mempool_information_available != snapshot.mempool_available) {
+                m_mempool_information_available = snapshot.mempool_available;
+                Q_EMIT mempoolInfoChanged();
+            }
+            Q_EMIT nodeInformationChanged();
+        }
+        if (std::exchange(m_status_again, false) || !current) refreshStatus();
+    }, [this](std::exception_ptr) {
+        m_status_pending = false;
+        if (std::exchange(m_status_again, false)) refreshStatus();
+    });
 }
 
 void NodeModel::setBlockTipHeight(int new_height)
@@ -193,14 +362,6 @@ void NodeModel::setNumInboundPeers(int new_num)
         m_num_inbound_peers = new_num;
         Q_EMIT numInboundPeersChanged();
     }
-}
-
-void NodeModel::refreshPeerCounts()
-{
-    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return;
-    setNumPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::Both)));
-    setNumInboundPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::In)));
-    setNumOutboundPeers(static_cast<int>(m_node.getNodeCount(ConnectionDirection::Out)));
 }
 
 void NodeModel::refreshMempoolInfo()
@@ -285,6 +446,7 @@ void NodeModel::fetchMempoolInfo()
 
 void NodeModel::applyMempoolInfo(const MempoolInfo& info)
 {
+    if (m_workers_stopping || m_shutdown_requested) return;
     if (info.transaction_count != m_mempool_transaction_count ||
         info.usage_mb != m_mempool_usage_mb ||
         info.max_usage_mb != m_mempool_max_usage_mb) {
@@ -364,6 +526,7 @@ void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
 
 void NodeModel::updateSyncCompletion()
 {
+    if (m_applying_sync_snapshot) return;
     if (m_initial_sync_complete) {
         // Ignore ordinary header-first block announcements, but resume the
         // sync presentation after falling substantially behind (e.g. sleep).
@@ -392,11 +555,61 @@ void NodeModel::updateSyncCompletion()
 void NodeModel::setPause(bool new_pause)
 {
     if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return;
-    if(m_pause != new_pause) {
-        m_pause = new_pause;
-        m_node.setNetworkActive(!new_pause);
-        Q_EMIT pauseChanged(new_pause);
-    }
+    m_network_desired_pause = new_pause;
+    if (m_network_action_pending || m_pause == new_pause) return;
+    m_network_action_pending = true;
+    m_network_action_error.clear();
+    Q_EMIT networkActionErrorChanged();
+    Q_EMIT networkActionPendingChanged();
+    submitNetworkAction();
+}
+
+void NodeModel::submitNetworkAction()
+{
+    struct Result { bool paused; uint64_t generation; };
+    const bool requested{m_network_desired_pause};
+    m_commands->submit(this, [node = &m_node, state = m_notifications, requested] {
+        node->setNetworkActive(!requested);
+        uint64_t generation;
+        {
+            std::lock_guard lock{state->mutex};
+            generation = state->network_generation;
+        }
+        return Result{!node->getNetworkActive(), generation};
+    }, [this, requested](Result result) {
+        if (m_shutdown_requested) return;
+        bool current;
+        {
+            std::lock_guard lock{m_notifications->mutex};
+            current = result.generation == m_notifications->network_generation;
+        }
+        if (current) {
+            m_network_known = true;
+            if (m_pause != result.paused) {
+                m_pause = result.paused;
+                Q_EMIT pauseChanged(m_pause);
+            }
+        } else {
+            // An RPC command can supersede this result while it is queued.
+            // Consume its value notification and request a fresh snapshot.
+            publishNotifications();
+            refreshStatus();
+        }
+        if (m_network_desired_pause != requested) {
+            submitNetworkAction();
+            return;
+        }
+        m_network_action_pending = false;
+        if (current && result.paused != requested) m_network_action_error = tr("Unable to change network activity.");
+        Q_EMIT networkActionPendingChanged();
+        Q_EMIT networkActionErrorChanged();
+        Q_EMIT nodeInformationChanged();
+    }, [this](std::exception_ptr) {
+        m_network_action_pending = false;
+        m_network_action_error = tr("Unable to change network activity.");
+        Q_EMIT networkActionPendingChanged();
+        Q_EMIT networkActionErrorChanged();
+    });
 }
 
 void NodeModel::setErrorState(bool faulted)
@@ -431,13 +644,6 @@ void NodeModel::setWarnings(const QString& warnings)
     m_warnings = warnings;
     m_warning_list = warning_list;
     Q_EMIT warningsChanged();
-}
-
-void NodeModel::refreshWarnings()
-{
-    if (m_shutdown_requested || m_workers_stopping) return;
-    // Keep "current warnings" tied to Core's active warning set.
-    setWarnings(QString::fromStdString(m_node.getWarnings().translated));
 }
 
 void NodeModel::showStartupWarnings()
@@ -488,13 +694,13 @@ void NodeModel::requestShutdown()
         return;
     }
     m_shutdown_requested = true;
+    Q_EMIT networkActionReadyChanged();
     while (m_runtime_dialog_active) answerRuntimeDialog(CClientUIInterface::BTN_CANCEL);
     stopShutdownPolling();
     Q_EMIT requestedShutdown();
 }
 
-void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info,
-                                 bool initial_block_download, bool shutdown_requested)
+void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool initial_block_download, bool shutdown_requested)
 {
     if (m_workers_stopping || m_fatal_exception) return;
     if (success && (m_shutdown_requested || shutdown_requested)) {
@@ -509,7 +715,7 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
             return;
         }
         setErrorState(true);
-        refreshWarnings();
+        refreshStatus();
         QString startup_error{m_startup_error_messages.isEmpty() ? tr("Node initialization failed.") : m_startup_error_messages.join(QStringLiteral("\n\n"))};
         if (!m_startup_warning_messages.isEmpty()) {
             startup_error = tr("Startup warnings:") + QStringLiteral("\n") + m_startup_warning_messages.join(QStringLiteral("\n\n")) + QStringLiteral("\n\n") + startup_error;
@@ -521,21 +727,31 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         }
     } else {
         m_backend_queries_ready = true;
-        refreshPeerCounts();
+        Q_EMIT networkActionReadyChanged();
         if (m_mempool_info_polling_active) {
             QMetaObject::invokeMethod(m_mempool_info_timer, [timer = m_mempool_info_timer] { timer->start(); }, Qt::QueuedConnection);
         }
         m_startup_error_messages.clear();
         m_runtime_dialogs_enabled = true;
-        refreshWarnings();
         showStartupWarnings();
-        setBlockTipHeight(tip_info.block_height);
-        setVerificationProgress(tip_info.verification_progress);
-        // Core's IBD result is authoritative. Verification progress remains an
-        // estimate for display and must not decide when initial sync completes.
-        setBlockSyncActive(initial_block_download);
-        setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
-        setNodeReady(true);
+        {
+            const QScopedValueRollback applying{m_applying_sync_snapshot, true};
+            publishNotifications();
+            if (!m_seen_block_tip) {
+                m_block_tip_time = tip_info.block_time;
+                setBlockTipHeight(tip_info.block_height);
+                setVerificationProgress(tip_info.verification_progress);
+                setBlockSyncActive(initial_block_download);
+            }
+            // LoadChainTip emits an INIT_DOWNLOAD notification even on a caught-up
+            // restart. Core's IBD flag only latches false: preserve a newer POST_INIT
+            // notification, but let this final startup result clear the init flag.
+            if (!initial_block_download) setBlockSyncActive(false);
+            if (!m_seen_header_tip) setHeaderSyncState(tip_info.header_height, tip_info.header_time, /*presync=*/false);
+            setNodeReady(true);
+        }
+        updateSyncCompletion();
+        refreshStatus();
         refreshMempoolInfo();
         Q_EMIT chainStateReady();
     }
@@ -579,74 +795,69 @@ void NodeModel::timerEvent(QTimerEvent* event)
     if (event->timerId() != m_shutdown_polling_timer_id) {
         return;
     }
-    if (m_node.shutdownRequested()) {
-        requestShutdown();
-    }
+    if (m_shutdown_poll_pending || m_workers_stopping) return;
+    m_shutdown_poll_pending = true;
+    QMetaObject::invokeMethod(m_mempool_info_worker, [this] {
+        const bool requested{m_node.shutdownRequested()};
+        QMetaObject::invokeMethod(this, [this, requested] {
+            m_shutdown_poll_pending = false;
+            // A poll already in flight cannot acknowledge a later fatal error.
+            if (requested && !m_fatal_exception) requestShutdown();
+        }, Qt::QueuedConnection);
+    }, Qt::QueuedConnection);
 }
 
 void NodeModel::ConnectToBlockTipSignal()
 {
-    assert(!m_handler_notify_block_tip);
-
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(
-        [this]([[maybe_unused]] SynchronizationState state, interfaces::BlockTip tip, double verification_progress) {
-            QMetaObject::invokeMethod(this, [this, state, block_height = tip.block_height, block_time = tip.block_time, verification_progress] {
-                setBlockTipHeight(block_height);
-                setVerificationProgress(verification_progress);
-                setBlockSyncActive(state != SynchronizationState::POST_INIT);
-
-                Q_EMIT blockTipTimeChanged(block_time);
-            }, Qt::QueuedConnection);
+        [state = m_notifications](SynchronizationState sync, interfaces::BlockTip tip, double progress) {
+            std::lock_guard lock{state->mutex};
+            state->block = Notifications::Block{sync, std::move(tip), progress};
+            state->schedule();
         });
 }
 
 void NodeModel::ConnectToHeaderTipSignal()
 {
-    assert(!m_handler_notify_header_tip);
-
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(
-        [this]([[maybe_unused]] SynchronizationState state, interfaces::BlockTip tip, bool presync) {
-            QMetaObject::invokeMethod(this, [this, block_height = tip.block_height, block_time = tip.block_time, presync] {
-                setHeaderSyncState(block_height, block_time, presync);
-            }, Qt::QueuedConnection);
+        [state = m_notifications](SynchronizationState, interfaces::BlockTip tip, bool presync) {
+            std::lock_guard lock{state->mutex};
+            state->header = Notifications::Header{std::move(tip), presync};
+            state->schedule();
         });
 }
 
 void NodeModel::ConnectToNumConnectionsChangedSignal()
 {
-    assert(!m_handler_notify_num_peers_changed);
-
     m_handler_notify_num_peers_changed = m_node.handleNotifyNumConnectionsChanged(
-        [this]([[maybe_unused]] int new_num_connections) {
-            QMetaObject::invokeMethod(this, [this] {
-                refreshPeerCounts();
-            }, Qt::QueuedConnection);
+        [state = m_notifications](int total) {
+            std::lock_guard lock{state->mutex};
+            state->peers = total;
+            state->last_peer_total = total;
+            ++state->status_generation;
+            state->schedule();
         });
 }
 
 void NodeModel::ConnectToNetworkActiveChangedSignal()
 {
-    assert(!m_handler_notify_network_active_changed);
-
     m_handler_notify_network_active_changed = m_node.handleNotifyNetworkActiveChanged(
-        [this](bool network_active) {
-            QMetaObject::invokeMethod(this, [this, network_active] {
-                if (m_pause != !network_active) {
-                    m_pause = !network_active;
-                    Q_EMIT pauseChanged(m_pause);
-                }
-            }, Qt::QueuedConnection);
+        [state = m_notifications](bool active) {
+            std::lock_guard lock{state->mutex};
+            state->network_active = active;
+            ++state->network_generation;
+            ++state->status_generation;
+            state->schedule();
         });
 }
 
 void NodeModel::ConnectToAlertChangedSignal()
 {
-    assert(!m_handler_notify_alert_changed);
-
-    m_handler_notify_alert_changed = m_node.handleNotifyAlertChanged([this]() {
-        QMetaObject::invokeMethod(this, [this] {
-            refreshWarnings();
-        }, Qt::QueuedConnection);
+    m_handler_notify_alert_changed = m_node.handleNotifyAlertChanged([state = m_notifications] {
+        std::lock_guard lock{state->mutex};
+        state->warnings = true;
+        ++state->status_generation;
+        state->schedule();
     });
 }
 
@@ -701,7 +912,8 @@ bool NodeModel::disconnectPeer(int nodeId)
 
 bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
 {
-    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping || banDuration <= 0) return false;
+    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return false;
+    if (banDuration <= 0) return false;
     auto addr = LookupHost(rawAddress.toStdString(), /*fAllowLookup=*/false);
     if (!addr) return false;
     bool result = m_node.ban(*addr, banDuration);
@@ -710,6 +922,9 @@ bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
     }
     return result;
 }
+
+
+
 
 QVariantList NodeModel::nodeInformationRows()
 {
@@ -895,10 +1110,10 @@ void NodeModel::showRuntimeDialogForTest(const QString& message, unsigned int st
 void NodeModel::ConnectToBannedListChangedSignal()
 {
     assert(!m_handler_notify_banned_list_changed);
-    m_handler_notify_banned_list_changed = m_node.handleBannedListChanged([this]() {
-        QMetaObject::invokeMethod(this, [this] {
-            Q_EMIT bannedListChanged();
-        }, Qt::QueuedConnection);
+    m_handler_notify_banned_list_changed = m_node.handleBannedListChanged([state = m_notifications] {
+        std::lock_guard lock{state->mutex};
+        state->bans = true;
+        state->schedule();
     });
 }
 
