@@ -610,10 +610,89 @@ TestCase {
         compare(testSendRecipient.address.address, address)
         compare(testSendRecipient.amount.satoshi, 10000000000)
         compare(testSendRecipient.paymentRequestLabel, "Alice")
-        compare(testSendRecipient.label, "")
+        compare(testSendRecipient.label, "Pay me - Alice")
+        compare(findChild(page, "sendNoteInput").text, "Pay me - Alice")
         compare(sendPage.paymentRequestMessage, "Pay me")
         compare(sendPage.paymentRequestStatus, "Payment request imported from clipboard")
         compare(sendPage.paymentRequestIsError, false)
+    }
+
+    function test_send_payment_request_details_data() {
+        return [
+            { tag: "address-only", params: "", note: "Existing note", payTo: "", message: "" },
+            { tag: "amount-only", params: "?amount=0.02", note: "Existing note", payTo: "", message: "" },
+            { tag: "empty-details", params: "?label=&message=", note: "Existing note", payTo: "", message: "" },
+            { tag: "label-only", params: "?label=Tully", note: "Existing note", payTo: "Tully", message: "" },
+            { tag: "message-only", params: "?message=River%20Crossing", note: "River Crossing", payTo: "", message: "River Crossing" },
+            { tag: "message-empty-label", params: "?label=&message=River%20Crossing", note: "River Crossing", payTo: "", message: "River Crossing" },
+            { tag: "label-empty-message", params: "?label=Tully&message=", note: "Existing note", payTo: "Tully", message: "" },
+            { tag: "both-details", params: "?label=Tully&message=River%20Crossing", note: "River Crossing - Tully", payTo: "Tully", message: "River Crossing" },
+        ]
+    }
+
+    function test_send_payment_request_details(data) {
+        testSendRecipient.label = "Existing note"
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
+            {width: testCase.width, height: testCase.height, visible: true})
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+        const section = findChild(page, "sendPaymentRequestSection")
+        verify(section !== null)
+        compare(section.visible, false)
+
+        sendPage.applyPaymentRequestFromText("bitcoin:bcrt1qreplacement" + data.params, "clipboard")
+        compare(testSendRecipient.hasPaymentRequest, true)
+        compare(testSendRecipient.label, data.note)
+        compare(findChild(page, "sendNoteInput").text, data.note)
+        compare(section.visible, data.payTo.length > 0 || data.message.length > 0)
+        const payTo = findChild(page, "sendPaymentRequestPayTo")
+        const message = findChild(page, "sendPaymentRequestMessageText")
+        compare(payTo.visible, data.payTo.length > 0)
+        compare(payTo.value, data.payTo)
+        compare(message.visible, data.message.length > 0)
+        compare(message.value, data.message)
+        compare(message.title, "Message")
+
+        // The imported note remains editable without changing the public details.
+        const noteField = findChild(page, "sendNoteField")
+        noteField.text = "My edited note"
+        noteField.textEdited()
+        compare(testSendRecipient.label, "My edited note")
+        compare(testSendRecipient.message, data.message)
+        compare(testSendRecipient.paymentRequestLabel, data.payTo)
+
+        // Importing another request without public details hides the section.
+        sendPage.applyPaymentRequestFromText("bitcoin:bcrt1qreplacement?amount=0.01", "clipboard")
+        compare(section.visible, false)
+        compare(testSendRecipient.label, "My edited note")
+    }
+
+    function test_send_payment_uri_paste_confirms_overwriting_note() {
+        testSendRecipient.label = "My private note"
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem,
+            {width: testCase.width, height: testCase.height, visible: true})
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+        const popup = findChild(page, "sendPaymentUriOverwritePopup")
+        const uri = "bitcoin:bcrt1qsendtoaddress?label=Tully&message=River%20Crossing"
+
+        sendPage.handlePaymentUriPaste(uri, "address")
+        tryCompare(popup, "opened", true)
+        compare(testSendRecipient.label, "My private note")
+        findChild(popup.contentItem, "sendPaymentUriOverwriteCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(testSendRecipient.label, "My private note")
+
+        sendPage.handlePaymentUriPaste(uri, "address")
+        tryCompare(popup, "opened", true)
+        findChild(popup.contentItem, "sendPaymentUriOverwriteConfirmButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(testSendRecipient.label, "River Crossing - Tully")
+        compare(findChild(page, "sendNoteInput").text, "River Crossing - Tully")
+
+        // Pasting the same details again does not prompt for a matching note.
+        sendPage.handlePaymentUriPaste(uri, "address")
+        compare(popup.opened, false)
     }
 
     function test_send_payment_uri_paste_confirms_overwriting_other_fields() {

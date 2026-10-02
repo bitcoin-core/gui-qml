@@ -39,7 +39,7 @@ def run_test():
         gui.click("clipboardUriPasteButton")
         gui.wait_for_property("sendPaymentRequestPayTo", "value", "Alice")
         gui.wait_for_property("sendPaymentRequestMessageText", "value", "September rent")
-        assert gui.get_text("sendNoteInput") == "My private note"
+        assert gui.get_text("sendNoteInput") == "September rent - Alice"
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         gui.wait_for_property("sendNetworkFeeSectionFooter", "visible", False)
         assert gui.get_property("feeSelectionEstimateLabel", "value") != "—"
@@ -56,7 +56,7 @@ def run_test():
         gui.save_screenshot(os.path.join(artifacts, "03-multiple-custom.png"))
         gui.click("sendEditRecipient_0")
         gui.wait_for_property("sendPaymentRequestPayTo", "value", "Alice")
-        assert gui.get_text("sendNoteInput") == "My private note"
+        assert gui.get_text("sendNoteInput") == "September rent - Alice"
         gui.click("sendSelectInputsButton")
         gui.wait_for_property("coinSelectionPopup", "opened", True)
         assert gui.get_property("coinSelectionDoneButton", "enabled") is False

@@ -439,6 +439,12 @@ PageStack {
             }
         }
 
+        function paymentRequestNote(result) {
+            if (!result.hasMessage || result.uriMessage.length === 0) return ""
+            return result.hasLabel && result.label.length > 0
+                ? result.uriMessage + " - " + result.label : result.uriMessage
+        }
+
         function paymentUriConflicts(result, sourceField) {
             if (!root.recipient) return false
 
@@ -449,7 +455,12 @@ PageStack {
                 && result.hasAmount
                 && root.recipient.amount.satoshi !== 0
                 && root.recipient.amount.satoshi !== result.amountSats
-            return addressConflict || amountConflict
+            const note = paymentRequestNote(result)
+            const noteConflict = sourceField !== "label"
+                && note.length > 0
+                && root.recipient.label.length > 0
+                && root.recipient.label !== note
+            return addressConflict || amountConflict || noteConflict
         }
 
         function clearPendingPaymentUriPaste() {
@@ -549,6 +560,8 @@ PageStack {
             if (result.hasAmount) {
                 root.recipient.amount.satoshi = result.amountSats
             }
+            const note = paymentRequestNote(result)
+            if (note.length > 0) root.recipient.label = note
             if (amountInput) amountInput.syncFromAmount(true)
             // Lower the guard only after all writes are done. Field-change
             // Connections must not fire checkClipboard() before the Fill
