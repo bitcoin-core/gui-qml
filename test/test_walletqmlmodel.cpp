@@ -718,6 +718,8 @@ private Q_SLOTS:
     void setCurrentPaymentRequestAddressUsesAddressListLabel();
     void commitPaymentRequestUsesSelectedAddressType();
     void updateChangesUnpaidPaymentRequestAmount();
+    void emptyPaymentRequestCanRemoveSavedPrivateNote_data();
+    void emptyPaymentRequestCanRemoveSavedPrivateNote();
     void paymentArrivalLocksRequestAndPreservesNote();
     void paymentRequestTracksActualReceivedAmount();
     void replacementNotificationRechecksReceiverOriginal();
@@ -733,6 +735,7 @@ private Q_SLOTS:
     void availableReceiveAddressTypesHideUnavailableTaproot();
     void receiveAddressTypeDefaultPersistsPerWallet();
     void receivingAddressIsStableUntilRotatedOrPaid();
+    void receivingAddressCreationAndRequestPersistenceAreSeparate_data();
     void receivingAddressCreationAndRequestPersistenceAreSeparate();
     void removeReceiveRequestRemovesPendingActivityRow();
     void editedReceiveRequestNameShownInActivityMetadata();
@@ -954,8 +957,16 @@ void WalletQmlModelTests::receivingAddressIsStableUntilRotatedOrPaid()
     settings.remove("receiveAddressTypes/fake-wallet");
 }
 
+void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSeparate_data()
+{
+    QTest::addColumn<QString>("note");
+    QTest::newRow("empty") << QString{};
+    QTest::newRow("private-note") << QStringLiteral("Only a private note");
+}
+
 void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSeparate()
 {
+    QFETCH(QString, note);
     QSettings settings;
     settings.remove("receiveAddressTypes/fake-wallet");
     auto [wallet, model] = MakePasswordWalletModel();
@@ -969,8 +980,7 @@ void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSepara
     QVERIFY(restored_model->ensureReceivingAddress());
     QCOMPARE(restored_model->receivingAddress()->address(), address);
     QCOMPARE(restored_wallet->get_new_destination_calls, 0);
-    QVERIFY(!model->commitReceivingPaymentRequest());
-    model->currentPaymentRequest()->setNoteSelf("Only a private note");
+    model->currentPaymentRequest()->setNoteSelf(note);
     wallet->set_address_receive_request_result = false;
     QVERIFY(!model->commitReceivingPaymentRequest());
     QCOMPARE(model->receivingAddress()->address(), address);
@@ -980,6 +990,11 @@ void WalletQmlModelTests::receivingAddressCreationAndRequestPersistenceAreSepara
     QCOMPARE(model->currentPaymentRequest()->address(), address);
     QCOMPARE(wallet->get_new_destination_calls, 1);
     QCOMPARE(model->receiveRequests()->count(), 1);
+    QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), CAmount{0});
+    QCOMPARE(model->currentPaymentRequest()->label(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->message(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->noteSelf(), note);
+    QVERIFY(!model->commitReceivingPaymentRequest());
     QVERIFY(model->receivingAddress()->address().isEmpty());
     QVERIFY(!settings.contains("receiveAddressTypes/fake-wallet/address"));
     model->currentPaymentRequest()->clear();
@@ -1896,11 +1911,61 @@ void WalletQmlModelTests::updateChangesUnpaidPaymentRequestAmount()
     QCOMPARE(entry->recipient.amount, CAmount{999999});
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("second"));
     QCOMPARE(model->currentPaymentRequest()->amount()->satoshi(), qint64{999999});
-    QVERIFY(!model->updatePaymentRequest(request_id, 0, "", "", ""));
-    QVERIFY(!model->updatePaymentRequest(request_id, 0, "  ", "\t", "\n"));
-    QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.amount, CAmount{999999});
+    QVERIFY(model->updatePaymentRequest(request_id, 0, "", "", ""));
+    QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.amount, CAmount{0});
+    QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.label, std::string{});
+    QVERIFY(model->updatePaymentRequest(request_id, 0, "  ", "\t", "\n"));
     QVERIFY(model->updatePaymentRequest(request_id, 0, "", "", "Private reminder"));
     QCOMPARE(model->receiveRequests()->entryById(request_id)->recipient.noteSelf, std::string("Private reminder"));
+}
+
+void WalletQmlModelTests::emptyPaymentRequestCanRemoveSavedPrivateNote_data()
+{
+    QTest::addColumn<bool>("paid");
+    QTest::newRow("unpaid") << false;
+    QTest::newRow("paid") << true;
+}
+
+void WalletQmlModelTests::emptyPaymentRequestCanRemoveSavedPrivateNote()
+{
+    QFETCH(bool, paid);
+    auto [wallet, model] = MakePasswordWalletModel();
+    QVERIFY(model->commitPaymentRequest());
+    const auto* request = model->currentPaymentRequest();
+    const QString id = request->id();
+    const QString address = request->address();
+    const auto created = request->created();
+    QVERIFY(model->loadPaymentRequestDetail(id));
+
+    if (paid) {
+        CMutableTransaction incoming;
+        incoming.vout.emplace_back(1, GetScriptForDestination(request->destination()));
+        const auto payment = MakeIncomingPayment(incoming, {true});
+        wallet->setWalletTxsFn([payment] { return std::set<interfaces::WalletTx>{payment}; });
+        wallet->setTransactionDetails(payment);
+        wallet->transaction_changed_fn(payment.tx->GetHash(), CT_UPDATED);
+        QTRY_VERIFY(model->detailPaymentRequest()->paymentReceived());
+    }
+    QVERIFY(model->updatePaymentRequest(id, 0, "", "", "Private note"));
+    QCOMPARE(model->detailPaymentRequest()->noteSelf(), QStringLiteral("Private note"));
+    QVERIFY(model->updatePaymentRequest(id, 0, "", "", ""));
+    QCOMPARE(model->detailPaymentRequest()->noteSelf(), QString{});
+    QCOMPARE(model->detailPaymentRequest()->address(), address);
+    QCOMPARE(model->detailPaymentRequest()->created(), created);
+    QCOMPARE(model->detailPaymentRequest()->paymentReceived(), paid);
+    const auto entry = model->receiveRequests()->entryById(id);
+    QVERIFY(entry.has_value());
+    QCOMPARE(entry->recipient.amount, CAmount{0});
+    QCOMPARE(entry->recipient.label, std::string{});
+    QCOMPARE(entry->recipient.message, std::string{});
+    QCOMPARE(entry->recipient.noteSelf, std::string{});
+    const auto persisted = ReceiveRequestHistoryModel::DeserializeEntries({ReceiveRequestHistoryModel::SerializeEntry(*entry)});
+    QCOMPARE(persisted.front().recipient.noteSelf, std::string{});
+    QCOMPARE(persisted.front().payment_received, paid);
+    QVERIFY(model->loadPaymentRequestDetail(id));
+    QCOMPARE(model->detailPaymentRequest()->noteSelf(), QString{});
+    QCOMPARE(model->detailPaymentRequest()->qrPayload(), paid ? QString{} : "bitcoin:" + address);
+    QCOMPARE(wallet->get_new_destination_calls, 1);
 }
 
 void WalletQmlModelTests::paymentArrivalLocksRequestAndPreservesNote()
@@ -2194,7 +2259,9 @@ void WalletQmlModelTests::requestDetailEditsPreserveReceiveDraft()
     QVERIFY(model->detailPaymentRequest()->qrPayload().contains("amount=0.00049000"));
     QVERIFY(model->detailPaymentRequest()->qrPayload().contains("label=Coffee%20%26%20cake"));
     QVERIFY(!model->detailPaymentRequest()->qrPayload().contains("Private"));
-    QVERIFY(!model->updatePaymentRequest(id, 0, "", "", ""));
+    QVERIFY(model->updatePaymentRequest(id, 0, "", "", ""));
+    QCOMPARE(model->detailPaymentRequest()->noteSelf(), QString{});
+    QCOMPARE(model->currentPaymentRequest()->label(), QStringLiteral("Unrelated draft"));
     QVERIFY(model->updatePaymentRequest(id, 0, "", "", "Private"));
     QCOMPARE(model->detailPaymentRequest()->qrPayload(), "bitcoin:" + address);
     QVERIFY(!model->updatePaymentRequest(id, -1, "", "", ""));

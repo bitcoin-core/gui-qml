@@ -1162,6 +1162,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString currentTransactionReviewMessage MEMBER m_current_transaction_review_message NOTIFY currentTransactionChanged)
     Q_PROPERTY(QObject* currentPaymentRequest READ currentPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receivingAddress READ receivingAddress CONSTANT)
+    Q_PROPERTY(bool ensureReceivingAddressResult MEMBER m_ensure_receiving_address_result)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending MEMBER m_receive_request_reconciliation_pending NOTIFY receiveRequestReconciliationPendingChanged)
@@ -1260,8 +1261,10 @@ public:
     MockPaymentRequest m_receiving_address;
     QObject* receivingAddress() { return &m_receiving_address; }
     int m_receiving_sequence{0};
+    bool m_ensure_receiving_address_result{true};
     Q_INVOKABLE bool ensureReceivingAddress(bool next = false, const QString& type = {})
     {
+        if (!m_ensure_receiving_address_result) return false;
         const QString selected = type.isEmpty() ? m_default_receive_address_type : type;
         if (next || m_receiving_address.m_address.isEmpty() || m_receiving_address.m_payment_received || selected != m_receiving_address.m_address_type) {
             m_receiving_address.clear();
@@ -1307,6 +1310,11 @@ public:
                 {QStringLiteral("id"), QStringLiteral("p2sh-segwit")},
                 {QStringLiteral("label"), QStringLiteral("Base58 (P2SH-SegWit)")},
                 {QStringLiteral("description"), QStringLiteral("Backward compatible")},
+            },
+            QVariantMap{
+                {QStringLiteral("id"), QStringLiteral("legacy")},
+                {QStringLiteral("label"), QStringLiteral("Base58 (Legacy)")},
+                {QStringLiteral("description"), QStringLiteral("Older wallet compatibility")},
             },
         };
     }
@@ -1425,6 +1433,7 @@ public:
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
         Q_EMIT request->m_amount.unitChanged();
+        Q_EMIT request->m_amount.amountChanged();
         return true;
     }
     void setTargetBlocks(const int value)

@@ -47,7 +47,7 @@ FormRow {
             padding: 4
             Accessible.name: root.label
             background: FocusBorder { visible: input.activeFocus; border.color: Theme.color.orange; borderRadius: 6 }
-            onTextEdited: root.modified = true
+            onTextEdited: root.modified = text !== root.value
             onEditingFinished: root.editingFinished()
         }
         Loader { id: unitLoader; sourceComponent: root.unitControl; active: sourceComponent !== null }

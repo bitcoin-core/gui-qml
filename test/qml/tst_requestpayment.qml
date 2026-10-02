@@ -29,6 +29,7 @@ TestCase {
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.ensureReceivingAddressResult = true
         testWalletModel.receiveRequestReconciliationPending = false
         walletController.closePaymentRequestDetailRequests = 0
     }
@@ -186,21 +187,157 @@ TestCase {
         return page.requestModal.card
     }
 
-    function test_address_ready_before_request_and_create_requires_fields() {
+    function test_customize_fields_matches_visible_rows() {
+        const page = createPage()
+        const card = page.draftCard
+        const amount = findChild(card, "requestPaymentAmountField")
+        const recipient = findChild(card, "requestPaymentLabelRow")
+        const message = findChild(card, "requestPaymentMessageRow")
+        verify(amount.visible)
+        verify(message.visible)
+        verify(!recipient.visible)
+        compare(message.label, "Message")
+        const footer = findChild(card, "requestPaymentDetailsFooter")
+        verify(footer.visible)
+
+        mouseClick(findChild(card, "requestPaymentCustomizeButton"))
+        const menu = findChild(card, "requestPaymentFieldsMenu")
+        tryCompare(menu, "opened", true)
+        const picker = findChild(card, "requestPaymentFieldsPicker")
+        tryVerify(function() { return picker.itemAtIndex(2) !== null })
+        const amountOption = picker.itemAtIndex(0)
+        const messageOption = picker.itemAtIndex(1)
+        const recipientOption = picker.itemAtIndex(2)
+        verify(amountOption.selected)
+        verify(messageOption.selected)
+        verify(!recipientOption.selected)
+        compare(recipientOption.text, "Recipient Name")
+
+        mouseClick(recipientOption)
+        verify(recipient.visible)
+        verify(recipientOption.selected)
+        verify(menu.opened)
+        mouseClick(messageOption)
+        verify(!message.visible)
+        verify(!messageOption.selected)
+        verify(!recipient.showDivider)
+        verify(amount.showDivider)
+        mouseClick(amountOption)
+        verify(!amount.visible)
+        verify(!amountOption.selected)
+        mouseClick(recipientOption)
+        verify(!recipient.visible)
+        verify(!footer.visible)
+        verify(findChild(card, "requestPaymentGenerateButton").enabled)
+
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "visible", false)
+        mouseClick(findChild(card, "requestPaymentCustomizeButton"))
+        tryCompare(menu, "opened", true)
+        verify(!amountOption.selected)
+        verify(!messageOption.selected)
+        verify(!recipientOption.selected)
+        menu.close()
+        tryCompare(menu, "visible", false)
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        verify(findChild(page.requestModal.card, "requestPaymentAmountField").visible)
+        verify(findChild(page.requestModal.card, "requestPaymentLabelRow").visible)
+        verify(findChild(page.requestModal.card, "requestPaymentMessageRow").visible)
+        compare(findChild(page.requestModal.card, "requestPaymentCustomizeButton"), null)
+    }
+
+    function test_customize_clears_fields_and_omits_them_from_request() {
+        const page = createPage()
+        const card = page.draftCard
+        editField(card, "requestPaymentAmountInput", "0.001").editingFinished()
+        editField(card, "requestPaymentMessageInput", "Lunch split").editingFinished()
+        editField(card, "requestPaymentYourNameInput", "Hal").editingFinished()
+        mouseClick(findChild(card, "requestPaymentCustomizeButton"))
+        const menu = findChild(card, "requestPaymentFieldsMenu")
+        tryCompare(menu, "opened", true)
+        const picker = findChild(card, "requestPaymentFieldsPicker")
+        tryVerify(function() { return picker.itemAtIndex(2) !== null })
+        for (let i = 0; i < 3; ++i) mouseClick(picker.itemAtIndex(i))
+        menu.close()
+        tryCompare(menu, "visible", false)
+        compare(card.request.amount.satoshi, 0)
+        compare(card.request.message, "")
+        compare(card.request.label, "")
+        compare(findChild(card, "requestPaymentAmountInput").text, "")
+        compare(findChild(card, "requestPaymentMessageInput").text, "")
+        compare(findChild(card, "requestPaymentYourNameInput").text, "")
+        verify(findChild(card, "requestPaymentEmptyRow").visible)
+        verify(!findChild(card, "requestPaymentDetailsFooter").visible)
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const saved = page.requestModal.card.request
+        compare(saved.amount.satoshi, 0)
+        compare(saved.label, "")
+        compare(saved.message, "")
+        compare(saved.qrPayload, "bitcoin:" + saved.address)
+    }
+
+    function test_empty_payment_details_restore_default_fields() {
+        const card = createPage().draftCard
+        card.showAmount = false
+        card.showMessage = false
+        const add = findChild(card, "requestPaymentAddDetailsButton")
+        verify(add.visible)
+        compare(add.text, "Add details to your payment request")
+        mouseClick(add)
+        verify(findChild(card, "requestPaymentAmountField").visible)
+        verify(findChild(card, "requestPaymentMessageRow").visible)
+        verify(!findChild(card, "requestPaymentLabelRow").visible)
+        verify(!findChild(card, "requestPaymentEmptyRow").visible)
+        verify(findChild(card, "requestPaymentDetailsFooter").visible)
+        compare(card.request.amount.satoshi, 0)
+        compare(card.request.message, "")
+    }
+
+    function test_unchecking_invalid_amount_clears_validation() {
+        const page = createPage()
+        const card = page.draftCard
+        editField(card, "requestPaymentAmountInput", "0.001").editingFinished()
+        editField(card, "requestPaymentAmountInput", ".").editingFinished()
+        verify(card.errorText.length > 0)
+        compare(card.request.amount.satoshi, 100000)
+        mouseClick(findChild(card, "requestPaymentCustomizeButton"))
+        const menu = findChild(card, "requestPaymentFieldsMenu")
+        tryCompare(menu, "opened", true)
+        const picker = findChild(card, "requestPaymentFieldsPicker")
+        mouseClick(picker.itemAtIndex(0))
+        menu.close()
+        tryCompare(menu, "visible", false)
+        compare(card.request.amount.satoshi, 0)
+        compare(findChild(card, "requestPaymentAmountInput").text, "")
+        compare(card.errorText, "")
+        verify(!card.modified)
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        compare(page.requestModal.card.request.amount.satoshi, 0)
+    }
+
+    function test_empty_request_can_be_created_without_showing_address() {
         const page = createPage()
         const address = testWalletModel.receivingAddress.address
         compare(testPaymentRequest.id, "")
-        verify(findChild(page, "receivingAddressQRImage").visible)
-        compare(findChild(page, "receivingAddressQRImage").code, address)
+        compare(findChild(page, "receivingAddressCard"), null)
+        compare(findChild(page, "receivingAddressQRImage"), null)
+        compare(findChild(page.draftCard, "requestPaymentAddressTypeSection"), null)
         const button = findChild(page.draftCard, "requestPaymentGenerateButton")
-        verify(!button.enabled)
-        page.draftCard.createRequest()
-        compare(testPaymentRequest.id, "")
-        editField(page.draftCard, "requestPaymentNoteSelfInput", "Private note")
         verify(button.enabled)
-        const card = createRequest(page)
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
         compare(card.saved, true)
+        compare(card.request.address, address)
+        compare(card.request.amount.satoshi, 0)
+        compare(card.request.label, "")
+        compare(card.request.message, "")
+        compare(card.request.noteSelf, "")
         compare(findChild(card, "paymentRequestStatus").text, "Awaiting payment")
+        compare(findChild(card, "requestPaymentAddressTypeSection"), null)
         page.requestModal.close()
         tryCompare(page.requestModal, "visible", false)
         verify(testWalletModel.receivingAddress.address !== "")
@@ -210,28 +347,81 @@ TestCase {
 
     function test_next_address_and_type_selection_rotate_without_request() {
         const page = createPage()
-        const receiving = findChild(page, "receivingAddressCard")
         const first = testWalletModel.receivingAddress.address
-        receiving.ensureAddress(true, "")
+        page.ensureReceivingAddress(true, "")
         verify(testWalletModel.receivingAddress.address !== first)
-        receiving.ensureAddress(false, "p2sh-segwit")
+        const settingsButton = findChild(page, "receiveAddressSettingsButton")
+        const moreButton = findChild(page, "receiveMoreButton")
+        compare(settingsButton.width, moreButton.width)
+        compare(settingsButton.height, moreButton.height)
+        verify(settingsButton.x + settingsButton.width <= moreButton.x)
+        compare(settingsButton.iconSource.toString(), "qrc:/icons/address-settings.svg")
+        compare(findChild(findChild(page, "receiveMoreMenu"), "receiveAddressTypePicker"), null)
+        mouseClick(settingsButton)
+        const menu = findChild(page, "receiveAddressTypeMenu")
+        tryCompare(menu, "opened", true)
+        const picker = findChild(page, "receiveAddressTypePicker")
+        compare(picker.title, "Address Type")
+        compare(picker.model.length, 4)
+        tryVerify(function() { return picker.itemAtIndex(3) !== null })
+        for (let i = 0; i < 4; ++i) {
+            compare(picker.itemAtIndex(i).selected, picker.itemAtIndex(i).rowValue === picker.currentValue)
+            compare(picker.itemAtIndex(i).subtitle, picker.model[i].description)
+            verify(picker.itemAtIndex(i).subtitle.length > 0)
+        }
+        mouseClick(picker.itemAtIndex(2))
+        tryCompare(menu, "visible", false)
         compare(testWalletModel.receivingAddress.addressType, "p2sh-segwit")
+        compare(picker.currentValue, "p2sh-segwit")
+        verify(picker.itemAtIndex(2).selected)
         compare(testPaymentRequest.id, "")
         const card = createRequest(page)
         compare(testWalletModel.lastCommitAddressType, "p2sh-segwit")
     }
 
+    function test_clear_form_removes_hidden_and_invalid_drafts_without_changing_address() {
+        const page = createPage()
+        const card = page.draftCard
+        const address = testWalletModel.receivingAddress.address
+        const type = testWalletModel.receivingAddress.addressType
+        editField(card, "requestPaymentAmountInput", "0.0001").editingFinished()
+        editField(card, "requestPaymentYourNameInput", "Alice").editingFinished()
+        editField(card, "requestPaymentMessageInput", "Lunch split").editingFinished()
+        editField(card, "requestPaymentNoteSelfInput", "Lunch with Hal").editingFinished()
+        compare(card.request.amount.satoshi, 10000)
+        compare(card.request.label, "Alice")
+        editField(card, "requestPaymentAmountInput", ".").editingFinished()
+        verify(card.errorText.length > 0)
+        card.showRecipientName = false
+        card.showAmount = false
+        card.showMessage = false
+
+        mouseClick(findChild(page, "receiveMoreButton"))
+        const menu = findChild(page, "receiveMoreMenu")
+        tryCompare(menu, "opened", true)
+        const clear = findChild(page, "receiveClearFormButton")
+        compare(clear.text, "Clear form")
+        mouseClick(clear)
+        tryCompare(menu, "visible", false)
+        compare(card.request.amount.satoshi, 0)
+        compare(card.request.label, "")
+        compare(card.request.message, "")
+        compare(card.request.noteSelf, "")
+        compare(card.errorText, "")
+        verify(!card.hasFields)
+        verify(!card.modified)
+        verify(!card.showRecipientName)
+        verify(!card.showAmount)
+        verify(!card.showMessage)
+        compare(testWalletModel.receivingAddress.address, address)
+        compare(testWalletModel.receivingAddress.addressType, type)
+        card.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        compare(page.requestModal.card.request.address, address)
+    }
+
     function test_qr_context_menus_close_when_address_is_no_longer_shareable() {
         const page = createPage()
-        const receivingArea = findChild(page, "receivingAddressQRContextArea")
-        const receivingMenu = findChild(page, "receivingAddressQRContextMenu")
-        mouseClick(receivingArea, 20, 20, Qt.RightButton)
-        tryCompare(receivingMenu, "opened", true)
-        compare(findChild(page, "receivingAddressQRContextCopy").text, "Copy QR code")
-        compare(findChild(page, "receivingAddressQRContextSave").text, "Save QR code")
-        findChild(page, "receivingAddressCard").ensureAddress(true, "")
-        tryCompare(receivingMenu, "visible", false)
-
         const card = createRequest(page)
         const requestMenu = findChild(card, "requestPaymentQRContextMenu")
         mouseClick(findChild(card, "requestPaymentQRContextArea"), 20, 20, Qt.RightButton)
@@ -289,19 +479,36 @@ TestCase {
         verify(!button.enabled)
     }
 
-    function test_update_requires_at_least_one_detail() {
+    function test_update_can_remove_all_optional_details() {
         const card = createRequest(createPage())
         editField(card, "requestPaymentAmountInput", "")
         editField(card, "requestPaymentMessageInput", "")
         editField(card, "requestPaymentNoteSelfInput", "")
-        editField(card, "requestPaymentYourNameInput", "   ")
-        verify(!findChild(card, "requestPaymentUpdateButton").enabled)
-        verify(!card.saveFields())
-        compare(card.request.label, "Request")
-        editField(card, "requestPaymentNoteSelfInput", "Keep privately")
+        editField(card, "requestPaymentYourNameInput", "")
         verify(findChild(card, "requestPaymentUpdateButton").enabled)
         verify(card.saveFields())
-        compare(card.request.noteSelf, "Keep privately")
+        compare(card.request.label, "")
+        compare(card.request.noteSelf, "")
+        compare(card.request.qrPayload, "bitcoin:" + card.request.address)
+    }
+
+    function test_empty_request_can_remove_saved_private_note_data() {
+        return [{tag: "unpaid", paid: false}, {tag: "paid", paid: true}]
+    }
+    function test_empty_request_can_remove_saved_private_note(data) {
+        const page = createPage()
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
+        card.request.paymentReceived = data.paid
+        editField(card, "requestPaymentNoteSelfInput", "Private note")
+        verify(card.saveFields())
+        compare(card.request.noteSelf, "Private note")
+        editField(card, "requestPaymentNoteSelfInput", "")
+        verify(findChild(card, "requestPaymentUpdateButton").enabled)
+        verify(card.saveFields())
+        compare(card.request.noteSelf, "")
+        verify(!findChild(card, "requestPaymentError").visible)
     }
 
     function test_request_again_prefills_without_saving_data() {
@@ -326,7 +533,71 @@ TestCase {
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
     }
 
+    function test_request_again_reveals_populated_hidden_fields() {
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "0.001").editingFinished()
+        editField(page.draftCard, "requestPaymentMessageInput", "Lunch split").editingFinished()
+        editField(page.draftCard, "requestPaymentYourNameInput", "Hal").editingFinished()
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const requestId = page.requestModal.card.request.id
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+
+        page.draftCard.showAmount = false
+        page.draftCard.showMessage = false
+        page.draftCard.showRecipientName = false
+        verify(page.requestModal.openRequest(requestId))
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        findChild(card, "requestPaymentAgainMenuButton").clicked()
+        tryCompare(page.requestModal, "visible", false)
+        tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
+
+        compare(testPaymentRequest.id, "")
+        compare(findChild(page.draftCard, "requestPaymentAmountInput").text, "0.00100000")
+        compare(findChild(page.draftCard, "requestPaymentMessageInput").text, "Lunch split")
+        compare(findChild(page.draftCard, "requestPaymentYourNameInput").text, "Hal")
+        verify(findChild(page.draftCard, "requestPaymentAmountField").visible)
+        verify(findChild(page.draftCard, "requestPaymentMessageRow").visible)
+        verify(findChild(page.draftCard, "requestPaymentLabelRow").visible)
+    }
+
+    function test_empty_request_reverted_edit_restores_copy_data() {
+        return [
+            {tag: "private-note", field: "requestPaymentNoteSelfInput"},
+            {tag: "message", field: "requestPaymentMessageInput"},
+            {tag: "recipient", field: "requestPaymentYourNameInput"},
+        ]
+    }
+    function test_empty_request_reverted_edit_restores_copy(data) {
+        const page = createPage()
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
+        const copy = findChild(card, "requestPaymentCopyButton")
+        const update = findChild(card, "requestPaymentUpdateButton")
+        verify(copy.visible)
+
+        editField(card, data.field, "Temporary detail")
+        verify(card.modified)
+        verify(update.enabled)
+        verify(!copy.visible)
+        editField(card, data.field, "")
+        verify(!card.modified)
+        verify(!update.visible)
+        verify(copy.visible)
+        verify(copy.enabled)
+        verify(!findChild(card, "requestPaymentError").visible)
+        compare(card.request.noteSelf, "")
+        compare(card.request.message, "")
+        compare(card.request.label, "")
+    }
+
     function editField(card, objectName, text) {
+        if (!card.modalView && objectName === "requestPaymentYourNameInput") card.showRecipientName = true
         const input = findChild(card, objectName)
         input.forceActiveFocus()
         input.text = text
@@ -347,8 +618,9 @@ TestCase {
         verify(findChild(card, "requestPaymentQRImage").visible)
         editField(card, "requestPaymentYourNameInput", "")
         findChild(card, "requestPaymentMessageInput").forceActiveFocus()
-        verify(!card.saveFields())
-        compare(card.request.label, "Friday coffee")
+        verify(card.saveFields())
+        compare(card.request.label, "")
+        compare(card.request.address, address)
     }
 
     function test_closing_modal_discards_unsaved_field() {
@@ -463,6 +735,91 @@ TestCase {
         optionsModel.displayUnit = BitcoinAmount.SAT
         compare(card.amountUnit, BitcoinAmount.SAT)
         optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_reverting_invalid_amount_clears_error_data() {
+        return [{tag: "draft", saved: false}, {tag: "saved", saved: true}]
+    }
+    function test_reverting_invalid_amount_clears_error(data) {
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "1").editingFinished()
+        const card = data.saved ? createRequest(page) : page.draftCard
+        compare(card.request.amount.satoshi, 1)
+        editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
+        if (data.saved) findChild(card, "requestPaymentUpdateButton").clicked()
+        verify(card.errorText.length > 0)
+
+        editField(card, "requestPaymentAmountInput", "1").editingFinished()
+        compare(card.errorText, "")
+        verify(!findChild(card, "requestPaymentError").visible)
+        verify(!card.modified)
+        compare(card.request.amount.satoshi, 1)
+        if (data.saved) {
+            verify(!findChild(card, "requestPaymentUpdateButton").visible)
+            verify(findChild(card, "requestPaymentCopyButton").visible)
+        }
+    }
+
+    function test_returning_to_receive_preserves_invalid_amount_error() {
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        const page = createPage()
+        const card = page.draftCard
+        editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
+        const error = card.errorText
+        verify(error.length > 0)
+        page.visible = false
+        page.visible = true
+        waitForRendering(page)
+        compare(findChild(card, "requestPaymentAmountInput").text, "1.5")
+        compare(card.errorText, error)
+        verify(findChild(card, "requestPaymentError").visible)
+
+        editField(card, "requestPaymentNoteSelfInput", "Private note").editingFinished()
+        compare(card.errorText, error)
+        card.createRequest()
+        compare(card.request.id, "")
+        verify(!page.requestModal.visible)
+    }
+
+    function test_address_errors_are_independent_of_amount_validation() {
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        const page = createPage()
+        const card = page.draftCard
+        testWalletModel.ensureReceivingAddressResult = false
+        page.prepareReceivingAddress()
+        const addressError = card.errorText
+        verify(addressError.length > 0)
+        editField(card, "requestPaymentNoteSelfInput", "Private note").editingFinished()
+        compare(card.errorText, addressError)
+        card.clearForm()
+        compare(card.errorText, addressError)
+
+        editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
+        const amountError = card.errorText
+        verify(amountError.length > 0 && amountError !== addressError)
+        testWalletModel.ensureReceivingAddressResult = true
+        page.prepareReceivingAddress()
+        compare(page.addressErrorText, "")
+        compare(card.errorText, amountError)
+        editField(card, "requestPaymentAmountInput", "1").editingFinished()
+        compare(card.errorText, "")
+    }
+
+    function test_reverting_amount_preserves_unrelated_action_error() {
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "1").editingFinished()
+        const card = createRequest(page)
+        testWalletModel.removeReceiveRequestResult = false
+        verify(!card.deleteRequest())
+        const error = card.errorText
+        verify(error.length > 0)
+        editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
+        verify(!card.saveFields())
+        editField(card, "requestPaymentAmountInput", "1").editingFinished()
+        compare(card.errorText, error)
+        verify(!card.modified)
     }
 
     function test_fractional_sats_and_out_of_range_amounts_never_save() {
