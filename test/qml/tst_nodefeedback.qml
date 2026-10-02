@@ -296,6 +296,45 @@ TestCase {
         compare(popup.firstInformationValue, "Bitcoin Core test")
     }
 
+    function test_open_node_information_popup_applies_async_result() {
+        const popup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
+        verify(popup !== null)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        compare(popup.informationRowCount, 3)
+
+        Qt.callLater(function() {
+            nodeModel.setWarningsForTest(["Warning delivered after the popup opened"])
+        })
+        compare(popup.informationRowCount, 3)
+        tryCompare(popup, "informationRowCount", 4)
+        compare(popup.rows[3].value, "Warning delivered after the popup opened")
+        compare(popup.opened, true)
+    }
+
+    function test_node_information_refresh_is_throttled_and_keeps_rows() {
+        nodeModel.setWarningsForTest(["First warning"])
+        const popup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
+        verify(popup !== null)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        tryCompare(popup, "informationRowCount", 4)
+        tryVerify(function() { return popup.rows[3].value === "First warning" })
+        wait(600)
+        const value = findChild(popup.contentItem, "nodeInformationValue_3")
+        verify(value !== null)
+
+        // A burst of notifications is read once, after the throttle interval.
+        nodeModel.setWarningsForTest(["Second warning"])
+        nodeModel.setWarningsForTest(["Third warning"])
+        compare(popup.rows[3].value, "First warning")
+        tryVerify(function() { return popup.rows[3].value === "Third warning" }, 2000)
+
+        // The same row items show the new values.
+        compare(findChild(popup.contentItem, "nodeInformationValue_3"), value)
+        compare(value.text, "Third warning")
+    }
+
     function test_node_information_popup_wraps_long_warning_value() {
         nodeModel.setWarningsForTest([longWarningText()])
 

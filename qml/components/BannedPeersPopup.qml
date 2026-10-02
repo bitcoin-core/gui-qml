@@ -14,11 +14,27 @@ DialogPopup {
     objectName: "bannedPeersPopup"
 
     property var model: banListModel
+    property bool awaitingUnban: false
 
     function unbanPeer(row) {
+        if (root.model.actionPending) return
+        awaitingUnban = true
         if (!root.model.unbanAt(row)) {
-            unbanActionError.message = qsTr("Could not unban peer. The ban list may have changed.")
+            awaitingUnban = false
+            unbanActionError.message = root.model.actionError || qsTr("Could not unban peer. The ban list may have changed.")
             unbanActionError.open()
+        }
+    }
+    onAboutToHide: awaitingUnban = false
+    Connections {
+        target: root.model
+        function onUnbanFinished(success, error) {
+            if (!root.awaitingUnban) return
+            root.awaitingUnban = false
+            if (!success && root.visible) {
+                unbanActionError.message = error
+                unbanActionError.open()
+            }
         }
     }
 
@@ -36,6 +52,15 @@ DialogPopup {
             description: qsTr("These peers are blocked from connecting to your node.")
             closeButtonObjectName: "bannedPeersCloseButton"
             onCloseRequested: root.close()
+        }
+
+        CoreText {
+            objectName: "banListStatus"
+            Layout.fillWidth: true
+            visible: root.model.actionPending || root.model.refreshError.length > 0
+            text: root.model.refreshError || qsTr("Updating banned peers…")
+            color: Theme.color.neutral6
+            textStyle: Theme.text.description
         }
 
         Rectangle {
@@ -113,6 +138,7 @@ DialogPopup {
                             textStyle: Theme.text.button
                             horizontalPadding: Theme.space.l
                             text: qsTr("Unban")
+                            enabled: !root.model.actionPending
                             onClicked: root.unbanPeer(bannedPeerRow.index)
                         }
                     }

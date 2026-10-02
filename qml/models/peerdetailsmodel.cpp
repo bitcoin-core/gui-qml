@@ -8,7 +8,7 @@ PeerDetailsModel::PeerDetailsModel(const CNodeCombinedStats* nodeStats, PeerList
 : QObject(parent)
 , m_node_id{static_cast<int>(nodeStats->nodeStats.nodeid)}
 , m_addr{nodeStats->nodeStats.addr}
-, m_combinedStats{nodeStats}
+, m_combinedStats{*nodeStats}
 , m_model{parent}
 {
     for (int row = 0; row < m_model->rowCount(); ++row) {
@@ -50,10 +50,12 @@ void PeerDetailsModel::onModelDataChanged(const QModelIndex& /* top_left */, con
         return;
     }
 
-    m_combinedStats = m_model->data(m_model->index(m_row, 0), PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
+    const auto* stats = m_model->data(m_model->index(m_row, 0), PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
+    if (!stats) return;
+    m_combinedStats = *stats;
 
     // Only update when all information is available
-    if (m_combinedStats && m_combinedStats->fNodeStateStatsAvailable) {
+    if (m_combinedStats.fNodeStateStatsAvailable) {
         Q_EMIT dataChanged();
     }
 }
@@ -68,8 +70,10 @@ void PeerDetailsModel::onModelReset()
         const int node_id_in_row = m_model->data(index, PeerListModel::NetNodeId).toInt();
         if (node_id_in_row == tracked_node_id) {
             m_row = row;
-            m_combinedStats = m_model->data(index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
-            if (m_combinedStats && m_combinedStats->fNodeStateStatsAvailable) {
+            const auto* stats = m_model->data(index, PeerListModel::StatsRole).value<const CNodeCombinedStats*>();
+            if (!stats) return;
+            m_combinedStats = *stats;
+            if (m_combinedStats.fNodeStateStatsAvailable) {
                 Q_EMIT dataChanged();
             }
             return;

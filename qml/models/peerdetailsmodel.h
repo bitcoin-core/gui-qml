@@ -52,40 +52,40 @@ public:
 
     int nodeId() const { return m_node_id; }
     QString rawAddress() const { return QString::fromStdString(m_addr.ToStringAddr()); }
-    QString address() const { return QString::fromStdString(m_combinedStats->nodeStats.m_addr_name); }
-    QString addressLocal() const { return QString::fromStdString(m_combinedStats->nodeStats.addrLocal); }
-    QString type() const { return PeerStatsUtil::ConnectionTypeToQString(m_combinedStats->nodeStats.m_conn_type, /*prepend_direction=*/true); }
-    QString network() const { return PeerStatsUtil::NetworkToQString(m_combinedStats->nodeStats.m_network); }
-    QString transport() const { return PeerStatsUtil::TransportToQString(m_combinedStats->nodeStats.m_transport_type); }
-    QString sessionId() const { return QString::fromStdString(m_combinedStats->nodeStats.m_session_id); }
-    QString version() const { return QString::number(m_combinedStats->nodeStats.nVersion); }
-    QString userAgent() const { return QString::fromStdString(m_combinedStats->nodeStats.cleanSubVer); }
-    QString services() const { return PeerStatsUtil::FormatServicesStr(m_combinedStats->nodeStateStats.their_services); }
-    bool transactionRelay() const { return m_combinedStats->nodeStateStats.m_relay_txs; }
-    bool addressRelay() const { return m_combinedStats->nodeStateStats.m_addr_relay_enabled; }
-    bool highBandwidth() const { return m_combinedStats->nodeStats.m_bip152_highbandwidth_to || m_combinedStats->nodeStats.m_bip152_highbandwidth_from; }
-    QString addressesProcessed() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_processed); }
-    QString addressesRateLimited() const { return QString::number(m_combinedStats->nodeStateStats.m_addr_rate_limited); }
+    QString address() const { return QString::fromStdString(m_combinedStats.nodeStats.m_addr_name); }
+    QString addressLocal() const { return QString::fromStdString(m_combinedStats.nodeStats.addrLocal); }
+    QString type() const { return PeerStatsUtil::ConnectionTypeToQString(m_combinedStats.nodeStats.m_conn_type, /*prepend_direction=*/true); }
+    QString network() const { return PeerStatsUtil::NetworkToQString(m_combinedStats.nodeStats.m_network); }
+    QString transport() const { return PeerStatsUtil::TransportToQString(m_combinedStats.nodeStats.m_transport_type); }
+    QString sessionId() const { return QString::fromStdString(m_combinedStats.nodeStats.m_session_id); }
+    QString version() const { return QString::number(m_combinedStats.nodeStats.nVersion); }
+    QString userAgent() const { return QString::fromStdString(m_combinedStats.nodeStats.cleanSubVer); }
+    QString services() const { return PeerStatsUtil::FormatServicesStr(m_combinedStats.nodeStateStats.their_services); }
+    bool transactionRelay() const { return m_combinedStats.nodeStateStats.m_relay_txs; }
+    bool addressRelay() const { return m_combinedStats.nodeStateStats.m_addr_relay_enabled; }
+    bool highBandwidth() const { return m_combinedStats.nodeStats.m_bip152_highbandwidth_to || m_combinedStats.nodeStats.m_bip152_highbandwidth_from; }
+    QString addressesProcessed() const { return QString::number(m_combinedStats.nodeStateStats.m_addr_processed); }
+    QString addressesRateLimited() const { return QString::number(m_combinedStats.nodeStateStats.m_addr_rate_limited); }
     QString startingHeight() const { return {}; }
-    QString syncedHeaders() const { return QString::number(m_combinedStats->nodeStateStats.nSyncHeight); }
-    QString syncedBlocks() const { return QString::number(m_combinedStats->nodeStateStats.nCommonHeight); }
-    QString direction() const { return QString::fromStdString(m_combinedStats->nodeStats.fInbound ? "Inbound" : "Outbound"); }
-    QString connectionDuration() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_connected); }
-    QString lastSend() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_last_send); }
-    QString lastReceived() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats->nodeStats.m_last_recv); }
-    QString bytesSent() const { return PeerStatsUtil::FormatBytes(m_combinedStats->nodeStats.nSendBytes); }
-    QString bytesReceived() const { return PeerStatsUtil::FormatBytes(m_combinedStats->nodeStats.nRecvBytes); }
-    QString pingTime() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStats.m_last_ping_time); }
-    QString pingMin() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStats.m_min_ping_time); }
-    QString pingWait() const { return PeerStatsUtil::FormatPingTime(m_combinedStats->nodeStateStats.m_ping_wait); }
-    QString timeOffset() const { return PeerStatsUtil::FormatTimeOffset(Ticks<std::chrono::seconds>(m_combinedStats->nodeStateStats.time_offset)); }
-    QString mappedAS() const { return m_combinedStats->nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats->nodeStats.m_mapped_as) : QString{}; }
+    QString syncedHeaders() const { return QString::number(m_combinedStats.nodeStateStats.nSyncHeight); }
+    QString syncedBlocks() const { return QString::number(m_combinedStats.nodeStateStats.nCommonHeight); }
+    QString direction() const { return QString::fromStdString(m_combinedStats.nodeStats.fInbound ? "Inbound" : "Outbound"); }
+    QString connectionDuration() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats.nodeStats.m_connected); }
+    QString lastSend() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats.nodeStats.m_last_send); }
+    QString lastReceived() const { return PeerStatsUtil::FormatDurationStr(NodeClock::now() - m_combinedStats.nodeStats.m_last_recv); }
+    QString bytesSent() const { return PeerStatsUtil::FormatBytes(m_combinedStats.nodeStats.nSendBytes); }
+    QString bytesReceived() const { return PeerStatsUtil::FormatBytes(m_combinedStats.nodeStats.nRecvBytes); }
+    QString pingTime() const { return PeerStatsUtil::FormatPingTime(m_combinedStats.nodeStats.m_last_ping_time); }
+    QString pingMin() const { return PeerStatsUtil::FormatPingTime(m_combinedStats.nodeStats.m_min_ping_time); }
+    QString pingWait() const { return PeerStatsUtil::FormatPingTime(m_combinedStats.nodeStateStats.m_ping_wait); }
+    QString timeOffset() const { return PeerStatsUtil::FormatTimeOffset(Ticks<std::chrono::seconds>(m_combinedStats.nodeStateStats.time_offset)); }
+    QString mappedAS() const { return m_combinedStats.nodeStats.m_mapped_as != 0 ? QString::number(m_combinedStats.nodeStats.m_mapped_as) : QString{}; }
     QString permission() const {
-        if (m_combinedStats->nodeStats.m_permission_flags == NetPermissionFlags::None) {
+        if (m_combinedStats.nodeStats.m_permission_flags == NetPermissionFlags::None) {
             return {};
         }
         QStringList permissions;
-        for (const auto& permission : NetPermissions::ToStrings(m_combinedStats->nodeStats.m_permission_flags)) {
+        for (const auto& permission : NetPermissions::ToStrings(m_combinedStats.nodeStats.m_permission_flags)) {
             permissions.append(QString::fromStdString(permission));
         }
         return permissions.join(" & ");
@@ -104,7 +104,7 @@ private:
     int m_row{-1};
     int m_node_id{-1};
     CNetAddr m_addr;
-    const CNodeCombinedStats* m_combinedStats{nullptr};
+    CNodeCombinedStats m_combinedStats;
     PeerListModel* m_model{nullptr};
     bool m_disconnected{false};
 };

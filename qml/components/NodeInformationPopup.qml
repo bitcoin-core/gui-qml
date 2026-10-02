@@ -18,7 +18,24 @@ DialogPopup {
     readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueLineCount : 0
     readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
 
-    onAboutToShow: rows = nodeModel.nodeInformationRows()
+    onAboutToShow: {
+        rows = nodeModel.nodeInformationRows()
+        nodeModel.refreshNodeInformation()
+    }
+    onAboutToHide: rowsRefreshTimer.stop()
+    // Node notifications arrive for every block and header during sync.
+    // Read the rows at most twice a second while the popup is open.
+    Timer {
+        id: rowsRefreshTimer
+        interval: 500
+        onTriggered: root.rows = nodeModel.nodeInformationRows()
+    }
+    Connections {
+        target: nodeModel
+        function onNodeInformationChanged() {
+            if (root.visible && !rowsRefreshTimer.running) rowsRefreshTimer.start()
+        }
+    }
 
     title: qsTr("Node information")
     implicitWidth: 760
@@ -55,17 +72,19 @@ DialogPopup {
 
                     Repeater {
                         id: informationRepeater
-                        model: root.rows
+                        // A count keeps the rows when only their values change, so a
+                        // refresh does not recreate them or drop a text selection.
+                        model: root.rows.length
                         delegate: ValueRow {
-                            required property var modelData
                             required property int index
+                            readonly property var row: root.rows[index] || ({})
 
                             width: informationColumn.width
-                            title: modelData.label
+                            title: row.label || ""
                             titleColor: Theme.color.neutral7
                             valueObjectName: "nodeInformationValue_" + index
-                            value: modelData.value
-                            valueTextStyle: modelData.mono ? Theme.text.monoDescription : Theme.text.description
+                            value: row.value || ""
+                            valueTextStyle: row.mono ? Theme.text.monoDescription : Theme.text.description
                             valueMaximumWidth: Math.round(informationColumn.width * 0.65)
                             valueWrap: true
                             showDivider: index < root.rows.length - 1

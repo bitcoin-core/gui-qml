@@ -22,6 +22,8 @@ Page {
     property Item popupParent: null
     property int selectedNodeId: -1
     property var contextPeerDetails: null
+    property var pendingContextTarget: null
+    property string submittedPeerAction: ""
     property int pendingContextBanDuration: 3600
     property string pendingContextBanLabel: qsTr("1 hour")
 
@@ -153,7 +155,7 @@ Page {
         return present.join(" · ")
     }
     function openPeerActionsMenu(peerDetails, sourceItem, localPosition) {
-        if (!peerDetails) return
+        if (!peerDetails || nodeModel.peerActionPending || banListModel.actionPending) return
         contextPeerDetails = peerDetails
         const position = sourceItem.mapToItem(
             root,
@@ -168,28 +170,41 @@ Page {
         peerRowActionsMenu.open()
     }
     function requestContextPeerBan(duration, label) {
+        if (!contextPeerDetails || nodeModel.peerActionPending || banListModel.actionPending) return
+        pendingContextTarget = {nodeId: contextPeerDetails.nodeId, rawAddress: contextPeerDetails.rawAddress, address: contextPeerDetails.address}
         pendingContextBanDuration = duration
         pendingContextBanLabel = label
         peerListBanConfirmation.open()
     }
     function confirmContextPeerBan() {
-        if (contextPeerDetails
-                && nodeModel.banPeer(contextPeerDetails.rawAddress, pendingContextBanDuration)) {
-            peerTableModel.refresh()
-            banListModel.refresh()
-        } else {
-            showPeerListActionError(qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
+        if (nodeModel.peerActionPending || banListModel.actionPending) return
+        submittedPeerAction = "ban"
+        if (!pendingContextTarget || !nodeModel.banPeer(pendingContextTarget.rawAddress, pendingContextBanDuration)) {
+            submittedPeerAction = ""
+            showPeerListActionError(nodeModel.peerActionError || qsTr("Could not ban peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
     function disconnectContextPeer() {
-        if (contextPeerDetails && nodeModel.disconnectPeer(contextPeerDetails.nodeId)) {
-            peerTableModel.refresh()
-        } else {
-            showPeerListActionError(qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
+        if (nodeModel.peerActionPending || banListModel.actionPending) return
+        submittedPeerAction = "disconnect"
+        if (!pendingContextTarget || !nodeModel.disconnectPeer(pendingContextTarget.nodeId)) {
+            submittedPeerAction = ""
+            showPeerListActionError(nodeModel.peerActionError || qsTr("Could not disconnect peer. The peer may already be disconnected or the node state may have changed."))
         }
     }
     function requestContextPeerDisconnect() {
+        if (!contextPeerDetails || nodeModel.peerActionPending || banListModel.actionPending) return
+        pendingContextTarget = {nodeId: contextPeerDetails.nodeId, rawAddress: contextPeerDetails.rawAddress, address: contextPeerDetails.address}
         peerListDisconnectConfirmation.open()
+    }
+    onVisibleChanged: if (!visible) submittedPeerAction = ""
+    Connections {
+        target: nodeModel
+        function onPeerActionFinished(action, success, error) {
+            if (root.submittedPeerAction !== action) return
+            root.submittedPeerAction = ""
+            if (!success && root.visible) root.showPeerListActionError(error)
+        }
     }
     function showPeerListActionError(message) {
         peerListActionError.message = message
@@ -219,6 +234,15 @@ Page {
         ColumnLayout {
             anchors.fill: parent
             spacing: 16
+
+            CoreText {
+                objectName: "peerRefreshStatus"
+                Layout.fillWidth: true
+                visible: peerTableModel.refreshError.length > 0 || banListModel.refreshError.length > 0 || !peerTableModel.ready || nodeModel.peerActionPending
+                text: peerTableModel.refreshError || banListModel.refreshError || (nodeModel.peerActionPending ? qsTr("Updating peer…") : qsTr("Loading peers…"))
+                color: Theme.color.neutral6
+                font: Theme.text.description.font
+            }
 
             RowLayout {
                 Layout.fillWidth: true
@@ -594,8 +618,8 @@ Page {
         objectName: "peerListBanConfirmationPopup"
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Ban peer?")
-        message: root.contextPeerDetails
-            ? qsTr("Ban %1 for %2?").arg(root.contextPeerDetails.address).arg(root.pendingContextBanLabel)
+        message: root.pendingContextTarget
+            ? qsTr("Ban %1 for %2?").arg(root.pendingContextTarget.address).arg(root.pendingContextBanLabel)
             : qsTr("Ban this peer for %1?").arg(root.pendingContextBanLabel)
         AlertAction {
             text: qsTr("Cancel")
@@ -627,8 +651,8 @@ Page {
         objectName: "peerListDisconnectConfirmationPopup"
         parent: root.popupParent ? root.popupParent : root
         title: qsTr("Disconnect peer?")
-        message: root.contextPeerDetails
-            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(root.contextPeerDetails.address)
+        message: root.pendingContextTarget
+            ? qsTr("Disconnect from %1? The peer may reconnect automatically.").arg(root.pendingContextTarget.address)
             : qsTr("Disconnect this peer? The peer may reconnect automatically.")
         AlertAction {
             text: qsTr("Cancel")

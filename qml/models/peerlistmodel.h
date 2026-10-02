@@ -14,6 +14,10 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <memory>
+
+class BackendExecutor;
+
 namespace interfaces {
 class Node;
 }
@@ -32,6 +36,9 @@ Q_DECLARE_METATYPE(const CNodeCombinedStats*)
 class PeerListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool ready READ ready NOTIFY refreshStateChanged)
+    Q_PROPERTY(bool refreshPending READ refreshPending NOTIFY refreshStateChanged)
+    Q_PROPERTY(QString refreshError READ refreshError NOTIFY refreshStateChanged)
 
 public:
     explicit PeerListModel(interfaces::Node& node, QObject* parent, bool backend_ready = true);
@@ -43,6 +50,10 @@ public:
     Q_INVOKABLE
     void stopAutoRefresh();
     void beginShutdown();
+    bool isDrained() const;
+    bool ready() const { return m_ready; }
+    bool refreshPending() const { return m_refresh_running; }
+    QString refreshError() const { return m_refresh_error; }
 
     enum Role {
         StatsRole = Qt::UserRole,
@@ -67,13 +78,25 @@ public:
 public Q_SLOTS:
     void refresh();
 
+Q_SIGNALS:
+    void refreshStateChanged();
+    void drained();
+
 private:
+    void applySnapshot(QList<CNodeCombinedStats> peers);
+    void finishRefresh(quint64 generation, QList<CNodeCombinedStats> peers, const QString& error);
     QList<CNodeCombinedStats> m_peers_data{};
     interfaces::Node& m_node;
+    std::shared_ptr<BackendExecutor> m_executor;
     QTimer* m_timer{nullptr};
     bool m_stopping{false};
     bool m_backend_ready;
     bool m_auto_refresh_requested{false};
+    bool m_ready{false};
+    bool m_refresh_running{false};
+    bool m_refresh_requested{false};
+    quint64 m_generation{0};
+    QString m_refresh_error;
 };
 
 #endif // BITCOIN_QML_MODELS_PEERLISTMODEL_H

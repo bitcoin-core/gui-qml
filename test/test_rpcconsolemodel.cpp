@@ -16,6 +16,7 @@
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
 #include <qml/models/rpcconsolemodel.h>
+#include <qml/initexecutor.h>
 #include <test/mocks/stubnode.h>
 #include <univalue.h>
 #include <util/result.h>
@@ -93,28 +94,32 @@ private:
 };
 
 // RpcTestStubNode whose long-running command blocks the worker thread until
-// "stop" is executed. "stop" records that it ran and releases the blocked
-// command, modelling shutdown aborting an in-flight RPC. This only works if
-// "stop" runs on the caller's thread: a worker-queued "stop" would sit behind
-// the blocked command and never release it.
+// the independent lifecycle executor interrupts it. Interruption must bypass
+// the ordinary RPC worker without executing backend calls on the GUI thread.
 class StopAbortNode : public RpcTestStubNode
 {
 public:
     UniValue executeRpc(const std::string& method, const UniValue&, const std::string&) override
     {
-        if (method == "stop") {
-            m_stop_executed = true;
-            m_gate.release();
-            return {};
-        }
+        if (method == "stop") m_stop_used_rpc = true;
         m_gate.tryAcquire(1, 5000);
         return {};
     }
+    void startShutdown() override
+    {
+        m_off_gui = QThread::currentThread() != QCoreApplication::instance()->thread();
+        m_stop_executed = true;
+        m_gate.release();
+    }
     bool stopExecuted() const { return m_stop_executed; }
+    bool offGui() const { return m_off_gui; }
+    bool stopUsedRpc() const { return m_stop_used_rpc; }
 
 private:
     QSemaphore m_gate{0};
     std::atomic<bool> m_stop_executed{false};
+    std::atomic<bool> m_stop_used_rpc{false};
+    std::atomic<bool> m_off_gui{false};
 };
 
 // RpcTestStubNode that records the URI executeRpc() is invoked with, so tests can
@@ -170,7 +175,7 @@ private Q_SLOTS:
     void historyTruncatesAtMax();
     void resetHistoryNavigationClearsState();
     void submitRefusedWhileExecuting();
-    void stopRunsSynchronouslyWhileExecuting();
+    void stopUsesIndependentControlWhileExecuting();
     void walletNameScopesRpcToWalletUri();
     void outputRowsExposeCategoryAndRawTimestamp();
     void clearRemovesOutput();
@@ -296,24 +301,23 @@ void RpcConsoleModelTests::submitRefusedWhileExecuting()
     QCOMPARE(model.browseHistory(1, ""), QString("waitfornewblock")); // clamped: no 2nd entry
 }
 
-void RpcConsoleModelTests::stopRunsSynchronouslyWhileExecuting()
+void RpcConsoleModelTests::stopUsesIndependentControlWhileExecuting()
 {
     StopAbortNode mock;
     RpcConsoleModel model{mock};
 
-    // A long-running command blocks the worker thread.
+    QmlInitExecutor lifecycle{mock};
+    connect(&model, &RpcConsoleModel::shutdownRequested, &lifecycle, &QmlInitExecutor::interrupt);
     QVERIFY(model.submitCommand("waitfornewblock"));
     QVERIFY(model.executing());
-
-    // "stop" is exempt from the executing guard and runs synchronously on the
-    // calling thread (matching Core), so its effect is already visible here
-    // without spinning the event loop. A worker-queued "stop" would not have run
-    // yet, since the worker is blocked on the in-flight command.
     QVERIFY(model.submitCommand("stop"));
-    QVERIFY(mock.stopExecuted());
-
-    // The synchronous "stop" released the blocked command, so the model settles.
+    QTRY_VERIFY(mock.stopExecuted());
+    QVERIFY(mock.offGui());
+    QVERIFY(!mock.stopUsedRpc());
     QTRY_VERIFY(!model.executing());
+    QSignalSpy finished{&lifecycle, &QmlInitExecutor::shutdownResult};
+    lifecycle.shutdown();
+    QTRY_COMPARE(finished.count(), 1);
 }
 
 void RpcConsoleModelTests::walletNameScopesRpcToWalletUri()
@@ -455,6 +459,7 @@ void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
 
     // Populate availableCommands via the public slot.
     model.onNodeInitialized();
+    QTRY_VERIFY(!model.availableCommands().isEmpty());
 
     QStringList cmds = model.availableCommands();
 
