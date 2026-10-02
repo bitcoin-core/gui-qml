@@ -24,6 +24,7 @@ add_executable(bitcoinqml_unit_tests
   test_backendexecutor.cpp
   test_bitcoinaddress.cpp
   test_blockclockdial.cpp
+  test_blockclockhistory.cpp
   test_blockclockmodel.cpp
   test_bitcoinuri.cpp
   test_qmlfiledialog.cpp
@@ -46,7 +47,9 @@ add_executable(bitcoinqml_unit_tests
   test_shutdownproducers.cpp
   test_guiargs.cpp
   test_options_model.cpp
+  test_async_options.cpp
   test_onboarding_storage.cpp
+  test_onboardingasync.cpp
   test_banlistmodel.cpp
   test_walletlistmodel.cpp
   test_bumptransactionmodel.cpp
