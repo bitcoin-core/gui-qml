@@ -752,6 +752,7 @@ void NodeModel::initializeResult(bool success, interfaces::BlockAndHeaderTipInfo
         }
         updateSyncCompletion();
         refreshStatus();
+        refreshNodeInformation();
         refreshMempoolInfo();
         Q_EMIT chainStateReady();
     }
@@ -906,69 +907,109 @@ QString NodeModel::defaultProxyAddress()
 
 bool NodeModel::disconnectPeer(int nodeId)
 {
-    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return false;
-    return m_node.disconnectById(nodeId);
+    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping || m_peer_action_pending) return false;
+    m_peer_action_pending = true;
+    m_peer_action_error.clear();
+    Q_EMIT peerActionPendingChanged();
+    Q_EMIT peerActionErrorChanged();
+    return m_commands->submit(this, [node = &m_node, nodeId] { return node->disconnectById(nodeId); },
+        [this](bool success) { finishPeerAction(QStringLiteral("disconnect"), success); },
+        [this](std::exception_ptr) { finishPeerAction(QStringLiteral("disconnect"), false); });
 }
 
 bool NodeModel::banPeer(const QString& rawAddress, int64_t banDuration)
 {
-    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return false;
-    if (banDuration <= 0) return false;
-    auto addr = LookupHost(rawAddress.toStdString(), /*fAllowLookup=*/false);
-    if (!addr) return false;
-    bool result = m_node.ban(*addr, banDuration);
-    if (result) {
-        m_node.disconnectByAddress(*addr);
-    }
-    return result;
+    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping || m_peer_action_pending || banDuration <= 0) return false;
+    const auto address{LookupHost(rawAddress.toStdString(), /*fAllowLookup=*/false)};
+    if (!address) return false;
+    m_peer_action_pending = true;
+    m_peer_action_error.clear();
+    Q_EMIT peerActionPendingChanged();
+    Q_EMIT peerActionErrorChanged();
+    return m_commands->submit(this, [node = &m_node, address = *address, banDuration] {
+        if (!node->ban(address, banDuration)) return false;
+        // A successful ban remains successful if the peer left in the meantime.
+        node->disconnectByAddress(address);
+        return true;
+    }, [this](bool success) { finishPeerAction(QStringLiteral("ban"), success); },
+       [this](std::exception_ptr) { finishPeerAction(QStringLiteral("ban"), false); });
 }
 
-
-
-
-QVariantList NodeModel::nodeInformationRows()
+void NodeModel::finishPeerAction(const QString& action, bool success, const QString& error)
 {
-    if (!m_backend_queries_ready || m_shutdown_requested || m_workers_stopping) return {};
-    int header_height{m_header_tip_height};
-    int64_t header_time{m_header_tip_time};
-    if (m_node_ready && header_height == 0) {
-        m_node.getHeaderTip(header_height, header_time);
-    }
+    if (m_shutdown_requested) return;
+    if (action == QStringLiteral("ban")) acknowledgeBanNotification();
+    m_peer_action_pending = false;
+    m_peer_action_error = success ? QString{} : (error.isEmpty() ?
+        (action == QStringLiteral("ban") ? tr("Unable to ban peer.") : tr("Unable to disconnect peer.")) : error);
+    Q_EMIT peerActionPendingChanged();
+    Q_EMIT peerActionErrorChanged();
+    Q_EMIT peerActionFinished(action, success, m_peer_action_error);
+}
 
-    QString local_addresses;
-    if (m_node_ready) {
-        for (const auto& [addr, info] : m_node.getNetLocalAddresses()) {
-            local_addresses += QString::fromStdString(addr.ToStringAddr());
-            if (!addr.IsI2P()) {
-                local_addresses += QStringLiteral(":") + QString::number(info.nPort);
-            }
-            local_addresses += QStringLiteral(", ");
+void NodeModel::acknowledgeBanNotification()
+{
+    std::lock_guard lock{m_notifications->mutex};
+    m_notifications->bans = false;
+}
+
+void NodeModel::refreshNodeInformation()
+{
+    if (!m_node_ready || m_shutdown_requested || m_workers_stopping) return;
+    if (m_information_pending) {
+        m_information_again = true;
+        return;
+    }
+    m_information_pending = true;
+    m_snapshots.submit(this, [node = &m_node] {
+        InformationSnapshot snapshot;
+        snapshot.user_agent = QString::fromStdString(strSubVersion);
+        snapshot.data_dir = QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()));
+        snapshot.blocks_dir = QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()));
+        snapshot.startup_time = QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString();
+        snapshot.network = QString::fromStdString(Params().GetChainTypeString());
+        QStringList addresses;
+        for (const auto& [address, info] : node->getNetLocalAddresses()) {
+            QString text{QString::fromStdString(address.ToStringAddr())};
+            if (!address.IsI2P()) text += QStringLiteral(":") + QString::number(info.nPort);
+            addresses.push_back(text);
         }
-    }
-    if (!local_addresses.isEmpty()) {
-        local_addresses.chop(2);
-    } else {
-        local_addresses = tr("None");
-    }
+        snapshot.local_addresses = addresses.join(QStringLiteral(", "));
+        return snapshot;
+    }, [this](InformationSnapshot snapshot) {
+        m_information_pending = false;
+        if (m_shutdown_requested) return;
+        m_information = std::move(snapshot);
+        m_information_ready = true;
+        Q_EMIT nodeInformationChanged();
+        if (std::exchange(m_information_again, false)) refreshNodeInformation();
+    }, [this](std::exception_ptr) {
+        m_information_pending = false;
+        if (std::exchange(m_information_again, false)) refreshNodeInformation();
+    });
+}
 
-    const int block_height{m_node_ready ? std::max(m_block_tip_height, m_node.getNumBlocks()) : m_block_tip_height};
-    const int64_t last_block_time{m_node_ready ? m_node.getLastBlockTime() : 0};
-    const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
-
+QVariantList NodeModel::nodeInformationRows() const
+{
+    const QString unknown{tr("Unknown")};
+    const QString local_addresses{!m_information_ready ? unknown :
+        m_information.local_addresses.isEmpty() ? tr("None") : m_information.local_addresses};
+    const QString warning_text{!m_status_ready ? unknown :
+        m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
     QVariantList rows;
     rows.push_back(InformationRow(tr("Client version"), fullClientVersion()));
-    rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
-    rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
-    rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
-    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
-    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
-    rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
-    rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(tr("User agent"), m_information_ready ? m_information.user_agent : unknown));
+    rows.push_back(InformationRow(tr("Datadir"), m_information_ready ? m_information.data_dir : unknown));
+    rows.push_back(InformationRow(tr("Blocks dir"), m_information_ready ? m_information.blocks_dir : unknown));
+    rows.push_back(InformationRow(tr("Startup time"), m_information_ready ? m_information.startup_time : unknown));
+    rows.push_back(InformationRow(tr("Network"), m_information_ready ? m_information.network : unknown));
+    rows.push_back(InformationRow(tr("Block height"), m_node_ready || m_seen_block_tip ? QString::number(m_block_tip_height) : unknown));
+    rows.push_back(InformationRow(tr("Header height"), m_node_ready || m_seen_header_tip ? QString::number(m_header_tip_height) : unknown));
+    rows.push_back(InformationRow(tr("Header time"), m_header_tip_time > 0 ? QDateTime::fromSecsSinceEpoch(m_header_tip_time).toString() : unknown));
+    rows.push_back(InformationRow(tr("Last block time"), m_block_tip_time > 0 ? QDateTime::fromSecsSinceEpoch(m_block_tip_time).toString() : unknown));
     rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
-    rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
-    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
+    rows.push_back(InformationRow(tr("Peers"), m_status_ready ? tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers) : unknown));
+    rows.push_back(InformationRow(tr("Network active"), m_network_known ? (m_pause ? tr("No") : tr("Yes")) : unknown));
     rows.push_back(InformationRow(tr("Local addresses"), local_addresses));
     rows.push_back(InformationRow(tr("Warnings"), warning_text));
     return rows;

@@ -2659,9 +2659,6 @@ Q_SIGNALS:
 class MockNodeModel : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool networkActionReady MEMBER m_network_action_ready NOTIFY networkActionReadyChanged)
-    Q_PROPERTY(bool networkActionPending MEMBER m_network_action_pending NOTIFY networkActionPendingChanged)
-    Q_PROPERTY(QString networkActionError MEMBER m_network_action_error NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool pause MEMBER m_pause NOTIFY pauseChanged)
     Q_PROPERTY(int numPeers MEMBER m_num_peers NOTIFY numPeersChanged)
     Q_PROPERTY(int numInboundPeers MEMBER m_num_inbound_peers NOTIFY numInboundPeersChanged)
@@ -2692,6 +2689,12 @@ class MockNodeModel : public QObject
     Q_PROPERTY(double mempoolMaxUsageMB MEMBER m_mempool_max_usage_mb NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
     Q_PROPERTY(bool mempoolInformationAvailable MEMBER m_mempool_information_available NOTIFY mempoolInformationAvailableChanged)
+    Q_PROPERTY(bool peerActionPending MEMBER m_peer_action_pending NOTIFY peerActionPendingChanged)
+    Q_PROPERTY(QString peerActionError MEMBER m_peer_action_error NOTIFY peerActionErrorChanged)
+    Q_PROPERTY(bool peerActionAutoComplete MEMBER m_peer_action_auto_complete NOTIFY peerActionStateChanged)
+    Q_PROPERTY(bool networkActionReady MEMBER m_network_action_ready NOTIFY networkActionReadyChanged)
+    Q_PROPERTY(bool networkActionPending MEMBER m_network_action_pending NOTIFY networkActionPendingChanged)
+    Q_PROPERTY(QString networkActionError MEMBER m_network_action_error NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool disconnectPeerResult MEMBER m_disconnect_peer_result NOTIFY peerActionStateChanged)
     Q_PROPERTY(bool banPeerResult MEMBER m_ban_peer_result NOTIFY peerActionStateChanged)
     Q_PROPERTY(int disconnectPeerCalls READ disconnectPeerCalls NOTIFY peerActionCallsChanged)
@@ -2700,6 +2703,12 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString lastBannedAddress MEMBER m_last_banned_address NOTIFY peerActionCallsChanged)
 
 public:
+    bool m_peer_action_pending{false};
+    bool m_peer_action_auto_complete{true};
+    QString m_peer_action_error;
+    QString m_pending_peer_action;
+    bool m_pending_peer_success{false};
+    quint64 m_peer_action_generation{0};
     bool m_network_action_ready{true};
     bool m_network_action_pending{false};
     QString m_network_action_error;
@@ -2740,6 +2749,7 @@ public:
     int m_ban_peer_calls{0};
     bool hasWarnings() const { return !m_warning_list.isEmpty(); }
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
+    bool peerActionPending() const { return m_peer_action_pending; }
     int disconnectPeerCalls() const { return m_disconnect_peer_calls; }
     int banPeerCalls() const { return m_ban_peer_calls; }
     void setMempoolInfoPollingActive(bool active)
@@ -2757,6 +2767,7 @@ public:
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }
+    Q_INVOKABLE void refreshNodeInformation() { Q_EMIT nodeInformationChanged(); }
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;
@@ -2788,6 +2799,7 @@ public:
         m_warning_list = warnings;
         m_warnings = warnings.join(QStringLiteral("<hr />"));
         Q_EMIT warningsChanged();
+        Q_EMIT nodeInformationChanged();
     }
     Q_INVOKABLE void setBlockSyncActiveForTest(bool active)
     {
@@ -2818,6 +2830,13 @@ public:
     }
     Q_INVOKABLE void resetPeerActionTestState()
     {
+        ++m_peer_action_generation;
+        m_peer_action_pending = false;
+        m_peer_action_auto_complete = true;
+        m_peer_action_error.clear();
+        m_pending_peer_action.clear();
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
         m_disconnect_peer_result = true;
         m_ban_peer_result = true;
         m_disconnect_peer_calls = 0;
@@ -2834,23 +2853,56 @@ public:
         };
         return pattern.match(value).hasMatch();
     }
+    bool startPeerAction(const QString& action, bool success)
+    {
+        if (m_peer_action_pending) return false;
+        m_peer_action_pending = true;
+        m_peer_action_error.clear();
+        m_pending_peer_action = action;
+        m_pending_peer_success = success;
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
+        const auto generation = m_peer_action_generation;
+        if (m_peer_action_auto_complete) QTimer::singleShot(0, this, [this, generation] {
+            if (generation == m_peer_action_generation) completePeerAction(m_pending_peer_success);
+        });
+        return true;
+    }
+    Q_INVOKABLE void completePeerAction(bool success)
+    {
+        if (!m_peer_action_pending) return;
+        const auto action = m_pending_peer_action;
+        m_peer_action_pending = false;
+        m_peer_action_error = success ? QString{} : action == QStringLiteral("ban")
+            ? QStringLiteral("Could not ban peer. The node rejected the request.")
+            : QStringLiteral("Could not disconnect peer. The node rejected the request.");
+        Q_EMIT peerActionPendingChanged();
+        Q_EMIT peerActionErrorChanged();
+        Q_EMIT peerActionFinished(action, success, m_peer_action_error);
+    }
     Q_INVOKABLE bool disconnectPeer(int node_id)
     {
+        if (m_peer_action_pending) return false;
         m_last_disconnected_node_id = node_id;
         ++m_disconnect_peer_calls;
         Q_EMIT peerActionCallsChanged();
-        return m_disconnect_peer_result;
+        return startPeerAction(QStringLiteral("disconnect"), m_disconnect_peer_result);
     }
     Q_INVOKABLE bool banPeer(const QString& raw_address, qint64 ban_duration)
     {
+        if (m_peer_action_pending) return false;
         m_last_banned_address = raw_address;
         Q_UNUSED(ban_duration);
         ++m_ban_peer_calls;
         Q_EMIT peerActionCallsChanged();
-        return m_ban_peer_result;
+        return startPeerAction(QStringLiteral("ban"), m_ban_peer_result);
     }
 
 Q_SIGNALS:
+    void nodeInformationChanged();
+    void peerActionPendingChanged();
+    void peerActionErrorChanged();
+    void peerActionFinished(const QString& action, bool success, const QString& error);
     void networkActionReadyChanged();
     void networkActionPendingChanged();
     void networkActionErrorChanged();
@@ -2881,6 +2933,9 @@ Q_SIGNALS:
 class MockPeerTableModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool ready MEMBER m_ready CONSTANT)
+    Q_PROPERTY(bool refreshPending MEMBER m_refresh_pending NOTIFY refreshCallsChanged)
+    Q_PROPERTY(QString refreshError MEMBER m_refresh_error NOTIFY refreshCallsChanged)
     Q_PROPERTY(bool autoRefreshActive MEMBER m_auto_refresh_active NOTIFY autoRefreshActiveChanged)
     Q_PROPERTY(int refreshCalls READ refreshCalls NOTIFY refreshCallsChanged)
 
@@ -2904,6 +2959,9 @@ Q_SIGNALS:
     void autoRefreshActiveChanged();
 
 private:
+    bool m_ready{true};
+    bool m_refresh_pending{false};
+    QString m_refresh_error;
     int m_refresh_calls{0};
     bool m_auto_refresh_active{false};
 };
@@ -3098,6 +3156,10 @@ private:
 class MockBanListModel : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool actionPending READ actionPending NOTIFY actionStateChanged)
+    Q_PROPERTY(QString actionError MEMBER m_action_error NOTIFY actionStateChanged)
+    Q_PROPERTY(QString refreshError MEMBER m_refresh_error NOTIFY refreshCallsChanged)
+    Q_PROPERTY(bool actionAutoComplete MEMBER m_action_auto_complete NOTIFY actionStateChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool unbanResult MEMBER m_unban_result NOTIFY actionStateChanged)
     Q_PROPERTY(bool resetOnUnban MEMBER m_reset_on_unban NOTIFY actionStateChanged)
@@ -3110,6 +3172,7 @@ public:
         BanUntilRole
     };
 
+    bool actionPending() const { return m_action_pending || m_external_action_pending; }
     int count() const { return 1; }
     int unbanCalls() const { return m_unban_calls; }
     int refreshCalls() const { return m_refresh_calls; }
@@ -3143,23 +3206,61 @@ public:
 
     Q_INVOKABLE bool unbanAt(int row)
     {
+        if (actionPending() || row < 0 || row >= count()) return false;
+        m_action_pending = true;
+        m_action_error.clear();
         ++m_unban_calls;
+        Q_EMIT actionStateChanged();
         Q_EMIT actionCallsChanged();
         if (m_reset_on_unban) {
             beginResetModel();
             endResetModel();
         }
-        return row >= 0 && row < count() && m_unban_result;
+        const auto generation = m_action_generation;
+        if (m_action_auto_complete) QTimer::singleShot(0, this, [this, generation] {
+            if (generation == m_action_generation) completeUnban(m_unban_result);
+        });
+        return true;
+    }
+    Q_INVOKABLE void completeUnban(bool success)
+    {
+        if (!m_action_pending) return;
+        m_action_pending = false;
+        m_action_error = success ? QString{} : QStringLiteral("Could not unban peer. The ban list may have changed.");
+        Q_EMIT actionStateChanged();
+        Q_EMIT unbanFinished(success, m_action_error);
     }
 
+    void setExternalActionPending(bool pending)
+    {
+        m_external_action_pending = pending;
+        Q_EMIT actionStateChanged();
+    }
+    void finishExternalAction(bool refresh_required)
+    {
+        setExternalActionPending(false);
+        if (refresh_required || m_refresh_requested) refresh();
+    }
     Q_INVOKABLE void refresh()
     {
+        if (actionPending()) {
+            m_refresh_requested = true;
+            return;
+        }
+        m_refresh_requested = false;
         ++m_refresh_calls;
         Q_EMIT refreshCallsChanged();
     }
 
     Q_INVOKABLE void resetTestState()
     {
+        ++m_action_generation;
+        m_action_pending = false;
+        m_external_action_pending = false;
+        m_refresh_requested = false;
+        m_action_auto_complete = true;
+        m_action_error.clear();
+        m_refresh_error.clear();
         m_unban_result = true;
         m_reset_on_unban = false;
         m_unban_calls = 0;
@@ -3170,12 +3271,20 @@ public:
     }
 
 Q_SIGNALS:
+    void unbanFinished(bool success, const QString& error);
     void countChanged();
     void actionStateChanged();
     void actionCallsChanged();
     void refreshCallsChanged();
 
 private:
+    bool m_action_pending{false};
+    bool m_external_action_pending{false};
+    bool m_refresh_requested{false};
+    bool m_action_auto_complete{true};
+    quint64 m_action_generation{0};
+    QString m_action_error;
+    QString m_refresh_error;
     bool m_unban_result{true};
     bool m_reset_on_unban{false};
     int m_unban_calls{0};
@@ -4176,6 +4285,13 @@ public Q_SLOTS:
         static MockNetworkStatusModel network_status_model;
         static MockPeerListModelProxy peer_list_model_proxy;
         static MockBanListModel ban_list_model;
+        connect(&node_model, &MockNodeModel::peerActionPendingChanged, engine, [] {
+            if (node_model.peerActionPending()) ban_list_model.setExternalActionPending(true);
+        });
+        connect(&node_model, &MockNodeModel::peerActionFinished, engine, [](const QString& action, bool success, const QString&) {
+            if (success) peer_table_model.refresh();
+            ban_list_model.finishExternalAction(action == QStringLiteral("ban"));
+        });
         static MockPeerDetailsModel peer_details_model;
         static MockPeerDetailsModel other_peer_details_model;
         other_peer_details_model.m_node_id = 8;
