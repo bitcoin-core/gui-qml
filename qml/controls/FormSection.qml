@@ -5,7 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
-ColumnLayout {
+Item {
     id: root
 
     default property alias content: contentColumn.data
@@ -24,13 +24,12 @@ ColumnLayout {
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption
 
-    spacing: sectionHeader.visible ? sectionSpacing : 0
     implicitWidth: 450
     implicitHeight: sectionColumn.implicitHeight
 
     ColumnLayout {
         id: sectionColumn
-        Layout.fillWidth: true
+        width: root.width
         spacing: sectionHeader.visible || sectionFooter.visible ? root.sectionSpacing : 0
 
         ColumnLayout {
@@ -62,6 +61,7 @@ ColumnLayout {
                     id: headerLoader
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     active: root.headerTrailingItem !== null
+                    visible: active
                     sourceComponent: root.headerTrailingItem
                 }
             }

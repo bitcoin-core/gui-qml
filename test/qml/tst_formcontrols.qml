@@ -12,6 +12,7 @@ TestCase {
     id: testCase
     name: "FormControls"
     when: windowShown
+    visible: true
     width: 640
     height: 640
 
@@ -55,6 +56,15 @@ TestCase {
                 title: "Second"
                 showDivider: false
             }
+        }
+    }
+
+    Component {
+        id: sectionHeaderActionComponent
+
+        NavButton {
+            objectName: "exampleSectionHeaderAction"
+            text: "More"
         }
     }
 
@@ -263,6 +273,32 @@ TestCase {
         compare(footer.text, "Changes apply immediately.")
         compare(footer.font.pixelSize, Theme.text.caption.font.pixelSize)
         verify(section.implicitHeight > 0)
+    }
+
+    function test_formSectionSizesHeaderAndContentIndependently() {
+        const section = createTemporaryObject(formSectionComponent, host)
+        verify(section !== null)
+        const card = findChild(section, "exampleSectionCard")
+        tryCompare(card, "height", 96)
+        tryCompare(card, "width", section.width)
+        const heightWithHeaderAndFooter = section.implicitHeight
+
+        section.width = 320
+        tryCompare(card, "width", 320)
+        tryCompare(card, "height", 96)
+        section.title = ""
+        section.footerText = ""
+        tryCompare(section, "implicitHeight", card.implicitHeight)
+
+        section.headerTrailingItem = sectionHeaderActionComponent
+        tryVerify(function() { return findChild(section, "exampleSectionHeaderAction") !== null })
+        tryVerify(function() { return section.implicitHeight > card.implicitHeight })
+        section.width = 480
+        section.title = "Appearance"
+        section.footerText = "Changes apply immediately."
+        tryVerify(function() { return section.implicitHeight >= heightWithHeaderAndFooter })
+        section.headerTrailingItem = null
+        tryCompare(section, "implicitHeight", heightWithHeaderAndFooter)
     }
 
     function test_listRowSelectionAndActivation() {

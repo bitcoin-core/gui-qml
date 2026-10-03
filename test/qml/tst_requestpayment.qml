@@ -200,6 +200,7 @@ TestCase {
         const footer = findChild(card, "requestPaymentDetailsFooter")
         verify(footer.visible)
 
+        waitForRendering(page)
         mouseClick(findChild(card, "requestPaymentCustomizeButton"))
         const menu = findChild(card, "requestPaymentFieldsMenu")
         tryCompare(menu, "opened", true)
@@ -253,6 +254,7 @@ TestCase {
         editField(card, "requestPaymentAmountInput", "0.001").editingFinished()
         editField(card, "requestPaymentMessageInput", "Lunch split").editingFinished()
         editField(card, "requestPaymentYourNameInput", "Hal").editingFinished()
+        waitForRendering(page)
         mouseClick(findChild(card, "requestPaymentCustomizeButton"))
         const menu = findChild(card, "requestPaymentFieldsMenu")
         tryCompare(menu, "opened", true)
@@ -279,12 +281,14 @@ TestCase {
     }
 
     function test_empty_payment_details_restore_default_fields() {
-        const card = createPage().draftCard
+        const page = createPage()
+        const card = page.draftCard
         card.showAmount = false
         card.showMessage = false
         const add = findChild(card, "requestPaymentAddDetailsButton")
         verify(add.visible)
         compare(add.text, "Add details to your payment request")
+        waitForRendering(page)
         mouseClick(add)
         verify(findChild(card, "requestPaymentAmountField").visible)
         verify(findChild(card, "requestPaymentMessageRow").visible)
@@ -302,6 +306,7 @@ TestCase {
         editField(card, "requestPaymentAmountInput", ".").editingFinished()
         verify(card.errorText.length > 0)
         compare(card.request.amount.satoshi, 100000)
+        waitForRendering(page)
         mouseClick(findChild(card, "requestPaymentCustomizeButton"))
         const menu = findChild(card, "requestPaymentFieldsMenu")
         tryCompare(menu, "opened", true)
