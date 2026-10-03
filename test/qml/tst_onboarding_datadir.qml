@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/onboarding"
@@ -355,6 +356,12 @@ TestCase {
         const dialog = findChild(page, "customDataDirFolderDialog")
         verify(dialog !== null)
         verify(dialog.selectedFolder !== undefined)
+        compare(dialog.fileMode, AppFileDialog.Directory)
+
+        dialog.selectAndAccept("file:///tmp/first-datadir")
+        compare(optionsModel.dataDir, "file:///tmp/first-datadir")
+        dialog.selectAndAccept("file:///tmp/second-datadir")
+        compare(optionsModel.dataDir, "file:///tmp/second-datadir")
     }
 
     function test_storage_location_option_bindings_survive_selection_clicks() {

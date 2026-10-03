@@ -4,8 +4,8 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 
 Item {
@@ -80,7 +80,7 @@ Item {
         walletController.refreshExternalSignerStatus()
     }
 
-    FileDialog {
+    AppFileDialog {
         id: importFileDialog
         objectName: "walletImportFileDialog"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
