@@ -8,6 +8,9 @@
 #include <test/qt_test_registry.h>
 
 #include <qml/models/nodemodel.h>
+#include <qml/initexecutor.h>
+#include <qml/quithandler.h>
+#include <qml/shutdowncoordinator.h>
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
@@ -18,17 +21,42 @@
 #include <validation.h>
 
 #include <atomic>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
 #include <QVariantMap>
+#include <QEventLoop>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QTimer>
 
 namespace {
-constexpr int ASYNC_TIMEOUT_MS{1'000};
+constexpr int ASYNC_TIMEOUT_MS{5'000};
+
+void DrainNodeModel(NodeModel& model)
+{
+    if (model.isDrained()) return;
+    QEventLoop loop;
+    QObject::connect(&model, &NodeModel::drained, &loop, &QEventLoop::quit);
+    model.beginShutdown();
+    while (!model.isDrained()) loop.exec();
+}
+
+QString InformationValue(NodeModel& model, const QString& label)
+{
+    for (const auto& row : model.nodeInformationRows()) {
+        const auto values = row.toMap();
+        if (values.value(QStringLiteral("label")).toString() == label) return values.value(QStringLiteral("value")).toString();
+    }
+    return {};
+}
 
 std::unique_ptr<interfaces::Handler> MakeNoopHandler()
 {
@@ -104,6 +132,12 @@ class NodeModelTests : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase() { SelectParams(ChainType::REGTEST); }
+    void latestNotificationsSurviveStaleInitializationAndReorg();
+    void caughtUpInitializationClearsEarlierInitialDownloadNotification();
+    void networkCommandsCoalesceDesiredStateWithoutBlockingGui();
+    void newerNetworkNotificationSupersedesBlockedCommandResult();
+    void statusNotificationBurstUsesOneFollowupSnapshot();
     void refreshMempoolInfoUpdatesProperties();
     void activatingMempoolPollingEmitsSignalsAndRefreshesImmediately();
     void peerCountsInitializeAndRefreshFromDirectionalNodeCounts();
@@ -111,18 +145,22 @@ private Q_SLOTS:
     void banPeerRejectsInvalidInputs();
     void banPeerReturnsFalseWithoutDisconnectWhenBackendFails();
     void banPeerDisconnectsAddressAfterSuccessfulBan();
+    void networkActionReadyFollowsInitializationAndShutdown_data();
+    void networkActionReadyFollowsInitializationAndShutdown();
     void requestShutdownEmitsOnlyOnce();
     void initializationFailureRequestsShutdownWhenCoreWasInterrupted();
     void initializationFailureWithoutCoreInterruptOnlySetsErrorState();
     void initializationSuccessDuringCoreShutdownSkipsReadyState();
-    void destructorUnsubscribesCoreSignalsBeforeStoppingPolling();
+    void shutdownUnsubscribesCoreSignalsBeforeDrained();
     void nodeNotificationHandlersUpdateModelThroughQueuedSignals();
     void bannedListNotificationFromGuiThreadIsNotDeliveredReentrantly();
+    void notificationsDuringAndAfterShutdownAreIgnored();
     void blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues();
     void initialSyncCompletionIgnoresVerificationEstimateForGenesis();
     void initialSyncCompletionWaitsForStartupCatchUpAndLatches();
     void syncCompletionResetsForLargeHeaderGap_data();
     void syncCompletionResetsForLargeHeaderGap();
+    void coalescedTipsDoNotLatchCompletionFromIntermediateHeights();
     void blockSyncActiveFollowsInitializationAndBlockTipState();
     void alertNotificationsRefreshWarningList();
     void headerTipNotificationsExposeHeaderSyncProgress();
@@ -138,11 +176,13 @@ private Q_SLOTS:
     void initializeFailureShowsStartupWarningsWithoutMakingThemCurrentWarnings();
     void initializeFailureUsesNodeErrorMessages();
     void runawayExceptionSetsFatalStartupError();
+    void fatalExceptionExitsWithoutDraining_data();
+    void fatalExceptionExitsWithoutDraining();
     void nodeInformationRowsAvoidChainmanBeforeInitialization();
     void nodeInformationRowsExposeDiagnostics();
     void initEmitsRequestedInitialize();
     void initGuardBlocksSecondEmission();
-    void shutdownPollingStartsShutdownBeforeEmittingSignal();
+    void shutdownPollingOnlyRequestsLifecycleControl();
 };
 
 void NodeModelTests::refreshMempoolInfoUpdatesProperties()
@@ -153,6 +193,7 @@ void NodeModelTests::refreshMempoolInfoUpdatesProperties()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     mempool.count = 12;
@@ -176,6 +217,7 @@ void NodeModelTests::activatingMempoolPollingEmitsSignalsAndRefreshesImmediately
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     mempool.count = 3;
@@ -220,9 +262,10 @@ void NodeModelTests::peerCountsInitializeAndRefreshFromDirectionalNodeCounts()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(connections_changed_fn);
-    QCOMPARE(model.numPeers(), 3);
+    QTRY_COMPARE_WITH_TIMEOUT(model.numPeers(), 3, ASYNC_TIMEOUT_MS);
     QCOMPARE(model.numInboundPeers(), 1);
     QCOMPARE(model.numOutboundPeers(), 2);
 
@@ -233,7 +276,7 @@ void NodeModelTests::peerCountsInitializeAndRefreshFromDirectionalNodeCounts()
     peers.total = 7;
     peers.inbound = 5;
     peers.outbound = 2;
-    connections_changed_fn(99);
+    connections_changed_fn(7);
 
     QTRY_COMPARE_WITH_TIMEOUT(peers_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(inbound_spy.count(), 1, ASYNC_TIMEOUT_MS);
@@ -245,7 +288,7 @@ void NodeModelTests::peerCountsInitializeAndRefreshFromDirectionalNodeCounts()
     peers.total = 8;
     peers.inbound = 5;
     peers.outbound = 3;
-    connections_changed_fn(1);
+    connections_changed_fn(8);
 
     QTRY_COMPARE_WITH_TIMEOUT(peers_spy.count(), 2, ASYNC_TIMEOUT_MS);
     QCOMPARE(inbound_spy.count(), 1);
@@ -263,6 +306,7 @@ void NodeModelTests::disconnectPeerReturnsNodeResult()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
@@ -286,6 +330,7 @@ void NodeModelTests::banPeerRejectsInvalidInputs()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
@@ -305,6 +350,7 @@ void NodeModelTests::banPeerReturnsFalseWithoutDisconnectWhenBackendFails()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
@@ -328,6 +374,7 @@ void NodeModelTests::banPeerDisconnectsAddressAfterSuccessfulBan()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
@@ -349,6 +396,48 @@ void NodeModelTests::banPeerDisconnectsAddressAfterSuccessfulBan()
     QVERIFY(received_expected_disconnect);
 }
 
+void NodeModelTests::networkActionReadyFollowsInitializationAndShutdown_data()
+{
+    QTest::addColumn<bool>("initialize_success");
+    QTest::addColumn<bool>("direct_drain");
+    QTest::newRow("successful-init-shutdown-request") << true << false;
+    QTest::newRow("successful-init-direct-drain") << true << true;
+    QTest::newRow("failed-init-shutdown-request") << false << false;
+    QTest::newRow("failed-init-direct-drain") << false << true;
+}
+
+void NodeModelTests::networkActionReadyFollowsInitializationAndShutdown()
+{
+    QFETCH(bool, initialize_success);
+    QFETCH(bool, direct_drain);
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    QSignalSpy ready{&model, &NodeModel::networkActionReadyChanged};
+    QVERIFY(!model.networkActionReady());
+
+    model.initializeResult(initialize_success, {}, false, false);
+    QCOMPARE(model.networkActionReady(), initialize_success);
+    QCOMPARE(ready.count(), initialize_success ? 1 : 0);
+
+    if (direct_drain) model.beginShutdown();
+    else model.requestShutdown();
+    QVERIFY(!model.networkActionReady());
+    QCOMPARE(ready.count(), initialize_success ? 2 : 1);
+
+    // Repeated shutdown and a late successful initialization cannot enable
+    // network controls after a shutdown request or worker retirement.
+    const int notifications = ready.count();
+    if (direct_drain) model.beginShutdown();
+    else model.requestShutdown();
+    model.initializeResult(true, {}, false, false);
+    QVERIFY(!model.networkActionReady());
+    QCOMPARE(ready.count(), notifications);
+}
+
 void NodeModelTests::requestShutdownEmitsOnlyOnce()
 {
     MockNode node;
@@ -357,6 +446,7 @@ void NodeModelTests::requestShutdownEmitsOnlyOnce()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
@@ -375,12 +465,13 @@ void NodeModelTests::initializationFailureRequestsShutdownWhenCoreWasInterrupted
     node.shutdown_requested_fn = [] { return true; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy error_state_spy{&model, &NodeModel::errorStateChanged};
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
     QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
-    model.initializeResult(false, {});
+    model.initializeResult(false, {}, false, true);
 
     QCOMPARE(error_state_spy.count(), 1);
     QVERIFY(model.errorState());
@@ -397,6 +488,7 @@ void NodeModelTests::initializationFailureWithoutCoreInterruptOnlySetsErrorState
     node.shutdown_requested_fn = [] { return false; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy error_state_spy{&model, &NodeModel::errorStateChanged};
@@ -419,19 +511,20 @@ void NodeModelTests::initializationSuccessDuringCoreShutdownSkipsReadyState()
     node.shutdown_requested_fn = [] { return true; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
     QSignalSpy initialized_spy{&model, &NodeModel::nodeInitialized};
     QSignalSpy ready_state_spy{&model, &NodeModel::chainStateReady};
-    model.initializeResult(true, {});
+    model.initializeResult(true, {}, false, true);
 
     QCOMPARE(shutdown_spy.count(), 1);
     QCOMPARE(initialized_spy.count(), 0);
     QCOMPARE(ready_state_spy.count(), 0);
 }
 
-void NodeModelTests::destructorUnsubscribesCoreSignalsBeforeStoppingPolling()
+void NodeModelTests::shutdownUnsubscribesCoreSignalsBeforeDrained()
 {
     MockNode node;
     MempoolState mempool;
@@ -473,18 +566,12 @@ void NodeModelTests::destructorUnsubscribesCoreSignalsBeforeStoppingPolling()
     model->setMempoolInfoPollingActive(true);
     QTRY_VERIFY_WITH_TIMEOUT(mempool.max_usage_calls.load() > refresh_calls, ASYNC_TIMEOUT_MS);
 
-    bool checked_shutdown_order{false};
-    QObject::connect(model.get(), &NodeModel::mempoolInfoPollingActiveChanged, [&](bool active) {
-        if (!active) {
-            checked_shutdown_order = true;
-            QCOMPARE(disconnected_handlers.load(), 8);
-        }
-    });
-
+    QSignalSpy drained{model.get(), &NodeModel::drained};
+    DrainNodeModel(*model);
+    QCOMPARE(drained.count(), 1);
+    QCOMPARE(disconnected_handlers.load(), 8);
     model.reset();
 
-    QVERIFY(checked_shutdown_order);
-    QCOMPARE(disconnected_handlers.load(), 8);
 }
 
 void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
@@ -513,6 +600,7 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
     QVERIFY(connections_changed_fn);
@@ -530,7 +618,7 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
     peers.total = 9;
     peers.inbound = 2;
     peers.outbound = 7;
-    connections_changed_fn(7);
+    connections_changed_fn(9);
     banned_list_changed_fn();
 
     QTRY_COMPARE_WITH_TIMEOUT(block_tip_height_spy.count(), 1, ASYNC_TIMEOUT_MS);
@@ -563,6 +651,7 @@ void NodeModelTests::bannedListNotificationFromGuiThreadIsNotDeliveredReentrantl
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(banned_list_changed_fn);
 
@@ -574,7 +663,57 @@ void NodeModelTests::bannedListNotificationFromGuiThreadIsNotDeliveredReentrantl
     banned_list_changed_fn();
     QCOMPARE(banned_list_spy.count(), 0);
 
-    QTRY_COMPARE_WITH_TIMEOUT(banned_list_spy.count(), 1, ASYNC_TIMEOUT_MS);
+    // Process queued calls only: delivery must not depend on a timer firing.
+    QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+    QCOMPARE(banned_list_spy.count(), 1);
+
+    // A burst needs only one queued delivery, and a later change must wake the
+    // GUI again after the previous batch has been consumed.
+    for (int i = 0; i < 100; ++i) banned_list_changed_fn();
+    QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+    QCOMPARE(banned_list_spy.count(), 2);
+    banned_list_changed_fn();
+    QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+    QCOMPARE(banned_list_spy.count(), 3);
+}
+
+void NodeModelTests::notificationsDuringAndAfterShutdownAreIgnored()
+{
+    for (const bool drain : {false, true}) {
+        MockNode node;
+        MempoolState mempool;
+        interfaces::Node::BannedListChangedFn banned_list_changed;
+        ConfigureNodeModelDefaults(node);
+        ConfigureMempoolGetters(node, mempool);
+        node.handle_banned_list_changed_fn = [&](interfaces::Node::BannedListChangedFn fn) {
+            banned_list_changed = std::move(fn);
+            return MakeNoopHandler();
+        };
+
+        auto model{std::make_unique<NodeModel>(node, false)};
+        QSignalSpy changed{model.get(), &NodeModel::bannedListChanged};
+        QVERIFY(banned_list_changed);
+        banned_list_changed(); // Leave a delivery queued when shutdown starts.
+
+        std::atomic_bool stop{false};
+        std::binary_semaphore started{0};
+        std::thread worker([&] {
+            banned_list_changed();
+            started.release();
+            while (!stop.load()) banned_list_changed();
+        });
+        const auto join = qScopeGuard([&] {
+            stop = true;
+            worker.join();
+        });
+        started.acquire();
+        if (drain) DrainNodeModel(*model);
+        model.reset();
+        QCOMPARE(changed.count(), 0);
+        // A backend callback can retain the shared notification state even after
+        // the GUI receiver has been destroyed.
+        banned_list_changed();
+    }
 }
 
 void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()
@@ -597,6 +736,7 @@ void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
 
@@ -620,16 +760,13 @@ void NodeModelTests::blockTipUpdatesQueuedAcrossThreadsRetainPayloadValues()
     });
     worker.join();
 
-    QTRY_COMPARE_WITH_TIMEOUT(seen_progress.size(), size_t{2}, ASYNC_TIMEOUT_MS);
-    QTRY_COMPARE_WITH_TIMEOUT(seen_heights.size(), size_t{2}, ASYNC_TIMEOUT_MS);
-    QTRY_COMPARE_WITH_TIMEOUT(seen_times.size(), size_t{2}, ASYNC_TIMEOUT_MS);
-
-    QVERIFY(qFuzzyCompare(seen_progress.at(0), 0.51));
-    QVERIFY(qFuzzyCompare(seen_progress.at(1), 0.75));
-    QCOMPARE(seen_heights.at(0), 123);
-    QCOMPARE(seen_heights.at(1), 456);
-    QCOMPARE(seen_times.at(0), 1'700'000'001);
-    QCOMPARE(seen_times.at(1), 1'700'000'099);
+    QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+    QCOMPARE(seen_progress.size(), size_t{1});
+    QTRY_COMPARE_WITH_TIMEOUT(seen_heights.size(), size_t{1}, ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(seen_times.size(), size_t{1}, ASYNC_TIMEOUT_MS);
+    QCOMPARE(seen_progress.at(0), 0.75);
+    QCOMPARE(seen_heights.at(0), 456);
+    QCOMPARE(seen_times.at(0), 1'700'000'099);
     QCOMPARE(model.blockTipHeight(), 456);
     QVERIFY(qFuzzyCompare(model.verificationProgress(), 0.75));
 }
@@ -650,6 +787,7 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
     QVERIFY(!model.blockSyncActive());
@@ -663,7 +801,7 @@ void NodeModelTests::blockSyncActiveFollowsInitializationAndBlockTipState()
         .header_height = 100,
         .header_time = GetTime(),
         .verification_progress = 0.25,
-    });
+    }, initial_block_download, false);
 
     QCOMPARE(block_sync_spy.count(), 1);
     QVERIFY(model.blockSyncActive());
@@ -693,6 +831,7 @@ void NodeModelTests::initialSyncCompletionIgnoresVerificationEstimateForGenesis(
     node.is_initial_block_download_fn = [] { return false; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QSignalSpy sync_complete_spy{&model, &NodeModel::initialSyncCompleteChanged};
 
@@ -731,6 +870,7 @@ void NodeModelTests::initialSyncCompletionWaitsForStartupCatchUpAndLatches()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
     QVERIFY(header_tip_fn);
@@ -813,6 +953,7 @@ void NodeModelTests::syncCompletionResetsForLargeHeaderGap()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(block_tip_fn);
     QVERIFY(header_tip_fn);
@@ -834,7 +975,8 @@ void NodeModelTests::syncCompletionResetsForLargeHeaderGap()
             header_tip_fn(SynchronizationState::POST_INIT,
                           interfaces::BlockTip{10'000 + gap, GetTime(), uint256{}}, /*presync=*/false);
         }
-        QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+        if (rewind_blocks) QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 10'000 - gap, ASYNC_TIMEOUT_MS);
+        else QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Header height")), QString::number(10'000 + gap), ASYNC_TIMEOUT_MS);
         QVERIFY(!model.blockSyncActive());
         QCOMPARE(model.initialSyncComplete(), gap <= 24);
         QCOMPARE(sync_complete_spy.count(), gap <= 24 ? 0 : 1);
@@ -846,10 +988,57 @@ void NodeModelTests::syncCompletionResetsForLargeHeaderGap()
     for (const int gap : {24, 1, 0}) {
         block_tip_fn(SynchronizationState::POST_INIT,
                      interfaces::BlockTip{header_height - gap, GetTime(), uint256{}}, 0.9999);
-        QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+        QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), header_height - gap, ASYNC_TIMEOUT_MS);
         QCOMPARE(model.initialSyncComplete(), gap == 0);
         QCOMPARE(sync_complete_spy.count(), gap == 0 ? 2 : 1);
     }
+}
+
+void NodeModelTests::coalescedTipsDoNotLatchCompletionFromIntermediateHeights()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    interfaces::Node::NotifyBlockTipFn block_tip;
+    interfaces::Node::NotifyHeaderTipFn header_tip;
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn callback) {
+        block_tip = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_header_tip_fn = [&](interfaces::Node::NotifyHeaderTipFn callback) {
+        header_tip = std::move(callback);
+        return MakeNoopHandler();
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    QVERIFY(block_tip);
+    QVERIFY(header_tip);
+    const auto now = GetTime();
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 100, .block_time = now,
+        .header_height = 100, .header_time = now,
+        .verification_progress = 1.0,
+    }, false, false);
+    QVERIFY(model.initialSyncComplete());
+
+    header_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{200, now, uint256{1}}, false);
+    QTRY_VERIFY_WITH_TIMEOUT(!model.initialSyncComplete(), ASYNC_TIMEOUT_MS);
+    QSignalSpy completion{&model, &NodeModel::initialSyncCompleteChanged};
+
+    // Both callbacks precede the next GUI publication. The shorter replacement
+    // chain remains one block behind its best header. Applying header 91 while
+    // block 100 is still cached must not latch completion for the final 90/91.
+    block_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{90, now, uint256{2}}, 0.9);
+    header_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{91, now, uint256{3}}, false);
+    QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 90, ASYNC_TIMEOUT_MS);
+    QCOMPARE(InformationValue(model, QStringLiteral("Header height")), QStringLiteral("91"));
+    QVERIFY(!model.initialSyncComplete());
+    QCOMPARE(completion.count(), 0);
+
+    block_tip(SynchronizationState::POST_INIT, interfaces::BlockTip{91, now, uint256{3}}, 1.0);
+    QTRY_VERIFY_WITH_TIMEOUT(model.initialSyncComplete(), ASYNC_TIMEOUT_MS);
+    QCOMPARE(completion.count(), 1);
 }
 
 void NodeModelTests::alertNotificationsRefreshWarningList()
@@ -857,23 +1046,25 @@ void NodeModelTests::alertNotificationsRefreshWarningList()
     MockNode node;
     MempoolState mempool;
     interfaces::Node::NotifyAlertChangedFn alert_changed_fn;
+    std::mutex warnings_mutex;
     bilingual_str warnings{Untranslated("")};
 
     ConfigureNodeModelDefaults(node);
     ConfigureMempoolGetters(node, mempool);
-    node.get_warnings_fn = [&] { return warnings; };
+    node.get_warnings_fn = [&] { std::lock_guard lock{warnings_mutex}; return warnings; };
     node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn fn) {
         alert_changed_fn = std::move(fn);
         return MakeNoopHandler();
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(alert_changed_fn);
     QVERIFY(!model.hasWarnings());
 
     QSignalSpy warnings_spy{&model, &NodeModel::warningsChanged};
-    warnings = bilingual_str{"first<hr />second", "translated first<hr />translated second"};
+    { std::lock_guard lock{warnings_mutex}; warnings = bilingual_str{"first<hr />second", "translated first<hr />translated second"}; }
     alert_changed_fn();
 
     QTRY_COMPARE_WITH_TIMEOUT(warnings_spy.count(), 1, ASYNC_TIMEOUT_MS);
@@ -896,6 +1087,7 @@ void NodeModelTests::headerTipNotificationsExposeHeaderSyncProgress()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(header_tip_fn);
 
@@ -920,11 +1112,12 @@ void NodeModelTests::startupWarningsAreShownOnceAndDoNotBecomeCurrentWarnings()
     MempoolState mempool;
     interfaces::Node::MessageBoxFn message_box_fn;
     interfaces::Node::NotifyAlertChangedFn alert_changed_fn;
+    std::mutex warnings_mutex;
     bilingual_str warnings{"network warning", "Translated network warning"};
 
     ConfigureNodeModelDefaults(node);
     ConfigureMempoolGetters(node, mempool);
-    node.get_warnings_fn = [&] { return warnings; };
+    node.get_warnings_fn = [&] { std::lock_guard lock{warnings_mutex}; return warnings; };
     node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn fn) {
         alert_changed_fn = std::move(fn);
         return MakeNoopHandler();
@@ -935,6 +1128,7 @@ void NodeModelTests::startupWarningsAreShownOnceAndDoNotBecomeCurrentWarnings()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     model.addStartupWarnings({QStringLiteral("Translated early startup warning")});
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(alert_changed_fn);
@@ -954,7 +1148,7 @@ void NodeModelTests::startupWarningsAreShownOnceAndDoNotBecomeCurrentWarnings()
     QCOMPARE(model.runtimeDialogMessage(), QStringLiteral("Translated early startup warning\n\nTranslated startup warning"));
     QCOMPARE(model.runtimeDialogButtons(), static_cast<unsigned int>(CClientUIInterface::BTN_OK));
 
-    QCOMPARE(model.warningList(), QStringList({QStringLiteral("Translated network warning")}));
+    QTRY_COMPARE_WITH_TIMEOUT(model.warningList(), QStringList({QStringLiteral("Translated network warning")}), ASYNC_TIMEOUT_MS);
     QVERIFY(model.hasWarnings());
     QVERIFY(model.startupError().isEmpty());
 
@@ -963,7 +1157,7 @@ void NodeModelTests::startupWarningsAreShownOnceAndDoNotBecomeCurrentWarnings()
     QVERIFY(!model.runtimeDialogVisible());
 
     QSignalSpy warnings_spy{&model, &NodeModel::warningsChanged};
-    warnings = Untranslated("");
+    { std::lock_guard lock{warnings_mutex}; warnings = Untranslated(""); }
     alert_changed_fn();
 
     QTRY_COMPARE_WITH_TIMEOUT(warnings_spy.count(), 1, ASYNC_TIMEOUT_MS);
@@ -985,6 +1179,7 @@ void NodeModelTests::runtimeMessageHandlerOpensAfterInitialization()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
     model.initializeResult(true, {});
@@ -1030,6 +1225,7 @@ void NodeModelTests::runtimeQuestionHandlerBlocksForAnswerAndReturnsResult()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(question_fn);
 
@@ -1078,6 +1274,7 @@ void NodeModelTests::runtimeStartupQuestionFailureLetsInitializeResultRequestShu
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(question_fn);
 
@@ -1138,6 +1335,7 @@ void NodeModelTests::runtimeStartupErrorDialogLetsInitializeResultRequestShutdow
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
 
@@ -1196,6 +1394,7 @@ void NodeModelTests::runtimeDialogDefaultsToOkWhenNoButtonsAreSpecified()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
     model.initializeResult(true, {});
@@ -1236,6 +1435,7 @@ void NodeModelTests::runtimeDialogExposesFullCoreButtonMask()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
     model.initializeResult(true, {});
@@ -1280,6 +1480,7 @@ void NodeModelTests::runtimeBlockingDialogsAreQueued()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(question_fn);
     model.initializeResult(true, {});
@@ -1332,6 +1533,7 @@ void NodeModelTests::runtimeNonBlockingDialogsAreQueued()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
     model.initializeResult(true, {});
@@ -1371,6 +1573,7 @@ void NodeModelTests::initializeFailureShowsStartupWarningsWithoutMakingThemCurre
     node.get_warnings_fn = [] { return bilingual_str{"pre-release warning", "Translated pre-release warning"}; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     model.addStartupWarnings({QStringLiteral("Translated startup warning")});
     WaitForInitialMempoolRefresh(mempool);
 
@@ -1381,7 +1584,7 @@ void NodeModelTests::initializeFailureShowsStartupWarningsWithoutMakingThemCurre
     QCOMPARE(faulted_spy.count(), 1);
     QCOMPARE(startup_error_spy.count(), 1);
     QVERIFY(model.errorState());
-    QCOMPARE(model.warningList(), QStringList({QStringLiteral("Translated pre-release warning")}));
+    QTRY_COMPARE_WITH_TIMEOUT(model.warningList(), QStringList({QStringLiteral("Translated pre-release warning")}), ASYNC_TIMEOUT_MS);
     QCOMPARE(model.startupError(), QStringLiteral("Startup warnings:\nTranslated startup warning\n\nNode initialization failed."));
 }
 
@@ -1400,6 +1603,7 @@ void NodeModelTests::initializeFailureUsesNodeErrorMessages()
     };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     QVERIFY(message_box_fn);
 
@@ -1428,7 +1632,7 @@ void NodeModelTests::initializeFailureUsesNodeErrorMessages()
     QCOMPARE(faulted_spy.count(), 1);
     QCOMPARE(startup_error_spy.count(), 1);
     QVERIFY(model.errorState());
-    QCOMPARE(model.warningList(), QStringList({QStringLiteral("Translated pre-release warning")}));
+    QTRY_COMPARE_WITH_TIMEOUT(model.warningList(), QStringList({QStringLiteral("Translated pre-release warning")}), ASYNC_TIMEOUT_MS);
     QCOMPARE(model.startupError(), QStringLiteral("Translated unable to bind\n\nTranslated failed to listen"));
 }
 
@@ -1441,11 +1645,111 @@ void NodeModelTests::runawayExceptionSetsFatalStartupError()
     ConfigureMempoolGetters(node, mempool);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     model.handleRunawayException(QStringLiteral("std::runtime_error: boom"));
     QVERIFY(model.errorState());
-    QCOMPARE(model.startupError(), QStringLiteral("std::runtime_error: boom"));
+    QVERIFY(model.fatalException());
+    QVERIFY(model.startupError().contains(QStringLiteral("can no longer continue safely")));
+    QVERIFY(model.startupError().endsWith(QStringLiteral("std::runtime_error: boom")));
+}
+
+void NodeModelTests::fatalExceptionExitsWithoutDraining_data()
+{
+    QTest::addColumn<QString>("phase");
+    QTest::addColumn<bool>("native_quit");
+    for (const auto* phase : {"initialize", "interrupt", "shutdown", "unknown", "empty", "pending-poll"}) {
+        for (const bool native_quit : {false, true}) {
+            const QByteArray tag = QByteArray{phase} + (native_quit ? "-quit" : "-dialog");
+            QTest::newRow(tag.constData()) << QString::fromLatin1(phase) << native_quit;
+        }
+    }
+}
+
+void NodeModelTests::fatalExceptionExitsWithoutDraining()
+{
+    QFETCH(QString, phase);
+    QFETCH(bool, native_quit);
+    if (!qEnvironmentVariableIsSet("BITCOIN_QML_FATAL_EXCEPTION_CHILD")) {
+        QSKIP("Executed by bitcoinqml_fatal_exception_tests in child processes.");
+    }
+
+    // A child process is required: the real fatal path must exit directly,
+    // leaving both stack owners and stalled work intact for process teardown.
+    MockNode node;
+    ConfigureNodeModelDefaults(node);
+    std::atomic_bool core_shutdown{false};
+    const auto fail = [&]() -> void {
+        core_shutdown = true;
+        if (phase == "unknown") throw 42;
+        throw std::runtime_error(phase == "empty" ? "" : "fatal test exception");
+    };
+    node.app_init_main_fn = [&](interfaces::BlockAndHeaderTipInfo*) -> bool { fail(); return false; };
+    node.start_shutdown_fn = [&] { if (phase == "interrupt") fail(); };
+    node.app_shutdown_fn = [&] { if (phase == "shutdown") fail(); };
+    QSemaphore poll_entered, release_poll;
+    node.shutdown_requested_fn = [&] {
+        if (phase == "pending-poll") {
+            poll_entered.release();
+            release_poll.acquire();
+        }
+        return core_shutdown.load();
+    };
+
+    NodeModel model{node, /*backend_ready=*/false};
+    QmlInitExecutor executor{node};
+    QmlShutdownCoordinator coordinator{executor};
+    QmlQuitHandler quit_handler;
+    connect(&quit_handler, &QmlQuitHandler::quitRequested, &model, &NodeModel::requestShutdown);
+    connect(&model, &NodeModel::requestedShutdown, &coordinator, &QmlShutdownCoordinator::requestShutdown);
+    connect(&executor, &QmlInitExecutor::runawayException, &model, &NodeModel::handleRunawayException);
+    connect(&coordinator, &QmlShutdownCoordinator::finished, this, [] { std::_Exit(86); });
+
+    QSemaphore entered, release;
+    BackendExecutor stalled;
+    stalled.submit(this, [&] { entered.release(); release.acquire(); }, [] {});
+    if (!entered.tryAcquire(1, 5'000)) std::_Exit(87);
+    const auto request_quit = [] {
+        QEvent quit{QEvent::Quit};
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &quit);
+    };
+    connect(&model, &NodeModel::startupErrorChanged, this, [&] {
+        const QString detail = phase == "unknown" ? QStringLiteral("Unknown exception")
+            : phase == "empty" ? QString{} : QStringLiteral("fatal test exception");
+        if (!model.fatalException() || !model.errorState()
+            || !model.startupError().contains(QStringLiteral("can no longer continue safely"))
+            || !model.startupError().contains(detail)) std::_Exit(88);
+        // An in-flight poll must not acknowledge the fatal notification when
+        // its reply arrives after shutdown polling has been stopped.
+        if (phase == "pending-poll") release_poll.release();
+        // Keep the notification open across a shutdown-polling interval.
+        // Fatal errors must await acknowledgement, even if Core wants to quit.
+        QTimer::singleShot(300, this, [&] {
+            if (phase == "interrupt" && node.calls.appShutdown.load() != 0) std::_Exit(89);
+            std::puts("fatal notification acknowledged");
+            std::fflush(stdout);
+            if (native_quit) request_quit();
+            else model.requestShutdown();
+            std::_Exit(90);
+        });
+    });
+    model.startShutdownPolling();
+    if (phase == "pending-poll") {
+        QTRY_VERIFY_WITH_TIMEOUT(poll_entered.available() > 0, ASYNC_TIMEOUT_MS);
+    }
+    if (phase == "interrupt" || phase == "shutdown") {
+        // The later acknowledgement must work even after an earlier Quit and
+        // an already-issued normal shutdown request.
+        if (native_quit) request_quit();
+        else model.requestShutdown();
+    } else {
+        executor.initialize();
+    }
+    QTimer::singleShot(5'000, this, [] { std::_Exit(91); });
+    QEventLoop loop;
+    loop.exec();
+    std::_Exit(92);
 }
 
 void NodeModelTests::nodeInformationRowsAvoidChainmanBeforeInitialization()
@@ -1463,6 +1767,7 @@ void NodeModelTests::nodeInformationRowsAvoidChainmanBeforeInitialization()
     node.ExpectNoCalls(node.calls.getNetworkActive);
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     const QVariantList rows = model.nodeInformationRows();
@@ -1502,6 +1807,7 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
     node.get_net_local_addresses_fn = [] { return std::map<CNetAddr, LocalServiceInfo>{}; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
     model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
         .block_height = 320,
@@ -1511,6 +1817,7 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
         .verification_progress = 0.5,
     });
 
+    QTRY_COMPARE_WITH_TIMEOUT(model.numPeers(), 3, ASYNC_TIMEOUT_MS);
     const QVariantList rows = model.nodeInformationRows();
     QVERIFY(!rows.empty());
 
@@ -1531,6 +1838,7 @@ void NodeModelTests::initEmitsRequestedInitialize()
     MockNode node;
     ConfigureNodeModelDefaults(node);
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
 
     QSignalSpy spy{&model, &NodeModel::requestedInitialize};
     model.startNodeInitializionThread();
@@ -1542,6 +1850,7 @@ void NodeModelTests::initGuardBlocksSecondEmission()
     MockNode node;
     ConfigureNodeModelDefaults(node);
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
 
     QSignalSpy spy{&model, &NodeModel::requestedInitialize};
     model.startNodeInitializionThread();
@@ -1549,7 +1858,7 @@ void NodeModelTests::initGuardBlocksSecondEmission()
     QCOMPARE(spy.count(), 1);
 }
 
-void NodeModelTests::shutdownPollingStartsShutdownBeforeEmittingSignal()
+void NodeModelTests::shutdownPollingOnlyRequestsLifecycleControl()
 {
     MockNode node;
     MempoolState mempool;
@@ -1558,23 +1867,277 @@ void NodeModelTests::shutdownPollingStartsShutdownBeforeEmittingSignal()
     node.shutdown_requested_fn = [] { return true; };
 
     NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
     WaitForInitialMempoolRefresh(mempool);
 
     QSignalSpy shutdown_spy{&model, &NodeModel::requestedShutdown};
-    bool started_before_signal{false};
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    node.start_shutdown_fn = [&] {
-        started_before_signal = shutdown_spy.count() == 0;
-    };
-    node.ExpectExactly(node.calls.startShutdown, 1);
+    node.ExpectExactly(node.calls.startShutdown, 0);
 
     model.startShutdownPolling();
 
     QTRY_COMPARE_WITH_TIMEOUT(shutdown_spy.count(), 1, ASYNC_TIMEOUT_MS);
-    QVERIFY(started_before_signal);
+    QCOMPARE(node.calls.startShutdown.load(), 0);
 
     model.requestShutdown();
     QCOMPARE(shutdown_spy.count(), 1);
+}
+
+
+void NodeModelTests::latestNotificationsSurviveStaleInitializationAndReorg()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    interfaces::Node::NotifyBlockTipFn block;
+    interfaces::Node::NotifyHeaderTipFn header;
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn callback) {
+        block = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_header_tip_fn = [&](interfaces::Node::NotifyHeaderTipFn callback) {
+        header = std::move(callback);
+        return MakeNoopHandler();
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    QVERIFY(block);
+    QVERIFY(header);
+    const auto now = GetTime();
+    block(SynchronizationState::POST_INIT, interfaces::BlockTip{200, now, uint256{1}}, 0.9);
+    header(SynchronizationState::POST_INIT, interfaces::BlockTip{200, now, uint256{1}}, false);
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 100, .block_time = now - 100,
+        .header_height = 100, .header_time = now - 100,
+        .verification_progress = 0.1,
+    }, true, false);
+    QCOMPARE(model.blockTipHeight(), 200);
+    QCOMPARE(model.verificationProgress(), 0.9);
+    QVERIFY(!model.blockSyncActive());
+    QCOMPARE(InformationValue(model, QStringLiteral("Header height")), QStringLiteral("200"));
+    QSignalSpy times{&model, &NodeModel::blockTipTimeChanged};
+    for (int id = 2; id < 10'002; ++id) {
+        block(SynchronizationState::INIT_DOWNLOAD, interfaces::BlockTip{200, now + id, uint256{static_cast<uint8_t>(id)}}, 0.8);
+    }
+    block(SynchronizationState::POST_INIT, interfaces::BlockTip{199, now + 10, uint256{10}}, 0.7);
+    QTRY_COMPARE_WITH_TIMEOUT(model.blockTipHeight(), 199, ASYNC_TIMEOUT_MS);
+    QCOMPARE(times.count(), 1);
+    QCOMPARE(times.at(0).at(0).toLongLong(), now + 10);
+    QCOMPARE(model.verificationProgress(), 0.7);
+    QVERIFY(!model.blockSyncActive());
+    model.initializeResult(true, {}, true, false);
+    QCOMPARE(model.blockTipHeight(), 199);
+    QCOMPARE(model.verificationProgress(), 0.7);
+    QVERIFY(!model.blockSyncActive());
+    QCOMPARE(node.calls.isInitialBlockDownload.load(), 0);
+    QCOMPARE(node.calls.shutdownRequested.load(), 0);
+}
+
+
+void NodeModelTests::caughtUpInitializationClearsEarlierInitialDownloadNotification()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    interfaces::Node::NotifyBlockTipFn block;
+    node.handle_notify_block_tip_fn = [&](interfaces::Node::NotifyBlockTipFn callback) {
+        block = std::move(callback);
+        return MakeNoopHandler();
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    QVERIFY(block);
+    const auto now = GetTime();
+    // LoadChainTip reports INIT_DOWNLOAD even when the existing chain is caught up.
+    block(SynchronizationState::INIT_DOWNLOAD, interfaces::BlockTip{200, now, uint256{1}}, 1.0);
+    model.initializeResult(true, interfaces::BlockAndHeaderTipInfo{
+        .block_height = 200, .block_time = now,
+        .header_height = 200, .header_time = now,
+        .verification_progress = 1.0,
+    }, false, false);
+    QCOMPARE(model.blockTipHeight(), 200);
+    QVERIFY(!model.blockSyncActive());
+    QVERIFY(model.initialSyncComplete());
+    QCOMPARE(node.calls.isInitialBlockDownload.load(), 0);
+    QCOMPARE(node.calls.shutdownRequested.load(), 0);
+}
+
+void NodeModelTests::networkCommandsCoalesceDesiredStateWithoutBlockingGui()
+{
+    struct NetworkNode final : MockNode {
+        std::function<void(bool)> set_active;
+        void setNetworkActive(bool active) override { set_active(active); }
+    } node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_bool active{true};
+    std::atomic_bool off_gui{true};
+    std::atomic_int commands{0};
+    std::vector<bool> requested_states;
+    const auto gui_thread = QThread::currentThread();
+    node.get_network_active_fn = [&] { return active.load(); };
+    node.set_active = [&](bool requested) {
+        if (QThread::currentThread() == gui_thread) off_gui = false;
+        requested_states.push_back(requested);
+        if (++commands == 1) {
+            entered.release();
+            release.acquire();
+        }
+        active = requested;
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    QSignalSpy status_ready{&model, &NodeModel::nodeInformationChanged};
+    model.initializeResult(true, {}, false, false);
+    QTRY_VERIFY_WITH_TIMEOUT(!status_ready.isEmpty(), ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"), ASYNC_TIMEOUT_MS);
+    QSignalSpy pending{&model, &NodeModel::networkActionPendingChanged};
+    model.setPause(true);
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    QVERIFY(model.networkActionPending());
+    for (int i = 0; i < 100; ++i) model.setPause(i % 2 == 0);
+    bool heartbeat{false};
+    QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+    QTRY_VERIFY_WITH_TIMEOUT(heartbeat, ASYNC_TIMEOUT_MS);
+    QCOMPARE(commands.load(), 1);
+    QCOMPARE(pending.count(), 1);
+    release.release();
+    QTRY_VERIFY_WITH_TIMEOUT(!model.networkActionPending(), ASYNC_TIMEOUT_MS);
+    QCOMPARE(commands.load(), 2);
+    QCOMPARE(requested_states, std::vector<bool>({false, true}));
+    QCOMPARE(pending.count(), 2);
+    QVERIFY(!model.pause());
+    QVERIFY(model.networkActionError().isEmpty());
+    QVERIFY(off_gui.load());
+    model.beginShutdown();
+    model.setPause(true);
+    QCOMPARE(commands.load(), 2);
+}
+
+
+void NodeModelTests::newerNetworkNotificationSupersedesBlockedCommandResult()
+{
+    struct NetworkNode final : MockNode {
+        std::function<void(bool)> set_active;
+        void setNetworkActive(bool active) override { set_active(active); }
+    } node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_bool active{true};
+    std::atomic_bool gate_next_read{false};
+    interfaces::Node::NotifyNetworkActiveChangedFn network_changed;
+    node.handle_notify_network_active_changed_fn = [&](interfaces::Node::NotifyNetworkActiveChangedFn callback) {
+        network_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.set_active = [&](bool requested) {
+        active = requested;
+        gate_next_read = true;
+    };
+    node.get_network_active_fn = [&] {
+        const bool captured = active.load();
+        if (gate_next_read.exchange(false)) {
+            entered.release();
+            release.acquire();
+        }
+        return captured;
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    QSignalSpy status_ready{&model, &NodeModel::nodeInformationChanged};
+    model.initializeResult(true, {}, false, false);
+    QTRY_VERIFY_WITH_TIMEOUT(!status_ready.isEmpty(), ASYNC_TIMEOUT_MS);
+    QTRY_COMPARE_WITH_TIMEOUT(InformationValue(model, QStringLiteral("Local addresses")), QStringLiteral("None"), ASYNC_TIMEOUT_MS);
+    QCOMPARE(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"));
+    QVERIFY(network_changed);
+    model.setPause(true);
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    QVERIFY(model.networkActionPending());
+    // An RPC command resumes networking after this command captured inactive.
+    QSignalSpy information{&model, &NodeModel::nodeInformationChanged};
+    active = true;
+    network_changed(true);
+    QTRY_VERIFY_WITH_TIMEOUT(!information.isEmpty(), ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.pause());
+    release.release();
+    QTRY_VERIFY_WITH_TIMEOUT(!model.networkActionPending(), ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.pause());
+    QCOMPARE(InformationValue(model, QStringLiteral("Network active")), QStringLiteral("Yes"));
+    QVERIFY(model.networkActionError().isEmpty());
+}
+
+
+void NodeModelTests::statusNotificationBurstUsesOneFollowupSnapshot()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_int version{0};
+    std::atomic_bool off_gui{true};
+    const auto gui_thread = QThread::currentThread();
+    interfaces::Node::NotifyNumConnectionsChangedFn connections_changed;
+    interfaces::Node::NotifyAlertChangedFn warnings_changed;
+    node.handle_notify_num_connections_changed_fn = [&](interfaces::Node::NotifyNumConnectionsChangedFn callback) {
+        connections_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn callback) {
+        warnings_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.get_node_count_fn = [&](ConnectionDirection direction) {
+        if (QThread::currentThread() == gui_thread) off_gui = false;
+        const size_t count = version.load() == 0 ? 1 : (direction == ConnectionDirection::In ? 9 : 4);
+        if (node.calls.getNodeCount.load() == 1) {
+            entered.release();
+            release.acquire();
+        }
+        return count;
+    };
+    node.get_warnings_fn = [&] {
+        if (QThread::currentThread() == gui_thread) off_gui = false;
+        return Untranslated(version.load() == 0 ? "Old warning" : "Latest warning");
+    };
+    NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    QVERIFY(connections_changed);
+    QVERIFY(warnings_changed);
+    QCOMPARE(model.numPeers(), 0);
+    QVERIFY(model.warnings().isEmpty());
+    version = 1;
+    for (int notification = 1; notification <= 10'000; ++notification) {
+        connections_changed(notification);
+        warnings_changed();
+    }
+    bool heartbeat{false};
+    QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+    QTRY_VERIFY_WITH_TIMEOUT(heartbeat, ASYNC_TIMEOUT_MS);
+    QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+    QCOMPARE(node.calls.getNodeCount.load(), 1);
+    QCOMPARE(node.calls.getWarnings.load(), 0);
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(model.numPeers(), 10'000, ASYNC_TIMEOUT_MS);
+    QCOMPARE(model.numInboundPeers(), 9);
+    QCOMPARE(model.numOutboundPeers(), 4);
+    QCOMPARE(model.warnings(), QStringLiteral("Latest warning"));
+    QCOMPARE(node.calls.getNodeCount.load(), 4);
+    QCOMPARE(node.calls.getWarnings.load(), 2);
+    QVERIFY(off_gui.load());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

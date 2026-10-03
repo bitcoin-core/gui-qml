@@ -23,13 +23,25 @@ private Q_SLOTS:
 void SyncProgressTrackerTests::publishesAtBoundedCadence()
 {
     SyncProgressTracker tracker;
-    std::optional<int64_t> estimate;
-    for (std::size_t i{0}; i < SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL; ++i) {
-        estimate = tracker.addSample(static_cast<int64_t>(i * 10), static_cast<double>(i) / 2000.0);
+    QVERIFY(!tracker.addSample(0, 0.1));
+    // Even thousands of incoming blocks inside one second cannot republish.
+    for (int sample = 1; sample < 1000; ++sample) {
+        QVERIFY(!tracker.addSample(sample, 0.1 + sample * 0.0001));
     }
+    const auto first = tracker.addSample(SyncProgressTracker::PUBLISH_INTERVAL_MILLISECONDS, 0.2);
+    QVERIFY(first.has_value());
+    QVERIFY(qAbs(*first - 8000) <= 1);
+    QVERIFY(!tracker.addSample(1500, 0.25));
+    const auto second = tracker.addSample(2000, 0.3);
+    QVERIFY(second.has_value());
+    QVERIFY(qAbs(*second - 7000) <= 1);
 
-    QVERIFY(estimate.has_value());
-    QVERIFY(*estimate > 0);
+    // Sparse notifications still publish once enough wall time has elapsed.
+    SyncProgressTracker sparse;
+    QVERIFY(!sparse.addSample(0, 0.1));
+    const auto low_frequency = sparse.addSample(5000, 0.2);
+    QVERIFY(low_frequency.has_value());
+    QVERIFY(qAbs(*low_frequency - 40000) <= 1);
 }
 
 void SyncProgressTrackerTests::boundsHistoryWithoutDiscardingTheWindow()
@@ -38,21 +50,21 @@ void SyncProgressTrackerTests::boundsHistoryWithoutDiscardingTheWindow()
     for (std::size_t i{0}; i < SyncProgressTracker::MAX_SAMPLES + 500; ++i) {
         tracker.addSample(static_cast<int64_t>(i), static_cast<double>(i) / 10'000.0);
     }
-
     QCOMPARE(tracker.sampleCount(), SyncProgressTracker::MAX_SAMPLES);
+    const auto estimate = tracker.addSample(SyncProgressTracker::WINDOW_MILLISECONDS + 6000, 0.8);
+    QVERIFY(estimate.has_value());
+    QVERIFY(tracker.sampleCount() <= 2);
 }
 
 void SyncProgressTrackerTests::publishesDespiteFrequentProgressDips()
 {
     SyncProgressTracker tracker;
-    for (std::size_t i{0}; i < 2 * SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL; ++i) {
-        // Timestamp-dependent verification estimates can dip even while blocks
-        // are being connected. A dip every ten samples must not starve the ETA.
-        const double progress{0.1 + static_cast<double>(i) * 0.0001 - (i % 10 == 9 ? 0.0005 : 0.0)};
-        const auto estimate{tracker.addSample(static_cast<int64_t>(i * 10), progress)};
-        if ((i + 1) % SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL == 0) {
+    for (int i = 0; i <= 200; ++i) {
+        const double progress{0.1 + i * 0.0001 - (i % 10 == 9 ? 0.0005 : 0.0)};
+        const auto estimate = tracker.addSample(i * 10, progress);
+        if (i > 0 && i % 100 == 0) {
             QVERIFY(estimate.has_value());
-            const auto expected{static_cast<int64_t>((1.0 - progress) / (progress - 0.1) * static_cast<double>(i * 10))};
+            const auto expected = static_cast<int64_t>((1.0 - progress) / (progress - 0.1) * (i * 10));
             QVERIFY(qAbs(*estimate - expected) <= 1);
         } else {
             QVERIFY(!estimate.has_value());
@@ -63,17 +75,12 @@ void SyncProgressTrackerTests::publishesDespiteFrequentProgressDips()
 void SyncProgressTrackerTests::nonpositiveWindowProgressDoesNotPublish()
 {
     SyncProgressTracker tracker;
-    for (std::size_t i{0}; i < SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL; ++i) {
-        QVERIFY(!tracker.addSample(static_cast<int64_t>(i * 10), 0.5 - static_cast<double>(i) * 0.0001).has_value());
-    }
-    // Preserve the baseline and publication cadence while progress recovers.
-    std::optional<int64_t> estimate;
-    for (std::size_t i{0}; i < SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL; ++i) {
-        estimate = tracker.addSample(static_cast<int64_t>((i + SyncProgressTracker::PUBLISH_SAMPLE_INTERVAL) * 10),
-                                     0.4 + static_cast<double>(i) * 0.0002);
-    }
-    QVERIFY(estimate.has_value());
-    QVERIFY(*estimate > 0);
+    QVERIFY(!tracker.addSample(0, 0.5));
+    QVERIFY(!tracker.addSample(1000, 0.4));
+    QVERIFY(!tracker.addSample(1999, 0.6));
+    const auto recovered = tracker.addSample(2000, 0.6);
+    QVERIFY(recovered.has_value());
+    QVERIFY(qAbs(*recovered - 8000) <= 1);
 }
 
 void SyncProgressTrackerTests::resetsForClockRegression()

@@ -33,6 +33,9 @@ TestCase {
         property bool headerSyncActive: false
         property bool headerPresync: false
         property real headerSyncProgress: 0
+        property bool networkActionReady: true
+        property bool networkActionPending: false
+        property string networkActionError: ""
         property bool pause: false
         property bool faulted: false
     }
@@ -90,6 +93,9 @@ TestCase {
         nodeModelMock.headerSyncActive = false
         nodeModelMock.headerPresync = false
         nodeModelMock.headerSyncProgress = 0
+        nodeModelMock.networkActionReady = true
+        nodeModelMock.networkActionPending = false
+        nodeModelMock.networkActionError = ""
         nodeModelMock.pause = false
         nodeModelMock.faulted = false
         networkStatusModelMock.networkOffline = false
@@ -139,6 +145,72 @@ TestCase {
     function clickToggle(clock) {
         clock.togglePause()
         wait(0)
+    }
+
+    function createVisibleClock() {
+        presentationWindow.visible = true
+        const clock = createTemporaryObject(blockClockComponent, presentationWindow.contentItem)
+        verify(clock !== null)
+        tryCompare(clock, "visible", true)
+        return clock
+    }
+
+    function cleanup() {
+        presentationWindow.visible = false
+    }
+
+    function test_pause_control_waits_for_network_readiness() {
+        resetMocks()
+        nodeModelMock.networkActionReady = false
+        const clock = createVisibleClock()
+        const area = toggleArea(clock)
+        compare(clock.state, "CONNECTING")
+        compare(area.enabled, false)
+        compare(area.cursorShape, Qt.ArrowCursor)
+        // The automation hook also checks readiness when it invokes click()
+        // directly instead of delivering a mouse event to the disabled area.
+        area.click()
+        compare(nodeModelMock.pause, false)
+        nodeModelMock.networkActionReady = true
+        tryCompare(area, "enabled", true)
+        area.click()
+        compare(nodeModelMock.pause, true)
+        compare(clock.state, "PAUSE")
+
+        // Shutdown revokes command availability even when nothing is pending.
+        nodeModelMock.networkActionReady = false
+        tryCompare(area, "enabled", false)
+        area.click()
+        compare(nodeModelMock.pause, true)
+    }
+
+    function test_pending_network_action_blocks_duplicate_toggle() {
+        resetMocks()
+        const clock = createVisibleClock()
+        nodeModelMock.networkActionPending = true
+        tryCompare(toggleArea(clock), "enabled", false)
+        const pending = findChild(clock, "blockClockNetworkPending")
+        verify(pending !== null)
+        tryCompare(pending, "visible", true)
+        clickToggle(clock)
+        compare(nodeModelMock.pause, false)
+        nodeModelMock.networkActionPending = false
+        tryCompare(toggleArea(clock), "enabled", true)
+        tryCompare(pending, "visible", false)
+        clickToggle(clock)
+        compare(nodeModelMock.pause, true)
+    }
+
+    function test_network_action_failure_is_visible() {
+        resetMocks()
+        const clock = createVisibleClock()
+        nodeModelMock.networkActionError = "Unable to change network activity."
+        const popup = findChild(clock, "blockClockNetworkError")
+        verify(popup !== null)
+        tryCompare(popup, "visible", true)
+        compare(popup.message, nodeModelMock.networkActionError)
+        compare(nodeModelMock.pause, false)
+        popup.close()
     }
 
     function test_connecting_state() {

@@ -87,6 +87,29 @@ QString ActiveDataDirString(const ArgsManager& args)
     return QmlDataDir::NormalizeLocalPath(QString::fromStdString(fs::PathToString(data_dir)));
 }
 
+// Preview has its own network paths and never changes process-wide Params().
+fs::path PreviewNetworkDataDir(const ArgsManager& args)
+{
+    return args.GetDataDirBase() / fs::PathFromString(CreateBaseChainParams(args.GetChainType())->DataDir());
+}
+
+std::optional<fs::path> PreviewSettingsPath(const ArgsManager& args)
+{
+    const fs::path setting = args.GetPathArg("-settings", BITCOIN_SETTINGS_FILENAME);
+    if (setting.empty()) return std::nullopt;
+    return fsbridge::AbsPathJoin(PreviewNetworkDataDir(args), setting);
+}
+
+bool ReadPreviewSettings(ArgsManager& args, std::vector<std::string>& errors)
+{
+    const auto path = PreviewSettingsPath(args);
+    if (!path) return true;
+    std::map<std::string, common::SettingsValue> values;
+    if (!common::ReadSettings(*path, values, errors)) return false;
+    args.LockSettings([&](common::Settings& settings) { settings.rw_settings = std::move(values); });
+    return true;
+}
+
 bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
 {
     std::string config_error;
@@ -95,7 +118,6 @@ bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
         return false;
     }
     try {
-        SelectParams(args.GetChainType());
         args.SelectConfigNetwork(args.GetChainTypeString());
     } catch (const std::exception& e) {
         if (error) *error = QString::fromStdString(e.what());
@@ -107,14 +129,14 @@ bool ReadConfigAndSelectNetwork(ArgsManager& args, QString* error)
 
 bool ReadSettingsFileIfPresent(ArgsManager& args, QString* error)
 {
-    fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path) || !fs::exists(settings_path)) {
+    const auto settings_path = PreviewSettingsPath(args);
+    if (!settings_path || !fs::exists(*settings_path)) {
         if (error) error->clear();
         return true;
     }
 
     std::vector<std::string> settings_errors;
-    if (!args.ReadSettingsFile(&settings_errors)) {
+    if (!ReadPreviewSettings(args, settings_errors)) {
         if (error) *error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
         return false;
     }
@@ -165,14 +187,14 @@ fs::path BlocksDirPathNoCreate(const ArgsManager& args)
     }
 
     if (path.empty()) return {};
-    path /= fs::PathFromString(BaseParams().DataDir());
+    path /= fs::PathFromString(CreateBaseChainParams(args.GetChainType())->DataDir());
     path /= "blocks";
     return path;
 }
 
 bool HasExistingChainData(const ArgsManager& args)
 {
-    const fs::path network_data_dir{args.GetDataDirNet()};
+    const fs::path network_data_dir{PreviewNetworkDataDir(args)};
     if (DirectoryHasNonHiddenEntry(network_data_dir / "chainstate")) return true;
     if (DirectoryHasNonHiddenEntry(network_data_dir / "chainstate_snapshot")) return true;
     if (DirectoryHasNonHiddenEntry(network_data_dir / "indexes")) return true;
@@ -189,7 +211,7 @@ std::optional<fs::path> EffectiveWalletDirNoCreate(const ArgsManager& args)
         return canonical_wallet_dir;
     }
 
-    fs::path wallet_dir{args.GetDataDirNet()};
+    fs::path wallet_dir{PreviewNetworkDataDir(args)};
     if (DirectoryExists(wallet_dir / "wallets")) {
         wallet_dir /= "wallets";
     }
@@ -206,8 +228,8 @@ bool HasExistingWalletData(const ArgsManager& args)
 QmlOnboardingSettings::ProfileSummary BuildProfileSummary(const ArgsManager& args, bool config_file_path_available)
 {
     QmlOnboardingSettings::ProfileSummary summary;
-    fs::path settings_path;
-    summary.has_settings_file = args.GetSettingsPath(&settings_path) && PathExists(settings_path);
+    const auto settings_path = PreviewSettingsPath(args);
+    summary.has_settings_file = settings_path && PathExists(*settings_path);
     summary.has_config_file = config_file_path_available && PathExists(args.GetConfigFilePath());
     summary.has_chain_data = HasExistingChainData(args);
     summary.has_wallet_data = HasExistingWalletData(args);
@@ -289,7 +311,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     }
 
     try {
-        SelectParams(preview_args.GetChainType());
+        CreateChainParams(preview_args, preview_args.GetChainType());
     } catch (const std::exception& e) {
         status.error = QString::fromStdString(e.what());
         return status;
@@ -335,7 +357,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         }
     } else {
         try {
-            SelectParams(preview_args.GetChainType());
+            CreateChainParams(preview_args, preview_args.GetChainType());
             preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
         } catch (const std::exception& e) {
             status.error = QString::fromStdString(e.what());
@@ -353,8 +375,9 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
         return status;
     }
 
-    fs::path settings_path;
-    if (!preview_args.GetSettingsPath(&settings_path)) {
+    // Only check whether settings are enabled here. Resolving a Core settings
+    // path would consult global BaseParams(), which startup has not selected.
+    if (!preview_args.GetSettingsPath()) {
         status.ok = true;
         status.settings_enabled = false;
         status.qml_onboarded = true;
@@ -393,7 +416,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     }
 
     try {
-        SelectParams(preview_args.GetChainType());
+        CreateChainParams(preview_args, preview_args.GetChainType());
     } catch (const std::exception& e) {
         result.error = QString::fromStdString(e.what());
         return result;
@@ -415,7 +438,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         }
         config_file_path_available = true;
         try {
-            SelectParams(preview_args.GetChainType());
+            CreateChainParams(preview_args, preview_args.GetChainType());
             preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
         } catch (const std::exception& e) {
             result.error = QString::fromStdString(e.what());
@@ -424,7 +447,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         const bool reset_gui_settings = preview_args.GetBoolArg("-resetguisettings", false);
         if (!reset_gui_settings) {
             std::vector<std::string> settings_errors;
-            if (!preview_args.ReadSettingsFile(&settings_errors)) {
+            if (!ReadPreviewSettings(preview_args, settings_errors)) {
                 result.error = QString::fromStdString(settings_errors.empty() ? std::string{"Settings file could not be read."} : settings_errors.front());
                 return result;
             }
@@ -455,8 +478,9 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     // bitcoin.conf values.
     InitParameterInteraction(preview_args);
 
-    result.assumed_blockchain_size = static_cast<int>(Params().AssumedBlockchainSize());
-    result.assumed_chainstate_size = static_cast<int>(Params().AssumedChainStateSize());
+    const auto chain_params = CreateChainParams(preview_args, preview_args.GetChainType());
+    result.assumed_blockchain_size = static_cast<int>(chain_params->AssumedBlockchainSize());
+    result.assumed_chainstate_size = static_cast<int>(chain_params->AssumedChainStateSize());
     result.profile = BuildProfileSummary(preview_args, config_file_path_available);
     result.core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(preview_args, QmlCoreSettings::OnboardingCoreSettingNames());
     result.values = QmlCoreSettings::LoadEffectiveValues(preview_args);

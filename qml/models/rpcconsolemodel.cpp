@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/rpcconsolemodel.h>
+#include <qml/asyncjoin.h>
 
 #include <interfaces/node.h>
 #include <qml/models/rpccommandexecutor.h>
@@ -274,25 +275,26 @@ private:
 // ---------------------------------------------------------------------------
 
 RpcConsoleModel::RpcConsoleModel(interfaces::Node& node, QObject* parent)
-    : QObject(parent), m_node(node)
+    : QObject(parent), m_node(node), m_worker_thread(new QThread(this))
 {
     m_worker = new RpcConsoleWorker(m_node);
-    m_worker->moveToThread(&m_worker_thread);
+    m_worker->moveToThread(m_worker_thread);
 
     connect(m_worker, &RpcConsoleWorker::resultReady,
             this,     &RpcConsoleModel::onResultReady,
             Qt::QueuedConnection);
 
-    connect(&m_worker_thread, &QThread::finished,
+    connect(m_worker_thread, &QThread::finished,
             m_worker, &RpcConsoleWorker::deleteLater);
 
-    m_worker_thread.start();
+    m_worker_thread->start();
 }
 
 RpcConsoleModel::~RpcConsoleModel()
 {
-    m_worker_thread.quit();
-    m_worker_thread.wait();
+    if (!m_worker_thread) return;
+    m_worker_thread->quit();
+    m_worker_thread->wait();
 }
 
 void RpcConsoleModel::appendFormattedRow(const QString& time, int category, const QString& rawText)
@@ -315,6 +317,7 @@ void RpcConsoleModel::appendFormattedRow(const QString& time, int category, cons
 
 bool RpcConsoleModel::submitCommand(const QString& command, const QString& wallet_name)
 {
+    if (m_stopping) return false;
     const QString trimmed_command = command.trimmed();
     if (trimmed_command.isEmpty()) return false;
 
@@ -430,6 +433,7 @@ void RpcConsoleModel::clear()
 
 void RpcConsoleModel::onNodeInitialized()
 {
+    if (m_stopping) return;
     std::vector<std::string> cmds = m_node.listRpcCommands();
     QStringList list;
     list.reserve(static_cast<int>(cmds.size()));
@@ -446,6 +450,7 @@ void RpcConsoleModel::onNodeInitialized()
 
 void RpcConsoleModel::onResultReady(const QString& time, int category, const QString& rawText)
 {
+    if (m_stopping) return;
     // Append the row first so the output line appears before the submit button
     // is re-enabled, avoiding a single-frame window where the user could submit
     // again before seeing the reply.
@@ -459,4 +464,16 @@ void RpcConsoleModel::setExecuting(bool executing)
         m_executing = executing;
         Q_EMIT executingChanged();
     }
+}
+
+void RpcConsoleModel::beginShutdown()
+{
+    if (m_stopping) return;
+    m_stopping = true;
+    m_worker_thread->quit();
+    JoinThreadAsync(m_worker_thread, this, [this] {
+        m_worker_thread = nullptr;
+        m_worker = nullptr;
+        Q_EMIT drained();
+    });
 }

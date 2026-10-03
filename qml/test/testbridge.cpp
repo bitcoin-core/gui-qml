@@ -523,6 +523,12 @@ QByteArray TestBridge::processCommand(const QByteArray& json_cmd)
         return cmdListObjects();
     } else if (cmd == QLatin1String("close_window")) {
         return cmdCloseWindow();
+    } else if (cmd == QLatin1String("request_quit")) {
+        // Exercise the application event used by native Quit (including before
+        // QApplication::exec), rather than the separate window-close path.
+        QEvent quit{QEvent::Quit};
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &quit);
+        return okResponse();
     } else if (cmd == QLatin1String("set_clipboard_text")) {
         return cmdSetClipboardText(obj.value(QStringLiteral("text")).toString());
     }
@@ -648,7 +654,13 @@ QByteArray TestBridge::cmdGetProperty(const QString& object_name, const QString&
     }
 
     QJsonObject resp;
-    resp[QStringLiteral("value")] = QJsonValue::fromVariant(value);
+    QJsonValue json_value{QJsonValue::fromVariant(value)};
+    // Qt does not serialize typed sequences such as QList<qreal> directly.
+    // Preserve supported scalars: strings can also convert to a variant list.
+    if (json_value.isNull() && value.canConvert<QVariantList>()) {
+        json_value = QJsonValue::fromVariant(value.toList());
+    }
+    resp[QStringLiteral("value")] = json_value;
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
 

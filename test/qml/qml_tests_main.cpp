@@ -6,6 +6,8 @@
 
 #include <QAbstractListModel>
 #include <QDateTime>
+#include <QEvent>
+#include <QEventLoop>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
@@ -26,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include <qml/backendexecutor.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 
@@ -2206,6 +2209,11 @@ QString MockCoreSettingEntryModel::defaultAddress() const
 class MockOptionsModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool settingsReady MEMBER m_settings_ready NOTIFY settingsReadyChanged)
+    Q_PROPERTY(bool settingsPending MEMBER m_settings_pending NOTIFY settingsPendingChanged)
+    Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
+    Q_PROPERTY(bool validationPending MEMBER m_validation_pending NOTIFY validationPendingChanged)
+    Q_PROPERTY(QString signerPathError MEMBER m_signer_path_error NOTIFY signerPathValidationChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
     Q_PROPERTY(bool server READ server WRITE setServer NOTIFY serverChanged)
@@ -2260,6 +2268,12 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
 
 public:
+    bool m_settings_ready{true};
+    bool m_settings_pending{false};
+    bool m_validation_pending{false};
+    QString m_settings_error;
+    QString m_signer_path_error;
+    Q_INVOKABLE void requestExternalSignerPathValidation(const QString&) {}
     bool m_listen{true};
     bool m_natpmp{false};
     bool m_server{false};
@@ -2496,6 +2510,12 @@ public:
     }
 
 Q_SIGNALS:
+    void settingsReadyChanged();
+    void settingsPendingChanged();
+    void settingsErrorChanged();
+    void validationPendingChanged();
+    void signerPathValidationChanged();
+    void dataDirSelectionFinished(bool success, const QString& error);
     void listenChanged();
     void natpmpChanged();
     void serverChanged();
@@ -2560,6 +2580,9 @@ Q_SIGNALS:
 class MockNodeModel : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(bool networkActionReady MEMBER m_network_action_ready NOTIFY networkActionReadyChanged)
+    Q_PROPERTY(bool networkActionPending MEMBER m_network_action_pending NOTIFY networkActionPendingChanged)
+    Q_PROPERTY(QString networkActionError MEMBER m_network_action_error NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool pause MEMBER m_pause NOTIFY pauseChanged)
     Q_PROPERTY(int numPeers MEMBER m_num_peers NOTIFY numPeersChanged)
     Q_PROPERTY(int numInboundPeers MEMBER m_num_inbound_peers NOTIFY numInboundPeersChanged)
@@ -2574,6 +2597,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(double headerSyncProgress MEMBER m_header_sync_progress NOTIFY headerSyncChanged)
     Q_PROPERTY(bool faulted MEMBER m_faulted NOTIFY faultedChanged)
     Q_PROPERTY(QString startupError MEMBER m_startup_error NOTIFY startupErrorChanged)
+    Q_PROPERTY(bool fatalException MEMBER m_fatal_exception NOTIFY fatalExceptionChanged)
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
@@ -2597,6 +2621,9 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString lastBannedAddress MEMBER m_last_banned_address NOTIFY peerActionCallsChanged)
 
 public:
+    bool m_network_action_ready{true};
+    bool m_network_action_pending{false};
+    QString m_network_action_error;
     int m_last_disconnected_node_id{-1};
     QString m_last_banned_address;
     bool m_pause{false};
@@ -2613,6 +2640,7 @@ public:
     double m_header_sync_progress{0.0};
     bool m_faulted{false};
     QString m_startup_error;
+    bool m_fatal_exception{false};
     QString m_warnings;
     QStringList m_warning_list;
     bool m_runtime_dialog_visible{false};
@@ -2744,6 +2772,9 @@ public:
     }
 
 Q_SIGNALS:
+    void networkActionReadyChanged();
+    void networkActionPendingChanged();
+    void networkActionErrorChanged();
     void requestedShutdown();
     void pauseChanged();
     void numPeersChanged();
@@ -2757,6 +2788,7 @@ Q_SIGNALS:
     void blockSyncActiveChanged();
     void faultedChanged();
     void startupErrorChanged();
+    void fatalExceptionChanged();
     void warningsChanged();
     void runtimeDialogChanged();
     void blockTipHeightChanged();
@@ -4033,6 +4065,16 @@ public Q_SLOTS:
     {
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    }
+
+    void cleanupTestCase()
+    {
+        // Keep Qt alive until retired backend jobs and final thread cleanup finish.
+        QEventLoop loop;
+        bool drained{false};
+        BackendExecutor::shutdownAll(&loop, [&] { drained = true; loop.quit(); });
+        while (!drained) loop.exec();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)

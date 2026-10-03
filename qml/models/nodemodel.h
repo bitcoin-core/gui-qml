@@ -9,6 +9,7 @@
 #include <interfaces/node.h>
 #include <clientversion.h>
 #include <qml/models/syncprogresstracker.h>
+#include <qml/backendexecutor.h>
 
 #include <deque>
 #include <memory>
@@ -47,20 +48,24 @@ class NodeModel : public QObject
     Q_PROPERTY(double mempoolUsageMB READ mempoolUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(double mempoolMaxUsageMB READ mempoolMaxUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
-    Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable CONSTANT)
+    Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable NOTIFY mempoolInfoChanged)
     Q_PROPERTY(qint64 remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     /** Estimated chain-verification progress used only for progress presentation. */
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
-    /** True once startup synchronization completes; remains true for this node session. */
+    /** True after synchronization completes, until the node falls substantially behind. */
     Q_PROPERTY(bool initialSyncComplete READ initialSyncComplete NOTIFY initialSyncCompleteChanged)
     /** True while Core reports initial block download through initialization or tip notifications. */
     Q_PROPERTY(bool blockSyncActive READ blockSyncActive NOTIFY blockSyncActiveChanged)
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
     Q_PROPERTY(double headerSyncProgress READ headerSyncProgress NOTIFY headerSyncChanged)
+    Q_PROPERTY(bool networkActionReady READ networkActionReady NOTIFY networkActionReadyChanged)
+    Q_PROPERTY(bool networkActionPending READ networkActionPending NOTIFY networkActionPendingChanged)
+    Q_PROPERTY(QString networkActionError READ networkActionError NOTIFY networkActionErrorChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
+    Q_PROPERTY(bool fatalException READ fatalException NOTIFY fatalExceptionChanged)
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
@@ -72,8 +77,15 @@ class NodeModel : public QObject
     Q_PROPERTY(bool runtimeDialogQuestion READ runtimeDialogQuestion NOTIFY runtimeDialogChanged)
 
 public:
-    explicit NodeModel(interfaces::Node& node);
+    // Pass false while appInitMain can still install backend services.
+    // Node must outlive drained(); shutdown never waits for its queries on GUI.
+    explicit NodeModel(interfaces::Node& node, bool backend_ready = true);
     ~NodeModel() override;
+    void beginShutdown();
+    bool isDrained() const { return m_drained; }
+    bool networkActionReady() const { return m_backend_queries_ready && !m_shutdown_requested && !m_workers_stopping; }
+    bool networkActionPending() const { return m_network_action_pending; }
+    QString networkActionError() const { return m_network_action_error; }
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
@@ -105,6 +117,7 @@ public:
     bool errorState() const { return m_faulted; }
     void setErrorState(bool new_error);
     QString startupError() const { return m_startup_error; }
+    bool fatalException() const { return m_fatal_exception; }
     void setStartupError(const QString& error);
     void addStartupWarnings(const QStringList& warnings);
     QString warnings() const { return m_warnings; }
@@ -138,10 +151,15 @@ public:
 #endif
 
 public Q_SLOTS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool initial_block_download = false, bool shutdown_requested = false);
     void handleRunawayException(const QString& message);
 
 Q_SIGNALS:
+    void drained();
+    void nodeInformationChanged();
+    void networkActionReadyChanged();
+    void networkActionPendingChanged();
+    void networkActionErrorChanged();
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -158,6 +176,7 @@ Q_SIGNALS:
     void pauseChanged(bool new_pause);
     void errorStateChanged(bool new_error_state);
     void startupErrorChanged();
+    void fatalExceptionChanged();
     void warningsChanged();
     void runtimeDialogChanged();
 
@@ -172,6 +191,29 @@ protected:
     void timerEvent(QTimerEvent* event) override;
 
 private:
+    struct Notifications;
+    struct StatusSnapshot;
+    std::shared_ptr<Notifications> m_notifications;
+    BackendExecutor m_snapshots;
+    std::shared_ptr<BackendExecutor> m_commands{std::make_shared<BackendExecutor>()};
+    bool m_status_ready{false};
+    bool m_status_pending{false};
+    bool m_status_again{false};
+    bool m_network_known{false};
+    bool m_network_action_pending{false};
+    bool m_network_desired_pause{false};
+    QString m_network_action_error;
+    bool m_shutdown_poll_pending{false};
+    bool m_drained{false};
+    bool m_seen_block_tip{false};
+    bool m_seen_header_tip{false};
+    qint64 m_block_tip_time{0};
+    void detachNotifications();
+    void publishNotifications();
+    void refreshStatus();
+    void finishDrain();
+    void submitNetworkAction();
+
     struct MempoolInfo {
         int transaction_count{0};
         double usage_mb{0.0};
@@ -198,6 +240,7 @@ private:
     double m_mempool_usage_mb{0.0};
     double m_mempool_max_usage_mb{0.0};
     bool m_mempool_info_polling_active{false};
+    bool m_workers_stopping{false};
     bool m_mempool_information_available{true};
     qint64 m_remaining_sync_time{0};
     double m_verification_progress{0.0};
@@ -215,9 +258,12 @@ private:
     int m_header_tip_height{0};
     int64_t m_header_tip_time{0};
     bool m_node_ready{false};
+    bool m_backend_queries_ready;
     bool m_initial_sync_complete{false};
+    bool m_applying_sync_snapshot{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
+    bool m_fatal_exception{false};
     bool m_runtime_dialogs_enabled{false};
     bool m_startup_failure_dialog_shown{false};
     bool m_runtime_dialog_visible{false};
@@ -256,8 +302,6 @@ private:
     void ConnectToBannedListChangedSignal();
     void unsubscribeFromCoreSignals();
     void initializeMempoolInfoPolling();
-    void refreshPeerCounts();
-    void refreshWarnings();
     void recordStartupErrorMessage(const QString& message);
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();

@@ -21,6 +21,7 @@
 #include <cassert>
 
 #include <QDebug>
+#include <QEventLoop>
 #include <QDir>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -29,7 +30,6 @@
 #include <QSettings>
 #include <QSet>
 #include <QStringList>
-#include <QTimer>
 #include <QUrl>
 #include <QVariantMap>
 
@@ -110,59 +110,183 @@ QVariantMap CoreSettingStatusesForNames(const QVariantMap& statuses, const QStri
 }
 } // namespace
 
-OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
-    : m_node{node}
-    , m_args{args}
-    , m_core_settings{QmlCoreSettings::LoadDisplayValues(node, args)}
+struct OptionsQmlModel::Snapshot {
+    QmlCoreSettings::Values core;
+    QmlCoreSettings::Values effective_core;
+    QVariantMap statuses;
+    int dbcache;
+    int mempool;
+    int effective_mempool;
+    int threads;
+    QString signer;
+    QString data_dir;
+    QString default_data_dir;
+    QString custom_data_dir;
+    QString language;
+    int display_unit;
+    QString transaction_urls;
+    QString money_font;
+};
+
+OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, ArgsManager& args)
 {
-    m_core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(m_args, QmlCoreSettings::CoreSettingNames());
-    m_core_settings.setStatuses(CoreSettingStatusesForNames(m_core_setting_statuses, QmlCoreSettings::OnboardingCoreSettingNames()));
-
-    m_dbcache_size_mib = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("dbcache")), DEFAULT_DB_CACHE >> 20);
-
-    m_max_mempool_size_mb = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
-
-    m_script_threads = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("par")), DEFAULT_SCRIPTCHECK_THREADS);
-
-    m_external_signer_path = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("signer")), ""));
-
-    resetDirtySnapshots();
-
+    Snapshot result;
+    result.core = QmlCoreSettings::LoadDisplayValues(node, args);
+    result.effective_core = result.core;
+    result.effective_mempool = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    result.statuses = QmlCoreSettings::BuildCoreSettingStatuses(args, QmlCoreSettings::CoreSettingNames());
+    // Startup interactions remain effective until restart. Once the user saves
+    // an override, show that saved request while retaining the source/status
+    // explaining the running node's startup adjustment.
+    const auto saved_override = [&](const QString& name) {
+        const auto status = result.statuses.value(name).toMap();
+        return status.value(QStringLiteral("startupAdjusted")).toBool()
+            && status.value(QStringLiteral("hasRwSetting")).toBool();
+    };
+    const auto display_value = [&](const QString& name) {
+        return saved_override(name) ? node.getPersistentSetting(name.toStdString())
+                                    : QmlCoreSettings::DisplaySettingValue(node, args, name);
+    };
+    if (saved_override(QStringLiteral("listen"))) result.core.listen = SettingToBool(display_value(QStringLiteral("listen"))).value_or(result.core.listen);
+    if (saved_override(QStringLiteral("natpmp"))) result.core.natpmp = SettingToBool(display_value(QStringLiteral("natpmp"))).value_or(result.core.natpmp);
+    result.dbcache = SettingTo<int64_t>(display_value(QStringLiteral("dbcache")), DEFAULT_DB_CACHE >> 20);
+    result.mempool = SettingTo<int64_t>(display_value(QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    result.threads = SettingTo<int64_t>(display_value(QStringLiteral("par")), DEFAULT_SCRIPTCHECK_THREADS);
+    result.signer = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("signer")), ""));
     const QString gui_data_dir = QmlDataDir::ReadGuiDataDir();
-    const QString active_data_dir = QString::fromStdString(m_args.GetDataDirBase().utf8string());
-    if (!active_data_dir.isEmpty() &&
-        (QmlDataDir::HasExplicitDataDirArg(m_args) || QmlDataDir::IsDefaultDataDir(gui_data_dir))) {
-        m_dataDir = active_data_dir;
-    } else {
-        m_dataDir = gui_data_dir;
-    }
-    if (!QmlDataDir::IsDefaultDataDir(m_dataDir)) {
-        m_custom_datadir_string = m_dataDir;
-    }
+    const QString active_data_dir = QString::fromStdString(args.GetDataDirBase().utf8string());
+    result.default_data_dir = QmlDataDir::DefaultDataDirString();
+    result.data_dir = !active_data_dir.isEmpty() &&
+        (QmlDataDir::HasExplicitDataDirArg(args) || QmlDataDir::IsDefaultDataDir(gui_data_dir))
+        ? active_data_dir : gui_data_dir;
+    if (!QmlDataDir::IsDefaultDataDir(result.data_dir)) result.custom_data_dir = result.data_dir;
     QSettings settings;
-    m_language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("lang")), ""));
-    if (m_language.isEmpty() && !QmlCoreSettings::IsCommandLineOverridden(m_args, QStringLiteral("lang"))) {
-        m_language = settings.value(SettingsKeys::LANGUAGE, "").toString();
+    result.language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("lang")), ""));
+    if (result.language.isEmpty() && !QmlCoreSettings::IsCommandLineOverridden(args, QStringLiteral("lang"))) {
+        result.language = settings.value(SettingsKeys::LANGUAGE, "").toString();
     }
-    const QString command_line_language = QString::fromStdString(m_args.GetArg("-lang", ""));
-    if (!command_line_language.isEmpty()) {
-        m_language = command_line_language;
-    }
-    const int display_unit_fallback{QmlLegacySettings::ReadLegacyGuiDisplayUnit(QString::fromStdString(m_args.GetChainTypeString()), 0)};
-    m_display_unit = NormalizeDisplayUnit(settings.value(SettingsKeys::DISPLAY_UNIT, display_unit_fallback).toInt());
-    m_third_party_transaction_urls = settings.value(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, "").toString();
-    m_money_font_choice = settings.value(SettingsKeys::MONEY_FONT_CHOICE, MONEY_FONT_EMBEDDED).toString();
-    if (m_money_font_choice != MONEY_FONT_EMBEDDED && m_money_font_choice != MONEY_FONT_BEST_SYSTEM) {
-        m_money_font_choice = MONEY_FONT_EMBEDDED;
-    }
+    const QString command_line_language = QString::fromStdString(args.GetArg("-lang", ""));
+    if (!command_line_language.isEmpty()) result.language = command_line_language;
+    const int fallback = QmlLegacySettings::ReadLegacyGuiDisplayUnit(QString::fromStdString(args.GetChainTypeString()), 0);
+    result.display_unit = NormalizeDisplayUnit(settings.value(SettingsKeys::DISPLAY_UNIT, fallback).toInt());
+    result.transaction_urls = settings.value(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, "").toString();
+    result.money_font = settings.value(SettingsKeys::MONEY_FONT_CHOICE, MONEY_FONT_EMBEDDED).toString();
+    if (result.money_font != MONEY_FONT_EMBEDDED && result.money_font != MONEY_FONT_BEST_SYSTEM) result.money_font = MONEY_FONT_EMBEDDED;
+    return result;
+}
 
+OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
+    : m_node{node}, m_args{args}
+{
     buildAvailableLanguages();
-
+    resetDirtySnapshots();
+    refreshCoreSettingStatuses();
+    connect(&m_executor, &BackendExecutor::drained, this, &OptionsQmlModel::shutdownFinished);
     m_core_settings.setBeforeChangeHandler([this](CoreSettingsModel::ChangeOrigin) {
         m_core_change_dirty_snapshot = dirtySnapshot();
     });
     m_core_settings.setAfterChangeHandler([this](const QmlCoreSettings::Change& change, CoreSettingsModel::ChangeOrigin) {
-        applyRuntimeCoreChange(change, m_core_change_dirty_snapshot);
+        if (!m_applying_snapshot) applyRuntimeCoreChange(change, m_core_change_dirty_snapshot);
+    });
+    runCommand([](interfaces::Node&, ArgsManager&) { return QString{}; });
+}
+
+OptionsQmlModel::~OptionsQmlModel()
+{
+    // Normal application shutdown enrolls this worker before interrupting Core.
+    // Early startup failures and isolated model owners must preserve Node/Args
+    // until the accepted work drains too, while continuing GUI event delivery.
+    QEventLoop loop;
+    connect(&m_executor, &BackendExecutor::drained, &loop, &QEventLoop::quit);
+    beginShutdown();
+    while (!m_executor.isDrained()) loop.exec();
+}
+
+void OptionsQmlModel::beginShutdown()
+{
+    if (m_stopping) return;
+    m_stopping = true;
+    refreshCoreSettingStatuses();
+    m_executor.shutdown();
+}
+
+void OptionsQmlModel::setError(const QString& error)
+{
+    if (m_error == error) return;
+    m_error = error;
+    Q_EMIT settingsErrorChanged();
+}
+
+void OptionsQmlModel::setPending(bool pending)
+{
+    if (m_pending == pending) return;
+    m_pending = pending;
+    refreshCoreSettingStatuses();
+    Q_EMIT settingsPendingChanged();
+}
+
+void OptionsQmlModel::applySnapshot(Snapshot snapshot)
+{
+    const bool initial = !m_ready;
+    const DirtySnapshot before = dirtySnapshot();
+    m_core_setting_statuses = std::move(snapshot.statuses);
+    m_applying_snapshot = true;
+    m_core_settings.clearTouchedSettings();
+    const auto change = m_core_settings.applyPreviewValuesPreservingTouched(snapshot.core, {});
+    m_applying_snapshot = false;
+    m_dbcache_size_mib = snapshot.dbcache;
+    m_max_mempool_size_mb = snapshot.mempool;
+    m_script_threads = snapshot.threads;
+    m_external_signer_path = std::move(snapshot.signer);
+    m_dataDir = std::move(snapshot.data_dir);
+    m_default_data_dir = std::move(snapshot.default_data_dir);
+    m_custom_datadir_string = std::move(snapshot.custom_data_dir);
+    m_language = std::move(snapshot.language);
+    m_display_unit = snapshot.display_unit;
+    m_third_party_transaction_urls = std::move(snapshot.transaction_urls);
+    m_money_font_choice = std::move(snapshot.money_font);
+    m_ready = true;
+    if (initial) {
+        resetDirtySnapshots();
+        m_initial_core_values = snapshot.effective_core;
+        m_initial_max_mempool_size_mb = snapshot.effective_mempool;
+    }
+    QmlCoreSettings::EmitCoreSettingSignals(*this, change);
+    Q_EMIT dbcacheSizeMiBChanged(m_dbcache_size_mib);
+    Q_EMIT maxMempoolSizeMBChanged(m_max_mempool_size_mb);
+    Q_EMIT scriptThreadsChanged(m_script_threads);
+    Q_EMIT externalSignerPathChanged(m_external_signer_path);
+    Q_EMIT dataDirChanged(m_dataDir);
+    Q_EMIT dataDirDefaultsChanged();
+    Q_EMIT customDataDirStringChanged(m_custom_datadir_string);
+    Q_EMIT languageChanged();
+    Q_EMIT displayUnitChanged(m_display_unit);
+    Q_EMIT thirdPartyTransactionUrlsChanged();
+    Q_EMIT moneyFontChoiceChanged();
+    Q_EMIT moneyFontChanged();
+    refreshCoreSettingStatuses();
+    emitDirtySignals(before);
+    if (initial) Q_EMIT settingsReadyChanged();
+}
+
+void OptionsQmlModel::runCommand(std::function<QString(interfaces::Node&, ArgsManager&)> command)
+{
+    if (m_stopping) return;
+    if (m_pending_commands++ == 0) setError({});
+    const quint64 revision = ++m_command_revision;
+    setPending(true);
+    m_executor.submit(this, [node = &m_node, args = &m_args, command = std::move(command)] {
+        const QString error = command(*node, *args);
+        return std::make_pair(readSnapshot(*node, *args), error);
+    }, [this, revision](auto result) {
+        if (revision == m_command_revision) applySnapshot(std::move(result.first));
+        if (!result.second.isEmpty()) setError(result.second);
+        if (--m_pending_commands == 0) setPending(false);
+    }, [this](std::exception_ptr exception) {
+        try { std::rethrow_exception(exception); }
+        catch (const std::exception& error) { setError(QString::fromUtf8(error.what())); }
+        catch (...) { setError(tr("Unable to load or save settings.")); }
+        if (--m_pending_commands == 0) setPending(false);
     });
 }
 
@@ -197,16 +321,20 @@ bool OptionsQmlModel::restartRequired() const
 
 QVariantMap OptionsQmlModel::coreSettingStatuses() const
 {
-    return m_core_setting_statuses;
+    QVariantMap statuses = m_core_setting_statuses;
+    if (!m_ready || m_stopping) {
+        for (const auto& name : QmlCoreSettings::CoreSettingNames()) {
+            auto status = statuses.value(name).toMap();
+            status.insert(QStringLiteral("canEdit"), false);
+            statuses.insert(name, status);
+        }
+    }
+    return statuses;
 }
 
 QVariantMap OptionsQmlModel::coreSettingStatus(const QString& name) const
 {
-    const auto it = m_core_setting_statuses.constFind(name);
-    if (it != m_core_setting_statuses.constEnd()) {
-        return it->toMap();
-    }
-    return QmlCoreSettings::CoreSettingStatus(m_args, name);
+    return coreSettingStatuses().value(name).toMap();
 }
 
 void OptionsQmlModel::resetDirtySnapshots()
@@ -245,19 +373,15 @@ void OptionsQmlModel::emitDirtySignals(const DirtySnapshot& before)
 void OptionsQmlModel::applyRuntimeCoreChange(const QmlCoreSettings::Change& change, const DirtySnapshot& before)
 {
     if (!change.accepted || !QmlCoreSettings::ValuesChanged(change)) return;
-    m_core_settings.writeToNode(m_node, m_args, change.setting_name);
-    refreshCoreSettingStatuses();
+    const QmlCoreSettings::Session session{change.after};
+    runCommand([session, name = change.setting_name](interfaces::Node& node, ArgsManager& args) {
+        QString error;
+        const bool saved = QmlCoreSettings::PersistSettings(args, {name, name + QStringLiteral("-prev")},
+            [&] { return session.writeToArgs(args, name); }, &error);
+        if (saved && name == QStringLiteral("natpmp")) node.mapPort(session.values().natpmp);
+        return error;
+    });
     QmlCoreSettings::EmitCoreSettingSignals(*this, change);
-    if (change.setting_name == QStringLiteral("natpmp")) {
-        // NAT-PMP mirrors Qt Widgets as a live-applied option, not a
-        // restart-required connection setting.
-        // Disabling NAT-PMP joins the mapport thread and can briefly block.
-        // Defer the live apply so the switch state and animation are not
-        // held behind that work.
-        QTimer::singleShot(200, this, [this, natpmp = change.after.natpmp] {
-            m_node.mapPort(natpmp);
-        });
-    }
     emitDirtySignals(before);
 }
 
@@ -274,25 +398,26 @@ common::SettingsValue OptionsQmlModel::currentCoreSettingValue(const QString& na
 
 bool OptionsQmlModel::canEditCoreSetting(const QString& name) const
 {
-    if (QmlCoreSettings::OnboardingCoreSettingNames().contains(name)) return m_core_settings.canEdit(name);
-    const QVariantMap status = coreSettingStatus(name);
-    return status.isEmpty() ? QmlCoreSettings::CanEditCoreSetting(m_args, name) : status.value(QStringLiteral("canEdit"), true).toBool();
+    if (!m_ready || m_stopping || m_validation_pending) return false;
+    return coreSettingStatus(name).value(QStringLiteral("canEdit"), false).toBool();
 }
 
 bool OptionsQmlModel::writeCoreSettingOverride(const QString& name, const common::SettingsValue& value)
 {
     if (!canEditCoreSetting(name)) return false;
-    QmlCoreSettings::UpdateRwSetting(m_node, name, QmlCoreSettings::GuiOverrideValue(m_args, name, value));
-    refreshCoreSettingStatuses();
+    runCommand([name, value](interfaces::Node& node, ArgsManager& args) {
+        QString error;
+        const bool saved = QmlCoreSettings::PersistSettings(args, {name},
+            [&] { return QmlCoreSettings::WriteCoreSettingOverride(args, name, value); }, &error);
+        if (saved && name == QStringLiteral("signer")) node.forceSetting("signer", value);
+        return error;
+    });
     return true;
 }
 
 void OptionsQmlModel::refreshCoreSettingStatuses()
 {
-    const QVariantMap statuses = QmlCoreSettings::BuildCoreSettingStatuses(m_args, QmlCoreSettings::CoreSettingNames());
-    if (statuses == m_core_setting_statuses) return;
-    m_core_setting_statuses = statuses;
-    m_core_settings.setStatuses(CoreSettingStatusesForNames(m_core_setting_statuses, QmlCoreSettings::OnboardingCoreSettingNames()));
+    m_core_settings.setStatuses(CoreSettingStatusesForNames(coreSettingStatuses(), QmlCoreSettings::OnboardingCoreSettingNames()));
     Q_EMIT coreSettingStatusesChanged();
 }
 
@@ -399,52 +524,96 @@ QString OptionsQmlModel::defaultProxyAddress() const
     return m_core_settings.defaultProxyAddress();
 }
 
+namespace {
+QString SignerPathError(const QString& normalized_path)
+{
+    if (normalized_path.isEmpty()) return {};
+    const QString token = FirstCommandToken(normalized_path);
+    if (token.isEmpty() || !TokenLooksLikePath(token)) return {};
+    const QFileInfo info(ExpandUserPath(token));
+    if (!info.exists()) return QObject::tr("The configured signer path does not exist.");
+    if (!info.isFile()) return QObject::tr("The configured signer path is not a file.");
+    if (!info.isExecutable()) return QObject::tr("The configured signer path is not executable.");
+    return {};
+}
+
+QString SaveGuiSetting(const QString& key, const QVariant& value)
+{
+    QSettings settings;
+    const QVariant previous = settings.value(key);
+    if (value.isValid()) settings.setValue(key, value);
+    else settings.remove(key);
+    settings.sync();
+    if (settings.status() == QSettings::NoError) return {};
+    if (previous.isValid()) settings.setValue(key, previous);
+    else settings.remove(key);
+    settings.sync();
+    return QObject::tr("Unable to save application settings.");
+}
+} // namespace
+
 void OptionsQmlModel::setExternalSignerPath(const QString& path)
 {
     if (!canEditCoreSetting(QStringLiteral("signer"))) return;
     const QString normalized_path = NormalizeCommandPath(path);
-    if (normalized_path != m_external_signer_path) {
-        const DirtySnapshot before = dirtySnapshot();
-        m_external_signer_path = normalized_path;
-        if (m_external_signer_path.isEmpty()) {
-            m_node.forceSetting("signer", common::SettingsValue{});
-        } else {
-            m_node.forceSetting("signer", m_external_signer_path.toStdString());
+    if (normalized_path == m_external_signer_path) return;
+    const auto before = dirtySnapshot();
+    m_external_signer_path = normalized_path;
+    Q_EMIT externalSignerPathChanged(m_external_signer_path);
+    emitDirtySignals(before);
+    runCommand([normalized_path](interfaces::Node& node, ArgsManager& args) {
+        QString error = SignerPathError(normalized_path);
+        if (!error.isEmpty()) return error;
+        const common::SettingsValue value = normalized_path.isEmpty()
+            ? common::SettingsValue{} : common::SettingsValue{normalized_path.toStdString()};
+        if (QmlCoreSettings::PersistSettings(args, {QStringLiteral("signer")},
+                [&] { return QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("signer"), value); }, &error)) {
+            node.forceSetting("signer", value);
         }
-        writeCoreSettingOverride(QStringLiteral("signer"), currentCoreSettingValue(QStringLiteral("signer")));
-        Q_EMIT externalSignerPathChanged(m_external_signer_path);
-        emitDirtySignals(before);
-    }
+        return error;
+    });
 }
 
 QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) const
 {
-    const QString normalized_path = NormalizeCommandPath(path);
-    if (normalized_path.isEmpty()) {
-        return {};
-    }
+    return NormalizeCommandPath(path) == m_validated_signer_path ? m_signer_validation_error : QString{};
+}
 
-    const QString token = FirstCommandToken(normalized_path);
-    if (token.isEmpty() || !TokenLooksLikePath(token)) {
-        return {};
-    }
+void OptionsQmlModel::requestExternalSignerPathValidation(const QString& path)
+{
+    if (m_stopping) return;
+    m_requested_signer_path = NormalizeCommandPath(path);
+    ++m_signer_validation_revision;
+    m_signer_validation_pending = true;
+    m_signer_validation_error.clear();
+    Q_EMIT signerPathValidationChanged();
+    if (!m_signer_validation_in_flight) startSignerValidation();
+}
 
-    const QFileInfo info(ExpandUserPath(token));
-    if (!info.exists()) {
-        return tr("The configured signer path does not exist.");
-    }
-    if (!info.isFile()) {
-        return tr("The configured signer path is not a file.");
-    }
-    if (!info.isExecutable()) {
-        return tr("The configured signer path is not executable.");
-    }
-    return {};
+void OptionsQmlModel::startSignerValidation()
+{
+    const QString normalized = m_requested_signer_path;
+    const quint64 revision = m_signer_validation_revision;
+    m_signer_validation_in_flight = true;
+    m_executor.submit(this, [normalized] { return SignerPathError(normalized); }, [this, normalized, revision](const QString& error) {
+        m_signer_validation_in_flight = false;
+        if (revision != m_signer_validation_revision) { startSignerValidation(); return; }
+        m_validated_signer_path = normalized;
+        m_signer_validation_error = error;
+        m_signer_validation_pending = false;
+        Q_EMIT signerPathValidationChanged();
+    }, [this, revision](std::exception_ptr) {
+        m_signer_validation_in_flight = false;
+        if (revision != m_signer_validation_revision) { startSignerValidation(); return; }
+        m_signer_validation_error = tr("Unable to validate the signer path.");
+        m_signer_validation_pending = false;
+        Q_EMIT signerPathValidationChanged();
+    });
 }
 
 QString OptionsQmlModel::getDefaultDataDirString()
 {
-    return QmlDataDir::DefaultDataDirString();
+    return m_default_data_dir;
 }
 
 
@@ -469,33 +638,64 @@ QString OptionsQmlModel::getCustomDataDirString()
 
 QString OptionsQmlModel::validateCustomDataDir(const QString& path) const
 {
-    return QmlDataDir::ValidateCustomDataDir(path);
+    return QmlDataDir::NormalizeLocalPath(path) == m_validated_data_dir ? m_data_dir_validation_error : QString{};
 }
 
 bool OptionsQmlModel::selectCustomDataDir(const QString& path)
 {
+    if (!m_ready || m_stopping || m_pending || m_validation_pending) return false;
     const QString local_path = QmlDataDir::NormalizeLocalPath(path);
-    if (local_path == m_custom_datadir_string && m_dataDir == local_path) {
-        return true;
-    }
-
-    QString error;
-    if (!QmlDataDir::PersistGuiDataDirSelection(local_path, &error)) {
-        return false;
-    }
-
-    m_custom_datadir_string = local_path;
-    Q_EMIT customDataDirStringChanged(local_path);
-    setDataDir(local_path);
+    m_validation_pending = true;
+    Q_EMIT validationPendingChanged();
+    setError({});
+    m_executor.submit(this, [local_path] {
+        QString error;
+        QmlDataDir::PersistGuiDataDirSelection(local_path, &error);
+        return error;
+    }, [this, local_path](const QString& error) {
+        m_validated_data_dir = local_path;
+        m_data_dir_validation_error = error;
+        if (error.isEmpty()) {
+            m_custom_datadir_string = local_path;
+            Q_EMIT customDataDirStringChanged(local_path);
+            setDataDir(local_path);
+        }
+        setError(error);
+        m_validation_pending = false;
+        Q_EMIT validationPendingChanged();
+        Q_EMIT dataDirSelectionFinished(error.isEmpty(), error);
+    }, [this](std::exception_ptr) {
+        const QString error = tr("Unable to select the data directory.");
+        setError(error);
+        m_validation_pending = false;
+        Q_EMIT validationPendingChanged();
+        Q_EMIT dataDirSelectionFinished(false, error);
+    });
     return true;
 }
 
 void OptionsQmlModel::useDefaultDataDir()
 {
-    m_custom_datadir_string.clear();
-    QmlDataDir::PersistDefaultDataDirSelection();
-    Q_EMIT customDataDirStringChanged({});
-    setDataDir(getDefaultDataDirString());
+    if (!m_ready || m_stopping || m_pending || m_validation_pending) return;
+    m_validation_pending = true;
+    Q_EMIT validationPendingChanged();
+    m_executor.submit(this, [] { QString error; QmlDataDir::PersistDefaultDataDirSelection(&error); return error; }, [this](const QString& error) {
+        if (error.isEmpty()) {
+            m_custom_datadir_string.clear();
+            Q_EMIT customDataDirStringChanged({});
+            setDataDir(m_default_data_dir);
+        }
+        setError(error);
+        m_validation_pending = false;
+        Q_EMIT validationPendingChanged();
+        Q_EMIT dataDirSelectionFinished(error.isEmpty(), error);
+    }, [this](std::exception_ptr) {
+        const QString error = tr("Unable to select the data directory.");
+        setError(error);
+        m_validation_pending = false;
+        Q_EMIT validationPendingChanged();
+        Q_EMIT dataDirSelectionFinished(false, error);
+    });
 }
 
 void OptionsQmlModel::setDataDir(QString new_data_dir)
@@ -528,16 +728,24 @@ void OptionsQmlModel::buildAvailableLanguages()
     m_available_languages << tags;
 }
 
+void OptionsQmlModel::persistGuiSetting(const QString& key, const QVariant& value)
+{
+    if (!m_ready || m_stopping || m_validation_pending) return;
+    runCommand([key, value](interfaces::Node&, ArgsManager&) { return SaveGuiSetting(key, value); });
+}
+
 void OptionsQmlModel::setLanguage(const QString& new_language)
 {
-    if (!canEditCoreSetting(QStringLiteral("lang"))) return;
-    if (new_language != m_language) {
-        m_language = new_language;
-        QSettings settings;
-        settings.setValue(SettingsKeys::LANGUAGE, m_language);
-        writeCoreSettingOverride(QStringLiteral("lang"), currentCoreSettingValue(QStringLiteral("lang")));
-        Q_EMIT languageChanged();
-    }
+    if (!canEditCoreSetting(QStringLiteral("lang")) || new_language == m_language) return;
+    m_language = new_language;
+    Q_EMIT languageChanged();
+    runCommand([new_language](interfaces::Node&, ArgsManager& args) {
+        QString error;
+        if (QmlCoreSettings::PersistSettings(args, {QStringLiteral("lang")}, [&] {
+                return QmlCoreSettings::WriteCoreSettingOverride(args, QStringLiteral("lang"), common::SettingsValue{new_language.toStdString()});
+            }, &error)) error = SaveGuiSetting(SettingsKeys::LANGUAGE, new_language);
+        return error;
+    });
 }
 
 QString OptionsQmlModel::languageSummary() const
@@ -572,21 +780,18 @@ QString OptionsQmlModel::languageLabel(const QString& locale_tag) const
 void OptionsQmlModel::setDisplayUnit(int new_display_unit)
 {
     new_display_unit = NormalizeDisplayUnit(new_display_unit);
-    if (new_display_unit != m_display_unit) {
-        m_display_unit = new_display_unit;
-        QSettings settings;
-        settings.setValue(SettingsKeys::DISPLAY_UNIT, m_display_unit);
-        Q_EMIT displayUnitChanged(m_display_unit);
-    }
+    if (!m_ready || m_stopping || m_validation_pending || new_display_unit == m_display_unit) return;
+    m_display_unit = new_display_unit;
+    Q_EMIT displayUnitChanged(m_display_unit);
+    persistGuiSetting(SettingsKeys::DISPLAY_UNIT, new_display_unit);
 }
 
 void OptionsQmlModel::setThirdPartyTransactionUrls(const QString& urls)
 {
-    if (urls == m_third_party_transaction_urls) return;
+    if (!m_ready || m_stopping || m_validation_pending || urls == m_third_party_transaction_urls) return;
     m_third_party_transaction_urls = urls;
-    QSettings settings;
-    settings.setValue(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, m_third_party_transaction_urls);
     Q_EMIT thirdPartyTransactionUrlsChanged();
+    persistGuiSetting(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, urls);
 }
 
 QVariantList OptionsQmlModel::thirdPartyTransactionLinks(const QString& txid) const
@@ -611,12 +816,11 @@ QVariantList OptionsQmlModel::thirdPartyTransactionLinks(const QString& txid) co
 void OptionsQmlModel::setMoneyFontChoice(const QString& choice)
 {
     const QString normalized = choice == MONEY_FONT_BEST_SYSTEM ? QString{MONEY_FONT_BEST_SYSTEM} : QString{MONEY_FONT_EMBEDDED};
-    if (normalized == m_money_font_choice) return;
+    if (!m_ready || m_stopping || m_validation_pending || normalized == m_money_font_choice) return;
     m_money_font_choice = normalized;
-    QSettings settings;
-    settings.setValue(SettingsKeys::MONEY_FONT_CHOICE, m_money_font_choice);
     Q_EMIT moneyFontChoiceChanged();
     Q_EMIT moneyFontChanged();
+    persistGuiSetting(SettingsKeys::MONEY_FONT_CHOICE, normalized);
 }
 
 QFont OptionsQmlModel::moneyFont() const

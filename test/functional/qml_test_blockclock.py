@@ -27,11 +27,15 @@ def run_tests():
         assert gui.get_property("blockClock", "header") == "Connecting"
         assert gui.get_property("blockClock", "subText") == "Please wait"
 
+        # The page is visible while Core is still starting. Pause becomes
+        # actionable only after initialization publishes command readiness.
+        gui.wait_for_property("blockClockToggleArea", "enabled", True, timeout_ms=10000)
         gui.click("blockClockToggleArea")
         gui.wait_for_property("blockClock", "state", "PAUSE", timeout_ms=5000)
         assert gui.get_property("blockClock", "header") == "Paused"
         assert gui.get_property("blockClock", "subText") == "Tap to resume"
 
+        gui.wait_for_property("blockClockToggleArea", "enabled", True, timeout_ms=5000)
         gui.click("blockClockToggleArea")
         gui.wait_for_property("blockClock", "state", "CONNECTING", timeout_ms=5000)
         assert gui.get_property("blockClock", "header") == "Connecting"

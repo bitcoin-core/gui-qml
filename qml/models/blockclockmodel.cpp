@@ -4,18 +4,18 @@
 
 #include <qml/models/blockclockmodel.h>
 
-#include <interfaces/chain.h>
+#include <qml/models/blockclockhistory.h>
 
 #include <algorithm>
-#include <optional>
 #include <utility>
 
+#include <QMetaObject>
 #include <QTime>
 
-BlockClockModel::BlockClockModel(HistoryLoader history_loader, bool start_timer,
+BlockClockModel::BlockClockModel(std::shared_ptr<BlockClockHistory> history, bool start_timer,
                                  CurrentTimeProvider current_time_provider, QObject* parent)
     : QObject{parent},
-      m_history_loader{std::move(history_loader)},
+      m_history{history ? std::move(history) : std::make_shared<BlockClockHistory>()},
       m_current_time_provider{std::move(current_time_provider)},
       m_clock_timer{this}
 {
@@ -30,10 +30,35 @@ BlockClockModel::BlockClockModel(HistoryLoader history_loader, bool start_timer,
         updateCurrentTime(current_time);
         scheduleNextClockUpdate(current_time);
     });
-
     const QDateTime current_time{m_current_time_provider()};
     updateCurrentTime(current_time);
     if (start_timer) scheduleNextClockUpdate(current_time);
+    m_history->setChangedCallback([this] { scheduleHistoryRefresh(); });
+}
+
+BlockClockModel::~BlockClockModel()
+{
+    stop();
+}
+
+void BlockClockModel::stop()
+{
+    if (m_stopped) return;
+    m_stopped = true;
+    // The cache invokes this callback under its mutex. Detaching therefore
+    // finishes any in-flight event posting before this QObject can be destroyed.
+    m_history->setChangedCallback({});
+    m_clock_timer.stop();
+}
+
+void BlockClockModel::scheduleHistoryRefresh()
+{
+    if (m_history_refresh_pending.exchange(true)) return;
+    QMetaObject::invokeMethod(this, [this] {
+        // Changes arriving during consumption schedule the next refresh.
+        m_history_refresh_pending = false;
+        refreshHistory();
+    }, Qt::QueuedConnection);
 }
 
 qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
@@ -44,16 +69,16 @@ qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
 
 void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
 {
+    if (m_stopped) return;
     const qint64 period_start{PeriodStartFor(current_time)};
     if (m_timeline.period_start != period_start) {
         m_timeline.period_start = period_start;
+        // Keep the previous period for ordinary backwards clock/DST changes,
+        // and retain future timestamps so rollover needs no backend reads.
+        m_history->setRetentionStart(period_start - PERIOD_SECONDS);
+        if (auto snapshot = m_history->takeSnapshot()) m_cached_block_timestamps = std::move(*snapshot);
+        replaceBlockHistory(m_cached_block_timestamps, /*period_changed=*/true);
         Q_EMIT periodChanged();
-
-        if (m_history_initialized) {
-            loadHistory();
-        } else {
-            replaceBlockHistory({});
-        }
     }
 
     const qreal fraction{fractionForTimestamp(current_time.toSecsSinceEpoch())};
@@ -65,48 +90,23 @@ void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
 
 void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
 {
+    if (m_stopped) return;
     const QTime time{current_time.time()};
     const int milliseconds_into_minute{time.second() * 1000 + time.msec()};
     m_clock_timer.start(CLOCK_UPDATE_INTERVAL_MS - milliseconds_into_minute);
 }
 
-void BlockClockModel::initializeHistory()
+void BlockClockModel::refreshHistory()
 {
-    m_history_initialized = true;
-    loadHistory();
-}
-
-void BlockClockModel::recordBlockTime(qint64 block_timestamp)
-{
+    if (m_stopped) return;
+    auto snapshot{m_history->takeSnapshot()};
+    if (!snapshot) return;
+    m_cached_block_timestamps = std::move(*snapshot);
     updateCurrentTime(m_current_time_provider());
-    if (m_history_initialized && m_history_loader) {
-        // A queued notification may already be included in loaded history.
-        // Refresh from the active chain: timestamps cannot identify blocks.
-        loadHistory();
-        return;
-    }
-
-    const qint64 period_end{m_timeline.period_start + PERIOD_SECONDS};
-    if (block_timestamp < m_timeline.period_start || block_timestamp >= period_end) return;
-
-    auto insert_position{std::lower_bound(m_timeline.block_timestamps.begin(), m_timeline.block_timestamps.end(), block_timestamp)};
-
-    m_timeline.block_timestamps.insert(insert_position, block_timestamp);
-    rebuildBlockTimeFractions();
-    Q_EMIT blockTimeFractionsChanged();
+    replaceBlockHistory(m_cached_block_timestamps);
 }
 
-void BlockClockModel::loadHistory()
-{
-    if (!m_history_loader) {
-        replaceBlockHistory({});
-        return;
-    }
-
-    replaceBlockHistory(m_history_loader(m_timeline.period_start, m_timeline.period_start + PERIOD_SECONDS));
-}
-
-void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps)
+void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps, bool period_changed)
 {
     const qint64 period_end{m_timeline.period_start + PERIOD_SECONDS};
     std::sort(block_timestamps.begin(), block_timestamps.end());
@@ -114,10 +114,11 @@ void BlockClockModel::replaceBlockHistory(QList<qint64> block_timestamps)
         return timestamp < m_timeline.period_start || timestamp >= period_end;
     }), block_timestamps.end());
 
-    if (m_timeline.block_timestamps == block_timestamps) return;
+    if (m_timeline.block_timestamps == block_timestamps && !period_changed) return;
+    const auto previous_fractions{m_block_time_fractions};
     m_timeline.block_timestamps = std::move(block_timestamps);
     rebuildBlockTimeFractions();
-    Q_EMIT blockTimeFractionsChanged();
+    if (previous_fractions != m_block_time_fractions) Q_EMIT blockTimeFractionsChanged();
 }
 
 void BlockClockModel::rebuildBlockTimeFractions()
@@ -136,24 +137,4 @@ qreal BlockClockModel::fractionForTimestamp(qint64 timestamp) const
         static_cast<qreal>(timestamp - m_timeline.period_start) / PERIOD_SECONDS,
         0.0,
         1.0);
-}
-
-QList<qint64> LoadBlockClockHistory(interfaces::Chain& chain, qint64 period_start, qint64 period_end)
-{
-    QList<qint64> block_timestamps;
-    const std::optional<int> active_height{chain.getHeight()};
-    if (!active_height) return block_timestamps;
-
-    int first_height{0};
-    if (!chain.findFirstBlockWithTimeAndHeight(period_start, /*min_height=*/0, interfaces::FoundBlock{}.height(first_height))) {
-        return block_timestamps;
-    }
-
-    for (int height{first_height}; height <= *active_height; ++height) {
-        const uint256 block_hash{chain.getBlockHash(height)};
-        int64_t block_time{0};
-        if (!chain.findBlock(block_hash, interfaces::FoundBlock{}.time(block_time))) continue;
-        if (block_time >= period_start && block_time < period_end) block_timestamps.push_back(block_time);
-    }
-    return block_timestamps;
 }
