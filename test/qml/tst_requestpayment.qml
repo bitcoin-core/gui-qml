@@ -199,6 +199,7 @@ TestCase {
         const footer = findChild(card, "requestPaymentDetailsFooter")
         verify(footer.visible)
 
+        waitForRendering(page)
         mouseClick(findChild(card, "requestPaymentCustomizeButton"))
         const menu = findChild(card, "requestPaymentFieldsMenu")
         tryCompare(menu, "opened", true)
@@ -247,10 +248,12 @@ TestCase {
     }
 
     function test_customize_preserves_field_values_when_hidden() {
-        const card = createPage().draftCard
+        const page = createPage()
+        const card = page.draftCard
         const input = editField(card, "requestPaymentMessageInput", "Lunch split")
         input.editingFinished()
         const address = card.request.address
+        waitForRendering(page)
         mouseClick(findChild(card, "requestPaymentCustomizeButton"))
         const menu = findChild(card, "requestPaymentFieldsMenu")
         tryCompare(menu, "opened", true)

@@ -103,7 +103,7 @@ def create_payment_request_from_first_unused_address(gui, expected_address):
     gui.click("addressDetailsCreatePaymentRequestButton")
     gui.settle()
     gui.wait_for_property("requestPaymentNoteRow", "value", ADDRESS_LABEL)
-    assert gui.get_property("receivingAddressText", "address") == expected_address
+    assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == expected_address
 
 
 def commit_payment_request(gui):

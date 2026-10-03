@@ -260,9 +260,17 @@ def run_tests():
         gui.invoke("sendAddressInput", "forceActiveFocus")
         gui.wait_for_property("sendAddressInput", "activeFocus", True)
         gui.invoke("sendAddressInput", "paste")
+        # The imported message would replace the existing private note.
+        gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", True)
+        assert gui.get_property("sendPaymentRequestMessageText", "value") == ""
+        gui.click("sendPaymentUriOverwriteConfirmButton")
+        gui.wait_for_property("sendPaymentUriOverwritePopup", "opened", False)
         gui.wait_for_property(
             "sendPaymentRequestMessageText", "value",
             "address-field-paste", timeout_ms=5000,
+        )
+        gui.wait_for_property(
+            "sendNoteInput", "text", "address-field-paste - field-paste",
         )
         print("Test 8 PASSED: native paste from recipient fields.")
 
