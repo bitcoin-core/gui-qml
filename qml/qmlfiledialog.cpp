@@ -4,6 +4,7 @@
 
 #include <qml/qmlfiledialog.h>
 
+#include <QDir>
 #include <QFileDialog>
 #include <QGuiApplication>
 #include <QWindow>
@@ -100,16 +101,21 @@ void QmlFileDialog::open()
         dlg->setAcceptMode(QFileDialog::AcceptOpen);
         dlg->setFileMode(QFileDialog::ExistingFile);
         dlg->setOption(QFileDialog::ShowDirsOnly, false);
+        dlg->setFilter(dlg->filter() & ~QDir::Hidden);
         break;
     case SaveFile:
         dlg->setAcceptMode(QFileDialog::AcceptSave);
         dlg->setFileMode(QFileDialog::AnyFile);
         dlg->setOption(QFileDialog::ShowDirsOnly, false);
+        dlg->setFilter(dlg->filter() & ~QDir::Hidden);
         break;
     case Directory:
         dlg->setAcceptMode(QFileDialog::AcceptOpen);
         dlg->setFileMode(QFileDialog::Directory);
         dlg->setOption(QFileDialog::ShowDirsOnly, true);
+        // Data directories such as ~/.bitcoin are hidden by convention, and
+        // the folder picker is where users look for an existing one.
+        dlg->setFilter(dlg->filter() | QDir::Hidden);
         break;
     }
 

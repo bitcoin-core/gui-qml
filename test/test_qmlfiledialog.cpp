@@ -33,6 +33,7 @@ private Q_SLOTS:
     void saveModeAsksToSaveNotToOpen();
     void openModeRequiresAnExistingFile();
     void directoryModeShowsDirectoriesOnly();
+    void onlyDirectoryModeShowsHiddenEntries();
     void propertiesReachTheDialog();
     void acceptedCarriesTheSelectedFile();
 };
@@ -78,6 +79,26 @@ void QmlFileDialogTests::directoryModeShowsDirectoriesOnly()
     QVERIFY(dialog);
     QCOMPARE(dialog->fileMode(), QFileDialog::Directory);
     QVERIFY(dialog->testOption(QFileDialog::ShowDirsOnly));
+    chooser.close();
+}
+
+void QmlFileDialogTests::onlyDirectoryModeShowsHiddenEntries()
+{
+    QmlFileDialog chooser;
+    chooser.setFileMode(QmlFileDialog::Directory);
+    chooser.open();
+
+    QFileDialog* dialog = VisibleFileDialog();
+    QVERIFY(dialog);
+    QVERIFY(dialog->filter().testFlag(QDir::Hidden));
+    chooser.close();
+
+    // The chooser reuses its dialog, so a later file mode must drop the flag.
+    chooser.setFileMode(QmlFileDialog::OpenFile);
+    chooser.open();
+    dialog = VisibleFileDialog();
+    QVERIFY(dialog);
+    QVERIFY(!dialog->filter().testFlag(QDir::Hidden));
     chooser.close();
 }
 
