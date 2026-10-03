@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtQuick.Dialogs
 import org.bitcoincore.qt 1.0
 
 import "../controls"
@@ -51,9 +50,9 @@ Popup {
         code: root.code
     }
 
-    FileDialog {
+    AppFileDialog {
         id: saveDialog
-        fileMode: FileDialog.SaveFile
+        fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("PNG files (*.png)")]
         currentFile: "file:///" + (root.label !== "" ? root.label : qsTr("payment-request")) + ".png"
         onAccepted: {

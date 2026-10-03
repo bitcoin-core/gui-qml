@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtQuick.Dialogs
 import org.bitcoincore.qt 1.0
 import "../controls"
 
@@ -169,10 +168,10 @@ Pane {
             onClicked: root.ensureAddress(root.pendingNext, root.pendingType)
         }
     }
-    FileDialog {
+    AppFileDialog {
         id: saveDialog
         objectName: "receivingAddressSaveQRDialog"
-        fileMode: FileDialog.SaveFile
+        fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("PNG files (*.png)")]
         defaultSuffix: "png"
         onAccepted: root.saveQRToFile(selectedFile)
