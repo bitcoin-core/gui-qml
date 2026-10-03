@@ -192,7 +192,7 @@ std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate)
     }
 
     const CAmount fee_rate_per_kvb = (whole_part * FEE_RATE_BASIS_VBYTES) + fractional_value;
-    if (fee_rate_per_kvb <= 0) {
+    if (fee_rate_per_kvb < DEFAULT_MIN_RELAY_TX_FEE) {
         return std::nullopt;
     }
 
@@ -459,6 +459,8 @@ std::optional<SendFeePreview> EstimateCustomPreviewFee(interfaces::Wallet& walle
     ApplySelectedInputsPolicy(coin_control);
     coin_control.m_confirm_target.reset();
     coin_control.m_feerate = CFeeRate{fee_rate_per_kvb};
+    // An explicit custom rate may be below the wallet's automatic minimum.
+    coin_control.fOverrideFeeRate = true;
     ApplyPreviewChangeDestination(coin_control, preview_change_type);
 
     if (const auto fee = TryPreviewFee(wallet, recipients, coin_control, remainder_index)) {
@@ -1232,8 +1234,6 @@ bool WalletQmlModel::commitReceivingPaymentRequest()
     // address if a payment landed while the user was filling out the form.
     for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
     if (m_receiving_address->address().isEmpty() || m_receiving_address->paymentReceived()) return false;
-    if (m_current_payment_request->amount()->satoshi() == 0 && m_current_payment_request->label().trimmed().isEmpty()
-        && m_current_payment_request->message().trimmed().isEmpty() && m_current_payment_request->noteSelf().trimmed().isEmpty()) return false;
     m_current_payment_request->setDestination(m_receiving_address->destination());
     if (!savePaymentRequest(m_current_payment_request)) return false;
     // Reserve this address for the saved request. The next Receive view must
@@ -2305,6 +2305,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         }
         coin_control.m_confirm_target.reset();
         coin_control.m_feerate = CFeeRate{*custom_fee_rate_per_kvb};
+        coin_control.fOverrideFeeRate = true;
     } else {
         coin_control.m_feerate.reset();
         if (!coin_control.m_confirm_target.has_value()) {

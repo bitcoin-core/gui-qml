@@ -1238,6 +1238,11 @@ public:
                 {QStringLiteral("label"), QStringLiteral("Base58 (P2SH-SegWit)")},
                 {QStringLiteral("description"), QStringLiteral("Backward compatible")},
             },
+            QVariantMap{
+                {QStringLiteral("id"), QStringLiteral("legacy")},
+                {QStringLiteral("label"), QStringLiteral("Base58 (Legacy)")},
+                {QStringLiteral("description"), QStringLiteral("Older wallet compatibility")},
+            },
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
@@ -1284,7 +1289,7 @@ public:
         static const QRegularExpression pattern{
             QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")
         };
-        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate != QStringLiteral("0");
+        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate.toDouble() >= 0.1;
     }
     int prepareTransactionCalls() const { return m_prepare_transaction_calls; }
     int scheduleFeeEstimatesCalls() const { return m_schedule_fee_estimates_calls; }

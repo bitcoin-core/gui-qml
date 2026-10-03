@@ -118,7 +118,8 @@ ColumnLayout {
         description: "sat/vB"
         text: root.walletModel ? root.walletModel.customFeeRate : ""
         validator: RegularExpressionValidator { regularExpression: /^(|[0-9]+(\.[0-9]{0,3})?)$/ }
-        errorText: root.walletModel && !root.walletModel.customFeeRateValid ? qsTr("Enter a fee rate greater than zero.") : ""
+        //: Validation error for the custom transaction fee rate. sat/vB means satoshis per virtual byte.
+        errorText: root.walletModel && !root.walletModel.customFeeRateValid ? qsTr("Enter a fee rate of at least 0.1 sat/vB.") : ""
         onTextEdited: function(text) { if (root.walletModel) root.walletModel.customFeeRate = text }
     }
 

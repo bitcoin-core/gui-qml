@@ -57,7 +57,9 @@ ColumnLayout {
     }
 
     ColumnLayout {
+        objectName: "sendPaymentRequestSection"
         visible: root.recipient && root.recipient.hasPaymentRequest
+            && (root.recipient.paymentRequestLabel.length > 0 || root.recipient.message.length > 0)
         Layout.fillWidth: true
         spacing: 8
         CoreText {
@@ -84,7 +86,7 @@ ColumnLayout {
                 visible: root.recipient && root.recipient.message.length > 0
                 objectName: "sendPaymentRequestMessageText"
                 Layout.fillWidth: true
-                title: qsTr("For")
+                title: qsTr("Message")
                 value: root.recipient ? root.recipient.message : ""
                 showDivider: false
             }

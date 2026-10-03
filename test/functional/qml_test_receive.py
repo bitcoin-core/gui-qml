@@ -108,6 +108,7 @@ def _import_wallet_backup(gui, backup_path, wallet_name):
     gui.click("walletTypeImport")
     gui.wait_for_page("importWalletSuccessPage", timeout_ms=30000)
     gui.click("importWalletSuccessOverviewButton")
+    gui.wait_for_property("walletCreationModal", "visible", False, timeout_ms=10000)
     gui.wait_for_property("walletBadge", "text", wallet_name, timeout_ms=20000)
     gui.settle()
 
@@ -190,6 +191,13 @@ def _mine_to_address(harness, address):
 
 def _edit_field(gui, field, value):
     input_name = {"label": "YourName", "message": "Message", "note": "NoteSelf", "amount": "Amount"}[field]
+    if not gui.get_property(f"requestPayment{input_name}Input", "visible"):
+        option_name = {"label": "RecipientName", "message": "Message", "amount": "Amount"}[field]
+        gui.click("requestPaymentCustomizeButton")
+        gui.wait_for_property("requestPaymentFieldsMenu", "opened", True)
+        gui.click(f"requestPaymentShow{option_name}")
+        gui.invoke("requestPaymentFieldsMenu", "close")
+        gui.wait_for_property("requestPaymentFieldsMenu", "visible", False)
     gui.wait_for_property(f"requestPayment{input_name}Input", "visible", True)
     gui.set_text(f"requestPayment{input_name}Input", value)
     gui.invoke(f"requestPayment{input_name}Input", "editingFinished")
@@ -221,42 +229,59 @@ def run_test():
         gui.set_property("appWindow", "width", 1180)
         gui.set_property("appWindow", "height", 960)
 
-        # Receiving is ready immediately, but saving a request requires details.
-        gui.wait_for_property("receivingAddressQRImage", "visible", True)
-        ready_address = gui.get_property("receivingAddressQRImage", "code")
+        gui.wait_for_property("requestPaymentMessageRow", "label", "Message")
+        assert not gui.get_property("requestPaymentLabelRow", "visible")
+        gui.click("requestPaymentCustomizeButton")
+        gui.wait_for_property("requestPaymentFieldsMenu", "opened", True)
+        assert gui.get_property("requestPaymentShowAmount", "selected")
+        assert gui.get_property("requestPaymentShowMessage", "selected")
+        assert not gui.get_property("requestPaymentShowRecipientName", "selected")
+        gui.save_screenshot(os.path.join(harness.tmpdir, "receive-customize.png"))
+        gui.invoke("requestPaymentFieldsMenu", "close")
+        gui.wait_for_property("requestPaymentFieldsMenu", "visible", False)
+
+        # Optional details can stay empty; the address is only shared after creation.
+        gui.wait_for_property("requestPaymentGenerateButton", "enabled", True)
+        ready_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert ready_address.startswith("bcrt1p")
         with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
             settings = json.load(settings_file)
         assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32m"
-        gui.invoke("requestPaymentAddressTypeDropdown", "activated", ["bech32"])
-        gui.wait_for_property("requestPaymentAddressTypeDropdown", "currentValue", "bech32")
-        ready_address = gui.get_property("receivingAddressQRImage", "code")
+        gui.click("receiveAddressSettingsButton")
+        gui.wait_for_property("receiveAddressTypeMenu", "opened", True)
+        gui.wait_for_property("receiveAddressTypePicker", "currentValue", "bech32m")
+        for address_type in ("bech32m", "bech32", "p2sh-segwit", "legacy"):
+            gui.wait_for_property(f"receiveAddressType_{address_type}", "visible", True)
+            gui.wait_for_property(f"receiveAddressTypeDescription_{address_type}", "visible", True)
+            assert gui.get_property(f"receiveAddressTypeDescription_{address_type}", "text")
+        gui.settle()
+        gui.save_screenshot(os.path.join(harness.tmpdir, "receive-address-settings.png"))
+        gui.click("receiveAddressType_bech32")
+        gui.wait_for_property("receiveAddressTypeMenu", "visible", False)
+        gui.wait_for_property("receiveAddressTypePicker", "currentValue", "bech32")
+        ready_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert ready_address.startswith("bcrt1q")
         with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
             settings = json.load(settings_file)
         assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32"
-        assert not gui.get_property("requestPaymentGenerateButton", "enabled")
+        assert gui.get_property("requestPaymentGenerateButton", "enabled")
         assert gui.get_property("requestHistoryCount", "count") == 0
+        for field, value in (("amount", "0.0001"), ("message", "Clear me"), ("note", "Private draft")):
+            _edit_field(gui, field, value)
+        gui.click("receiveMoreButton")
+        gui.wait_for_property("receiveMoreMenu", "opened", True)
+        gui.settle()
+        gui.save_screenshot(os.path.join(harness.tmpdir, "receive-overflow.png"))
+        gui.click("receiveClearFormButton")
+        gui.wait_for_property("receiveMoreMenu", "visible", False)
+        for field in ("Amount", "Message", "YourName", "NoteSelf"):
+            assert gui.get_property(f"requestPayment{field}Input", "text") == ""
+        assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == ready_address
+        assert gui.get_property("receiveAddressTypePicker", "currentValue") == "bech32"
         _open_activity(gui)
         _open_receive(gui)
-        assert gui.get_property("receivingAddressQRImage", "code") == ready_address
+        assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") == ready_address
         gui.save_screenshot(os.path.join(harness.tmpdir, "receive-draft.png"))
-        # The receiving address QR has image actions before a request is saved.
-        gui.invoke("receivingAddressQRContextMenu", "open")
-        gui.wait_for_property("receivingAddressQRContextMenu", "opened", True)
-        gui.click("receivingAddressQRContextCopy")
-        gui.wait_for_property("receivingAddressQRContextMenu", "visible", False)
-        address_qr_path = os.path.join(harness.tmpdir, "address-qr.png")
-        gui.invoke("receivingAddressQRContextMenu", "open")
-        gui.wait_for_property("receivingAddressQRContextMenu", "opened", True)
-        gui.click("receivingAddressQRContextSave")
-        gui.wait_for_property("receivingAddressSaveQRDialog", "visible", True)
-        gui.set_property("receivingAddressSaveQRDialog", "selectedFile", "file://" + address_qr_path)
-        gui.invoke("receivingAddressSaveQRDialog", "accepted")
-        gui.invoke("receivingAddressSaveQRDialog", "close")
-        wait_until(lambda: os.path.exists(address_qr_path), description="saved receiving address QR")
-        with open(address_qr_path, "rb") as image:
-            assert image.read(8) == b"\x89PNG\r\n\x1a\n"
         _create_request(gui, "0.0001", "Alice", "pizza", note_self="Private lunch note")
         gui.wait_for_property("activityTabButton", "checked", True)
         original = _request_qr_payload(gui)
@@ -308,7 +333,7 @@ def run_test():
         gui.wait_for_property("activityTabButton", "checked", True)
         _open_receive(gui)
         assert gui.get_property("requestPaymentQRImage", "code") == ""
-        next_receiving_address = gui.get_property("receivingAddressQRImage", "code")
+        next_receiving_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert next_receiving_address and next_receiving_address != address
 
         # The Activity request opens the same modal without pushing a page.
@@ -329,7 +354,7 @@ def run_test():
         gui.wait_for_property("requestPaymentYourNameInput", "text", "Coffee & cake")
         assert gui.get_property("requestPaymentMessageInput", "text") == "pizza"
         assert gui.get_property("requestPaymentNoteSelfInput", "text") == "Private lunch note"
-        assert gui.get_property("receivingAddressQRImage", "code") != address
+        assert gui.get_property("requestPaymentPage", "wallet.receivingAddress.address") != address
         assert gui.get_property("requestHistoryCount", "count") == count
         for field in ("amount", "label", "message", "note"):
             _edit_field(gui, field, "")
@@ -436,12 +461,12 @@ def run_test():
         for field in ("amount", "label", "message", "note"):
             _edit_field(gui, field, "")
 
-        # A payment rotates the receiving address; a private note alone can save a request.
+        # A request can be created with every optional field empty.
         _open_receive(gui)
-        assert not gui.get_property("requestPaymentGenerateButton", "enabled")
-        next_address = gui.get_property("receivingAddressQRImage", "code")
+        assert gui.get_property("requestPaymentGenerateButton", "enabled")
+        next_address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         assert next_address != address
-        _create_request(gui, "", "", "", note_self="Private reminder")
+        _create_request(gui, "", "", "")
         blank_uri = _request_qr_payload(gui)
         assert "?" not in blank_uri
         assert _address_from_bip21(blank_uri) == next_address
