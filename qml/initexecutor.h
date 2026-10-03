@@ -6,39 +6,59 @@
 #define BITCOIN_QML_INITEXECUTOR_H
 
 #include <interfaces/node.h>
+#include <qml/backendexecutor.h>
 
 #include <exception>
+#include <functional>
+#include <memory>
 
 #include <QObject>
-#include <QThread>
 
 QT_BEGIN_NAMESPACE
 class QString;
 QT_END_NAMESPACE
+
+namespace interfaces {
+class Handler;
+}
 
 /** Runs app initialization and shutdown work off the GUI thread. */
 class QmlInitExecutor : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlInitExecutor(interfaces::Node& node);
+    using SubscriptionFactory = std::function<std::unique_ptr<interfaces::Handler>()>;
+
+    explicit QmlInitExecutor(interfaces::Node& node, SubscriptionFactory subscribe = {});
     ~QmlInitExecutor();
 
 public Q_SLOTS:
     void initialize();
+    void interrupt();
     void shutdown();
 
 Q_SIGNALS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info,
+                          bool initial_block_download, bool shutdown_requested);
+    void interruptResult();
     void shutdownResult();
     void runawayException(const QString& message);
 
 private:
-    void handleRunawayException(const std::exception* e);
+    void handleRunawayException(std::exception_ptr error);
+    void finishShutdown();
 
+    struct WorkerState;
     interfaces::Node& m_node;
-    QObject m_context;
-    QThread m_thread;
+    std::shared_ptr<WorkerState> m_worker_state;
+    BackendExecutor m_init_and_shutdown_executor;
+    BackendExecutor m_interrupt_executor;
+    bool m_initialize_requested{false};
+    bool m_interrupt_requested{false};
+    bool m_shutdown_requested{false};
+    bool m_app_shutdown_complete{false};
+    bool m_shutdown_result_emitted{false};
+    bool m_runaway_exception{false};
 };
 
 #endif // BITCOIN_QML_INITEXECUTOR_H

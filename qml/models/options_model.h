@@ -77,6 +77,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
 
 public:
+    void beginShutdown();
     explicit OptionsQmlModel(interfaces::Node& node, ArgsManager& args = gArgs);
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
@@ -168,6 +169,7 @@ public Q_SLOTS:
     }
 
 Q_SIGNALS:
+    void shutdownFinished();
     void dbcacheSizeMiBChanged(int new_dbcache_size_mib);
     void listenChanged(bool new_listen);
     void maxMempoolSizeMBChanged(int new_max_mempool_size_mb);
@@ -198,6 +200,7 @@ Q_SIGNALS:
     void moneyFontChanged();
 
 private:
+    bool m_stopping{false};
     struct DirtySnapshot {
         bool connection{false};
         bool storage{false};

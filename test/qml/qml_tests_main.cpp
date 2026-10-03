@@ -6,6 +6,8 @@
 
 #include <QAbstractListModel>
 #include <QDateTime>
+#include <QEvent>
+#include <QEventLoop>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
@@ -26,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include <qml/backendexecutor.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 
@@ -2574,6 +2577,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(double headerSyncProgress MEMBER m_header_sync_progress NOTIFY headerSyncChanged)
     Q_PROPERTY(bool faulted MEMBER m_faulted NOTIFY faultedChanged)
     Q_PROPERTY(QString startupError MEMBER m_startup_error NOTIFY startupErrorChanged)
+    Q_PROPERTY(bool fatalException MEMBER m_fatal_exception NOTIFY fatalExceptionChanged)
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
@@ -2613,6 +2617,7 @@ public:
     double m_header_sync_progress{0.0};
     bool m_faulted{false};
     QString m_startup_error;
+    bool m_fatal_exception{false};
     QString m_warnings;
     QStringList m_warning_list;
     bool m_runtime_dialog_visible{false};
@@ -2757,6 +2762,7 @@ Q_SIGNALS:
     void blockSyncActiveChanged();
     void faultedChanged();
     void startupErrorChanged();
+    void fatalExceptionChanged();
     void warningsChanged();
     void runtimeDialogChanged();
     void blockTipHeightChanged();
@@ -4033,6 +4039,15 @@ public Q_SLOTS:
     {
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+    }
+
+    void cleanupTestCase()
+    {
+        QEventLoop loop;
+        bool drained{false};
+        BackendExecutor::shutdownAll(&loop, [&] { drained = true; loop.quit(); });
+        while (!drained) loop.exec();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
 
     void qmlEngineAvailable(QQmlEngine* engine)

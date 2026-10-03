@@ -20,6 +20,12 @@ TestCase {
     property bool preInitOnboardingRan: false
     property var windowUnderTest: null
 
+    SignalSpy {
+        id: shutdownSpy
+        target: nodeModel
+        signalName: "requestedShutdown"
+    }
+
     Component {
         id: mainWindowComponent
         MainWindow {
@@ -35,6 +41,10 @@ TestCase {
             windowUnderTest.destroy()
             windowUnderTest = null
         }
+        nodeModel.fatalException = false
+        nodeModel.setStartupErrorForTest("")
+        desktopWindowBehaviorModel.minimizeOnClose = false
+        shutdownSpy.clear()
     }
 
     function createMain(wallet_enabled, preinit_onboarding_ran, no_wallets_found, wallet_dir_loaded, initialized) {
@@ -63,6 +73,41 @@ TestCase {
         verify(menuActions !== null)
         compare(menuActions.createWallet.visible, true)
         compare(menuActions.createWallet.enabled, true)
+    }
+
+    function test_fatal_exception_during_shutdown_keeps_dialog_usable() {
+        const window = createMain(false)
+        nodeModel.requestShutdown()
+        window.contentItem.enabled = false
+        window.hide()
+
+        nodeModel.fatalException = true
+        nodeModel.setStartupErrorForTest("Shutdown failed")
+        const popup = findChild(window, "nodeFatalErrorPopup")
+        tryCompare(popup, "opened", true)
+        verify(window.visible)
+        verify(window.contentItem.enabled)
+        compare(findChild(window, "mainPageStack").enabled, false)
+        const actions = findChild(window, "desktopMenuActions")
+        compare(actions.settings.enabled, false)
+        compare(actions.exit.enabled, true)
+        const button = findChild(popup, "nodeFatalShutdownButton")
+        verify(button.enabled)
+        verify(waitForRendering(button))
+        shutdownSpy.clear()
+        mouseClick(button, button.width / 2, button.height / 2)
+        compare(shutdownSpy.count, 1)
+    }
+
+    function test_closing_fatal_exception_requests_exit_even_with_minimize_on_close() {
+        const window = createMain(false)
+        desktopWindowBehaviorModel.minimizeOnClose = true
+        nodeModel.fatalException = true
+        nodeModel.setStartupErrorForTest("Initialization failed")
+        tryCompare(findChild(window, "nodeFatalErrorPopup"), "opened", true)
+        shutdownSpy.clear()
+        window.close()
+        compare(shutdownSpy.count, 1)
     }
 
     function test_wallet_unavailable_routes_to_node_runner() {

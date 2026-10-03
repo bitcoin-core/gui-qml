@@ -12,7 +12,6 @@
 #include <key_io.h>
 
 #include <QDateTime>
-#include <QThreadPool>
 
 #include <exception>
 #include <utility>
@@ -157,9 +156,7 @@ void TransactionActivityModel::stop()
     m_timer.stop();
     m_loading = m_details_loading = false;
     Q_EMIT loadingChanged();
-    if (m_watcher) m_watcher->cancel();
-    // No wait on the GUI thread. The task owns its wallet handle and copies,
-    // and deleting the watcher disconnects delivery to this model.
+    m_cancelled->store(true);
 }
 
 void TransactionActivityModel::Work::merge(const Work& other)
@@ -243,7 +240,7 @@ void TransactionActivityModel::schedule()
         if (m_pending.reload || m_pending.details) m_load_error.clear();
         Q_EMIT loadingChanged();
     }
-    if (m_watcher || m_scheduled) return;
+    if (m_work_pending || m_scheduled) return;
     m_scheduled = true;
     QTimer::singleShot(0, this, &TransactionActivityModel::startWork);
 }
@@ -251,7 +248,7 @@ void TransactionActivityModel::schedule()
 void TransactionActivityModel::startWork()
 {
     m_scheduled = false;
-    if (m_stopped || m_watcher || m_pending.empty()) return;
+    if (m_stopped || m_work_pending || m_pending.empty()) return;
     const auto wallet = m_wallet_model->walletHandle();
     if (!wallet) return;
     const Work work = std::exchange(m_pending, {});
@@ -267,61 +264,52 @@ void TransactionActivityModel::startWork()
     snapshot.detail_labels = m_detail_labels;
     snapshot.can_bump = m_detail_can_bump;
     snapshot.detail_missing = m_detail_missing;
-    auto promise = std::make_shared<QPromise<Snapshot>>();
-    auto* watcher = new QFutureWatcher<Snapshot>(this);
-    m_watcher = watcher;
-    connect(watcher, &QFutureWatcher<Snapshot>::finished, this, [this, watcher, work, generation, detail_generation] {
-        m_watcher = nullptr;
-        if (!m_stopped) {
+    m_work_pending = true;
+    const auto cancelled = m_cancelled;
+    m_wallet_model->backendExecutor()->submit(this,
+        [wallet, snapshot = std::move(snapshot), work, cancelled]() mutable {
+            return readSnapshot(*wallet, std::move(snapshot), work, *cancelled);
+        }, [this, work, generation, detail_generation](Snapshot result) {
+            m_work_pending = false;
+            if (m_stopped) return;
             if (generation != m_generation) {
                 // A wallet notification or reload superseded this snapshot.
-                // Merge its work back so an initial load cannot be lost.
                 m_pending.merge(work);
             } else {
-                try {
-                    auto result = watcher->result();
-                    m_transactions = std::move(result.records);
-                    m_retry = std::move(result.retry);
-                    m_last_tip = result.tip;
-                    if (detail_generation == m_detail_generation) {
-                        m_detail_flow = std::move(result.flow);
-                        m_detail_flow_resolved = result.flow_resolved;
-                        m_detail_raw_transaction = std::move(result.raw_transaction);
-                        m_detail_labels = std::move(result.detail_labels);
-                        m_detail_can_bump = result.can_bump;
-                        m_detail_missing = result.detail_missing;
-                        m_details_loading = false;
-                    }
-                    if (result.rows_changed) rebuildRows();
-                    else if (result.details_changed) Q_EMIT transactionDetailsChanged();
-                } catch (...) {
-                    if (detail_generation == m_detail_generation) {
-                        m_load_error = tr("Wallet activity could not be loaded. Please try again.");
-                        m_details_loading = false;
-                        Q_EMIT transactionDetailsChanged();
-                    }
+                m_transactions = std::move(result.records);
+                m_retry = std::move(result.retry);
+                m_last_tip = result.tip;
+                if (detail_generation == m_detail_generation) {
+                    m_detail_flow = std::move(result.flow);
+                    m_detail_flow_resolved = result.flow_resolved;
+                    m_detail_raw_transaction = std::move(result.raw_transaction);
+                    m_detail_labels = std::move(result.detail_labels);
+                    m_detail_can_bump = result.can_bump;
+                    m_detail_missing = result.detail_missing;
+                    m_details_loading = false;
                 }
+                if (result.rows_changed) rebuildRows();
+                else if (result.details_changed) Q_EMIT transactionDetailsChanged();
             }
             m_loading = !m_pending.empty();
             Q_EMIT loadingChanged();
             schedule();
-        }
-        watcher->deleteLater();
-    });
-    promise->start();
-    watcher->setFuture(promise->future());
-    QThreadPool::globalInstance()->start([wallet, snapshot = std::move(snapshot), work, promise]() mutable {
-        try {
-            if (!promise->isCanceled()) promise->addResult(readSnapshot(*wallet, std::move(snapshot), work, *promise));
-        } catch (...) {
-            promise->setException(std::current_exception());
-        }
-        promise->finish();
-    });
+        }, [this, detail_generation](std::exception_ptr) {
+            m_work_pending = false;
+            if (m_stopped) return;
+            if (detail_generation == m_detail_generation) {
+                m_load_error = tr("Wallet activity could not be loaded. Please try again.");
+                m_details_loading = false;
+                Q_EMIT transactionDetailsChanged();
+            }
+            m_loading = !m_pending.empty();
+            Q_EMIT loadingChanged();
+            schedule();
+        });
 }
 
 TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
-    interfaces::Wallet& wallet, Snapshot snapshot, const Work& work, const QPromise<Snapshot>& promise)
+    interfaces::Wallet& wallet, Snapshot snapshot, const Work& work, const std::atomic_bool& cancelled)
 {
     const auto read_record = [&](const interfaces::WalletTx& wtx) {
         auto activity = TransactionActivity::fromWalletTx(wtx);
@@ -340,7 +328,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
     if (work.reload) {
         QSet<QString> present;
         for (const auto& wtx : wallet.getWalletTxs()) {
-            if (promise.isCanceled()) return snapshot;
+            if (cancelled.load()) return snapshot;
             if (wtx.tx) present.insert(QString::fromStdString(wtx.tx->GetHash().ToString()));
             read_record(wtx);
         }
@@ -352,7 +340,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
         }
     }
     for (const auto& txid : work.transactions) {
-        if (promise.isCanceled()) return snapshot;
+        if (cancelled.load()) return snapshot;
         const auto hash = uint256::FromHex(txid.toStdString());
         if (!hash) continue;
         const auto tx = wallet.getWalletTx(Txid::FromUint256(*hash));
@@ -361,7 +349,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
     }
     if (work.labels) {
         for (auto& record : snapshot.records) {
-            if (promise.isCanceled()) return snapshot;
+            if (cancelled.load()) return snapshot;
             updateLabels(wallet, record);
         }
     }
@@ -377,7 +365,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
     const bool retry = work.poll && !snapshot.retry.isEmpty();
     if (statuses || retry) {
         for (auto& record : snapshot.records) {
-            if (promise.isCanceled()) return snapshot;
+            if (cancelled.load()) return snapshot;
             if (!statuses && !snapshot.retry.contains(record.activity.txid)) continue;
             if (updateStatus(wallet, record)) snapshot.retry.remove(record.activity.txid);
             else snapshot.retry.insert(record.activity.txid);
@@ -385,7 +373,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
     }
     snapshot.rows_changed = work.reload || work.labels || statuses || retry || !work.transactions.isEmpty();
     snapshot.details_changed = work.details || snapshot.rows_changed;
-    if (snapshot.detail_txid.isEmpty() || !snapshot.details_changed || promise.isCanceled()) return snapshot;
+    if (snapshot.detail_txid.isEmpty() || !snapshot.details_changed || cancelled.load()) return snapshot;
 
     // A send-result link may arrive before its queued transaction notification.
     const auto hash = uint256::FromHex(snapshot.detail_txid.toStdString());
@@ -403,7 +391,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
         std::vector<std::optional<CTxOut>> prevouts;
         if (!wtx.tx->IsCoinBase()) {
             for (const auto& input : wtx.tx->vin) {
-                if (promise.isCanceled()) return snapshot;
+                if (cancelled.load()) return snapshot;
                 auto [it, inserted] = parents.try_emplace(input.prevout.hash);
                 if (inserted) it->second = wallet.getTx(input.prevout.hash);
                 prevouts.push_back(it->second && input.prevout.n < it->second->vout.size()
@@ -418,7 +406,7 @@ TransactionActivityModel::Snapshot TransactionActivityModel::readSnapshot(
     if (work.labels) snapshot.detail_labels.clear();
     for (const QString& side : {QStringLiteral("inputs"), QStringLiteral("outputs")}) {
         for (const auto& value : snapshot.flow.value(side).toList()) {
-            if (promise.isCanceled()) return snapshot;
+            if (cancelled.load()) return snapshot;
             const auto address = value.toMap().value("address").toString();
             if (!snapshot.detail_labels.contains(address)) snapshot.detail_labels.insert(address, AddressLabel(wallet, address));
         }
