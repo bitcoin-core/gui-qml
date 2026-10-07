@@ -1798,12 +1798,15 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool noWalletsFound MEMBER m_no_wallets_found NOTIFY noWalletsFoundChanged)
     Q_PROPERTY(bool walletLoadInProgress MEMBER m_wallet_load_in_progress NOTIFY walletLoadInProgressChanged)
     Q_PROPERTY(bool walletImportInProgress MEMBER m_wallet_import_in_progress NOTIFY walletImportInProgressChanged)
+    Q_PROPERTY(bool holdImport MEMBER m_hold_import)
+    Q_PROPERTY(int importWalletCalls MEMBER m_import_wallet_calls)
     Q_PROPERTY(QString importingWalletName MEMBER m_importing_wallet_name NOTIFY walletImportInProgressChanged)
     Q_PROPERTY(QString walletLoadError MEMBER m_wallet_load_error NOTIFY walletLoadErrorChanged)
     Q_PROPERTY(QString walletLoadWarnings MEMBER m_wallet_load_warnings NOTIFY walletLoadWarningsChanged)
-    Q_PROPERTY(QString walletImportErrorTitle READ walletImportErrorTitle NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletImportErrorDescription READ walletImportErrorDescription NOTIFY walletLoadErrorChanged)
-    Q_PROPERTY(QString walletImportErrorHelpText READ walletImportErrorHelpText NOTIFY walletLoadErrorChanged)
+    Q_PROPERTY(QString walletImportError MEMBER m_wallet_import_error NOTIFY walletImportErrorChanged)
+    Q_PROPERTY(QString walletImportErrorTitle READ walletImportErrorTitle NOTIFY walletImportErrorChanged)
+    Q_PROPERTY(QString walletImportErrorDescription READ walletImportErrorDescription NOTIFY walletImportErrorChanged)
+    Q_PROPERTY(QString walletImportErrorHelpText READ walletImportErrorHelpText NOTIFY walletImportErrorChanged)
     Q_PROPERTY(QString walletCreateError MEMBER m_wallet_create_error NOTIFY walletCreateErrorChanged)
     Q_PROPERTY(bool walletMigrationInProgress MEMBER m_wallet_migration_in_progress NOTIFY walletMigrationInProgressChanged)
     Q_PROPERTY(QString walletMigrationError MEMBER m_wallet_migration_error NOTIFY walletMigrationErrorChanged)
@@ -1831,8 +1834,11 @@ public:
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
     bool m_wallet_import_in_progress{false};
+    bool m_hold_import{false};
+    int m_import_wallet_calls{0};
     QString m_importing_wallet_name;
     QString m_wallet_load_error;
+    QString m_wallet_import_error;
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
     bool m_wallet_migration_in_progress{false};
@@ -1867,8 +1873,8 @@ public:
     int closeWalletCalls() const { return m_close_wallet_calls; }
     QString walletLocationOpenError() const { return m_wallet_location_open_error; }
     int openWalletLocationCalls() const { return m_open_wallet_location_calls; }
-    QString walletImportErrorTitle() const { return m_wallet_load_error.isEmpty() ? QString{} : QStringLiteral("Failed to load wallet"); }
-    QString walletImportErrorDescription() const { return m_wallet_load_error; }
+    QString walletImportErrorTitle() const { return m_wallet_import_error.isEmpty() ? QString{} : QStringLiteral("Failed to load wallet"); }
+    QString walletImportErrorDescription() const { return m_wallet_import_error; }
     QString walletImportErrorHelpText() const { return QString{}; }
     Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
@@ -1924,6 +1930,12 @@ public:
     Q_INVOKABLE void importWallet(const QString&)
     {
         clearWalletLoadStatus();
+        ++m_import_wallet_calls;
+        if (m_hold_import) {
+            m_wallet_import_in_progress = true;
+            Q_EMIT walletImportInProgressChanged();
+            return;
+        }
         Q_EMIT walletImportSucceeded(reportedWallet());
     }
     Q_INVOKABLE void migrateWallet(const QString&, const QString& = QString())
@@ -1995,9 +2007,13 @@ public:
         m_open_wallet_location_error.clear();
         clearWalletLocationOpenError();
         clearWalletLoadStatus();
+        m_wallet_import_error.clear();
+        Q_EMIT walletImportErrorChanged();
         clearWalletCreateStatus();
         clearWalletMigrationStatus();
         m_wallet_import_in_progress = false;
+        m_hold_import = false;
+        m_import_wallet_calls = 0;
         m_importing_wallet_name.clear();
         Q_EMIT walletImportInProgressChanged();
         m_last_imported_wallet_name.clear();
@@ -2087,6 +2103,7 @@ Q_SIGNALS:
     void walletLoadSucceeded(QObject* wallet);
     void walletImportSucceeded(QObject* wallet);
     void walletImportFailed();
+    void walletImportErrorChanged();
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
     void openWalletLocationCallsChanged();
@@ -4266,6 +4283,50 @@ public:
     }
 };
 
+//! Records the window requests MainWindow makes and lets a test raise the
+//! tray's quit action.
+class MockDesktopTrayIconController : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int showMainWindowCalls READ showMainWindowCalls NOTIFY showMainWindowCallsChanged)
+
+public:
+    int showMainWindowCalls() const { return m_show_main_window_calls; }
+    Q_INVOKABLE void showMainWindow()
+    {
+        ++m_show_main_window_calls;
+        Q_EMIT showMainWindowCallsChanged();
+    }
+    Q_INVOKABLE void hideMainWindow() {}
+    Q_INVOKABLE void reset()
+    {
+        m_show_main_window_calls = 0;
+        Q_EMIT showMainWindowCallsChanged();
+    }
+    Q_INVOKABLE void requestQuitForTest() { Q_EMIT quitRequested(); }
+
+Q_SIGNALS:
+    void showRequested();
+    void hideRequested();
+    void quitRequested();
+    void showMainWindowCallsChanged();
+
+private:
+    int m_show_main_window_calls{0};
+};
+
+//! Stands in for QmlQuitHandler, which only reacts to a QEvent::Quit.
+class MockQuitHandler : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void requestQuitForTest() { Q_EMIT quitRequested(); }
+
+Q_SIGNALS:
+    void quitRequested();
+};
+
 //! Stands in for the real UrlOpener so the popup's success and failure paths
 //! can be driven without launching a browser. Mirrors the production scheme
 //! allowlist so a test cannot pass on a URL the real opener would reject.
@@ -4357,6 +4418,8 @@ public Q_SLOTS:
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
         static MockUrlOpener url_opener;
+        static MockDesktopTrayIconController desktop_tray_icon_controller;
+        static MockQuitHandler quit_handler;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
@@ -4447,6 +4510,8 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testCoinsListModel"), &coins_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("desktopTrayIconController"), &desktop_tray_icon_controller);
+        engine->rootContext()->setContextProperty(QStringLiteral("quitHandler"), &quit_handler);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }

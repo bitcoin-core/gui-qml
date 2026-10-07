@@ -879,6 +879,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     });
     engine->rootContext()->setContextProperty("desktopWindowBehaviorModel", &desktop_window_behavior_model);
     engine->rootContext()->setContextProperty("desktopTrayIconController", &desktop_tray_icon_controller);
+    engine->rootContext()->setContextProperty("quitHandler", &quit_handler);
 
     engine->setInitialProperties({
         {QStringLiteral("walletAvailableForUi"), wallet_enabled},
@@ -917,8 +918,6 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         shutdown_before_startup_return();
         return EXIT_SUCCESS;
     }
-    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested,
-                     &node_model, &NodeModel::requestShutdown);
     const auto exit_main_event_loop = [] {
         QCoreApplication::exit(0);
     };

@@ -45,6 +45,7 @@ ApplicationWindow {
     readonly property bool waitForPostOnboardingWalletRoute: preInitOnboardingRanForUi && desktopWalletMode
     property bool postOnboardingWalletRouteResolved: false
     property bool shutdownInProgress: false
+    property string lastImportingWalletName: ""
     readonly property var menuEditTarget: appWindow.editTarget(appWindow.activeFocusItem)
     readonly property var menuWalletController: appWindow.desktopWalletMode ? walletController : null
     readonly property bool menuNavigationEnabled: main.depth === 1
@@ -92,8 +93,25 @@ ApplicationWindow {
         appWindow.routeToShell("openSettings", section)
     }
 
+    function requestQuit() {
+        // requestShutdown() exits after a fatal error.
+        if (appWindow.shutdownInProgress && !nodeModel.fatalException) return
+        if (!nodeModel.fatalException && appWindow.menuWalletController
+                && appWindow.menuWalletController.walletImportInProgress) {
+            // The tray and the platform can ask to quit while the window is hidden.
+            if (!appWindow.visible) desktopTrayIconController.showMainWindow()
+            if (appWindow.visibility === Window.Minimized) appWindow.showNormal()
+            appWindow.raise()
+            appWindow.requestActivate()
+            quitDuringImportPopup.open()
+            return
+        }
+        nodeModel.requestShutdown()
+    }
+
     function openWalletCreation() {
-        if (!appWindow.menuNavigationEnabled) {
+        if (!appWindow.menuNavigationEnabled
+                || (appWindow.menuWalletController && appWindow.menuWalletController.walletImportInProgress)) {
             return
         }
         walletCreationModal.open()
@@ -162,6 +180,9 @@ ApplicationWindow {
         walletBusy: appWindow.menuWalletController
             ? appWindow.menuWalletController.walletLoadInProgress
             : false
+        walletImportBusy: appWindow.menuWalletController
+            ? appWindow.menuWalletController.walletImportInProgress
+            : false
         canUndo: appWindow.menuEditTarget
             && typeof appWindow.menuEditTarget.undo === "function"
             && appWindow.menuEditTarget.canUndo === true
@@ -188,7 +209,7 @@ ApplicationWindow {
         onSignMessageRequested: appWindow.routeToShell("openSignVerifyMessage", SignVerifyMessage.SignTab)
         onVerifyMessageRequested: appWindow.routeToShell("openSignVerifyMessage", SignVerifyMessage.VerifyTab)
         onLoadPsbtRequested: appWindow.routeToShell("openPsbtImporter")
-        onExitRequested: nodeModel.requestShutdown()
+        onExitRequested: appWindow.requestQuit()
         onSettingsRequested: appWindow.openSettings("display")
         onUndoRequested: appWindow.invokeEditCommand("undo")
         onRedoRequested: appWindow.invokeEditCommand("redo")
@@ -229,7 +250,7 @@ ApplicationWindow {
         if (!nodeModel.fatalException && desktopWindowBehaviorModel.shouldMinimizeWindowOnClose()) {
             showMinimized()
         } else {
-            nodeModel.requestShutdown()
+            appWindow.requestQuit()
         }
     }
 
@@ -280,7 +301,16 @@ ApplicationWindow {
             desktopTrayIconController.hideMainWindow()
         }
         function onQuitRequested() {
-            nodeModel.requestShutdown()
+            appWindow.requestQuit()
+        }
+    }
+
+    // Quit requests from the platform, such as the macOS Dock menu, ask the
+    // same questions as the app's own quit actions.
+    Connections {
+        target: quitHandler
+        function onQuitRequested() {
+            appWindow.requestQuit()
         }
     }
 
@@ -293,7 +323,7 @@ ApplicationWindow {
         focus: true
         Keys.onReleased: (event) => {
             if (event.key == Qt.Key_Back) {
-                nodeModel.requestShutdown()
+                appWindow.requestQuit()
                 event.accepted = true
             }
         }
@@ -309,6 +339,7 @@ ApplicationWindow {
         }
         function onRequestedShutdown() {
             appWindow.shutdownInProgress = true
+            quitDuringImportPopup.close()
             main.clear()
             main.push(shutdown)
         }
@@ -348,9 +379,7 @@ ApplicationWindow {
         id: desktopWallets
         DesktopWallets {
             objectName: "desktopWalletsPage"
-            onAddWallet: {
-                walletCreationModal.open()
-            }
+            onAddWallet: appWindow.openWalletCreation()
         }
     }
 
@@ -358,6 +387,106 @@ ApplicationWindow {
         id: walletCreationModal
         onFinished: function(openActivity, wallet) {
             if (openActivity) appWindow.routeToShell("openWallet", wallet)
+        }
+    }
+
+    Connections {
+        target: appWindow.menuWalletController
+        // The controller clears the name before it reports the result.
+        function onWalletImportInProgressChanged() {
+            const name = appWindow.menuWalletController.importingWalletName
+            if (name.length > 0) appWindow.lastImportingWalletName = name
+            if (!appWindow.menuWalletController.walletImportInProgress) quitDuringImportPopup.close()
+        }
+        function onWalletImportFailed() {
+            if (walletCreationModal.opened) return
+            walletImportErrorToast.walletName = appWindow.lastImportingWalletName
+            walletImportErrorToast.shown = true
+        }
+        // The error page reads the current import error, so a newer one would
+        // describe something else.
+        function onWalletImportErrorChanged() {
+            walletImportErrorToast.shown = false
+        }
+        function onWalletImportSucceeded(wallet) {
+            if (walletCreationModal.opened) return
+            walletImportToast.wallet = wallet
+            walletImportToast.walletName = appWindow.menuWalletController.lastImportedWalletName
+        }
+    }
+
+    AlertPopup {
+        id: quitDuringImportPopup
+        objectName: "quitDuringImportPopup"
+        parent: Overlay.overlay
+        title: qsTr("Quit while importing?")
+        message: appWindow.menuWalletController
+            ? qsTr("\"%1\" is still being imported. Quitting stops the import, and the wallet will not be available until it is imported again.")
+                .arg(appWindow.menuWalletController.importingWalletName)
+            : ""
+        messageObjectName: "quitDuringImportMessage"
+        AlertAction {
+            text: qsTr("Keep importing")
+            role: AlertAction.Cancel
+            buttonObjectName: "quitDuringImportCancelButton"
+        }
+        AlertAction {
+            text: qsTr("Quit")
+            role: AlertAction.Destructive
+            buttonObjectName: "quitDuringImportConfirmButton"
+            onTriggered: nodeModel.requestShutdown()
+        }
+    }
+
+    ToastBanner {
+        id: walletImportErrorToast
+        objectName: "walletImportFailedToast"
+        property string walletName: ""
+        property bool shown: false
+        visible: shown && !appWindow.shutdownInProgress
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        width: Math.min(480, parent.width - 32)
+        tintColor: Theme.color.red
+        iconSource: "image://images/alert-filled"
+        text: walletName.length > 0
+            ? qsTr("Wallet \"%1\" could not be imported.").arg(walletName)
+            : qsTr("The wallet could not be imported.")
+        textObjectName: "walletImportFailedToastText"
+        actionText: qsTr("Details")
+        showsCloseButton: true
+        onActionTriggered: {
+            shown = false
+            walletCreationModal.openForImportError()
+        }
+        onDismissed: shown = false
+    }
+
+    ToastBanner {
+        id: walletImportToast
+        objectName: "walletImportSucceededToast"
+        property string walletName: ""
+        property var wallet: null
+        visible: walletName.length > 0 && !appWindow.shutdownInProgress
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        width: Math.min(480, parent.width - 32)
+        tintColor: Theme.color.green
+        iconSource: "image://images/check"
+        text: qsTr("Wallet \"%1\" was imported.").arg(walletName)
+        textObjectName: "walletImportSucceededToastText"
+        actionText: qsTr("Open")
+        showsCloseButton: true
+        onActionTriggered: {
+            appWindow.routeToShell("openWallet", wallet)
+            wallet = null
+            walletName = ""
+        }
+        onDismissed: {
+            wallet = null
+            walletName = ""
         }
     }
 
