@@ -330,6 +330,10 @@ private Q_SLOTS:
     void initializedControllerSignalsMigrationForLegacyWallet();
     void createWalletBeforeInitializationReturnsFalseAndSetsError();
     void importWalletBeforeInitializationSetsLoadError();
+    void importWalletLeavesLoadedWalletsSelectable();
+    void importWalletFailureEmitsImportFailed();
+    void importWalletFailureDuringShutdownIsNotReported();
+    void unrelatedLoadErrorDuringImportKeepsImportRunning();
     void migrateWalletBeforeInitializationSetsMigrationError();
     void selectWalletBeforeInitializationSetsLoadError();
     void initializedControllerPropagatesCreateErrors();
@@ -781,6 +785,189 @@ void WalletQmlControllerTests::importWalletBeforeInitializationSetsLoadError()
 
     controller.importWallet("/tmp/test_wallet.dat");
     QCOMPARE(controller.walletLoadError(), QString{NOT_INITIALIZED_ERROR});
+}
+
+void WalletQmlControllerTests::importWalletLeavesLoadedWalletsSelectable()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    FakeWallet::State open_state;
+    FakeWallet::State closed_state;
+    FakeWallet::State imported_state;
+    loader.wallet_dir_entries = {{"open_wallet", "sqlite"}, {"closed_wallet", "sqlite"}};
+    loader.get_wallets_fn = [&] {
+        std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
+        wallets.push_back(std::make_unique<FakeWallet>("open_wallet", &open_state));
+        return wallets;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    QTemporaryDir backup_dir;
+    QVERIFY(backup_dir.isValid());
+    const QString backup_path = backup_dir.filePath("imported.dat");
+    QFile backup_file(backup_path);
+    QVERIFY(backup_file.open(QIODevice::WriteOnly));
+    backup_file.close();
+
+    WalletQmlController controller(node);
+    controller.initialize();
+
+    QSemaphore restore_started;
+    QSemaphore allow_restore_return;
+    int restore_wallet_calls{0};
+    loader.restore_wallet_fn = [&] {
+        ++restore_wallet_calls;
+        restore_started.release();
+        allow_restore_return.acquire();
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>("imported", &imported_state)};
+    };
+
+    QSignalSpy import_spy(&controller, &WalletQmlController::walletImportSucceeded);
+
+    controller.importWallet(backup_path);
+    QVERIFY(restore_started.tryAcquire(1, 5000));
+    QVERIFY(controller.walletImportInProgress());
+    QCOMPARE(controller.importingWalletName(), QString{"imported"});
+    QVERIFY(!controller.walletLoadInProgress());
+
+    controller.importWallet(backup_path);
+    controller.createSingleSigWallet("new_wallet", QString());
+    controller.setSelectedWallet("closed_wallet", "sqlite");
+    controller.setSelectedWallet("open_wallet", "sqlite");
+    QCOMPARE(controller.selectedWallet()->name(), QString{"open_wallet"});
+
+    allow_restore_return.release();
+    QTRY_COMPARE_WITH_TIMEOUT(import_spy.count(), 1, 5000);
+    QVERIFY(!controller.walletImportInProgress());
+    QVERIFY(controller.importingWalletName().isEmpty());
+    QCOMPARE(controller.selectedWallet()->name(), QString{"imported"});
+    QCOMPARE(restore_wallet_calls, 1);
+    QCOMPARE(loader.create_wallet_calls, 0);
+    QCOMPARE(loader.load_wallet_calls, 0);
+}
+
+void WalletQmlControllerTests::importWalletFailureEmitsImportFailed()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    QTemporaryDir backup_dir;
+    QVERIFY(backup_dir.isValid());
+    const QString backup_path = backup_dir.filePath("broken.dat");
+    QFile backup_file(backup_path);
+    QVERIFY(backup_file.open(QIODevice::WriteOnly));
+    backup_file.close();
+
+    WalletQmlController controller(node);
+    controller.initialize();
+
+    loader.restore_wallet_fn = [] {
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{util::Error{Untranslated("Rescan failed")}};
+    };
+
+    node.shutdown_requested_fn = [] { return false; };
+
+    QSignalSpy failed_spy(&controller, &WalletQmlController::walletImportFailed);
+    QSignalSpy progress_spy(&controller, &WalletQmlController::walletImportInProgressChanged);
+
+    controller.importWallet(backup_path);
+    QTRY_COMPARE_WITH_TIMEOUT(failed_spy.count(), 1, 5000);
+    QCOMPARE(progress_spy.count(), 2);
+    QVERIFY(!controller.walletImportInProgress());
+    QCOMPARE(controller.walletLoadError(), QString{"Rescan failed"});
+}
+
+void WalletQmlControllerTests::importWalletFailureDuringShutdownIsNotReported()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    QTemporaryDir backup_dir;
+    QVERIFY(backup_dir.isValid());
+    const QString backup_path = backup_dir.filePath("aborted.dat");
+    QFile backup_file(backup_path);
+    QVERIFY(backup_file.open(QIODevice::WriteOnly));
+    backup_file.close();
+
+    WalletQmlController controller(node);
+    controller.initialize();
+
+    loader.restore_wallet_fn = [] {
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{util::Error{Untranslated("Rescan aborted")}};
+    };
+    node.shutdown_requested_fn = [] { return true; };
+
+    QSignalSpy failed_spy(&controller, &WalletQmlController::walletImportFailed);
+
+    controller.importWallet(backup_path);
+    QVERIFY(controller.walletImportInProgress());
+    QTRY_VERIFY_WITH_TIMEOUT(!controller.walletImportInProgress(), 5000);
+    QCOMPARE(failed_spy.count(), 0);
+    QVERIFY(controller.walletLoadError().isEmpty());
+}
+
+void WalletQmlControllerTests::unrelatedLoadErrorDuringImportKeepsImportRunning()
+{
+    FakeWallet::State alpha_state;
+    FakeWallet::State imported_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    loader.get_wallets_fn = [&] {
+        std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
+        wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
+        return wallets;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    QTemporaryDir backup_dir;
+    QVERIFY(backup_dir.isValid());
+    const QString backup_path = backup_dir.filePath("imported.dat");
+    QFile backup_file(backup_path);
+    QVERIFY(backup_file.open(QIODevice::WriteOnly));
+    backup_file.close();
+
+    QSemaphore close_entered, allow_close;
+    QSemaphore restore_started, allow_restore_return;
+    DrainingWalletController controller{node};
+    controller.initialize();
+
+    const auto executor = controller.selectedWallet()->backendExecutor();
+    executor->submit(this, [&] { close_entered.release(); allow_close.acquire(); }, [] {});
+    const auto release_close_on_exit = qScopeGuard([&] { allow_close.release(); });
+    QTRY_VERIFY(close_entered.available() > 0);
+    controller.closeWallet("alpha_wallet");
+
+    loader.restore_wallet_fn = [&] {
+        restore_started.release();
+        allow_restore_return.acquire();
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>("imported", &imported_state)};
+    };
+    const auto release_restore_on_exit = qScopeGuard([&] { allow_restore_return.release(); });
+
+    QSignalSpy failed_spy(&controller, &WalletQmlController::walletImportFailed);
+    QSignalSpy succeeded_spy(&controller, &WalletQmlController::walletImportSucceeded);
+
+    controller.importWallet(backup_path);
+    QVERIFY(restore_started.tryAcquire(1, 5000));
+
+    controller.setSelectedWallet("alpha_wallet", "sqlite");
+    QCOMPARE(controller.walletLoadError(), QStringLiteral("This wallet is still closing."));
+    QVERIFY(controller.walletImportInProgress());
+    QCOMPARE(failed_spy.count(), 0);
+
+    allow_restore_return.release();
+    QTRY_COMPARE_WITH_TIMEOUT(succeeded_spy.count(), 1, 5000);
+    QVERIFY(!controller.walletImportInProgress());
+    QCOMPARE(failed_spy.count(), 0);
 }
 
 void WalletQmlControllerTests::migrateWalletBeforeInitializationSetsMigrationError()
