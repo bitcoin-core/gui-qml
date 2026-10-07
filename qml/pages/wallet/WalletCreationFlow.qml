@@ -14,6 +14,7 @@ Item {
     clip: true
     property bool modalView: false
     property bool onboardingEntry: false
+    property bool importErrorEntry: false
     property bool waitForWalletDiscovery: false
     property bool creatingWallet: false
     property bool importingWallet: false
@@ -99,6 +100,7 @@ Item {
     Component.onCompleted: {
         if (!walletController.initialized) nodeModel.startNodeInitializionThread()
         walletController.refreshExternalSignerStatus()
+        if (root.importErrorEntry) root.push(importError, { "modalView": root.modalView }, StackView.Immediate)
     }
 
     AppFileDialog {
@@ -203,7 +205,7 @@ Item {
             maximumContentWidth: 640
             heading: qsTr("Your wallet starts here")
             subheading: qsTr("Create a wallet to manage your keys in this app, or import an existing wallet file.")
-            showCloseButton: !root.importingWallet
+            showCloseButton: true
             primaryButtonText: qsTr("Create wallet")
             secondaryButtonText: qsTr("Import wallet")
             primaryButtonObjectName: "createWalletButton"
