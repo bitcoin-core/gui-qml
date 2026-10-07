@@ -1797,6 +1797,8 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool isWalletLoaded MEMBER m_is_wallet_loaded NOTIFY isWalletLoadedChanged)
     Q_PROPERTY(bool noWalletsFound MEMBER m_no_wallets_found NOTIFY noWalletsFoundChanged)
     Q_PROPERTY(bool walletLoadInProgress MEMBER m_wallet_load_in_progress NOTIFY walletLoadInProgressChanged)
+    Q_PROPERTY(bool walletImportInProgress MEMBER m_wallet_import_in_progress NOTIFY walletImportInProgressChanged)
+    Q_PROPERTY(QString importingWalletName MEMBER m_importing_wallet_name NOTIFY walletImportInProgressChanged)
     Q_PROPERTY(QString walletLoadError MEMBER m_wallet_load_error NOTIFY walletLoadErrorChanged)
     Q_PROPERTY(QString walletLoadWarnings MEMBER m_wallet_load_warnings NOTIFY walletLoadWarningsChanged)
     Q_PROPERTY(QString walletImportErrorTitle READ walletImportErrorTitle NOTIFY walletLoadErrorChanged)
@@ -1828,6 +1830,8 @@ public:
     bool m_is_wallet_loaded{true};
     bool m_no_wallets_found{false};
     bool m_wallet_load_in_progress{false};
+    bool m_wallet_import_in_progress{false};
+    QString m_importing_wallet_name;
     QString m_wallet_load_error;
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
@@ -1869,6 +1873,7 @@ public:
     Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
+    Q_INVOKABLE bool isWalletOpen(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
     Q_PROPERTY(int externalSignerRefreshCalls MEMBER m_external_signer_refresh_calls NOTIFY externalSignerStatusChanged)
     int m_external_signer_refresh_calls{0};
@@ -1992,6 +1997,9 @@ public:
         clearWalletLoadStatus();
         clearWalletCreateStatus();
         clearWalletMigrationStatus();
+        m_wallet_import_in_progress = false;
+        m_importing_wallet_name.clear();
+        Q_EMIT walletImportInProgressChanged();
         m_last_imported_wallet_name.clear();
         m_last_imported_wallet_key_scheme.clear();
         m_external_signer_refresh_calls = 0;
@@ -2057,6 +2065,7 @@ Q_SIGNALS:
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
     void walletLoadInProgressChanged();
+    void walletImportInProgressChanged();
     void walletLoadErrorChanged();
     void walletLoadWarningsChanged();
     void walletCreateErrorChanged();
@@ -2077,6 +2086,7 @@ Q_SIGNALS:
     void walletCreateSucceeded(QObject* wallet);
     void walletLoadSucceeded(QObject* wallet);
     void walletImportSucceeded(QObject* wallet);
+    void walletImportFailed();
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
     void openWalletLocationCallsChanged();
@@ -3266,6 +3276,7 @@ public:
         KeySchemeKindRole,
         WalletSectionRole,
         BalanceSatoshiRole,
+        ImportingRole,
     };
 
     int rowCount(const QModelIndex& parent = QModelIndex{}) const override
@@ -3280,7 +3291,9 @@ public:
         if (role == Qt::DisplayRole || role == DisplayNameRole) return m_wallet_names.at(index.row());
         if (role == NameRole) return m_wallet_names.at(index.row());
         if (role == FormatRole) return QStringLiteral("sqlite");
-        if (role == LoadStateRole) return m_wallet_load_states.at(index.row());
+        const bool importing{m_wallet_names.at(index.row()) == m_importing_wallet};
+        if (role == LoadStateRole) return importing ? 2 : m_wallet_load_states.at(index.row());
+        if (role == ImportingRole) return importing;
         if (role == ErrorMessageRole) return QString{};
         if (role == BalanceRole) return QString{};
         if (role == BalanceSatoshiRole) return qint64{0};
@@ -3301,6 +3314,7 @@ public:
             {KeySchemeKindRole, "keySchemeKind"},
             {WalletSectionRole, "walletSection"},
             {BalanceSatoshiRole, "balanceSatoshi"},
+            {ImportingRole, "importing"},
         };
     }
 
@@ -3321,6 +3335,13 @@ public:
         Q_EMIT walletDirLoadedChanged();
         setWalletLoadState(QStringLiteral("testwallet"), 1);
         setWalletLoadState(QStringLiteral("secondarywallet"), 0);
+        setImportingWallet(QString());
+    }
+    Q_INVOKABLE void setImportingWallet(const QString& name)
+    {
+        if (m_importing_wallet == name) return;
+        m_importing_wallet = name;
+        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {LoadStateRole, ImportingRole});
     }
     Q_INVOKABLE void setWalletDirLoaded(bool loaded)
     {
@@ -3346,6 +3367,7 @@ private:
     bool m_wallet_dir_loaded{false};
     QStringList m_wallet_names{QStringLiteral("testwallet"), QStringLiteral("secondarywallet")};
     QVector<int> m_wallet_load_states{1, 0};
+    QString m_importing_wallet;
 };
 
 class MockBumpTransactionModel : public QObject
