@@ -156,7 +156,7 @@ private:
 
     void handleLoadWallet(std::unique_ptr<interfaces::Wallet> wallet);
     void consumeWalletNotifications();
-    WalletQmlModel* addOrSelectWalletModel(std::unique_ptr<interfaces::Wallet> wallet);
+    WalletQmlModel* addOrSelectWalletModel(std::unique_ptr<interfaces::Wallet> wallet, bool select = true);
     void registerWalletModel(WalletQmlModel* wallet_model);
     void removeWalletModel(WalletQmlModel* wallet_model, bool remove = false);
     void retireWallet(WalletQmlModel* wallet_model, bool remove);

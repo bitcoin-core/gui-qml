@@ -331,6 +331,7 @@ private Q_SLOTS:
     void createWalletBeforeInitializationReturnsFalseAndSetsError();
     void importWalletBeforeInitializationSetsLoadError();
     void importWalletLeavesLoadedWalletsSelectable();
+    void importWalletWithoutSelectedWalletSelectsIt();
     void importWalletFailureEmitsImportFailed();
     void importWalletFailureDuringShutdownIsNotReported();
     void unrelatedLoadErrorDuringImportKeepsImportRunning();
@@ -820,6 +821,8 @@ void WalletQmlControllerTests::importWalletLeavesLoadedWalletsSelectable()
         ++restore_wallet_calls;
         restore_started.release();
         allow_restore_return.acquire();
+        // Core announces the restored wallet before restoreWallet() returns.
+        loader.captured_load_wallet_fn(std::make_unique<FakeWallet>("imported", &imported_state));
         return util::Result<std::unique_ptr<interfaces::Wallet>>{
             std::make_unique<FakeWallet>("imported", &imported_state)};
     };
@@ -837,15 +840,50 @@ void WalletQmlControllerTests::importWalletLeavesLoadedWalletsSelectable()
     controller.setSelectedWallet("closed_wallet", "sqlite");
     controller.setSelectedWallet("open_wallet", "sqlite");
     QCOMPARE(controller.selectedWallet()->name(), QString{"open_wallet"});
+    QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
 
     allow_restore_return.release();
     QTRY_COMPARE_WITH_TIMEOUT(import_spy.count(), 1, 5000);
+    QCoreApplication::processEvents();
     QVERIFY(!controller.walletImportInProgress());
     QVERIFY(controller.importingWalletName().isEmpty());
-    QCOMPARE(controller.selectedWallet()->name(), QString{"imported"});
+    QVERIFY(controller.isWalletOpen("imported"));
+    QCOMPARE(controller.selectedWallet()->name(), QString{"open_wallet"});
+    QCOMPARE(selected_spy.count(), 0);
     QCOMPARE(restore_wallet_calls, 1);
     QCOMPARE(loader.create_wallet_calls, 0);
     QCOMPARE(loader.load_wallet_calls, 0);
+}
+
+void WalletQmlControllerTests::importWalletWithoutSelectedWalletSelectsIt()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    FakeWallet::State imported_state;
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    QTemporaryDir backup_dir;
+    QVERIFY(backup_dir.isValid());
+    const QString backup_path = backup_dir.filePath("imported.dat");
+    QFile backup_file(backup_path);
+    QVERIFY(backup_file.open(QIODevice::WriteOnly));
+    backup_file.close();
+
+    WalletQmlController controller(node);
+    controller.initialize();
+
+    loader.restore_wallet_fn = [&] {
+        loader.captured_load_wallet_fn(std::make_unique<FakeWallet>("imported", &imported_state));
+        return util::Result<std::unique_ptr<interfaces::Wallet>>{
+            std::make_unique<FakeWallet>("imported", &imported_state)};
+    };
+
+    QSignalSpy import_spy(&controller, &WalletQmlController::walletImportSucceeded);
+    controller.importWallet(backup_path);
+    QTRY_COMPARE_WITH_TIMEOUT(import_spy.count(), 1, 5000);
+    QCoreApplication::processEvents();
+    QCOMPARE(controller.selectedWallet()->name(), QString{"imported"});
 }
 
 void WalletQmlControllerTests::importWalletFailureEmitsImportFailed()
