@@ -12,13 +12,32 @@ DialogPopup {
     objectName: "walletCreationModal"
     signal finished(bool openActivity, var wallet)
     property bool onboardingEntry: false
+    property bool importErrorEntry: false
+    property bool importErrorPending: false
 
     function openForOnboarding() {
         onboardingEntry = true
         open()
     }
 
-    onClosed: onboardingEntry = false
+    function openForImportError() {
+        // Still visible during the exit transition.
+        if (visible) {
+            importErrorPending = true
+            return
+        }
+        importErrorEntry = true
+        open()
+    }
+
+    onClosed: {
+        onboardingEntry = false
+        importErrorEntry = false
+        if (importErrorPending) {
+            importErrorPending = false
+            Qt.callLater(openForImportError)
+        }
+    }
 
     title: qsTr("Add wallet")
     sheet: true
@@ -28,7 +47,7 @@ DialogPopup {
     horizontalPadding: 0
     closesOnPressOutside: false
     readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
-    busy: !!flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
+    busy: !!flow && (flow.creatingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
             || flow.currentItem.objectName === "externalWalletCreatedPage")))
@@ -39,6 +58,7 @@ DialogPopup {
         sourceComponent: WalletCreationFlow {
             modalView: true
             onboardingEntry: root.onboardingEntry
+            importErrorEntry: root.importErrorEntry
             onFinished: function(openActivity, wallet) {
                 root.close()
                 root.finished(openActivity, wallet)

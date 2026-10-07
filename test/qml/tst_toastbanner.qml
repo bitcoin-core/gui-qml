@@ -47,4 +47,21 @@ TestCase {
         compare(banner.opacity, 1)
         compare(banner.visible, true)
     }
+
+    function test_disabled_action_does_not_trigger() {
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem,
+            {objectName: "banner", actionText: "Open", shown: true})
+        const button = findChild(banner, "bannerActionButton")
+        let triggered = 0
+        banner.actionTriggered.connect(function() { ++triggered })
+
+        banner.actionEnabled = false
+        compare(button.enabled, false)
+        mouseClick(button)
+        compare(triggered, 0)
+
+        banner.actionEnabled = true
+        mouseClick(button)
+        compare(triggered, 1)
+    }
 }
