@@ -161,6 +161,9 @@ Popup {
                 required property string balance;
                 required property var balanceSatoshi;
                 required property int keySchemeKind;
+                required property bool importing;
+                readonly property bool selectable: !walletController.walletLoadInProgress && !importing
+                    && (!walletController.walletImportInProgress || loadState === WalletListModel.Open)
 
                 readonly property string iconSource: {
                     if (loadState !== WalletListModel.Open) return "image://images/wallet"
@@ -176,6 +179,10 @@ Popup {
                 readonly property string statusText: {
                     switch (loadState) {
                     case WalletListModel.Loading:
+                        if (importing) {
+                            //: Status of a wallet in the wallet selector while its wallet file is being imported.
+                            return qsTr("Importing…")
+                        }
                         return qsTr("Loading…")
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
@@ -197,7 +204,7 @@ Popup {
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
                 checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
-                enabled: !walletController.walletLoadInProgress
+                enabled: selectable
                 ButtonGroup.group: buttonGroup
                 focusPolicy: Qt.StrongFocus
                 leftPadding: 10
@@ -400,7 +407,7 @@ Popup {
                 }
 
                 onClicked: {
-                    if (walletController.walletLoadInProgress) {
+                    if (!selectable) {
                         return
                     }
                     walletController.setSelectedWallet(name, format)
@@ -423,7 +430,7 @@ Popup {
             textColor: Theme.color.accentText
             hoverTextColor: Theme.color.accentText
             iconSource: "image://images/plus-filled"
-            enabled: !walletController.walletLoadInProgress
+            enabled: !walletController.walletLoadInProgress && !walletController.walletImportInProgress
             onTriggered: {
                 root.addWallet()
                 root.close()
