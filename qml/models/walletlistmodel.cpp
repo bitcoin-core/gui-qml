@@ -68,6 +68,7 @@ void WalletListModel::listWalletDir()
             updated_items.append(std::move(item));
         }
     }
+    appendImportingItem(updated_items);
 
     sortItems(updated_items);
     applyUpdatedItems(std::move(updated_items));
@@ -166,6 +167,35 @@ void WalletListModel::setWalletLoadState(const QString& name, LoadState state, c
     }
 }
 
+void WalletListModel::setImportingWallet(const QString& name)
+{
+    if (m_importing_wallet == name) {
+        return;
+    }
+    const QString previous_wallet = m_importing_wallet;
+    m_importing_wallet = name;
+
+    QList<Item> updated_items{m_items};
+    if (!previous_wallet.isEmpty() && !m_open_wallet_names.contains(previous_wallet)) {
+        updated_items.erase(std::remove_if(updated_items.begin(), updated_items.end(), [&](const Item& item) {
+            return item.name == previous_wallet && !item.from_wallet_dir;
+        }), updated_items.end());
+    }
+    appendImportingItem(updated_items);
+
+    const bool wallet_count_changed{updated_items.size() != m_items.size()};
+    sortItems(updated_items);
+    if (applyUpdatedItems(std::move(updated_items))) {
+        if (wallet_count_changed) {
+            Q_EMIT walletListChanged(rowCount() > 0);
+        }
+        return;
+    }
+    if (!m_items.isEmpty()) {
+        Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {LoadStateRole, ImportingRole});
+    }
+}
+
 void WalletListModel::setDisplayUnit(int unit)
 {
     if (m_display_unit == unit) return;
@@ -223,6 +253,9 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
     case FormatRole:
         return item.format;
     case LoadStateRole:
+        if (m_importing_wallet == item.name) {
+            return static_cast<int>(LoadState::Loading);
+        }
         if (m_load_error.first == item.name) {
             return static_cast<int>(LoadState::LoadError);
         }
@@ -242,6 +275,8 @@ QVariant WalletListModel::data(const QModelIndex &index, int role) const
         return m_open_wallet_names.contains(item.name) ? QStringLiteral("open") : QStringLiteral("closed");
     case KeySchemeKindRole:
         return item.keySchemeKind;
+    case ImportingRole:
+        return m_importing_wallet == item.name;
     default:
         return QVariant();
     }
@@ -259,6 +294,7 @@ QHash<int, QByteArray> WalletListModel::roleNames() const
     roles[BalanceSatoshiRole] = "balanceSatoshi";
     roles[KeySchemeKindRole] = "keySchemeKind";
     roles[WalletSectionRole] = "walletSection";
+    roles[ImportingRole] = "importing";
     return roles;
 }
 
@@ -322,6 +358,19 @@ void WalletListModel::updateLoadStateForAllRows()
 void WalletListModel::emitTransientStateChanged()
 {
     updateLoadStateForAllRows();
+}
+
+void WalletListModel::appendImportingItem(QList<Item>& items) const
+{
+    if (m_importing_wallet.isEmpty()) {
+        return;
+    }
+    const bool has_wallet = std::any_of(items.cbegin(), items.cend(), [&](const Item& item) {
+        return item.name == m_importing_wallet;
+    });
+    if (!has_wallet) {
+        items.append({m_importing_wallet, QString(), false, {}, -1});
+    }
 }
 
 int WalletListModel::rowForName(const QString& name) const
