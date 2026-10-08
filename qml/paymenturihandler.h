@@ -30,6 +30,7 @@ public:
     void queueRequests(const QStringList& uris);
 
     bool hasPendingRequest() const { return !m_requests.isEmpty(); }
+    qsizetype pendingCount() const { return m_requests.size(); }
 
     /** The request at the front of the queue, or an empty string. */
     Q_INVOKABLE QString pendingRequest() const;

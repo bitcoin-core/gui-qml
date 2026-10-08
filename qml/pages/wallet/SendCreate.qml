@@ -91,6 +91,8 @@ PageStack {
         return root.wallet !== null
             && root.recipient !== null
             && root.depth === 1
+            && !transactionReviewPopup.visible
+            && !coinSelectionPopup.visible
             && !paymentRequestReviewPopup.visible
             && !paymentUriOverwritePopup.visible
     }
@@ -312,6 +314,7 @@ PageStack {
                 if (wallet && wasImported) {
                     wallet.discardCurrentTransaction()
                 }
+                root.paymentRequestOutcome("available")
             }
 
             background: null
@@ -1214,7 +1217,11 @@ PageStack {
         }
     }
 
-    SendCoinSelection { id: coinSelectionPopup; wallet: root.wallet }
+    SendCoinSelection {
+        id: coinSelectionPopup
+        wallet: root.wallet
+        onClosed: root.paymentRequestOutcome("available")
+    }
 
     WalletPassphrasePopup {
         id: reviewPassphrasePopup

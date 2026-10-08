@@ -31,6 +31,7 @@
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
 #include <qml/paymenturihandler.h>
+#include <qml/paymenturiserver.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
@@ -83,9 +84,11 @@
 #endif
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <vector>
 
@@ -431,6 +434,32 @@ const char* qt_argv = "bitcoin-core-app";
 
 const QLatin1String PAYMENT_URI_PREFIX{"bitcoin:"};
 
+constexpr std::chrono::milliseconds PAYMENT_URI_CONNECT_TIMEOUT{1000};
+constexpr std::chrono::milliseconds PAYMENT_URI_REPLY_TIMEOUT{10000};
+constexpr std::chrono::milliseconds PAYMENT_URI_OWNER_WAIT{3000};
+constexpr qsizetype MAX_PENDING_PAYMENT_URIS{256};
+
+QString PaymentUriServerName(const fs::path& network_data_dir)
+{
+    return PaymentUriIpc::ServerName(QString::fromStdString(fs::PathToString(network_data_dir)));
+}
+
+std::optional<int> PaymentUriHandOffExitCode(const PaymentUriIpc::SendResult& result)
+{
+    switch (result.status) {
+    case PaymentUriIpc::SendStatus::NoReceiver:
+        return std::nullopt;
+    case PaymentUriIpc::SendStatus::Queued:
+        return EXIT_SUCCESS;
+    case PaymentUriIpc::SendStatus::Failed:
+        InitError(Untranslated(strprintf("Payment request could not be handed to the running instance: %s",
+                                         result.error.toStdString())));
+        return EXIT_FAILURE;
+    }
+    assert(false);
+}
+
+
 // Collect bitcoin: URIs from the command line and reject every other loose token.
 // ArgsManager moves the first dashless token and everything after it into
 // m_command, which the GUI never reads, and splits that token on '=', which
@@ -604,6 +633,19 @@ int QmlGuiMain(int argc, char* argv[])
         command_line_args.emplace_back(argv[i]);
     }
 
+    // Before onboarding, which a second instance must not show.
+    if (!payment_uri_args.isEmpty()) {
+        const QmlOnboardingSettings::OnboardingStartupStatus startup_status{
+            QmlOnboardingSettings::ResolveOnboardingStartupStatus(command_line_args, init->canListenIpc())};
+        if (startup_status.ok && !startup_status.network_data_dir.isEmpty()) {
+            const QString server_name{PaymentUriIpc::ServerName(startup_status.network_data_dir)};
+            if (auto exit_code{PaymentUriHandOffExitCode(PaymentUriIpc::SendRequests(
+                    server_name, payment_uri_args, PAYMENT_URI_CONNECT_TIMEOUT, PAYMENT_URI_REPLY_TIMEOUT))}) {
+                return *exit_code;
+            }
+        }
+    }
+
     PreInitOnboardingContext pre_init_onboarding_context;
     const PreInitOnboardingStatus pre_init_onboarding_status{
         RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc(), quit_handler)
@@ -621,6 +663,7 @@ int QmlGuiMain(int argc, char* argv[])
 
     std::unique_ptr<interfaces::Node> node;
     std::unique_ptr<interfaces::Chain> chain;
+    std::optional<int> payment_uri_exit_code;
     const auto prepare_node = [&] {
         if (common::InitConfig(gArgs, [](const bilingual_str& message, const std::vector<std::string>& details) {
                 return InitError(message, details);
@@ -649,6 +692,12 @@ int QmlGuiMain(int argc, char* argv[])
         }
         node = init->makeNode();
         chain = init->makeChain();
+        if (!payment_uri_args.isEmpty()) {
+            payment_uri_exit_code = PaymentUriHandOffExitCode(PaymentUriIpc::LockDataDirOrHandOver(
+                gArgs.GetDataDirNet(), payment_uri_args,
+                PAYMENT_URI_OWNER_WAIT, PAYMENT_URI_CONNECT_TIMEOUT, PAYMENT_URI_REPLY_TIMEOUT));
+            if (payment_uri_exit_code) return false;
+        }
         if (!node->baseInitialize()) return false;
 
         // Use Qt's effective settings identity with the resolved network, before
@@ -689,7 +738,26 @@ int QmlGuiMain(int argc, char* argv[])
         // No window is visible, so retain the original synchronous startup path.
         prepared = prepare_node();
     }
+    if (payment_uri_exit_code) return *payment_uri_exit_code;
     if (!prepared) return EXIT_FAILURE;
+
+    PaymentUriServer payment_uri_server;
+    {
+        QString listen_error;
+        if (payment_uri_server.listen(PaymentUriServerName(gArgs.GetDataDirNet()), listen_error)) {
+            payment_uri_server.setRequestSink([&payment_uri_handler](const QStringList& uris) {
+                if (payment_uri_handler.pendingCount() + uris.size() > MAX_PENDING_PAYMENT_URIS) return false;
+                payment_uri_handler.queueRequests(uris);
+                return true;
+            });
+        } else {
+            LogWarning("Payment requests from other instances are disabled: %s", listen_error.toStdString());
+            RecordStartupWarning(startup_warnings, Untranslated(strprintf(
+                "Payment requests opened while the application is running cannot be received: %s",
+                listen_error.toStdString())));
+        }
+    }
+
     gui_startup_message_handler.disconnect();
 
     const bool wallet_enabled = WalletEnabledFromArgs();
@@ -723,6 +791,7 @@ int QmlGuiMain(int argc, char* argv[])
                      &shutdown_coordinator, &QmlShutdownCoordinator::requestShutdown);
     QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &node_model, [&] {
         shutdown_requested = true;
+        payment_uri_server.stopAccepting();
         for (auto* window : QGuiApplication::allWindows()) {
             if (auto* quick_window = qobject_cast<QQuickWindow*>(window)) quick_window->contentItem()->setEnabled(false);
         }
@@ -768,6 +837,8 @@ int QmlGuiMain(int argc, char* argv[])
 
     DesktopWindowBehaviorModel desktop_window_behavior_model;
     DesktopTrayIconController desktop_tray_icon_controller;
+    QObject::connect(&payment_uri_server, &PaymentUriServer::requestsReceived,
+                     &desktop_tray_icon_controller, &DesktopTrayIconController::activateMainWindow);
 
     qGuiApp->setQuitOnLastWindowClosed(false);
     QObject::connect(qGuiApp, &QGuiApplication::lastWindowClosed, &desktop_tray_icon_controller, [&] {

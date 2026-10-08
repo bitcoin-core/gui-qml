@@ -459,6 +459,7 @@ ApplicationWindow {
         target: paymentUriHandler
         function onPendingRequestChanged() {
             appWindow.paymentUriAnnounced = false
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
         }
     }
 
