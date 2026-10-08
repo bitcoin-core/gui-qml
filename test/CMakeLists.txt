@@ -28,6 +28,7 @@ add_executable(bitcoinqml_unit_tests
   test_bitcoinuri.cpp
   test_qmlfiledialog.cpp
   test_paymenturihandler.cpp
+  test_paymenturiserver.cpp
   test_bitcoinamount.cpp
   test_debuglogmodel.cpp
   test_desktoptrayiconcontroller.cpp
