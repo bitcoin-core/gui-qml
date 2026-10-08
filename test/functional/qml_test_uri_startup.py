@@ -226,6 +226,9 @@ def run_tests():
             {"filename": WALLET_NAME, "load_on_startup": True},
         )
         wait_for_wallet(gui)
+        # The wallet selector opened by the offer holds the request until it closes.
+        assert gui.get_property("walletSelectPopup", "opened") is True
+        gui.invoke("walletSelectPopup", "close")
         gui.wait_for_page("sendPage", timeout_ms=20000)
         apply_review(gui)
         gui.wait_for_property(

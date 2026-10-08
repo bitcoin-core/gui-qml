@@ -182,6 +182,40 @@ TestCase {
         compare(page.canAcceptPaymentRequest(), true)
     }
 
+    function test_page_does_not_accept_a_request_during_password_entry() {
+        const page = makeVisibleSendPage()
+        const prompt = findChild(page, "reviewPassphrasePopup")
+        verify(prompt !== null)
+        const acceptableSpy = createTemporaryObject(outcomeSpyComponent, testCase,
+            {target: page, signalName: "paymentRequestAcceptable"})
+
+        prompt.open()
+        tryCompare(prompt, "opened", true)
+        compare(page.canAcceptPaymentRequest(), false)
+
+        prompt.close()
+        tryCompare(prompt, "visible", false)
+        compare(page.canAcceptPaymentRequest(), true)
+        compare(acceptableSpy.count, 1)
+    }
+
+    function test_page_does_not_accept_a_request_during_manual_uri_entry() {
+        const page = makeVisibleSendPage()
+        const importPopup = findChild(page, "sendUriImportPopup")
+        verify(importPopup !== null)
+        const acceptableSpy = createTemporaryObject(outcomeSpyComponent, testCase,
+            {target: page, signalName: "paymentRequestAcceptable"})
+
+        page.openPaymentRequestImport()
+        tryCompare(importPopup, "opened", true)
+        compare(page.canAcceptPaymentRequest(), false)
+
+        importPopup.close()
+        tryCompare(importPopup, "visible", false)
+        compare(page.canAcceptPaymentRequest(), true)
+        compare(acceptableSpy.count, 1)
+    }
+
     function test_review_with_a_long_message_keeps_its_actions_reachable() {
         const page = makeVisibleSendPage()
         const review = findChild(page, "sendPaymentRequestReviewPopup")

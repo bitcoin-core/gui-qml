@@ -356,6 +356,50 @@ TestCase {
         tryCompare(paymentUriHandler, "hasPendingRequest", false)
     }
 
+    function test_request_arriving_after_backing_out_of_no_wallet_notice_is_announced() {
+        paymentUris = ["bitcoin:bcrt1qfirstaddress"]
+        const window = createMain(true, false, true)
+        const popup = findChild(window, "paymentUriNoWalletPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+
+        // Choosing Open wallet and backing out leaves the request queued.
+        popup.close()
+        tryCompare(popup, "visible", false)
+        wait(50)
+        compare(popup.visible, false)
+
+        paymentUriHandler.queueForTest("bitcoin:bcrt1qsecondaddress")
+        tryCompare(popup, "opened", true)
+        compare(paymentUriHandler.pendingRequest(), "bitcoin:bcrt1qfirstaddress")
+    }
+
+    function test_payment_uri_waits_for_a_dialog_on_another_page() {
+        testSendRecipient.address.setAddress("")
+        const window = createMain(true)
+        const wallets = findChild(window, "desktopWalletsPage")
+        tryVerify(function() { return wallets.activeView !== null })
+        const review = findChild(wallets.activeView.sendPage, "sendPaymentRequestReviewPopup")
+        verify(review !== null)
+        const dialog = Qt.createQmlObject(
+            "import QtQuick.Controls; Popup { modal: true; width: 100; height: 100 }",
+            window.contentItem)
+        dialog.open()
+        tryCompare(dialog, "opened", true)
+
+        paymentUriHandler.queueForTest("bitcoin:bcrt1qlateaddress")
+        wait(100)
+        compare(window.paymentUriDeliveryInFlight, false)
+        compare(review.opened, false)
+
+        dialog.close()
+        tryCompare(review, "opened", true)
+        compare(review.address, "bcrt1qlateaddress")
+        findChild(review, "paymentRequestReviewDiscardButton").clicked()
+        tryCompare(paymentUriHandler, "hasPendingRequest", false)
+        dialog.destroy()
+    }
+
     function test_escape_on_wallet_disabled_notice_reports_the_next_request() {
         paymentUris = ["bitcoin:bcrt1qfirstaddress", "bitcoin:bcrt1qsecondaddress"]
         const window = createMain(false)

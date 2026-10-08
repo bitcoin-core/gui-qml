@@ -19,6 +19,7 @@ void PaymentUriHandler::queueRequest(const QString& uri)
     if (was_empty) {
         Q_EMIT pendingRequestChanged();
     }
+    Q_EMIT requestQueued();
 }
 
 void PaymentUriHandler::queueRequests(const QStringList& uris)

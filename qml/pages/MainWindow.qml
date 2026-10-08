@@ -101,8 +101,9 @@ ApplicationWindow {
         walletCreationModal.open()
     }
 
-    // Raised once per request. The flag is cleared when the queue moves on, so
-    // a repeated URI is announced again while a retry is not.
+    // Raised once per request. The flag is cleared when the queue moves on or
+    // another request arrives, so a repeated URI is announced again while a
+    // retry is not.
     function announcePendingPaymentUri(popup) {
         if (appWindow.paymentUriAnnounced) {
             return
@@ -142,13 +143,24 @@ ApplicationWindow {
             return
         }
         paymentUriNoWalletPopup.close()
-        if (!shell.canAcceptPaymentUri()) {
+        // Delivery switches to Send, which would cancel a dialog open on another page.
+        if (appWindow.modalPopupOpen() || !shell.canAcceptPaymentUri()) {
             return
         }
         appWindow.paymentUriDeliveryInFlight = true
         if (!shell.applyIncomingPaymentUri(paymentUriHandler.pendingRequest(), qsTr("command line"))) {
             appWindow.paymentUriDeliveryInFlight = false
         }
+    }
+
+    // Modal and dimming popups add a backdrop to the overlay. Unlike a popup
+    // item, a backdrop has no header property.
+    function modalPopupOpen() {
+        const children = appWindow.Overlay.overlay.children
+        for (let i = 0; i < children.length; ++i) {
+            if (children[i].visible && children[i].header === undefined) return true
+        }
+        return false
     }
 
     function finishPendingPaymentUri(outcome) {
@@ -455,8 +467,19 @@ ApplicationWindow {
     }
 
     Connections {
+        target: appWindow.Overlay.overlay
+        function onChildrenChanged() {
+            if (paymentUriHandler.hasPendingRequest) Qt.callLater(appWindow.deliverPendingPaymentUri)
+        }
+    }
+
+    Connections {
         target: paymentUriHandler
         function onPendingRequestChanged() {
+            appWindow.paymentUriAnnounced = false
+            Qt.callLater(appWindow.deliverPendingPaymentUri)
+        }
+        function onRequestQueued() {
             appWindow.paymentUriAnnounced = false
             Qt.callLater(appWindow.deliverPendingPaymentUri)
         }

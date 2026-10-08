@@ -14,6 +14,7 @@ private Q_SLOTS:
     void requestsAreHandedOutInArrivalOrder();
     void emptyRequestsAreIgnored();
     void notifiesOnlyWhenTheFrontChanges();
+    void notifiesEveryArrival();
 };
 
 void PaymentUriHandlerTests::requestsAreHandedOutInArrivalOrder()
@@ -66,6 +67,18 @@ void PaymentUriHandlerTests::notifiesOnlyWhenTheFrontChanges()
 
     handler.completePendingRequest();
     QCOMPARE(spy.count(), 3);
+}
+
+void PaymentUriHandlerTests::notifiesEveryArrival()
+{
+    PaymentUriHandler handler;
+    QSignalSpy spy(&handler, &PaymentUriHandler::requestQueued);
+
+    handler.queueRequests({QStringLiteral("bitcoin:first"), QString(), QStringLiteral("bitcoin:second")});
+    QCOMPARE(spy.count(), 2);
+
+    handler.completePendingRequest();
+    QCOMPARE(spy.count(), 2);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

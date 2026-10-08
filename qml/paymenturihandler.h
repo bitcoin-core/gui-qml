@@ -30,6 +30,7 @@ public:
     void queueRequests(const QStringList& uris);
 
     bool hasPendingRequest() const { return !m_requests.isEmpty(); }
+    qsizetype pendingCount() const { return m_requests.size(); }
 
     /** The request at the front of the queue, or an empty string. */
     Q_INVOKABLE QString pendingRequest() const;
@@ -39,6 +40,8 @@ public:
 
 Q_SIGNALS:
     void pendingRequestChanged();
+    /** Emitted for every request, including those queued behind the front. */
+    void requestQueued();
 
 private:
     QQueue<QString> m_requests;

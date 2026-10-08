@@ -142,11 +142,15 @@ PageStack {
         })
     }
 
-    // Coin selection and an open review both own the form; a request waits.
+    // Coin selection, password entry, manual URI entry and an open review
+    // all own the form; a request waits.
     function canAcceptPaymentRequest() {
         return root.wallet !== null
             && root.recipient !== null
             && root.depth === 1
+            && !coinSelectionPopup.visible
+            && !reviewPassphrasePopup.visible
+            && !sendUriImportPopup.visible
             && !paymentRequestReviewPopup.visible
             && !paymentUriOverwritePopup.visible
             && !transactionReviewPopup.visible
@@ -852,6 +856,7 @@ PageStack {
         Popup {
             id: sendUriImportPopup
             objectName: "sendUriImportPopup"
+            onClosed: root.paymentRequestAcceptable()
             anchors.centerIn: Overlay.overlay
             width: Math.min(sendPage.width - 40, 420)
             modal: true
@@ -1333,13 +1338,18 @@ PageStack {
         }
     }
 
-    SendCoinSelection { id: coinSelectionPopup; wallet: root.wallet }
+    SendCoinSelection {
+        id: coinSelectionPopup
+        wallet: root.wallet
+        onClosed: root.paymentRequestAcceptable()
+    }
 
     WalletPassphrasePopup {
         id: reviewPassphrasePopup
         parent: Overlay.overlay
         width: Math.min(480, root.width - 40)
         popupObjectName: "reviewPassphrasePopup"
+        onClosed: root.paymentRequestAcceptable()
         passphraseFieldObjectName: "reviewPassphraseField"
         errorTextObjectName: "reviewPassphraseErrorText"
         cancelButtonObjectName: "reviewPassphraseCancelButton"
