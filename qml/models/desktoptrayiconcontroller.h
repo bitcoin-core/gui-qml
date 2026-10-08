@@ -37,6 +37,7 @@ public:
 
     Q_INVOKABLE void hideMainWindow();
     Q_INVOKABLE void showMainWindow();
+    void activateMainWindow();
 
 Q_SIGNALS:
     void visibleChanged(bool visible);

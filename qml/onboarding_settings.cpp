@@ -326,6 +326,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
             status.error = read_error;
             return status;
         }
+        status.network_data_dir = QString::fromStdString(fs::PathToString(preview_args.GetDataDirNet()));
         const QString resolved_data_dir = ActiveDataDirString(preview_args);
         if (!resolved_data_dir.isEmpty()) {
             status.active_data_dir = resolved_data_dir;

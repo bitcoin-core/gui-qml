@@ -17,6 +17,8 @@ private Q_SLOTS:
     void setVisibleFalseWhenAlreadyHidden_noSignal();
     void setToolTipIsReadable();
     void showRestoresGeometryCapturedAtHide();
+    void activateShowsAHiddenWindow();
+    void activateRestoresAMinimizedWindow();
 };
 
 void DesktopTrayIconControllerTests::initiallyNotVisible()
@@ -64,6 +66,33 @@ void DesktopTrayIconControllerTests::showRestoresGeometryCapturedAtHide()
 
     controller.showMainWindow();
     QTRY_COMPARE(window.geometry(), captured);
+}
+
+void DesktopTrayIconControllerTests::activateShowsAHiddenWindow()
+{
+    DesktopTrayIconController controller;
+    QWindow window;
+    window.show();
+    controller.setMainWindow(&window);
+    controller.hideMainWindow();
+    QVERIFY(!window.isVisible());
+
+    controller.activateMainWindow();
+    QTRY_VERIFY(window.isVisible());
+}
+
+void DesktopTrayIconControllerTests::activateRestoresAMinimizedWindow()
+{
+    DesktopTrayIconController controller;
+    QWindow window;
+    window.show();
+    controller.setMainWindow(&window);
+    window.setWindowStates(Qt::WindowMinimized);
+    QVERIFY(window.windowStates() & Qt::WindowMinimized);
+
+    controller.activateMainWindow();
+    QTRY_VERIFY(!(window.windowStates() & Qt::WindowMinimized));
+    QVERIFY(window.isVisible());
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

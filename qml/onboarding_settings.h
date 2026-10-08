@@ -54,6 +54,7 @@ struct OnboardingStartupStatus {
     bool ok{false};
     QString error;
     QString active_data_dir;
+    QString network_data_dir;
     DataDirSource data_dir_source{DataDirSource::Default};
     bool settings_enabled{true};
     bool qml_onboarded{false};
