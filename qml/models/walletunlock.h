@@ -19,6 +19,14 @@ enum class WalletUnlockResult {
     IncorrectPassphrase,
 };
 
+struct WalletSecurityState {
+    bool encrypted;
+    bool locked;
+};
+
+//! Read the encryption and lock state under cs_wallet, which EncryptWallet() holds while adding the master keys.
+WalletSecurityState ReadSecurityState(interfaces::Wallet& wallet);
+
 //! Try to unlock `wallet` with `passphrase`. `passphrase` is wiped on every return path.
 WalletUnlockResult TryUnlockWithPassphrase(interfaces::Wallet& wallet,
                                            SecureString& passphrase);

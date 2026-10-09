@@ -16,6 +16,7 @@ ContextMenu {
     property bool showsQrActions: false
     property bool qrActionsEnabled: true
     property bool showsRequestAgain: false
+    property bool deleteEnabled: true
     property string copyRequestObjectName: "requestPaymentCopyMenuButton"
     property string deleteObjectName: "requestPaymentDeleteMenuButton"
 
@@ -60,6 +61,7 @@ ContextMenu {
     }
     ContextMenuButton {
         objectName: root.deleteObjectName
+        enabled: root.deleteEnabled
         text: qsTr("Delete payment request")
         role: ContextMenuButton.Destructive
         onTriggered: root.deleteRequested()

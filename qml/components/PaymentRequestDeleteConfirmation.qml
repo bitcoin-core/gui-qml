@@ -14,10 +14,12 @@ AlertPopup {
 
     property var wallet: null
     property string requestId: ""
+    property string pendingRequestId: ""
 
     signal deleted(string requestId)
 
     function confirmDelete(requestWallet, id) {
+        if (wallet !== requestWallet) pendingRequestId = ""
         wallet = requestWallet
         requestId = id
         open()
@@ -26,11 +28,27 @@ AlertPopup {
     function deleteRequest() {
         const id = requestId
         if (!wallet || !wallet.removeReceiveRequest(id)) {
-            failurePopup.open()
+            showFailure("")
             return false
         }
-        deleted(id)
+        pendingRequestId = id
         return true
+    }
+
+    function showFailure(error) {
+        failurePopup.message = error || qsTr("The payment request could not be deleted. Please try again.")
+        failurePopup.open()
+    }
+
+    readonly property Connections walletCompletion: Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (operation !== "remove" || !root.pendingRequestId) return
+            const id = root.pendingRequestId
+            root.pendingRequestId = ""
+            if (success) root.deleted(id)
+            else root.showFailure(root.wallet.receiveOperationError)
+        }
     }
 
     title: qsTr("Delete payment request?")
@@ -54,7 +72,6 @@ AlertPopup {
         objectName: root.objectName.length > 0 ? root.objectName + "Error" : ""
         parent: root.parent
         title: qsTr("Payment request not deleted")
-        message: qsTr("The payment request could not be deleted. Please try again.")
         messageObjectName: "deletePaymentRequestErrorMessage"
 
         AlertAction {

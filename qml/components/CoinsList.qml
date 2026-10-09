@@ -21,6 +21,8 @@ ColumnLayout {
     property string pendingLockedCoinId: ""
     property string contextCoinId: ""
     property bool contextCoinLocked: false
+    readonly property bool lockOperationPending: coins ? coins.lockOperationPending : false
+    readonly property string lockOperationError: coins ? coins.lockOperationError : ""
     property real fallbackTarget: 0
     readonly property real target: feeReady ? wallet.sendTotalSatoshi : fallbackTarget
     onTargetChanged: if (feeReady) fallbackTarget = target
@@ -56,10 +58,16 @@ ColumnLayout {
         }
     }
     function lockMarked(locked) {
-        errorText = coins.setCoinsLocked(markedIds, locked) ? "" : qsTr("Some coins could not be updated. Try again.")
-        markedIds = []
+        if (!coins || lockOperationPending) return
+        if (coins.setCoinsLocked(markedIds, locked)) {
+            errorText = ""
+            markedIds = []
+        } else {
+            errorText = qsTr("Some coins could not be updated. Try again.")
+        }
     }
     function setCoinLocked(coinId, locked) {
+        if (!coins || lockOperationPending) return
         errorText = coins.setCoinsLocked([coinId], locked) ? "" : qsTr("This coin could not be updated. Try again.")
     }
     function openMenu(menu, button) {
@@ -331,10 +339,11 @@ ColumnLayout {
         visible: !root.selectionMode && root.walletSelectionActive
         Layout.fillWidth: true
         CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description }
-        NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
-        NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
+        NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0 && !root.lockOperationPending; onClicked: root.lockMarked(true) }
+        NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0 && !root.lockOperationPending; onClicked: root.lockMarked(false) }
     }
-    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; textStyle: Theme.text.caption; horizontalAlignment: Text.AlignLeft }
+    CoreText { objectName: "coinsLockPendingText"; Layout.fillWidth: true; visible: root.lockOperationPending; text: qsTr("Updating coins…"); textStyle: Theme.text.caption; horizontalAlignment: Text.AlignLeft }
+    CoreText { objectName: "coinsErrorText"; Layout.fillWidth: true; visible: text.length > 0; text: root.lockOperationError || root.errorText; color: Theme.color.dangerText; textStyle: Theme.text.caption; horizontalAlignment: Text.AlignLeft }
 
     ContextMenu {
         id: sortMenu; parent: Overlay.overlay; objectName: "coinBrowserSortMenu"
@@ -404,6 +413,7 @@ ColumnLayout {
         objectName: "walletCoinContextMenu"
         ContextMenuButton {
             objectName: "walletCoinLockToggle"
+            enabled: !root.lockOperationPending
             text: root.contextCoinLocked ? qsTr("Unlock coin") : qsTr("Lock coin")
             onTriggered: root.setCoinLocked(root.contextCoinId, !root.contextCoinLocked)
         }

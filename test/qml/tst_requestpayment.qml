@@ -90,6 +90,7 @@ TestCase {
     function init() {
         optionsModel.displayUnit = BitcoinAmount.BTC
         testPaymentRequest.clear()
+        otherPaymentRequest.clear()
         testWalletModel.lastCommitAddressType = ""
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
@@ -241,7 +242,9 @@ TestCase {
     function createPage() {
         const page = createTemporaryObject(requestPaymentComponent, this, { width: 900, height: 900, wallet: testWalletModel })
         verify(page !== null)
+        wait(0)
         tryVerify(function() { return testWalletModel.receivingAddress.address !== "" })
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         return page
     }
     function createRequest(page) {
@@ -249,6 +252,11 @@ TestCase {
         if (!card.hasFields) editField(card, "requestPaymentYourNameInput", "Request")
         card.createRequest()
         tryCompare(page.requestModal, "opened", true)
+        // Receive queues follow-up work after a save, such as preparing the next address,
+        // and the card ignores input until it finishes.
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        wait(50)
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         // Without an enter transition the window drops the next press until it renders a frame.
         waitForRendering(page.requestModal.contentItem, 1000)
         return page.requestModal.card
@@ -390,6 +398,53 @@ TestCase {
         compare(page.requestModal.card.request.amount.satoshi, 0)
     }
 
+    Component {
+        id: paymentCardComponent
+        PaymentRequestCard {}
+    }
+
+    PaymentRequest { id: otherPaymentRequest }
+
+    QtObject {
+        id: otherReceiveWallet
+        readonly property var receivingAddress: otherPaymentRequest
+        readonly property var receiveAddressTypes: testWalletModel.receiveAddressTypes
+        property bool receiveOperationPending: false
+        property bool receiveRequestReconciliationPending: false
+        property string receiveOperationError: ""
+        function receiveAddressTypeLabel(type) { return testWalletModel.receiveAddressTypeLabel(type) }
+        signal receiveOperationFinished(string operation, bool success)
+    }
+
+    function test_payment_request_handlers_survive_collection_and_target_changes() {
+        const card = createTemporaryObject(paymentCardComponent, this, {
+            wallet: testWalletModel, request: testPaymentRequest, width: 532
+        })
+        verify(card !== null)
+        for (let i = 0; i < 2; ++i) {
+            const previousWallet = card.wallet
+            const previousRequest = card.request
+            gc()
+            card.wallet = i === 0 ? otherReceiveWallet : testWalletModel
+            card.request = i === 0 ? otherPaymentRequest : testPaymentRequest
+            gc()
+            card.pendingOperation = "save"
+            card.wallet.receiveOperationError = "Save failed " + i
+            previousWallet.receiveOperationFinished("save", false)
+            compare(card.pendingOperation, "save")
+            card.wallet.receiveOperationFinished("save", false)
+            compare(card.pendingOperation, "")
+            compare(card.errorText, "Save failed " + i)
+            compare(card.request.id, "")
+            compare(card.saved, false)
+            previousRequest.idChanged()
+            compare(card.errorText, "Save failed " + i)
+            card.request.idChanged()
+            compare(card.errorText, "")
+        }
+        testWalletModel.receiveOperationError = ""
+    }
+
     function test_empty_request_can_be_created_without_showing_address() {
         const page = createPage()
         const address = testWalletModel.receivingAddress.address
@@ -421,6 +476,7 @@ TestCase {
         const page = createPage()
         const first = testWalletModel.receivingAddress.address
         page.ensureReceivingAddress(true, "")
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         verify(testWalletModel.receivingAddress.address !== first)
         const settingsButton = findChild(page, "receiveAddressSettingsButton")
         const moreButton = findChild(page, "receiveMoreButton")
@@ -443,6 +499,7 @@ TestCase {
         }
         mouseClick(picker.itemAtIndex(2))
         tryCompare(menu, "visible", false)
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(testWalletModel.receivingAddress.addressType, "p2sh-segwit")
         compare(picker.currentValue, "p2sh-segwit")
         verify(picker.itemAtIndex(2).selected)
@@ -557,6 +614,7 @@ TestCase {
         verify(!copy.visible)
         verify(update.visible)
         update.clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "Hal")
         verify(page.requestModal.opened)
         verify(copy.visible)
@@ -566,6 +624,7 @@ TestCase {
         editField(card, "requestPaymentNoteSelfInput", "Received")
         verify(update.visible)
         update.clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         verify(!copy.visible)
         verify(!update.visible)
     }
@@ -592,6 +651,7 @@ TestCase {
         compare(findChild(card, "requestPaymentAmountUnitToggle").text, data.label)
         editField(card, "requestPaymentNoteSelfInput", "Private reminder")
         findChild(card, "requestPaymentUpdateButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Private reminder")
         compare(card.request.amount.satoshi, 1)
         compare(findChild(card, "requestPaymentAmountInput").text, data.amount)
@@ -610,6 +670,7 @@ TestCase {
         verify(!card.modified)
         editField(card, "requestPaymentNoteSelfInput", "Private reminder")
         findChild(card, "requestPaymentUpdateButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Private reminder")
         compare(card.request.amount.satoshi, 1)
         verify(!card.modified)
@@ -645,6 +706,7 @@ TestCase {
         editField(card, "requestPaymentYourNameInput", "")
         verify(findChild(card, "requestPaymentUpdateButton").enabled)
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "")
         compare(card.request.noteSelf, "")
         compare(card.request.qrPayload, "bitcoin:" + card.request.address)
@@ -661,10 +723,12 @@ TestCase {
         card.request.paymentReceived = data.paid
         editField(card, "requestPaymentNoteSelfInput", "Private note")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Private note")
         editField(card, "requestPaymentNoteSelfInput", "")
         verify(findChild(card, "requestPaymentUpdateButton").enabled)
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "")
         verify(!findChild(card, "requestPaymentError").visible)
     }
@@ -772,6 +836,7 @@ TestCase {
         findChild(card, "requestPaymentMessageInput").forceActiveFocus()
         compare(card.request.label, "Request")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "Friday coffee")
         compare(card.request.address, address)
         verify(card.sharing)
@@ -779,6 +844,7 @@ TestCase {
         editField(card, "requestPaymentYourNameInput", "")
         findChild(card, "requestPaymentMessageInput").forceActiveFocus()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "")
         compare(card.request.address, address)
     }
@@ -820,6 +886,7 @@ TestCase {
         const note = editField(card, "requestPaymentNoteSelfInput", "Received, thank you")
         note.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Received, thank you")
     }
 
@@ -855,6 +922,7 @@ TestCase {
         verify(note.enabled)
         note.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Keep this draft")
     }
 
@@ -870,6 +938,7 @@ TestCase {
         compare(input.text, "0.12345678")
         input.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 12345678)
         compare(input.text, "0.12345678")
     }
@@ -885,6 +954,7 @@ TestCase {
         compare(page.draftCard.amountUnit, BitcoinAmount.SAT)
         compare(input.text, "12")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 12)
         findChild(card, "requestPaymentAmountUnitToggle").clicked()
         compare(input.text, "0.00000012")
@@ -995,6 +1065,7 @@ TestCase {
         compare(card.request.id, "")
         editField(card, "requestPaymentAmountInput", "21000000.00000000")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 2100000000000000)
     }
 
@@ -1011,6 +1082,7 @@ TestCase {
         tryCompare(confirmation, "opened", true)
         verify(page.requestModal.opened)
         findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         tryCompare(page.requestModal, "visible", false)
         compare(testWalletModel.lastRemovedRequestId, requestId)
         compare(card.request.id, "")
@@ -1029,6 +1101,7 @@ TestCase {
         const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
         tryCompare(confirmation, "opened", true)
         findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         tryCompare(findChild(card, "requestPaymentDeleteConfirmationError"), "opened", true)
         verify(page.requestModal.opened)
         compare(card.request.id, requestId)

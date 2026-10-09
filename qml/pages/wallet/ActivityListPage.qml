@@ -78,7 +78,7 @@ Page {
     function exportResultTitle() { return exportSucceeded ? qsTr("Export complete") : qsTr("Export failed") }
     function exportResultDescription() {
         return exportSucceeded ? qsTr("Your Activity CSV has been saved.")
-            : qsTr("The Activity CSV could not be saved. Check the file path and try again.")
+            : activityFilterProxy.exportError
     }
 
     function normalizeLocalPath(path) {
@@ -95,10 +95,16 @@ Page {
         return value
     }
 
+    Connections {
+        target: activityFilterProxy
+        function onExportFinished(success) {
+            root.exportSucceeded = success
+            exportResultPopup.open()
+        }
+    }
+
     function exportActivity(path) {
-        const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
-        exportSucceeded = ok
-        exportResultPopup.open()
+        activityFilterProxy.exportCsv(normalizeLocalPath(path))
     }
 
     // A filter popup right-aligns to its button, but a wide popup on a
@@ -517,6 +523,7 @@ Page {
         showsCopyRequest: true
         copyRequestEnabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
         copyRequestObjectName: "activityCopyPaymentRequest"
+        deleteEnabled: !!root.wallet && !root.wallet.receiveOperationPending
         deleteObjectName: "activityDeletePaymentRequest"
         onCopyRequestRequested: {
             const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRequestMenu.requestId) : ""
@@ -583,7 +590,8 @@ Page {
         ContextMenuDivider {}
         ContextMenuButton {
             objectName: "activityExportButton"
-            text: qsTr("Export CSV…")
+            text: activityFilterProxy.exportPending ? qsTr("Exporting…") : qsTr("Export CSV…")
+            enabled: !activityFilterProxy.exportPending
             iconSource: "qrc:/icons/export"
             onTriggered: {
                 if (automationExportPathField.text.length > 0) {

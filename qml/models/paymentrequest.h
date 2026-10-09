@@ -37,6 +37,7 @@ class PaymentRequest : public QObject
 public:
     explicit PaymentRequest(QObject* parent = nullptr);
 
+    quint64 revision() const { return m_revision; }
     QString address() const;
     QString addressFormatted() const;
 
@@ -104,6 +105,7 @@ Q_SIGNALS:
 private:
     static QString FormatAddress(const QString& address);
 
+    quint64 m_revision{0};
     CTxDestination m_destination;
     QString m_label;
     QString m_message;

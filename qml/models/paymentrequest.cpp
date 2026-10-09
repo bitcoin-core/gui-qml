@@ -14,6 +14,12 @@ PaymentRequest::PaymentRequest(QObject* parent)
     : QObject(parent)
 {
     m_amount = new BitcoinAmount(this);
+    const auto changed = [this] { ++m_revision; };
+    connect(this, &PaymentRequest::qrPayloadChanged, this, changed);
+    connect(this, &PaymentRequest::noteSelfChanged, this, changed);
+    connect(this, &PaymentRequest::addressTypeChanged, this, changed);
+    connect(this, &PaymentRequest::idChanged, this, changed);
+    connect(this, &PaymentRequest::isEditingChanged, this, changed);
     connect(m_amount, &BitcoinAmount::amountChanged, this, &PaymentRequest::qrPayloadChanged);
     connect(this, &PaymentRequest::addressChanged, this, &PaymentRequest::qrPayloadChanged);
     connect(this, &PaymentRequest::labelChanged, this, &PaymentRequest::qrPayloadChanged);
@@ -164,6 +170,7 @@ void PaymentRequest::setUnlockError(const QString& error)
 
 void PaymentRequest::setDestination(const CTxDestination& destination)
 {
+    if (m_destination == destination) return;
     m_destination = destination;
     Q_EMIT addressChanged();
     Q_EMIT addressTypeChanged();
@@ -218,6 +225,7 @@ void PaymentRequest::setIsEditing(bool editing)
 
 void PaymentRequest::clear()
 {
+    ++m_revision;
     m_payment_received = false;
     setReceivedAmountSatoshi(0);
     m_destination = CNoDestination();
