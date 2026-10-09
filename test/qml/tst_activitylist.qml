@@ -114,6 +114,12 @@ TestCase {
         waitForRendering(page)
         return page
     }
+    function waitForLayout(item) {
+        if (typeof waitForPolish === "function")
+            verify(waitForPolish(item))
+        else
+            waitForRendering(item)
+    }
     function findRow(page, txid) {
         const list = findChild(page, "activityListView")
         let result = findChild(page, "activityItem_" + txid)
@@ -209,6 +215,7 @@ TestCase {
         const button = findChild(menu.contentItem, "activityDeletePaymentRequest")
         compare(button.role, ContextMenuButton.Destructive)
         mouseClick(button)
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         if (data.succeeds) {
             tryCompare(menu, "visible", false)
             compare(testWalletModel.lastRemovedRequestId, "invoice")
@@ -681,7 +688,11 @@ TestCase {
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
     }
 
-    function test_filter_menus_export_and_wallet_switch() {
+    function test_filter_menus_export_and_wallet_switch_data() {
+        return [{tag: "success", succeeds: true}, {tag: "failure", succeeds: false}]
+    }
+
+    function test_filter_menus_export_and_wallet_switch(data) {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
         mouseClick(findChild(page, "activityTypeFilterButton"))
@@ -702,11 +713,24 @@ TestCase {
         page.currentItem.clearFilters()
 
         findChild(page, "activityExportPathField").text = "/tmp/activity-list-test.csv"
+        proxy.exportSucceeds = data.succeeds
+        proxy.autoCompleteExport = false
         openMore(page)
-        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        const exportButton = findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton")
+        mouseClick(exportButton)
         const result = findChild(page, "activityExportResultPopup")
+        verify(proxy.exportPending)
+        compare(exportButton.enabled, false)
+        compare(result.opened, false)
+        compare(proxy.exportCsv("/tmp/duplicate-export.csv"), false)
+        proxy.completeExport()
+        compare(proxy.exportPending, false)
+        compare(exportButton.enabled, true)
         tryCompare(result, "opened", true)
-        compare(findChild(result.contentItem, "activityExportResultTitle").text, "Export complete")
+        compare(findChild(result.contentItem, "activityExportResultTitle").text,
+            data.succeeds ? "Export complete" : "Export failed")
+        if (!data.succeeds)
+            compare(findChild(result.contentItem, "activityExportResultDescription").text, proxy.exportError)
         result.close()
         tryCompare(result, "visible", false)
 
@@ -888,8 +912,14 @@ TestCase {
 
     function test_scrolls_from_page_side_margins(data) {
         const page = createPage({width: data.pageWidth, height: 600})
+        tryCompare(page, "busy", false)
+        waitForLayout(page)
         const list = findChild(page, "activityListView")
+        list.forceLayout()
         const row = findRow(page, "receive")
+        list.positionViewAtBeginning()
+        tryCompare(list, "atYBeginning", true)
+        waitForLayout(list)
         const inset = row.mapToItem(page, 0, 0).x
         verify(inset > 0)
         list.forceLayout()

@@ -23,6 +23,8 @@ class CoinsListModel : public QAbstractListModel
     Q_PROPERTY(qint64 totalSelectedSatoshi READ totalSelectedSatoshi NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(qint64 totalSatoshi READ totalSatoshi NOTIFY coinCountChanged)
     Q_PROPERTY(qint64 lockedSatoshi READ lockedSatoshi NOTIFY coinCountChanged)
+    Q_PROPERTY(bool lockOperationPending READ lockOperationPending NOTIFY lockOperationStateChanged)
+    Q_PROPERTY(QString lockOperationError READ lockOperationError NOTIFY lockOperationStateChanged)
     Q_PROPERTY(QString changeAmount READ changeAmount NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(bool overRequiredAmount READ overRequiredAmount NOTIFY selectedCoinsCountChanged)
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY viewChanged)
@@ -51,6 +53,8 @@ public:
     qint64 totalSelectedSatoshi() const;
     qint64 totalSatoshi() const;
     qint64 lockedSatoshi() const;
+    bool lockOperationPending() const;
+    QString lockOperationError() const;
     QString changeAmount() const;
     bool overRequiredAmount() const;
     QString searchText() const { return m_search; }
@@ -76,8 +80,10 @@ public:
     Q_INVOKABLE void beginSelection();
     Q_INVOKABLE void applySelection();
     Q_INVOKABLE void cancelSelection();
+    // Returns acceptance, not the result of the backend operation.
     Q_INVOKABLE bool setCoinsLocked(const QStringList& coin_ids, bool locked);
 Q_SIGNALS:
+    void lockOperationStateChanged();
     void lockedCoinsCountChanged();
     void selectedCoinsCountChanged();
     void coinCountChanged();

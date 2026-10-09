@@ -445,7 +445,8 @@ void TransactionActivityModel::rebuildRows()
 
     QMap<QString, Row> rows;
     QSet<QString> fulfilled;
-    for (const auto& record : m_transactions) {
+    // The worker may still share this snapshot. GUI projection must not detach it.
+    for (const auto& record : std::as_const(m_transactions)) {
         const auto& tx = record.activity;
         // Replacement metadata is historical. An original transaction that
         // subsequently confirms is active even if the marker is still stored.

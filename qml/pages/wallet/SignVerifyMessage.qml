@@ -65,30 +65,35 @@ SettingsPage {
 
     function submitSign(passphrase) {
         if (!root.signVerifyModel) return
-        const signed = arguments.length === 0
-            ? root.signVerifyModel.signMessage(signAddressModel.address, signMessageText.text)
-            : root.signVerifyModel.signMessageWithPassphrase(signAddressModel.address, signMessageText.text, passphrase)
-        if (signed) {
-            signPassphrasePopup.close()
-            return
-        }
-        if (root.signVerifyModel.signingNeedsUnlock) {
-            signPassphrasePopup.errorText = ""
-            signPassphrasePopup.open()
-        }
+        if (arguments.length === 0)
+            root.signVerifyModel.signMessage(signAddressModel.address, signMessageText.text)
+        else
+            root.signVerifyModel.signMessageWithPassphrase(signAddressModel.address, signMessageText.text, passphrase)
     }
 
     function submitVerify() {
-        const verified = root.signVerifyModel
-            && root.signVerifyModel.verifyMessage(
-                verifyAddressModel.address,
-                verifyMessageText.text,
-                verifySignature.text)
-        root.verifyResultSuccess = verified
-        root.verifyResultText = verified
-            ? qsTr("Message verified successfully.")
-            : qsTr("Message verification failed.")
+        if (root.signVerifyModel)
+            root.signVerifyModel.verifyMessage(verifyAddressModel.address, verifyMessageText.text, verifySignature.text)
     }
+
+    Connections {
+        target: root.signVerifyModel
+        function onSigningFinished(success) {
+            signPassphrasePopup.busy = false
+            if (success) signPassphrasePopup.close()
+            else if (root.signVerifyModel.signingNeedsUnlock) {
+                signPassphrasePopup.errorText = ""
+                signPassphrasePopup.open()
+            } else if (signPassphrasePopup.visible) signPassphrasePopup.errorText = root.signVerifyModel.signingError
+        }
+        function onVerificationFinished() {
+            const verified = root.signVerifyModel.verificationValid
+            root.verifyResultSuccess = verified
+            root.verifyResultText = verified ? qsTr("Message verified successfully.") : qsTr("Message verification failed.")
+        }
+    }
+
+    Component.onDestruction: { if (root.signVerifyModel) root.signVerifyModel.clear() }
 
     Component.onCompleted: {
         if (root.signVerifyModel) root.signVerifyModel.clear()
@@ -115,6 +120,7 @@ SettingsPage {
 
     StackLayout {
         Layout.fillWidth: true
+        enabled: !root.signVerifyModel || (!root.signVerifyModel.signingPending && !root.signVerifyModel.verificationPending)
         currentIndex: root.selectedMode
 
         FormSection {
@@ -316,17 +322,8 @@ SettingsPage {
         confirmText: qsTr("Unlock and sign")
         busyConfirmText: qsTr("Signing...")
         onSubmitted: (passphrase) => {
-            signPassphrasePopup.busy = true
-            if (root.signVerifyModel.signMessageWithPassphrase(
-                    signAddressModel.address,
-                    signMessageText.text,
-                    passphrase)) {
-                signPassphrasePopup.busy = false
-                signPassphrasePopup.close()
-                return
-            }
-            signPassphrasePopup.busy = false
-            signPassphrasePopup.errorText = root.signVerifyModel.signingError
+            signPassphrasePopup.busy = root.signVerifyModel.signMessageWithPassphrase(
+                signAddressModel.address, signMessageText.text, passphrase)
         }
     }
 
