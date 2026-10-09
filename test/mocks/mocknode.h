@@ -50,7 +50,14 @@ public:
         std::source_location m_where;
     };
 
-    explicit MockNode(bool strict = false) : m_strict{strict} {}
+    explicit MockNode(bool strict = false) : m_strict{strict} {
+        get_persistent_setting_fn = [this](const std::string& setting_name) {
+            std::lock_guard lock{m_settings_mutex};
+            if (!m_settings_initialized) UnexpectedCall("getPersistentSetting");
+            const auto it = m_persistent_settings.find(setting_name);
+            return it == m_persistent_settings.end() ? common::SettingsValue{} : it->second;
+        };
+    }
 
     [[nodiscard]] Verification VerifyOnExit(std::source_location where = std::source_location::current())
     {
@@ -74,11 +81,9 @@ public:
 
     void SetPersistentSetting(std::string name, common::SettingsValue value)
     {
+        std::lock_guard lock{m_settings_mutex};
+        m_settings_initialized = true;
         m_persistent_settings.insert_or_assign(std::move(name), std::move(value));
-        get_persistent_setting_fn = [this](const std::string& setting_name) {
-            const auto it{m_persistent_settings.find(setting_name)};
-            return it == m_persistent_settings.end() ? common::SettingsValue{} : it->second;
-        };
     }
 
     std::function<bilingual_str()> get_warnings_fn;
@@ -305,6 +310,8 @@ private:
     mutable std::mutex m_unexpected_mutex;
     std::vector<std::string> m_unexpected_calls;
     std::vector<CallExpectation> m_call_expectations;
+    std::mutex m_settings_mutex;
+    bool m_settings_initialized{false};
     std::map<std::string, common::SettingsValue> m_persistent_settings;
 };
 

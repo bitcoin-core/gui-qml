@@ -27,8 +27,15 @@ TestCase {
         property string signature: ""
         property string signingError: ""
         property bool signingNeedsUnlock: false
+        property bool signingPending: false
+        property bool verificationPending: false
+        property bool verificationValid: false
+        property int generation: 0
+        signal signingFinished(bool success)
+        signal verificationFinished()
 
         function clear() {
+            ++generation
             mockSignVerifyModel.signature = ""
             mockSignVerifyModel.signingError = ""
             mockSignVerifyModel.signingNeedsUnlock = false
@@ -39,19 +46,36 @@ TestCase {
         }
 
         function signMessage(address, message) {
-            if (!isLegacyP2PKHAddress(address) || message.length === 0) return false
-            mockSignVerifyModel.signature = "test-signature"
+            if (signingPending || !isLegacyP2PKHAddress(address) || message.length === 0) return false
+            signingPending = true
+            const revision = generation
+            Qt.callLater(function() {
+                signingPending = false
+                if (revision !== generation) return
+                signature = "test-signature"
+                signingFinished(true)
+            })
             return true
         }
 
         function signMessageWithPassphrase(address, message, passphrase) {
-            return signMessage(address, message) && passphrase.length > 0
+            return passphrase.length > 0 && signMessage(address, message)
         }
 
         function verifyMessage(address, message, candidateSignature) {
-            return isLegacyP2PKHAddress(address)
+            if (verificationPending) return false
+            verificationPending = true
+            const revision = generation
+            const valid = isLegacyP2PKHAddress(address)
                 && message === "Signed statement"
                 && candidateSignature === "test-signature"
+            Qt.callLater(function() {
+                verificationPending = false
+                if (revision !== generation) return
+                verificationValid = valid
+                verificationFinished()
+            })
+            return true
         }
     }
 
@@ -272,7 +296,7 @@ TestCase {
         compare(verifyButton.background.color, Theme.color.orange)
         compare(verifyButton.opacity, 1.0)
         page.submitVerify()
-        compare(page.verifyResultSuccess, true)
+        tryCompare(page, "verifyResultSuccess", true)
         compare(resultText.text, "Message verified successfully.")
         compare(resultBanner.radius, 15)
         compare(resultBanner.implicitHeight, 40)
@@ -295,7 +319,7 @@ TestCase {
 
         verifyMessage.text = "Changed statement"
         page.submitVerify()
-        compare(resultText.text, "Message verification failed.")
+        tryCompare(resultText, "text", "Message verification failed.")
         compare(resultBanner.tintColor, Theme.color.red)
         compare(resultBanner.backgroundColor, Qt.rgba(
             Theme.color.red.r,

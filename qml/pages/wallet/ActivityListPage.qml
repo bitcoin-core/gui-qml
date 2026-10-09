@@ -76,7 +76,7 @@ Page {
     function exportResultTitle() { return exportSucceeded ? qsTr("Export complete") : qsTr("Export failed") }
     function exportResultDescription() {
         return exportSucceeded ? qsTr("Your Activity CSV has been saved.")
-            : qsTr("The Activity CSV could not be saved. Check the file path and try again.")
+            : activityFilterProxy.exportError
     }
 
     function normalizeLocalPath(path) {
@@ -93,10 +93,33 @@ Page {
         return value
     }
 
+    Connections {
+        target: activityFilterProxy
+        function onExportFinished(success) {
+            root.exportSucceeded = success
+            exportResultPopup.open()
+        }
+    }
+
+    Connections {
+        target: root.wallet
+        function onReceiveOperationFinished(operation, success) {
+            if (operation !== "remove" || !activityRowMenu.pendingDeleteId) return
+            const requestId = activityRowMenu.pendingDeleteId
+            activityRowMenu.pendingDeleteId = ""
+            if (!success) {
+                activityRowMenu.deleteError = root.wallet.receiveOperationError
+                return
+            }
+            for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
+                if (request && request.id === requestId) request.clear()
+            }
+            activityRowMenu.close()
+        }
+    }
+
     function exportActivity(path) {
-        const ok = activityFilterProxy.exportCsv(normalizeLocalPath(path))
-        exportSucceeded = ok
-        exportResultPopup.open()
+        activityFilterProxy.exportCsv(normalizeLocalPath(path))
     }
 
     // A filter popup right-aligns to its button, but a wide popup on a
@@ -470,6 +493,7 @@ Page {
 
     ContextMenu {
         id: activityRowMenu
+        property string pendingDeleteId: ""
         objectName: "activityRowContextMenu"
         backgroundColor: Theme.color.neutral2
         parent: Overlay.overlay
@@ -510,6 +534,7 @@ Page {
         }
         ContextMenuButton {
             objectName: "activityDeletePaymentRequest"
+            enabled: !!root.wallet && !root.wallet.receiveOperationPending
             visible: activityRowMenu.isRequest
             text: qsTr("Delete payment request")
             role: ContextMenuButton.Destructive
@@ -520,10 +545,7 @@ Page {
                     activityRowMenu.deleteError = qsTr("The payment request could not be deleted. Please try again.")
                     return
                 }
-                for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
-                    if (request && request.id === requestId) request.clear()
-                }
-                activityRowMenu.close()
+                activityRowMenu.pendingDeleteId = requestId
             }
         }
         CoreText {
@@ -580,7 +602,8 @@ Page {
         ContextMenuDivider {}
         ContextMenuButton {
             objectName: "activityExportButton"
-            text: qsTr("Export CSV")
+            text: activityFilterProxy.exportPending ? qsTr("Exporting…") : qsTr("Export CSV")
+            enabled: !activityFilterProxy.exportPending
             iconSource: "qrc:/icons/export"
             onTriggered: {
                 if (automationExportPathField.text.length > 0) {
