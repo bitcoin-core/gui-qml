@@ -22,6 +22,7 @@ class AddressListModel : public QAbstractListModel
     Q_PROPERTY(QVariantList categoryOptions READ categoryOptions CONSTANT)
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(bool labelChangePending READ labelChangePending NOTIFY labelChangePendingChanged)
 
 public:
     enum Category {
@@ -49,6 +50,7 @@ public:
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     int count() const;
+    bool labelChangePending() const { return !m_pending_label_address.isEmpty(); }
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
@@ -67,6 +69,8 @@ Q_SIGNALS:
     void categoryChanged();
     void showUsedChanged();
     void countChanged();
+    void labelChangePendingChanged();
+    void labelChangeFinished(const QString& address, const QString& label, bool success, const QString& error);
 
 private:
     struct AddressEntry {
@@ -88,6 +92,8 @@ private:
     Category m_category{SingleUse};
     bool m_show_used{false};
     int m_display_unit{0};
+    QString m_pending_label_address;
+    QString m_pending_label;
 };
 
 #endif // BITCOIN_QML_MODELS_ADDRESSLISTMODEL_H
