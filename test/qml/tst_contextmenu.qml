@@ -125,6 +125,21 @@ TestCase {
         tryCompare(menu, "opened", false)
     }
 
+    function test_button_closes_menu_after_collection() {
+        const menu = createTemporaryObject(menuWithButtonComponent, host)
+        verify(menu !== null)
+        for (let i = 0; i < 3; ++i) {
+            gc()
+            menu.open()
+            tryCompare(menu, "opened", true)
+            gc()
+            mouseClick(menu.button, menu.button.width / 2, menu.button.height / 2)
+            compare(menu.triggerCount, i + 1)
+            compare(menu.openedWhenTriggered, false)
+            tryCompare(menu, "visible", false)
+        }
+    }
+
     function test_button_can_opt_out_of_closing_menu() {
         const menu = openMenu(menuWithPersistentItemsComponent)
 

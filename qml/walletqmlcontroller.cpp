@@ -157,7 +157,7 @@ bool WalletQmlController::isWalletOpen(const QString& path)
 
 void WalletQmlController::publishWalletInfo(WalletQmlModel* wallet_model)
 {
-    if (!wallet_model) return;
+    if (!wallet_model || !wallet_model->walletStateReady()) return;
     Q_EMIT walletInfoChanged(
         wallet_model->name(),
         wallet_model->balanceSatoshi(),
@@ -463,7 +463,7 @@ WalletQmlModel* WalletQmlController::addOrSelectWalletModel(std::unique_ptr<inte
     }
 
     const QString loaded_wallet_name = QString::fromStdString(wallet->getWalletName());
-    auto wallet_model = new WalletQmlModel(std::move(wallet), &m_node);
+    auto wallet_model = new WalletQmlModel(std::move(wallet), &m_node, nullptr, loaded_wallet_name);
     wallet_model->moveToThread(this->thread());
     registerWalletModel(wallet_model);
     {
@@ -1123,7 +1123,7 @@ void WalletQmlController::initialize()
     loaded_wallet_names.reserve(static_cast<qsizetype>(wallets.size()));
     for (auto& wallet : wallets) {
         loaded_wallet_names.append(QString::fromStdString(wallet->getWalletName()));
-        auto* wallet_model = new WalletQmlModel(std::move(wallet), &m_node);
+        auto* wallet_model = new WalletQmlModel(std::move(wallet), &m_node, nullptr, loaded_wallet_names.back());
         registerWalletModel(wallet_model);
         applyWalletDisplayName(wallet_model);
         m_wallets.push_back(wallet_model);

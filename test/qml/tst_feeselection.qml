@@ -87,6 +87,7 @@ TestCase {
         feeChangedSpy.clear()
 
         popup.open()
+        tryCompare(popup, "opened", true)
         tryVerify(function() {
             return picker.itemAtIndex(2) !== null
         })
@@ -118,6 +119,7 @@ TestCase {
         verify(picker !== null)
 
         popup.open()
+        tryCompare(popup, "opened", true)
         tryVerify(function() {
             return picker.itemAtIndex(0) !== null
                 && picker.itemAtIndex(1) !== null
@@ -167,6 +169,7 @@ TestCase {
         verify(customEstimateLabel !== null)
 
         popup.open()
+        tryCompare(popup, "opened", true)
         tryVerify(function() {
             return picker.itemAtIndex(3) !== null
         })
@@ -201,6 +204,7 @@ TestCase {
         verify(customEstimateLabel !== null)
 
         popup.open()
+        tryCompare(popup, "opened", true)
         tryVerify(function() {
             return picker.itemAtIndex(3) !== null
         })
@@ -217,6 +221,7 @@ TestCase {
         compare(testWalletModel.customFeeRate, customFeeRateInput.text)
 
         popup.open()
+        tryCompare(popup, "opened", true)
         tryVerify(function() {
             return picker.itemAtIndex(2) !== null
         })

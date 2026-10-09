@@ -6,6 +6,7 @@
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
         <file>tst_contextmenubutton.qml</file>
+        <file>tst_coinslist.qml</file>
         <file>tst_contextmenudivider.qml</file>
         <file>tst_contextmenupicker.qml</file>
         <file>tst_contextmenu.qml</file>

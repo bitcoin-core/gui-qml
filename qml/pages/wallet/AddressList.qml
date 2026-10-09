@@ -88,15 +88,19 @@ SettingsPage {
 
     function updateAddressLabel(address, label) {
         root.errorText = ""
-        if (root.addressModel.setAddressLabel(address, label)) {
-            if (root.selectedAddress === address) root.selectedLabel = label
-            root.clearPendingNote(address)
-            return true
-        }
-        root.clearPendingNote(address)
-        root.addressModel.refresh()
-        root.errorText = qsTr("This address is no longer available.")
+        if (root.addressModel.setAddressLabel(address, label)) return true
+        root.errorText = qsTr("The address label could not be saved. Please try again.")
         return false
+    }
+
+    Connections {
+        target: root.addressModel
+        function onLabelChangeFinished(address, label, success, error) {
+            if (success && root.selectedAddress === address) root.selectedLabel = label
+            if (success && root.pendingNotesByAddress[address] === label) root.clearPendingNote(address)
+            root.errorText = error
+            if (root.selectedAddress === address) addressDetails.noteErrorText = error
+        }
     }
 
     rightItem: IconButton {
@@ -207,7 +211,6 @@ SettingsPage {
             }
             onEditLabelRequested: (address, label) => {
                 if (root.updateAddressLabel(address, label)) {
-                    root.selectedLabel = label;
                     noteErrorText = "";
                 } else {
                     noteErrorText = qsTr("This address is no longer available.");

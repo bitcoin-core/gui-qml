@@ -39,6 +39,7 @@ add_executable(bitcoinqml_unit_tests
   test_walletqmlmodeltransaction.cpp
   test_qmlbitcoinunits.cpp
   test_imageprovider.cpp
+  test_imagesavemodel.cpp
   test_nodemodel.cpp
   test_networkstyle.cpp
   test_networkstatusmodel.cpp
@@ -132,6 +133,7 @@ qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
 
 add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/imagesavemodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinamount.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp

@@ -24,6 +24,7 @@ SendRecipient::SendRecipient(WalletQmlModel* wallet, QObject* parent)
             Q_EMIT paymentRequestChanged();
         }
     });
+    if (wallet) connect(wallet, &WalletQmlModel::balanceChanged, this, &SendRecipient::validateAmount);
     connect(m_amount, &BitcoinAmount::amountChanged, this, &SendRecipient::validateAmount);
     connect(m_address, &BitcoinAddress::formattedAddressChanged, this, &SendRecipient::validateAddress);
 }
