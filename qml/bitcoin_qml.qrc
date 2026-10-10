@@ -261,8 +261,6 @@
         <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
         <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
-        <file alias="onboarding-clock-face-dark.svg">res/src/onboarding-clock-face-dark.svg</file>
-        <file alias="onboarding-clock-face-light.svg">res/src/onboarding-clock-face-light.svg</file>
         <file alias="blocktime-dark">res/icons/blocktime-dark.png</file>
         <file alias="blocktime-light">res/icons/blocktime-light.png</file>
         <file alias="bitcoin">res/icons/bitcoin.png</file>
