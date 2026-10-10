@@ -59,6 +59,10 @@ class NodeModel : public QObject
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
     Q_PROPERTY(double headerSyncProgress READ headerSyncProgress NOTIFY headerSyncChanged)
+    /** Height of the best known header, cached from header-tip notifications. */
+    Q_PROPERTY(int headerTipHeight READ headerTipHeight NOTIFY headerSyncChanged)
+    /** Timestamp of the active tip in Unix seconds, or 0 before the first tip. */
+    Q_PROPERTY(qint64 blockTipTime READ blockTipTime NOTIFY blockTipTimeChanged)
     Q_PROPERTY(bool networkActionReady READ networkActionReady NOTIFY networkActionReadyChanged)
     Q_PROPERTY(bool networkActionPending READ networkActionPending NOTIFY networkActionPendingChanged)
     Q_PROPERTY(QString networkActionError READ networkActionError NOTIFY networkActionErrorChanged)
@@ -69,6 +73,10 @@ class NodeModel : public QObject
     Q_PROPERTY(QString warnings READ warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList READ warningList NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
+    /** Current warnings the user has not dismissed. */
+    Q_PROPERTY(QStringList activeWarningList READ activeWarningList NOTIFY warningsChanged)
+    /** Current warnings the user dismissed. */
+    Q_PROPERTY(QStringList dismissedWarningList READ dismissedWarningList NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible READ runtimeDialogVisible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle READ runtimeDialogTitle NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogMessage READ runtimeDialogMessage NOTIFY runtimeDialogChanged)
@@ -88,6 +96,8 @@ public:
     QString networkActionError() const { return m_network_action_error; }
 
     int blockTipHeight() const { return m_block_tip_height; }
+    int headerTipHeight() const { return m_header_tip_height; }
+    qint64 blockTipTime() const { return m_block_tip_time; }
     void setBlockTipHeight(int new_height);
     QString fullClientVersion() const { return QString::fromStdString(FormatFullVersion()); }
     int numPeers() const { return m_num_peers; }
@@ -123,6 +133,12 @@ public:
     QString warnings() const { return m_warnings; }
     QStringList warningList() const { return m_warning_list; }
     bool hasWarnings() const { return !m_warning_list.empty(); }
+    QStringList activeWarningList() const;
+    QStringList dismissedWarningList() const;
+    /** Hide these warnings until their text changes. Persisted per network. */
+    Q_INVOKABLE void dismissWarnings(const QStringList& warnings);
+    /** Show every dismissed warning again. */
+    Q_INVOKABLE void restoreDismissedWarnings();
     bool runtimeDialogVisible() const { return m_runtime_dialog_visible; }
     QString runtimeDialogTitle() const { return m_runtime_dialog_title; }
     QString runtimeDialogMessage() const { return m_runtime_dialog_message; }
@@ -252,6 +268,7 @@ private:
     QStringList m_startup_warning_messages;
     QString m_warnings;
     QStringList m_warning_list;
+    QStringList m_dismissed_warnings;
     bool m_header_sync_active{false};
     bool m_header_presync{false};
     double m_header_sync_progress{0.0};
@@ -318,5 +335,8 @@ private:
     void fetchMempoolInfo();
     void applyMempoolInfo(const MempoolInfo& info);
 };
+
+/** Replace a leading home directory with ~ for display (not on Windows). */
+QString ShortenHomePath(const QString& path, const QString& home);
 
 #endif // BITCOIN_QML_MODELS_NODEMODEL_H

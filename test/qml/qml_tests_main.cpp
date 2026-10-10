@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
 #include <qqml.h>
@@ -2567,14 +2568,17 @@ class MockBlockClockModel : public QObject
     Q_OBJECT
     Q_PROPERTY(qreal currentTimeFraction MEMBER m_current_time_fraction NOTIFY currentTimeFractionChanged)
     Q_PROPERTY(QList<qreal> blockTimeFractions MEMBER m_block_time_fractions NOTIFY blockTimeFractionsChanged)
+    Q_PROPERTY(qint64 lastBlockAge MEMBER m_last_block_age NOTIFY lastBlockAgeChanged)
 
 public:
     qreal m_current_time_fraction{0.25};
     QList<qreal> m_block_time_fractions{0.1, 0.2};
+    qint64 m_last_block_age{120};
 
 Q_SIGNALS:
     void currentTimeFractionChanged();
     void blockTimeFractionsChanged();
+    void lastBlockAgeChanged();
 };
 
 class MockNodeModel : public QObject
@@ -2601,6 +2605,8 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString warnings MEMBER m_warnings NOTIFY warningsChanged)
     Q_PROPERTY(QStringList warningList MEMBER m_warning_list NOTIFY warningsChanged)
     Q_PROPERTY(bool hasWarnings READ hasWarnings NOTIFY warningsChanged)
+    Q_PROPERTY(QStringList activeWarningList READ activeWarningList NOTIFY warningsChanged)
+    Q_PROPERTY(QStringList dismissedWarningList READ dismissedWarningList NOTIFY warningsChanged)
     Q_PROPERTY(bool runtimeDialogVisible MEMBER m_runtime_dialog_visible NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogTitle MEMBER m_runtime_dialog_title NOTIFY runtimeDialogChanged)
     Q_PROPERTY(QString runtimeDialogMessage MEMBER m_runtime_dialog_message NOTIFY runtimeDialogChanged)
@@ -2643,6 +2649,7 @@ public:
     bool m_fatal_exception{false};
     QString m_warnings;
     QStringList m_warning_list;
+    QStringList m_dismissed_warnings;
     bool m_runtime_dialog_visible{false};
     QString m_runtime_dialog_title;
     QString m_runtime_dialog_message;
@@ -2660,6 +2667,34 @@ public:
     int m_disconnect_peer_calls{0};
     int m_ban_peer_calls{0};
     bool hasWarnings() const { return !m_warning_list.isEmpty(); }
+    QStringList activeWarningList() const
+    {
+        QStringList active;
+        for (const QString& warning : m_warning_list) {
+            if (!m_dismissed_warnings.contains(warning)) active.push_back(warning);
+        }
+        return active;
+    }
+    QStringList dismissedWarningList() const
+    {
+        QStringList dismissed;
+        for (const QString& warning : m_warning_list) {
+            if (m_dismissed_warnings.contains(warning)) dismissed.push_back(warning);
+        }
+        return dismissed;
+    }
+    Q_INVOKABLE void dismissWarnings(const QStringList& warnings)
+    {
+        for (const QString& warning : warnings) {
+            if (!m_dismissed_warnings.contains(warning)) m_dismissed_warnings.push_back(warning);
+        }
+        Q_EMIT warningsChanged();
+    }
+    Q_INVOKABLE void restoreDismissedWarnings()
+    {
+        m_dismissed_warnings.clear();
+        Q_EMIT warningsChanged();
+    }
     bool mempoolInfoPollingActive() const { return m_mempool_info_polling_active; }
     int disconnectPeerCalls() const { return m_disconnect_peer_calls; }
     int banPeerCalls() const { return m_ban_peer_calls; }
@@ -2681,23 +2716,35 @@ public:
     Q_INVOKABLE QVariantList nodeInformationRows() const
     {
         QVariantMap version;
+        version.insert(QStringLiteral("id"), QStringLiteral("clientVersion"));
         version.insert(QStringLiteral("label"), QStringLiteral("Client version"));
         version.insert(QStringLiteral("value"), QStringLiteral("Bitcoin Core test"));
 
+        QVariantMap data_dir;
+        data_dir.insert(QStringLiteral("id"), QStringLiteral("dataDir"));
+        data_dir.insert(QStringLiteral("label"), QStringLiteral("Datadir"));
+        data_dir.insert(QStringLiteral("value"), QStringLiteral("~/.bitcoin/regtest"));
+        data_dir.insert(QStringLiteral("path"), QStringLiteral("/home/test/.bitcoin/regtest"));
+        data_dir.insert(QStringLiteral("url"), QUrl::fromLocalFile(QStringLiteral("/home/test/.bitcoin/regtest")));
+
         QVariantMap network;
+        network.insert(QStringLiteral("id"), QStringLiteral("network"));
         network.insert(QStringLiteral("label"), QStringLiteral("Network"));
         network.insert(QStringLiteral("value"), QStringLiteral("regtest"));
 
         QVariantMap peers;
+        peers.insert(QStringLiteral("id"), QStringLiteral("peers"));
         peers.insert(QStringLiteral("label"), QStringLiteral("Peers"));
         peers.insert(QStringLiteral("value"), QStringLiteral("0 total (0 inbound, 0 outbound)"));
 
         QVariantList rows;
         rows.push_back(QVariant::fromValue(version));
+        rows.push_back(QVariant::fromValue(data_dir));
         rows.push_back(QVariant::fromValue(network));
         rows.push_back(QVariant::fromValue(peers));
         if (!m_warning_list.isEmpty()) {
             QVariantMap warnings;
+            warnings.insert(QStringLiteral("id"), QStringLiteral("warnings"));
             warnings.insert(QStringLiteral("label"), QStringLiteral("Warnings"));
             warnings.insert(QStringLiteral("value"), m_warning_list.join(QStringLiteral("\n")));
             rows.push_back(QVariant::fromValue(warnings));

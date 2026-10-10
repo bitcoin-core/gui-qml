@@ -4,6 +4,7 @@
 
 #include <qml/models/nodemodel.h>
 #include <qml/asyncjoin.h>
+#include <qml/models/settings_keys.h>
 
 #include <common/args.h>
 #include <common/system.h>
@@ -29,9 +30,12 @@
 #include <utility>
 
 #include <QDateTime>
+#include <QDir>
+#include <QUrl>
 #include <QEventLoop>
 #include <QMetaObject>
 #include <QScopedValueRollback>
+#include <QSettings>
 #include <QThread>
 #include <QTimer>
 #include <QTimerEvent>
@@ -92,14 +96,40 @@ bool HasMultipleRuntimeDialogButtons(unsigned int buttons)
     return (buttons & (buttons - 1)) != 0;
 }
 
-QVariant InformationRow(const QString& label, const QString& value)
+QVariant InformationRow(const QString& id, const QString& label, const QString& value)
 {
     QVariantMap row;
+    // A stable id lets views pick rows without matching translated labels.
+    row.insert(QStringLiteral("id"), id);
     row.insert(QStringLiteral("label"), label);
     row.insert(QStringLiteral("value"), value);
     return QVariant::fromValue(row);
 }
+
+/** A directory row: shortened for display, with a URL that opens the folder. */
+QVariant DirectoryRow(const QString& id, const QString& label, const QString& path)
+{
+    QVariantMap row{InformationRow(id, label, ShortenHomePath(path, QDir::homePath())).toMap()};
+    row.insert(QStringLiteral("path"), path);
+    row.insert(QStringLiteral("url"), QUrl::fromLocalFile(path));
+    return QVariant::fromValue(row);
+}
 } // namespace
+
+QString ShortenHomePath(const QString& path, const QString& home)
+{
+#ifdef Q_OS_WIN
+    // Windows has no ~ convention; keep the full path.
+    Q_UNUSED(home);
+    return path;
+#else
+    if (home.isEmpty() || home == QStringLiteral("/")) return path;
+    if (path == home) return QStringLiteral("~");
+    const QString prefix{home.endsWith(QLatin1Char('/')) ? home : home + QLatin1Char('/')};
+    if (path.startsWith(prefix)) return QStringLiteral("~/") + path.mid(prefix.size());
+    return path;
+#endif
+}
 
 // Core callbacks share a bounded mailbox and coalesce changes into one pending
 // GUI delivery. The mutex also protects the receiver until shutdown detaches it.
@@ -146,6 +176,7 @@ NodeModel::NodeModel(interfaces::Node& node, bool backend_ready)
     : m_notifications{std::make_shared<Notifications>()}, m_backend_queries_ready{backend_ready}, m_node{node}
 {
     m_notifications->receiver = this;
+    m_dismissed_warnings = QSettings{}.value(QString::fromLatin1(SettingsKeys::DISMISSED_WARNINGS)).toStringList();
     m_sync_progress_clock.start();
     initializeMempoolInfoPolling();
     ConnectToBlockTipSignal();
@@ -506,6 +537,9 @@ void NodeModel::setBlockSyncActive(bool active)
 
 void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
 {
+    // The header height is published through headerSyncChanged as well, so
+    // it must notify even when the sync state itself is unchanged.
+    const bool height_changed{m_header_tip_height != height};
     m_header_tip_height = height;
     m_header_tip_time = block_time;
 
@@ -513,7 +547,8 @@ void NodeModel::setHeaderSyncState(int height, int64_t block_time, bool presync)
     const bool active{height > 0 && estimate_headers_left > HEADER_HEIGHT_DELTA_SYNC};
     const double progress{active ? 1.0 * height / (height + estimate_headers_left) : 0.0};
 
-    if (m_header_sync_active != active ||
+    if (height_changed ||
+        m_header_sync_active != active ||
         m_header_presync != presync ||
         m_header_sync_progress != progress) {
         m_header_sync_active = active;
@@ -643,6 +678,48 @@ void NodeModel::setWarnings(const QString& warnings)
     }
     m_warnings = warnings;
     m_warning_list = warning_list;
+    Q_EMIT warningsChanged();
+}
+
+QStringList NodeModel::activeWarningList() const
+{
+    QStringList active;
+    for (const QString& warning : m_warning_list) {
+        if (!m_dismissed_warnings.contains(warning)) active.push_back(warning);
+    }
+    return active;
+}
+
+QStringList NodeModel::dismissedWarningList() const
+{
+    QStringList dismissed;
+    for (const QString& warning : m_warning_list) {
+        if (m_dismissed_warnings.contains(warning)) dismissed.push_back(warning);
+    }
+    return dismissed;
+}
+
+void NodeModel::dismissWarnings(const QStringList& warnings)
+{
+    bool changed{false};
+    for (const QString& warning : warnings) {
+        if (warning.isEmpty() || m_dismissed_warnings.contains(warning)) continue;
+        m_dismissed_warnings.push_back(warning);
+        changed = true;
+    }
+    if (!changed) return;
+    // Keep the most recent dismissals; old ones would only grow the setting.
+    constexpr qsizetype MAX_DISMISSED_WARNINGS{50};
+    while (m_dismissed_warnings.size() > MAX_DISMISSED_WARNINGS) m_dismissed_warnings.removeFirst();
+    QSettings{}.setValue(QString::fromLatin1(SettingsKeys::DISMISSED_WARNINGS), m_dismissed_warnings);
+    Q_EMIT warningsChanged();
+}
+
+void NodeModel::restoreDismissedWarnings()
+{
+    if (m_dismissed_warnings.isEmpty()) return;
+    m_dismissed_warnings.clear();
+    QSettings{}.remove(QString::fromLatin1(SettingsKeys::DISMISSED_WARNINGS));
     Q_EMIT warningsChanged();
 }
 
@@ -956,21 +1033,21 @@ QVariantList NodeModel::nodeInformationRows()
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
-    rows.push_back(InformationRow(tr("Client version"), fullClientVersion()));
-    rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
-    rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
-    rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
-    rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
-    rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
-    rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));
-    rows.push_back(InformationRow(tr("Header height"), QString::number(header_height)));
-    rows.push_back(InformationRow(tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
-    rows.push_back(InformationRow(tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
-    rows.push_back(InformationRow(tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
-    rows.push_back(InformationRow(tr("Local addresses"), local_addresses));
-    rows.push_back(InformationRow(tr("Warnings"), warning_text));
+    rows.push_back(InformationRow(QStringLiteral("clientVersion"), tr("Client version"), fullClientVersion()));
+    rows.push_back(InformationRow(QStringLiteral("userAgent"), tr("User agent"), QString::fromStdString(strSubVersion)));
+    rows.push_back(DirectoryRow(QStringLiteral("dataDir"), tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
+    rows.push_back(DirectoryRow(QStringLiteral("blocksDir"), tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
+    rows.push_back(InformationRow(QStringLiteral("startupTime"), tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
+    rows.push_back(InformationRow(QStringLiteral("network"), tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
+    rows.push_back(InformationRow(QStringLiteral("blockHeight"), tr("Block height"), QString::number(block_height)));
+    rows.push_back(InformationRow(QStringLiteral("headerHeight"), tr("Header height"), QString::number(header_height)));
+    rows.push_back(InformationRow(QStringLiteral("headerTime"), tr("Header time"), header_time > 0 ? QDateTime::fromSecsSinceEpoch(header_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(QStringLiteral("lastBlockTime"), tr("Last block time"), last_block_time > 0 ? QDateTime::fromSecsSinceEpoch(last_block_time).toString() : tr("Unknown")));
+    rows.push_back(InformationRow(QStringLiteral("verificationProgress"), tr("Verification progress"), QStringLiteral("%1%").arg(QString::number(m_verification_progress * 100.0, 'f', 2))));
+    rows.push_back(InformationRow(QStringLiteral("peers"), tr("Peers"), tr("%1 total (%2 inbound, %3 outbound)").arg(m_num_peers).arg(m_num_inbound_peers).arg(m_num_outbound_peers)));
+    rows.push_back(InformationRow(QStringLiteral("networkActive"), tr("Network active"), m_node_ready ? (m_node.getNetworkActive() ? tr("Yes") : tr("No")) : tr("Unknown")));
+    rows.push_back(InformationRow(QStringLiteral("localAddresses"), tr("Local addresses"), local_addresses));
+    rows.push_back(InformationRow(QStringLiteral("warnings"), tr("Warnings"), warning_text));
     return rows;
 }
 

@@ -8,6 +8,7 @@
 #include <test/qt_test_registry.h>
 
 #include <qml/models/nodemodel.h>
+#include <qml/models/settings_keys.h>
 #include <qml/initexecutor.h>
 #include <qml/quithandler.h>
 #include <qml/shutdowncoordinator.h>
@@ -35,6 +36,8 @@
 #include <QEventLoop>
 #include <QScopeGuard>
 #include <QSemaphore>
+#include <QSet>
+#include <QSettings>
 #include <QTimer>
 
 namespace {
@@ -180,6 +183,8 @@ private Q_SLOTS:
     void fatalExceptionExitsWithoutDraining();
     void nodeInformationRowsAvoidChainmanBeforeInitialization();
     void nodeInformationRowsExposeDiagnostics();
+    void shortenHomePathUsesTildeForPathsUnderHome();
+    void dismissedWarningsStayHiddenUntilTheyChange();
     void initEmitsRequestedInitialize();
     void initGuardBlocksSecondEmission();
     void shutdownPollingOnlyRequestsLifecycleControl();
@@ -624,6 +629,7 @@ void NodeModelTests::nodeNotificationHandlersUpdateModelThroughQueuedSignals()
     QTRY_COMPARE_WITH_TIMEOUT(block_tip_height_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(verification_progress_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(time_ratio_spy.count(), 1, ASYNC_TIMEOUT_MS);
+    QCOMPARE(model.blockTipTime(), qint64{1'700'000'000});
     QTRY_COMPARE_WITH_TIMEOUT(peers_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(inbound_peers_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QTRY_COMPARE_WITH_TIMEOUT(outbound_peers_spy.count(), 1, ASYNC_TIMEOUT_MS);
@@ -1099,11 +1105,22 @@ void NodeModelTests::headerTipNotificationsExposeHeaderSyncProgress()
 
     QTRY_COMPARE_WITH_TIMEOUT(header_spy.count(), 1, ASYNC_TIMEOUT_MS);
     QCOMPARE(block_sync_spy.count(), 0);
+    QCOMPARE(model.headerTipHeight(), height);
     QVERIFY(model.headerSyncActive());
     QVERIFY(model.headerPresync());
     QVERIFY(model.headerSyncProgress() > 0.45);
     QVERIFY(model.headerSyncProgress() < 0.55);
     QVERIFY(!model.blockSyncActive());
+
+    // Once headers are caught up the sync state stops changing, but a new
+    // header still publishes its height.
+    header_tip_fn(SynchronizationState::POST_INIT, interfaces::BlockTip{200, GetTime(), uint256{}}, /*presync=*/false);
+    QTRY_COMPARE_WITH_TIMEOUT(header_spy.count(), 2, ASYNC_TIMEOUT_MS);
+    QVERIFY(!model.headerSyncActive());
+    header_tip_fn(SynchronizationState::POST_INIT, interfaces::BlockTip{201, GetTime(), uint256{}}, /*presync=*/false);
+    QTRY_COMPARE_WITH_TIMEOUT(header_spy.count(), 3, ASYNC_TIMEOUT_MS);
+    QCOMPARE(model.headerTipHeight(), 201);
+    QVERIFY(!model.headerSyncActive());
 }
 
 void NodeModelTests::startupWarningsAreShownOnceAndDoNotBecomeCurrentWarnings()
@@ -1817,6 +1834,18 @@ void NodeModelTests::nodeInformationRowsExposeDiagnostics()
     const QVariantList rows = model.nodeInformationRows();
     QVERIFY(!rows.empty());
 
+    // Node details picks rows by id, so ids are present and unique.
+    QSet<QString> ids;
+    for (const QVariant& row : rows) {
+        const QString id{row.toMap().value(QStringLiteral("id")).toString()};
+        QVERIFY(!id.isEmpty());
+        QVERIFY(!ids.contains(id));
+        ids.insert(id);
+    }
+    for (const auto& id : {"clientVersion", "userAgent", "dataDir", "blocksDir", "startupTime", "localAddresses", "warnings"}) {
+        QVERIFY2(ids.contains(QString::fromLatin1(id)), id);
+    }
+
     bool saw_network_active{false};
     bool saw_peer_counts{false};
     for (const QVariant& row : rows) {
@@ -2134,6 +2163,91 @@ void NodeModelTests::statusNotificationBurstUsesOneFollowupSnapshot()
     QCOMPARE(node.calls.getNodeCount.load(), 4);
     QCOMPARE(node.calls.getWarnings.load(), 2);
     QVERIFY(off_gui.load());
+}
+
+void NodeModelTests::shortenHomePathUsesTildeForPathsUnderHome()
+{
+#ifdef Q_OS_WIN
+    QCOMPARE(ShortenHomePath(QStringLiteral("C:/Users/test/AppData/Roaming/Bitcoin"), QStringLiteral("C:/Users/test")),
+             QStringLiteral("C:/Users/test/AppData/Roaming/Bitcoin"));
+#else
+    const QString home{QStringLiteral("/home/test")};
+    QCOMPARE(ShortenHomePath(QStringLiteral("/home/test/.bitcoin/signet"), home), QStringLiteral("~/.bitcoin/signet"));
+    QCOMPARE(ShortenHomePath(QStringLiteral("/home/test"), home), QStringLiteral("~"));
+    QCOMPARE(ShortenHomePath(QStringLiteral("/home/test/"), QStringLiteral("/home/test/")), QStringLiteral("~"));
+    // A sibling whose name starts with the home path is not under it.
+    QCOMPARE(ShortenHomePath(QStringLiteral("/home/tester/.bitcoin"), home), QStringLiteral("/home/tester/.bitcoin"));
+    QCOMPARE(ShortenHomePath(QStringLiteral("/mnt/data/bitcoin"), home), QStringLiteral("/mnt/data/bitcoin"));
+    // An unknown or root home never turns every path into ~.
+    QCOMPARE(ShortenHomePath(QStringLiteral("/srv/bitcoin"), QString{}), QStringLiteral("/srv/bitcoin"));
+    QCOMPARE(ShortenHomePath(QStringLiteral("/srv/bitcoin"), QStringLiteral("/")), QStringLiteral("/srv/bitcoin"));
+#endif
+}
+
+void NodeModelTests::dismissedWarningsStayHiddenUntilTheyChange()
+{
+    const QString key{QString::fromLatin1(SettingsKeys::DISMISSED_WARNINGS)};
+    QSettings{}.remove(key);
+    const auto cleanup = qScopeGuard([&] { QSettings{}.remove(key); });
+
+    MockNode node;
+    MempoolState mempool;
+    interfaces::Node::NotifyAlertChangedFn alert_changed_fn;
+    std::mutex warnings_mutex;
+    bilingual_str warnings{"first<hr />second", "First<hr />Second"};
+
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    node.get_warnings_fn = [&] { std::lock_guard lock{warnings_mutex}; return warnings; };
+    node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn fn) {
+        alert_changed_fn = std::move(fn);
+        return MakeNoopHandler();
+    };
+
+    {
+        NodeModel model{node};
+        const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+        WaitForInitialMempoolRefresh(mempool);
+        model.initializeResult(true, {});
+        QTRY_COMPARE_WITH_TIMEOUT(model.warningList(), QStringList({QStringLiteral("First"), QStringLiteral("Second")}), ASYNC_TIMEOUT_MS);
+        QCOMPARE(model.activeWarningList(), model.warningList());
+        QVERIFY(model.dismissedWarningList().isEmpty());
+
+        QSignalSpy changed{&model, &NodeModel::warningsChanged};
+        model.dismissWarnings({QStringLiteral("First")});
+        QCOMPARE(model.activeWarningList(), QStringList{QStringLiteral("Second")});
+        QCOMPARE(model.dismissedWarningList(), QStringList{QStringLiteral("First")});
+        QCOMPARE(changed.count(), 1);
+        // Dismissing again changes nothing.
+        model.dismissWarnings({QStringLiteral("First")});
+        QCOMPARE(changed.count(), 1);
+        // Core still reports it; only the presentation hides it.
+        QCOMPARE(model.warningList().size(), 2);
+    }
+
+    // The dismissal is saved, so a restarted app keeps it hidden.
+    NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    WaitForInitialMempoolRefresh(mempool);
+    QVERIFY(alert_changed_fn);
+    model.initializeResult(true, {});
+    QTRY_COMPARE_WITH_TIMEOUT(model.warningList().size(), qsizetype{2}, ASYNC_TIMEOUT_MS);
+    QCOMPARE(model.activeWarningList(), QStringList{QStringLiteral("Second")});
+
+    // A changed warning is a new warning and shows again.
+    {
+        std::lock_guard lock{warnings_mutex};
+        warnings = bilingual_str{"first changed<hr />second", "First, changed<hr />Second"};
+    }
+    alert_changed_fn();
+    QTRY_COMPARE_WITH_TIMEOUT(model.activeWarningList(), QStringList({QStringLiteral("First, changed"), QStringLiteral("Second")}), ASYNC_TIMEOUT_MS);
+
+    model.dismissWarnings(model.activeWarningList());
+    QVERIFY(model.activeWarningList().isEmpty());
+    model.restoreDismissedWarnings();
+    QCOMPARE(model.activeWarningList().size(), 2);
+    QVERIFY(model.dismissedWarningList().isEmpty());
+    QVERIFY(!QSettings{}.contains(key));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
