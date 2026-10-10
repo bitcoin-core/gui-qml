@@ -35,17 +35,17 @@ private Q_SLOTS:
         QVERIFY(clock);
         QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("CONNECTING"));
         QCOMPARE(clock->property("header").toString(), QStringLiteral("Connecting"));
-        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Please wait"));
+        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Finding peers"));
         m_app.nodeModel().setPause(true);
         QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("PAUSE"));
         QTRY_VERIFY(!qmltest::Call(m_app, &interfaces::Node::getNetworkActive));
         QCOMPARE(clock->property("header").toString(), QStringLiteral("Paused"));
-        QCOMPARE(clock->property("subText").toString(), QString{});
+        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Network off"));
         m_app.nodeModel().setPause(false);
         QTRY_COMPARE(clock->property("state").toString(), QStringLiteral("CONNECTING"));
         QTRY_VERIFY(qmltest::Call(m_app, &interfaces::Node::getNetworkActive));
         QCOMPARE(clock->property("header").toString(), QStringLiteral("Connecting"));
-        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Please wait"));
+        QCOMPARE(clock->property("subText").toString(), QStringLiteral("Finding peers"));
     }
 
     void networkActionsAndCoreNotificationsAgree_data()

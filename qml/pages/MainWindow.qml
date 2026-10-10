@@ -214,7 +214,7 @@ ApplicationWindow {
         onActivityRequested: appWindow.routeToShell("openActivity")
         onSendRequested: appWindow.routeToShell("openSend")
         onReceiveRequested: appWindow.routeToShell("openReceive")
-        onInformationRequested: appWindow.openNodeInformation()
+        onInformationRequested: appWindow.routeToShell("openNodeDetails")
         onConsoleRequested: appWindow.routeToShell("openConsole")
         onNetworkTrafficRequested: appWindow.routeToShell("openNetworkTraffic")
         onPeersRequested: appWindow.routeToShell("openPeers")
@@ -327,30 +327,10 @@ ApplicationWindow {
         parent: Overlay.overlay
     }
 
-    // One of each for the whole window: the menu bar and every
-    // NodeStatusActions open these.
-    NodeInformationPopup {
-        id: nodeInformationPopup
-        parent: Overlay.overlay
-    }
-
-    NodeWarningsPopup {
-        id: nodeWarningsPopup
-        parent: Overlay.overlay
-    }
-
     ExternalPopup {
         id: rpcDocumentationLinkPopup
         objectName: "rpcDocumentationLinkPopup"
         parent: Overlay.overlay
-    }
-
-    function openNodeInformation() {
-        nodeInformationPopup.open()
-    }
-
-    function openNodeWarnings() {
-        nodeWarningsPopup.open()
     }
 
     Connections {
@@ -443,6 +423,13 @@ ApplicationWindow {
 
             function openNode() {
                 nodeStack.resetToRoot()
+            }
+
+            function openNodeDetails() {
+                nodeStack.resetToRoot()
+                if (nodeStack.currentItem && typeof nodeStack.currentItem.openNodeDetails === "function") {
+                    nodeStack.currentItem.openNodeDetails()
+                }
             }
 
             function openPeers() {
