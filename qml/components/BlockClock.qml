@@ -30,12 +30,24 @@ Item {
         root.Window.window.visibility !== Window.Minimized
     readonly property bool presentationActive: root.renderingActive && root.visible && root.windowVisible
 
-    width: dial.width
-    height: dial.height + (networkIndicator.visible ? networkIndicator.height + networkIndicator.anchors.topMargin : 0)
+    width: Math.max(dial.width, statusLine.implicitWidth)
+    height: root.showDetailsLink
+        ? detailsLink.y + detailsLink.height
+        : (networkIndicator.visible
+            ? networkIndicator.y + networkIndicator.height
+            : statusLine.y + statusLine.height)
+
+    signal detailsRequested()
+    signal warningsRequested()
 
     property alias header: mainText.text
-    property alias headerSize: mainText.font.pixelSize
     property alias subText: subText.text
+    readonly property alias status: nodeStatus
+    readonly property string statusLabel: nodeStatus.label
+    readonly property color statusTone: nodeStatus.tone
+    // Words such as "Connecting" use a smaller headline than numbers.
+    property bool headerIsWord: true
+    property bool showDetailsLink: false
     readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
     // Completion is latched after Core leaves IBD and the active chain catches
     // the best known header, and resets if the chain falls substantially behind.
@@ -45,17 +57,35 @@ Item {
     readonly property real syncProgressFraction: root.headerSyncActive
         ? root.nodeModelRef.headerSyncProgress
         : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
-    readonly property string syncProgress: formatProgressPercentage(root.syncProgressFraction * 100, root.synced)
-    readonly property bool networkActionReady: root.nodeModelRef !== null && root.nodeModelRef.networkActionReady === true
-    readonly property bool networkActionPending: root.nodeModelRef !== null && root.nodeModelRef.networkActionPending === true
+    // A node holding only the genesis block has not synced anything yet, even
+    // though Core reports a tiny verification progress for it.
+    readonly property bool hasSyncedBlocks: root.synced || (root.nodeModelRef !== null && root.nodeModelRef.blockTipHeight > 0)
+    readonly property real headerProgressFraction: root.headerSyncActive
+        ? root.nodeModelRef.headerSyncProgress
+        : (root.hasSyncedBlocks ? 1 : 0)
+    readonly property real blockProgressFraction: root.headerSyncActive || !root.hasSyncedBlocks
+        ? 0
+        : root.nodeModelRef.verificationProgress
+    readonly property string syncProgress: root.headerSyncActive
+        ? Math.floor(root.syncProgressFraction * 100) + "%"
+        : formatProgressPercentage(root.syncProgressFraction * 100, root.synced)
     property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
     property var syncState: Utils.formatRemainingSyncTime(root.nodeModelRef !== null ? root.nodeModelRef.remainingSyncTime : 0)
     property string syncTime: syncState.text
     property bool estimating: syncState.estimating
     property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property bool offline: root.networkStatusModelRef !== null && root.networkStatusModelRef.networkOffline
+    readonly property string peersText: nodeStatus.peersText
 
     activeFocusOnTab: true
+
+    NodeStatus {
+        id: nodeStatus
+        nodeModelRef: root.nodeModelRef
+        chainModelRef: root.chainModelRef
+        blockClockModelRef: root.blockClockModelRef
+        networkStatusModelRef: root.networkStatusModelRef
+    }
 
     AppSettings {
         id: settings
@@ -65,20 +95,29 @@ Item {
     BlockClockDial {
         id: dial
         objectName: "blockClockDial"
+        anchors.top: root.top
         anchors.horizontalCenter: root.horizontalCenter
         scale: Theme.blockclocksize
-        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)), 
+        width: {Math.max(Math.min(200, Math.min(root.parentWidth - 30, root.parentHeight - 30)),
                 Math.min((root.parentWidth * dial.scale), (root.parentHeight * dial.scale)))}
         height: dial.width
-        penWidth: dial.width / 50
+        layeredRings: true
         currentTimeFraction: root.blockClockModelRef !== null ? root.blockClockModelRef.currentTimeFraction : 0
         blockTimeFractions: root.blockClockModelRef !== null ? root.blockClockModelRef.blockTimeFractions : []
         syncProgress: root.syncProgressFraction
+        headerProgress: root.headerProgressFraction
+        blockProgress: root.blockProgressFraction
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
         synced: root.synced
-        backgroundColor: Theme.color.neutral2
+        dimmed: root.paused || root.offline || !root.connected
+        faulted: root.faulted
+        backgroundColor: root.faulted ? Theme.color.red : Theme.color.neutral2
         timeTickColor: Theme.color.neutral5
+        dimmedColor: Theme.color.neutral4
+        headerProgressColor: Theme.color.blue
+        progressColor: Theme.color.orange
+        handColor: Theme.color.neutral9
         confirmationColors: Theme.color.confirmationColors
         renderingActive: root.presentationActive
 
@@ -95,81 +134,115 @@ Item {
         }
     }
 
-    Icon {
-        id: bitcoinIcon
-        source: "image://images/bitcoin-circle"
-        color: Theme.color.neutral9
-        size: Math.max(dial.width / 5, 1)
-        anchors.bottom: mainText.top
-        anchors.horizontalCenter: root.horizontalCenter
-    }
-
-    Label {
-        id: mainText
+    Column {
         anchors.centerIn: dial
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: dial.width * (4/25)
-        color: Theme.color.neutral9
+        spacing: 2
 
-        Behavior on color {
-            ColorAnimation { duration: 150 }
+        Label {
+            id: mainText
+            objectName: "blockClockHeader"
+            anchors.horizontalCenter: parent.horizontalCenter
+            font.family: "BitcoinCoreSans"
+            font.styleName: "Semi Bold"
+            // Hero proportions, never below the design's compact widget sizes.
+            readonly property int headerPixelSize: root.headerIsWord
+                ? Math.max(20, Math.round(dial.width * 0.093))
+                : Math.max(30, Math.round(dial.width * 0.133))
+            font.pixelSize: headerPixelSize
+            font.letterSpacing: -0.02 * headerPixelSize
+            color: Theme.color.neutral9
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
+        }
+
+        TextMetrics {
+            id: subTextMetrics
+            font.family: "BitcoinCoreSans"
+            font.styleName: "Regular"
+            font.pixelSize: Math.max(13, Math.round(dial.width * 0.05))
+            text: subText.text
+        }
+
+        Label {
+            id: subText
+            objectName: "blockClockSubText"
+            property bool estimating: root.estimating
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: dial.width * 0.7
+            horizontalAlignment: Text.AlignHCenter
+            font.family: "BitcoinCoreSans"
+            font.styleName: "Regular"
+            readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
+            readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
+            font.pixelSize: subText.desiredTextWidth > subText.width
+                ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
+                : subText.desiredPixelSize
+            elide: Text.ElideRight
+            color: Theme.color.neutral7
+
+            Behavior on color {
+                enabled: !subText.estimating
+                ColorAnimation { duration: 150 }
+            }
+
+            SequentialAnimation {
+                id: estimatingTime
+                objectName: "blockClockEstimatingAnimation"
+                running: root.presentationActive && subText.estimating
+                loops: Animation.Infinite
+                ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral7; to: Theme.color.neutral5; duration: 1000 }
+                ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral5; to: Theme.color.neutral7; duration: 1000 }
+            }
         }
     }
 
-    TextMetrics {
-        id: subTextMetrics
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
-        text: subText.text
-    }
-
-    Label {
-        id: subText
-        objectName: "blockClockSubText"
-        anchors.top: mainText.bottom
-        property bool estimating: root.estimating
+    Row {
+        id: statusLine
+        objectName: "blockClockStatusLine"
+        anchors.top: dial.bottom
+        anchors.topMargin: 18
         anchors.horizontalCenter: root.horizontalCenter
-        width: dial.width * (4/5)
-        horizontalAlignment: Text.AlignHCenter
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
-        readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
-        readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
-        font.pixelSize: subText.desiredTextWidth > subText.width
-            ? Math.max(1, Math.floor(subText.desiredPixelSize * (subText.width - 2) / subText.desiredTextWidth))
-            : subText.desiredPixelSize
-        elide: Text.ElideRight
-        color: Theme.color.neutral4
+        spacing: 8
 
-        Behavior on color {
-            enabled: !subText.estimating
-            ColorAnimation { duration: 150 }
+        Rectangle {
+            objectName: "blockClockStatusDot"
+            anchors.verticalCenter: parent.verticalCenter
+            width: 8
+            height: 8
+            radius: 4
+            color: root.statusTone
+
+            Behavior on color {
+                ColorAnimation { duration: 150 }
+            }
         }
-
-        SequentialAnimation {
-            id: estimatingTime
-            objectName: "blockClockEstimatingAnimation"
-            running: root.presentationActive && subText.estimating
-            loops: Animation.Infinite
-            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
-            ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }
+        CoreText {
+            objectName: "blockClockStatusLabel"
+            text: root.statusLabel
+            font.pixelSize: 14
+            wrap: false
         }
-
-    }
-
-    PeersIndicator {
-        objectName: "blockClockPeersIndicator"
-        anchors.top: subText.bottom
-        anchors.topMargin: dial.width / 10
-        anchors.horizontalCenter: root.horizontalCenter
-        numOutboundPeers: root.nodeModelRef !== null ? root.nodeModelRef.numOutboundPeers : 0
-        maxNumOutboundPeers: root.nodeModelRef !== null ? Math.max(root.nodeModelRef.maxNumOutboundPeers, 1) : 1
-        indicatorDimensions: dial.width * (3/200)
-        indicatorSpacing: dial.width / 40
-        paused: root.paused || root.faulted
-        active: root.presentationActive
+        WarningsLink {
+            objectName: "blockClockWarnings"
+            anchors.verticalCenter: parent.verticalCenter
+            status: nodeStatus
+            onClicked: root.warningsRequested()
+        }
+        CoreText {
+            text: "·"
+            font.pixelSize: 14
+            wrap: false
+            color: Theme.color.neutral5
+        }
+        CoreText {
+            objectName: "blockClockPeersText"
+            text: root.peersText
+            font.pixelSize: 14
+            wrap: false
+            color: Theme.color.neutral7
+        }
     }
 
     NetworkIndicator {
@@ -177,49 +250,38 @@ Item {
         objectName: "blockClockNetworkIndicator"
         show: root.showNetworkIndicator
         chainModelRef: root.chainModelRef
-        anchors.top: dial.bottom
-        anchors.topMargin: networkIndicator.visible ? 30 : 0
+        anchors.top: statusLine.bottom
+        anchors.topMargin: networkIndicator.visible ? 18 : 0
         anchors.horizontalCenter: root.horizontalCenter
     }
 
+    LinkButton {
+        id: detailsLink
+        objectName: "blockClockDetailsLink"
+        visible: root.showDetailsLink
+        anchors.top: networkIndicator.visible ? networkIndicator.bottom : statusLine.bottom
+        anchors.topMargin: 12
+        anchors.horizontalCenter: root.horizontalCenter
+        text: qsTr("Node details")
+        onClicked: root.detailsRequested()
+    }
+
+    // The whole clock opens Node details. Pausing has its own button.
     MouseArea {
-        objectName: "blockClockToggleArea"
+        objectName: "blockClockDetailsArea"
         anchors.fill: dial
-        cursorShape: root.networkActionPending ? Qt.BusyCursor : !root.networkActionReady || root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
-        enabled: root.networkActionReady && !root.faulted && !root.networkActionPending
-        function click() {
-            root.togglePause()
-        }
-        onClicked: click()
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.detailsRequested()
         FocusBorder {
             visible: root.activeFocus
         }
     }
 
-    BusyIndicator {
-        objectName: "blockClockNetworkPending"
-        anchors.top: dial.bottom
-        anchors.topMargin: 4
-        anchors.horizontalCenter: dial.horizontalCenter
-        width: 24
-        height: 24
-        running: root.networkActionPending
-        visible: running
-    }
-
-    Connections {
-        target: root.nodeModelRef
-        function onNetworkActionErrorChanged() {
-            if (root.visible && root.nodeModelRef.networkActionError.length > 0) networkError.open()
-        }
-    }
-    AlertPopup {
-        id: networkError
-        objectName: "blockClockNetworkError"
-        parent: Overlay.overlay
-        title: qsTr("Network action failed")
-        message: root.nodeModelRef !== null ? root.nodeModelRef.networkActionError : ""
-    }
+    Keys.onReturnPressed: root.detailsRequested()
+    Keys.onSpacePressed: root.detailsRequested()
+    Accessible.role: Accessible.Button
+    Accessible.name: qsTr("Block clock")
+    Accessible.description: root.statusLabel + ", " + root.header + ", " + root.subText
 
     states: [
         State {
@@ -227,6 +289,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: root.syncProgress
+                headerIsWord: false
                 subText: root.headerSyncActive
                     ? (root.nodeModelRef.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers"))
                     : root.syncTime
@@ -238,7 +301,8 @@ Item {
             PropertyChanges {
                 target: root
                 header: Number(root.nodeModelRef !== null ? root.nodeModelRef.blockTipHeight : 0).toLocaleString(Qt.locale(), 'f', 0)
-                subText: "Blocktime"
+                headerIsWord: false
+                subText: nodeStatus.formatLastBlock(nodeStatus.lastBlockAge)
                 estimating: false
             }
         },
@@ -247,18 +311,9 @@ Item {
             name: "PAUSE"; when: paused && !faulted && !offline
             PropertyChanges {
                 target: root
-                header: "Paused"
-                headerSize: dial.width * (3/25)
-                subText: "Tap to resume"
+                header: qsTr("Paused")
+                subText: qsTr("Network off")
                 estimating: false
-            }
-            PropertyChanges {
-                target: bitcoinIcon
-                anchors.bottomMargin: dial.width / 40
-            }
-            PropertyChanges {
-                target: subText
-                anchors.topMargin: dial.width / 50
             }
         },
 
@@ -266,13 +321,9 @@ Item {
             name: "ERROR"; when: faulted
             PropertyChanges {
                 target: root
-                header: "Error"
-                headerSize: dial.width * (3/25)
-            }
-            PropertyChanges {
-                target: bitcoinIcon
-                anchors.bottomMargin: dial.width / 40
-                icon.source: "image://images/error"
+                header: qsTr("Error")
+                subText: qsTr("Node stopped")
+                estimating: false
             }
         },
 
@@ -281,18 +332,8 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Offline")
-                headerSize: dial.width * (3/25)
-                subText: qsTr("Check network")
+                subText: qsTr("Check connection")
                 estimating: false
-            }
-            PropertyChanges {
-                target: bitcoinIcon
-                anchors.bottomMargin: dial.width / 40
-                icon.source: "image://images/network-light"
-            }
-            PropertyChanges {
-                target: subText
-                anchors.topMargin: dial.width / 50
             }
         },
 
@@ -301,21 +342,11 @@ Item {
             PropertyChanges {
                 target: root
                 header: qsTr("Connecting")
-                headerSize: dial.width * (3/25)
-                subText: qsTr("Please wait")
+                subText: qsTr("Finding peers")
                 estimating: false
-            }
-            PropertyChanges {
-                target: bitcoinIcon
-                anchors.bottomMargin: dial.width / 40
-            }
-            PropertyChanges {
-                target: subText
-                anchors.topMargin: dial.width / 50
             }
         }
     ]
-
 
     function formatProgressPercentage(progress, complete) {
         if (complete === true) {
@@ -325,20 +356,9 @@ Item {
         if (progress >= 99.9) {
             return "99.9%"
         }
-        if (progress >= 1) {
-            return Math.round(progress) + "%"
-        } else if (progress >= 0.1) {
+        if (progress >= 10) {
             return progress.toFixed(1) + "%"
-        } else if (progress >= 0.01) {
-            return progress.toFixed(2) + "%"
-        } else {
-            return "0%"
         }
-    }
-
-    function togglePause() {
-        if (root.networkActionReady && !root.faulted && !root.networkActionPending) {
-            root.nodeModelRef.pause = !root.paused
-        }
+        return Math.max(0, progress).toFixed(2) + "%"
     }
 }

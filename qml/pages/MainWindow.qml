@@ -209,7 +209,7 @@ ApplicationWindow {
         onActivityRequested: appWindow.routeToShell("openActivity")
         onSendRequested: appWindow.routeToShell("openSend")
         onReceiveRequested: appWindow.routeToShell("openReceive")
-        onInformationRequested: menuInformationPopup.open()
+        onInformationRequested: appWindow.routeToShell("openNodeDetails")
         onConsoleRequested: appWindow.routeToShell("openConsole")
         onNetworkTrafficRequested: appWindow.routeToShell("openNetworkTraffic")
         onPeersRequested: appWindow.routeToShell("openPeers")
@@ -323,11 +323,6 @@ ApplicationWindow {
         parent: Overlay.overlay
     }
 
-    NodeInformationPopup {
-        id: menuInformationPopup
-        parent: Overlay.overlay
-    }
-
     Connections {
         target: appWindow.desktopWalletMode ? walletController : null
         function onInitializedChanged() {
@@ -417,6 +412,13 @@ ApplicationWindow {
 
             function openNode() {
                 nodeStack.resetToRoot()
+            }
+
+            function openNodeDetails() {
+                nodeStack.resetToRoot()
+                if (nodeStack.currentItem && typeof nodeStack.currentItem.openNodeDetails === "function") {
+                    nodeStack.currentItem.openNodeDetails()
+                }
             }
 
             function openPeers() {

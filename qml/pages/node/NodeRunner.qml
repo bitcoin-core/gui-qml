@@ -29,8 +29,11 @@ Page {
                 anchors.rightMargin: 12
                 spacing: 4
 
-                NodeStatusActions {
+                NodeStatusBar {
+                    id: nodeStatusBar
                     Layout.alignment: Qt.AlignVCenter
+                    onRouteRequested: root.settingsClicked()
+                    onWarningsRequested: nodeWarnings.open()
                 }
                 IconButton {
                     objectName: "peersTabButton"
@@ -58,10 +61,40 @@ Page {
 
     Component.onCompleted: nodeModel.startNodeInitializionThread();
 
+    function openNodeDetails() {
+        nodeDetails.open()
+    }
+
+    NodeBanner {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        z: 2
+    }
+
     BlockClock {
         parentWidth: parent.width - 40
         parentHeight: parent.height
         anchors.centerIn: parent
         renderingActive: root.visible
+        showDetailsLink: true
+        onDetailsRequested: nodeDetails.open()
+        onWarningsRequested: nodeWarnings.open()
+    }
+
+    NodeWarningsPopup {
+        id: nodeWarnings
+    }
+
+    NodeDetailsPopup {
+        id: nodeDetails
+        onActionTriggered: function(action) { nodeStatusBar.trigger(action) }
+    }
+
+    NewBlockToast {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 72
+        active: root.visible
     }
 }

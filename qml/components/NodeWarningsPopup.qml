@@ -8,58 +8,83 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
+// The warnings Core reported, styled like Node details. Each warning is an
+// amber card, as in the banner, and can be dismissed until its text changes.
+// Dismissed warnings stay one click away instead of disappearing for good.
 Popup {
     id: root
     objectName: "nodeWarningsPopup"
 
-    readonly property int warningCount: warningRepeater.count
-    readonly property string firstWarningText: nodeModel.warningList.length > 0 ? nodeModel.warningList[0] : ""
-    readonly property int firstWarningLineCount: warningRepeater.count > 0 ? warningRepeater.itemAt(0).warningLineCount : 0
-    readonly property int firstWarningWrapMode: warningRepeater.count > 0 ? warningRepeater.itemAt(0).warningWrapMode : Text.NoWrap
-    readonly property int contentMargin: 28
+    property NodeStatus status: NodeStatus {}
+    readonly property var warnings: status.activeWarnings
+    readonly property var dismissed: status.dismissedWarnings
+    property bool showDismissed: false
 
-    modal: true
-    padding: 0
+    parent: Overlay.overlay
     anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 720) : 720
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 520)
-    implicitHeight: Math.min(columnLayout.implicitHeight, 520)
+    modal: true
+    width: parent ? Math.min(440, parent.width - 48) : 440
+    height: parent ? Math.min(implicitHeight, parent.height - 48) : implicitHeight
+    padding: 24
+    onClosed: root.showDismissed = false
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: 8
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
+    enter: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "scale"; from: 0.98; to: 1; duration: 180; easing.type: Easing.OutCubic }
     }
 
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
+    background: Rectangle {
+        color: Theme.color.neutral1
+        radius: 12
+        border.width: 1
+        border.color: Theme.color.neutral3
+    }
+
+    contentItem: ColumnLayout {
         spacing: 0
 
-        CoreText {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            text: qsTr("Node warnings")
-            bold: true
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            Layout.bottomMargin: 16
+            spacing: 8
+            CoreText {
+                Layout.fillWidth: true
+                text: qsTr("Warnings")
+                bold: true
+                font.pixelSize: 18
+                horizontalAlignment: Text.AlignLeft
+            }
+            WarningAction {
+                objectName: "nodeWarningsDismissAll"
+                visible: root.warnings.length > 1
+                text: qsTr("Dismiss all")
+                onClicked: root.status.dismissWarnings(root.warnings)
+            }
+            CloseButton {
+                objectName: "nodeWarningsCloseButton"
+                size: 32
+                onClicked: root.close()
+            }
         }
 
-        Separator { Layout.fillWidth: true }
+        CoreText {
+            objectName: "nodeWarningsEmpty"
+            Layout.fillWidth: true
+            Layout.bottomMargin: 16
+            visible: root.warnings.length === 0
+            text: root.dismissed.length > 0
+                ? qsTr("No new warnings.")
+                : qsTr("Your node has no warnings.")
+            font.pixelSize: 14
+            color: Theme.color.neutral7
+            horizontalAlignment: Text.AlignLeft
+        }
 
         ScrollView {
             id: warningsScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.contentMargin
+            Layout.preferredHeight: warningsColumn.implicitHeight
             contentWidth: availableWidth
             clip: true
 
@@ -68,64 +93,136 @@ Popup {
             Column {
                 id: warningsColumn
                 width: warningsScroll.availableWidth
-                spacing: 12
+                spacing: 8
 
                 Repeater {
-                    id: warningRepeater
-                    model: nodeModel.warningList
-                    delegate: RowLayout {
-                        // Qt 6.2 does not inject `modelData`/`index` into this
-                        // delegate; declare them explicitly.
-                        required property var modelData
-                        required property int index
-
-                        readonly property int warningLineCount: warningText.lineCount
-                        readonly property int warningWrapMode: warningText.wrapMode
-
+                    objectName: "nodeWarningsRepeater"
+                    model: root.warnings
+                    delegate: WarningCard {
                         width: warningsColumn.width
-                        spacing: 10
-
-                        Icon {
-                            Layout.preferredWidth: 18
-                            Layout.preferredHeight: 18
-                            Layout.alignment: Qt.AlignTop
-                            source: "image://images/alert-filled"
-                            color: Theme.color.orange
-                            size: 18
-                        }
-
-                        CoreText {
-                            id: warningText
-                            objectName: "nodeWarningText_" + index
-                            Layout.fillWidth: true
-                            text: modelData
-                            color: Theme.color.neutral8
-                            font.pixelSize: 15
-                            wrapMode: Text.WordWrap
-                            horizontalAlignment: Text.AlignLeft
-                        }
+                        textObjectName: "nodeWarningText_" + index
+                        actionObjectName: "nodeWarningDismiss_" + index
+                        warning: modelData
+                        actionText: qsTr("Dismiss")
+                        onActionClicked: root.status.dismissWarnings([modelData])
                     }
                 }
 
-                CoreText {
-                    objectName: "nodeNoWarningsText"
+                // Dismissed warnings are out of the way, not gone.
+                RowLayout {
                     width: warningsColumn.width
-                    visible: nodeModel.warningList.length === 0
-                    text: qsTr("No current warnings.")
-                    color: Theme.color.neutral7
-                    font.pixelSize: 15
+                    visible: root.dismissed.length > 0
+                    spacing: 8
+                    WarningAction {
+                        objectName: "nodeWarningsShowDismissed"
+                        text: (root.dismissed.length === 1 ? qsTr("1 dismissed") : qsTr("%1 dismissed").arg(root.dismissed.length))
+                            + " · " + (root.showDismissed ? qsTr("Hide") : qsTr("Show"))
+                        muted: true
+                        onClicked: root.showDismissed = !root.showDismissed
+                    }
+                    Item { Layout.fillWidth: true }
+                    WarningAction {
+                        objectName: "nodeWarningsRestoreAll"
+                        visible: root.showDismissed
+                        text: qsTr("Restore all")
+                        onClicked: root.status.restoreDismissedWarnings()
+                    }
+                }
+
+                Repeater {
+                    objectName: "nodeWarningsDismissedRepeater"
+                    model: root.showDismissed ? root.dismissed : []
+                    delegate: WarningCard {
+                        width: warningsColumn.width
+                        textObjectName: "nodeDismissedWarningText_" + index
+                        warning: modelData
+                        dimmed: true
+                    }
                 }
             }
         }
+    }
 
-        ContinueButton {
-            objectName: "nodeWarningsCloseButton"
-            Layout.fillWidth: true
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            Layout.bottomMargin: root.contentMargin
-            text: qsTr("OK")
-            onClicked: root.close()
+    // A warning in the banner's amber tint. Dimmed cards are dismissed ones.
+    component WarningCard: Rectangle {
+        id: card
+        property string warning: ""
+        property bool dimmed: false
+        property string actionText: ""
+        property string textObjectName: ""
+        property string actionObjectName: ""
+        signal actionClicked()
+
+        readonly property color tone: dimmed ? Theme.color.neutral5 : Theme.color.amber
+        implicitHeight: cardContent.implicitHeight + 24
+        radius: 8
+        color: Qt.rgba(tone.r, tone.g, tone.b, dimmed ? 0.08 : 0.14)
+        border.width: 1
+        border.color: dimmed ? Theme.color.neutral3 : Theme.color.amber
+
+        RowLayout {
+            id: cardContent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 14
+            anchors.rightMargin: 10
+            spacing: 12
+
+            Rectangle {
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: 6
+                implicitWidth: 8
+                implicitHeight: 8
+                radius: 4
+                color: card.tone
+            }
+            CoreText {
+                objectName: card.textObjectName
+                Layout.fillWidth: true
+                text: card.warning
+                font.pixelSize: 14
+                lineHeight: 1.45
+                color: card.dimmed ? Theme.color.neutral7 : Theme.color.neutral9
+                horizontalAlignment: Text.AlignLeft
+                verticalAlignment: Text.AlignTop
+            }
+            WarningAction {
+                objectName: card.actionObjectName
+                Layout.alignment: Qt.AlignTop
+                visible: card.actionText.length > 0
+                text: card.actionText
+                onClicked: card.actionClicked()
+            }
+        }
+    }
+
+    // A small text action, orange like the app's links, or muted.
+    component WarningAction: AbstractButton {
+        id: action
+        property bool muted: false
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        padding: 4
+        implicitWidth: actionLabel.implicitWidth + leftPadding + rightPadding
+        implicitHeight: actionLabel.implicitHeight + topPadding + bottomPadding
+        opacity: down ? 0.7 : hovered ? 0.85 : 1
+        Accessible.role: Accessible.Button
+        Accessible.name: text
+
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+        contentItem: CoreText {
+            id: actionLabel
+            text: action.text
+            font: Theme.text.captionStrong.font
+            wrap: false
+            color: action.muted ? Theme.color.neutral7 : Theme.color.orange
+        }
+
+        background: FocusBorder {
+            visible: action.visualFocus
+            borderRadius: 6
         }
     }
 }

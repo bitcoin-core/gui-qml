@@ -24,8 +24,8 @@ TestCase {
     }
 
     Component {
-        id: actionsComponent
-        NodeStatusActions {}
+        id: bannerComponent
+        NodeBanner { width: 640 }
     }
 
     Component {
@@ -48,13 +48,13 @@ TestCase {
     }
 
     Component {
-        id: warningsPopupComponent
-        NodeWarningsPopup {}
+        id: detailsPopupComponent
+        NodeDetailsPopup {}
     }
 
     Component {
-        id: informationPopupComponent
-        NodeInformationPopup {}
+        id: warningsPopupComponent
+        NodeWarningsPopup {}
     }
 
     Component {
@@ -101,6 +101,7 @@ TestCase {
         testWindow.width = 640
         testWindow.height = 520
         nodeModel.setWarningsForTest([])
+        nodeModel.restoreDismissedWarnings()
         nodeModel.setStartupErrorForTest("")
         shutdownSpy.clear()
         nodeModel.answerRuntimeDialog(DialogButtonBox.Cancel)
@@ -171,23 +172,54 @@ TestCase {
         verify(destructiveAlertTriggered)
     }
 
-    function test_warning_action_visibility_follows_warning_state() {
-        const actions = createTemporaryObject(actionsComponent, testWindow.contentItem)
-        verify(actions !== null)
-        wait(0)
-
-        const warningButton = findChild(actions, "nodeWarningsButton")
-        const infoButton = findChild(actions, "nodeInformationButton")
-        verify(warningButton !== null)
-        verify(infoButton !== null)
-        compare(warningButton.visible, false)
-        compare(infoButton.visible, true)
+    function test_banner_follows_warnings_and_can_be_closed() {
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem)
+        verify(banner !== null)
+        compare(banner.shown, false)
+        compare(banner.height, 0)
 
         nodeModel.setWarningsForTest(["Clock skew warning"])
-        tryCompare(warningButton, "visible", true)
+        tryCompare(banner, "shown", true)
+        verify(banner.height > 0)
+        const text = findChild(banner, "nodeBannerText")
+        verify(text.text.indexOf("<b>Warning:</b>") === 0)
+        verify(text.text.indexOf("Clock skew warning") > 0)
+
+        // Closing a warning dismisses it; a new warning brings the banner back
+        // with only the new one.
+        findChild(banner, "nodeBannerCloseButton").clicked()
+        compare(banner.shown, false)
+        compare(nodeModel.dismissedWarningList, ["Clock skew warning"])
+        nodeModel.setWarningsForTest(["Clock skew warning", "Unknown new rules activated"])
+        tryCompare(banner, "shown", true)
+        verify(text.text.indexOf("Unknown new rules activated") > 0)
+        verify(text.text.indexOf("Clock skew warning") < 0)
     }
 
-    function test_node_runner_status_actions_align_with_settings_button() {
+    function test_banner_shows_errors_before_warnings() {
+        nodeModel.setWarningsForTest(["Clock skew warning"])
+        nodeModel.setStartupErrorForTest("Disk space is too low.")
+        nodeModel.faulted = true
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem)
+        tryCompare(banner, "shown", true)
+        const text = findChild(banner, "nodeBannerText")
+        compare(text.text, "<b>Error:</b> Disk space is too low.")
+        compare(banner.status.bannerColor, Theme.color.red)
+        nodeModel.faulted = false
+        tryCompare(text, "text", "<b>Warning:</b> Clock skew warning")
+    }
+
+    function test_banner_escapes_and_wraps_long_warning_text() {
+        nodeModel.setWarningsForTest(["<b>not markup</b> " + longWarningText()])
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem)
+        tryCompare(banner, "shown", true)
+        const text = findChild(banner, "nodeBannerText")
+        verify(text.text.indexOf("&lt;b&gt;not markup&lt;/b&gt;") > 0)
+        for (let i = 0; i < 20 && text.lineCount <= 1; ++i) wait(25)
+        verify(text.lineCount > 1)
+    }
+
+    function test_node_runner_status_bar_aligns_with_settings_button() {
         nodeModel.setWarningsForTest(["Clock skew warning"])
 
         const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem)
@@ -196,24 +228,18 @@ TestCase {
         runner.height = testWindow.height
         wait(0)
 
-        const warningButton = findChild(runner, "nodeWarningsButton")
-        const infoButton = findChild(runner, "nodeInformationButton")
+        compare(findChild(runner, "nodeWarningsButton"), null)
+        compare(findChild(runner, "nodeInformationButton"), null)
+        const primary = findChild(runner, "nodeStatusPrimaryAction")
         const settingsButton = findChild(runner, "nodeSettingsButton")
-        verify(warningButton !== null)
-        verify(infoButton !== null)
+        verify(primary !== null)
         verify(settingsButton !== null)
         compare(findChild(runner, "consoleTabButton"), null)
-        tryCompare(warningButton, "visible", true)
+        tryCompare(findChild(runner, "nodeBanner"), "shown", true)
 
-        compare(warningButton.height, 34)
-        compare(infoButton.height, 34)
-        compare(settingsButton.height, 34)
-
-        const warningCenterY = warningButton.mapToItem(runner, 0, warningButton.height / 2).y
-        const infoCenterY = infoButton.mapToItem(runner, 0, infoButton.height / 2).y
+        const primaryCenterY = primary.mapToItem(runner, 0, primary.height / 2).y
         const settingsCenterY = settingsButton.mapToItem(runner, 0, settingsButton.height / 2).y
-        verify(Math.abs(warningCenterY - settingsCenterY) <= 0.5)
-        verify(Math.abs(infoCenterY - settingsCenterY) <= 0.5)
+        verify(Math.abs(primaryCenterY - settingsCenterY) <= 0.5)
     }
 
     function test_node_runner_clock_follows_stack_visibility() {
@@ -236,87 +262,128 @@ TestCase {
         tryCompare(clock, "renderingActive", true)
     }
 
-    function test_warning_popup_lists_current_warnings() {
-        nodeModel.setWarningsForTest(["Warning one", "Warning two"])
-
-        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
-        verify(popup !== null)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        tryCompare(popup, "warningCount", 2)
-        compare(popup.firstWarningText, "Warning one")
-    }
-
-    function test_warning_popup_wraps_long_warning_text() {
-        nodeModel.setWarningsForTest([longWarningText()])
-
-        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
-        verify(popup !== null)
-        popup.open()
-        tryCompare(popup, "opened", true)
-
-        tryCompare(popup, "warningCount", 1)
-        tryCompare(popup, "firstWarningWrapMode", Text.WordWrap)
-        for (let i = 0; i < 20; ++i) {
-            if (popup.firstWarningLineCount > 1) {
-                return
-            }
-            wait(25)
-        }
-        verify(popup.firstWarningLineCount > 1)
-    }
-
     function test_feedback_popups_expand_in_wide_window() {
         testWindow.width = 900
         wait(0)
 
-        const warningsPopup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
-        const informationPopup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
         const runtimePopup = createTemporaryObject(runtimeDialogComponent, testWindow.contentItem)
         const fatalPopup = createTemporaryObject(fatalPopupComponent, testWindow.contentItem)
-        verify(warningsPopup !== null)
-        verify(informationPopup !== null)
         verify(runtimePopup !== null)
         verify(fatalPopup !== null)
 
-        compare(warningsPopup.contentMargin, 28)
-        compare(informationPopup.contentMargin, 28)
         compare(runtimePopup.contentMargin, 28)
         compare(fatalPopup.contentMargin, 28)
-        verify(warningsPopup.width > 460)
-        verify(informationPopup.width > 520)
         verify(runtimePopup.width > 420)
         verify(fatalPopup.width > 420)
     }
 
-    function test_node_information_popup_materializes_rows_on_open() {
-        const popup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
+    function test_node_details_reads_about_rows_only_when_expanded() {
+        const popup = createTemporaryObject(detailsPopupComponent, testWindow.contentItem)
         verify(popup !== null)
         popup.open()
         tryCompare(popup, "opened", true)
+        compare(popup.aboutRows.length, 0)
 
-        tryCompare(popup, "informationRowCount", 3)
-        compare(popup.firstInformationValue, "Bitcoin Core test")
+        popup.moreExpanded = true
+        // Rows covered elsewhere (network, peers, warnings) are not repeated.
+        compare(popup.aboutRows.map(function(row) { return row.key + "=" + row.value }),
+                ["Version=Bitcoin Core test", "Data directory=~/.bitcoin/regtest"])
+        tryVerify(function() { return findChild(popup.contentItem, "nodeDetailsAboutValue_0") !== null })
+        compare(findChild(popup.contentItem, "nodeDetailsAboutValue_0").text, "Bitcoin Core test")
+
+        // Directories are links that open the folder; plain values are not.
+        const dataDir = findChild(popup.contentItem, "nodeDetailsAboutValue_1")
+        compare(dataDir.text, "~/.bitcoin/regtest")
+        compare(dataDir.color, Theme.color.orange)
+        compare(popup.aboutRows[1].url.toString(), "file:///home/test/.bitcoin/regtest")
+        compare(findChild(popup.contentItem, "nodeDetailsAboutValue_1_link").enabled, true)
+        compare(findChild(popup.contentItem, "nodeDetailsAboutValue_0_link").enabled, false)
+        compare(popup.aboutRows[1].path, "/home/test/.bitcoin/regtest")
+
+        // Hovering the link dims it; its colour already marks it as a link.
+        const link = findChild(popup.contentItem, "nodeDetailsAboutValue_1_link")
+        mouseMove(link, link.width / 2, link.height / 2)
+        tryCompare(link, "containsMouse", true)
+        compare(dataDir.opacity, 0.85)
+        mouseMove(findChild(popup.contentItem, "nodeDetailsAboutValue_0"), 2, 2)
+        tryCompare(link, "containsMouse", false)
+        compare(dataDir.opacity, 1)
+
+        nodeModel.setWarningsForTest([longWarningText()])
+        popup.moreExpanded = false
+        popup.moreExpanded = true
+        compare(popup.aboutRows.length, 2)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        compare(popup.aboutRows.length, 0)
     }
 
-    function test_node_information_popup_wraps_long_warning_value() {
-        nodeModel.setWarningsForTest([longWarningText()])
-
-        const popup = createTemporaryObject(informationPopupComponent, testWindow.contentItem)
+    function test_warnings_popup_lists_each_warning_in_amber() {
+        nodeModel.setWarningsForTest(["This is a pre-release test build", longWarningText()])
+        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
         verify(popup !== null)
         popup.open()
         tryCompare(popup, "opened", true)
 
-        tryCompare(popup, "informationRowCount", 4)
-        tryCompare(popup, "lastInformationValueWrapMode", Text.WordWrap)
-        for (let i = 0; i < 20; ++i) {
-            if (popup.lastInformationValueLineCount > 1) {
-                return
-            }
-            wait(25)
-        }
-        verify(popup.lastInformationValueLineCount > 1)
+        compare(popup.warnings.length, 2)
+        const first = findChild(popup.contentItem, "nodeWarningText_0")
+        const second = findChild(popup.contentItem, "nodeWarningText_1")
+        verify(first !== null && second !== null)
+        compare(first.text, "This is a pre-release test build")
+        // Each warning is its own amber card, and long text wraps.
+        compare(first.parent.parent.border.color, Theme.color.amber)
+        for (let i = 0; i < 20 && second.lineCount <= 1; ++i) wait(25)
+        verify(second.lineCount > 1)
+
+        // The list follows Core: a cleared warning leaves it.
+        nodeModel.setWarningsForTest(["This is a pre-release test build"])
+        compare(popup.warnings.length, 1)
+        popup.close()
+    }
+
+    function test_warnings_can_be_dismissed_and_restored() {
+        nodeModel.setWarningsForTest(["First warning", "Second warning", "Third warning"])
+        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        compare(popup.warnings.length, 3)
+
+        // One at a time.
+        findChild(popup.contentItem, "nodeWarningDismiss_1").clicked()
+        compare(popup.warnings, ["First warning", "Third warning"])
+        compare(popup.dismissed, ["Second warning"])
+        // The count everywhere follows the active warnings.
+        compare(popup.status.warningsText, "2 warnings")
+
+        // Dismissed ones are a click away, muted, and can be restored.
+        const show = findChild(popup.contentItem, "nodeWarningsShowDismissed")
+        compare(show.text, "1 dismissed · Show")
+        show.clicked()
+        compare(show.text, "1 dismissed · Hide")
+        tryVerify(function() { return findChild(popup.contentItem, "nodeDismissedWarningText_0") !== null })
+        compare(findChild(popup.contentItem, "nodeDismissedWarningText_0").text, "Second warning")
+
+        // All at once.
+        findChild(popup.contentItem, "nodeWarningsDismissAll").clicked()
+        compare(popup.warnings.length, 0)
+        compare(popup.status.warningsText, "")
+        compare(findChild(popup.contentItem, "nodeWarningsEmpty").text, "No new warnings.")
+
+        findChild(popup.contentItem, "nodeWarningsRestoreAll").clicked()
+        compare(popup.warnings.length, 3)
+        compare(popup.dismissed.length, 0)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        compare(popup.showDismissed, false)
+    }
+
+    function test_warnings_popup_says_when_there_are_none() {
+        const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        compare(popup.warnings.length, 0)
+        compare(findChild(popup.contentItem, "nodeWarningText_0"), null)
+        popup.close()
     }
 
     function test_runtime_dialog_opens_from_node_model_and_answers() {

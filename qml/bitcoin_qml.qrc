@@ -33,13 +33,16 @@
         <file>components/InfoBanner.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NetworkIndicator.qml</file>
+        <file>components/NewBlockToast.qml</file>
+        <file>components/NodeActionButton.qml</file>
+        <file>components/NodeBanner.qml</file>
+        <file>components/NodeDetailsPopup.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
-        <file>components/NodeInformationPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
-        <file>components/NodeStatusActions.qml</file>
+        <file>components/NodeStatus.qml</file>
+        <file>components/NodeStatusBar.qml</file>
         <file>components/NodeWarningsPopup.qml</file>
         <file>components/OptionPopup.qml</file>
-        <file>components/PeersIndicator.qml</file>
         <file>components/ProxySettings.qml</file>
         <file>components/SettingsPageContainer.qml</file>
         <file>components/SettingsRestartNotice.qml</file>
@@ -77,6 +80,7 @@
         <file>components/LabeledBitcoinAddressField.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
+        <file>components/WarningsLink.qml</file>
         <file>controls/AddWalletButton.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/CloseButton.qml</file>
