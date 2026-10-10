@@ -122,20 +122,20 @@ TestCase {
         compare(menuActions.settings.enabled, true)
     }
 
-    function test_node_status_actions_open_the_window_popups() {
+    function test_node_menu_and_status_bar_open_the_node_popups() {
         const window = createMain(false)
         const runner = findChild(window, "nodeRunner")
         verify(runner !== null)
-        const popup = findChild(window, "nodeInformationPopup")
-        verify(popup !== null)
-        findChild(runner, "nodeInformationButton").clicked()
-        tryCompare(popup, "opened", true)
-        compare(popup.parent, window.Overlay.overlay)
-        popup.close()
-        tryCompare(popup, "opened", false)
+        findChild(window, "desktopMenuActions").information.trigger()
+        const details = findChild(window, "nodeDetailsPopup")
+        verify(details !== null)
+        tryCompare(details, "opened", true)
+        compare(details.parent, window.Overlay.overlay)
+        details.close()
+        tryCompare(details, "opened", false)
 
         nodeModel.setWarningsForTest(["Clock skew warning"])
-        findChild(runner, "nodeWarningsButton").clicked()
+        findChild(runner, "nodeStatusBarWarnings").clicked()
         tryCompare(findChild(window, "nodeWarningsPopup"), "opened", true)
         nodeModel.setWarningsForTest([])
     }

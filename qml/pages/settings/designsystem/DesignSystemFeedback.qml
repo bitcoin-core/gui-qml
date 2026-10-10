@@ -276,32 +276,6 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
-        objectName: "designSystemPeersIndicator"
-        Layout.fillWidth: true
-        name: "PeersIndicator"
-        note: "The block clock's outbound peer dots."
-
-        DesignSystemState {
-            label: "4 of 8, active"
-            PeersIndicator {
-                numOutboundPeers: 4
-                maxNumOutboundPeers: 8
-                paused: false
-                active: true
-            }
-        }
-        DesignSystemState {
-            label: "no peers: the first dot pulses"
-            PeersIndicator {
-                numOutboundPeers: 0
-                maxNumOutboundPeers: 8
-                paused: false
-                active: true
-            }
-        }
-    }
-
-    DesignSystemSpecimen {
         objectName: "designSystemWalletSuccessBadge"
         Layout.fillWidth: true
         name: "WalletSuccessBadge"

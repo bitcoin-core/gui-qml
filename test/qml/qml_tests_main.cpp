@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QDesktopServices>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFont>
@@ -4416,6 +4417,23 @@ public:
     }
 };
 
+//! Records file URLs that QML hands to Qt.openUrlExternally instead of
+//! launching the file manager.
+class MockFileUrlOpener : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE QUrl lastUrl() const { return m_last_url; }
+    Q_INVOKABLE void reset() { m_last_url.clear(); }
+
+public Q_SLOTS:
+    void openUrl(const QUrl& url) { m_last_url = url; }
+
+private:
+    QUrl m_last_url;
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4562,6 +4580,9 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("nodeModel"), &node_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testUrlOpener"), &url_opener);
+        static MockFileUrlOpener file_url_opener;
+        QDesktopServices::setUrlHandler(QStringLiteral("file"), &file_url_opener, "openUrl");
+        engine->rootContext()->setContextProperty(QStringLiteral("testFileUrlOpener"), &file_url_opener);
         engine->rootContext()->setContextProperty(QStringLiteral("peerTableModel"), &peer_table_model);
         engine->rootContext()->setContextProperty(QStringLiteral("networkTrafficTower"), &network_traffic_tower);
         engine->rootContext()->setContextProperty(QStringLiteral("testNetworkTrafficTower"), &network_traffic_tower);
