@@ -101,7 +101,6 @@ DesignSystemSection {
         qrForeground: "QR code modules",
         syntaxKey: "Keys in RPC console output",
         illustrationSignal: "Onboarding signal pulse",
-        illustrationLatestBlock: "Onboarding newest block",
         surface1BorderGradient: "Edge of raised surface1",
         surface2BorderGradient: "Edge of raised surface2",
         accentBorderGradient: "Edge of accent buttons",
