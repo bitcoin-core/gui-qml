@@ -192,12 +192,8 @@ DesignSystemSection {
             NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "SIGNET" } }
         }
         DesignSystemState {
-            label: "REGTEST, shorten: true"
-            NetworkIndicator {
-                textStyle: Theme.text.caption
-                shorten: true
-                chainModelRef: QtObject { readonly property string networkName: "REGTEST" }
-            }
+            label: "REGTEST"
+            NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "REGTEST" } }
         }
     }
 
