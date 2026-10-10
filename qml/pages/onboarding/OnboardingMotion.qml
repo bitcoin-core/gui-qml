@@ -40,9 +40,9 @@ Item {
     ]
     readonly property var signalLinks: [0, 1, 2, 3]
     readonly property color signalColor: "#F9D63C"
-    readonly property color latestBlockColor: "#ED6E46"
-    readonly property real clockSegmentGapMinutes: 6
-    readonly property int minutesPerDay: 24 * 60
+    // The block clock is a twelve-hour face showing the last twelve hours.
+    readonly property real clockSegmentGapMinutes: 2.4
+    readonly property int clockMinutes: 12 * 60
     readonly property int clockBlockCount: 24
     readonly property var clockSegments: makeClockSegments()
     readonly property var clockGroups: makeClockGroups()
@@ -57,7 +57,7 @@ Item {
             return seed / 4294967296
         }
         const durations = []
-        const averageMinutes = minutesPerDay / 2 / clockBlockCount
+        const averageMinutes = clockMinutes / clockBlockCount
         for (let i = 0; i < clockBlockCount / 2; ++i) {
             const minutes = averageMinutes * (7 + Math.floor(random() * 7)) / 10
             durations.push(minutes, 2 * averageMinutes - minutes)
@@ -77,9 +77,13 @@ Item {
         })
     }
     function clockSegmentColor(index) {
-        if (index === clockBlockCount - 1) return latestBlockColor
-        if (index >= clockBlockCount - 4) return Theme.color.orange
-        return signalColor
+        // As on the live dial: the six newest blocks use the confirmation
+        // palette, every older block is orange.
+        // The palette holds color strings; a transparent tint returns the same
+        // color as a value whose channels can be blended.
+        const age = clockBlockCount - 1 - index
+        return age < Theme.color.confirmationColors.length
+            ? Qt.tint(Theme.color.confirmationColors[age], "transparent") : Theme.color.orange
     }
     function makeClockGroups() {
         const groups = []
@@ -117,7 +121,7 @@ Item {
         return [112 + Math.cos(angle) * 91, 112 + Math.sin(angle) * 91]
     }
     function chainPoint(index) { return [26 + index * 19.1, 112] }
-    function minuteAngle(minutes) { return -Math.PI / 2 + minutes / minutesPerDay * 2 * Math.PI }
+    function minuteAngle(minutes) { return -Math.PI / 2 + minutes / clockMinutes * 2 * Math.PI }
     function clockPoint(index) {
         const group = clockGroups[index]
         const angle = minuteAngle((group.startMinute + group.endMinute) / 2)
@@ -125,20 +129,20 @@ Item {
     }
     function blockProgress() { return eased(clockProgress) }
     function blockBoundaryPoint(index, minute, side) {
-        // Grow the same straight chain into a half-day arc. Its leading edge,
-        // rather than the first block's center, lands exactly at midnight.
+        // Grow the same straight chain into the twelve-hour ring. Its leading
+        // edge, rather than the first block's center, lands at the top.
         const progress = blockProgress()
         const group = clockGroups[index]
         const sourceDistance = index * 19.1 + 12 * (minute - group.startMinute)
             / (group.endMinute - group.startMinute)
-        const targetDistance = minute / minutesPerDay * 2 * Math.PI * 91
+        const targetDistance = minute / clockMinutes * 2 * Math.PI * 91
         const distance = sourceDistance + (targetDistance - sourceDistance) * progress
-        const length = 183.9 + (Math.PI * 91 - 183.9) * progress
-        const curvature = Math.PI * progress / length
+        const length = 183.9 + (2 * Math.PI * 91 - 183.9) * progress
+        const curvature = 2 * Math.PI * progress / length
         const angle = distance * curvature
         const startX = 20 + 92 * progress
         const startY = 112 - 91 * progress - 16 * Math.sin(progress * Math.PI)
-        const thickness = side * (6 - 4 * progress)
+        const thickness = side * (6 - 3 * progress)
         return [startX + (curvature > 0.0001 ? Math.sin(angle) / curvature : distance)
                     - thickness * Math.sin(angle),
                 startY + (curvature > 0.0001 ? (1 - Math.cos(angle)) / curvature : 0)
@@ -152,11 +156,12 @@ Item {
         const progress = blockProgress()
         const group = clockGroups[index]
         const sourceScale = 12 / (group.endMinute - group.startMinute)
-        const targetScale = 2 * Math.PI * 91 / minutesPerDay
+        const targetScale = 2 * Math.PI * 91 / clockMinutes
         const scale = sourceScale + (targetScale - sourceScale) * progress
-        const radius = 1.2
+        // Chain tiles are rounded; dial segments have flat ends.
+        const radius = 1.2 * (1 - progress)
         const cornerMinutes = Math.min((endMinute - startMinute) / 3, radius / scale)
-        const cornerSide = radius / (6 - 4 * progress)
+        const cornerSide = radius / (6 - 3 * progress)
         function point(minute, side) { return blockBoundaryPoint(index, minute, side) }
         function line(minute, side) {
             const p = point(minute, side)
@@ -182,7 +187,7 @@ Item {
         corner(startMinute, -1, startMinute + cornerMinutes, -1)
         ctx.closePath()
         ctx.fillStyle = color
-        // Round inward, keeping the first edge exactly at midnight and all
+        // Round inward, keeping the first edge exactly at the top and all
         // corners inside their intervals rather than extending caps into gaps.
         ctx.fill()
     }
@@ -312,7 +317,7 @@ Item {
         id: networkLines
         anchors.fill: parent
         opacity: root.networkOpacity
-        property color ringColor: Theme.color.neutral3
+        property color ringColor: Theme.color.neutral2
         property color lineColor: Theme.color.neutral5
         property color activeLineColor: Theme.color.neutral6
         onRingColorChanged: requestPaint()
@@ -396,7 +401,7 @@ Item {
             ctx.beginPath()
             ctx.arc(112, 112, 91, 0, 2 * Math.PI)
             ctx.strokeStyle = ringColor
-            ctx.lineWidth = 4
+            ctx.lineWidth = 6
             ctx.stroke()
         }
     }
@@ -431,9 +436,9 @@ Item {
             onProgressChanged: requestPaint()
             onBlockColorChanged: requestPaint()
             readonly property color orangeColor: Theme.color.orange
-            readonly property color latestColor: root.latestBlockColor
+            readonly property var paletteColors: Theme.color.confirmationColors
             onOrangeColorChanged: requestPaint()
-            onLatestColorChanged: requestPaint()
+            onPaletteColorsChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
@@ -444,11 +449,14 @@ Item {
                     return
                 }
                 // Each large chain tile opens into its share of the 24 segments.
-                // Small gaps separate intervals without shifting the day's start.
+                // Small gaps separate intervals; wider ones at the top leave
+                // room for the hand that marks the current time.
                 for (let segmentIndex = group.first; segmentIndex < group.end; ++segmentIndex) {
                     const segment = root.clockSegments[segmentIndex]
-                    const start = segment.startMinute + (segmentIndex === 0 ? 0 : root.clockSegmentGapMinutes / 2 * split)
-                    const end = segment.endMinute - (segmentIndex === root.clockBlockCount - 1 ? 0 : root.clockSegmentGapMinutes / 2 * split)
+                    const startGap = segmentIndex === 0 ? 2 * root.clockSegmentGapMinutes : root.clockSegmentGapMinutes / 2
+                    const endGap = segmentIndex === root.clockBlockCount - 1 ? 2 * root.clockSegmentGapMinutes : root.clockSegmentGapMinutes / 2
+                    const start = segment.startMinute + startGap * split
+                    const end = segment.endMinute - endGap * split
                     const targetColor = root.clockSegmentColor(segmentIndex)
                     const segmentColor = Qt.rgba(
                         blockColor.r + (targetColor.r - blockColor.r) * split,
@@ -460,16 +468,59 @@ Item {
         }
     }
 
-    Image {
-        anchors.centerIn: parent
-        width: 182
-        height: 182
-        source: Theme.dark ? "qrc:/icons/onboarding-clock-face-dark.svg"
-            : "qrc:/icons/onboarding-clock-face-light.svg"
-        sourceSize.width: 400
-        sourceSize.height: 400
-        fillMode: Image.PreserveAspectFit
+    // The block clock's face: hour dots inside the ring, the hand at the
+    // current time and the block height. The ring at radius 91 stands for the
+    // dial's 88-unit track radius.
+    Item {
+        id: clockFace
+        objectName: "onboardingMotionClockFace"
+        anchors.fill: parent
         opacity: root.clockDetailsOpacity
+        readonly property real unit: 91 / 88
+
+        Repeater {
+            model: 12
+            delegate: Rectangle {
+                readonly property real dotRadius: (index % 3 === 0 ? 2 : 1.2) * clockFace.unit
+                readonly property real angle: index * Math.PI / 6
+                x: 112 + Math.sin(angle) * 74 * clockFace.unit - dotRadius
+                y: 112 - Math.cos(angle) * 74 * clockFace.unit - dotRadius
+                width: 2 * dotRadius
+                height: 2 * dotRadius
+                radius: dotRadius
+                color: Theme.color.neutral5
+            }
+        }
+
+        Rectangle {
+            objectName: "onboardingMotionClockHand"
+            width: 1.5 * clockFace.unit
+            height: 16 * clockFace.unit
+            radius: width / 2
+            x: 112 - width / 2
+            y: 112 - 96 * clockFace.unit
+            color: Theme.color.neutral9
+        }
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 2
+            CoreText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: Number(915420).toLocaleString(Qt.locale(), 'f', 0)
+                bold: true
+                wrap: false
+                font.pixelSize: 27
+                font.letterSpacing: -0.5
+            }
+            CoreText {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: qsTr("Last block 4 min ago")
+                wrap: false
+                font.pixelSize: 11
+                color: Theme.color.neutral7
+            }
+        }
     }
 
     SequentialAnimation {

@@ -100,7 +100,7 @@ TestCase {
         compare(tip[1], motion.clockPoint(9)[1])
     }
 
-    function test_clock_represents_half_a_day_from_midnight() {
+    function test_clock_represents_last_twelve_hours() {
         const motion = createTemporaryObject(stillMotion, this)
         const intervals = JSON.stringify(motion.clockSegments)
         compare(motion.clockSegments.length, 24)
@@ -114,21 +114,30 @@ TestCase {
             compare(segment.endMinute, elapsed)
         }
         compare(elapsed, 12 * 60)
+        // The six newest blocks use the confirmation palette, newest first.
         for (let i = 0; i < 24; ++i) {
-            compare(motion.clockSegmentColor(i), i === 23 ? motion.latestBlockColor
-                : i >= 20 ? Theme.color.orange : motion.signalColor)
+            const age = 23 - i
+            const color = motion.clockSegmentColor(i)
+            verify(Qt.colorEqual(color, age < 6 ? Theme.color.confirmationColors[age] : Theme.color.orange))
+            // Segments blend from the chain color channel by channel.
+            verify(!isNaN(color.r) && !isNaN(color.g) && !isNaN(color.b))
         }
         verify(lengths.size > 1)
         motion.toClock()
+        // Twelve hours make one full turn of the dial.
         compare(motion.minuteAngle(0), -Math.PI / 2)
-        compare(motion.minuteAngle(720), Math.PI / 2)
+        compare(motion.minuteAngle(360), Math.PI / 2)
+        compare(motion.minuteAngle(720), 3 * Math.PI / 2)
         for (const side of [-1, 0, 1]) {
-            const midnight = motion.blockBoundaryPoint(0, 0, side)
-            verify(Math.abs(midnight[0] - 112) < 0.0001)
-            verify(midnight[1] < 112)
-            const noon = motion.blockBoundaryPoint(9, 720, side)
-            verify(Math.abs(noon[0] - 112) < 0.0001)
-            verify(noon[1] > 112)
+            const start = motion.blockBoundaryPoint(0, 0, side)
+            verify(Math.abs(start[0] - 112) < 0.0001)
+            verify(start[1] < 112)
+            const half = motion.blockBoundaryPoint(4, 360, side)
+            verify(Math.abs(half[0] - 112) < 0.0001)
+            verify(half[1] > 112)
+            const end = motion.blockBoundaryPoint(9, 720, side)
+            verify(Math.abs(end[0] - 112) < 0.0001)
+            verify(end[1] < 112)
         }
         motion.backToBlocks()
         motion.toClock()
