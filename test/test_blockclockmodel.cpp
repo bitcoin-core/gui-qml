@@ -69,7 +69,7 @@ private Q_SLOTS:
     void currentTimeUsesNamedTwelveHourFraction();
     void unchangedSecondDoesNotRepublishCurrentTime();
     void blockArrivalRefreshesCurrentTime();
-    void blockHistoryPreservesEqualTimestampsAndPeriodBounds();
+    void blockHistoryPreservesEqualTimestampsAndWindowBounds();
     void initialHistoryCanArriveAfterTheModel();
     void historyInitializedBeforeModelIsPublished();
     void workerNotificationsPublishWithoutHistoryTimer();
@@ -87,6 +87,8 @@ private Q_SLOTS:
     void timerAlignsToNextMinute();
     void minuteTimerAdvancesWithoutBlockNotifications();
     void stoppedModelDoesNotConsumeHistoryOrRestartTimers();
+    void windowSlidesWithoutBlockNotifications();
+    void lastBlockAgeFollowsNewestBlockAndClock();
 };
 
 void BlockClockModelTests::currentTimeUsesNamedTwelveHourFraction()
@@ -131,23 +133,28 @@ void BlockClockModelTests::blockArrivalRefreshesCurrentTime()
                  (10830.0 / BlockClockModel::PERIOD_SECONDS)) < 0.000001);
 }
 
-void BlockClockModelTests::blockHistoryPreservesEqualTimestampsAndPeriodBounds()
+void BlockClockModelTests::blockHistoryPreservesEqualTimestampsAndWindowBounds()
 {
     auto history{std::make_shared<BlockClockHistory>()};
     BlockClockModel model{history, false, [] { return UtcTime(15); }};
     const qint64 start{model.periodStart()};
     QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
 
+    // At 15:00 the dial shows the last twelve hours, from 03:00.
+    const qint64 window_start{UtcTime(3).toSecsSinceEpoch()};
     history->initialize({
         {uint256{1}, start + 7200},
         {uint256{2}, start - 1},
         {uint256{3}, start + 3600},
         {uint256{4}, start + 7200},
         {uint256{5}, start + BlockClockModel::PERIOD_SECONDS},
+        {uint256{6}, window_start - 1},
     });
     QCoreApplication::processEvents();
 
-    const QList<qreal> expected{1.0 / 12.0, 2.0 / 12.0, 2.0 / 12.0};
+    // The previous period's block is negative; the block older than the
+    // window is dropped; the future-dated block waits at the current time.
+    const QList<qreal> expected{-1.0 / BlockClockModel::PERIOD_SECONDS, 1.0 / 12.0, 2.0 / 12.0, 2.0 / 12.0, 0.25};
     QCOMPARE(model.blockTimeFractions(), expected);
     QCOMPARE(history_spy.count(), 1);
     QCoreApplication::processEvents();
@@ -300,18 +307,26 @@ void BlockClockModelTests::cachedHistorySurvivesPeriodRollover()
         {uint256{3}, UtcTime(12, 1).toSecsSinceEpoch()},
     });
     QCoreApplication::processEvents();
-    QCOMPARE(model.blockTimeFractions(), QList<qreal>{11.5 / 12.0});
+    // Future-dated blocks wait at the current time.
+    const qreal now{43199.0 / 43200.0};
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{11.5 / 12.0, now, now}));
     QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
 
-    // Future-dated blocks already in the cache appear at noon without another
-    // block notification or any access to the chain.
+    // At noon the cached blocks move to the new period origin without another
+    // block notification or any access to the chain. The 11:30 block is still
+    // within the last twelve hours.
     current_time = UtcTime(12);
     model.updateCurrentTime(current_time);
 
     QCOMPARE(model.periodStart(), UtcTime(12).toSecsSinceEpoch());
-    const QList<qreal> expected{1.0 / 720.0, 1.0 / 720.0};
-    QCOMPARE(model.blockTimeFractions(), expected);
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{-0.5 / 12.0, 0.0, 0.0}));
     QCOMPARE(history_spy.count(), 1);
+
+    current_time = UtcTime(12, 2);
+    model.updateCurrentTime(current_time);
+    const QList<qreal> expected{-0.5 / 12.0, 1.0 / 720.0, 1.0 / 720.0};
+    QCOMPARE(model.blockTimeFractions(), expected);
+    QCOMPARE(history_spy.count(), 2);
 }
 
 void BlockClockModelTests::blockNotificationsAreCoalesced()
@@ -384,19 +399,20 @@ void BlockClockModelTests::disconnectRemovesOnlyTheMatchingBlock()
     QCoreApplication::processEvents();
     QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
 
-    // A replacement outside the displayed period still removes the former
-    // tip. Equal timestamps must not cause the other block to disappear.
+    // A replacement from the previous period removes the former tip and
+    // appears before noon. Equal timestamps must not cause the other block to
+    // disappear.
     DisconnectBlock(*history, 2, UtcTime(13).toSecsSinceEpoch());
     ConnectBlock(*history, 4, UtcTime(11).toSecsSinceEpoch());
     QCoreApplication::processEvents();
-    const QList<qreal> expected{1.0 / 12.0, 2.0 / 12.0};
+    const QList<qreal> expected{-1.0 / 12.0, 1.0 / 12.0, 2.0 / 12.0};
     QCOMPARE(model.blockTimeFractions(), expected);
     QCOMPARE(history_spy.count(), 1);
 
     DisconnectBlock(*history, 1, UtcTime(13).toSecsSinceEpoch());
     ConnectBlock(*history, 5, UtcTime(15).toSecsSinceEpoch());
     QCoreApplication::processEvents();
-    const QList<qreal> reorganized{2.0 / 12.0, 3.0 / 12.0};
+    const QList<qreal> reorganized{-1.0 / 12.0, 2.0 / 12.0, 3.0 / 12.0};
     QCOMPARE(model.blockTimeFractions(), reorganized);
     QCOMPARE(history_spy.count(), 2);
 }
@@ -426,7 +442,8 @@ void BlockClockModelTests::blockArrivalAtRolloverIsNotCountedTwice()
     const qint64 timestamp{UtcTime(12, 1).toSecsSinceEpoch()};
     history->initialize({{uint256{1}, timestamp}});
     QCoreApplication::processEvents();
-    QVERIFY(model.blockTimeFractions().isEmpty());
+    // The future-dated block waits at the current time.
+    QCOMPARE(model.blockTimeFractions(), QList<qreal>{719.0 / 720.0});
     QueuedDeliveryCounter queued;
     model.installEventFilter(&queued);
 
@@ -442,6 +459,7 @@ void BlockClockModelTests::blockArrivalAtRolloverIsNotCountedTwice()
     const QList<qreal> initial{1.0 / 720.0, 1.0 / 720.0};
     QCOMPARE(model.blockTimeFractions(), initial);
     QCOMPARE(queued.deliveries, 0);
+    current_time = UtcTime(12, 2);
     std::thread second_notification{[history] {
         ConnectBlock(*history, 3, UtcTime(12, 2).toSecsSinceEpoch());
     }};
@@ -562,6 +580,63 @@ void BlockClockModelTests::stoppedModelDoesNotConsumeHistoryOrRestartTimers()
     // Stopping the presentation does not own backend unregistration. The init
     // worker retires the independent subscription before appShutdown instead.
     QVERIFY(history->retentionStart().has_value());
+}
+
+void BlockClockModelTests::windowSlidesWithoutBlockNotifications()
+{
+    auto history{std::make_shared<BlockClockHistory>()};
+    QDateTime current_time{UtcTime(11, 59)};
+    BlockClockModel model{history, false, [&] { return current_time; }};
+    history->initialize({
+        {uint256{1}, UtcTime(1).toSecsSinceEpoch()},
+        {uint256{2}, UtcTime(11).toSecsSinceEpoch()},
+    });
+    QCoreApplication::processEvents();
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{1.0 / 12.0, 11.0 / 12.0}));
+    QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
+
+    // Noon moves the origin; both blocks are still within the last 12 hours.
+    current_time = UtcTime(12);
+    model.updateCurrentTime(current_time);
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{-11.0 / 12.0, -1.0 / 12.0}));
+    QCOMPARE(history_spy.count(), 1);
+
+    // A tick within the window does not republish the history.
+    current_time = UtcTime(12, 30);
+    model.updateCurrentTime(current_time);
+    QCOMPARE(history_spy.count(), 1);
+
+    // The 01:00 block leaves the dial once it is more than 12 hours old.
+    current_time = UtcTime(13, 30);
+    model.updateCurrentTime(current_time);
+    QCOMPARE(model.blockTimeFractions(), QList<qreal>{-1.0 / 12.0});
+    QCOMPARE(history_spy.count(), 2);
+}
+
+void BlockClockModelTests::lastBlockAgeFollowsNewestBlockAndClock()
+{
+    auto history{std::make_shared<BlockClockHistory>()};
+    QDateTime current_time{UtcTime(15)};
+    BlockClockModel model{history, false, [&] { return current_time; }};
+    QCOMPARE(model.lastBlockAge(), qint64{-1});
+    QSignalSpy age_spy{&model, &BlockClockModel::lastBlockAgeChanged};
+
+    history->initialize({
+        {uint256{1}, UtcTime(14, 40).toSecsSinceEpoch()},
+        {uint256{2}, UtcTime(14, 50).toSecsSinceEpoch()},
+    });
+    QCoreApplication::processEvents();
+    QCOMPARE(model.lastBlockAge(), qint64{600});
+
+    current_time = UtcTime(15, 5);
+    model.updateCurrentTime(current_time);
+    QCOMPARE(model.lastBlockAge(), qint64{900});
+
+    // A miner timestamp ahead of the local clock is not a negative age.
+    ConnectBlock(*history, 3, UtcTime(15, 7).toSecsSinceEpoch());
+    QCoreApplication::processEvents();
+    QCOMPARE(model.lastBlockAge(), qint64{0});
+    QCOMPARE(age_spy.count(), 3);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN
