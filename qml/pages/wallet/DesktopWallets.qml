@@ -243,8 +243,7 @@ Page {
         rightItem: RowLayout {
             spacing: 5
             NetworkIndicator {
-                textSize: 11
-                shorten: true
+                Layout.alignment: Qt.AlignVCenter
             }
             NavigationTab {
                 id: blockClockTabButton

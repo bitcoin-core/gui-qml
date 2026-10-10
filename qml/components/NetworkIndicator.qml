@@ -9,34 +9,60 @@ import "../components"
 
 import org.bitcoincore.qt 1.0
 
-Button {
+// Outlined chip naming the network when it is not mainnet.
+AbstractButton {
     id: root
-    property color bgColor
-    property bool shorten: false
+    property color chainColor: Theme.color.neutral4
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
-    property int textSize: 15
-    topPadding: 2
-    bottomPadding: 2
-    leftPadding: 7
-    rightPadding: 7
+    property int textSize: 13
+    implicitHeight: 28
+    implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
+    leftPadding: 10
+    rightPadding: 10
+    hoverEnabled: AppMode.isDesktop
+    focusPolicy: Qt.NoFocus
+    Accessible.name: text
+    Accessible.description: tooltip.text
     state: show && root.chainModelRef !== null ? root.chainModelRef.networkName : "MAIN"
-    contentItem: CoreText {
-        text: root.text
-        font.pixelSize: root.textSize
-        color: Theme.color.white
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
+    contentItem: Row {
+        spacing: 6
+        Rectangle {
+            objectName: "networkIndicatorDot"
+            anchors.verticalCenter: parent.verticalCenter
+            width: 8
+            height: 8
+            radius: 4
+            color: root.chainColor
+        }
+        CoreText {
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.text
+            bold: true
+            wrap: false
+            font.pixelSize: root.textSize
+        }
     }
     background: Rectangle {
-        id: bg
-        color: root.bgColor
-        radius: 2
+        color: "transparent"
+        radius: height / 2
+        border.width: 1
+        border.color: root.chainColor
 
-        Behavior on color {
+        Behavior on border.color {
             ColorAnimation { duration: 150 }
         }
     }
+
+    Tooltip {
+        id: tooltip
+        anchors.top: root.bottom
+        anchors.topMargin: 8
+        anchors.horizontalCenter: root.horizontalCenter
+        shown: root.hovered
+        text: qsTr("This node is not on the main Bitcoin network")
+    }
+
     states: [
         State {
             name: "MAIN"
@@ -50,8 +76,8 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet") : qsTr("Test Network")
-                bgColor: Theme.color.green
+                text: qsTr("Testnet")
+                chainColor: Theme.color.green
             }
         },
         State {
@@ -59,8 +85,8 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet4") : qsTr("Test Network (v4)")
-                bgColor: Theme.color.green
+                text: qsTr("Testnet4")
+                chainColor: Theme.color.green
             }
         },
         State {
@@ -68,8 +94,8 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Signet") : qsTr("Signet Network")
-                bgColor: Theme.color.amber
+                text: qsTr("Signet")
+                chainColor: Theme.color.purple
             }
         },
         State {
@@ -77,8 +103,8 @@ Button {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Regtest") : qsTr("Regtest Mode")
-                bgColor: Theme.color.blue
+                text: qsTr("Regtest")
+                chainColor: Theme.color.blue
             }
         }
     ]
