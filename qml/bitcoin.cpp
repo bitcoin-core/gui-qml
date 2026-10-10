@@ -684,7 +684,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         if (!node->baseInitialize()) return false;
 
         // Use Qt's effective settings identity with the resolved network, before
-        // any window-behavior model reads it. This also works on the onboarding worker.
+        // any model reads it. This also works on the onboarding worker.
         if (gArgs.IsArgSet("-resetguisettings")) {
             const QSettings defaults;
             QSettings settings{defaults.format(), defaults.scope(), defaults.organizationName(),
@@ -692,6 +692,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
             settings.remove(QStringLiteral("fHideTrayIcon"));
             settings.remove(QStringLiteral("fMinimizeToTray"));
             settings.remove(QStringLiteral("fMinimizeOnClose"));
+            settings.remove(QString::fromLatin1(SettingsKeys::DISMISSED_WARNINGS));
             settings.sync();
             if (settings.status() != QSettings::NoError) InitWarning(Untranslated(QObject::tr("Unable to save window settings after reset.").toStdString()));
         }
@@ -728,6 +729,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
     const bool wallet_enabled = WalletEnabledFromArgs();
     app_mode.setWalletEnabled(wallet_enabled);
+
+    // The config file may select the network, and NodeModel reads per-network settings.
+    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
 
     constexpr bool backend_ready{false};
     NodeModel node_model{*node, backend_ready};
@@ -798,7 +802,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
     ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
     BlockClockModel block_clock_model{block_clock_history};
-    setupChainQSettings(&app, chain_model.networkName());
+    block_clock_model.setTipTime(node_model.blockTipTime());
+    QObject::connect(&node_model, &NodeModel::blockTipTimeChanged, &block_clock_model, &BlockClockModel::setTipTime);
 
 
 
