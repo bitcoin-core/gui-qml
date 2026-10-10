@@ -146,6 +146,11 @@ Page {
         blockClockTabButton.checked = true
     }
 
+    function openNodeDetails() {
+        blockClockTabButton.checked = true
+        blockClockDetails.open()
+    }
+
     // Show a wallet's Activity, as long as that wallet is still open.
     function openWallet(wallet) {
         if (!wallet || wallet.available === false || walletController.openWallets.indexOf(wallet) < 0) return
@@ -478,19 +483,47 @@ Page {
 
             Item {
                 id: blockClockTab
-                NodeStatusActions {
+                NodeBanner {
+                    id: blockClockBanner
                     anchors.top: parent.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    z: 2
+                }
+                NodeStatusBar {
+                    id: blockClockStatusBar
+                    anchors.top: blockClockBanner.bottom
                     anchors.right: parent.right
                     anchors.topMargin: 16
                     anchors.rightMargin: 16
                     z: 2
+                    onRouteRequested: function(action) {
+                        root.openSettingsRoute(action === "debugLog" ? "debug-log" : "connection")
+                    }
+                    onWarningsRequested: blockClockWarnings.open()
                 }
                 BlockClock {
                     parentWidth: blockClockTab.width - 40
                     parentHeight: blockClockTab.height
                     anchors.centerIn: blockClockTab
                     showNetworkIndicator: false
+                    showDetailsLink: true
                     renderingActive: root.visible && blockClockTabButton.checked
+                    onDetailsRequested: blockClockDetails.open()
+                    onWarningsRequested: blockClockWarnings.open()
+                }
+                NodeWarningsPopup {
+                    id: blockClockWarnings
+                }
+                NodeDetailsPopup {
+                    id: blockClockDetails
+                    onActionTriggered: function(action) { blockClockStatusBar.trigger(action) }
+                }
+                NewBlockToast {
+                    anchors.horizontalCenter: blockClockTab.horizontalCenter
+                    anchors.bottom: blockClockTab.bottom
+                    anchors.bottomMargin: 72
+                    active: root.visible && blockClockTabButton.checked
                 }
             }
             PeersView {
