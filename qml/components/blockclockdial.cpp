@@ -111,6 +111,11 @@ qreal BlockClockDial::decrementGradientAngle(qreal angle) const
 
 qreal BlockClockDial::getTargetAnimationAngle() const
 {
+    if (m_layered_rings) {
+        // Layered blocks reveal the whole twelve-hour window, oldest first.
+        if (connected() && !synced()) return qMax(m_header_progress, m_block_progress) * 360;
+        return 360;
+    }
     if (connected() && synced()) {
         return m_current_time_fraction * 360;
     } else if (connected()) {
@@ -152,7 +157,9 @@ void BlockClockDial::advanceAnimation()
         }
     } else {
         m_animating_max_angle = qMin<qreal>(360.0, m_animating_max_angle + 4.0);
-        if (m_animating_max_angle >= m_connecting_end_angle * -1) {
+        // The layered spinner turns from its first frame, about once every
+        // 1.4 seconds at the 16 ms frame interval.
+        if (m_layered_rings || m_animating_max_angle >= m_connecting_end_angle * -1) {
             m_connecting_start_angle = decrementGradientAngle(m_connecting_start_angle);
         }
     }
@@ -225,7 +232,7 @@ void BlockClockDial::setCurrentTimeFraction(qreal fraction)
 
 void BlockClockDial::setBlockTimeFractions(QList<qreal> fractions)
 {
-    for (qreal& fraction : fractions) fraction = qBound<qreal>(0.0, fraction, 1.0);
+    for (qreal& fraction : fractions) fraction = qBound<qreal>(-1.0, fraction, 1.0);
     std::sort(fractions.begin(), fractions.end());
     if (m_block_time_fractions == fractions) return;
     m_block_time_fractions = std::move(fractions);
@@ -369,6 +376,58 @@ void BlockClockDial::setTimeTickColor(QColor color)
     m_time_tick_color = color;
     requestRepaint();
 }
+
+void BlockClockDial::setColor(QColor& member, const QColor& color)
+{
+    if (member == color) return;
+    member = color;
+    requestRepaint();
+}
+
+void BlockClockDial::setLayeredRings(bool layered_rings)
+{
+    if (m_layered_rings == layered_rings) return;
+    m_layered_rings = layered_rings;
+    syncAnimationState();
+    requestRepaint();
+}
+
+void BlockClockDial::setHeaderProgress(double progress)
+{
+    progress = qBound(0.0, progress, 1.0);
+    if (qFuzzyCompare(m_header_progress + 1.0, progress + 1.0)) return;
+    m_header_progress = progress;
+    syncAnimationState();
+    requestRepaint();
+}
+
+void BlockClockDial::setBlockProgress(double progress)
+{
+    progress = qBound(0.0, progress, 1.0);
+    if (qFuzzyCompare(m_block_progress + 1.0, progress + 1.0)) return;
+    m_block_progress = progress;
+    syncAnimationState();
+    requestRepaint();
+}
+
+void BlockClockDial::setDimmed(bool dimmed)
+{
+    if (m_dimmed == dimmed) return;
+    m_dimmed = dimmed;
+    requestRepaint();
+}
+
+void BlockClockDial::setFaulted(bool faulted)
+{
+    if (m_faulted == faulted) return;
+    m_faulted = faulted;
+    requestRepaint();
+}
+
+void BlockClockDial::setHeaderProgressColor(QColor color) { setColor(m_header_progress_color, color); }
+void BlockClockDial::setProgressColor(QColor color) { setColor(m_progress_color, color); }
+void BlockClockDial::setHandColor(QColor color) { setColor(m_hand_color, color); }
+void BlockClockDial::setDimmedColor(QColor color) { setColor(m_dimmed_color, color); }
 
 QRectF BlockClockDial::getBoundsForPen(const QPen & pen)
 {
@@ -652,12 +711,136 @@ void BlockClockDial::paintTimeTicks(QPainter * painter)
     }
 }
 
+QRectF BlockClockDial::circleBounds(qreal radius) const
+{
+    const QPointF center{boundingRect().center()};
+    return {center.x() - radius, center.y() - radius, radius * 2, radius * 2};
+}
+
+void BlockClockDial::paintLayeredBlocks(QPainter* painter, qreal unit)
+{
+    const QList<qreal>& blocks{m_block_time_fractions};
+    const qreal current{m_current_time_fraction};
+    const bool reveal{connected() && !paused() && m_animate_dial};
+    const qreal visible_end{reveal ? current - 1.0 + qBound<qreal>(0.0, m_animating_max_angle / 360.0, 1.0) : current};
+    // Each segment leaves 0.6 degrees free at both ends so neighbouring
+    // blocks stay distinct at every size.
+    constexpr qreal half_gap{0.6 / 360.0};
+    const QRectF bounds{circleBounds(88 * unit)};
+
+    QPen pen;
+    pen.setWidthF(6 * unit);
+    pen.setCapStyle(Qt::FlatCap);
+    for (qsizetype i{1}; i < blocks.size(); ++i) {
+        const qreal start{qMax(blocks.at(i - 1), current - 1.0) + half_gap};
+        const qreal end{qMin(blocks.at(i), visible_end) - half_gap};
+        if (blocks.at(i - 1) >= visible_end) break;
+        if (end <= start) continue;
+
+        // The newest interval has one confirmation and uses the first color.
+        const qsizetype age{blocks.size() - 1 - i};
+        if (m_dimmed) {
+            pen.setColor(m_dimmed_color);
+        } else if (age < m_confirmation_colors.size()) {
+            pen.setColor(m_confirmation_colors.at(age));
+        } else {
+            pen.setColor(m_progress_color);
+        }
+        painter->setPen(pen);
+        painter->drawArc(bounds, qRound((90 - 360 * start) * 16), qRound(-360 * (end - start) * 16));
+    }
+
+    QPen hand_pen{m_dimmed ? m_time_tick_color : m_hand_color};
+    hand_pen.setWidthF(1.5 * unit);
+    hand_pen.setCapStyle(Qt::RoundCap);
+    painter->setPen(hand_pen);
+    const qreal angle{qDegreesToRadians(current * 360)};
+    const QPointF center{boundingRect().center()};
+    const QPointF direction{qSin(angle), -qCos(angle)};
+    painter->drawLine(center + direction * 80 * unit, center + direction * 96 * unit);
+}
+
+void BlockClockDial::paintLayeredProgress(QPainter* painter, qreal unit)
+{
+    const bool reveal{connected() && !paused() && m_animate_dial};
+    const auto span{[&](double progress) {
+        return reveal ? qMin(progress * 360, m_animating_max_angle) : progress * 360;
+    }};
+
+    QPen header_pen{m_background_color};
+    header_pen.setWidthF(2.5 * unit);
+    header_pen.setCapStyle(Qt::RoundCap);
+    const QRectF header_bounds{circleBounds(81 * unit)};
+    painter->setPen(header_pen);
+    painter->drawEllipse(header_bounds);
+    if (m_header_progress > 0) {
+        header_pen.setColor(m_dimmed ? m_dimmed_color : m_header_progress_color);
+        painter->setPen(header_pen);
+        painter->drawArc(header_bounds, 90 * 16, qRound(-span(m_header_progress) * 16));
+    }
+
+    if (m_block_progress > 0) {
+        QPen block_pen{m_dimmed ? m_time_tick_color : m_progress_color};
+        block_pen.setWidthF(6 * unit);
+        block_pen.setCapStyle(Qt::RoundCap);
+        painter->setPen(block_pen);
+        painter->drawArc(circleBounds(88 * unit), 90 * 16, qRound(-span(m_block_progress) * 16));
+    }
+}
+
+void BlockClockDial::paintLayered(QPainter* painter)
+{
+    // Geometry follows the 200-unit design canvas: track radius 88, hour
+    // dots at radius 74, header ring at 81 and the hand from 80 to 96.
+    const qreal unit{qMin(width(), height()) / 200.0};
+    const QPointF center{boundingRect().center()};
+
+    QPen track_pen{m_background_color};
+    track_pen.setWidthF(6 * unit);
+    painter->setPen(track_pen);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawEllipse(circleBounds(88 * unit));
+
+    if (showTimeTicks()) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(m_time_tick_color);
+        for (int hour{0}; hour < 12; ++hour) {
+            const qreal angle{qDegreesToRadians(hour * 30.0)};
+            const qreal radius{(hour % 3 == 0 ? 2.0 : 1.2) * unit};
+            const QPointF dot{center + QPointF{qSin(angle), -qCos(angle)} * 74 * unit};
+            painter->drawEllipse(dot, radius, radius);
+        }
+        painter->setBrush(Qt::NoBrush);
+    }
+
+    if (m_faulted) return;
+
+    if (synced()) {
+        paintLayeredBlocks(painter, unit);
+    } else if (m_header_progress > 0 || m_block_progress > 0) {
+        paintLayeredProgress(painter, unit);
+    }
+
+    if (!connected() && !paused() && m_animation_timer.isActive()) {
+        QPen spinner_pen{m_hand_color};
+        spinner_pen.setWidthF(6 * unit);
+        spinner_pen.setCapStyle(Qt::RoundCap);
+        painter->setPen(spinner_pen);
+        painter->drawArc(circleBounds(88 * unit), qRound((m_connecting_start_angle + 18) * 16), -36 * 16);
+    }
+}
+
 void BlockClockDial::paint(QPainter * painter)
 {
     if (width() <= 0 || height() <= 0) {
         return;
     }
     painter->setRenderHint(QPainter::Antialiasing);
+
+    if (m_layered_rings) {
+        paintLayered(painter);
+        return;
+    }
 
     paintBackground(painter);
     if (showTimeTicks()) {

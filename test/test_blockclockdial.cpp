@@ -114,6 +114,68 @@ void VerifyDialColor(const QImage& image, qreal fraction, const QColor& expected
                             .arg(fraction)
                             .arg(actual.name(QColor::HexArgb))));
 }
+constexpr int LAYERED_SIZE{200};
+const QColor TICK_COLOR{QStringLiteral("#787878")};
+const QColor DIMMED_COLOR{QStringLiteral("#5C5C5C")};
+const QColor HEADER_COLOR{QStringLiteral("#3CA3DE")};
+const QColor PROGRESS_COLOR{QStringLiteral("#F89B2A")};
+const QColor HAND_COLOR{QStringLiteral("#FFFFFF")};
+
+void ConfigureLayeredDial(BlockClockDial& dial)
+{
+    dial.setWidth(LAYERED_SIZE);
+    dial.setHeight(LAYERED_SIZE);
+    dial.setLayeredRings(true);
+    dial.setAnimateDial(false);
+    dial.setBackgroundColor(BACKGROUND_COLOR);
+    dial.setConfirmationColors(CONFIRMATION_COLORS);
+    dial.setTimeTickColor(TICK_COLOR);
+    dial.setDimmedColor(DIMMED_COLOR);
+    dial.setHeaderProgressColor(HEADER_COLOR);
+    dial.setProgressColor(PROGRESS_COLOR);
+    dial.setHandColor(HAND_COLOR);
+}
+
+QImage RenderLayeredDial(BlockClockDial& dial)
+{
+    QImage image{LAYERED_SIZE, LAYERED_SIZE, QImage::Format_ARGB32_Premultiplied};
+    image.fill(Qt::transparent);
+
+    QPainter painter{&image};
+    dial.paint(&painter);
+    return image;
+}
+
+// Sample the layered design canvas, where the dial is 200 units across.
+QColor LayeredPixel(const QImage& image, qreal fraction, qreal radius)
+{
+    const qreal angle{fraction * 2.0 * M_PI};
+    return image.pixelColor(QPoint{qFloor(100 + qSin(angle) * radius), qFloor(100 - qCos(angle) * radius)});
+}
+
+void VerifyLayeredColor(const QImage& image, qreal fraction, qreal radius, const QColor& expected)
+{
+    const QColor actual{LayeredPixel(image, fraction, radius)};
+    // The 1.5-unit hand covers at most three quarters of a pixel.
+    QVERIFY2(ColorDistance(actual, expected) < 20 && actual.alpha() > 150,
+             qPrintable(QStringLiteral("expected %1 at %2 radius %3, got %4")
+                            .arg(expected.name(QColor::HexArgb))
+                            .arg(fraction)
+                            .arg(radius)
+                            .arg(actual.name(QColor::HexArgb))));
+}
+
+int CountLayeredPixels(const QImage& image, const QColor& color)
+{
+    int count{0};
+    for (int y{0}; y < image.height(); ++y) {
+        for (int x{0}; x < image.width(); ++x) {
+            const QColor pixel{image.pixelColor(x, y)};
+            if (pixel.alpha() > 200 && ColorDistance(pixel, color) < 20) ++count;
+        }
+    }
+    return count;
+}
 } // namespace
 
 class BlockClockDialTests : public QObject
@@ -139,6 +201,11 @@ private Q_SLOTS:
     void coalescedBlocksSaturateAtHighestConfirmationColor();
     void blocksCoalescedWithCurrentTimePreserveConfirmationDepth();
     void blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth();
+    void layeredBlocksSpanLastTwelveHoursByRecency();
+    void layeredBlocksBeyondPaletteUseProgressColor();
+    void layeredProgressShowsHeaderAndBlockRings();
+    void layeredDimmedAndFaultedStates();
+    void layeredSpinnerTurnsWhileConnecting();
 };
 
 void BlockClockDialTests::ibdProgressRendersImmediateHalfArc()
@@ -471,6 +538,106 @@ void BlockClockDialTests::blocksCoalescedWithPeriodStartDoNotShiftVisibleDepth()
     const QImage image{RenderDial(dial)};
     VerifyDialColor(image, 0.125, CONFIRMATION_COLORS[1]);
     VerifyDialColor(image, 0.50, CONFIRMATION_COLORS[0]);
+}
+
+void BlockClockDialTests::layeredBlocksSpanLastTwelveHoursByRecency()
+{
+    BlockClockDial dial;
+    ConfigureLayeredDial(dial);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+    // Negative fractions are blocks from the previous period.
+    dial.setBlockTimeFractions({-0.2, 0.0, 0.2, 0.4, 0.6});
+
+    const QImage image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(image, 0.90, 88, CONFIRMATION_COLORS[3]);
+    VerifyLayeredColor(image, 0.10, 88, CONFIRMATION_COLORS[2]);
+    VerifyLayeredColor(image, 0.30, 88, CONFIRMATION_COLORS[1]);
+    VerifyLayeredColor(image, 0.50, 88, CONFIRMATION_COLORS[0]);
+    // The time since the newest block is not a segment yet.
+    VerifyLayeredColor(image, 0.68, 88, BACKGROUND_COLOR);
+    // The hand marks the current time outside the track.
+    VerifyLayeredColor(image, 0.75, 94, HAND_COLOR);
+    // Hour dots sit inside the track.
+    VerifyLayeredColor(image, 0.25, 74, TICK_COLOR);
+}
+
+void BlockClockDialTests::layeredBlocksBeyondPaletteUseProgressColor()
+{
+    BlockClockDial dial;
+    ConfigureLayeredDial(dial);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(0.95);
+    dial.setBlockTimeFractions({0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8});
+
+    const QImage image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(image, 0.05, 88, PROGRESS_COLOR);
+    VerifyLayeredColor(image, 0.15, 88, PROGRESS_COLOR);
+    VerifyLayeredColor(image, 0.25, 88, CONFIRMATION_COLORS[5]);
+    VerifyLayeredColor(image, 0.75, 88, CONFIRMATION_COLORS[0]);
+}
+
+void BlockClockDialTests::layeredProgressShowsHeaderAndBlockRings()
+{
+    BlockClockDial dial;
+    ConfigureLayeredDial(dial);
+    dial.setConnected(true);
+    dial.setSynced(false);
+    dial.setHeaderProgress(1.0);
+    dial.setBlockProgress(0.5);
+
+    const QImage image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(image, 0.25, 88, PROGRESS_COLOR);
+    VerifyLayeredColor(image, 0.75, 88, BACKGROUND_COLOR);
+    VerifyLayeredColor(image, 0.75, 81, HEADER_COLOR);
+
+    dial.setHeaderProgress(0.25);
+    dial.setBlockProgress(0.0);
+    const QImage headers_image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(headers_image, 0.125, 81, HEADER_COLOR);
+    VerifyLayeredColor(headers_image, 0.50, 81, BACKGROUND_COLOR);
+    QCOMPARE(CountLayeredPixels(headers_image, PROGRESS_COLOR), 0);
+}
+
+void BlockClockDialTests::layeredDimmedAndFaultedStates()
+{
+    BlockClockDial dial;
+    ConfigureLayeredDial(dial);
+    dial.setConnected(true);
+    dial.setSynced(true);
+    dial.setCurrentTimeFraction(0.75);
+    dial.setBlockTimeFractions({0.2, 0.4, 0.6});
+    dial.setDimmed(true);
+
+    const QImage dimmed_image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(dimmed_image, 0.50, 88, DIMMED_COLOR);
+    VerifyLayeredColor(dimmed_image, 0.75, 94, TICK_COLOR);
+    QCOMPARE(CountConfirmationPixels(dimmed_image), 0);
+
+    dial.setDimmed(false);
+    dial.setFaulted(true);
+    const QImage faulted_image{RenderLayeredDial(dial)};
+    VerifyLayeredColor(faulted_image, 0.50, 88, BACKGROUND_COLOR);
+    QCOMPARE(CountLayeredPixels(faulted_image, HAND_COLOR), 0);
+}
+
+void BlockClockDialTests::layeredSpinnerTurnsWhileConnecting()
+{
+    TestableBlockClockDial dial;
+    ConfigureLayeredDial(dial);
+    dial.setAnimateDial(true);
+    dial.setConnected(false);
+    dial.setConnectingAnimationDelayMs(0);
+    dial.complete();
+
+    QTRY_VERIFY_WITH_TIMEOUT(CountLayeredPixels(RenderLayeredDial(dial), HAND_COLOR) > 0, 250);
+    const QImage first{RenderLayeredDial(dial)};
+    QTRY_VERIFY_WITH_TIMEOUT(RenderLayeredDial(dial) != first, 250);
+
+    dial.setPaused(true);
+    QCOMPARE(CountLayeredPixels(RenderLayeredDial(dial), HAND_COLOR), 0);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

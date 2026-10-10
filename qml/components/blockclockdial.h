@@ -21,13 +21,21 @@
  * separate rounded segments are coalesced without losing their block count;
  * the resulting segment records both confirmation depths and paints the skipped
  * transitions as a continuous gradient.
+ *
+ * With layeredRings set, the dial instead paints the widget design: a track
+ * with twelve hour dots inside it, block segments between consecutive blocks
+ * of the last twelve hours with a hand at the current time, and, while
+ * syncing, block progress on the track with header progress on a thin inner
+ * ring. In this mode block fractions are chronological and may be negative,
+ * for blocks of the previous period, and the ring geometry scales with the
+ * item instead of following penWidth.
  */
 class BlockClockDial : public QQuickPaintedItem
 {
     Q_OBJECT
     /** Current position through the local twelve-hour period, in [0, 1]. */
     Q_PROPERTY(qreal currentTimeFraction READ currentTimeFraction WRITE setCurrentTimeFraction)
-    /** Sorted block positions through the same period, each in [0, 1]. */
+    /** Sorted block positions relative to the same period, each in [-1, 1]. */
     Q_PROPERTY(QList<qreal> blockTimeFractions READ blockTimeFractions WRITE setBlockTimeFractions)
     /** Progress of the synchronization phase currently presented by the dial. */
     Q_PROPERTY(double syncProgress READ syncProgress WRITE setSyncProgress)
@@ -45,6 +53,19 @@ class BlockClockDial : public QQuickPaintedItem
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor)
     Q_PROPERTY(QList<QColor> confirmationColors READ confirmationColors WRITE setConfirmationColors )
     Q_PROPERTY(QColor timeTickColor READ timeTickColor WRITE setTimeTickColor)
+    Q_PROPERTY(bool layeredRings READ layeredRings WRITE setLayeredRings)
+    /** Layered mode: header download progress on the inner ring, in [0, 1]. */
+    Q_PROPERTY(double headerProgress READ headerProgress WRITE setHeaderProgress)
+    /** Layered mode: block verification progress on the track, in [0, 1]. */
+    Q_PROPERTY(double blockProgress READ blockProgress WRITE setBlockProgress)
+    /** Layered mode: grey out rings and the hand while the node is not live. */
+    Q_PROPERTY(bool dimmed READ dimmed WRITE setDimmed)
+    /** Layered mode: show only the track and hour dots. */
+    Q_PROPERTY(bool faulted READ faulted WRITE setFaulted)
+    Q_PROPERTY(QColor headerProgressColor READ headerProgressColor WRITE setHeaderProgressColor)
+    Q_PROPERTY(QColor progressColor READ progressColor WRITE setProgressColor)
+    Q_PROPERTY(QColor handColor READ handColor WRITE setHandColor)
+    Q_PROPERTY(QColor dimmedColor READ dimmedColor WRITE setDimmedColor)
 
 public:
     explicit BlockClockDial(QQuickItem * parent = nullptr);
@@ -68,6 +89,15 @@ public:
     QColor backgroundColor() const { return m_background_color; };
     QList<QColor> confirmationColors() const { return m_confirmation_colors; };
     QColor timeTickColor() const { return m_time_tick_color; };
+    bool layeredRings() const { return m_layered_rings; }
+    double headerProgress() const { return m_header_progress; }
+    double blockProgress() const { return m_block_progress; }
+    bool dimmed() const { return m_dimmed; }
+    bool faulted() const { return m_faulted; }
+    QColor headerProgressColor() const { return m_header_progress_color; }
+    QColor progressColor() const { return m_progress_color; }
+    QColor handColor() const { return m_hand_color; }
+    QColor dimmedColor() const { return m_dimmed_color; }
 
 public Q_SLOTS:
     void setCurrentTimeFraction(qreal fraction);
@@ -87,6 +117,15 @@ public Q_SLOTS:
     void setBackgroundColor(QColor color);
     void setConfirmationColors(QList<QColor> colorList);
     void setTimeTickColor(QColor color);
+    void setLayeredRings(bool layered_rings);
+    void setHeaderProgress(double progress);
+    void setBlockProgress(double progress);
+    void setDimmed(bool dimmed);
+    void setFaulted(bool faulted);
+    void setHeaderProgressColor(QColor color);
+    void setProgressColor(QColor color);
+    void setHandColor(QColor color);
+    void setDimmedColor(QColor color);
 
 Q_SIGNALS:
     void scaleChanged();
@@ -112,6 +151,11 @@ private:
     void paintBlocks(QPainter * painter);
     void paintBackground(QPainter * painter);
     void paintTimeTicks(QPainter * painter);
+    void paintLayered(QPainter* painter);
+    void paintLayeredBlocks(QPainter* painter, qreal unit);
+    void paintLayeredProgress(QPainter* painter, qreal unit);
+    QRectF circleBounds(qreal radius) const;
+    void setColor(QColor& member, const QColor& color);
     QRectF getBoundsForPen(const QPen & pen);
     double degreesPerPixel();
     qreal degreesForArcPixels(qreal pixels, const QRectF& bounds) const;
@@ -153,6 +197,15 @@ private:
     const qreal m_connecting_end_angle = -180;
     QList<QColor> m_confirmation_colors{};
     QColor m_time_tick_color{"#000000"};
+    bool m_layered_rings{false};
+    double m_header_progress{0.0};
+    double m_block_progress{0.0};
+    bool m_dimmed{false};
+    bool m_faulted{false};
+    QColor m_header_progress_color{"#3CA3DE"};
+    QColor m_progress_color{"#F89B2A"};
+    QColor m_hand_color{"#FFFFFF"};
+    QColor m_dimmed_color{"#5C5C5C"};
     QTimer m_animation_timer;
     QTimer m_delay_timer;
     QMetaObject::Connection m_window_visibility_connection;

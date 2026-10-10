@@ -21,4 +21,13 @@ Item {
     property color backgroundColor: "transparent"
     property var confirmationColors: []
     property color timeTickColor: "transparent"
+    property bool layeredRings: false
+    property real headerProgress: 0
+    property real blockProgress: 0
+    property bool dimmed: false
+    property bool faulted: false
+    property color headerProgressColor: "transparent"
+    property color progressColor: "transparent"
+    property color handColor: "transparent"
+    property color dimmedColor: "transparent"
 }
