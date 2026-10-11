@@ -202,6 +202,7 @@ private Q_SLOTS:
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
     void renderedTextMatchesPlainContent();
+    void rowsOfOneReplyShareAnEntry();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -531,6 +532,26 @@ void RpcConsoleModelTests::renderedTextMatchesPlainContent()
     auto* out = model.outputModel();
     QVERIFY(joinRows(out, roleForName(out, "plainContent"), 1)
                 .contains(QStringLiteral("\"two  spaces needle\"")));
+}
+
+void RpcConsoleModelTests::rowsOfOneReplyShareAnEntry()
+{
+    JsonReplyNode mock;
+    RpcConsoleModel model{mock};
+    auto* out = model.outputModel();
+    const int entry_role = roleForName(out, "entry");
+    QVERIFY(entry_role != -1);
+    const auto entry = [&](int row) { return out->data(out->index(row, 0), entry_role).toInt(); };
+
+    submitAndSettle(model, "getsomething");
+    submitAndSettle(model, "getsomething");
+    // Per command: the request row, then `{`, three key lines and `}`.
+    QCOMPARE(out->rowCount(), 12);
+    for (int row = 2; row < 6; ++row) QCOMPARE(entry(row), entry(1));
+    QVERIFY(entry(1) != entry(0));
+    QVERIFY(entry(6) != entry(1));
+    QVERIFY(entry(7) != entry(6));
+    QCOMPARE(entry(11), entry(7));
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()

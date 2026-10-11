@@ -29,7 +29,8 @@ class RpcConsoleWorker;
  * Rows are capped at kMaxRows — the oldest are dropped when the cap is hit.
  *
  * Each row carries the content twice: contentHtml for rendering and
- * contentPlain for search offsets and accessibility.
+ * contentPlain for search offsets, accessibility and copying. Rows appended in
+ * one batch share an entry id, so a whole reply can be selected and copied.
  */
 class RpcOutputListModel : public QAbstractListModel
 {
@@ -42,6 +43,7 @@ public:
         ContentRole,
         PlainContentRole,
         CategoryRole,
+        EntryRole,
     };
 
     /** Lines, not replies: bounds the buffer at ~12 MB of text. */
@@ -74,8 +76,10 @@ private:
         QString contentHtml;
         QString contentPlain;
         int category;
+        int entry;
     };
     QVector<Row> m_rows;
+    int m_next_entry{0};
 };
 
 /**
