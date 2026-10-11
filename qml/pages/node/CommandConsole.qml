@@ -125,9 +125,8 @@ Page {
         }
     }
 
-    // Output area — MonospaceOutputView virtualizes the rows and gives each
-    // one a TextEdit for single-row select + copy. The model feeds it one row
-    // per output line.
+    // Output area. MonospaceOutputView virtualizes the rows and owns the text
+    // selection across them; the model feeds it one row per output line.
     MonospaceOutputView {
         id: outputView
         objectName: "consoleOutputArea"
@@ -142,6 +141,7 @@ Page {
         listModel: rpcConsoleModel.outputModel
         contentRole: "content"
         plainContentRole: "plainContent"
+        entryRole: "entry"
         contentTextFormat: Text.RichText
         leftColumnRole: "timestamp"
         leftColumnSample: "00:00:00"

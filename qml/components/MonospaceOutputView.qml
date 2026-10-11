@@ -19,6 +19,11 @@ import "../controls"
 // The public model property is named "listModel" (not "model") to avoid
 // shadowing the delegate's implicit "model" context property.
 //
+// Selection belongs to the view, not to the per-row TextEdits, so it can span
+// rows: a mouse layer over the list tracks it as {row, pos} endpoints and each
+// delegate's TextEdit only paints its own slice. On touch devices the TextEdits
+// keep their own per-row selection and the list flicks as usual.
+//
 // Supports two optional side columns around the main content column:
 //   Console:   [timestamp] | [content]
 //   Debug log: [line#]     | [content] | [relative time]
@@ -40,6 +45,9 @@ Item {
     property string leftColumnRole: ""
     property string rightColumnRole: ""
     property string categoryRole: ""
+    // Role whose value is shared by the rows of one entry (e.g. one RPC reply).
+    // Without it every row is an entry of its own.
+    property string entryRole: ""
 
     // ── Style ────────────────────────────────────────────────────────────
 
@@ -70,6 +78,18 @@ Item {
     // fresh object so delegates see a change even when two matches share a row.
     property var _currentMatch: null
     property bool _resetSearchOnRefresh: false
+
+    // ── Selection ────────────────────────────────────────────────────────
+
+    readonly property bool hasSelection: _selection !== null
+    // Endpoints as {row, pos}; the anchor stays put while the focus follows
+    // the pointer, so the selection can run in either direction.
+    property var _selAnchor: null
+    property var _selFocus: null
+    readonly property var _selection: root._normalizedSelection(_selAnchor, _selFocus)
+    // Row last clicked, which Select All expands to its whole entry.
+    property int _activeRow: -1
+    readonly property bool _pointerSelection: AppMode.isDesktop
 
     // ── Layout metrics ───────────────────────────────────────────────────
 
@@ -128,6 +148,162 @@ Item {
     }
     function _maxContentY() {
         return listView.originY + listView.contentHeight + listView.bottomMargin - listView.height
+    }
+
+    function roleValueAt(row, role) {
+        if (!root.listModel || row < 0 || row >= listView.count) return undefined
+        const data = root.listModel.get(row)
+        return data ? data[role] : undefined
+    }
+
+    function _entryAt(row) {
+        return root.entryRole !== "" ? root.roleValueAt(row, root.entryRole) : row
+    }
+
+    // An entry's rows are contiguous, so gallop out from `row` and bisect the
+    // boundary: O(log n) lookups even for a reply tens of thousands of lines long.
+    function _entryBounds(row) {
+        if (root.entryRole === "") return { first: row, last: row }
+        const entry = root._entryAt(row)
+        const inEntry = function(r) { return root._entryAt(r) === entry }
+        const edge = function(direction, limit) {
+            let inside = row
+            let step = 1
+            while ((inside + direction * step - limit) * direction <= 0
+                   && inEntry(inside + direction * step)) {
+                inside += direction * step
+                step *= 2
+            }
+            let outside = inside + direction * step
+            if ((outside - limit) * direction > 0) outside = limit + direction
+            while (Math.abs(outside - inside) > 1) {
+                const middle = Math.floor((inside + outside) / 2)
+                if (inEntry(middle)) inside = middle
+                else outside = middle
+            }
+            return inside
+        }
+        return { first: edge(-1, 0), last: edge(1, listView.count - 1) }
+    }
+
+    function entryTextAt(row) {
+        if (row < 0 || row >= listView.count) return ""
+        const bounds = root._entryBounds(row)
+        const lines = []
+        for (let r = bounds.first; r <= bounds.last; ++r) lines.push(root._plainTextOf(r))
+        return lines.join("\n")
+    }
+
+    function _normalizedSelection(anchor, focus) {
+        if (!anchor || !focus || (anchor.row === focus.row && anchor.pos === focus.pos)) return null
+        const forward = anchor.row < focus.row || (anchor.row === focus.row && anchor.pos < focus.pos)
+        const start = forward ? anchor : focus
+        const end = forward ? focus : anchor
+        return { startRow: start.row, startPos: start.pos, endRow: end.row, endPos: end.pos }
+    }
+
+    // The slice of `row` inside `selection`, as {start, end}; end -1 means to
+    // the end of the row.
+    function _rangeInRow(row, selection) {
+        if (!selection || row < selection.startRow || row > selection.endRow) return null
+        return {
+            start: row === selection.startRow ? selection.startPos : 0,
+            end: row === selection.endRow ? selection.endPos : -1
+        }
+    }
+
+    function _selectionContains(point) {
+        const selection = root._selection
+        if (!selection || point.row < selection.startRow || point.row > selection.endRow) return false
+        if (point.row === selection.startRow && point.pos < selection.startPos) return false
+        if (point.row === selection.endRow && point.pos > selection.endPos) return false
+        return true
+    }
+
+    function selectRange(startRow, startPos, endRow, endPos) {
+        root._selAnchor = { row: startRow, pos: startPos }
+        root._selFocus = { row: endRow, pos: endPos }
+    }
+
+    function selectEntryAt(row) {
+        if (row < 0 || row >= listView.count) return
+        const bounds = root._entryBounds(row)
+        root.selectRange(bounds.first, 0, bounds.last, root._plainTextOf(bounds.last).length)
+    }
+
+    function selectAll() {
+        if (listView.count === 0) return
+        const last = listView.count - 1
+        root.selectRange(0, 0, last, root._plainTextOf(last).length)
+    }
+
+    function clearSelection() {
+        root._selAnchor = null
+        root._selFocus = null
+    }
+
+    function selectedText() {
+        const selection = root._selection
+        if (!selection) return ""
+        const lines = []
+        for (let row = selection.startRow; row <= selection.endRow; ++row) {
+            const text = root._plainTextOf(row)
+            const range = root._rangeInRow(row, selection)
+            lines.push(text.slice(range.start, range.end < 0 ? text.length : range.end))
+        }
+        return lines.join("\n")
+    }
+
+    function copySelection() {
+        if (root.hasSelection) Clipboard.setText(root.selectedText())
+    }
+
+    // The {row, pos} under a point in the view, clamped into the view so a
+    // drag past an edge still lands on the edge row.
+    function _hitTest(x, y) {
+        if (listView.count === 0) return null
+        const viewY = Math.max(0, Math.min(listView.height - 1, y))
+        const contentX = listView.width / 2
+        const contentY = viewY + listView.contentY
+        let row = listView.indexAt(contentX, contentY)
+        if (row < 0) {
+            const lastRow = listView.count - 1
+            const last = listView.itemAtIndex(lastRow)
+            if (last && contentY >= last.y)
+                return { row: lastRow, pos: root._plainTextOf(lastRow).length }
+            const first = listView.itemAtIndex(0)
+            if (first && contentY < first.y) return { row: 0, pos: 0 }
+            row = listView.indexAt(contentX, contentY + root.rowSpacing)
+            if (row < 0) return null
+            return { row: row, pos: 0 }
+        }
+        const item = listView.itemAtIndex(row)
+        if (!item) return null
+        const local = item.contentEditor.mapFromItem(pointerArea, x, viewY)
+        return { row: row, pos: item.contentEditor.positionAt(local.x, local.y) }
+    }
+
+    // Words are runs of anything but whitespace and JSON punctuation, so a
+    // double-click on a quoted hash or address takes it without the quotes.
+    function _selectWordAt(point) {
+        const text = root._plainTextOf(point.row)
+        const isWordChar = function(c) { return !/[\s"',:{}\[\]()]/.test(c) }
+        let start = Math.min(point.pos, text.length)
+        let end = start
+        if (start < text.length && isWordChar(text[start])) {
+            while (start > 0 && isWordChar(text[start - 1])) --start
+            while (end < text.length && isWordChar(text[end])) ++end
+        } else if (start > 0 && isWordChar(text[start - 1])) {
+            while (start > 0 && isWordChar(text[start - 1])) --start
+        } else {
+            end = Math.min(start + 1, text.length)
+        }
+        root.selectRange(point.row, start, point.row, end)
+    }
+
+    function _extendSelectionTo(x, y) {
+        const hit = root._hitTest(x, y)
+        if (hit && root._selAnchor) root._selFocus = hit
     }
 
     function scheduleSearchRefresh(resetCurrent) {
@@ -224,6 +400,7 @@ Item {
 
     function showNextSearchResult() {
         if (root.searchResultCount === 0) return
+        root.clearSelection()
         root.currentSearchResultIndex = (root.currentSearchResultIndex + 1)
             % root.searchResultCount
         root.applyCurrentSearchMatch()
@@ -231,13 +408,17 @@ Item {
 
     function showPreviousSearchResult() {
         if (root.searchResultCount === 0) return
+        root.clearSelection()
         root.currentSearchResultIndex = (root.currentSearchResultIndex
                                          + root.searchResultCount - 1)
             % root.searchResultCount
         root.applyCurrentSearchMatch()
     }
 
-    onSearchTextChanged: scheduleSearchRefresh(true)
+    onSearchTextChanged: {
+        root.clearSelection()
+        scheduleSearchRefresh(true)
+    }
     onListModelChanged: scheduleSearchRefresh(true)
 
     Timer {
@@ -255,14 +436,21 @@ Item {
         target: root.listModel
         ignoreUnknownSignals: true
         function onRowsInserted() { root._onRowsChanged() }
-        function onRowsRemoved()  { root._onRowsChanged() }
-        function onModelReset()   { root._onRowsChanged() }
+        function onRowsRemoved()  { root._onRowsShifted() }
+        function onModelReset()   { root._onRowsShifted() }
         function onDataChanged()  { root.scheduleSearchRefresh(false) }
     }
 
     function _onRowsChanged() {
         root.scheduleSearchRefresh(false)
         if (root.autoScrollToBottom && root.searchText.length === 0) tailTimer.restart()
+    }
+
+    // Row indices held by the selection no longer point at the same lines.
+    function _onRowsShifted() {
+        root.clearSelection()
+        root._activeRow = -1
+        root._onRowsChanged()
     }
 
     function _onLayoutChanged() {
@@ -288,6 +476,23 @@ Item {
     // ── Signal ───────────────────────────────────────────────────────────
 
     signal scrolled(real y)
+    // Right-click at (x, y) in the view's coordinates; row is -1 off the rows.
+    signal contextMenuRequested(int row, real x, real y)
+
+    Keys.onPressed: (event) => {
+        if (event.matches(StandardKey.Copy)) {
+            if (!root.hasSelection) return
+            root.copySelection()
+        } else if (event.matches(StandardKey.SelectAll)) {
+            if (root._activeRow >= 0 && root._activeRow < listView.count) root.selectEntryAt(root._activeRow)
+            else root.selectAll()
+        } else if (event.key === Qt.Key_Escape && root.hasSelection) {
+            root.clearSelection()
+        } else {
+            return
+        }
+        event.accepted = true
+    }
 
     // ── Font metrics (shared across all delegates) ───────────────────────
 
@@ -338,6 +543,7 @@ Item {
         cacheBuffer: Math.max(400, height)
 
         ScrollBar.vertical: ScrollBar {
+            id: verticalScrollBar
             policy: ScrollBar.AsNeeded
             minimumSize: 0.05
         }
@@ -379,6 +585,8 @@ Item {
                                                                 : rowCategory === root.replyCategory
                                                                   ? root.replyLeftColumnColor
                                                                   : root.leftColumnColor
+            readonly property var rowEntry: root.entryRole !== ""
+                                            ? rowRoot.model[root.entryRole] : rowRoot.index
             property alias contentEditor: contentTextEditor
 
             objectName: root.objectName.length > 0 ? root.objectName + "_row_" + index : ""
@@ -392,16 +600,22 @@ Item {
                              : rowRoot.rowContent
 
             // Driven from the view rather than applied to a captured editor:
-            // the row holding the match may not exist when the match is found,
-            // and may be recycled away and back while stepping through results.
+            // the row may not exist when the selection or match is made, and
+            // may be recycled away and back while it stands.
+            readonly property var selectionRange: root._rangeInRow(rowRoot.index, root._selection)
             readonly property var currentMatch: root._currentMatch
-            onCurrentMatchChanged: rowRoot.syncSearchSelection()
-            Component.onCompleted: rowRoot.syncSearchSelection()
-            ListView.onReused: rowRoot.syncSearchSelection()
+            onSelectionRangeChanged: rowRoot.syncSelection()
+            onCurrentMatchChanged: rowRoot.syncSelection()
+            Component.onCompleted: rowRoot.syncSelection()
+            ListView.onReused: rowRoot.syncSelection()
 
-            function syncSearchSelection() {
+            function syncSelection() {
+                const range = rowRoot.selectionRange
                 const match = root._currentMatch
-                if (match && match.row === rowRoot.index) {
+                if (range) {
+                    contentTextEditor.select(range.start,
+                                             range.end < 0 ? contentTextEditor.length : range.end)
+                } else if (match && match.row === rowRoot.index) {
                     contentTextEditor.select(match.start, match.end)
                 } else if (contentTextEditor.selectionStart !== contentTextEditor.selectionEnd) {
                     contentTextEditor.deselect()
@@ -426,14 +640,16 @@ Item {
                 wrapMode: Text.NoWrap
             }
 
-            // Main content column: TextEdit for per-row select + copy.
+            // Main content column. The TextEdit paints the selection; on
+            // desktop the view's pointer layer decides what is selected.
             TextEdit {
                 id: contentTextEditor
                 objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
                 text: rowRoot.rowContent
                 readOnly: true
-                selectByMouse: true
-                persistentSelection: root.searchText.length > 0
+                selectByMouse: !root._pointerSelection
+                activeFocusOnPress: !root._pointerSelection
+                persistentSelection: true
                 textFormat: root.contentTextFormat
                 wrapMode: Text.WrapAnywhere
                 font.family: root.fontFamily
@@ -442,7 +658,8 @@ Item {
                 color: rowRoot.effectiveContentColor
                 selectionColor: root.selectionColor
                 selectedTextColor: root.selectedTextColor
-                activeFocusOnPress: true
+                // Recycling swaps the text, which resets the selection.
+                onTextChanged: rowRoot.syncSelection()
 
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignTop
@@ -464,6 +681,79 @@ Item {
                 Layout.alignment: Qt.AlignTop
                 horizontalAlignment: Text.AlignRight
                 wrapMode: Text.NoWrap
+            }
+        }
+    }
+
+    MouseArea {
+        id: pointerArea
+        objectName: root.objectName.length > 0 ? root.objectName + "_pointer" : ""
+        anchors.fill: listView
+        anchors.rightMargin: verticalScrollBar.size < 1 ? verticalScrollBar.width : 0
+        enabled: root._pointerSelection
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        preventStealing: true
+        cursorShape: Qt.IBeamCursor
+
+        property int tripleClickRow: -1
+
+        onWheel: (wheel) => { wheel.accepted = false }
+
+        onPressed: (mouse) => {
+            root.forceActiveFocus()
+            const hit = root._hitTest(mouse.x, mouse.y)
+            root._activeRow = hit ? hit.row : -1
+            if (mouse.button === Qt.RightButton) {
+                if (!hit || !root._selectionContains(hit)) root.clearSelection()
+                root.contextMenuRequested(hit ? hit.row : -1, mouse.x, mouse.y)
+                return
+            }
+            if (!hit) {
+                root.clearSelection()
+            } else if ((mouse.modifiers & Qt.ShiftModifier) && root._selAnchor) {
+                root._selFocus = hit
+            } else if (tripleClickTimer.running && hit.row === tripleClickRow) {
+                root.selectRange(hit.row, 0, hit.row, root._plainTextOf(hit.row).length)
+            } else {
+                root._selAnchor = hit
+                root._selFocus = hit
+            }
+        }
+        onDoubleClicked: (mouse) => {
+            if (mouse.button !== Qt.LeftButton) return
+            const hit = root._hitTest(mouse.x, mouse.y)
+            if (!hit) return
+            root._selectWordAt(hit)
+            tripleClickRow = hit.row
+            tripleClickTimer.restart()
+        }
+        onPositionChanged: (mouse) => {
+            if (!(pressedButtons & Qt.LeftButton)) return
+            root._extendSelectionTo(mouse.x, mouse.y)
+            autoScrollTimer.running = mouse.y < 0 || mouse.y > height
+        }
+        onReleased: autoScrollTimer.stop()
+        onCanceled: autoScrollTimer.stop()
+
+        Timer {
+            id: tripleClickTimer
+            interval: Qt.styleHints.mouseDoubleClickInterval
+        }
+
+        // Scroll while a drag selection is held past the top or bottom edge,
+        // faster the further out the pointer is.
+        Timer {
+            id: autoScrollTimer
+            interval: 16
+            repeat: true
+            onTriggered: {
+                const y = pointerArea.mouseY
+                const overshoot = y < 0 ? y : y - pointerArea.height
+                const step = Math.max(-60, Math.min(60, overshoot / 2))
+                listView.contentY = Math.max(root._minContentY(),
+                                             Math.min(Math.max(root._minContentY(), root._maxContentY()),
+                                                      listView.contentY + step))
+                root._extendSelectionTo(pointerArea.mouseX, y)
             }
         }
     }
