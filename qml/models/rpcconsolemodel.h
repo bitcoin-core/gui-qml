@@ -31,6 +31,8 @@ class RpcConsoleWorker;
  * Each row carries the content twice: contentHtml for rendering and
  * contentPlain for search offsets, accessibility and copying. Rows appended in
  * one batch share an entry id, so a whole reply can be selected and copied.
+ * The rows echoing a submitted command also carry it in the command role, and
+ * whether secrets were redacted from it, so the view can offer to run it again.
  */
 class RpcOutputListModel : public QAbstractListModel
 {
@@ -44,6 +46,8 @@ public:
         PlainContentRole,
         CategoryRole,
         EntryRole,
+        CommandRole,
+        RedactedRole,
     };
 
     /** Lines, not replies: bounds the buffer at ~12 MB of text. */
@@ -64,7 +68,8 @@ public:
     Q_INVOKABLE QVariantMap get(int row) const;
 
     /** Append a block of lines as one batch; only its first row is stamped. */
-    void appendLines(const QString& timestamp, const QVector<OutputLine>& lines, int category);
+    void appendLines(const QString& timestamp, const QVector<OutputLine>& lines, int category,
+                     const QString& command = {}, bool redacted = false);
     void resetAll();
 
 Q_SIGNALS:
@@ -77,6 +82,8 @@ private:
         QString contentPlain;
         int category;
         int entry;
+        QString command;
+        bool redacted;
     };
     QVector<Row> m_rows;
     int m_next_entry{0};
@@ -158,7 +165,8 @@ private Q_SLOTS:
 
 private:
     void setExecuting(bool executing);
-    void appendFormattedRow(const QString& time, int category, const QString& rawText);
+    void appendFormattedRow(const QString& time, int category, const QString& rawText,
+                            const QString& command = {}, bool redacted = false);
 
     interfaces::Node& m_node;
     bool m_executing{false};
