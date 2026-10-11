@@ -88,6 +88,9 @@ Item {
     // ── Scroll behaviour ─────────────────────────────────────────────────
 
     property bool autoScrollToBottom: true
+    // Cleared when the user scrolls away from the bottom, so a relayout (font
+    // or width change) only re-pins the view if it was pinned before.
+    property bool _followingTail: true
 
     // ── Header ───────────────────────────────────────────────────────────
 
@@ -262,6 +265,11 @@ Item {
         if (root.autoScrollToBottom && root.searchText.length === 0) tailTimer.restart()
     }
 
+    function _onLayoutChanged() {
+        if (root._followingTail && root.autoScrollToBottom && root.searchText.length === 0)
+            tailTimer.restart()
+    }
+
     // Following the tail waits for the new rows to be laid out, and ListView
     // refines its content height as it goes, so settle over two passes.
     Timer {
@@ -334,7 +342,12 @@ Item {
             minimumSize: 0.05
         }
 
-        onContentYChanged: root.scrolled(contentY)
+        onContentYChanged: {
+            root._followingTail = atYEnd
+            root.scrolled(contentY)
+        }
+        onContentHeightChanged: root._onLayoutChanged()
+        onHeightChanged: root._onLayoutChanged()
 
         delegate: RowLayout {
             id: rowRoot
