@@ -203,6 +203,7 @@ private Q_SLOTS:
     void jsonReplyKeyColoringSkipsStringsContainingColons();
     void renderedTextMatchesPlainContent();
     void rowsOfOneReplyShareAnEntry();
+    void commandRowsCarryTheRunnableCommand();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -552,6 +553,36 @@ void RpcConsoleModelTests::rowsOfOneReplyShareAnEntry()
     QVERIFY(entry(6) != entry(1));
     QVERIFY(entry(7) != entry(6));
     QCOMPARE(entry(11), entry(7));
+}
+
+void RpcConsoleModelTests::commandRowsCarryTheRunnableCommand()
+{
+    RpcTestStubNode mock;
+    RpcConsoleModel model{mock};
+    auto* out = model.outputModel();
+    const int command_role = roleForName(out, "command");
+    const int redacted_role = roleForName(out, "redacted");
+    const int content_role = roleForName(out, "plainContent");
+    QVERIFY(command_role != -1);
+    QVERIFY(redacted_role != -1);
+    const auto value = [&](int row, int role) { return out->data(out->index(row, 0), role); };
+
+    QVERIFY(model.submitCommand("getblockcount", "w1"));
+    QTRY_VERIFY(!model.executing());
+    // The wallet notice, the echoed command, then the reply.
+    QCOMPARE(out->rowCount(), 3);
+    QCOMPARE(value(0, command_role).toString(), QString{});
+    QCOMPARE(value(1, command_role).toString(), QStringLiteral("getblockcount"));
+    QCOMPARE(value(1, redacted_role).toBool(), false);
+    QCOMPARE(value(2, command_role).toString(), QString{});
+
+    QVERIFY(model.submitCommand("walletpassphrase hunter2 60", "w1"));
+    QTRY_VERIFY(!model.executing());
+    const int echo = 3;
+    QVERIFY(!value(echo, content_role).toString().contains("hunter2"));
+    QVERIFY(!value(echo, command_role).toString().contains("hunter2"));
+    QVERIFY(value(echo, command_role).toString().startsWith("walletpassphrase"));
+    QCOMPARE(value(echo, redacted_role).toBool(), true);
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
