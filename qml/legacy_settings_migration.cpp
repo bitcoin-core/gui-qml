@@ -26,12 +26,16 @@
 
 #include <QDataStream>
 #include <QMetaType>
+#include <QObject>
 #include <QSettings>
 #include <QVariant>
+#include <QVariantMap>
 
 #include <algorithm>
 #include <cstdint>
+#include <exception>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -95,7 +99,9 @@ void RegisterLegacyBitcoinUnitMetaType()
 
 std::unique_ptr<QSettings> OpenSettings(const QString& org, const QString& app)
 {
-    return std::make_unique<QSettings>(QSettings::defaultFormat(), QSettings::UserScope, org, app);
+    auto settings = std::make_unique<QSettings>(QSettings::defaultFormat(), QSettings::UserScope, org, app);
+    settings->setFallbacksEnabled(false);
+    return settings;
 }
 
 std::unique_ptr<QSettings> OpenLegacyDataDirSettings()
@@ -105,21 +111,167 @@ std::unique_ptr<QSettings> OpenLegacyDataDirSettings()
 
 struct SettingsStore {
     bool legacy_qt{false};
+    bool dirty{false};
+    QString organization;
+    QString application;
     std::unique_ptr<QSettings> settings;
 };
+
+SettingsStore MakeSettingsStore(bool legacy_qt, const QString& organization, const QString& application)
+{
+    return {
+        legacy_qt,
+        false,
+        organization,
+        application,
+        OpenSettings(organization, application),
+    };
+}
 
 std::vector<SettingsStore> CoreSettingsStores(const QString& chain)
 {
     std::vector<SettingsStore> stores;
-    stores.push_back({
+    stores.push_back(MakeSettingsStore(
         /*legacy_qt=*/false,
-        OpenSettings(QStringLiteral(QAPP_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/false)),
-    });
-    stores.push_back({
+        QStringLiteral(QAPP_ORG_NAME),
+        AppNameForChain(chain, /*legacy_qt=*/false)));
+    stores.push_back(MakeSettingsStore(
         /*legacy_qt=*/true,
-        OpenSettings(QString::fromUtf8(QT_ORG_NAME), AppNameForChain(chain, /*legacy_qt=*/true)),
-    });
+        QString::fromUtf8(QT_ORG_NAME),
+        AppNameForChain(chain, /*legacy_qt=*/true)));
     return stores;
+}
+
+SettingsStore& FindOrAddStore(
+    std::vector<SettingsStore>& stores,
+    bool legacy_qt,
+    const QString& organization,
+    const QString& application)
+{
+    for (SettingsStore& store : stores) {
+        if (store.organization == organization && store.application == application) {
+            return store;
+        }
+    }
+    stores.push_back(MakeSettingsStore(legacy_qt, organization, application));
+    return stores.back();
+}
+
+SettingsStore& LegacyDataDirStore(std::vector<SettingsStore>& stores)
+{
+    return FindOrAddStore(
+        stores,
+        /*legacy_qt=*/true,
+        QString::fromUtf8(QT_ORG_NAME),
+        QString::fromUtf8(QT_APP_NAME_DEFAULT));
+}
+
+QVariantMap SnapshotSettings(const QSettings& settings)
+{
+    QVariantMap values;
+    for (const QString& key : settings.allKeys()) {
+        values.insert(key, settings.value(key));
+    }
+    return values;
+}
+
+std::vector<QVariantMap> SnapshotStores(const std::vector<SettingsStore>& stores)
+{
+    std::vector<QVariantMap> snapshots;
+    snapshots.reserve(stores.size());
+    for (const SettingsStore& store : stores) {
+        snapshots.push_back(SnapshotSettings(*store.settings));
+    }
+    return snapshots;
+}
+
+void MarkChangedStores(
+    std::vector<SettingsStore>& stores,
+    const std::vector<QVariantMap>& snapshots)
+{
+    for (size_t i = 0; i < stores.size(); ++i) {
+        stores[i].dirty = SnapshotSettings(*stores[i].settings) != snapshots[i];
+    }
+}
+
+void ReplaceSettings(QSettings& settings, const QVariantMap& values)
+{
+    settings.clear();
+    for (auto it = values.cbegin(); it != values.cend(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+}
+
+bool RestoreStores(
+    std::vector<SettingsStore>& stores,
+    const std::vector<QVariantMap>& snapshots,
+    QString* error)
+{
+    for (SettingsStore& store : stores) {
+        if (store.dirty) store.settings.reset();
+    }
+
+    bool restored{true};
+    for (size_t i = 0; i < stores.size(); ++i) {
+        SettingsStore& store{stores[i]};
+        if (!store.dirty) continue;
+        store.settings = OpenSettings(store.organization, store.application);
+        ReplaceSettings(*store.settings, snapshots[i]);
+        store.settings->sync();
+        if (store.settings->status() != QSettings::NoError) {
+            restored = false;
+            if (error) {
+                //: Startup error shown when legacy GUI settings cannot be restored after a later operation fails. %1 is the settings file path.
+                const QString rollback_error{
+                    QObject::tr("Legacy settings rollback failed for %1.")
+                        .arg(store.settings->fileName())
+                };
+                if (!error->isEmpty()) error->append(QLatin1Char(' '));
+                error->append(rollback_error);
+            }
+        }
+    }
+    return restored;
+}
+
+bool CommitStores(
+    std::vector<SettingsStore>& stores,
+    const std::vector<QVariantMap>& snapshots,
+    const QString& action,
+    QString* error)
+{
+    for (SettingsStore& store : stores) {
+        if (!store.dirty) continue;
+        store.settings->sync();
+        if (store.settings->status() == QSettings::NoError) continue;
+
+        if (error) {
+            //: Startup error shown when a legacy GUI settings operation fails. %1 is the operation and %2 is the settings file path.
+            *error = QObject::tr("%1 failed for %2.")
+                         .arg(action, store.settings->fileName());
+        }
+        RestoreStores(stores, snapshots, error);
+        return false;
+    }
+    return true;
+}
+
+std::map<std::string, common::SettingsValue> SnapshotRwSettings(ArgsManager& args)
+{
+    std::map<std::string, common::SettingsValue> values;
+    args.LockSettings([&](common::Settings& settings) {
+        values = settings.rw_settings;
+    });
+    return values;
+}
+
+void RestoreRwSettings(
+    ArgsManager& args,
+    const std::map<std::string, common::SettingsValue>& values)
+{
+    args.LockSettings([&](common::Settings& settings) {
+        settings.rw_settings = values;
+    });
 }
 
 const QStringList& LegacyCoreKeys(bool include_language)
@@ -377,10 +529,17 @@ bool MigrateStore(ArgsManager& args, SettingsStore& store, QmlLegacySettings::Mi
         });
     }
 
-    if (mode == QmlLegacySettings::MigrationMode::Persist) {
-        settings.sync();
-    }
     return changed;
+}
+
+void ApplyGuiCleanup(QSettings& settings, QmlLegacySettings::GuiCleanup cleanup)
+{
+    if (cleanup == QmlLegacySettings::GuiCleanup::DataDirAndReset) {
+        settings.remove(SettingsKeys::DATA_DIR);
+    }
+    if (cleanup != QmlLegacySettings::GuiCleanup::None) {
+        settings.remove(QString::fromUtf8(RESET_GUI_SETTINGS_KEY));
+    }
 }
 } // namespace
 
@@ -425,35 +584,76 @@ QString ReadLegacyGuiLanguage(const QString& chain)
     return default_settings->value(SettingsKeys::LANGUAGE).toString();
 }
 
-void ClearLegacyGuiSettings(const QString& chain)
+bool ClearLegacyGuiSettings(const QString& chain, QString* error)
 {
-    for (SettingsStore& store : CoreSettingsStores(chain)) {
+    std::vector<SettingsStore> stores{CoreSettingsStores(chain)};
+    const size_t core_store_count{stores.size()};
+    SettingsStore& data_dir_store{LegacyDataDirStore(stores)};
+    const std::vector<QVariantMap> snapshots{SnapshotStores(stores)};
+
+    for (size_t i = 0; i < core_store_count; ++i) {
+        SettingsStore& store{stores[i]};
         for (const QString& key : LegacyCoreKeys(store.legacy_qt)) {
             store.settings->remove(key);
         }
         store.settings->remove(SettingsKeys::DISPLAY_UNIT);
-        store.settings->sync();
     }
+    ApplyGuiCleanup(*data_dir_store.settings, GuiCleanup::DataDirAndReset);
+    MarkChangedStores(stores, snapshots);
 
-    const std::unique_ptr<QSettings> legacy_default_settings = OpenLegacyDataDirSettings();
-    legacy_default_settings->remove(SettingsKeys::DATA_DIR);
-    legacy_default_settings->remove(QString::fromUtf8(RESET_GUI_SETTINGS_KEY));
-    legacy_default_settings->sync();
+    //: Name of the operation that removes obsolete GUI settings during startup.
+    const QString cleanup_action{QObject::tr("Legacy GUI settings cleanup")};
+    return CommitStores(stores, snapshots, cleanup_action, error);
 }
 
-MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode)
+MigrationResult MigrateCoreSettings(ArgsManager& args, MigrationMode mode, GuiCleanup cleanup)
 {
     MigrationResult result;
-    if (!args.GetSettingsPath()) {
+    const bool settings_enabled{args.GetSettingsPath()};
+    if (!settings_enabled && (mode == MigrationMode::Preview || cleanup == GuiCleanup::None)) {
         return result;
     }
 
+    std::vector<SettingsStore> stores;
+    if (settings_enabled) {
+        stores = CoreSettingsStores(QString::fromStdString(args.GetChainTypeString()));
+    }
+    const size_t core_store_count{stores.size()};
+    SettingsStore* data_dir_store{nullptr};
+    if (mode == MigrationMode::Persist && cleanup != GuiCleanup::None) {
+        data_dir_store = &LegacyDataDirStore(stores);
+    }
+
+    std::vector<QVariantMap> snapshots;
+    std::map<std::string, common::SettingsValue> original_rw_settings;
+    if (mode == MigrationMode::Persist) {
+        snapshots = SnapshotStores(stores);
+        original_rw_settings = SnapshotRwSettings(args);
+    }
+
     try {
-        for (SettingsStore& store : CoreSettingsStores(QString::fromStdString(args.GetChainTypeString()))) {
-            result.settings_changed |= MigrateStore(args, store, mode);
+        for (size_t i = 0; i < core_store_count; ++i) {
+            result.settings_changed |= MigrateStore(args, stores[i], mode);
+        }
+        if (data_dir_store) {
+            ApplyGuiCleanup(*data_dir_store->settings, cleanup);
+        }
+        if (mode == MigrationMode::Persist) {
+            MarkChangedStores(stores, snapshots);
+        }
+        if (mode == MigrationMode::Persist) {
+            //: Name of the operation that moves settings from older Bitcoin GUI versions during startup.
+            const QString migration_action{QObject::tr("Legacy GUI settings migration")};
+            if (!CommitStores(stores, snapshots, migration_action, &result.error)) {
+                RestoreRwSettings(args, original_rw_settings);
+            }
         }
     } catch (const std::exception& e) {
         result.error = QString::fromStdString(e.what());
+        if (mode == MigrationMode::Persist) {
+            RestoreStores(stores, snapshots, &result.error);
+            RestoreRwSettings(args, original_rw_settings);
+        }
     }
     return result;
 }
