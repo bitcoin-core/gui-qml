@@ -238,4 +238,49 @@ TestCase {
         verify(matchTop >= output.contentY)
         verify(matchBottom <= output.contentY + output.height + 0.5)
     }
+
+    function createTailOutput(rowText) {
+        const model = createTemporaryObject(regressionModelComponent, testWindow.contentItem)
+        verify(model !== null)
+        const output = createTemporaryObject(outputComponent, testWindow.contentItem, {
+            listModel: model,
+            autoScrollToBottom: true
+        })
+        verify(output !== null)
+        for (let i = 0; i < 200; ++i) model.append({ content: rowText + i })
+        tryCompare(output, "count", 200)
+        tryCompare(output, "atBottom", true)
+        wait(50)
+        verify(output.atBottom)
+        return output
+    }
+
+    function test_font_resize_keeps_tail_in_view() {
+        const output = createTailOutput("line ")
+        output.fontPixelSize = 24
+        tryCompare(output, "atBottom", true)
+        wait(50)
+        verify(output.atBottom)
+        const lastRow = findChild(output, "searchOutput_row_199")
+        verify(lastRow !== null)
+        verify(lastRow.y + lastRow.height <= output.contentY + output.height)
+    }
+
+    function test_narrowing_keeps_tail_in_view() {
+        const output = createTailOutput("word word word word word word word word word ")
+        output.width = 200
+        tryCompare(output, "atBottom", true)
+        wait(50)
+        verify(output.atBottom)
+    }
+
+    function test_relayout_does_not_pull_a_scrolled_up_view_down() {
+        const output = createTailOutput("line ")
+        output.scrollToTop()
+        verify(output.atTop)
+        output.fontPixelSize = 24
+        wait(100)
+        verify(output.atTop)
+        verify(!output.atBottom)
+    }
 }
