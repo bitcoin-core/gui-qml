@@ -661,6 +661,8 @@ TestCase {
         compare(findRow(page, "consolidation").displayLabel, "Consolidation")
         compare(findRow(page, "split").displayLabel, "Split")
         const mixed = findRow(page, "mixed")
+        // The row can exist before its nested Repeater finishes creating the actions.
+        tryVerify(function() { return findChild(mixed, "activityAction_receipt") !== null })
         const receipt = findChild(mixed, "activityAction_receipt")
         compare(findChild(receipt, "activityActionLabel").visible, false)
         verify(findChild(receipt, "activityActionRequestBadge").visible)
