@@ -170,6 +170,99 @@ Page {
         rowSpacing: 0
         columnSpacing: 20
         leftColumnWidth: 60
+        onContextMenuRequested: (row, x, y) => root.openOutputMenu(row, x, y)
+    }
+
+    function commandAt(row) {
+        return outputView.roleValueAt(row, "command") ?? ""
+    }
+
+    function canRunAgain(row) {
+        return root.commandAt(row) !== "" && !outputView.roleValueAt(row, "redacted")
+            && !rpcConsoleModel.executing
+    }
+
+    function runCommandAt(row) {
+        if (root.canRunAgain(row)) rpcConsoleModel.submitCommand(root.commandAt(row), root.walletName)
+    }
+
+    // Like recalling it from history: the text is set without opening the
+    // autocomplete menu, and the cursor goes to the end, not a selection.
+    function editCommandAt(row) {
+        const command = root.commandAt(row)
+        if (command === "") return
+        internal.navigatingHistory = true
+        inputField.text = command
+        internal.navigatingHistory = false
+        inputField.forceActiveFocus()
+        inputField.cursorPosition = command.length
+    }
+
+    function openOutputMenu(row, x, y) {
+        outputMenu.row = row
+        const position = outputView.mapToItem(root, x, y)
+        outputMenu.x = Math.max(12, Math.min(position.x, root.width - outputMenu.width - 12))
+        outputMenu.y = Math.max(12, Math.min(position.y, root.height - outputMenu.height - 12))
+        outputMenu.open()
+    }
+
+    ContextMenu {
+        id: outputMenu
+        objectName: "consoleOutputMenu"
+        minMenuWidth: 200
+
+        property int row: -1
+        readonly property bool onRow: row >= 0
+        readonly property bool onCommand: root.commandAt(row) !== ""
+
+        ContextMenuButton {
+            objectName: "consoleMenuCopy"
+            text: qsTr("Copy")
+            enabled: outputView.hasSelection
+            onTriggered: outputView.copySelection()
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuCopyEntry"
+            visible: outputMenu.onRow
+            text: outputMenu.onCommand ? qsTr("Copy command") : qsTr("Copy output")
+            onTriggered: Clipboard.setText(outputView.entryTextAt(outputMenu.row))
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuSelectEntry"
+            visible: outputMenu.onRow
+            text: outputMenu.onCommand ? qsTr("Select command") : qsTr("Select output")
+            onTriggered: outputView.selectEntryAt(outputMenu.row)
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuSelectAll"
+            text: qsTr("Select all")
+            enabled: outputView.count > 0
+            onTriggered: outputView.selectAll()
+        }
+        ContextMenuDivider {
+            visible: outputMenu.onCommand
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuRunAgain"
+            visible: outputMenu.onCommand
+            text: qsTr("Run again")
+            enabled: root.canRunAgain(outputMenu.row)
+            onTriggered: root.runCommandAt(outputMenu.row)
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuEdit"
+            visible: outputMenu.onCommand
+            text: qsTr("Edit command")
+            onTriggered: root.editCommandAt(outputMenu.row)
+        }
+        ContextMenuDivider { }
+        ContextMenuButton {
+            objectName: "consoleMenuClear"
+            text: qsTr("Clear console")
+            role: ContextMenuButton.Destructive
+            enabled: outputView.count > 0
+            onTriggered: rpcConsoleModel.clear()
+        }
     }
 
     // Autocomplete menu, aligned to the command field's left edge and styled

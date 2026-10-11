@@ -5,6 +5,7 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QColor>
 #include <QDateTime>
 #include <QEvent>
 #include <QEventLoop>
@@ -4108,6 +4109,157 @@ public:
     }
 };
 
+class MockRpcOutputModel : public QAbstractListModel
+{
+    Q_OBJECT
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+
+public:
+    enum Roles {
+        TimestampRole = Qt::UserRole + 1,
+        ContentRole,
+        PlainContentRole,
+        CategoryRole,
+        EntryRole,
+        CommandRole,
+        RedactedRole,
+    };
+
+    int count() const { return m_rows.size(); }
+    int rowCount(const QModelIndex& parent = QModelIndex{}) const override
+    {
+        return parent.isValid() ? 0 : count();
+    }
+
+    QVariant data(const QModelIndex& index, int role) const override
+    {
+        if (!index.isValid() || index.row() < 0 || index.row() >= count()) return {};
+        return get(index.row()).value(QString::fromLatin1(roleNames().value(role)));
+    }
+
+    QHash<int, QByteArray> roleNames() const override
+    {
+        return {
+            {TimestampRole, "timestamp"},
+            {ContentRole, "content"},
+            {PlainContentRole, "plainContent"},
+            {CategoryRole, "category"},
+            {EntryRole, "entry"},
+            {CommandRole, "command"},
+            {RedactedRole, "redacted"},
+        };
+    }
+
+    Q_INVOKABLE QVariantMap get(int row) const
+    {
+        if (row < 0 || row >= count()) return {};
+        return m_rows.at(row);
+    }
+
+    void appendEntry(int category, const QString& text, const QString& command, bool redacted)
+    {
+        const QStringList lines = text.split(QLatin1Char('\n'));
+        beginInsertRows({}, count(), count() + lines.size() - 1);
+        for (int i = 0; i < lines.size(); ++i) {
+            m_rows.append(QVariantMap{
+                {QStringLiteral("timestamp"), i == 0 ? QStringLiteral("12:00:00") : QString{}},
+                {QStringLiteral("content"), lines.at(i).toHtmlEscaped()},
+                {QStringLiteral("plainContent"), lines.at(i)},
+                {QStringLiteral("category"), category},
+                {QStringLiteral("entry"), m_next_entry},
+                {QStringLiteral("command"), command},
+                {QStringLiteral("redacted"), redacted},
+            });
+        }
+        ++m_next_entry;
+        endInsertRows();
+        Q_EMIT countChanged();
+    }
+
+    void clear()
+    {
+        beginResetModel();
+        m_rows.clear();
+        endResetModel();
+        Q_EMIT countChanged();
+    }
+
+Q_SIGNALS:
+    void countChanged();
+
+private:
+    QList<QVariantMap> m_rows;
+    int m_next_entry{0};
+};
+
+class MockRpcConsoleModel : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool executing MEMBER m_executing NOTIFY executingChanged)
+    Q_PROPERTY(QStringList availableCommands READ availableCommands CONSTANT)
+    Q_PROPERTY(QAbstractListModel* outputModel READ outputModel CONSTANT)
+    Q_PROPERTY(QColor requestColor MEMBER m_color)
+    Q_PROPERTY(QColor replyColor MEMBER m_color)
+    Q_PROPERTY(QColor errorColor MEMBER m_color)
+    Q_PROPERTY(QColor keyColor MEMBER m_color)
+    Q_PROPERTY(QString lastSubmittedCommand MEMBER m_last_submitted NOTIFY testStateChanged)
+    Q_PROPERTY(QString lastSubmittedWallet MEMBER m_last_wallet NOTIFY testStateChanged)
+    Q_PROPERTY(int submitCalls MEMBER m_submit_calls NOTIFY testStateChanged)
+    Q_PROPERTY(int clearCalls MEMBER m_clear_calls NOTIFY testStateChanged)
+
+public:
+    QStringList availableCommands() const { return {QStringLiteral("getblockcount")}; }
+    QAbstractListModel* outputModel() { return &m_output; }
+
+    Q_INVOKABLE bool submitCommand(const QString& command, const QString& wallet_name = {})
+    {
+        m_last_submitted = command;
+        m_last_wallet = wallet_name;
+        ++m_submit_calls;
+        Q_EMIT testStateChanged();
+        return true;
+    }
+    Q_INVOKABLE QString browseHistory(int, const QString& current_text) { return current_text; }
+    Q_INVOKABLE void resetHistoryNavigation() {}
+    Q_INVOKABLE void clear()
+    {
+        ++m_clear_calls;
+        m_output.clear();
+        Q_EMIT testStateChanged();
+    }
+
+    Q_INVOKABLE void appendForTest(int category, const QString& text,
+                                   const QString& command = {}, bool redacted = false)
+    {
+        m_output.appendEntry(category, text, command, redacted);
+    }
+
+    Q_INVOKABLE void resetForTest()
+    {
+        m_output.clear();
+        m_executing = false;
+        m_last_submitted.clear();
+        m_last_wallet.clear();
+        m_submit_calls = 0;
+        m_clear_calls = 0;
+        Q_EMIT executingChanged();
+        Q_EMIT testStateChanged();
+    }
+
+Q_SIGNALS:
+    void executingChanged();
+    void testStateChanged();
+
+private:
+    MockRpcOutputModel m_output;
+    bool m_executing{false};
+    QColor m_color;
+    QString m_last_submitted;
+    QString m_last_wallet;
+    int m_submit_calls{0};
+    int m_clear_calls{0};
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4162,6 +4314,7 @@ public Q_SLOTS:
         static MockBumpTransactionModel bump_model;
         static MockDesktopWindowBehaviorModel desktop_window_behavior_model;
         static MockDebugLogModel debug_log_model;
+        static MockRpcConsoleModel rpc_console_model;
         recipients_model.setCurrent(&send_recipient);
         wallet_model.setTransactionActivityModel(&transaction_activity_model);
         wallet_model.setBumpModel(&bump_model);
@@ -4233,6 +4386,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("rpcConsoleModel"), &rpc_console_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
 };

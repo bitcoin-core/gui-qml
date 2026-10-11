@@ -41,6 +41,8 @@ QVariant RpcOutputListModel::data(const QModelIndex& index, int role) const
     case PlainContentRole: return r.contentPlain;
     case CategoryRole:     return r.category;
     case EntryRole:        return r.entry;
+    case CommandRole:      return r.command;
+    case RedactedRole:     return r.redacted;
     }
     return {};
 }
@@ -53,6 +55,8 @@ QHash<int, QByteArray> RpcOutputListModel::roleNames() const
         {PlainContentRole, "plainContent"},
         {CategoryRole,     "category"},
         {EntryRole,        "entry"},
+        {CommandRole,      "command"},
+        {RedactedRole,     "redacted"},
     };
 }
 
@@ -66,12 +70,16 @@ QVariantMap RpcOutputListModel::get(int row) const
         {QStringLiteral("plainContent"), r.contentPlain},
         {QStringLiteral("category"),     r.category},
         {QStringLiteral("entry"),        r.entry},
+        {QStringLiteral("command"),      r.command},
+        {QStringLiteral("redacted"),     r.redacted},
     };
 }
 
 void RpcOutputListModel::appendLines(const QString& timestamp,
                                      const QVector<OutputLine>& lines,
-                                     int category)
+                                     int category,
+                                     const QString& command,
+                                     bool redacted)
 {
     if (lines.isEmpty()) return;
 
@@ -93,7 +101,8 @@ void RpcOutputListModel::appendLines(const QString& timestamp,
     m_rows.reserve(first + keep);
     for (int i = skipped; i < lines.size(); ++i) {
         m_rows.append(Row{i == 0 ? timestamp : QString{},
-                          lines.at(i).html, lines.at(i).plain, category, entry});
+                          lines.at(i).html, lines.at(i).plain, category, entry,
+                          command, redacted});
     }
     endInsertRows();
     Q_EMIT countChanged();
@@ -389,7 +398,8 @@ RpcConsoleModel::~RpcConsoleModel()
     m_worker_thread->wait();
 }
 
-void RpcConsoleModel::appendFormattedRow(const QString& time, int category, const QString& rawText)
+void RpcConsoleModel::appendFormattedRow(const QString& time, int category, const QString& rawText,
+                                         const QString& command, bool redacted)
 {
     QVector<RpcOutputListModel::OutputLine> lines;
     switch (category) {
@@ -402,7 +412,7 @@ void RpcConsoleModel::appendFormattedRow(const QString& time, int category, cons
         lines = EscapeToLines(rawText);
         break;
     }
-    m_output_model.appendLines(time, lines, category);
+    m_output_model.appendLines(time, lines, category, command, redacted);
 }
 
 bool RpcConsoleModel::submitCommand(const QString& command, const QString& wallet_name)
@@ -475,7 +485,7 @@ bool RpcConsoleModel::submitCommand(const QString& command, const QString& walle
 
     // Append the request line immediately (main thread) so QML sees it before
     // the async reply arrives. Mirrors Qt GUI RPCConsole behaviour.
-    appendFormattedRow(time, CMD_REQUEST, filteredCmd);
+    appendFormattedRow(time, CMD_REQUEST, filteredCmd, filteredCmd, filteredCmd != trimmed_command);
 
     setExecuting(true);
 
