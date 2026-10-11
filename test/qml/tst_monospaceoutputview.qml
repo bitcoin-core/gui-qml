@@ -460,4 +460,78 @@ TestCase {
         id: signalSpyComponent
         SignalSpy {}
     }
+
+    Component {
+        id: hoverActionsComponent
+        Rectangle {
+            objectName: "testHoverActions"
+            implicitWidth: 40
+            implicitHeight: 20
+            color: "red"
+        }
+    }
+
+    // Compares on-screen positions: the highlight and the rows need not share
+    // a parent, so their raw y values are not comparable.
+    function screenTop(output, item) {
+        return item.mapToItem(output, 0, 0).y
+    }
+
+    function test_hover_highlights_the_entry_and_shows_actions() {
+        const output = createSelectionOutput(threeLineRows(), { hoverActions: hoverActionsComponent })
+        const point = charPoint(output, 1, 2)
+        mouseMove(output, point.x, point.y)
+        tryCompare(output, "hoveredRow", 1)
+        compare(output.hoveredEntry, 0)
+        const highlight = findChild(output, "searchOutput_hover")
+        const firstRow = findChild(output, "searchOutput_row_0")
+        const secondRow = findChild(output, "searchOutput_row_1")
+        verify(highlight.visible)
+        compare(screenTop(output, highlight), screenTop(output, firstRow))
+        compare(screenTop(output, highlight) + highlight.height,
+                screenTop(output, secondRow) + secondRow.height)
+
+        const loader = findChild(output, "searchOutput_hoverActions")
+        verify(loader !== null)
+        verify(loader.item !== null)
+        compare(screenTop(output, loader), Math.max(4, screenTop(output, firstRow)))
+
+        // Over the actions themselves the hover must stay put, or they would
+        // vanish under the pointer.
+        mouseMove(loader.item, 5, loader.item.height - 2)
+        wait(50)
+        compare(output.hoveredRow, 1)
+        verify(loader.item !== null)
+
+        const other = charPoint(output, 2, 2)
+        mouseMove(output, other.x, other.y)
+        tryCompare(output, "hoveredRow", 2)
+        compare(output.hoveredEntry, 1)
+        const thirdRow = findChild(output, "searchOutput_row_2")
+        compare(screenTop(output, highlight), screenTop(output, thirdRow))
+        compare(highlight.height, thirdRow.height)
+
+        mouseMove(output, output.width / 2, output.height + 20)
+        tryCompare(output, "hoveredRow", -1)
+        verify(!highlight.visible)
+    }
+
+    function test_hover_highlight_tracks_rows_in_a_scrolled_view() {
+        const rows = []
+        for (let i = 0; i < 100; ++i) rows.push({ content: "line " + i, entry: Math.floor(i / 3) })
+        const output = createSelectionOutput(rows, { hoverActions: hoverActionsComponent, height: 120 })
+        output.scrollToBottom()
+        tryCompare(output, "atBottom", true)
+        verify(output.contentY > 1000)
+        const highlight = findChild(output, "searchOutput_hover")
+        const loader = findChild(output, "searchOutput_hoverActions")
+        const point = charPoint(output, 97, 1)
+        mouseMove(output, point.x, point.y)
+        tryCompare(output, "hoveredRow", 97)
+        const first = findChild(output, "searchOutput_row_96")
+        const last = findChild(output, "searchOutput_row_98")
+        compare(screenTop(output, highlight), screenTop(output, first))
+        compare(screenTop(output, highlight) + highlight.height, screenTop(output, last) + last.height)
+        compare(screenTop(output, loader), Math.max(4, screenTop(output, first)))
+    }
 }

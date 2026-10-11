@@ -170,4 +170,32 @@ TestCase {
         const menu = openMenuAt(page, 1)
         verify(!findChild(menu, "consoleMenuRunAgain").enabled)
     }
+
+    function test_hover_actions_follow_the_entry_kind() {
+        const page = createPage()
+        const output = findChild(page, "consoleOutputArea")
+        const commandPoint = rowPoint(page, 1)
+        mouseMove(page, commandPoint.x, commandPoint.y)
+        tryCompare(output, "hoveredRow", 1)
+        const commandRow = findChild(page, "consoleOutputArea_row_1")
+        const highlight = findChild(page, "consoleOutputArea_hover")
+        compare(highlight.mapToItem(page, 0, 0).y, commandRow.mapToItem(page, 0, 0).y)
+        compare(highlight.height, commandRow.height)
+        let runButton = findChild(page, "consoleHoverRunButton")
+        verify(runButton !== null)
+        verify(runButton.visible)
+        verify(findChild(page, "consoleHoverEditButton").visible)
+
+        runButton.clicked()
+        compare(rpcConsoleModel.lastSubmittedCommand, "getblockcount")
+
+        const replyPoint = rowPoint(page, 3)
+        mouseMove(page, replyPoint.x, replyPoint.y)
+        tryCompare(output, "hoveredRow", 3)
+        verify(!findChild(page, "consoleHoverRunButton").visible)
+        const copyButton = findChild(page, "consoleHoverCopyButton")
+        verify(copyButton.visible)
+        copyButton.clicked()
+        compare(Clipboard.currentText, "{\n  \"blocks\": 7\n}")
+    }
 }

@@ -70,6 +70,7 @@ Item {
     property color errorLeftColumnColor: leftColumnColor
     property color selectionColor:    Theme.color.orange
     property color selectedTextColor: Theme.color.white
+    property color hoverColor:        Theme.color.neutral2
     property string searchText: ""
     readonly property int searchResultCount: _searchMatches.length
     property int currentSearchResultIndex: -1
@@ -79,8 +80,12 @@ Item {
     property var _currentMatch: null
     property bool _resetSearchOnRefresh: false
 
-    // ── Selection ────────────────────────────────────────────────────────
+    // ── Selection and hover ──────────────────────────────────────────────
 
+    // Shown at the top-right of the hovered entry; it can read hoveredRow.
+    property Component hoverActions: null
+    readonly property int hoveredRow: _hoveredRow
+    readonly property var hoveredEntry: _hoverBounds ? _hoverBounds.entry : undefined
     readonly property bool hasSelection: _selection !== null
     // Endpoints as {row, pos}; the anchor stays put while the focus follows
     // the pointer, so the selection can run in either direction.
@@ -89,6 +94,11 @@ Item {
     readonly property var _selection: root._normalizedSelection(_selAnchor, _selFocus)
     // Row last clicked, which Select All expands to its whole entry.
     property int _activeRow: -1
+    property int _hoveredRow: -1
+    // Rows of the hovered entry as {entry, first, last}, found once per entry
+    // rather than on every scroll step under a resting pointer.
+    property var _hoverBounds: null
+    readonly property var _hoverSpan: root._spanOf(_hoverBounds, listView.contentY, listView.contentHeight)
     readonly property bool _pointerSelection: AppMode.isDesktop
 
     // ── Layout metrics ───────────────────────────────────────────────────
@@ -306,6 +316,36 @@ Item {
         if (hit && root._selAnchor) root._selFocus = hit
     }
 
+    function _rowAtY(y) {
+        return listView.indexAt(listView.width / 2, y + listView.contentY)
+    }
+
+    function _updateHover() {
+        if (actionsHover.hovered) return
+        const row = pointerArea.containsMouse && !pointerArea.pressed
+            ? root._rowAtY(pointerArea.mouseY) : -1
+        root._hoveredRow = row
+        const bounds = root._hoverBounds
+        if (row < 0) {
+            root._hoverBounds = null
+        } else if (!bounds || row < bounds.first || row > bounds.last) {
+            const found = root._entryBounds(row)
+            root._hoverBounds = { entry: root._entryAt(row), first: found.first, last: found.last }
+        }
+    }
+
+    // Content-y extent of the hovered entry. An end row without a delegate is
+    // beyond the cache buffer, so the extent just runs past that edge of the view.
+    function _spanOf(bounds, contentY, contentHeight) {
+        if (!bounds) return null
+        const first = listView.itemAtIndex(bounds.first)
+        const last = listView.itemAtIndex(bounds.last)
+        return {
+            top: first ? first.y : contentY - 1,
+            bottom: last ? last.y + last.height : contentY + listView.height + 1
+        }
+    }
+
     function scheduleSearchRefresh(resetCurrent) {
         root._resetSearchOnRefresh = root._resetSearchOnRefresh || resetCurrent
         searchRefreshTimer.restart()
@@ -442,8 +482,10 @@ Item {
     }
 
     function _onRowsChanged() {
+        root._hoverBounds = null
         root.scheduleSearchRefresh(false)
         if (root.autoScrollToBottom && root.searchText.length === 0) tailTimer.restart()
+        Qt.callLater(root._updateHover)
     }
 
     // Row indices held by the selection no longer point at the same lines.
@@ -550,6 +592,7 @@ Item {
 
         onContentYChanged: {
             root._followingTail = atYEnd
+            root._updateHover()
             root.scrolled(contentY)
         }
         onContentHeightChanged: root._onLayoutChanged()
@@ -683,6 +726,22 @@ Item {
                 wrapMode: Text.NoWrap
             }
         }
+
+        // One highlight behind the hovered entry's rows, rather than one per
+        // delegate: delegates are created and recycled on every scroll step.
+        Rectangle {
+            objectName: root.objectName.length > 0 ? root.objectName + "_hover" : ""
+            // ListView keeps declared children itself; the span is in content
+            // coordinates, so the highlight has to scroll with the rows.
+            parent: listView.contentItem
+            z: -1
+            visible: root._hoverSpan !== null
+            x: root.horizontalPadding / 2
+            y: root._hoverSpan ? root._hoverSpan.top : 0
+            width: listView.width - root.horizontalPadding
+            height: root._hoverSpan ? root._hoverSpan.bottom - root._hoverSpan.top : 0
+            color: root.hoverColor
+        }
     }
 
     MouseArea {
@@ -692,12 +751,15 @@ Item {
         anchors.rightMargin: verticalScrollBar.size < 1 ? verticalScrollBar.width : 0
         enabled: root._pointerSelection
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        hoverEnabled: true
         preventStealing: true
         cursorShape: Qt.IBeamCursor
 
         property int tripleClickRow: -1
 
         onWheel: (wheel) => { wheel.accepted = false }
+        onContainsMouseChanged: root._updateHover()
+        onPressedChanged: root._updateHover()
 
         onPressed: (mouse) => {
             root.forceActiveFocus()
@@ -728,7 +790,10 @@ Item {
             tripleClickTimer.restart()
         }
         onPositionChanged: (mouse) => {
-            if (!(pressedButtons & Qt.LeftButton)) return
+            if (!(pressedButtons & Qt.LeftButton)) {
+                root._updateHover()
+                return
+            }
             root._extendSelectionTo(mouse.x, mouse.y)
             autoScrollTimer.running = mouse.y < 0 || mouse.y > height
         }
@@ -754,6 +819,21 @@ Item {
                                              Math.min(Math.max(root._minContentY(), root._maxContentY()),
                                                       listView.contentY + step))
                 root._extendSelectionTo(pointerArea.mouseX, y)
+            }
+        }
+
+        Loader {
+            id: hoverActionsLoader
+            objectName: root.objectName.length > 0 ? root.objectName + "_hoverActions" : ""
+            active: root.hoverActions !== null && root.hoveredRow >= 0
+            sourceComponent: root.hoverActions
+            x: pointerArea.width - width - 4
+            y: root._hoverSpan ? Math.max(4, root._hoverSpan.top - listView.contentY) : 0
+
+            HoverHandler {
+                id: actionsHover
+                cursorShape: Qt.ArrowCursor
+                onHoveredChanged: if (!hovered) root._updateHover()
             }
         }
     }

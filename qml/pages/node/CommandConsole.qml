@@ -170,6 +170,7 @@ Page {
         rowSpacing: 0
         columnSpacing: 20
         leftColumnWidth: 60
+        hoverActions: hoverActionsComponent
         onContextMenuRequested: (row, x, y) => root.openOutputMenu(row, x, y)
     }
 
@@ -262,6 +263,66 @@ Page {
             role: ContextMenuButton.Destructive
             enabled: outputView.count > 0
             onTriggered: rpcConsoleModel.clear()
+        }
+    }
+
+    Component {
+        id: hoverActionsComponent
+
+        Rectangle {
+            id: hoverActions
+            readonly property int row: outputView.hoveredRow
+            readonly property bool onCommand: root.commandAt(row) !== ""
+
+            implicitWidth: hoverActionsRow.implicitWidth + 4
+            implicitHeight: hoverActionsRow.implicitHeight + 4
+            radius: 6
+            color: Theme.color.neutral1
+            border.width: 1
+            border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+
+            Row {
+                id: hoverActionsRow
+                anchors.centerIn: parent
+                spacing: 2
+
+                CopyButton {
+                    objectName: "consoleHoverCopyButton"
+                    displayMode: CopyButton.IconOnly
+                    iconSize: 14
+                    implicitHeight: 24
+                    copyText: hoverActions.onCommand ? qsTr("Copy command") : qsTr("Copy output")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: text
+                    onCopyRequested: Clipboard.setText(outputView.entryTextAt(hoverActions.row))
+                }
+                IconButton {
+                    objectName: "consoleHoverRunButton"
+                    visible: hoverActions.onCommand
+                    enabled: root.canRunAgain(hoverActions.row)
+                    size: 24
+                    iconSize: 14
+                    iconSource: "qrc:/icons/refresh"
+                    Accessible.name: qsTr("Run again")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: qsTr("Run again")
+                    onClicked: root.runCommandAt(hoverActions.row)
+                }
+                IconButton {
+                    objectName: "consoleHoverEditButton"
+                    visible: hoverActions.onCommand
+                    size: 24
+                    iconSize: 14
+                    iconSource: "qrc:/icons/edit"
+                    Accessible.name: qsTr("Edit command")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: qsTr("Edit command")
+                    onClicked: root.editCommandAt(hoverActions.row)
+                }
+            }
         }
     }
 
