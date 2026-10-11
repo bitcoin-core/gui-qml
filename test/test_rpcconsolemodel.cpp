@@ -24,6 +24,7 @@
 #include <QMutex>
 #include <QSemaphore>
 #include <QSignalSpy>
+#include <QTextDocument>
 #include <QtTest/QtTest>
 
 #include <atomic>
@@ -63,6 +64,20 @@ public:
         obj.pushKV("key3", "value3");
         return obj;
     }
+};
+
+// RpcTestStubNode that returns a preset reply.
+class FixedReplyNode : public RpcTestStubNode
+{
+public:
+    explicit FixedReplyNode(UniValue reply) : m_reply{std::move(reply)} {}
+    UniValue executeRpc(const std::string&, const UniValue&, const std::string&) override
+    {
+        return m_reply;
+    }
+
+private:
+    UniValue m_reply;
 };
 
 // RpcTestStubNode that provides a known command list for autocomplete tests.
@@ -186,6 +201,7 @@ private Q_SLOTS:
     void clearRemovesOutput();
     void outputTruncatedWhenResultTooLong();
     void jsonReplyKeyColoringSkipsStringsContainingColons();
+    void renderedTextMatchesPlainContent();
     void availableCommandsIncludesHelpVariants();
 };
 
@@ -464,6 +480,57 @@ void RpcConsoleModelTests::jsonReplyKeyColoringSkipsStringsContainingColons()
     // The old regex-based formatter incorrectly treated this as a key.
     QVERIFY2(!html.contains(QStringLiteral("\"see section\"</span>")),
              qPrintable("String value was mis-coloured as a key in:\n" + html));
+}
+
+// Search offsets and copied text come from plainContent, so it must be exactly
+// what the rich text renders to, whitespace runs included.
+void RpcConsoleModelTests::renderedTextMatchesPlainContent()
+{
+    UniValue arr(UniValue::VARR);
+    arr.push_back("  two  spaces  ");
+    arr.push_back("tab\there");
+    UniValue obj(UniValue::VOBJ);
+    obj.pushKV("needle", "two  spaces needle");
+    obj.pushKV("key  with  spaces", "value");
+    obj.pushKV("escaped", "<b>&amp;</b> \"quoted\"");
+    obj.pushKV("breaks", "line\nbreak\r\nend");
+    obj.pushKV("nbsp", "a\xc2\xa0 b");
+    obj.pushKV("edges", " lead trail ");
+    obj.pushKV("array", arr);
+
+    const std::vector<UniValue> replies{
+        obj,
+        UniValue{"col1    col2\n    indented  text\t\ttabs \nlast"},
+    };
+    for (const UniValue& reply : replies) {
+        FixedReplyNode mock{reply};
+        RpcConsoleModel model{mock};
+        auto* out = qobject_cast<QAbstractListModel*>(model.outputModel());
+        QVERIFY(out != nullptr);
+        submitAndSettle(model, "getsomething  with   spaces");
+        QVERIFY(out->rowCount() > 2);
+
+        const int content_role = roleForName(out, "content");
+        const int plain_role = roleForName(out, "plainContent");
+        QVERIFY(content_role != -1);
+        QVERIFY(plain_role != -1);
+        QTextDocument doc;
+        for (int row = 0; row < out->rowCount(); ++row) {
+            const QModelIndex index = out->index(row, 0);
+            const QString html = out->data(index, content_role).toString();
+            doc.setHtml(html);
+            QVERIFY2(doc.toPlainText() == out->data(index, plain_role).toString(),
+                     qPrintable(QString("row %1 renders as '%2' from '%3'")
+                                    .arg(row).arg(doc.toPlainText(), html)));
+        }
+    }
+
+    FixedReplyNode mock{obj};
+    RpcConsoleModel model{mock};
+    submitAndSettle(model, "getsomething");
+    auto* out = model.outputModel();
+    QVERIFY(joinRows(out, roleForName(out, "plainContent"), 1)
+                .contains(QStringLiteral("\"two  spaces needle\"")));
 }
 
 void RpcConsoleModelTests::availableCommandsIncludesHelpVariants()
