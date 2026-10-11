@@ -14,8 +14,8 @@ NeutralButton {
     property alias iconObjectName: unitIcon.objectName
 
     text: unit === BitcoinAmount.SAT ? qsTr("sats")
-        : unit === BitcoinAmount.mBTC ? "mBTC"
-        : unit === BitcoinAmount.uBTC ? qsTr("bits") : "BTC"
+        : unit === BitcoinAmount.MilliBTC ? "mBTC"
+        : unit === BitcoinAmount.MicroBTC ? qsTr("bits") : "BTC"
     implicitHeight: 32
     textStyle: Theme.text.caption
     padding: 6

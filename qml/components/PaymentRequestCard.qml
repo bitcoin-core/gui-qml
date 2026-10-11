@@ -101,7 +101,7 @@ Pane {
         if (text === "") return 0
         if (!/^\d*(\.\d*)?$/.test(text) || text === ".") return -1
         const decimals = amountUnit === BitcoinAmount.SAT ? 0
-            : amountUnit === BitcoinAmount.mBTC ? 5 : amountUnit === BitcoinAmount.uBTC ? 2 : 8
+            : amountUnit === BitcoinAmount.MilliBTC ? 5 : amountUnit === BitcoinAmount.MicroBTC ? 2 : 8
         const parts = text.split(".")
         const fraction = parts.length > 1 ? parts[1] : ""
         if (fraction.length > decimals) return -1

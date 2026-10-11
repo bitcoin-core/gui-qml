@@ -66,7 +66,7 @@ void BitcoinAmountTests::display_flow_btc()
 void BitcoinAmountTests::display_flow_mbtc_and_ubtc()
 {
     BitcoinAmount amt;
-    amt.setUnit(BitcoinAmount::Unit::mBTC);
+    amt.setUnit(BitcoinAmount::Unit::MilliBTC);
     amt.setSatoshi(COIN);
     QCOMPARE(amt.toDisplay(), QString("1000.00000"));
     QCOMPARE(amt.unitLabel(), QString("mBTC"));
@@ -75,7 +75,7 @@ void BitcoinAmountTests::display_flow_mbtc_and_ubtc()
     QCOMPARE(amt.satoshi(), qint64{123456});
     QCOMPARE(amt.toDisplay(), QString("1.23456"));
 
-    amt.setUnit(BitcoinAmount::Unit::uBTC);
+    amt.setUnit(BitcoinAmount::Unit::MicroBTC);
     QCOMPARE(amt.toDisplay(), QString("1234.56"));
     QCOMPARE(amt.unitLabel(), QString("bits"));
 

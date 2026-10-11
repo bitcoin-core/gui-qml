@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <qml/backendexecutor.h>
+#include <qml/bitcoinamount.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 
@@ -4178,7 +4179,7 @@ public Q_SLOTS:
             "PeerDetailsModel",
             "Test stub type"
         );
-        qmlRegisterType<MockBitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
+        qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
         qmlRegisterType<MockBitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
         qmlRegisterType<MockActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
         qmlRegisterUncreatableType<MockTransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Test fixture");

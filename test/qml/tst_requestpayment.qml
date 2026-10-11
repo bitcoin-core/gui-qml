@@ -462,6 +462,51 @@ TestCase {
         verify(!update.visible)
     }
 
+    function test_request_amount_survives_note_only_update_data() {
+        return [
+            {tag: "BTC", unit: 0, amount: "0.00000001", label: "BTC"},
+            {tag: "mBTC", unit: 1, amount: "0.00001", label: "mBTC"},
+            {tag: "bits", unit: 2, amount: "0.01", label: "bits"},
+            {tag: "sats", unit: 3, amount: "1", label: "sats"},
+        ]
+    }
+    function test_request_amount_survives_note_only_update(data) {
+        optionsModel.displayUnit = data.unit
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", data.amount).editingFinished()
+        compare(page.draftCard.request.amount.satoshi, 1)
+        compare(findChild(page.draftCard, "requestPaymentAmountUnitToggle").text, data.label)
+        page.draftCard.createRequest()
+        tryCompare(page.requestModal, "opened", true)
+        const card = page.requestModal.card
+        compare(card.request.amount.satoshi, 1)
+        compare(findChild(card, "requestPaymentAmountInput").text, data.amount)
+        compare(findChild(card, "requestPaymentAmountUnitToggle").text, data.label)
+        editField(card, "requestPaymentNoteSelfInput", "Private reminder")
+        findChild(card, "requestPaymentUpdateButton").clicked()
+        compare(card.request.noteSelf, "Private reminder")
+        compare(card.request.amount.satoshi, 1)
+        compare(findChild(card, "requestPaymentAmountInput").text, data.amount)
+        verify(!card.modified)
+    }
+
+    function test_saved_request_note_only_update_preserves_amount_data() {
+        return test_request_amount_survives_note_only_update_data()
+    }
+    function test_saved_request_note_only_update_preserves_amount(data) {
+        const page = createPage()
+        editField(page.draftCard, "requestPaymentAmountInput", "0.00000001").editingFinished()
+        const card = createRequest(page)
+        optionsModel.displayUnit = data.unit
+        compare(findChild(card, "requestPaymentAmountInput").text, data.amount)
+        verify(!card.modified)
+        editField(card, "requestPaymentNoteSelfInput", "Private reminder")
+        findChild(card, "requestPaymentUpdateButton").clicked()
+        compare(card.request.noteSelf, "Private reminder")
+        compare(card.request.amount.satoshi, 1)
+        verify(!card.modified)
+    }
+
     function test_saved_request_unit_toggle_does_not_enable_update() {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "0.001")
