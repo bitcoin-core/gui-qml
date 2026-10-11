@@ -40,6 +40,7 @@ QVariant RpcOutputListModel::data(const QModelIndex& index, int role) const
     case ContentRole:      return r.contentHtml;
     case PlainContentRole: return r.contentPlain;
     case CategoryRole:     return r.category;
+    case EntryRole:        return r.entry;
     }
     return {};
 }
@@ -51,6 +52,7 @@ QHash<int, QByteArray> RpcOutputListModel::roleNames() const
         {ContentRole,      "content"},
         {PlainContentRole, "plainContent"},
         {CategoryRole,     "category"},
+        {EntryRole,        "entry"},
     };
 }
 
@@ -63,6 +65,7 @@ QVariantMap RpcOutputListModel::get(int row) const
         {QStringLiteral("content"),      r.contentHtml},
         {QStringLiteral("plainContent"), r.contentPlain},
         {QStringLiteral("category"),     r.category},
+        {QStringLiteral("entry"),        r.entry},
     };
 }
 
@@ -85,11 +88,12 @@ void RpcOutputListModel::appendLines(const QString& timestamp,
 
     // One insert signal for the whole block, not one per line.
     const int first = m_rows.size();
+    const int entry = m_next_entry++;
     beginInsertRows({}, first, first + keep - 1);
     m_rows.reserve(first + keep);
     for (int i = skipped; i < lines.size(); ++i) {
         m_rows.append(Row{i == 0 ? timestamp : QString{},
-                          lines.at(i).html, lines.at(i).plain, category});
+                          lines.at(i).html, lines.at(i).plain, category, entry});
     }
     endInsertRows();
     Q_EMIT countChanged();
