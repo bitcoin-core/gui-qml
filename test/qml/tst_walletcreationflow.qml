@@ -281,14 +281,24 @@ TestCase {
         compare(flow.importingWallet, false)
     }
 
+    function test_import_file_dialog_selection_imports_file() {
+        const flow = createFlow()
+        const dialog = findChild(flow, "walletImportFileDialog")
+        verify(dialog !== null)
+        findChild(flow, "walletTypeImport").clicked()
+        compare(dialog.openCalls, 1)
+        dialog.selectAndAccept("file:///tmp/test-wallet.bak")
+        tryVerify(function() { return findChild(flow, "importWalletSuccessPage") !== null })
+        compare(findChild(flow, "walletImportErrorPage"), null)
+        compare(flow.importingWallet, false)
+    }
+
     function test_import_file_dialog_rejection_keeps_wallet_types() {
         const flow = createFlow()
         const dialog = findChild(flow, "walletImportFileDialog")
         verify(dialog !== null)
         verify(dialog.selectedFile !== undefined)
         compare(dialog.nameFilters.length, 2)
-        // Exercise dialog signals without opening a platform picker: the
-        // minimal platform has no native picker on Qt 6.2.
         dialog.rejected()
         compare(flow.depth, 1)
         compare(flow.currentItem.objectName, "walletCreationTypePage")
@@ -300,8 +310,6 @@ TestCase {
         const flow = createFlow()
         const dialog = findChild(flow, "walletImportFileDialog")
         verify(dialog !== null)
-        // Qt 6.2 exposes selectedFile as read-only. Successful selection is
-        // covered through importWalletPathField without opening a picker.
         compare(dialog.selectedFile.toString(), "")
         dialog.accepted()
         compare(flow.depth, 1)

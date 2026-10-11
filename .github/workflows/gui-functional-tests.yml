@@ -160,6 +160,7 @@ jobs:
           python3 test/functional/qml_test_resetguisettings.py
           python3 test/functional/qml_test_receive.py
           python3 test/functional/qml_test_activity_filter_export.py
+          python3 test/functional/qml_test_file_dialog.py
           python3 test/functional/qml_test_password_wallet.py
           python3 test/functional/qml_test_send_receive.py
           python3 test/functional/qml_test_addresses.py

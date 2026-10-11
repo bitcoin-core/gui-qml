@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtQuick.Dialogs
 import org.bitcoincore.qt 1.0
 import "../controls"
 import "../pages/wallet"
@@ -554,10 +553,10 @@ Pane {
         }
 
     }
-    FileDialog {
+    AppFileDialog {
         id: saveDialog
         objectName: "requestPaymentSaveQRDialog"
-        fileMode: FileDialog.SaveFile
+        fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("PNG files (*.png)")]
         defaultSuffix: "png"
         onAccepted: root.saveQRToFile(selectedFile)

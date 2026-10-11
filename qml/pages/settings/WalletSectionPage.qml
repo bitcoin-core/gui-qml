@@ -4,8 +4,8 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../../controls"
 
@@ -64,9 +64,9 @@ SettingsPage {
         backupDialog.open()
     }
 
-    FileDialog {
+    AppFileDialog {
         id: backupDialog
-        fileMode: FileDialog.SaveFile
+        fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
         currentFile: root.backupDefaultFileUrl()
         defaultSuffix: "bak"
