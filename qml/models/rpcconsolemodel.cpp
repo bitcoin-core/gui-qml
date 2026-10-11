@@ -112,6 +112,8 @@ namespace {
 
 using OutputLine = RpcOutputListModel::OutputLine;
 
+bool IsCollapsible(QChar c) { return c.isSpace() && c != QChar::Nbsp; }
+
 /**
  * Accumulates output a line at a time, in two representations: HTML for the
  * delegate, and the plain text that HTML renders to. Recording the plain text
@@ -128,14 +130,36 @@ public:
     void raw(QLatin1String chars) { m_html += chars; m_plain += chars; }
     void raw(QChar c) { m_html += c; m_plain += c; }
 
-    /** Arbitrary text, escaped in the markup. */
-    void text(const QString& t) { m_html += t.toHtmlEscaped(); m_plain += t; }
+    /**
+     * Arbitrary text, escaped in the markup. The renderer collapses each run
+     * of whitespace to one space, so all but the last of a run are emitted as
+     * &nbsp; (the whole run at the start of a line, where it is indentation).
+     */
+    void text(const QString& t)
+    {
+        int i = 0;
+        while (i < t.size()) {
+            int j = i;
+            if (IsCollapsible(t.at(i))) {
+                while (j < t.size() && IsCollapsible(t.at(j))) ++j;
+                const bool at_line_start = m_plain.isEmpty();
+                indent(j - i - (at_line_start ? 0 : 1));
+                if (!at_line_start) raw(QLatin1Char(' '));
+            } else {
+                while (j < t.size() && !IsCollapsible(t.at(j))) ++j;
+                const QString chunk = t.mid(i, j - i);
+                m_html += chunk.toHtmlEscaped();
+                m_plain += QString{chunk}.replace(QChar::Nbsp, QLatin1Char(' '));
+            }
+            i = j;
+        }
+    }
 
     void indent(int count)
     {
         for (int i = 0; i < count; ++i) {
             m_html += QStringLiteral("&nbsp;");
-            m_plain += QChar{0x00A0};
+            m_plain += QLatin1Char(' ');
         }
     }
 
@@ -158,38 +182,12 @@ private:
     QVector<OutputLine> m_lines;
 };
 
-// Escape `text` and split it into lines. An HTML renderer collapses a run of
-// spaces to one, which would misalign the space-padded columns in `help`
-// output, so every space in a run but the last is emitted as &nbsp; — the last
-// stays an ordinary space so searching for "two words" still matches.
 QVector<OutputLine> EscapeToLines(const QString& text)
 {
     LineSink out;
     const QStringList lines = text.split(QLatin1Char('\n'));
     for (int i = 0; i < lines.size(); ++i) {
-        const QString& line = lines.at(i);
-        bool at_line_start = true;
-        int j = 0;
-        while (j < line.size()) {
-            if (line.at(j) != QLatin1Char(' ')) {
-                int k = j;
-                while (k < line.size() && line.at(k) != QLatin1Char(' ')) ++k;
-                out.text(line.mid(j, k - j));
-                at_line_start = false;
-                j = k;
-                continue;
-            }
-            int k = j;
-            while (k < line.size() && line.at(k) == QLatin1Char(' ')) ++k;
-            const int run = k - j;
-            if (at_line_start) {
-                out.indent(run);
-            } else {
-                out.indent(run - 1);
-                out.raw(QLatin1Char(' '));
-            }
-            j = k;
-        }
+        out.text(lines.at(i));
         if (i + 1 < lines.size()) out.newLine();
     }
     return out.take();
