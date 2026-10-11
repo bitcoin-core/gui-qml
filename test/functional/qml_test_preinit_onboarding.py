@@ -74,17 +74,22 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
     assert_preinit_cover_about_available(gui)
 
+    gui.wait_for_property("onboardingCoverButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingCoverButton")
     gui.wait_for_page("onboardingStrengthen", timeout_ms=5000)
+    gui.wait_for_property("onboardingStrengthenButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingStrengthenButton")
     gui.wait_for_page("onboardingBlockchain", timeout_ms=5000)
+    gui.wait_for_property("onboardingBlockchainButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingBlockchainButton")
     gui.wait_for_page("onboardingBlockclock", timeout_ms=5000)
+    gui.wait_for_property("onboardingBlockclockButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingBlockclockButton")
     gui.wait_for_page("onboardingStorageLocation", timeout_ms=5000)
     gui.wait_for_property("storageCustomLocationOption", "checked", True, timeout_ms=5000)
     assert gui.get_property("storageCustomLocationOption", "customDir") == datadir
 
+    gui.wait_for_property("onboardingStorageLocationButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingStorageLocationButton")
     gui.wait_for_page("onboardingStorageAmount", timeout_ms=5000)
     if expect_custom_storage:
@@ -95,6 +100,7 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
             or gui.get_property("storageFullOption", "checked")
         ), "Expected an existing-profile storage amount selection"
 
+    gui.wait_for_property("onboardingStorageAmountButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingStorageAmountButton")
     gui.wait_for_page("onboardingConnection", timeout_ms=5000)
 
@@ -102,6 +108,7 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
 def finish_existing_profile_preinit_and_reconnect(harness, datadir, expect_custom_storage=True):
     gui = harness.driver
     click_existing_profile_to_connection(gui, datadir, expect_custom_storage)
+    gui.wait_for_property("onboardingConnectionButton", "enabled", True, timeout_ms=5000)
     gui.click("onboardingConnectionButton")
     return harness.wait_for_main_window_reconnect()
 
@@ -477,6 +484,7 @@ def run_qml_onboarded_override_reloads_saved_settings_flow():
         click_existing_profile_to_connection(gui, datadir)
         assert_saved_connection_settings_visible(gui)
 
+        gui.wait_for_property("onboardingConnectionButton", "enabled", True, timeout_ms=5000)
         gui.click("onboardingConnectionButton")
         gui = harness.wait_for_main_window_reconnect()
         assert_node_shell_visible(gui)
