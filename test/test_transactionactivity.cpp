@@ -9,6 +9,7 @@
 #include <interfaces/wallet.h>
 #include <key_io.h>
 #include <script/solver.h>
+#include <util/strencodings.h>
 
 #include <algorithm>
 #include <utility>
@@ -251,7 +252,7 @@ void TransactionActivityTests::flowDecodesDataOutputs()
     QFETCH(QString, payload_hex);
     auto wtx = MakeWalletTx({{100'000, true}}, {{99'000, false}, {0, false, false, true}});
     CMutableTransaction tx{*wtx.tx};
-    const auto bytes = QByteArray::fromHex(script_hex);
+    const auto bytes = ParseHex(script_hex.toStdString());
     tx.vout[1].scriptPubKey = CScript(bytes.begin(), bytes.end());
     wtx.tx = MakeTransactionRef(tx);
     const auto outputs = BuildTransactionFlow(wtx, {}).value("outputs").toList();
