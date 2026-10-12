@@ -8,7 +8,12 @@
 
 #include <QDir>
 #include <QFile>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QTemporaryDir>
+#include <QThread>
+#include <QTimer>
+#include <qml/backendexecutor.h>
 #include <test/mocks/mocknode.h>
 #include <chainparams.h>
 #include <qml/core_settings.h>
@@ -25,6 +30,9 @@
 #include <common/args.h>
 #include <common/settings.h>
 #include <util/translation.h>
+
+#include <atomic>
+#include <stdexcept>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
 const TranslateFn G_TRANSLATION_FUN{nullptr};
@@ -94,10 +102,13 @@ private Q_SLOTS:
     void resetGuiSettingsExplicitDatadirClearsThatDatadirSettingsJson();
     void qmlOnboardedProfileSkipsPreInitOnboarding();
     void qmlOnboardedCommandLineOverrideShowsPreInitOnboarding();
-    void qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding();
+    void configuredDatadirOnboardingStatus_data();
+    void configuredDatadirOnboardingStatus();
     void configuredDatadirPreviewKeepsConfigSource();
     void configuredDatadirApplyDoesNotPersistGuiDataDir();
     void explicitDatadirApplyDoesNotPersistGuiDataDir();
+    void asynchronousOnboardingPreparation_data();
+    void asynchronousOnboardingPreparation();
     void qmlOnboardedResetGuiSettingsShowsPreInitOnboarding();
     void qmlOnboardedChooseDataDirShowsPreInitOnboarding();
     void qmlOnboardedCurrentResetFlagShowsPreInitOnboarding();
@@ -1041,10 +1052,7 @@ void OptionsModelTests::guiDataDirChooserShowsForMissingConfiguredDir()
     QVERIFY(!QFileInfo::exists(missing_data_dir));
 
     ArgsManager args;
-    QVERIFY(QmlDataDir::ShouldShowDataDirChooser(args));
-
-    args.ForceSetArg("-datadir", QDir(temp_dir.path()).filePath("explicit-data-dir").toStdString());
-    QVERIFY(!QmlDataDir::ShouldShowDataDirChooser(args));
+    QVERIFY(QmlDataDir::ShouldShowDataDirChooser(args, missing_data_dir));
 }
 
 void OptionsModelTests::guiDataDirChooserShowsForUnwritableConfiguredDir()
@@ -1065,14 +1073,10 @@ void OptionsModelTests::guiDataDirChooserShowsForUnwritableConfiguredDir()
     }
 
     ArgsManager args;
-    const bool should_show = QmlDataDir::ShouldShowDataDirChooser(args);
-
-    args.ForceSetArg("-datadir", QDir(temp_dir.path()).filePath("explicit-data-dir").toStdString());
-    const bool explicit_datadir_should_show = QmlDataDir::ShouldShowDataDirChooser(args);
+    const bool should_show = QmlDataDir::ShouldShowDataDirChooser(args, data_dir);
 
     QVERIFY(QFile(data_dir).setPermissions(original_permissions));
     QVERIFY(should_show);
-    QVERIFY(!explicit_datadir_should_show);
 }
 
 void OptionsModelTests::resetGuiSettingsClearsQSettings()
@@ -1466,9 +1470,43 @@ void OptionsModelTests::qmlOnboardedCommandLineOverrideShowsPreInitOnboarding()
     QCOMPARE(status.active_data_dir, data_dir.path());
 }
 
-void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboarding()
+void OptionsModelTests::configuredDatadirOnboardingStatus_data()
 {
+    QTest::addColumn<QString>("option");
+    QTest::addColumn<bool>("explicit_datadir");
+    QTest::addColumn<bool>("expected_onboarding");
+
+    QTest::newRow("config-profile") << QString{} << false << false;
+    QTest::newRow("config-choose") << QStringLiteral("-choosedatadir") << false << true;
+    QTest::newRow("config-reset") << QStringLiteral("-resetguisettings") << false << true;
+    QTest::newRow("config-current-reset") << QStringLiteral("current-reset") << false << true;
+    QTest::newRow("config-legacy-reset") << QStringLiteral("legacy-reset") << false << true;
+    QTest::newRow("config-marker-override") << QStringLiteral("-qml_onboarded=0") << false << true;
+    QTest::newRow("explicit-profile") << QString{} << true << false;
+    QTest::newRow("explicit-choose") << QStringLiteral("-choosedatadir") << true << false;
+    QTest::newRow("explicit-reset") << QStringLiteral("-resetguisettings") << true << true;
+    QTest::newRow("explicit-current-reset") << QStringLiteral("current-reset") << true << false;
+    QTest::newRow("explicit-legacy-reset") << QStringLiteral("legacy-reset") << true << false;
+    QTest::newRow("explicit-marker-override") << QStringLiteral("-qml_onboarded=0") << true << true;
+}
+
+void OptionsModelTests::configuredDatadirOnboardingStatus()
+{
+    QFETCH(QString, option);
+    QFETCH(bool, explicit_datadir);
+    QFETCH(bool, expected_onboarding);
+
     SavedGuiDataDirSettings saved_settings;
+    SavedNamedSettings legacy_default_settings{QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt")};
+    QSettings settings;
+    settings.clear();
+    // Pin the fallback selection independently of any legacy directory setting.
+    settings.setValue(SettingsKeys::DATA_DIR, QmlDataDir::DefaultDataDirString());
+    if (option == QStringLiteral("current-reset")) {
+        settings.setValue(QStringLiteral("fReset"), true);
+    } else if (option == QStringLiteral("legacy-reset")) {
+        legacy_default_settings.settings().setValue(QStringLiteral("fReset"), true);
+    }
     QTemporaryDir temp_dir;
     QVERIFY(temp_dir.isValid());
     QTemporaryDir configured_data_dir;
@@ -1480,7 +1518,7 @@ void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboardi
     QVERIFY(conf.write(QStringLiteral("regtest=1\ndatadir=%1\n[regtest]\nserver=1\n").arg(configured_data_dir.path()).toUtf8()) > 0);
     conf.close();
 
-    const std::vector<std::string> argv{
+    std::vector<std::string> argv{
         std::string{"bitcoinqml"},
         std::string{"-regtest"},
         "-conf=" + conf_path.toStdString(),
@@ -1496,14 +1534,16 @@ void OptionsModelTests::qmlOnboardedConfiguredDatadirProfileSkipsPreInitOnboardi
     QString write_error;
     QVERIFY2(QmlOnboardingSettings::MarkQmlOnboarded(write_args, &write_error), qPrintable(write_error));
 
+    if (option.startsWith('-')) argv.push_back(option.toStdString());
+    if (explicit_datadir) argv.push_back("-datadir=" + configured_data_dir.path().toStdString());
     const QmlOnboardingSettings::OnboardingStartupStatus status{
         QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, /*can_listen_ipc=*/false)
     };
     QVERIFY2(status.ok, qPrintable(status.error));
-    QVERIFY(status.qml_onboarded);
-    QVERIFY(!status.should_show_onboarding);
+    QCOMPARE(status.qml_onboarded, !expected_onboarding);
+    QCOMPARE(status.should_show_onboarding, expected_onboarding);
     QCOMPARE(status.active_data_dir, configured_data_dir.path());
-    QVERIFY(status.data_dir_source == QmlOnboardingSettings::DataDirSource::Config);
+    QCOMPARE(status.data_dir_source, explicit_datadir ? QmlOnboardingSettings::DataDirSource::ExplicitArg : QmlOnboardingSettings::DataDirSource::Config);
 }
 
 void OptionsModelTests::configuredDatadirPreviewKeepsConfigSource()
@@ -1623,6 +1663,69 @@ void OptionsModelTests::explicitDatadirApplyDoesNotPersistGuiDataDir()
 
     QVERIFY(!settings.contains(SettingsKeys::DATA_DIR));
     QCOMPARE(SettingToBool(args.GetPersistentSetting("qml_onboarded")), true);
+}
+
+void OptionsModelTests::asynchronousOnboardingPreparation_data()
+{
+    QTest::addColumn<QString>("outcome");
+    for (const auto* outcome : {"success", "failure", "exception", "unknown", "settings-error"}) {
+        QTest::newRow(outcome) << QString::fromLatin1(outcome);
+    }
+}
+
+void OptionsModelTests::asynchronousOnboardingPreparation()
+{
+    QFETCH(QString, outcome);
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    const auto argv = TestArgvWithDataDir(data_dir.path());
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
+    QSemaphore entered, release;
+    std::atomic_int calls{0};
+    std::atomic_bool off_gui{false};
+    const auto gui_thread = QThread::currentThread();
+    const auto drain_before_fixture_destruction = qScopeGuard([&] {
+        release.release();
+        bool drained{false};
+        BackendExecutor::shutdownAll(this, [&] { drained = true; });
+        QVERIFY(QTest::qWaitFor([&] { return drained; }, 5000));
+    });
+    OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    if (outcome == "settings-error") {
+        QVERIFY(QDir().mkpath(data_dir.filePath("regtest/settings.json")));
+    }
+    QSignalSpy prepared{&model, &OnboardingOptionsModel::nodePrepared};
+    model.prepareNode(args, [&] {
+        ++calls;
+        off_gui = QThread::currentThread() != gui_thread;
+        entered.release();
+        release.acquire();
+        if (outcome == "exception") throw std::runtime_error{"preparation failed"};
+        if (outcome == "unknown") throw 42;
+        return outcome == "success";
+    });
+    model.prepareNode(args, [&] { ++calls; return true; });
+    if (outcome != "settings-error") {
+        QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, 5000);
+        bool heartbeat{false};
+        QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+        QTRY_VERIFY(heartbeat);
+        QVERIFY(prepared.empty());
+        QVERIFY(!model.canFinish());
+        release.release();
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(prepared.size(), 1, 5000);
+    QCOMPARE(calls.load(), outcome == "settings-error" ? 0 : 1);
+    QCOMPARE(off_gui.load(), outcome != "settings-error");
+    QCOMPARE(prepared.first().at(0).toBool(), outcome == "success");
+    const auto error = prepared.first().at(1).toString();
+    if (outcome == "exception") QCOMPARE(error, QStringLiteral("preparation failed"));
+    else if (outcome == "unknown") QVERIFY(error.contains("Unknown exception"));
+    else if (outcome == "settings-error") QVERIFY(!error.isEmpty());
+    else QVERIFY(error.isEmpty());
 }
 
 void OptionsModelTests::qmlOnboardedResetGuiSettingsShowsPreInitOnboarding()

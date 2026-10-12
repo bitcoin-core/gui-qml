@@ -36,6 +36,13 @@ BlockClockModel::BlockClockModel(HistoryLoader history_loader, bool start_timer,
     if (start_timer) scheduleNextClockUpdate(current_time);
 }
 
+void BlockClockModel::stop()
+{
+    m_stopped = true;
+    m_clock_timer.stop();
+    m_history_loader = {};
+}
+
 qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
 {
     const qint64 seconds_since_midnight{current_time.time().msecsSinceStartOfDay() / 1000};
@@ -44,6 +51,7 @@ qint64 BlockClockModel::PeriodStartFor(const QDateTime& current_time)
 
 void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
 {
+    if (m_stopped) return;
     const qint64 period_start{PeriodStartFor(current_time)};
     if (m_timeline.period_start != period_start) {
         m_timeline.period_start = period_start;
@@ -65,6 +73,7 @@ void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
 
 void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
 {
+    if (m_stopped) return;
     const QTime time{current_time.time()};
     const int milliseconds_into_minute{time.second() * 1000 + time.msec()};
     m_clock_timer.start(CLOCK_UPDATE_INTERVAL_MS - milliseconds_into_minute);
@@ -72,12 +81,14 @@ void BlockClockModel::scheduleNextClockUpdate(const QDateTime& current_time)
 
 void BlockClockModel::initializeHistory()
 {
+    if (m_stopped) return;
     m_history_initialized = true;
     loadHistory();
 }
 
 void BlockClockModel::recordBlockTime(qint64 block_timestamp)
 {
+    if (m_stopped) return;
     updateCurrentTime(m_current_time_provider());
     if (m_history_initialized && m_history_loader) {
         // A queued notification may already be included in loaded history.

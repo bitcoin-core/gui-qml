@@ -17,11 +17,13 @@
 #include <QVariantMap>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 class ArgsManager;
+class BackendExecutor;
 
 namespace QmlDataDir {
 struct StorageSpaceResult;
@@ -68,6 +70,10 @@ class OnboardingOptionsModel : public QObject
 
 public:
     explicit OnboardingOptionsModel(std::vector<std::string> argv, bool can_listen_ipc, QObject* parent = nullptr);
+    ~OnboardingOptionsModel() override;
+
+    // Keep args and the preparation callback's dependencies alive until nodePrepared.
+    void prepareNode(ArgsManager& args, std::function<bool()> prepare_node);
 
     QString dataDir() const { return m_data_dir; }
     QString getDefaultDataDirString() const;
@@ -101,7 +107,7 @@ public:
     QObject* coreSettings() { return &m_core_settings; }
     QVariantMap coreSettingStatuses() const { return m_core_settings.statuses(); }
     QString previewError() const { return m_preview_error; }
-    bool canFinish() const { return m_preview_error.isEmpty() && !m_storage_check_pending && m_storage_error_text.isEmpty(); }
+    bool canFinish() const { return !m_preparing && m_preview_error.isEmpty() && !m_storage_check_pending && m_storage_error_text.isEmpty(); }
     bool dirtyState() const { return false; }
     int assumedBlockchainSize() const { return m_assumed_blockchain_size; }
     int assumedChainstateSize() const { return m_assumed_chainstate_size; }
@@ -126,8 +132,10 @@ public:
     Q_INVOKABLE QString defaultProxyAddress() const;
 
     bool applyToArgs(ArgsManager& args, QString* error = nullptr) const;
+    QmlOnboardingSettings::ApplyRequest applyRequest() const;
 
 Q_SIGNALS:
+    void nodePrepared(bool success, const QString& error);
     void customDataDirStringChanged(QString path);
     void dataDirChanged(QString path);
     void pruneChanged(bool prune);
@@ -146,6 +154,7 @@ Q_SIGNALS:
     void storageStatusChanged();
 
 private:
+    void finishNodePreparation(bool success, const QString& error);
     void setDataDir(const QString& path);
     void refreshPreview();
     void applyPreviewValues(const QmlCoreSettings::Values& values, const QVariantMap& statuses);
@@ -159,6 +168,8 @@ private:
     QmlOnboardingStorage::Info storageInfo() const;
     void setPreviewError(const QString& error);
 
+    std::unique_ptr<BackendExecutor> m_executor;
+    bool m_preparing{false};
     std::vector<std::string> m_argv;
     bool m_can_listen_ipc;
     QString m_data_dir;

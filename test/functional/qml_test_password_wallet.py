@@ -23,6 +23,7 @@ from qml_wallet_test_lib import (
     find_legacy_bitcoind,
     open_wallet_selector,
     rpc_call,
+    wait_for_loaded_wallets,
     wait_for_rpc,
 )
 from test_framework.descriptors import descsum_create
@@ -561,10 +562,7 @@ def case_close_loaded_wallet_from_selector(harness, checkpoints):
     checkpoints.checkpoint("wallet selector after closing selected wallet", gui)
     gui.click(f"walletSelectItem_{sanitize_object_suffix(remaining_wallet)}")
 
-    loaded_wallets_after = rpc_call(harness.gui_rpc_port, "listwallets")
-    assert loaded_wallets_after == [remaining_wallet], (
-        f"Expected only remaining wallet to stay loaded, got {loaded_wallets_after}"
-    )
+    wait_for_loaded_wallets(harness.gui_rpc_port, [remaining_wallet])
     assert gui.get_property("walletBadge", "noWalletLoaded") is False, "Expected one wallet to remain loaded"
     checkpoints.checkpoint("selected wallet closed from selector", gui)
 

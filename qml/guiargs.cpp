@@ -16,5 +16,6 @@ void SetupQmlGuiArgs(ArgsManager& argsman)
 #ifdef ENABLE_TEST_AUTOMATION
     argsman.AddArg("-test-automation=<path>", "Enable test automation bridge on the given Unix socket path", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
     argsman.AddArg("-test-settings-dir=<dir>", "Store QSettings in this directory while test automation is enabled", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
+    argsman.AddArg("-test-fatal-exception=<phase>", "Throw during a lifecycle phase (initialize, interrupt, shutdown); requires -test-automation", ArgsManager::ALLOW_ANY, OptionsCategory::GUI);
 #endif
 }

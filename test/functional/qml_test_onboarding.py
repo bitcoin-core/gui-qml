@@ -47,12 +47,14 @@ def run_tests():
 
         for button, expected_page in onboarding_steps:
             print(f"Click {button} ...")
+            gui.wait_for_property(button, "enabled", True, timeout_ms=10000)
             gui.click(button)
             gui.wait_for_page(expected_page, timeout_ms=5000)
             print(f"  -> page: {expected_page}")
 
         # Click Next on the final connection page to finish onboarding.
         print("Click onboardingConnectionButton (finish onboarding) ...")
+        gui.wait_for_property("onboardingConnectionButton", "enabled", True, timeout_ms=10000)
         gui.click("onboardingConnectionButton")
 
         if not args.socket_path:

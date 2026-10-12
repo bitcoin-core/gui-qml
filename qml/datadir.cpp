@@ -272,12 +272,9 @@ bool HasExplicitDataDirArg(const ArgsManager& args)
     return args.IsArgSet("-datadir") && !args.GetPathArg("-datadir").empty();
 }
 
-bool ShouldShowDataDirChooser(const ArgsManager& args)
+bool ShouldShowDataDirChooser(const ArgsManager& args, const QString& data_dir)
 {
-    if (HasExplicitDataDirArg(args)) return false;
-
     QSettings settings;
-    const QString data_dir = ReadGuiDataDir();
     const QString validation_error = IsDefaultDataDir(data_dir) ? QString{} : ValidateCustomDataDir(data_dir);
     const QFileInfo data_dir_info(data_dir);
     return !validation_error.isEmpty() ||

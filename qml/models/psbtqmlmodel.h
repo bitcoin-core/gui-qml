@@ -38,6 +38,7 @@ class PsbtQmlModel : public QObject
     Q_PROPERTY(QString matchedTxid READ matchedTxid NOTIFY changed)
 
 public:
+    void detachWallet() { m_wallet = nullptr; }
     explicit PsbtQmlModel(interfaces::Wallet* wallet, interfaces::Node* node, QObject* parent = nullptr);
 
     bool loaded() const { return m_psbt != nullptr; }

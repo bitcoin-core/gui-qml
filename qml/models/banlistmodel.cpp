@@ -10,9 +10,16 @@
 #include <QDateTime>
 #include <QLocale>
 
-BanListModel::BanListModel(interfaces::Node& node, QObject* parent)
-    : QAbstractListModel(parent), m_node(node)
+BanListModel::BanListModel(interfaces::Node& node, QObject* parent, bool backend_ready)
+    : QAbstractListModel(parent), m_node(node), m_backend_ready(backend_ready)
 {
+}
+
+void BanListModel::backendInitialized()
+{
+    if (m_stopping || m_backend_ready) return;
+    m_backend_ready = true;
+    refresh();
 }
 
 int BanListModel::rowCount(const QModelIndex& parent) const
@@ -46,12 +53,13 @@ QHash<int, QByteArray> BanListModel::roleNames() const
 
 bool BanListModel::unbanAt(int row)
 {
-    if (row < 0 || row >= m_ban_list.size()) return false;
+    if (m_stopping || !m_backend_ready || row < 0 || row >= m_ban_list.size()) return false;
     return m_node.unban(m_ban_list.at(row).subnet);
 }
 
 void BanListModel::refresh()
 {
+    if (m_stopping || !m_backend_ready) return;
     beginResetModel();
     banmap_t banMap;
     m_node.getBanned(banMap);

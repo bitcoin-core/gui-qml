@@ -29,6 +29,8 @@ Popup {
     Component.onCompleted: syncOpenState()
 
     modal: true
+    focus: true
+    z: 100
     closePolicy: Popup.NoAutoClose
     padding: 0
     anchors.centerIn: parent

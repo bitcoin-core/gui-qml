@@ -31,6 +31,8 @@ class NetworkTrafficTower : public QObject
 public:
     explicit NetworkTrafficTower(interfaces::Node& node, int sample_interval_ms = 1000);
     ~NetworkTrafficTower() override;
+    void startSampling();
+    void beginShutdown();
 
     bool active() const { return m_active; }
     quint64 totalBytesReceived() const { return m_total_bytes_received; }
@@ -46,6 +48,7 @@ public Q_SLOTS:
     Q_INVOKABLE void updateFilterWindowSize(int new_size);
 
 Q_SIGNALS:
+    void drained();
     void activeChanged();
     void totalBytesReceivedChanged();
     void totalBytesSentChanged();
@@ -58,6 +61,8 @@ private:
     NetworkTrafficWorker* m_worker{nullptr};
     QThread* m_worker_thread{nullptr};
     bool m_active{false};
+    bool m_stopping{false};
+    bool m_sampling_started{false};
     quint64 m_activation_generation{0};
     quint64 m_total_bytes_received{0};
     quint64 m_total_bytes_sent{0};

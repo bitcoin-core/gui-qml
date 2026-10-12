@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/debuglogmodel.h>
+#include <qml/asyncjoin.h>
 
 #include <logging.h>
 #include <util/threadnames.h>
@@ -75,6 +76,7 @@ DebugLogModel::DebugLogModel(const fs::path& log_path, QObject* parent)
 {
     m_reader = new QObject;
     m_reader_thread = new QThread(this);
+    m_reader_thread->setObjectName(QStringLiteral("debug-log"));
     m_reader->moveToThread(m_reader_thread);
     connect(m_reader_thread, &QThread::finished, m_reader, &QObject::deleteLater);
     m_reader_thread->start();
@@ -339,9 +341,11 @@ void DebugLogModel::stop()
 
     if (m_reader_thread) {
         m_reader_thread->quit();
-        if (QThread::currentThread() != m_reader_thread) {
-            m_reader_thread->wait();
-        }
+        JoinThreadAsync(m_reader_thread, this, [this] {
+            m_reader_thread = nullptr;
+            m_reader = nullptr;
+            Q_EMIT drained();
+        });
     }
 }
 

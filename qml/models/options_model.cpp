@@ -244,7 +244,7 @@ void OptionsQmlModel::emitDirtySignals(const DirtySnapshot& before)
 
 void OptionsQmlModel::applyRuntimeCoreChange(const QmlCoreSettings::Change& change, const DirtySnapshot& before)
 {
-    if (!change.accepted || !QmlCoreSettings::ValuesChanged(change)) return;
+    if (m_stopping || !change.accepted || !QmlCoreSettings::ValuesChanged(change)) return;
     m_core_settings.writeToNode(m_node, m_args, change.setting_name);
     refreshCoreSettingStatuses();
     QmlCoreSettings::EmitCoreSettingSignals(*this, change);
@@ -255,7 +255,7 @@ void OptionsQmlModel::applyRuntimeCoreChange(const QmlCoreSettings::Change& chan
         // Defer the live apply so the switch state and animation are not
         // held behind that work.
         QTimer::singleShot(200, this, [this, natpmp = change.after.natpmp] {
-            m_node.mapPort(natpmp);
+            if (!m_stopping) m_node.mapPort(natpmp);
         });
     }
     emitDirtySignals(before);
@@ -637,4 +637,11 @@ QString OptionsQmlModel::displayUnitLabel() const
 QString OptionsQmlModel::displayUnitLabelForAmount(qint64 satoshi) const
 {
     return QmlBitcoinUnits::displayLabel(QmlBitcoinUnits::fromDisplayUnit(m_display_unit), satoshi);
+}
+
+void OptionsQmlModel::beginShutdown()
+{
+    if (m_stopping) return;
+    m_stopping = true;
+    Q_EMIT shutdownFinished();
 }

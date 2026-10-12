@@ -32,6 +32,12 @@ struct DataDirSelection {
     DataDirSource source{DataDirSource::UserSelection};
 };
 
+struct ApplyRequest {
+    DataDirSelection data_dir;
+    QSet<QString> touched_settings;
+    QmlCoreSettings::Values values;
+};
+
 struct ProfileSummary {
     bool existing_profile{false};
     bool has_settings_file{false};

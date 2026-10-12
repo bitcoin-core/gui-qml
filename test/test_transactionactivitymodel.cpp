@@ -122,10 +122,10 @@ public:
     std::set<interfaces::WalletTx> getWalletTxs() override
     {
         blockingRead();
-        if (fail_history) throw std::runtime_error("wallet read failed");
         std::set<interfaces::WalletTx> result;
         for (const auto& [id, tx] : transactions) result.insert(tx);
         if (history_gate) history_gate->wait();
+        if (fail_history) throw std::runtime_error("wallet read failed");
         return result;
     }
     interfaces::WalletTx getWalletTx(const Txid& id) override
@@ -234,6 +234,13 @@ struct Fixture {
         // address-book model has loaded during wallet construction.
         state->blocking_read_on_gui = false;
     }
+    ~Fixture()
+    {
+        if (!wallet) return;
+        QSignalSpy drained{wallet.get(), &WalletQmlModel::shutdownFinished};
+        wallet->beginShutdown();
+        if (!wallet->backendExecutor()->isDrained() && drained.empty()) QVERIFY(drained.wait(10000));
+    }
     Model* model() { auto* result = wallet->transactionActivityModel(); Wait(result); return result; }
     void request(const QmlRecentRequestEntry& request) { wallet->receiveRequests()->prependOrReplace(request); }
 };
@@ -258,6 +265,8 @@ private Q_SLOTS:
     void bumpEligibilityIsOnlyReadForTheSelectedTransaction();
     void deletingWalletDoesNotWaitForActivityReads();
     void readFailuresCanBeRetried();
+    void failedInitialHistoryRetainsWorkAfterNotification_data();
+    void failedInitialHistoryRetainsWorkAfterNotification();
     void opensNewTransactionBeforeItsNotification();
     void confirmationUpdatesAreBatchedAndPreserveAmountCaches();
     void copiesRawTransactionAndPublicPaymentRequest();
@@ -333,9 +342,10 @@ void TransactionActivityModelTests::historyReadsLeaveTheEventLoopFreeAndDiscardS
     QTimer::singleShot(0, [&] { heartbeat = true; });
     QTRY_VERIFY(heartbeat);
     QVERIFY(model->loading());
-    // The worker captured old_tx before the gate. Supersede that snapshot.
-    f.state->transactions.clear();
-    f.state->put(new_tx);
+    QVERIFY(f.wallet->backendExecutor()->submit(model, [state = f.state, new_tx] {
+        state->transactions.clear();
+        state->put(new_tx);
+    }, [] {}));
     model->reload();
     bool inserted_stale{false};
     connect(model, &Model::rowsInserted, model, [&] {
@@ -526,6 +536,47 @@ void TransactionActivityModelTests::readFailuresCanBeRetried()
     Wait(model);
     QVERIFY(model->loadError().isEmpty());
     QCOMPARE(model->rowCount(), 1);
+}
+
+void TransactionActivityModelTests::failedInitialHistoryRetainsWorkAfterNotification_data()
+{
+    QTest::addColumn<bool>("retry_fails");
+    QTest::newRow("retry-succeeds") << false;
+    QTest::newRow("retry-fails") << true;
+}
+
+void TransactionActivityModelTests::failedInitialHistoryRetainsWorkAfterNotification()
+{
+    QFETCH(bool, retry_fails);
+    Fixture f;
+    const auto old_tx = MakeTx({{50'000, false}}, {{49'000, true}});
+    const auto new_tx = MakeTx({{60'000, false}}, {{59'000, true}});
+    f.state->put(old_tx);
+    f.state->fail_history = true;
+    auto gate = std::make_shared<ReadGate>();
+    f.state->history_gate = gate;
+    const auto release = qScopeGuard([&] { gate->release.release(); });
+    auto* model = f.wallet->transactionActivityModel();
+    QTRY_VERIFY(gate->entered.available() > 0);
+    QVERIFY(f.wallet->backendExecutor()->submit(model, [state = f.state, new_tx, retry_fails] {
+        state->put(new_tx);
+        state->fail_history = retry_fails;
+    }, [] {}));
+    Q_EMIT f.wallet->transactionChanged(Id(new_tx), CT_NEW);
+    gate->release.release();
+    Wait(model);
+    if (retry_fails) {
+        QVERIFY(!model->loadError().isEmpty());
+        QCOMPARE(model->rowCount(), 0);
+        f.state->fail_history = false;
+        model->reload();
+        Wait(model);
+    }
+    QVERIFY(model->loadError().isEmpty());
+    QCOMPARE(model->rowCount(), 2);
+    QVERIFY(Find(*model, Id(old_tx)).isValid());
+    QVERIFY(Find(*model, Id(new_tx)).isValid());
+    QVERIFY(!f.state->blocking_read_on_gui);
 }
 
 void TransactionActivityModelTests::confirmationUpdatesAreBatchedAndPreserveAmountCaches()
