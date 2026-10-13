@@ -44,9 +44,11 @@
 #include <qml/models/bitcoinaddress.h>
 #include <qml/models/bitcoinurimodel.h>
 #include <qml/models/blockclockmodel.h>
+#include <qml/models/blockclockhistory.h>
 #include <qml/models/bumptransactionmodel.h>
 #include <qml/models/chainmodel.h>
 #include <qml/models/debuglogmodel.h>
+#include <qml/models/imagesavemodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/networkstatusmodel.h>
 #include <qml/models/nodemodel.h>
@@ -298,6 +300,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return bitcoin_uri_model_instance;
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
+    qmlRegisterType<ImageSaveModel>("org.bitcoincore.qt", 1, 0, "ImageSaveModel");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");
@@ -654,7 +657,10 @@ int QmlGuiMain(int argc, char* argv[])
     constexpr bool backend_ready{false};
     NodeModel node_model{*node, backend_ready};
     node_model.addStartupWarnings(startup_warnings);
-    QmlInitExecutor init_executor{*node};
+    auto block_clock_history{std::make_shared<BlockClockHistory>()};
+    QmlInitExecutor init_executor{*node, [history = block_clock_history, node = node.get(), chain = chain.get()] {
+        return SubscribeBlockClockHistory(*node, *chain, history);
+    }};
     QmlShutdownCoordinator shutdown_coordinator{init_executor};
     QPointer<QQuickWindow> main_window;
     bool shutdown_requested{false};
@@ -713,13 +719,9 @@ int QmlGuiMain(int argc, char* argv[])
 #endif
 
     ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
-    BlockClockModel block_clock_model{[chain = chain.get()](qint64 period_start, qint64 period_end) {
-        return LoadBlockClockHistory(*chain, period_start, period_end);
-    }};
+    BlockClockModel block_clock_model{block_clock_history};
     setupChainQSettings(&app, chain_model.networkName());
 
-    QObject::connect(&node_model, &NodeModel::blockTipTimeChanged, &block_clock_model, &BlockClockModel::recordBlockTime);
-    QObject::connect(&node_model, &NodeModel::chainStateReady, &block_clock_model, &BlockClockModel::initializeHistory);
 
 
     DesktopWindowBehaviorModel desktop_window_behavior_model;
@@ -738,15 +740,25 @@ int QmlGuiMain(int argc, char* argv[])
     PeerListSortProxy peer_model_sort_proxy{nullptr};
     peer_model_sort_proxy.setSourceModel(&peer_model);
 
-    BanListModel ban_list_model{*node, nullptr, backend_ready};
+    BanListModel ban_list_model{*node, nullptr, backend_ready, node_model.peerCommandExecutor()};
     QObject::connect(&node_model, &NodeModel::bannedListChanged,
                      &ban_list_model, &BanListModel::refresh);
+    QObject::connect(&node_model, &NodeModel::peerActionPendingChanged, &ban_list_model, [&] {
+        if (node_model.peerActionPending()) ban_list_model.setExternalActionPending(true);
+    });
+    QObject::connect(&node_model, &NodeModel::peerActionFinished, &peer_model,
+                     [&](const QString& action, bool success, const QString&) {
+        if (success) peer_model.refresh();
+        ban_list_model.finishExternalAction(action == QStringLiteral("ban"));
+    });
+    QObject::connect(&ban_list_model, &BanListModel::unbanFinished,
+                     &node_model, &NodeModel::acknowledgeBanNotification);
     QObject::connect(&node_model, &NodeModel::chainStateReady,
                      &ban_list_model, &BanListModel::backendInitialized);
 
+    shutdown_coordinator.addParticipant(&peer_model, &PeerListModel::drained, [&] { peer_model.beginShutdown(); });
+    shutdown_coordinator.addParticipant(&ban_list_model, &BanListModel::drained, [&] { ban_list_model.beginShutdown(); });
     QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::shutdownStarted, &peer_model, [&] {
-        peer_model.beginShutdown();
-        ban_list_model.beginShutdown();
         block_clock_model.stop();
         QObject::disconnect(&node_model, nullptr, &ban_list_model, nullptr);
         QObject::disconnect(&node_model, nullptr, &block_clock_model, nullptr);
@@ -770,6 +782,8 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
 
     RpcConsoleModel rpc_console_model{*node};
+    QObject::connect(&rpc_console_model, &RpcConsoleModel::shutdownRequested,
+                     &node_model, &NodeModel::requestShutdown);
     shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
                                         [&] { rpc_console_model.beginShutdown(); });
     QObject::connect(&node_model, &NodeModel::nodeInitialized,
@@ -823,7 +837,8 @@ int QmlGuiMain(int argc, char* argv[])
 #else
     engine->rootContext()->setContextProperty("testAutomationEnabled", false);
 #endif
-    install_language(options_model.language());
+    // Keep the startup language until the settings snapshot is ready.
+    if (options_model.settingsReady()) install_language(options_model.language());
 
     // Retranslate the QML UI immediately when the user picks a new language.
     QObject::connect(&options_model, &OptionsQmlModel::languageChanged, [&]() {

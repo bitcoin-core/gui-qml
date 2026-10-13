@@ -190,6 +190,7 @@ private Q_SLOTS:
     void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
+    void exportBatchesYieldAndRejectChangedRows();
     void exportsCsvUsingDisplayUnit();
     void exportsCsvEscapesSignedRowsAndHandlesFailures();
     void exportsCsvNeutralizesFormulaInjection();
@@ -350,6 +351,37 @@ void ActivityFilterProxyModelTests::sortsByTimestampDescending()
     QCOMPARE(proxy.index(2, 0).data(TransactionActivityModel::LabelRole).toString(), QString{"Old"});
 }
 
+void ActivityFilterProxyModelTests::exportBatchesYieldAndRejectChangedRows()
+{
+    TestActivityModel source;
+    QList<ActivityRow> rows;
+    for (int i = 0; i < 500; ++i) rows.push_back(MakeRow(QString::number(i), Transaction::RecvWithAddress, i));
+    source.setRows(rows);
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = directory.filePath("activity.csv");
+    QVERIFY(proxy.exportCsv(path));
+    QVERIFY(!proxy.exportCsv(path));
+    bool heartbeat_while_pending{false};
+    QTimer::singleShot(0, &proxy, [&] {
+        heartbeat_while_pending = proxy.exportPending();
+        source.setRows({});
+    });
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY(heartbeat_while_pending);
+    QVERIFY(!proxy.exportError().isEmpty());
+    QVERIFY(!QFile::exists(path));
+    source.setRows(rows);
+    QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY(proxy.exportError().isEmpty());
+    QFile output{path};
+    QVERIFY(output.open(QIODevice::ReadOnly));
+    QCOMPARE(output.readAll().count('\n'), 501);
+}
+
 void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()
 {
     const qint64 timestamp = TimestampForLocalDate(QDate::currentDate());
@@ -372,6 +404,8 @@ void ActivityFilterProxyModelTests::exportsCurrentFilteredRowsToCsv()
     QVERIFY(temp_dir.isValid());
     const QString path = temp_dir.filePath("activity.csv");
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
 
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
@@ -402,6 +436,8 @@ void ActivityFilterProxyModelTests::exportsCsvUsingDisplayUnit()
     QVERIFY(temp_dir.isValid());
     const QString path = temp_dir.filePath("activity.csv");
     QVERIFY(proxy.exportCsv(path));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
 
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
@@ -430,6 +466,8 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     QVERIFY(temp_dir.isValid());
     const QString path = temp_dir.filePath("activity.csv");
     QVERIFY(proxy.exportCsv(QUrl::fromLocalFile(path).toString()));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
 
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
@@ -441,7 +479,9 @@ void ActivityFilterProxyModelTests::exportsCsvEscapesSignedRowsAndHandlesFailure
     QVERIFY(csv.contains("\"txid-bob\""));
     QVERIFY(csv.contains("\"true\""));
 
-    QVERIFY(!proxy.exportCsv(temp_dir.filePath("missing/activity.csv")));
+    QVERIFY(proxy.exportCsv(temp_dir.filePath("missing/activity.csv")));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY(!proxy.exportError().isEmpty());
 }
 
 void ActivityFilterProxyModelTests::filtersByCustomDateRange()
@@ -633,6 +673,8 @@ void ActivityFilterProxyModelTests::exportsCsvNeutralizesFormulaInjection()
     QVERIFY(temp_dir.isValid());
     const QString path = temp_dir.filePath("activity.csv");
     QVERIFY(proxy.exportCsv(QUrl::fromLocalFile(path).toString()));
+    QTRY_VERIFY(!proxy.exportPending());
+    QVERIFY2(proxy.exportError().isEmpty(), qPrintable(proxy.exportError()));
 
     QFile file(path);
     QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));

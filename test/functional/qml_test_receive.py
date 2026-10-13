@@ -212,6 +212,18 @@ def _request_qr_payload(gui):
     return gui.get_property("requestPaymentQRImage", "code")
 
 
+def _wait_receiving_address(gui, previous=None, prefix=None):
+    address = ""
+
+    def ready():
+        nonlocal address
+        address = gui.get_property("receivingAddressQRImage", "code")
+        return bool(address) and address != previous and (prefix is None or address.startswith(prefix))
+
+    wait_until(ready, description="receiving address after the wallet command")
+    return address
+
+
 def run_test():
     harness = WalletFlowHarness("qml_receive_requests", port_offset=70)
     try:
@@ -221,17 +233,15 @@ def run_test():
         gui.set_property("appWindow", "width", 1180)
         gui.set_property("appWindow", "height", 960)
 
-        # Receiving is ready immediately, but saving a request requires details.
+        # Wait for the receiving address; saving a request requires details.
         gui.wait_for_property("receivingAddressQRImage", "visible", True)
-        ready_address = gui.get_property("receivingAddressQRImage", "code")
-        assert ready_address.startswith("bcrt1p")
+        ready_address = _wait_receiving_address(gui, prefix="bcrt1p")
         with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
             settings = json.load(settings_file)
         assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32m"
         gui.invoke("requestPaymentAddressTypeDropdown", "activated", ["bech32"])
         gui.wait_for_property("requestPaymentAddressTypeDropdown", "currentValue", "bech32")
-        ready_address = gui.get_property("receivingAddressQRImage", "code")
-        assert ready_address.startswith("bcrt1q")
+        ready_address = _wait_receiving_address(gui, previous=ready_address, prefix="bcrt1q")
         with open(os.path.join(harness.gui_datadir, "regtest", "settings.json"), encoding="utf-8") as settings_file:
             settings = json.load(settings_file)
         assert settings["qml_receive_address_types"][WALLET_NAME] == "bech32"
@@ -308,8 +318,7 @@ def run_test():
         gui.wait_for_property("activityTabButton", "checked", True)
         _open_receive(gui)
         assert gui.get_property("requestPaymentQRImage", "code") == ""
-        next_receiving_address = gui.get_property("receivingAddressQRImage", "code")
-        assert next_receiving_address and next_receiving_address != address
+        _wait_receiving_address(gui, previous=address)
 
         # The Activity request opens the same modal without pushing a page.
         _open_activity(gui)
@@ -329,7 +338,7 @@ def run_test():
         gui.wait_for_property("requestPaymentYourNameInput", "text", "Coffee & cake")
         assert gui.get_property("requestPaymentMessageInput", "text") == "pizza"
         assert gui.get_property("requestPaymentNoteSelfInput", "text") == "Private lunch note"
-        assert gui.get_property("receivingAddressQRImage", "code") != address
+        _wait_receiving_address(gui, previous=address)
         assert gui.get_property("requestHistoryCount", "count") == count
         for field in ("amount", "label", "message", "note"):
             _edit_field(gui, field, "")
@@ -432,15 +441,16 @@ def run_test():
         gui.wait_for_property("receiveTabButton", "checked", True)
         gui.wait_for_property("requestPaymentNoteSelfInput", "text", "Partial payment received")
         assert gui.get_property("requestHistoryCount", "count") == 1
-        assert gui.get_property("requestPaymentAmountInput", "enabled")
+        # Request Again copies the draft before the wallet finishes rotating
+        # its receiving address. Wait for that command before editing fields.
+        gui.wait_for_property("requestPaymentAmountInput", "enabled", True)
         for field in ("amount", "label", "message", "note"):
             _edit_field(gui, field, "")
 
         # A payment rotates the receiving address; a private note alone can save a request.
         _open_receive(gui)
         assert not gui.get_property("requestPaymentGenerateButton", "enabled")
-        next_address = gui.get_property("receivingAddressQRImage", "code")
-        assert next_address != address
+        next_address = _wait_receiving_address(gui, previous=address)
         _create_request(gui, "", "", "", note_self="Private reminder")
         blank_uri = _request_qr_payload(gui)
         assert "?" not in blank_uri

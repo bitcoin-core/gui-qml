@@ -9,6 +9,7 @@
 #include <interfaces/node.h>
 #include <clientversion.h>
 #include <qml/models/syncprogresstracker.h>
+#include <qml/backendexecutor.h>
 
 #include <deque>
 #include <memory>
@@ -47,17 +48,22 @@ class NodeModel : public QObject
     Q_PROPERTY(double mempoolUsageMB READ mempoolUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(double mempoolMaxUsageMB READ mempoolMaxUsageMB NOTIFY mempoolInfoChanged)
     Q_PROPERTY(bool mempoolInfoPollingActive READ mempoolInfoPollingActive WRITE setMempoolInfoPollingActive NOTIFY mempoolInfoPollingActiveChanged)
-    Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable CONSTANT)
+    Q_PROPERTY(bool mempoolInformationAvailable READ mempoolInformationAvailable NOTIFY mempoolInfoChanged)
     Q_PROPERTY(qint64 remainingSyncTime READ remainingSyncTime NOTIFY remainingSyncTimeChanged)
     /** Estimated chain-verification progress used only for progress presentation. */
     Q_PROPERTY(double verificationProgress READ verificationProgress NOTIFY verificationProgressChanged)
-    /** True once startup synchronization completes; remains true for this node session. */
+    /** True after synchronization completes, until the node falls substantially behind. */
     Q_PROPERTY(bool initialSyncComplete READ initialSyncComplete NOTIFY initialSyncCompleteChanged)
     /** True while Core reports initial block download through initialization or tip notifications. */
     Q_PROPERTY(bool blockSyncActive READ blockSyncActive NOTIFY blockSyncActiveChanged)
     Q_PROPERTY(bool headerSyncActive READ headerSyncActive NOTIFY headerSyncChanged)
     Q_PROPERTY(bool headerPresync READ headerPresync NOTIFY headerSyncChanged)
     Q_PROPERTY(double headerSyncProgress READ headerSyncProgress NOTIFY headerSyncChanged)
+    Q_PROPERTY(bool networkActionReady READ networkActionReady NOTIFY networkActionReadyChanged)
+    Q_PROPERTY(bool networkActionPending READ networkActionPending NOTIFY networkActionPendingChanged)
+    Q_PROPERTY(QString networkActionError READ networkActionError NOTIFY networkActionErrorChanged)
+    Q_PROPERTY(bool peerActionPending READ peerActionPending NOTIFY peerActionPendingChanged)
+    Q_PROPERTY(QString peerActionError READ peerActionError NOTIFY peerActionErrorChanged)
     Q_PROPERTY(bool pause READ pause WRITE setPause NOTIFY pauseChanged)
     Q_PROPERTY(bool faulted READ errorState WRITE setErrorState NOTIFY errorStateChanged)
     Q_PROPERTY(QString startupError READ startupError NOTIFY startupErrorChanged)
@@ -73,9 +79,19 @@ class NodeModel : public QObject
     Q_PROPERTY(bool runtimeDialogQuestion READ runtimeDialogQuestion NOTIFY runtimeDialogChanged)
 
 public:
+    // Pass false while appInitMain can still install backend services.
+    // Node must outlive workDrained(); shutdown never waits for its queries on GUI.
     explicit NodeModel(interfaces::Node& node, bool backend_ready = true);
     ~NodeModel() override;
     void beginShutdown();
+    void acknowledgeBanNotification();
+    std::shared_ptr<BackendExecutor> peerCommandExecutor() const { return m_commands; }
+    bool isDrained() const { return m_drained; }
+    bool networkActionReady() const { return m_backend_queries_ready && !m_shutdown_requested && !m_workers_stopping; }
+    bool networkActionPending() const { return m_network_action_pending; }
+    QString networkActionError() const { return m_network_action_error; }
+    bool peerActionPending() const { return m_peer_action_pending; }
+    QString peerActionError() const { return m_peer_action_error; }
 
     int blockTipHeight() const { return m_block_tip_height; }
     void setBlockTipHeight(int new_height);
@@ -120,8 +136,6 @@ public:
     unsigned int runtimeDialogButtons() const { return m_runtime_dialog_buttons; }
     bool runtimeDialogQuestion() const { return m_runtime_dialog_question; }
 
-    Q_INVOKABLE float getTotalBytesReceived() const { return (float)m_node.getTotalBytesRecv(); }
-    Q_INVOKABLE float getTotalBytesSent() const { return (float)m_node.getTotalBytesSent(); }
     Q_INVOKABLE void refreshMempoolInfo();
 
     Q_INVOKABLE void startNodeInitializionThread();
@@ -134,19 +148,26 @@ public:
     Q_INVOKABLE QString defaultProxyAddress();
     Q_INVOKABLE bool disconnectPeer(int nodeId);
     Q_INVOKABLE bool banPeer(const QString& rawAddress, int64_t banDuration);
-    Q_INVOKABLE QVariantList nodeInformationRows();
+    Q_INVOKABLE QVariantList nodeInformationRows() const;
+    Q_INVOKABLE void refreshNodeInformation();
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button);
 #ifdef ENABLE_TEST_AUTOMATION
     Q_INVOKABLE void showRuntimeDialogForTest(const QString& message, unsigned int style, bool question);
 #endif
 
 public Q_SLOTS:
-    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info,
-                          bool initial_block_download = false, bool shutdown_requested = false);
+    void initializeResult(bool success, interfaces::BlockAndHeaderTipInfo tip_info, bool initial_block_download = false, bool shutdown_requested = false);
     void handleRunawayException(const QString& message);
 
 Q_SIGNALS:
     void workDrained();
+    void nodeInformationChanged();
+    void networkActionReadyChanged();
+    void networkActionPendingChanged();
+    void networkActionErrorChanged();
+    void peerActionPendingChanged();
+    void peerActionErrorChanged();
+    void peerActionFinished(const QString& action, bool success, const QString& error);
     void blockTipHeightChanged();
     void mempoolInfoChanged();
     void mempoolInfoPollingActiveChanged(bool active);
@@ -178,6 +199,44 @@ protected:
     void timerEvent(QTimerEvent* event) override;
 
 private:
+    struct Notifications;
+    struct StatusSnapshot;
+    struct InformationSnapshot {
+        QString user_agent;
+        QString data_dir;
+        QString blocks_dir;
+        QString startup_time;
+        QString network;
+        QString local_addresses;
+    };
+    std::shared_ptr<Notifications> m_notifications;
+    BackendExecutor m_snapshots;
+    std::shared_ptr<BackendExecutor> m_commands{std::make_shared<BackendExecutor>()};
+    InformationSnapshot m_information;
+    bool m_information_ready{false};
+    bool m_information_pending{false};
+    bool m_information_again{false};
+    bool m_status_ready{false};
+    bool m_status_pending{false};
+    bool m_status_again{false};
+    bool m_network_known{false};
+    bool m_network_action_pending{false};
+    bool m_network_desired_pause{false};
+    QString m_network_action_error;
+    bool m_peer_action_pending{false};
+    QString m_peer_action_error;
+    bool m_shutdown_poll_pending{false};
+    bool m_drained{false};
+    bool m_seen_block_tip{false};
+    bool m_seen_header_tip{false};
+    qint64 m_block_tip_time{0};
+    void detachNotifications();
+    void publishNotifications();
+    void refreshStatus();
+    void finishDrain();
+    void submitNetworkAction();
+    void finishPeerAction(const QString& action, bool success, const QString& error = {});
+
     struct MempoolInfo {
         int transaction_count{0};
         double usage_mb{0.0};
@@ -224,6 +283,7 @@ private:
     bool m_node_ready{false};
     bool m_backend_queries_ready;
     bool m_initial_sync_complete{false};
+    bool m_applying_sync_snapshot{false};
     bool m_initialization_requested{false};
     bool m_shutdown_requested{false};
     bool m_fatal_exception{false};
@@ -265,8 +325,6 @@ private:
     void ConnectToBannedListChangedSignal();
     void unsubscribeFromCoreSignals();
     void initializeMempoolInfoPolling();
-    void refreshPeerCounts();
-    void refreshWarnings();
     void recordStartupErrorMessage(const QString& message);
     void recordStartupWarningMessage(const QString& message);
     void showStartupWarnings();

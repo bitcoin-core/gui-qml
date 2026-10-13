@@ -8,6 +8,7 @@ import QtTest 1.2
 import org.bitcoincore.qt 1.0
 import "../../qml/controls/utils.js" as Utils
 import "../../qml/pages/wallet"
+import "../../qml/components"
 
 TestCase {
     name: "RequestPayment"
@@ -25,12 +26,37 @@ TestCase {
     function init() {
         optionsModel.displayUnit = BitcoinAmount.BTC
         testPaymentRequest.clear()
+        otherPaymentRequest.clear()
         testWalletModel.lastCommitAddressType = ""
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
         testWalletModel.receiveRequestReconciliationPending = false
         walletController.closePaymentRequestDetailRequests = 0
+    }
+
+    function test_receiving_address_reconnects_after_wallet_selection_and_gc() {
+        const page = createTemporaryObject(requestPaymentComponent, this, { wallet: null })
+        verify(page)
+        const card = findChild(page, "receivingAddressCard")
+        const menu = findChild(card, "receivingAddressQRContextMenu")
+        const request = testWalletModel.receivingAddress
+        request.clear()
+
+        for (let selection = 0; selection < 2; ++selection) {
+            page.wallet = null
+            gc()
+            page.wallet = testWalletModel
+            compare(card.request, request)
+            verify(testWalletModel.ensureReceivingAddress())
+            menu.open()
+            tryCompare(menu, "opened", true)
+            request.addressChanged()
+            tryCompare(menu, "opened", false)
+        }
+
+        page.wallet = null
+        request.clear()
     }
 
     function test_formatRelativeTime_empty() {
@@ -176,6 +202,7 @@ TestCase {
         const page = createTemporaryObject(requestPaymentComponent, this, { width: 900, height: 900, wallet: testWalletModel })
         verify(page !== null)
         tryVerify(function() { return testWalletModel.receivingAddress.address !== "" })
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         return page
     }
     function createRequest(page) {
@@ -184,6 +211,109 @@ TestCase {
         card.createRequest()
         tryCompare(page.requestModal, "opened", true)
         return page.requestModal.card
+    }
+
+    Component {
+        id: receivingCardComponent
+        ReceivingAddressCard {}
+    }
+
+    Component {
+        id: paymentCardComponent
+        PaymentRequestCard {}
+    }
+
+    PaymentRequest { id: otherPaymentRequest }
+
+    QtObject {
+        id: otherReceiveWallet
+        readonly property var receivingAddress: otherPaymentRequest
+        readonly property var receiveAddressTypes: testWalletModel.receiveAddressTypes
+        property bool receiveOperationPending: false
+        property bool receiveRequestReconciliationPending: false
+        property string receiveOperationError: ""
+        function receiveAddressTypeLabel(type) { return testWalletModel.receiveAddressTypeLabel(type) }
+        signal receiveOperationFinished(string operation, bool success)
+    }
+
+    function test_receiving_completion_survives_collection_and_wallet_changes() {
+        const card = createTemporaryObject(receivingCardComponent, this, { wallet: testWalletModel })
+        verify(card !== null)
+        for (let i = 0; i < 3; ++i) {
+            gc()
+            card.wallet = otherReceiveWallet
+            compare(card.request, otherPaymentRequest)
+            gc()
+            otherReceiveWallet.receiveOperationError = "New wallet " + i
+            otherReceiveWallet.receiveOperationFinished("address", false)
+            compare(card.errorText, "New wallet " + i)
+            testWalletModel.receiveOperationFinished("address", false)
+            compare(card.errorText, "New wallet " + i)
+            card.wallet = testWalletModel
+            gc()
+            testWalletModel.receiveOperationError = "Original wallet " + i
+            testWalletModel.receiveOperationFinished("address", false)
+            compare(card.errorText, "Original wallet " + i)
+            otherReceiveWallet.receiveOperationFinished("address", false)
+            compare(card.errorText, "Original wallet " + i)
+        }
+        testWalletModel.receiveOperationError = ""
+    }
+
+    SignalSpy {
+        id: receiveMenuClosing
+        signalName: "aboutToHide"
+    }
+
+    function test_receiving_request_changes_survive_collection() {
+        const card = createTemporaryObject(receivingCardComponent, this, { wallet: testWalletModel, width: 480 })
+        verify(card !== null)
+        const menu = findChild(card, "receivingAddressQRContextMenu")
+        receiveMenuClosing.target = menu
+        for (let i = 0; i < 2; ++i) {
+            const previous = card.request
+            gc()
+            card.wallet = i === 0 ? otherReceiveWallet : testWalletModel
+            gc()
+            menu.open()
+            tryCompare(menu, "opened", true)
+            receiveMenuClosing.clear()
+            previous.addressChanged()
+            compare(receiveMenuClosing.count, 0)
+            card.request.addressChanged()
+            compare(receiveMenuClosing.count, 1)
+            tryCompare(menu, "visible", false)
+        }
+        receiveMenuClosing.target = null
+    }
+
+    function test_payment_request_handlers_survive_collection_and_target_changes() {
+        const card = createTemporaryObject(paymentCardComponent, this, {
+            wallet: testWalletModel, request: testPaymentRequest, width: 532
+        })
+        verify(card !== null)
+        for (let i = 0; i < 2; ++i) {
+            const previousWallet = card.wallet
+            const previousRequest = card.request
+            gc()
+            card.wallet = i === 0 ? otherReceiveWallet : testWalletModel
+            card.request = i === 0 ? otherPaymentRequest : testPaymentRequest
+            gc()
+            card.pendingOperation = "save"
+            card.wallet.receiveOperationError = "Save failed " + i
+            previousWallet.receiveOperationFinished("save", false)
+            compare(card.pendingOperation, "save")
+            card.wallet.receiveOperationFinished("save", false)
+            compare(card.pendingOperation, "")
+            compare(card.errorText, "Save failed " + i)
+            compare(card.request.id, "")
+            compare(card.saved, false)
+            previousRequest.idChanged()
+            compare(card.errorText, "Save failed " + i)
+            card.request.idChanged()
+            compare(card.errorText, "")
+        }
+        testWalletModel.receiveOperationError = ""
     }
 
     function test_address_ready_before_request_and_create_requires_fields() {
@@ -213,8 +343,10 @@ TestCase {
         const receiving = findChild(page, "receivingAddressCard")
         const first = testWalletModel.receivingAddress.address
         receiving.ensureAddress(true, "")
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         verify(testWalletModel.receivingAddress.address !== first)
         receiving.ensureAddress(false, "p2sh-segwit")
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(testWalletModel.receivingAddress.addressType, "p2sh-segwit")
         compare(testPaymentRequest.id, "")
         const card = createRequest(page)
@@ -254,6 +386,7 @@ TestCase {
         verify(!copy.visible)
         verify(update.visible)
         update.clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "Hal")
         verify(page.requestModal.opened)
         verify(copy.visible)
@@ -263,6 +396,7 @@ TestCase {
         editField(card, "requestPaymentNoteSelfInput", "Received")
         verify(update.visible)
         update.clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         verify(!copy.visible)
         verify(!update.visible)
     }
@@ -301,6 +435,7 @@ TestCase {
         editField(card, "requestPaymentNoteSelfInput", "Keep privately")
         verify(findChild(card, "requestPaymentUpdateButton").enabled)
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Keep privately")
     }
 
@@ -341,6 +476,7 @@ TestCase {
         findChild(card, "requestPaymentMessageInput").forceActiveFocus()
         compare(card.request.label, "Request")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.label, "Friday coffee")
         compare(card.request.address, address)
         verify(card.sharing)
@@ -388,6 +524,7 @@ TestCase {
         const note = editField(card, "requestPaymentNoteSelfInput", "Received, thank you")
         note.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Received, thank you")
     }
 
@@ -423,6 +560,7 @@ TestCase {
         verify(note.enabled)
         note.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.noteSelf, "Keep this draft")
     }
 
@@ -438,6 +576,7 @@ TestCase {
         compare(input.text, "0.12345678")
         input.editingFinished()
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 12345678)
         compare(input.text, "0.12345678")
     }
@@ -453,6 +592,7 @@ TestCase {
         compare(page.draftCard.amountUnit, BitcoinAmount.SAT)
         compare(input.text, "12")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 12)
         findChild(card, "requestPaymentAmountUnitToggle").clicked()
         compare(input.text, "0.00000012")
@@ -479,6 +619,7 @@ TestCase {
         compare(card.request.id, "")
         editField(card, "requestPaymentAmountInput", "21000000.00000000")
         verify(card.saveFields())
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         compare(card.request.amount.satoshi, 2100000000000000)
     }
 
@@ -491,6 +632,7 @@ TestCase {
         verify(findChild(card, "requestPaymentCopyQRMenuButton").visible)
         verify(findChild(card, "requestPaymentSaveQRMenuButton").visible)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         tryCompare(page.requestModal, "visible", false)
         compare(testWalletModel.lastRemovedRequestId, requestId)
         compare(card.request.id, "")
@@ -506,6 +648,7 @@ TestCase {
         findChild(card, "paymentRequestMoreButton").clicked()
         tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         verify(page.requestModal.opened)
         compare(card.request.id, requestId)
         compare(testWalletModel.lastRemovedRequestId, "")

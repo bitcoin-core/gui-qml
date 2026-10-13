@@ -9,10 +9,12 @@
 #include <qml/models/transactionactivitymodel.h>
 
 #include <algorithm>
+#include <array>
 
 #include <QDate>
 #include <QDateTime>
-#include <QFile>
+#include <QSaveFile>
+#include <QTimer>
 #include <QLocale>
 #include <QStringList>
 #include <QTextStream>
@@ -62,6 +64,9 @@ QString ExportDisplayUnitLabel(int display_unit)
 ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
+    connect(this, &ActivityFilterProxyModel::countChanged, this, [this] { ++m_model_revision; });
+    connect(this, &QAbstractItemModel::dataChanged, this, [this] { ++m_model_revision; });
+    connect(this, &ActivityFilterProxyModel::displayUnitChanged, this, [this] { ++m_model_revision; });
     setDynamicSortFilter(true);
     setSortCaseSensitivity(Qt::CaseInsensitive);
     sort(0, Qt::DescendingOrder);
@@ -548,72 +553,69 @@ QString ActivityFilterProxyModel::normalizedExportPath(const QString& path) cons
     return path;
 }
 
-bool ActivityFilterProxyModel::exportCsv(const QString& path) const
+namespace {
+bool WriteActivityCsv(const QString& filename, const std::vector<QHash<int, QVariant>>& records, int display_unit)
 {
-    const QString filename = normalizedExportPath(path);
-    if (filename.isEmpty()) return false;
-
-    QFile file(filename);
+    QSaveFile file(filename);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         return false;
     }
 
     QTextStream stream(&file);
     QStringList header{
-        tr("Confirmed"),
-        tr("Date"),
-        tr("Type"),
-        tr("Label"),
-        tr("Address"),
-        tr("Amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit)),
-        tr("ID"),
+        ActivityFilterProxyModel::tr("Confirmed"),
+        ActivityFilterProxyModel::tr("Date"),
+        ActivityFilterProxyModel::tr("Type"),
+        ActivityFilterProxyModel::tr("Label"),
+        ActivityFilterProxyModel::tr("Address"),
+        ActivityFilterProxyModel::tr("Amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(display_unit)),
+        ActivityFilterProxyModel::tr("ID"),
     };
-    header << tr("Record") << tr("Action ID") << tr("Status")
-                        << tr("Action amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(m_display_unit));
+    header << ActivityFilterProxyModel::tr("Record") << ActivityFilterProxyModel::tr("Action ID") << ActivityFilterProxyModel::tr("Status")
+                        << ActivityFilterProxyModel::tr("Action amount") + QStringLiteral(" (%1)").arg(ExportDisplayUnitLabel(display_unit));
     WriteCsvRow(stream, header);
 
-    for (int row = 0; row < rowCount(); ++row) {
-        const QModelIndex proxy_index = index(row, 0);
-        const qint64 timestamp = proxy_index.data(TransactionActivityModel::TimestampRole).toLongLong();
-        const auto status = static_cast<Transaction::Status>(proxy_index.data(TransactionActivityModel::StatusRole).toInt());
+    for (const auto& proxy_index : records) {
+        const qint64 timestamp = proxy_index.value(TransactionActivityModel::TimestampRole).toLongLong();
+        const auto status = static_cast<Transaction::Status>(proxy_index.value(TransactionActivityModel::StatusRole).toInt());
         const bool confirmed = status == Transaction::Confirming || status == Transaction::Confirmed;
-        const bool replaced = !proxy_index.data(TransactionActivityModel::ReplacedByTxidRole).toString().isEmpty()
-            && (!proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()
-                || proxy_index.data(TransactionActivityModel::DepthRole).toInt() <= 0);
-        const CAmount amount = replaced ? 0 : proxy_index.data(TransactionActivityModel::NetAmountSatRole).toLongLong();
-        const bool pending_request = proxy_index.data(TransactionActivityModel::IsPendingRequestRole).toBool();
+        const bool replaced = !proxy_index.value(TransactionActivityModel::ReplacedByTxidRole).toString().isEmpty()
+            && (!proxy_index.value(TransactionActivityModel::StatusKnownRole).toBool()
+                || proxy_index.value(TransactionActivityModel::DepthRole).toInt() <= 0);
+        const CAmount amount = replaced ? 0 : proxy_index.value(TransactionActivityModel::NetAmountSatRole).toLongLong();
+        const bool pending_request = proxy_index.value(TransactionActivityModel::IsPendingRequestRole).toBool();
 
         QString status_label;
-        if (pending_request) status_label = tr("Awaiting payment");
-        else if (replaced) status_label = tr("Replaced");
-        else if (!proxy_index.data(TransactionActivityModel::StatusKnownRole).toBool()) status_label = tr("Unknown");
+        if (pending_request) status_label = ActivityFilterProxyModel::tr("Awaiting payment");
+        else if (replaced) status_label = ActivityFilterProxyModel::tr("Replaced");
+        else if (!proxy_index.value(TransactionActivityModel::StatusKnownRole).toBool()) status_label = ActivityFilterProxyModel::tr("Unknown");
         else {
             switch (status) {
-            case Transaction::Confirmed: status_label = tr("Confirmed"); break;
-            case Transaction::Confirming: status_label = tr("Confirming"); break;
-            case Transaction::Unconfirmed: status_label = tr("Unconfirmed"); break;
-            case Transaction::Conflicted: status_label = tr("Conflicted"); break;
-            case Transaction::Abandoned: status_label = tr("Abandoned"); break;
-            case Transaction::Immature: status_label = tr("Immature"); break;
-            case Transaction::NotAccepted: status_label = tr("Not accepted"); break;
+            case Transaction::Confirmed: status_label = ActivityFilterProxyModel::tr("Confirmed"); break;
+            case Transaction::Confirming: status_label = ActivityFilterProxyModel::tr("Confirming"); break;
+            case Transaction::Unconfirmed: status_label = ActivityFilterProxyModel::tr("Unconfirmed"); break;
+            case Transaction::Conflicted: status_label = ActivityFilterProxyModel::tr("Conflicted"); break;
+            case Transaction::Abandoned: status_label = ActivityFilterProxyModel::tr("Abandoned"); break;
+            case Transaction::Immature: status_label = ActivityFilterProxyModel::tr("Immature"); break;
+            case Transaction::NotAccepted: status_label = ActivityFilterProxyModel::tr("Not accepted"); break;
             }
         }
 
         QStringList values{
             confirmed ? QStringLiteral("true") : QStringLiteral("false"),
             QDateTime::fromSecsSinceEpoch(timestamp).toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")),
-            exportTypeLabelForIndex(proxy_index),
-            GuardedCsvText(proxy_index.data(TransactionActivityModel::LabelRole).toString()),
-            GuardedCsvText(proxy_index.data(TransactionActivityModel::AddressRole).toString()),
-            QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
-            pending_request ? QString{} : proxy_index.data(TransactionActivityModel::TxidRole).toString(),
+            proxy_index.value(-1).toString(),
+            GuardedCsvText(proxy_index.value(TransactionActivityModel::LabelRole).toString()),
+            GuardedCsvText(proxy_index.value(TransactionActivityModel::AddressRole).toString()),
+            QmlBitcoinUnits::format(ExportDisplayUnit(display_unit), amount, false, QmlBitcoinUnits::SeparatorStyle::NEVER),
+            pending_request ? QString{} : proxy_index.value(TransactionActivityModel::TxidRole).toString(),
         };
-        values << (pending_request ? tr("Payment request") : tr("Transaction")) << QString{} << status_label << QString{};
+        values << (pending_request ? ActivityFilterProxyModel::tr("Payment request") : ActivityFilterProxyModel::tr("Transaction")) << QString{} << status_label << QString{};
         WriteCsvRow(stream, values);
 
         // Keep the wallet impact (including fees) only on the parent. Action
         // amounts describe individual movements and are not wallet balance deltas.
-        const auto actions = proxy_index.data(TransactionActivityModel::ActionsRole).toList();
+        const auto actions = proxy_index.value(TransactionActivityModel::ActionsRole).toList();
         if (pending_request || actions.size() <= 1) continue;
         for (const auto& value : actions) {
             const auto action = value.toMap();
@@ -621,18 +623,79 @@ bool ActivityFilterProxyModel::exportCsv(const QString& path) const
             const CAmount action_amount = action.value("amountSat").toLongLong();
             WriteCsvRow(stream, {
                 values[0], values[1],
-                direction == TransactionActivityModel::SendAction ? tr("Sent")
-                    : direction == TransactionActivityModel::ReceiveAction ? tr("Received") : tr("Internal"),
+                direction == TransactionActivityModel::SendAction ? ActivityFilterProxyModel::tr("Sent")
+                    : direction == TransactionActivityModel::ReceiveAction ? ActivityFilterProxyModel::tr("Received") : ActivityFilterProxyModel::tr("Internal"),
                 GuardedCsvText(action.value("label").toString()),
                 GuardedCsvText(action.value("address").toString()),
-                QString{}, values[6], tr("Action"), GuardedCsvText(action.value("actionId").toString()), status_label,
-                QmlBitcoinUnits::format(ExportDisplayUnit(m_display_unit),
+                QString{}, values[6], ActivityFilterProxyModel::tr("Action"), GuardedCsvText(action.value("actionId").toString()), status_label,
+                QmlBitcoinUnits::format(ExportDisplayUnit(display_unit),
                     direction == TransactionActivityModel::SendAction ? -action_amount : action_amount,
                     false, QmlBitcoinUnits::SeparatorStyle::NEVER),
             });
         }
     }
 
-    file.close();
-    return file.error() == QFile::NoError;
+    stream.flush();
+    return stream.status() == QTextStream::Ok && file.commit();
+}
+
+} // namespace
+
+bool ActivityFilterProxyModel::exportCsv(const QString& path)
+{
+    if (m_export_pending) return false;
+    m_export_path = normalizedExportPath(path);
+    if (m_export_path.isEmpty()) return false;
+    m_export_pending = true;
+    m_export_error.clear();
+    m_export_records.clear();
+    m_export_row = 0;
+    m_export_unit = m_display_unit;
+    m_export_revision = m_model_revision;
+    Q_EMIT exportPendingChanged();
+    Q_EMIT exportErrorChanged();
+    QTimer::singleShot(0, this, &ActivityFilterProxyModel::collectExportBatch);
+    return true;
+}
+
+void ActivityFilterProxyModel::collectExportBatch()
+{
+    if (m_export_revision != m_model_revision) {
+        finishExport(false, tr("Activity changed while preparing the export. Please try again."));
+        return;
+    }
+    // Reading Qt models must stay on their thread. Bound each copy step so a
+    // large export also leaves the GUI responsive before serialization starts.
+    const int end = std::min(rowCount(), m_export_row + 128);
+    const std::array roles{TransactionActivityModel::TimestampRole, TransactionActivityModel::StatusRole,
+        TransactionActivityModel::ReplacedByTxidRole, TransactionActivityModel::StatusKnownRole,
+        TransactionActivityModel::DepthRole, TransactionActivityModel::NetAmountSatRole,
+        TransactionActivityModel::IsPendingRequestRole, TransactionActivityModel::LabelRole,
+        TransactionActivityModel::AddressRole, TransactionActivityModel::TxidRole,
+        TransactionActivityModel::ActionsRole};
+    for (; m_export_row < end; ++m_export_row) {
+        const auto row = index(m_export_row, 0);
+        QHash<int, QVariant> record;
+        for (const auto role : roles) record.insert(role, row.data(role));
+        record.insert(-1, exportTypeLabelForIndex(row));
+        m_export_records.push_back(std::move(record));
+    }
+    if (m_export_row < rowCount()) {
+        QTimer::singleShot(0, this, &ActivityFilterProxyModel::collectExportBatch);
+        return;
+    }
+    m_export_executor->submit(this,
+        [path = m_export_path, records = std::move(m_export_records), unit = m_export_unit] { return WriteActivityCsv(path, records, unit); },
+        [this](bool success) { finishExport(success, success ? QString{} : tr("The Activity CSV could not be saved. Check the file path and try again.")); },
+        [this](std::exception_ptr) { finishExport(false, tr("The Activity CSV could not be saved. Please try again.")); });
+}
+
+void ActivityFilterProxyModel::finishExport(bool success, QString error)
+{
+    m_export_pending = false;
+    m_export_records.clear();
+    m_export_error = std::move(error);
+    Q_EMIT exportPendingChanged();
+    Q_EMIT exportErrorChanged();
+    Q_EMIT exportFinished(success);
 }

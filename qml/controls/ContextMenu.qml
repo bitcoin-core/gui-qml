@@ -57,7 +57,8 @@ Popup {
         NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 100; easing.type: Easing.InCubic }
     }
 
-    contentItem: ColumnLayout {
+    contentItem: _menuContent
+    readonly property Item _menuContent: ColumnLayout {
         id: _column
         spacing: root.itemSpacing
         readonly property bool _contextMenuMarker: true

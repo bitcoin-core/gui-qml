@@ -24,6 +24,7 @@ add_executable(bitcoinqml_unit_tests
   test_backendexecutor.cpp
   test_bitcoinaddress.cpp
   test_blockclockdial.cpp
+  test_blockclockhistory.cpp
   test_blockclockmodel.cpp
   test_bitcoinuri.cpp
   test_qmlfiledialog.cpp
@@ -38,6 +39,7 @@ add_executable(bitcoinqml_unit_tests
   test_walletqmlmodeltransaction.cpp
   test_qmlbitcoinunits.cpp
   test_imageprovider.cpp
+  test_imagesavemodel.cpp
   test_nodemodel.cpp
   test_networkstyle.cpp
   test_networkstatusmodel.cpp
@@ -46,7 +48,9 @@ add_executable(bitcoinqml_unit_tests
   test_shutdownproducers.cpp
   test_guiargs.cpp
   test_options_model.cpp
+  test_async_options.cpp
   test_onboarding_storage.cpp
+  test_onboardingasync.cpp
   test_banlistmodel.cpp
   test_walletlistmodel.cpp
   test_bumptransactionmodel.cpp
@@ -123,6 +127,7 @@ qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
 
 add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/models/imagesavemodel.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp

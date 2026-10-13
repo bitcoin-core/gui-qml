@@ -5,12 +5,11 @@
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
-#include <init.h>
-#include <qml/models/options_model.h>
 #include <node/interface_ui.h>
 #include <qml/backendexecutor.h>
 #include <qml/models/banlistmodel.h>
 #include <qml/models/blockclockmodel.h>
+#include <qml/models/blockclockhistory.h>
 #include <qml/models/debuglogmodel.h>
 #include <qml/models/networktraffictower.h>
 #include <qml/models/nodemodel.h>
@@ -121,7 +120,7 @@ private Q_SLOTS:
         MockNode node;
         const bool backend_ready{false};
         NodeModel model(node, backend_ready);
-        QVERIFY(model.nodeInformationRows().isEmpty());
+        QVERIFY(!model.nodeInformationRows().isEmpty());
         PeerListModel peers(node, nullptr, backend_ready);
         BanListModel bans(node, nullptr, backend_ready);
         connect(&model, &NodeModel::chainStateReady, &peers, &PeerListModel::backendInitialized);
@@ -134,7 +133,7 @@ private Q_SLOTS:
         model.setPause(true);
         QVERIFY(!model.disconnectPeer(1));
         model.initializeResult(false, {});
-        QVERIFY(model.nodeInformationRows().isEmpty());
+        QVERIFY(!model.nodeInformationRows().isEmpty());
         QTest::qWait(30);
         QCOMPARE(node.calls.getMempoolSize.load(), 0);
         QCOMPARE(node.calls.getNodeCount.load(), 0);
@@ -144,15 +143,17 @@ private Q_SLOTS:
 
         model.initializeResult(true, {});
         QTRY_VERIFY(node.calls.getMempoolSize.load() > 0);
-        QVERIFY(node.calls.getNodeCount.load() > 0);
-        QVERIFY(node.calls.getNodesStats.load() >= 1);
-        QCOMPARE(node.calls.getBanned.load(), 1);
+        QTRY_VERIFY(node.calls.getNodeCount.load() > 0);
+        QTRY_VERIFY(node.calls.getNodesStats.load() >= 1);
+        QTRY_COMPARE(node.calls.getBanned.load(), 1);
         QVERIFY(peers.findChild<QTimer*>()->isActive());
         QSignalSpy drained(&model, &NodeModel::workDrained);
         model.beginShutdown();
         peers.beginShutdown();
         bans.beginShutdown();
         QTRY_COMPARE(drained.size(), 1);
+        QTRY_VERIFY(peers.isDrained());
+        QTRY_VERIFY(bans.isDrained());
         const int mempool_queries = node.calls.getMempoolSize.load();
         const int peer_queries = node.calls.getNodesStats.load();
         const int ban_queries = node.calls.getBanned.load();
@@ -171,20 +172,22 @@ private Q_SLOTS:
         MockNode node;
         PeerListModel peers(node, nullptr);
         BanListModel bans(node);
-        int history_queries{0};
-        BlockClockModel clock([&](qint64, qint64) { ++history_queries; return QList<qint64>{}; });
-        clock.initializeHistory();
+        auto history = std::make_shared<BlockClockHistory>();
+        BlockClockModel clock(history);
+        history->initialize({});
+        clock.refreshHistory();
         peers.beginShutdown();
         bans.beginShutdown();
         clock.stop();
+        QTRY_VERIFY(peers.isDrained());
+        QTRY_VERIFY(bans.isDrained());
         const int peer_queries = node.calls.getNodesStats.load();
         const int ban_queries = node.calls.getBanned.load();
         peers.startAutoRefresh();
         peers.refresh();
         bans.refresh();
         QVERIFY(!bans.unbanAt(0));
-        clock.initializeHistory();
-        clock.recordBlockTime(QDateTime::currentSecsSinceEpoch());
+        clock.refreshHistory();
         clock.updateCurrentTime(QDateTime::currentDateTime().addDays(1));
         QVERIFY(!clock.timerActive());
         const auto* timer = peers.findChild<QTimer*>();
@@ -192,7 +195,7 @@ private Q_SLOTS:
         QVERIFY(!timer->isActive());
         QCOMPARE(node.calls.getNodesStats.load(), peer_queries);
         QCOMPARE(node.calls.getBanned.load(), ban_queries);
-        QCOMPARE(history_queries, 1);
+        QVERIFY(history->retentionStart().has_value());
     }
 
     void nodeHandlersRetireOffGuiBeforeDrain()
@@ -228,30 +231,10 @@ private Q_SLOTS:
         QTRY_VERIFY(heartbeat);
         QCOMPARE(drained.size(), 0);
         QVERIFY(!gui_call.load());
-        QVERIFY(model.nodeInformationRows().isEmpty());
+        QVERIFY(!model.nodeInformationRows().isEmpty());
         QVERIFY(!model.disconnectPeer(1));
         release.release();
         QTRY_COMPARE(drained.size(), 1);
-    }
-
-    void pendingPortMappingCannotRestartAfterShutdown()
-    {
-        SelectParams(ChainType::REGTEST);
-        QTemporaryDir directory;
-        QVERIFY(directory.isValid());
-        ArgsManager args;
-        SetupServerArgs(args, false);
-        args.ForceSetArg("-datadir", directory.path().toStdString());
-        args.ForceSetArg("-settings", directory.filePath("settings.json").toStdString());
-        args.SelectConfigNetwork("regtest");
-        MockNode node;
-        OptionsQmlModel model(node, args);
-        model.setNatpmp(!model.natpmp());
-        QSignalSpy drained(&model, &OptionsQmlModel::shutdownFinished);
-        model.beginShutdown();
-        QCOMPARE(drained.size(), 1);
-        QTest::qWait(250);
-        QCOMPARE(node.calls.mapPort.load(), 0);
     }
 
     void shutdownDismissesBlockingBackendQuestion()
@@ -272,6 +255,8 @@ private Q_SLOTS:
         QVERIFY(!model.runtimeDialogVisible());
         QVERIFY(!question(Untranslated("Late question"), "Late question", CClientUIInterface::BTN_OK));
         QVERIFY(!model.runtimeDialogVisible());
+        model.beginShutdown();
+        QTRY_VERIFY(model.isDrained());
     }
 };
 

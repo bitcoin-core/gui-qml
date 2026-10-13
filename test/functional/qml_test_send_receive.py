@@ -206,10 +206,15 @@ def assert_receiver_output(port, txid, receiver_address, expected_sats):
     return matched_outputs[0]["n"]
 
 
-def enable_coin_control_and_select_first_coin(gui, checkpoints, coin_id=None):
+def open_coin_selection(gui, *, locked_coins):
     gui.click("sendCoinControlPickerOption_1")
     gui.click("sendSelectInputsButton")
     gui.wait_for_property("coinSelectionPopup", "opened", True, timeout_ms=10000)
+    gui.wait_for_property("coinSelectionPopup", "editingCoins.lockedCoinsCount", locked_coins, timeout_ms=10000)
+
+
+def enable_coin_control_and_select_first_coin(gui, checkpoints, coin_id=None, *, locked_coins=0):
+    open_coin_selection(gui, locked_coins=locked_coins)
     if coin_id:
         gui.set_text("coinBrowserSearch", coin_id)
     gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
@@ -302,9 +307,7 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         for manual in (False, True):
             gui.set_text("sendAddressInput", self_address)
             if manual:
-                gui.click("sendCoinControlPickerOption_1")
-                gui.click("sendSelectInputsButton")
-                gui.wait_for_property("coinSelectionPopup", "opened", True)
+                open_coin_selection(gui, locked_coins=1)
                 for coin in inputs[1:]:
                     gui.set_text("coinBrowserSearch", f"{coin['txid']}:{coin['vout']}")
                     gui.click_list_item("coinSelectionListView", 0, "coinSelectionCheckbox")
@@ -416,6 +419,9 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("transactionReviewPopup", "visible", False)
         assert rpc_call(harness.gui_rpc_port, "getrawmempool") == []
         checkpoints.checkpoint("automatic maximum excludes locked coins and shows both warnings", gui)
+        open_coin_selection(gui, locked_coins=1)
+        gui.click("coinSelectionCancelButton")
+        gui.wait_for_property("coinSelectionPopup", "visible", False)
         rpc_call(harness.gui_rpc_port, "lockunspent", [True, [inputs[0]]], wallet=GUI_WALLET_NAME)
         gui.click("sendCoinControlPickerOption_0")
         gui.set_text("sendAmountInput", "")
@@ -579,7 +585,7 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_page("sendPage", timeout_ms=10000)
         gui.set_text("sendAddressInput", receiver_address)
         enable_coin_control_and_select_first_coin(gui, checkpoints,
-                                                 f"{remaining[1]['txid']}:{remaining[1]['vout']}")
+                                                 f"{remaining[1]['txid']}:{remaining[1]['vout']}", locked_coins=1)
         remaining = remaining[1:]
         manual_reference = rpc_call(harness.gui_rpc_port, "sendall", {
             "recipients": [receiver_address], "fee_rate": 1,

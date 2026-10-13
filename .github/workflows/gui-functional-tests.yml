@@ -151,6 +151,7 @@ jobs:
           python3 test/functional/qml_test_onboarding_startup.py
           python3 test/functional/qml_test_disablewallet_boot.py
           python3 test/functional/qml_test_blockclock.py
+          python3 test/functional/qml_test_blockclock_history.py
           python3 test/functional/qml_test_blocksonly_settings.py
           python3 test/functional/qml_test_external_signer.py
           python3 test/functional/qml_test_peers.py
@@ -160,6 +161,7 @@ jobs:
           python3 test/functional/qml_test_settings_display.py
           python3 test/functional/qml_test_resetguisettings.py
           python3 test/functional/qml_test_receive.py
+          python3 test/functional/qml_test_wallet_state.py
           python3 test/functional/qml_test_activity_filter_export.py
           python3 test/functional/qml_test_file_dialog.py
           python3 test/functional/qml_test_password_wallet.py

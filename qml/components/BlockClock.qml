@@ -46,6 +46,8 @@ Item {
         ? root.nodeModelRef.headerSyncProgress
         : (root.nodeModelRef !== null ? root.nodeModelRef.verificationProgress : 0)
     readonly property string syncProgress: formatProgressPercentage(root.syncProgressFraction * 100, root.synced)
+    readonly property bool networkActionReady: root.nodeModelRef !== null && root.nodeModelRef.networkActionReady === true
+    readonly property bool networkActionPending: root.nodeModelRef !== null && root.nodeModelRef.networkActionPending === true
     property bool paused: root.nodeModelRef !== null && root.nodeModelRef.pause
     property var syncState: Utils.formatRemainingSyncTime(root.nodeModelRef !== null ? root.nodeModelRef.remainingSyncTime : 0)
     property string syncTime: syncState.text
@@ -183,8 +185,8 @@ Item {
     MouseArea {
         objectName: "blockClockToggleArea"
         anchors.fill: dial
-        cursorShape: root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
-        enabled: !root.faulted
+        cursorShape: root.networkActionPending ? Qt.BusyCursor : !root.networkActionReady || root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
+        enabled: root.networkActionReady && !root.faulted && !root.networkActionPending
         function click() {
             root.togglePause()
         }
@@ -192,6 +194,31 @@ Item {
         FocusBorder {
             visible: root.activeFocus
         }
+    }
+
+    BusyIndicator {
+        objectName: "blockClockNetworkPending"
+        anchors.top: dial.bottom
+        anchors.topMargin: 4
+        anchors.horizontalCenter: dial.horizontalCenter
+        width: 24
+        height: 24
+        running: root.networkActionPending
+        visible: running
+    }
+
+    Connections {
+        target: root.nodeModelRef
+        function onNetworkActionErrorChanged() {
+            if (root.visible && root.nodeModelRef.networkActionError.length > 0) networkError.open()
+        }
+    }
+    AlertPopup {
+        id: networkError
+        objectName: "blockClockNetworkError"
+        parent: Overlay.overlay
+        title: qsTr("Network action failed")
+        message: root.nodeModelRef !== null ? root.nodeModelRef.networkActionError : ""
     }
 
     states: [
@@ -310,7 +337,7 @@ Item {
     }
 
     function togglePause() {
-        if (!root.faulted && root.nodeModelRef !== null) {
+        if (root.networkActionReady && !root.faulted && !root.networkActionPending) {
             root.nodeModelRef.pause = !root.paused
         }
     }
