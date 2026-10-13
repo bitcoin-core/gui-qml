@@ -111,7 +111,7 @@ Page {
         anchors.fill: parent
         clip: true
         contentWidth: availableWidth
-        contentHeight: content.implicitHeight + 64
+        contentHeight: content.height + 64
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         Item {

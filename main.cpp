@@ -9,7 +9,6 @@
 #include <compat/compat.h>
 #include <interfaces/node.h>
 #include <logging.h>
-#include <noui.h>
 #include <util/translation.h>
 
 #include <QCoreApplication>
@@ -39,8 +38,5 @@ const std::function<std::string()> G_TEST_GET_FULL_NAME{};
 
 MAIN_FUNCTION
 {
-    // Subscribe to global signals from core.
-    noui_connect();
-
     return QmlGuiMain(argc, argv);
 }

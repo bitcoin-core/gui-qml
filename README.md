@@ -130,13 +130,72 @@ build/bin/bitcoin-core-app
 
 ### Run Tests
 
-- Enable tests at configure time and run them via CTest.
+Enable tests with `-DBUILD_APP_TESTS=ON`. The test directories separate the kinds of coverage:
 
-```
+- `test/test_*.cpp`: unit tests for models, controllers, and helpers. They do not start a full node.
+- `test/qml/`: QML component tests with mock models.
+- `test/integration/`: C++ tests that run the production application and a real regtest node, with their own CMake file.
+- `test/functional/`: Python tests that drive the application through the test bridge.
+
+Build and run the unit and QML component tests:
+
+```sh
 cmake -B build -DBUILD_APP_TESTS=ON
-cmake --build build -j$(nproc)
-ctest --test-dir build --output-on-failure
+cmake --build build --target bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests -j$(nproc)
+ctest --test-dir build --output-on-failure -L 'unit|qml'
 ```
+
+Build and run the application and node integration tests:
+
+```sh
+cmake -B build -DBUILD_APP_TESTS=ON
+cmake --build build --target bitcoinqml_integration -j$(nproc)
+ctest --test-dir build --output-on-failure -L integration
+```
+
+The integration target builds `bitcoinqml_integration_tests`. Its runner starts a
+fresh process for each module and supported wallet mode. Each child uses production
+application startup and shutdown. The initial modules are `lifecycle`, `navigation`,
+and `node`, each run with wallets disabled and enabled.
+Each process has its own temporary data directory and GUI settings, so changes to
+wallets, the chain, settings, and UI state cannot affect the next module.
+The runner prints each process's output when it finishes and fails if a process
+cannot start or exits unsuccessfully. Select modules and modes with:
+
+```sh
+build/bin/bitcoinqml_integration_tests --list-modules
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=navigation
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
+```
+
+Omitting `--module` selects all modules; omitting `--wallet` selects each module's
+supported modes. Qt Test arguments are forwarded to the selected module. For
+example, add `chainSyncFollowsRealCoreBlockNotifications` to the last command to
+run that individual test with a fresh node and profile.
+
+`TestApplication` extends the production `BitcoinQmlApplication` and provides
+profile isolation, node and wallet initialization waits, test scheduling, and
+shutdown cleanup for the test modules. Wallet-enabled runs start without loaded
+wallets; wallet test modules can create the wallets they need.
+Test cases live in separate modules and take a `BitcoinQmlApplication&`, giving
+them access to the same node, models, and QML engine as the application.
+`test/integration/runner/` contains the entry point, process runner, and module
+declarations. `test/integration/fixture/` contains the application fixture and
+shared test helpers. Test case modules live directly in `test/integration/`.
+Add a new module to `test/integration/CMakeLists.txt`, declare its runner in
+`runner/test_cases.h`, and add its name, supported wallet modes, and runner to
+`IntegrationTestModules()` in `runner/test_cases.cpp`. Use the runner signature
+`int RunFeatureTests(BitcoinQmlApplication&, WalletMode, int argc, char* argv[])`
+and pass `argc`/`argv` to `QTest::qExec`.
+
+Test methods within a module share state. Each independent case should create its
+own wallets and restore settings/navigation in `init()`/`cleanup()`, including on
+assertion failure. Cases that need a fresh chain or conflicting startup options
+should be separate modules or separate filtered invocations. Shared state is
+appropriate for the ordered startup-to-shutdown checks in the lifecycle module.
+The fixture always requests shutdown and verifies UI teardown when a module ends.
+
+To run everything, build the default target and run CTest without a label filter.
 
 - If CMake reports "Target Qt6::Test not found", ensure Qt6 Test is available
   and discoverable by CMake:

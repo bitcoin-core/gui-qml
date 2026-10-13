@@ -61,6 +61,11 @@ cmake_dependent_option(BUILD_APP_TESTS "Build tests for the app" ON "BUILD_GUI" 
 # Builds libraries: univalue, core_interface, bitcoin_node, bitcoin_wallet
 add_subdirectory(bitcoin)
 
+# Match Core's DEBUG_LOCKORDER and sanitizer settings.
+foreach(rule CMAKE_CXX_COMPILE_OBJECT CMAKE_CXX_CREATE_SHARED_LIBRARY CMAKE_CXX_LINK_EXECUTABLE)
+  get_directory_property(${rule} DIRECTORY bitcoin DEFINITION ${rule})
+endforeach()
+
 # Qt-specific commands
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_MOC_OPTIONS "-p${CMAKE_CURRENT_SOURCE_DIR}")
@@ -174,6 +179,14 @@ qt6_add_resources(bitcoinqml "bitcoin_qt_translations"
 )
 add_dependencies(bitcoinqml bitcoin-qt)
 
+qt6_import_qml_plugins(bitcoinqml)
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
+  # The Qt 6.2 settings plugin duplicates QtCore's QQmlSettings symbols in static builds.
+  get_target_property(qml_libraries bitcoinqml INTERFACE_LINK_LIBRARIES)
+  list(REMOVE_ITEM qml_libraries Qt6::qmlsettingsplugin)
+  set_property(TARGET bitcoinqml PROPERTY INTERFACE_LINK_LIBRARIES "${qml_libraries}")
+endif()
+
 # Put it all together
 add_executable(bitcoin-core-app main.cpp)
 target_include_directories(bitcoin-core-app
@@ -196,7 +209,6 @@ target_link_libraries(bitcoin-core-app
     bitcoinqt
 )
 qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QSvgPlugin Qt6::QSvgIconPlugin)
-qt6_import_qml_plugins(bitcoin-core-app)
 
 if(BUILD_APP_TESTS)
   include(CTest)
