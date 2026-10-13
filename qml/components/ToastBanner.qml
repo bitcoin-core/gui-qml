@@ -33,7 +33,7 @@ Rectangle {
 
     color: backgroundColor
     radius: 15
-    implicitHeight: contentRow.implicitHeight + 16
+    implicitHeight: contentRow.height + 16
     opacity: 0
 
     onVisibleChanged: {
@@ -81,13 +81,20 @@ Rectangle {
         onTriggered: fadeOutAnim.start()
     }
 
-    RowLayout {
-        id: contentRow
+    Item {
+        id: contentFrame
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: 15
         anchors.rightMargin: 15
+        height: contentRow.height
+    }
+
+    RowLayout {
+        id: contentRow
+        parent: contentFrame
+        width: parent.width
         spacing: 8
 
         Icon {

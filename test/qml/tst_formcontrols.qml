@@ -251,6 +251,24 @@ TestCase {
         tryCompare(findChild(row, "exampleRowTitle"), "color", Theme.color.neutral4)
     }
 
+    function test_formRowValidationChangesHeightWithoutChangingPreferredWidth() {
+        const row = createTemporaryObject(textFieldRowComponent, host, { width: 360 })
+        verify(row !== null)
+        wait(0)
+        const preferredWidth = row.implicitWidth
+        const normalHeight = row.implicitHeight
+
+        row.errorText = "A validation message that must wrap within the row. ".repeat(8)
+        tryVerify(function() { return row.implicitHeight > normalHeight })
+        compare(row.implicitWidth, preferredWidth)
+        row.width = 280
+        tryVerify(function() { return row.field.mapToItem(row, 0, 0).y >= row.topPadding })
+        compare(row.implicitWidth, preferredWidth)
+
+        row.errorText = ""
+        tryCompare(row, "implicitHeight", normalHeight)
+    }
+
     function test_formSectionOwnsCardAndContent() {
         const section = createTemporaryObject(formSectionComponent, host)
         verify(section !== null)
@@ -263,6 +281,31 @@ TestCase {
         compare(footer.text, "Changes apply immediately.")
         compare(footer.font.pixelSize, Theme.text.caption.font.pixelSize)
         verify(section.implicitHeight > 0)
+    }
+
+    function test_formSectionResizesWrappedContent() {
+        const section = createTemporaryObject(formSectionComponent, host, {
+            description: "A description that wraps to fit the available width. ".repeat(8),
+            footerText: "Footer text that also wraps at narrow widths. ".repeat(4)
+        })
+        verify(section !== null)
+        const card = findChild(section, "exampleSectionCard")
+        const footer = findChild(section, "exampleSectionFooter")
+        verify(card !== null)
+        verify(footer !== null)
+        wait(0)
+        const wideHeight = section.implicitHeight
+
+        section.width = 260
+        tryVerify(function() { return section.implicitHeight > wideHeight })
+        compare(card.width, section.width)
+        verify(footer.y >= card.y + card.height)
+        verify(footer.mapToItem(section, 0, footer.height).y <= section.height + 1)
+
+        const narrowHeight = section.implicitHeight
+        section.footerText = ""
+        tryVerify(function() { return section.implicitHeight < narrowHeight })
+        compare(card.width, section.width)
     }
 
     function test_listRowSelectionAndActivation() {
@@ -427,6 +470,26 @@ TestCase {
         page.back.connect(function() { backCount += 1 })
         page.pageHeader.back()
         compare(backCount, 1)
+    }
+
+    function test_settingsPageScrollHeightTracksWrappedContent() {
+        const page = createTemporaryObject(settingsPageComponent, host, { height: 200 })
+        verify(page !== null)
+        const section = findChild(page, "exampleSettingsSection")
+        verify(section !== null)
+        section.description = "Content that must remain reachable when the page is narrow. ".repeat(20)
+        tryVerify(function() { return page.scrollView.contentHeight > page.scrollView.availableHeight })
+        const wideHeight = page.scrollView.contentHeight
+
+        page.width = 360
+        tryVerify(function() { return page.scrollView.contentHeight > wideHeight })
+        compare(page.contentLayout.y, page.contentTopPadding)
+        fuzzyCompare(page.scrollView.contentHeight,
+                     page.contentTopPadding + page.contentLayout.height + page.contentBottomPadding, 1)
+
+        const flickable = page.scrollView.contentItem
+        flickable.contentY = page.scrollView.contentHeight - page.scrollView.availableHeight
+        verify(flickable.contentY > 0)
     }
 
     function test_settingsPageKeepsImplicitWidthIndependentOfLayout() {

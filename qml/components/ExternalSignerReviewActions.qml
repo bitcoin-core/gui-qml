@@ -46,7 +46,7 @@ Item {
     signal sendRequested()
 
     Layout.fillWidth: true
-    implicitHeight: actionsColumn.implicitHeight
+    implicitHeight: actionsColumn.height
 
     function reset() {
         approveTimer.stop()

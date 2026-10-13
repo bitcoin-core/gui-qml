@@ -47,7 +47,7 @@ Control {
     rightPadding: 16
     topPadding: 10
     bottomPadding: 10
-    implicitWidth: Math.max(320, contentItem.implicitWidth + leftPadding + rightPadding)
+    implicitWidth: 320
     implicitHeight: Math.max(minimumRowHeight, contentItem.implicitHeight + topPadding + bottomPadding)
 
     background: Item {
@@ -67,7 +67,21 @@ Control {
         }
     }
 
-    contentItem: ColumnLayout {
+    contentItem: Item {
+        implicitHeight: contentLayout.height
+
+        Item {
+            id: contentFrame
+            width: parent.width
+            height: contentLayout.height
+            anchors.verticalCenter: parent.verticalCenter
+        }
+    }
+
+    ColumnLayout {
+        id: contentLayout
+        parent: contentFrame
+        width: parent.width
         spacing: root.bodySpacing
 
         RowLayout {

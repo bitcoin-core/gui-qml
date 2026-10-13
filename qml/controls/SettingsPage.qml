@@ -53,7 +53,7 @@ Page {
         Item {
             id: contentFrame
             width: scrollView.availableWidth
-            height: contentLayout.implicitHeight + root.contentTopPadding + root.contentBottomPadding
+            height: contentLayout.height + root.contentTopPadding + root.contentBottomPadding
 
             ColumnLayout {
                 id: contentLayout

@@ -5,7 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
-ColumnLayout {
+Item {
     id: root
 
     default property alias content: contentColumn.data
@@ -23,13 +23,12 @@ ColumnLayout {
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption
 
-    spacing: sectionHeader.visible ? sectionSpacing : 0
     implicitWidth: 450
-    implicitHeight: sectionColumn.implicitHeight
+    implicitHeight: sectionColumn.height
 
     ColumnLayout {
         id: sectionColumn
-        Layout.fillWidth: true
+        width: root.width
         spacing: sectionHeader.visible || sectionFooter.visible ? root.sectionSpacing : 0
 
         ColumnLayout {
@@ -70,7 +69,7 @@ ColumnLayout {
             id: card
             objectName: root.objectName.length > 0 ? root.objectName + "Card" : ""
             Layout.fillWidth: true
-            implicitHeight: contentColumn.implicitHeight
+            implicitHeight: contentColumn.height
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
             clip: true

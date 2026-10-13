@@ -34,6 +34,7 @@ private Q_SLOTS:
     {
         QPointer<QObject> clock{qmltest::Find(m_app, "blockClock")};
         QVERIFY(clock);
+        QSignalSpy warnings{&m_app.engine(), &QQmlEngine::warnings};
         QVERIFY(qmltest::OpenSettings(m_app));
         QTRY_VERIFY(qmltest::Find(m_app, "settingsView"));
         auto* settings = qmltest::Find(m_app, "settingsView");
@@ -69,11 +70,13 @@ private Q_SLOTS:
             QSignalSpy rendered{page->window(), &QQuickWindow::afterRendering};
             page->window()->update();
             QTRY_VERIFY(!rendered.isEmpty());
+            QCOMPARE(warnings.count(), 0);
         }
         QVERIFY(qmltest::ReturnToNode(m_app));
         QTRY_VERIFY(clock && clock->property("visible").toBool());
         QTRY_VERIFY(qmltest::TransitionsFinished(m_app.window()));
         QCOMPARE(qmltest::Find(m_app, "blockClock"), clock.data());
+        QCOMPARE(warnings.count(), 0);
     }
 };
 
