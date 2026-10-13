@@ -11,7 +11,10 @@
 #include <QString>
 #include <QSystemTrayIcon>
 
+#include <memory>
+
 class QAction;
+class QMenu;
 class QWindow;
 
 class DesktopTrayIconController : public QObject
@@ -23,6 +26,7 @@ class DesktopTrayIconController : public QObject
 
 public:
     explicit DesktopTrayIconController(QObject* parent = nullptr);
+    ~DesktopTrayIconController() override;
 
     bool supported() const;
     bool visible() const;
@@ -51,6 +55,7 @@ private:
     void toggleWindow();
 
     QSystemTrayIcon* m_tray_icon{nullptr};
+    const std::unique_ptr<QMenu> m_menu;
     QAction* m_show_action{nullptr};
     QWindow* m_main_window{nullptr};
     bool m_window_visible{true};
