@@ -45,7 +45,7 @@ Rectangle {
 
     radius: 10
     color: backgroundColor
-    implicitHeight: contentLoader.item ? contentLoader.item.height + 2 * verticalContentMargin : 2 * verticalContentMargin
+    implicitHeight: contentLoader.implicitHeight + 2 * verticalContentMargin
 
     Loader {
         id: contentLoader

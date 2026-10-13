@@ -113,7 +113,7 @@ ColumnLayout {
     }
     Rectangle {
         Layout.fillWidth: true
-        implicitHeight: contents.implicitHeight + 48
+        implicitHeight: contents.height + 48
         color: Theme.color.neutral1
         radius: 16
         ColumnLayout {

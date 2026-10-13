@@ -780,12 +780,12 @@ PageStack {
             objectName: "sendFormScrollView"
             anchors.fill: parent
             contentWidth: availableWidth
-            contentHeight: formColumn.implicitHeight + 64
+            contentHeight: formColumn.height + 64
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             Item {
                 width: sendScroll.availableWidth
-                height: formColumn.implicitHeight + 64
+                height: formColumn.height + 64
                 ColumnLayout {
                     id: formColumn
                     width: Math.max(0, Math.min(1100, sendScroll.availableWidth - sendPage.pageSidePadding * 2))

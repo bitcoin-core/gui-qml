@@ -123,7 +123,7 @@ Page {
         Item {
             id: contentFrame
             width: scrollView.availableWidth
-            height: content.implicitHeight + 96
+            height: content.height + 96
 
             ColumnLayout {
                 id: content

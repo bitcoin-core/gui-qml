@@ -44,7 +44,7 @@ Rectangle {
     border.width: 2
     border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.6)
     radius: 10
-    implicitHeight: Math.max(80, content.implicitHeight + 24)
+    implicitHeight: Math.max(80, content.height + 24)
     height: implicitHeight
     Accessible.role: Accessible.Grouping
     Accessible.name: title + ", " + amountText
