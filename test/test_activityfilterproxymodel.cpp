@@ -187,6 +187,7 @@ private Q_SLOTS:
     void filtersByMinimumAmount();
     void combinesTypeSelections();
     void filtersByInclusiveAmountRange();
+    void refiltersWhenSourceAmountChanges();
     void availableMaximumUsesUnfilteredTransactionsAndUpdates();
     void sortsByTimestampDescending();
     void exportsCurrentFilteredRowsToCsv();
@@ -702,6 +703,57 @@ void ActivityFilterProxyModelTests::filtersByInclusiveAmountRange()
     QCOMPARE(proxy.rowCount(), 3);
     QVERIFY(proxy.setAmountRange(0, 0));
     QCOMPARE(proxy.rowCount(), 0);
+}
+
+void ActivityFilterProxyModelTests::refiltersWhenSourceAmountChanges()
+{
+    auto send = MakeRow("Send", Transaction::SendToAddress, 10, "tx-send");
+    auto receive = MakeRow("Receive", Transaction::RecvWithAddress, 20, "tx-receive");
+    send.status = receive.status = Transaction::Unconfirmed;
+    send.net_amount_sat = -150;
+    receive.net_amount_sat = 250;
+    TestActivityModel source;
+    source.setRows({send, receive});
+
+    ActivityFilterProxyModel proxy;
+    proxy.setSourceModel(&source);
+    QVERIFY(proxy.setAmountRange(100, 200));
+    QCOMPARE(proxy.count(), 1);
+    QVERIFY(ContainsLabel(proxy, "Send"));
+    QCOMPARE(proxy.pendingBalanceSat(), -150);
+
+    int notified_count{-1};
+    connect(&proxy, &ActivityFilterProxyModel::countChanged, &proxy, [&] {
+        notified_count = proxy.count();
+    });
+
+    // Only NetAmountSatRole changes: keep the filter fixed and do not reset
+    // the source model or explicitly invalidate the proxy from the test.
+    source.setAmount(0, -50);
+    QCOMPARE(proxy.count(), 0);
+    QCOMPARE(notified_count, 0);
+    QCOMPARE(proxy.pendingBalanceSat(), 0);
+
+    source.setAmount(1, 175);
+    QCOMPARE(proxy.count(), 1);
+    QCOMPARE(notified_count, 1);
+    QVERIFY(ContainsLabel(proxy, "Receive"));
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::NetAmountSatRole).toLongLong(), 175);
+    QCOMPARE(proxy.pendingBalanceSat(), 175);
+
+    source.setAmount(0, -125);
+    QCOMPARE(proxy.count(), 2);
+    QCOMPARE(notified_count, 2);
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::TxidRole).toString(), QString{"tx-receive"});
+    QCOMPARE(proxy.index(1, 0).data(TransactionActivityModel::TxidRole).toString(), QString{"tx-send"});
+    QCOMPARE(proxy.pendingBalanceSat(), 50);
+
+    // An already-visible row also exposes its updated data and clears the
+    // cached pending balance even when the filtered row count stays the same.
+    source.setAmount(1, 180);
+    QCOMPARE(proxy.count(), 2);
+    QCOMPARE(proxy.index(0, 0).data(TransactionActivityModel::NetAmountSatRole).toLongLong(), 180);
+    QCOMPARE(proxy.pendingBalanceSat(), 55);
 }
 
 void ActivityFilterProxyModelTests::availableMaximumUsesUnfilteredTransactionsAndUpdates()

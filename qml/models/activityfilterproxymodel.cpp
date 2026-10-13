@@ -125,20 +125,12 @@ void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* source_model)
         m_source_connections << connect(source_model, &QAbstractItemModel::dataChanged, this,
             [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
                 if (roles.isEmpty() || roles.contains(TransactionActivityModel::NetAmountSatRole) || roles.contains(TransactionActivityModel::IsPendingRequestRole)) updateAvailableMaxAmount();
-                // The proxy's derived roles and custom predicates depend on
-                // several source roles, not just Qt's default DisplayRole.
+                // Notify views when source changes affect the proxy's derived
+                // section and date roles.
                 const auto changed = [&roles](int role) { return roles.isEmpty() || roles.contains(role); };
                 if (changed(TransactionActivityModel::TimestampRole) || changed(TransactionActivityModel::IsPendingRole)) {
                     invalidate();
                     if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionKeyRole, SectionLabelRole, DateTimeLabelRole});
-                } else if ((!m_search_text.isEmpty() && (changed(TransactionActivityModel::SearchTextRole)
-                        || changed(TransactionActivityModel::AddressRole) || changed(TransactionActivityModel::LabelRole)))
-                    || (!m_type_filters.isEmpty() && (changed(TransactionActivityModel::ActivityTypeRole)
-                        || changed(TransactionActivityModel::ActionsRole) || changed(TransactionActivityModel::HasPaymentRequestRole)
-                        || changed(TransactionActivityModel::TypeRole)))
-                    || ((m_min_amount >= 0 || m_max_amount >= 0) && changed(TransactionActivityModel::NetAmountSatRole))
-                    || changed(TransactionActivityModel::IsPendingRequestRole)) {
-                    invalidateFilter();
                 }
             });
         m_source_connections << connect(source_model, &QObject::destroyed, this, [this] {
