@@ -138,6 +138,7 @@ void DesktopTrayIconController::setVisible(bool visible)
     if (visible == m_tray_icon->isVisible()) return;
 
     if (visible) {
+        if (!supported()) return;
         m_tray_icon->show();
         if (!m_tray_icon->isVisible()) {
             Q_EMIT supportedChanged(false);
