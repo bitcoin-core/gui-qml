@@ -6,6 +6,7 @@
 #define BITCOIN_QML_MODELS_ONBOARDINGOPTIONSMODEL_H
 
 #include <qml/core_settings.h>
+#include <qml/backendexecutor.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/onboarding_settings.h>
 #include <qml/onboarding_storage.h>
@@ -46,6 +47,7 @@ class OnboardingOptionsModel : public QObject
     Q_PROPERTY(QString torAddress READ torAddress WRITE setTorAddress NOTIFY torAddressChanged)
     Q_PROPERTY(QObject* coreSettings READ coreSettings CONSTANT)
     Q_PROPERTY(QVariantMap coreSettingStatuses READ coreSettingStatuses NOTIFY coreSettingStatusesChanged)
+    Q_PROPERTY(bool validationPending READ validationPending NOTIFY validationPendingChanged)
     Q_PROPERTY(QString previewError READ previewError NOTIFY previewErrorChanged)
     Q_PROPERTY(bool canFinish READ canFinish NOTIFY canFinishChanged)
     Q_PROPERTY(bool connectionSettingsDirty READ dirtyState CONSTANT)
@@ -75,6 +77,8 @@ public:
     // Keep args and the preparation callback's dependencies alive until nodePrepared.
     void prepareNode(ArgsManager& args, std::function<bool()> prepare_node);
 
+    void beginShutdown();
+    bool validationPending() const { return m_preview_pending; }
     QString dataDir() const { return m_data_dir; }
     QString getDefaultDataDirString() const;
     QUrl getDefaultDataDirectory() const;
@@ -107,7 +111,7 @@ public:
     QObject* coreSettings() { return &m_core_settings; }
     QVariantMap coreSettingStatuses() const { return m_core_settings.statuses(); }
     QString previewError() const { return m_preview_error; }
-    bool canFinish() const { return !m_preparing && m_preview_error.isEmpty() && !m_storage_check_pending && m_storage_error_text.isEmpty(); }
+    bool canFinish() const { return !m_preparing && !m_stopping && !m_preview_pending && m_preview_error.isEmpty() && !m_storage_check_pending && m_storage_error_text.isEmpty(); }
     bool dirtyState() const { return false; }
     int assumedBlockchainSize() const { return m_assumed_blockchain_size; }
     int assumedChainstateSize() const { return m_assumed_chainstate_size; }
@@ -149,6 +153,9 @@ Q_SIGNALS:
     void torAddressChanged(QString address);
     void coreSettingStatusesChanged();
     void previewErrorChanged();
+    void validationPendingChanged();
+    void dataDirSelectionFinished(bool success, const QString& error);
+    void shutdownFinished();
     void canFinishChanged();
     void assumedSizesChanged();
     void storageStatusChanged();
@@ -157,6 +164,9 @@ private:
     void finishNodePreparation(bool success, const QString& error);
     void setDataDir(const QString& path);
     void refreshPreview();
+    void startPreview();
+    void applyPreview(const QmlOnboardingSettings::PreviewResult& preview);
+    void setPreviewPending(bool pending);
     void applyPreviewValues(const QmlCoreSettings::Values& values, const QVariantMap& statuses);
     void requestStorageCheck();
     void startStorageCheck(uint64_t request_id, const QString& path);
@@ -170,6 +180,10 @@ private:
 
     std::unique_ptr<BackendExecutor> m_executor;
     bool m_preparing{false};
+    bool m_stopping{false};
+    bool m_preview_pending{true};
+    bool m_preview_in_flight{false};
+    uint64_t m_preview_request_id{0};
     std::vector<std::string> m_argv;
     bool m_can_listen_ipc;
     QString m_data_dir;

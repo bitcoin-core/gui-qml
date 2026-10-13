@@ -33,6 +33,30 @@ TestCase {
         walletController.closePaymentRequestDetailRequests = 0
     }
 
+    function test_receiving_address_reconnects_after_wallet_selection_and_gc() {
+        const page = createTemporaryObject(requestPaymentComponent, this, { wallet: null })
+        verify(page)
+        const card = findChild(page, "receivingAddressCard")
+        const menu = findChild(card, "receivingAddressQRContextMenu")
+        const request = testWalletModel.receivingAddress
+        request.clear()
+
+        for (let selection = 0; selection < 2; ++selection) {
+            page.wallet = null
+            gc()
+            page.wallet = testWalletModel
+            compare(card.request, request)
+            verify(testWalletModel.ensureReceivingAddress())
+            menu.open()
+            tryCompare(menu, "opened", true)
+            request.addressChanged()
+            tryCompare(menu, "opened", false)
+        }
+
+        page.wallet = null
+        request.clear()
+    }
+
     function test_formatRelativeTime_empty() {
         compare(Utils.formatRelativeTime(""), "")
         compare(Utils.formatRelativeTime(null), "")

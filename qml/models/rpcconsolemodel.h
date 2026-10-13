@@ -103,7 +103,6 @@ public:
 
     explicit RpcConsoleModel(interfaces::Node& node, QObject* parent = nullptr);
     ~RpcConsoleModel();
-    void beginShutdown();
 
     bool executing() const { return m_executing; }
     QStringList availableCommands() const { return m_available_commands; }
@@ -124,14 +123,16 @@ public:
 
     /** Clear the console output. */
     Q_INVOKABLE void clear();
+    void beginShutdown();
 
 public Q_SLOTS:
     void onNodeInitialized();
 
 Q_SIGNALS:
-    void drained();
     void executingChanged();
     void availableCommandsChanged();
+    void shutdownRequested();
+    void drained();
 
 private Q_SLOTS:
     void onResultReady(const QString& time, int category, const QString& rawText);
@@ -142,6 +143,7 @@ private:
 
     interfaces::Node& m_node;
     bool m_executing{false};
+    bool m_stopping{false};
     QStringList m_available_commands;
     RpcOutputListModel m_output_model;
 
@@ -158,8 +160,7 @@ private:
     QString m_pending_text; // text being edited before browsing history
     QString m_last_wallet_name; // last wallet context surfaced in the output
 
-    bool m_stopping{false};
-    QThread* m_worker_thread{nullptr};
+    QThread* m_worker_thread;
     RpcConsoleWorker* m_worker{nullptr};
 };
 

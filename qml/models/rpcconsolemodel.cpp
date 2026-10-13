@@ -200,6 +200,24 @@ public:
         : QObject(parent), m_node(node) {}
 
 public Q_SLOTS:
+    void loadCommands()
+    {
+        try {
+            QStringList list;
+            for (const auto& command : m_node.listRpcCommands()) {
+                list.append(QString::fromStdString(command));
+                list.append(QStringLiteral("help ") + QString::fromStdString(command));
+            }
+            list.append(QStringLiteral("help-console"));
+            list.sort(Qt::CaseInsensitive);
+            list.removeDuplicates();
+            Q_EMIT commandsReady(list);
+        } catch (const std::exception& e) {
+            Q_EMIT resultReady(QDateTime::currentDateTime().toString("hh:mm:ss"), RpcConsoleModel::CMD_ERROR,
+                               QString::fromUtf8(e.what()));
+        }
+    }
+
     void execute(const QString& command, const QString& wallet_name)
     {
         QString time = QDateTime::currentDateTime().toString("hh:mm:ss");
@@ -263,6 +281,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void resultReady(const QString& time, int category, const QString& rawText);
+    void commandsReady(const QStringList& commands);
 
 private:
     interfaces::Node& m_node;
@@ -284,7 +303,11 @@ RpcConsoleModel::RpcConsoleModel(interfaces::Node& node, QObject* parent)
     connect(m_worker, &RpcConsoleWorker::resultReady,
             this,     &RpcConsoleModel::onResultReady,
             Qt::QueuedConnection);
-
+    connect(m_worker, &RpcConsoleWorker::commandsReady, this, [this](const QStringList& commands) {
+        if (m_stopping) return;
+        m_available_commands = commands;
+        Q_EMIT availableCommandsChanged();
+    }, Qt::QueuedConnection);
     connect(m_worker_thread, &QThread::finished,
             m_worker, &RpcConsoleWorker::deleteLater);
 
@@ -342,15 +365,10 @@ bool RpcConsoleModel::submitCommand(const QString& command, const QString& walle
     }
     QString filteredCmd = QString::fromStdString(filtered).trimmed();
 
-    // A special case allows requesting shutdown even while a long-running command
-    // is executing, mirroring Core's RPCConsole::on_lineEdit_returnPressed().
-    // "stop" runs synchronously on the calling thread, so it can abort a command
-    // that is blocking the worker, and returns before the request is echoed or
-    // added to history: the GUI shuts down immediately, so that output is never
-    // seen.
+    // Keep shutdown independent of the ordinary RPC queue. The application
+    // dispatches interruption on its control executor, even while RPC is busy.
     if (trimmed_command == QLatin1String("stop")) {
-        std::string result;
-        RpcCommandExecutor::RPCExecuteCommandLine(m_node, result, trimmed_command.toStdString());
+        Q_EMIT shutdownRequested();
         return true;
     }
 
@@ -434,19 +452,19 @@ void RpcConsoleModel::clear()
 
 void RpcConsoleModel::onNodeInitialized()
 {
+    if (!m_stopping) QMetaObject::invokeMethod(m_worker, &RpcConsoleWorker::loadCommands, Qt::QueuedConnection);
+}
+
+void RpcConsoleModel::beginShutdown()
+{
     if (m_stopping) return;
-    std::vector<std::string> cmds = m_node.listRpcCommands();
-    QStringList list;
-    list.reserve(static_cast<int>(cmds.size()));
-    for (const auto& c : cmds) {
-        list.append(QString::fromStdString(c));
-        list.append(QStringLiteral("help ") + QString::fromStdString(c));
-    }
-    list.append(QStringLiteral("help-console"));
-    list.sort(Qt::CaseInsensitive);
-    list.removeDuplicates();
-    m_available_commands = list;
-    Q_EMIT availableCommandsChanged();
+    m_stopping = true;
+    m_worker_thread->quit();
+    JoinThreadAsync(m_worker_thread, this, [this] {
+        m_worker_thread = nullptr;
+        m_worker = nullptr;
+        Q_EMIT drained();
+    });
 }
 
 void RpcConsoleModel::onResultReady(const QString& time, int category, const QString& rawText)
@@ -465,16 +483,4 @@ void RpcConsoleModel::setExecuting(bool executing)
         m_executing = executing;
         Q_EMIT executingChanged();
     }
-}
-
-void RpcConsoleModel::beginShutdown()
-{
-    if (m_stopping) return;
-    m_stopping = true;
-    m_worker_thread->quit();
-    JoinThreadAsync(m_worker_thread, this, [this] {
-        m_worker_thread = nullptr;
-        m_worker = nullptr;
-        Q_EMIT drained();
-    });
 }
