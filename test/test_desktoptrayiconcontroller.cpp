@@ -4,6 +4,9 @@
 
 #include <qml/models/desktoptrayiconcontroller.h>
 
+#include <QAction>
+#include <QMenu>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QWindow>
 #include <QtTest/QtTest>
@@ -14,6 +17,7 @@ class DesktopTrayIconControllerTests : public QObject
 
 private Q_SLOTS:
     void initiallyNotVisible();
+    void destroysMenuWithController();
     void setVisibleFalseWhenAlreadyHidden_noSignal();
     void showWithoutSystemTrayStaysHidden();
     void setToolTipIsReadable();
@@ -24,6 +28,23 @@ void DesktopTrayIconControllerTests::initiallyNotVisible()
 {
     DesktopTrayIconController controller;
     QVERIFY(!controller.visible());
+}
+
+void DesktopTrayIconControllerTests::destroysMenuWithController()
+{
+    QPointer<QMenu> menu;
+    QPointer<QAction> action;
+    {
+        DesktopTrayIconController controller;
+        auto* tray = controller.findChild<QSystemTrayIcon*>();
+        QVERIFY(tray);
+        menu = tray->contextMenu();
+        QVERIFY(menu);
+        QVERIFY(!menu->actions().isEmpty());
+        action = menu->actions().constFirst();
+    }
+    QVERIFY(menu.isNull());
+    QVERIFY(action.isNull());
 }
 
 void DesktopTrayIconControllerTests::setVisibleFalseWhenAlreadyHidden_noSignal()

@@ -38,12 +38,12 @@ static bool isObscured(const QWindow *w)
 DesktopTrayIconController::DesktopTrayIconController(QObject* parent)
     : QObject(parent)
     , m_tray_icon(new QSystemTrayIcon(this))
+    , m_menu(std::make_unique<QMenu>())
 {
     // Linux SNI/AppIndicator hosts require a native QMenu registered via
     // setContextMenu() — the menu is exported over D-Bus and displayed by
     // the DE natively. Without this, right-click does nothing on GNOME/KDE.
-    auto* menu = new QMenu();
-    m_show_action = menu->addAction(tr("Show"));
+    m_show_action = m_menu->addAction(tr("Show"));
     connect(m_show_action, &QAction::triggered, this, [this] {
         if (m_window_visible) {
             Q_EMIT hideRequested();
@@ -51,10 +51,10 @@ DesktopTrayIconController::DesktopTrayIconController(QObject* parent)
             Q_EMIT showRequested();
         }
     });
-    menu->addSeparator();
-    auto* quitAction = menu->addAction(tr("Quit"));
+    m_menu->addSeparator();
+    auto* quitAction = m_menu->addAction(tr("Quit"));
     connect(quitAction, &QAction::triggered, this, [this] { Q_EMIT quitRequested(); });
-    m_tray_icon->setContextMenu(menu);
+    m_tray_icon->setContextMenu(m_menu.get());
 
     connect(m_tray_icon, &QSystemTrayIcon::activated, this,
         [this](QSystemTrayIcon::ActivationReason reason) {
@@ -69,6 +69,8 @@ DesktopTrayIconController::DesktopTrayIconController(QObject* parent)
         [this] { Q_EMIT showRequested(); });
 #endif
 }
+
+DesktopTrayIconController::~DesktopTrayIconController() = default;
 
 void DesktopTrayIconController::toggleWindow()
 {
