@@ -16,6 +16,7 @@ QtObject {
     property int role: AlertAction.Normal
     property string buttonObjectName: ""
     property bool closesPopup: true
+    property bool enabled: true
 
     signal triggered()
 }
