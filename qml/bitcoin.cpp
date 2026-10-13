@@ -5,6 +5,7 @@
 #include <bitcoin-build-config.h> // IWYU pragma: keep
 
 #include <qml/bitcoin.h>
+#include <qml/bitcoinqmlapplication.h>
 
 #include <common/args.h>
 #include <common/init.h>
@@ -84,6 +85,7 @@
 #include <cassert>
 #include <cstdio>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <tuple>
 #include <vector>
@@ -175,7 +177,8 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
 
 bool InitErrorMessageBox(
     const bilingual_str& message,
-    QmlQuitHandler& quit_handler)
+    QmlQuitHandler& quit_handler,
+    const std::function<void(QQmlApplicationEngine&)>& engine_created)
 {
     qCritical().noquote() << QString::fromStdString(message.original);
     static AppMode error_app_mode = SetupAppMode();
@@ -185,6 +188,7 @@ bool InitErrorMessageBox(
     RegisterQmlTypes(error_app_mode, error_build_info, error_clipboard, error_bitcoin_uri_model);
 
     QQmlApplicationEngine engine;
+    engine_created(engine);
 
     engine.rootContext()->setContextProperty("message", QString::fromStdString(message.translated));
     engine.load(QUrl(QStringLiteral("qrc:///qml/pages/initerrormessage.qml")));
@@ -362,7 +366,9 @@ bool ShouldShowPreInitOnboarding(const std::vector<std::string>& argv, bool can_
     return !status.ok || status.should_show_onboarding;
 }
 
-PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc, QmlQuitHandler& quit_handler)
+PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, const std::vector<std::string>& argv, bool can_listen_ipc, QmlQuitHandler& quit_handler,
+    const std::function<void(QQmlApplicationEngine&)>& engine_created,
+    const std::function<void(QQmlApplicationEngine&)>& window_created)
 {
     const bool show_onboarding = ShouldShowPreInitOnboarding(argv, can_listen_ipc);
     if (quit_handler.isQuitRequested()) return PreInitOnboardingStatus::CANCELED;
@@ -384,6 +390,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     assert(!context.network_style.isNull());
 
     context.engine = std::make_unique<QQmlApplicationEngine>();
+    engine_created(*context.engine);
     context.engine->addImageProvider(QStringLiteral("images"), new ImageProvider{context.network_style.data()});
     context.engine->rootContext()->setContextProperty("optionsModel", context.onboarding_options_model.get());
     context.engine->load(QUrl(QStringLiteral("qrc:///qml/pages/preinit.qml")));
@@ -409,6 +416,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     QObject::connect(context.engine->rootObjects().first(), SIGNAL(finished()), &loop, SLOT(quit()));
     QObject::connect(context.window, SIGNAL(closing(QQuickCloseEvent*)), &loop, SLOT(quit()));
     QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &loop, &QEventLoop::quit);
+    if (window_created) window_created(*context.engine);
     if (!quit_handler.isQuitRequested()) loop.exec();
 
     const bool completed = context.engine->rootObjects().first()->property("completed").toBool();
@@ -420,28 +428,40 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
     if (context.window) context.window->contentItem()->setEnabled(false);
     return PreInitOnboardingStatus::COMPLETED;
 }
-
-// Qt gets a synthetic argument list so it never parses the process command line:
-// a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
-// before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
-int qt_argc = 1;
-const char* qt_argv = "bitcoin-core-app";
 } // namespace
 
 
 int QmlGuiMain(int argc, char* argv[])
+{
+    BitcoinQmlApplication app;
+    return app.runFromCommandLine(argc, argv);
+}
+
+int BitcoinQmlApplication::runFromCommandLine(int argc, char* argv[])
 {
 #ifdef WIN32
     common::WinCmdLineArgs winArgs;
     std::tie(argc, argv) = winArgs.get();
 #endif // WIN32
 
+    return run(argc, argv);
+}
+
+int BitcoinQmlApplication::run(int argc, char* argv[])
+{
+    noui_connect();
     Q_INIT_RESOURCE(bitcoin_qml);
     Q_INIT_RESOURCE(bitcoin_compat);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
-    QApplication app(qt_argc, const_cast<char**>(&qt_argv));
+    // Qt gets a synthetic argument list so it never parses the process command line:
+    // a bitcoin: URI from a desktop handler can smuggle options that Qt would consume
+    // before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
+    int qt_argc = 1;
+    char qt_application_name[]{"bitcoin-core-app"};
+    char* qt_argv[]{qt_application_name, nullptr};
+    QApplication app(qt_argc, qt_argv);
     // Route onboarding worker diagnostics to Core's logger as soon as logging is configured.
     qInstallMessageHandler(StartupDebugMessageHandler);
     QmlQuitHandler quit_handler;
@@ -468,7 +488,8 @@ int QmlGuiMain(int argc, char* argv[])
                 if (style & CClientUIInterface::ICON_WARNING) {
                     RecordStartupWarning(startup_warnings, message);
                 } else if (!startup_canceled && !quit_handler.isQuitRequested()) {
-                    result = InitErrorMessageBox(message, quit_handler);
+                    result = InitErrorMessageBox(message, quit_handler,
+                                                 [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
                 }
             };
             if (QThread::currentThread() == app.thread()) {
@@ -562,7 +583,9 @@ int QmlGuiMain(int argc, char* argv[])
 
     PreInitOnboardingContext pre_init_onboarding_context;
     const PreInitOnboardingStatus pre_init_onboarding_status{
-        RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc(), quit_handler)
+        RunPreInitOnboarding(pre_init_onboarding_context, command_line_args, init->canListenIpc(), quit_handler,
+                            [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); },
+                            [this](QQmlApplicationEngine& engine) { onboardingCreated(engine); })
     };
     switch (pre_init_onboarding_status) {
     case PreInitOnboardingStatus::COMPLETED:
@@ -697,7 +720,8 @@ int QmlGuiMain(int argc, char* argv[])
         if (main_window) main_window->contentItem()->setEnabled(true);
         node_model.handleRunawayException(message);
         if (!main_window) {
-            InitErrorMessageBox(Untranslated(node_model.startupError().toStdString()), quit_handler);
+            InitErrorMessageBox(Untranslated(node_model.startupError().toStdString()), quit_handler,
+                                [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
             node_model.requestShutdown();
         }
     });
@@ -753,6 +777,7 @@ int QmlGuiMain(int argc, char* argv[])
     });
 
     auto engine = std::make_unique<QQmlApplicationEngine>();
+    qmlEngineCreated(*engine);
 
     QScopedPointer<const NetworkStyle> network_style{NetworkStyle::instantiate(Params().GetChainType())};
     assert(!network_style.isNull());
@@ -908,10 +933,47 @@ int QmlGuiMain(int argc, char* argv[])
     qInfo() << "Graphics API in use:" << QmlUtil::GraphicsApi(main_window);
 
     node_model.startShutdownPolling();
+    m_node = node.get();
+    m_node_model = &node_model;
+    m_engine = engine.get();
+    const auto clear_runtime = qScopeGuard([this] {
+        m_node = nullptr;
+        m_node_model = nullptr;
+        m_engine = nullptr;
+    });
+    windowCreated();
     const int exit_code{qGuiApp->exec()};
 #ifdef ENABLE_TEST_AUTOMATION
     test_bridge.reset();
 #endif
     engine.reset();
     return exit_code;
+}
+
+interfaces::Node& BitcoinQmlApplication::node() const
+{
+    assert(m_node);
+    return *m_node;
+}
+
+NodeModel& BitcoinQmlApplication::nodeModel() const
+{
+    assert(m_node_model);
+    return *m_node_model;
+}
+
+QQmlApplicationEngine& BitcoinQmlApplication::engine() const
+{
+    assert(m_engine);
+    return *m_engine;
+}
+
+QQuickWindow* BitcoinQmlApplication::window() const
+{
+    return qobject_cast<QQuickWindow*>(engine().rootObjects().constFirst());
+}
+
+void BitcoinQmlApplication::requestShutdown()
+{
+    nodeModel().requestShutdown();
 }

@@ -159,7 +159,20 @@ jobs:
 
       - name: Run app tests
         run: |
-          ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}"
+          mkdir -p "${BUILD_DIR}/test-reports"
+          ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}" \
+            --output-junit "${PWD}/${BUILD_DIR}/test-reports/ctest.xml"
+
+      - name: Upload test reports and failed profiles
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: app-test-results-depends-${{ matrix.cache-id }}
+          path: |
+            ${{ env.BUILD_DIR }}/test-reports/
+            ${{ env.BUILD_DIR }}/test-profiles/
+            ${{ env.BUILD_DIR }}/Testing/Temporary/
+          if-no-files-found: ignore
 
       - name: Upload depends logs
         uses: actions/upload-artifact@v7
