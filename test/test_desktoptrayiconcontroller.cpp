@@ -15,6 +15,7 @@ class DesktopTrayIconControllerTests : public QObject
 private Q_SLOTS:
     void initiallyNotVisible();
     void setVisibleFalseWhenAlreadyHidden_noSignal();
+    void showWithoutSystemTrayStaysHidden();
     void setToolTipIsReadable();
     void showRestoresGeometryCapturedAtHide();
 };
@@ -31,6 +32,21 @@ void DesktopTrayIconControllerTests::setVisibleFalseWhenAlreadyHidden_noSignal()
     QSignalSpy spy(&controller, &DesktopTrayIconController::visibleChanged);
     controller.setVisible(false);
     QCOMPARE(spy.count(), 0);
+}
+
+void DesktopTrayIconControllerTests::showWithoutSystemTrayStaysHidden()
+{
+    DesktopTrayIconController controller;
+    if (controller.supported()) QSKIP("Requires a platform without a system tray");
+    QSignalSpy visible_changed{&controller, &DesktopTrayIconController::visibleChanged};
+
+    controller.setVisible(true);
+    QVERIFY(!controller.visible());
+    QCOMPARE(visible_changed.count(), 0);
+
+    controller.setVisible(false);
+    QVERIFY(!controller.visible());
+    QCOMPARE(visible_changed.count(), 0);
 }
 
 // The system-tray tooltip (e.g. "Bitcoin Core client [regtest]") is set on the
