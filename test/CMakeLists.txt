@@ -155,6 +155,10 @@ target_include_directories(bitcoinqml_qmltests
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
+set_tests_properties(bitcoinqml_qmltests PROPERTIES
+  FAIL_REGULAR_EXPRESSION "CommandConsole\\.qml:[0-9:]+ Parameter \"event\" is not declared"
+)
+
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_bootstrap_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
