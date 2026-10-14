@@ -17,8 +17,8 @@ qint64 UnitFactor(BitcoinAmount::Unit unit)
 {
     switch (unit) {
     case BitcoinAmount::Unit::BTC: return COIN;
-    case BitcoinAmount::Unit::mBTC: return 100'000;
-    case BitcoinAmount::Unit::uBTC: return 100;
+    case BitcoinAmount::Unit::MilliBTC: return 100'000;
+    case BitcoinAmount::Unit::MicroBTC: return 100;
     case BitcoinAmount::Unit::SAT: return 1;
     }
     assert(false);
@@ -28,8 +28,8 @@ int UnitDecimals(BitcoinAmount::Unit unit)
 {
     switch (unit) {
     case BitcoinAmount::Unit::BTC: return 8;
-    case BitcoinAmount::Unit::mBTC: return 5;
-    case BitcoinAmount::Unit::uBTC: return 2;
+    case BitcoinAmount::Unit::MilliBTC: return 5;
+    case BitcoinAmount::Unit::MicroBTC: return 2;
     case BitcoinAmount::Unit::SAT: return 0;
     }
     assert(false);
@@ -39,8 +39,8 @@ QmlBitcoinUnits::Unit ToQmlUnit(BitcoinAmount::Unit unit)
 {
     switch (unit) {
     case BitcoinAmount::Unit::BTC: return QmlBitcoinUnits::Unit::BTC;
-    case BitcoinAmount::Unit::mBTC: return QmlBitcoinUnits::Unit::mBTC;
-    case BitcoinAmount::Unit::uBTC: return QmlBitcoinUnits::Unit::uBTC;
+    case BitcoinAmount::Unit::MilliBTC: return QmlBitcoinUnits::Unit::mBTC;
+    case BitcoinAmount::Unit::MicroBTC: return QmlBitcoinUnits::Unit::uBTC;
     case BitcoinAmount::Unit::SAT: return QmlBitcoinUnits::Unit::SAT;
     }
     assert(false);

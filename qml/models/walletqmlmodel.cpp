@@ -167,7 +167,14 @@ void ApplySelectedInputsPolicy(wallet::CCoinControl& coin_control)
     coin_control.m_allow_other_inputs = !coin_control.HasSelected();
 }
 
-std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate)
+CAmount MinimumCustomFeeRatePerKvB(interfaces::Wallet* wallet)
+{
+    const auto* raw_wallet = wallet ? wallet->wallet() : nullptr;
+    return raw_wallet ? std::max<CAmount>(DEFAULT_MIN_RELAY_TX_FEE, raw_wallet->chain().relayMinFee().GetFeePerK())
+                      : DEFAULT_MIN_RELAY_TX_FEE;
+}
+
+std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate, CAmount minimum_fee_rate_per_kvb)
 {
     const QString trimmed = custom_fee_rate.trimmed();
     if (trimmed.isEmpty() || !CUSTOM_FEE_RATE_PATTERN.match(trimmed).hasMatch()) {
@@ -194,7 +201,7 @@ std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate)
     }
 
     const CAmount fee_rate_per_kvb = (whole_part * FEE_RATE_BASIS_VBYTES) + fractional_value;
-    if (fee_rate_per_kvb <= 0) {
+    if (fee_rate_per_kvb < minimum_fee_rate_per_kvb) {
         return std::nullopt;
     }
 
@@ -461,6 +468,8 @@ std::optional<SendFeePreview> EstimateCustomPreviewFee(interfaces::Wallet& walle
     ApplySelectedInputsPolicy(coin_control);
     coin_control.m_confirm_target.reset();
     coin_control.m_feerate = CFeeRate{fee_rate_per_kvb};
+    // An explicit custom rate may be below the wallet's automatic minimum.
+    coin_control.fOverrideFeeRate = true;
     ApplyPreviewChangeDestination(coin_control, preview_change_type);
 
     if (const auto fee = TryPreviewFee(wallet, recipients, coin_control, remainder_index)) {
@@ -859,7 +868,12 @@ bool WalletQmlModel::sendAmountExhaustsBalance() const
 
 bool WalletQmlModel::customFeeRateValid() const
 {
-    return ParseCustomFeeRatePerKvB(m_custom_fee_rate).has_value();
+    return ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get())).has_value();
+}
+
+double WalletQmlModel::minimumCustomFeeRate() const
+{
+    return static_cast<double>(MinimumCustomFeeRatePerKvB(m_wallet.get())) / FEE_RATE_BASIS_VBYTES;
 }
 
 QString WalletQmlModel::estimatedFeeForTarget(const unsigned int target_blocks) const
@@ -1245,8 +1259,6 @@ bool WalletQmlModel::commitReceivingPaymentRequest()
     // address if a payment landed while the user was filling out the form.
     for (const auto& tx : m_wallet->getWalletTxs()) recordReceiveRequestPayment(tx);
     if (m_receiving_address->address().isEmpty() || m_receiving_address->paymentReceived()) return false;
-    if (m_current_payment_request->amount()->satoshi() == 0 && m_current_payment_request->label().trimmed().isEmpty()
-        && m_current_payment_request->message().trimmed().isEmpty() && m_current_payment_request->noteSelf().trimmed().isEmpty()) return false;
     m_current_payment_request->setDestination(m_receiving_address->destination());
     if (!savePaymentRequest(m_current_payment_request)) return false;
     // Reserve this address for the saved request. The next Receive view must
@@ -1296,8 +1308,6 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
     // Until the background history scan completes, an old request might have
     // received a payment that is not yet reflected in its persisted lock.
     if (is_update && (receiveRequestReconciliationPending() || m_receive_request_notifications_pending->load() > 0)) return false;
-    if (is_update && request->amount()->satoshi() == 0 && request->label().trimmed().isEmpty()
-        && request->message().trimmed().isEmpty() && request->noteSelf().trimmed().isEmpty()) return false;
     const QString request_id_text = is_update
         ? request->id()
         : QString::number(nextPaymentRequestId());
@@ -2133,7 +2143,7 @@ void WalletQmlModel::requestFeeEstimatesNow()
     const OutputType preview_change_type{base_coin_control.m_change_type.value_or(m_wallet->getDefaultAddressType())};
     const bool custom_fee_enabled{m_custom_fee_enabled};
     const std::optional<CAmount> custom_fee_rate_per_kvb{
-        ParseCustomFeeRatePerKvB(m_custom_fee_rate)};
+        ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get()))};
     const auto wallet = m_wallet;
 
     if (!m_fee_estimate_pending) {
@@ -2315,12 +2325,13 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
     wallet::CCoinControl coin_control{m_coin_control};
     ApplySelectedInputsPolicy(coin_control);
     if (m_custom_fee_enabled) {
-        const auto custom_fee_rate_per_kvb = ParseCustomFeeRatePerKvB(m_custom_fee_rate);
+        const auto custom_fee_rate_per_kvb = ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get()));
         if (!custom_fee_rate_per_kvb.has_value()) {
             return false;
         }
         coin_control.m_confirm_target.reset();
         coin_control.m_feerate = CFeeRate{*custom_fee_rate_per_kvb};
+        coin_control.fOverrideFeeRate = true;
     } else {
         coin_control.m_feerate.reset();
         if (!coin_control.m_confirm_target.has_value()) {
@@ -3092,7 +3103,7 @@ void WalletQmlModel::setCustomFeeRate(const QString& fee_rate)
     m_custom_fee_estimate.reset();
 
     if (m_wallet) {
-        if (const auto requested_rate = ParseCustomFeeRatePerKvB(m_custom_fee_rate)) {
+        if (const auto requested_rate = ParseCustomFeeRatePerKvB(m_custom_fee_rate, MinimumCustomFeeRatePerKvB(m_wallet.get()))) {
             std::array<CAmount, CUSTOM_FEE_TARGETS.size()> target_rates{};
             for (size_t i = 0; i < CUSTOM_FEE_TARGETS.size(); ++i) {
                 wallet::CCoinControl control{m_coin_control};

@@ -220,7 +220,7 @@ def enable_coin_control_and_select_first_coin(gui, checkpoints, coin_id=None):
     gui.wait_for_property("sendInputsSelectedText", "text", "1 input selected", timeout_ms=10000)
 
 
-def run_test(*, save_screenshots=False, screenshot_root=None):
+def run_test(*, custom_fee_rate=None, save_screenshots=False, screenshot_root=None):
     harness = WalletFlowHarness("qml_test_send_receive", port_offset=60)
     checkpoints = CheckpointRecorder(save_screenshots, screenshot_root)
     gui = None
@@ -432,6 +432,14 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_property("feeSelectionControl", "currentTarget", 10, timeout_ms=5000)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         checkpoints.checkpoint("flexible fee selected", gui)
+        if custom_fee_rate is not None:
+            gui.click("feeSelectionPickerButton")
+            gui.click("feeSelectionOption3")
+            gui.set_text("feeSelectionCustomRateInput", "0.099")
+            gui.wait_for_property("sendReviewButton", "enabled", False, timeout_ms=5000)
+            gui.set_text("feeSelectionCustomRateInput", custom_fee_rate)
+            gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+            checkpoints.checkpoint(f"custom fee {custom_fee_rate} sat/vB selected", gui)
         estimated_fee_sats = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
         assert estimated_fee_sats > 0
 
@@ -449,6 +457,10 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_page("sendPage", timeout_ms=10000)
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=10000)
         checkpoints.checkpoint("returned to send page", gui)
+        if custom_fee_rate is not None:
+            gui.click("feeSelectionPickerButton")
+            gui.click("feeSelectionOption2")
+            gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
 
         gui.wait_for_property("sendUseMaximumButton", "text", "Use maximum from selected coins")
         gui.click("sendUseMaximumButton")
@@ -498,8 +510,14 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.click("feeSelectionOption2")
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         assert amount_text_to_sats(gui.get_text("sendAmountInput")) == SEND_AMOUNT_SATS
+        if custom_fee_rate is not None:
+            gui.click("feeSelectionPickerButton")
+            gui.click("feeSelectionOption3")
+            gui.set_text("feeSelectionCustomRateInput", custom_fee_rate)
+            gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
         gui.click("sendUseMaximumButton")
         gui.wait_for_property("sendReviewButton", "enabled", True, timeout_ms=20000)
+        maximum_fee_sats = amount_text_to_sats(gui.get_property("sendTotalFeesValue", "value"))
         gui.click("sendReviewButton")
         gui.wait_for_page("sendTransactionReviewPage", timeout_ms=10000)
         checkpoints.checkpoint("review page with sendall", gui)
@@ -524,6 +542,12 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
             f"Broadcast fee {rpc_fee_sats} sats did not match preview estimate "
             f"{maximum_fee_sats} sats"
         )
+        if custom_fee_rate is not None:
+            decoded = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [tx_details["hex"]])
+            expected_fee = (Decimal(custom_fee_rate) * decoded["vsize"]).to_integral_value(rounding="ROUND_CEILING")
+            assert rpc_fee_sats == int(expected_fee), (
+                f"Expected {custom_fee_rate} sat/vB for {decoded['vsize']} vB, got {rpc_fee_sats} sats"
+            )
         receiver_output_index = assert_receiver_output(
             harness.gui_rpc_port,
             txid,
@@ -550,6 +574,9 @@ def run_test(*, save_screenshots=False, screenshot_root=None):
         gui.wait_for_page("sendPage", timeout_ms=10000)
         gui.wait_for_property("sendUseAutomaticInputsButton", "visible", False, timeout_ms=10000)
         checkpoints.checkpoint("coin control selection cleared after send", gui)
+        if custom_fee_rate is not None:
+            gui.click("feeSelectionPickerButton")
+            gui.click("feeSelectionOption1")
         gui.click("activityTabButton")
         gui.wait_for_property("activitySearchField", "visible", True, timeout_ms=10000)
         gui.click("activityTypeFilterButton")
@@ -721,4 +748,12 @@ if __name__ == "__main__":
     if args.save_screenshots:
         screenshot_root = make_screenshot_root()
         print(f"Checkpoint screenshots will be saved under: {screenshot_root}")
-    sys.exit(run_test(save_screenshots=args.save_screenshots, screenshot_root=screenshot_root))
+    for rate in (None, "0.1"):
+        case = "preset" if rate is None else "custom-0.1"
+        case_screenshots = os.path.join(screenshot_root, case) if screenshot_root else None
+        if case_screenshots:
+            os.makedirs(case_screenshots, exist_ok=True)
+        result = run_test(custom_fee_rate=rate, save_screenshots=args.save_screenshots, screenshot_root=case_screenshots)
+        if result:
+            sys.exit(result)
+    sys.exit(0)

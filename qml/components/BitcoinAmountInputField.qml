@@ -68,22 +68,22 @@ ColumnLayout {
 
     function amountInputPlaceholder(unit) {
         if (unit === BitcoinAmount.SAT) return "0"
-        if (unit === BitcoinAmount.uBTC) return "0.00"
-        if (unit === BitcoinAmount.mBTC) return "0.00000"
+        if (unit === BitcoinAmount.MicroBTC) return "0.00"
+        if (unit === BitcoinAmount.MilliBTC) return "0.00000"
         return "0.00000000"
     }
 
     function amountInputPattern(unit) {
         if (unit === BitcoinAmount.SAT) return /^0*\d{0,16}$/
-        if (unit === BitcoinAmount.uBTC) return /^0*\d{0,13}(\.\d{0,2})?$/
-        if (unit === BitcoinAmount.mBTC) return /^0*\d{0,10}(\.\d{0,5})?$/
+        if (unit === BitcoinAmount.MicroBTC) return /^0*\d{0,13}(\.\d{0,2})?$/
+        if (unit === BitcoinAmount.MilliBTC) return /^0*\d{0,10}(\.\d{0,5})?$/
         return /^0*\d{0,7}(\.\d{0,8})?$/
     }
 
     function amountInputMaximumLength(unit) {
         if (unit === BitcoinAmount.SAT) return 16
-        if (unit === BitcoinAmount.uBTC) return 17
-        if (unit === BitcoinAmount.mBTC) return 17
+        if (unit === BitcoinAmount.MicroBTC) return 17
+        if (unit === BitcoinAmount.MilliBTC) return 17
         return 17
     }
 

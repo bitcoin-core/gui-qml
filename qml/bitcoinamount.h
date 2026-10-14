@@ -22,10 +22,11 @@ class BitcoinAmount : public QObject
     Q_PROPERTY(qint64 satoshi READ satoshi WRITE setSatoshi NOTIFY amountChanged)
 
 public:
+    // QML only exposes enum names that begin with an uppercase letter.
     enum class Unit {
         BTC,
-        mBTC,
-        uBTC,
+        MilliBTC,
+        MicroBTC,
         SAT
     };
     Q_ENUM(Unit)

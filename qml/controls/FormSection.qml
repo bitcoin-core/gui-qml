@@ -5,13 +5,14 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
-ColumnLayout {
+Item {
     id: root
 
     default property alias content: contentColumn.data
     property string title: ""
     property string description: ""
     property string footerText: ""
+    property Component headerTrailingItem
     property bool showBackground: true
     property bool showGradientBorder: true
     property bool isOnSurface: false
@@ -23,34 +24,46 @@ ColumnLayout {
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption
 
-    spacing: sectionHeader.visible ? sectionSpacing : 0
     implicitWidth: 450
     implicitHeight: sectionColumn.implicitHeight
 
     ColumnLayout {
         id: sectionColumn
-        Layout.fillWidth: true
+        width: root.width
         spacing: sectionHeader.visible || sectionFooter.visible ? root.sectionSpacing : 0
 
         ColumnLayout {
             id: sectionHeader
-            visible: root.title.length > 0 || root.description.length > 0
+            visible: root.title.length > 0 || root.description.length > 0 || headerLoader.active
             Layout.fillWidth: true
             Layout.leftMargin: 4
             Layout.rightMargin: 4
             spacing: 2
 
-            CoreText {
-                visible: root.title.length > 0
+            RowLayout {
+                visible: root.title.length > 0 || headerLoader.active
                 Layout.fillWidth: true
-                text: root.title
-                color: Theme.color.neutral9
-                font: root.titleTextStyle.font
-                lineHeight: root.titleTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
-                horizontalAlignment: Text.AlignLeft
-                wrap: false
-                elide: Text.ElideRight
+                spacing: 8
+
+                CoreText {
+                    Layout.fillWidth: true
+                    text: root.title
+                    color: Theme.color.neutral9
+                    font: root.titleTextStyle.font
+                    lineHeight: root.titleTextStyle.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    horizontalAlignment: Text.AlignLeft
+                    wrap: false
+                    elide: Text.ElideRight
+                }
+
+                Loader {
+                    id: headerLoader
+                    Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    active: root.headerTrailingItem !== null
+                    visible: active
+                    sourceComponent: root.headerTrailingItem
+                }
             }
 
             CoreText {

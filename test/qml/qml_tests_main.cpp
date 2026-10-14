@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <qml/backendexecutor.h>
+#include <qml/bitcoinamount.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 
@@ -1162,6 +1163,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString currentTransactionReviewMessage MEMBER m_current_transaction_review_message NOTIFY currentTransactionChanged)
     Q_PROPERTY(QObject* currentPaymentRequest READ currentPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receivingAddress READ receivingAddress CONSTANT)
+    Q_PROPERTY(bool ensureReceivingAddressResult MEMBER m_ensure_receiving_address_result)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending MEMBER m_receive_request_reconciliation_pending NOTIFY receiveRequestReconciliationPendingChanged)
@@ -1173,6 +1175,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool customFeeEnabled READ customFeeEnabled WRITE setCustomFeeEnabled NOTIFY customFeeEnabledChanged)
     Q_PROPERTY(QString customFeeRate READ customFeeRate WRITE setCustomFeeRate NOTIFY customFeeRateChanged)
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
+    Q_PROPERTY(double minimumCustomFeeRate MEMBER m_minimum_custom_fee_rate NOTIFY customFeeRateValidChanged)
     Q_PROPERTY(bool feeEstimatePending MEMBER m_fee_estimate_pending NOTIFY feeEstimatePendingChanged)
     Q_PROPERTY(int feeEstimateRevision MEMBER m_fee_estimate_revision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance WRITE setSendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
@@ -1259,8 +1262,10 @@ public:
     MockPaymentRequest m_receiving_address;
     QObject* receivingAddress() { return &m_receiving_address; }
     int m_receiving_sequence{0};
+    bool m_ensure_receiving_address_result{true};
     Q_INVOKABLE bool ensureReceivingAddress(bool next = false, const QString& type = {})
     {
+        if (!m_ensure_receiving_address_result) return false;
         const QString selected = type.isEmpty() ? m_default_receive_address_type : type;
         if (next || m_receiving_address.m_address.isEmpty() || m_receiving_address.m_payment_received || selected != m_receiving_address.m_address_type) {
             m_receiving_address.clear();
@@ -1306,6 +1311,11 @@ public:
                 {QStringLiteral("id"), QStringLiteral("p2sh-segwit")},
                 {QStringLiteral("label"), QStringLiteral("Base58 (P2SH-SegWit)")},
                 {QStringLiteral("description"), QStringLiteral("Backward compatible")},
+            },
+            QVariantMap{
+                {QStringLiteral("id"), QStringLiteral("legacy")},
+                {QStringLiteral("label"), QStringLiteral("Base58 (Legacy)")},
+                {QStringLiteral("description"), QStringLiteral("Older wallet compatibility")},
             },
         };
     }
@@ -1353,8 +1363,9 @@ public:
         static const QRegularExpression pattern{
             QStringLiteral(R"(^[0-9]+(?:\.[0-9]{0,3})?$)")
         };
-        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate != QStringLiteral("0");
+        return pattern.match(m_custom_fee_rate).hasMatch() && m_custom_fee_rate.toDouble() >= m_minimum_custom_fee_rate;
     }
+    double m_minimum_custom_fee_rate{0.1};
     int prepareTransactionCalls() const { return m_prepare_transaction_calls; }
     int scheduleFeeEstimatesCalls() const { return m_schedule_fee_estimates_calls; }
     int sendTransactionCalls() const { return m_send_transaction_calls; }
@@ -1423,6 +1434,7 @@ public:
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
         Q_EMIT request->m_amount.unitChanged();
+        Q_EMIT request->m_amount.amountChanged();
         return true;
     }
     void setTargetBlocks(const int value)
@@ -4167,7 +4179,7 @@ public Q_SLOTS:
             "PeerDetailsModel",
             "Test stub type"
         );
-        qmlRegisterType<MockBitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
+        qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
         qmlRegisterType<MockBitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
         qmlRegisterType<MockActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
         qmlRegisterUncreatableType<MockTransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Test fixture");
