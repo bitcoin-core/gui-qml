@@ -27,13 +27,9 @@ def run_tests():
         assert gui.get_property("blockClock", "header") == "Connecting"
         assert gui.get_property("blockClock", "subText") == "Please wait"
 
-        gui.click("blockClockToggleArea")
-        gui.wait_for_property("blockClock", "state", "PAUSE", timeout_ms=5000)
-        assert gui.get_property("blockClock", "header") == "Paused"
-        assert gui.get_property("blockClock", "subText") == "Tap to resume"
-
-        gui.click("blockClockToggleArea")
-        gui.wait_for_property("blockClock", "state", "CONNECTING", timeout_ms=5000)
+        gui.click("blockClock")
+        assert gui.get_property("blockClock", "paused") is False
+        assert gui.get_property("blockClock", "state") == "CONNECTING"
         assert gui.get_property("blockClock", "header") == "Connecting"
         assert gui.get_property("blockClock", "subText") == "Please wait"
 

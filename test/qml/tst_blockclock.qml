@@ -10,6 +10,7 @@ import "../../qml/components"
 TestCase {
     name: "BlockClock"
     when: windowShown
+    visible: true
     width: 800
     height: 700
 
@@ -130,14 +131,9 @@ TestCase {
         verify(Math.abs(itemCenterY(item) - itemCenterY(targetItem)) < 0.01)
     }
 
-    function toggleArea(clock) {
-        const area = findChild(clock, "blockClockToggleArea")
-        verify(area !== null)
-        return area
-    }
-
-    function clickToggle(clock) {
-        clock.togglePause()
+    function clickClock(clock) {
+        verify(waitForRendering(clock))
+        mouseClick(clock, clock.width / 2, clock.width / 2)
         wait(0)
     }
 
@@ -379,7 +375,7 @@ TestCase {
 
         compare(clock.state, "PAUSE")
         compare(clock.header, "Paused")
-        compare(clock.subText, "Tap to resume")
+        compare(clock.subText, "")
     }
 
     function test_offline_state_overrides_connecting() {
@@ -472,7 +468,7 @@ TestCase {
         compare(dial.synced, true)
     }
 
-    function test_error_state_overrides_and_disables_toggle() {
+    function test_error_state_overrides() {
         resetMocks()
         nodeModelMock.numPeers = 1
         nodeModelMock.numOutboundPeers = 1
@@ -480,27 +476,26 @@ TestCase {
         nodeModelMock.faulted = true
 
         const clock = createClock()
-        const area = toggleArea(clock)
-
         compare(clock.state, "ERROR")
         compare(clock.header, "Error")
-        clickToggle(clock)
+        clickClock(clock)
         compare(nodeModelMock.pause, false)
         compare(clock.state, "ERROR")
     }
 
-    function test_click_toggles_pause_model() {
+    function test_click_does_not_toggle_pause_model() {
         resetMocks()
         const clock = createClock()
-        toggleArea(clock)
 
-        clickToggle(clock)
-        compare(nodeModelMock.pause, true)
-        compare(clock.state, "PAUSE")
-
-        clickToggle(clock)
+        clickClock(clock)
         compare(nodeModelMock.pause, false)
         compare(clock.state, "CONNECTING")
+
+        nodeModelMock.pause = true
+        clickClock(clock)
+        compare(nodeModelMock.pause, true)
+        compare(clock.state, "PAUSE")
+        compare(clock.activeFocusOnTab, false)
     }
 
     function test_inbound_only_peer_counts_as_connected_without_outbound_peer_fill() {

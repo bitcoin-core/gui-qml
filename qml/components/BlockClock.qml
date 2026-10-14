@@ -53,8 +53,6 @@ Item {
     property bool faulted: root.nodeModelRef !== null && root.nodeModelRef.faulted
     property bool offline: root.networkStatusModelRef !== null && root.networkStatusModelRef.networkOffline
 
-    activeFocusOnTab: true
-
     AppSettings {
         id: settings
         property alias blockclocksize: dial.scale
@@ -180,20 +178,6 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
     }
 
-    MouseArea {
-        objectName: "blockClockToggleArea"
-        anchors.fill: dial
-        cursorShape: root.faulted ? Qt.ArrowCursor : Qt.PointingHandCursor
-        enabled: !root.faulted
-        function click() {
-            root.togglePause()
-        }
-        onClicked: click()
-        FocusBorder {
-            visible: root.activeFocus
-        }
-    }
-
     states: [
         State {
             name: "IBD"; when: !faulted && !offline && !synced && !paused && connected
@@ -222,7 +206,7 @@ Item {
                 target: root
                 header: "Paused"
                 headerSize: dial.width * (3/25)
-                subText: "Tap to resume"
+                subText: ""
                 estimating: false
             }
             PropertyChanges {
@@ -306,12 +290,6 @@ Item {
             return progress.toFixed(2) + "%"
         } else {
             return "0%"
-        }
-    }
-
-    function togglePause() {
-        if (!root.faulted && root.nodeModelRef !== null) {
-            root.nodeModelRef.pause = !root.paused
         }
     }
 }
