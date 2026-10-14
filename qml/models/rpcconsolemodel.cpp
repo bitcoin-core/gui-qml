@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include <QDateTime>
 #include <QString>
@@ -35,9 +36,13 @@ QVariant RpcOutputListModel::data(const QModelIndex& index, int role) const
     if (!index.isValid() || index.row() < 0 || index.row() >= m_rows.size()) return {};
     const Row& r = m_rows.at(index.row());
     switch (role) {
-    case TimestampRole: return r.timestamp;
-    case ContentRole:   return r.contentHtml;
-    case CategoryRole:  return r.category;
+    case TimestampRole:    return r.timestamp;
+    case ContentRole:      return r.contentHtml;
+    case PlainContentRole: return r.contentPlain;
+    case CategoryRole:     return r.category;
+    case EntryRole:        return r.entry;
+    case CommandRole:      return r.command;
+    case RedactedRole:     return r.redacted;
     }
     return {};
 }
@@ -45,23 +50,60 @@ QVariant RpcOutputListModel::data(const QModelIndex& index, int role) const
 QHash<int, QByteArray> RpcOutputListModel::roleNames() const
 {
     return {
-        {TimestampRole, "timestamp"},
-        {ContentRole,   "content"},
-        {CategoryRole,  "category"},
+        {TimestampRole,    "timestamp"},
+        {ContentRole,      "content"},
+        {PlainContentRole, "plainContent"},
+        {CategoryRole,     "category"},
+        {EntryRole,        "entry"},
+        {CommandRole,      "command"},
+        {RedactedRole,     "redacted"},
     };
 }
 
-void RpcOutputListModel::appendRow(const QString& timestamp, const QString& contentHtml, int category)
+QVariantMap RpcOutputListModel::get(int row) const
 {
-    // Cap the row buffer. Drop oldest rows until we have room for the new one.
-    if (m_rows.size() >= kMaxRows) {
-        const int to_remove = m_rows.size() - kMaxRows + 1;
+    if (row < 0 || row >= m_rows.size()) return {};
+    const Row& r = m_rows.at(row);
+    return QVariantMap{
+        {QStringLiteral("timestamp"),    r.timestamp},
+        {QStringLiteral("content"),      r.contentHtml},
+        {QStringLiteral("plainContent"), r.contentPlain},
+        {QStringLiteral("category"),     r.category},
+        {QStringLiteral("entry"),        r.entry},
+        {QStringLiteral("command"),      r.command},
+        {QStringLiteral("redacted"),     r.redacted},
+    };
+}
+
+void RpcOutputListModel::appendLines(const QString& timestamp,
+                                     const QVector<OutputLine>& lines,
+                                     int category,
+                                     const QString& command,
+                                     bool redacted)
+{
+    if (lines.isEmpty()) return;
+
+    // A single reply can exceed the cap on its own; keep only its tail.
+    const int keep = std::min<int>(lines.size(), kMaxRows);
+    const int skipped = lines.size() - keep;
+
+    if (m_rows.size() + keep > kMaxRows) {
+        const int to_remove = m_rows.size() + keep - kMaxRows;
         beginRemoveRows({}, 0, to_remove - 1);
         m_rows.remove(0, to_remove);
         endRemoveRows();
     }
-    beginInsertRows({}, m_rows.size(), m_rows.size());
-    m_rows.append(Row{timestamp, contentHtml, category});
+
+    // One insert signal for the whole block, not one per line.
+    const int first = m_rows.size();
+    const int entry = m_next_entry++;
+    beginInsertRows({}, first, first + keep - 1);
+    m_rows.reserve(first + keep);
+    for (int i = skipped; i < lines.size(); ++i) {
+        m_rows.append(Row{i == 0 ? timestamp : QString{},
+                          lines.at(i).html, lines.at(i).plain, category, entry,
+                          command, redacted});
+    }
     endInsertRows();
     Q_EMIT countChanged();
 }
@@ -81,109 +123,167 @@ void RpcOutputListModel::resetAll()
 
 namespace {
 
-// HTML-escape `text` and convert whitespace for monospace RichText rendering:
-// newlines become <br>, leading-indent runs of spaces become &nbsp; runs so
-// indentation is preserved.
-QString EscapeAndConvertWhitespace(const QString& text)
+using OutputLine = RpcOutputListModel::OutputLine;
+
+bool IsCollapsible(QChar c) { return c.isSpace() && c != QChar::Nbsp; }
+
+/**
+ * Accumulates output a line at a time, in two representations: HTML for the
+ * delegate, and the plain text that HTML renders to. Recording the plain text
+ * here beats deriving it later by stripping tags, which would have to reproduce
+ * Qt's HTML-to-document mapping exactly for search offsets to line up.
+ */
+class LineSink
 {
-    const QString escaped = text.toHtmlEscaped();
-    QString out;
-    out.reserve(escaped.size());
-    bool at_line_start = true;
-    for (const QChar c : escaped) {
-        if (c == QLatin1Char('\n')) {
-            out.append(QStringLiteral("<br>"));
-            at_line_start = true;
-        } else if (c == QLatin1Char(' ') && at_line_start) {
-            out.append(QStringLiteral("&nbsp;"));
-        } else {
-            out.append(c);
-            if (c != QLatin1Char(' ')) at_line_start = false;
+public:
+    /** Tags, which render to nothing. */
+    void markup(const QString& html) { m_html += html; }
+
+    /** Characters needing no escaping, e.g. JSON punctuation. */
+    void raw(QLatin1String chars) { m_html += chars; m_plain += chars; }
+    void raw(QChar c) { m_html += c; m_plain += c; }
+
+    /**
+     * Arbitrary text, escaped in the markup. The renderer collapses each run
+     * of whitespace to one space, so all but the last of a run are emitted as
+     * &nbsp; (the whole run at the start of a line, where it is indentation).
+     */
+    void text(const QString& t)
+    {
+        int i = 0;
+        while (i < t.size()) {
+            int j = i;
+            if (IsCollapsible(t.at(i))) {
+                while (j < t.size() && IsCollapsible(t.at(j))) ++j;
+                const bool at_line_start = m_plain.isEmpty();
+                indent(j - i - (at_line_start ? 0 : 1));
+                if (!at_line_start) raw(QLatin1Char(' '));
+            } else {
+                while (j < t.size() && !IsCollapsible(t.at(j))) ++j;
+                const QString chunk = t.mid(i, j - i);
+                m_html += chunk.toHtmlEscaped();
+                m_plain += QString{chunk}.replace(QChar::Nbsp, QLatin1Char(' '));
+            }
+            i = j;
         }
     }
-    return out;
+
+    void indent(int count)
+    {
+        for (int i = 0; i < count; ++i) {
+            m_html += QStringLiteral("&nbsp;");
+            m_plain += QLatin1Char(' ');
+        }
+    }
+
+    void newLine()
+    {
+        m_lines.append(OutputLine{m_html, m_plain});
+        m_html.clear();
+        m_plain.clear();
+    }
+
+    QVector<OutputLine> take()
+    {
+        newLine();
+        return std::move(m_lines);
+    }
+
+private:
+    QString m_html;
+    QString m_plain;
+    QVector<OutputLine> m_lines;
+};
+
+QVector<OutputLine> EscapeToLines(const QString& text)
+{
+    LineSink out;
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (int i = 0; i < lines.size(); ++i) {
+        out.text(lines.at(i));
+        if (i + 1 < lines.size()) out.newLine();
+    }
+    return out.take();
 }
 
-void AppendIndent(QString& out, int depth)
-{
-    for (int i = 0; i < depth * 2; ++i) out.append(QStringLiteral("&nbsp;"));
-}
+void AppendValue(LineSink& out, const UniValue& v, int depth, const QString& key_color_hex);
 
-void AppendValue(QString& out, const UniValue& v, int depth, const QString& key_color_hex);
-
-void AppendObject(QString& out, const UniValue& obj, int depth, const QString& key_color_hex)
+void AppendObject(LineSink& out, const UniValue& obj, int depth, const QString& key_color_hex)
 {
-    if (obj.empty()) { out.append(QStringLiteral("{}")); return; }
-    out.append(QStringLiteral("{<br>"));
+    if (obj.empty()) { out.raw(QLatin1String("{}")); return; }
+    out.raw(QLatin1Char('{'));
+    out.newLine();
     const std::vector<std::string>& keys = obj.getKeys();
     const std::vector<UniValue>& vals = obj.getValues();
     for (size_t i = 0; i < keys.size(); ++i) {
-        AppendIndent(out, depth + 1);
-        out.append(QStringLiteral("<span style='color:"));
-        out.append(key_color_hex);
-        out.append(QStringLiteral("'>\""));
-        out.append(QString::fromStdString(keys[i]).toHtmlEscaped());
-        out.append(QStringLiteral("\"</span>: "));
+        out.indent((depth + 1) * 2);
+        out.markup(QStringLiteral("<span style='color:") + key_color_hex + QStringLiteral("'>"));
+        out.raw(QLatin1Char('"'));
+        out.text(QString::fromStdString(keys[i]));
+        out.raw(QLatin1Char('"'));
+        out.markup(QStringLiteral("</span>"));
+        out.raw(QLatin1String(": "));
         AppendValue(out, vals[i], depth + 1, key_color_hex);
-        if (i + 1 < keys.size()) out.append(QLatin1Char(','));
-        out.append(QStringLiteral("<br>"));
+        if (i + 1 < keys.size()) out.raw(QLatin1Char(','));
+        out.newLine();
     }
-    AppendIndent(out, depth);
-    out.append(QLatin1Char('}'));
+    out.indent(depth * 2);
+    out.raw(QLatin1Char('}'));
 }
 
-void AppendArray(QString& out, const UniValue& arr, int depth, const QString& key_color_hex)
+void AppendArray(LineSink& out, const UniValue& arr, int depth, const QString& key_color_hex)
 {
-    if (arr.empty()) { out.append(QStringLiteral("[]")); return; }
-    out.append(QStringLiteral("[<br>"));
+    if (arr.empty()) { out.raw(QLatin1String("[]")); return; }
+    out.raw(QLatin1Char('['));
+    out.newLine();
     for (size_t i = 0; i < arr.size(); ++i) {
-        AppendIndent(out, depth + 1);
+        out.indent((depth + 1) * 2);
         AppendValue(out, arr[i], depth + 1, key_color_hex);
-        if (i + 1 < arr.size()) out.append(QLatin1Char(','));
-        out.append(QStringLiteral("<br>"));
+        if (i + 1 < arr.size()) out.raw(QLatin1Char(','));
+        out.newLine();
     }
-    AppendIndent(out, depth);
-    out.append(QLatin1Char(']'));
+    out.indent(depth * 2);
+    out.raw(QLatin1Char(']'));
 }
 
-void AppendValue(QString& out, const UniValue& v, int depth, const QString& key_color_hex)
+void AppendValue(LineSink& out, const UniValue& v, int depth, const QString& key_color_hex)
 {
     switch (v.getType()) {
     case UniValue::VOBJ: AppendObject(out, v, depth, key_color_hex); break;
     case UniValue::VARR: AppendArray(out, v, depth, key_color_hex); break;
     case UniValue::VSTR:
-        out.append(QLatin1Char('"'));
-        out.append(QString::fromStdString(v.get_str()).toHtmlEscaped());
-        out.append(QLatin1Char('"'));
+        out.raw(QLatin1Char('"'));
+        out.text(QString::fromStdString(v.get_str()));
+        out.raw(QLatin1Char('"'));
         break;
     case UniValue::VNUM:
-        out.append(QString::fromStdString(v.getValStr()));
+        out.text(QString::fromStdString(v.getValStr()));
         break;
     case UniValue::VBOOL:
-        out.append(v.get_bool() ? QStringLiteral("true") : QStringLiteral("false"));
+        out.raw(v.get_bool() ? QLatin1String("true") : QLatin1String("false"));
         break;
     case UniValue::VNULL:
-        out.append(QStringLiteral("null"));
+        out.raw(QLatin1String("null"));
         break;
     default: break;
     }
 }
 
-// Format an RPC reply body into HTML suitable for RichText rendering.
+// Format an RPC reply body into one OutputLine per line.
 // Walks the UniValue tree directly so keys are identified structurally —
 // a string value containing `": "` (e.g. `"note": "see section:"`) is never
 // mistaken for a key. Non-JSON replies (help text, scalar strings,
 // truncation notices) fall through to the plain-escape path.
-QString FormatJsonReply(const std::string& raw, const QString& key_color_hex)
+QVector<OutputLine> FormatJsonReply(const std::string& raw, const QString& key_color_hex)
 {
     UniValue v;
     if (!v.read(raw) ||
         (v.getType() != UniValue::VOBJ && v.getType() != UniValue::VARR)) {
-        return EscapeAndConvertWhitespace(QString::fromStdString(raw));
+        return EscapeToLines(QString::fromStdString(raw));
     }
-    QString out;
+    LineSink out;
     AppendValue(out, v, 0, key_color_hex);
-    return out;
+    return out.take();
 }
 
 } // anonymous namespace
@@ -298,22 +398,21 @@ RpcConsoleModel::~RpcConsoleModel()
     m_worker_thread->wait();
 }
 
-void RpcConsoleModel::appendFormattedRow(const QString& time, int category, const QString& rawText)
+void RpcConsoleModel::appendFormattedRow(const QString& time, int category, const QString& rawText,
+                                         const QString& command, bool redacted)
 {
-    QString body;
+    QVector<RpcOutputListModel::OutputLine> lines;
     switch (category) {
-    case CMD_REQUEST:
-        body = EscapeAndConvertWhitespace(rawText);
-        break;
     case CMD_REPLY:
-        body = FormatJsonReply(rawText.toStdString(), m_key_color.name());
+        lines = FormatJsonReply(rawText.toStdString(), m_key_color.name());
         break;
+    case CMD_REQUEST:
     case CMD_ERROR:
     default:
-        body = EscapeAndConvertWhitespace(rawText);
+        lines = EscapeToLines(rawText);
         break;
     }
-    m_output_model.appendRow(time, body, category);
+    m_output_model.appendLines(time, lines, category, command, redacted);
 }
 
 bool RpcConsoleModel::submitCommand(const QString& command, const QString& wallet_name)
@@ -386,7 +485,7 @@ bool RpcConsoleModel::submitCommand(const QString& command, const QString& walle
 
     // Append the request line immediately (main thread) so QML sees it before
     // the async reply arrives. Mirrors Qt GUI RPCConsole behaviour.
-    appendFormattedRow(time, CMD_REQUEST, filteredCmd);
+    appendFormattedRow(time, CMD_REQUEST, filteredCmd, filteredCmd, filteredCmd != trimmed_command);
 
     setExecuting(true);
 

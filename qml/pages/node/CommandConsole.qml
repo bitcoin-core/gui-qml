@@ -125,9 +125,8 @@ Page {
         }
     }
 
-    // Output area — MonospaceOutputView (Flickable + Column + Repeater)
-    // keeps contentHeight exact (no ListView estimation) and gives each
-    // row a TextEdit for single-row select + copy.
+    // Output area. MonospaceOutputView virtualizes the rows and owns the text
+    // selection across them; the model feeds it one row per output line.
     MonospaceOutputView {
         id: outputView
         objectName: "consoleOutputArea"
@@ -141,6 +140,8 @@ Page {
 
         listModel: rpcConsoleModel.outputModel
         contentRole: "content"
+        plainContentRole: "plainContent"
+        entryRole: "entry"
         contentTextFormat: Text.RichText
         leftColumnRole: "timestamp"
         leftColumnSample: "00:00:00"
@@ -165,9 +166,164 @@ Page {
         horizontalPadding: 16
         topPadding: 16
         bottomPadding: 16
-        rowSpacing: 5
+        // Rows are single lines, so this is line spacing, not entry spacing.
+        rowSpacing: 0
         columnSpacing: 20
         leftColumnWidth: 60
+        hoverActions: hoverActionsComponent
+        onContextMenuRequested: (row, x, y) => root.openOutputMenu(row, x, y)
+    }
+
+    function commandAt(row) {
+        return outputView.roleValueAt(row, "command") ?? ""
+    }
+
+    function canRunAgain(row) {
+        return root.commandAt(row) !== "" && !outputView.roleValueAt(row, "redacted")
+            && !rpcConsoleModel.executing
+    }
+
+    function runCommandAt(row) {
+        if (root.canRunAgain(row)) rpcConsoleModel.submitCommand(root.commandAt(row), root.walletName)
+    }
+
+    // Like recalling it from history: the text is set without opening the
+    // autocomplete menu, and the cursor goes to the end, not a selection.
+    function editCommandAt(row) {
+        const command = root.commandAt(row)
+        if (command === "") return
+        internal.navigatingHistory = true
+        inputField.text = command
+        internal.navigatingHistory = false
+        inputField.forceActiveFocus()
+        inputField.cursorPosition = command.length
+    }
+
+    function openOutputMenu(row, x, y) {
+        outputMenu.row = row
+        const position = outputView.mapToItem(root, x, y)
+        outputMenu.x = Math.max(12, Math.min(position.x, root.width - outputMenu.width - 12))
+        outputMenu.y = Math.max(12, Math.min(position.y, root.height - outputMenu.height - 12))
+        outputMenu.open()
+    }
+
+    ContextMenu {
+        id: outputMenu
+        objectName: "consoleOutputMenu"
+        minMenuWidth: 200
+
+        property int row: -1
+        readonly property bool onRow: row >= 0
+        readonly property bool onCommand: root.commandAt(row) !== ""
+
+        ContextMenuButton {
+            objectName: "consoleMenuCopy"
+            text: qsTr("Copy")
+            enabled: outputView.hasSelection
+            onTriggered: outputView.copySelection()
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuCopyEntry"
+            visible: outputMenu.onRow
+            text: outputMenu.onCommand ? qsTr("Copy command") : qsTr("Copy output")
+            onTriggered: Clipboard.setText(outputView.entryTextAt(outputMenu.row))
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuSelectEntry"
+            visible: outputMenu.onRow
+            text: outputMenu.onCommand ? qsTr("Select command") : qsTr("Select output")
+            onTriggered: outputView.selectEntryAt(outputMenu.row)
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuSelectAll"
+            text: qsTr("Select all")
+            enabled: outputView.count > 0
+            onTriggered: outputView.selectAll()
+        }
+        ContextMenuDivider {
+            visible: outputMenu.onCommand
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuRunAgain"
+            visible: outputMenu.onCommand
+            text: qsTr("Run again")
+            enabled: root.canRunAgain(outputMenu.row)
+            onTriggered: root.runCommandAt(outputMenu.row)
+        }
+        ContextMenuButton {
+            objectName: "consoleMenuEdit"
+            visible: outputMenu.onCommand
+            text: qsTr("Edit command")
+            onTriggered: root.editCommandAt(outputMenu.row)
+        }
+        ContextMenuDivider { }
+        ContextMenuButton {
+            objectName: "consoleMenuClear"
+            text: qsTr("Clear console")
+            role: ContextMenuButton.Destructive
+            enabled: outputView.count > 0
+            onTriggered: rpcConsoleModel.clear()
+        }
+    }
+
+    Component {
+        id: hoverActionsComponent
+
+        Rectangle {
+            id: hoverActions
+            readonly property int row: outputView.hoveredRow
+            readonly property bool onCommand: root.commandAt(row) !== ""
+
+            implicitWidth: hoverActionsRow.implicitWidth + 4
+            implicitHeight: hoverActionsRow.implicitHeight + 4
+            radius: 6
+            color: Theme.color.neutral1
+            border.width: 1
+            border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+
+            Row {
+                id: hoverActionsRow
+                anchors.centerIn: parent
+                spacing: 2
+
+                CopyButton {
+                    objectName: "consoleHoverCopyButton"
+                    displayMode: CopyButton.IconOnly
+                    iconSize: 14
+                    implicitHeight: 24
+                    copyText: hoverActions.onCommand ? qsTr("Copy command") : qsTr("Copy output")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: text
+                    onCopyRequested: Clipboard.setText(outputView.entryTextAt(hoverActions.row))
+                }
+                IconButton {
+                    objectName: "consoleHoverRunButton"
+                    visible: hoverActions.onCommand
+                    enabled: root.canRunAgain(hoverActions.row)
+                    size: 24
+                    iconSize: 14
+                    iconSource: "qrc:/icons/refresh"
+                    Accessible.name: qsTr("Run again")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: qsTr("Run again")
+                    onClicked: root.runCommandAt(hoverActions.row)
+                }
+                IconButton {
+                    objectName: "consoleHoverEditButton"
+                    visible: hoverActions.onCommand
+                    size: 24
+                    iconSize: 14
+                    iconSource: "qrc:/icons/edit"
+                    Accessible.name: qsTr("Edit command")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 500
+                    ToolTip.text: qsTr("Edit command")
+                    onClicked: root.editCommandAt(hoverActions.row)
+                }
+            }
+        }
     }
 
     // Autocomplete menu, aligned to the command field's left edge and styled
