@@ -10,11 +10,17 @@ the command line before Bitcoin Core does. See
 https://achow101.com/2021/02/0.18-uri-vuln.
 
 Each case appends a Qt option to an otherwise valid command line and asserts
-that Core's parser rejects it, which it can only do if Qt left the option
+that the application rejects it, which it can only do if Qt left the option
 alone. -platformpluginpath, the option used by the original attack, is not
 usable as a probe because an unreachable plugin path stalls startup whether or
-not Qt read it. Command line URI capture is not implemented yet, so the
-injected arguments are passed directly.
+not Qt read it.
+
+Two rejection paths are covered. Without a URI in front, the option reaches
+ArgsManager and is reported as an invalid parameter. Behind a URI it never
+gets that far: ArgsManager stops option parsing at the first loose token and
+moves the remainder into m_command, so the option is reported by the loose
+token check instead. Both paths must hold, because a desktop URI handler puts
+the crafted URI ahead of everything an attacker appends to it.
 
 This test requires the binary to be built with -DENABLE_TEST_AUTOMATION=ON.
 """
@@ -39,6 +45,10 @@ MIN_STARTUP_BUDGET = 15.0
 
 # Multiple of a healthy startup used as the budget for runs that must be rejected.
 STARTUP_BUDGET_FACTOR = 3.0
+
+# A syntactically valid URI, used only as the token that precedes an injected
+# option. It is never applied: startup stops at the command line check.
+PROBE_URI = "bitcoin:bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080?amount=0.1"
 
 
 def launch(injected_args):
@@ -116,6 +126,21 @@ def measure_healthy_startup():
         harness.stop()
 
 
+def check_command_line_rejected(injected_args, expected_error, budget):
+    """The application must refuse to start and report expected_error."""
+    process, socket_path, output_path = launch(injected_args)
+    try:
+        output = wait_for_output(output_path, process, expected_error, budget)
+        assert expected_error in output, (
+            f"The expected rejection was not reported: {expected_error}\n{output}"
+        )
+        assert not os.path.exists(socket_path), (
+            f"The application started with {injected_args} on the command line\n{output}"
+        )
+    finally:
+        terminate(process)
+
+
 def check_argument_reaches_core(injected_args, budget):
     """A Qt option on the command line must be rejected by Bitcoin Core.
 
@@ -123,18 +148,25 @@ def check_argument_reaches_core(injected_args, budget):
     parser error proves the option was left for Bitcoin Core instead.
     """
     option = injected_args[0]
-    expected_error = f"Cannot parse command line arguments: Invalid parameter {option}"
-    process, socket_path, output_path = launch(injected_args)
-    try:
-        output = wait_for_output(output_path, process, expected_error, budget)
-        assert expected_error in output, (
-            f"Core did not report the expected rejection: {expected_error}\n{output}"
-        )
-        assert not os.path.exists(socket_path), (
-            f"The application started with {option} on the command line\n{output}"
-        )
-    finally:
-        terminate(process)
+    check_command_line_rejected(
+        injected_args,
+        f"Cannot parse command line arguments: Invalid parameter {option}",
+        budget,
+    )
+
+
+def check_option_behind_uri_rejected(option_args, budget):
+    """A Qt option smuggled behind a bitcoin: URI must be rejected too.
+
+    This is the shape the vulnerability actually takes: the desktop handler
+    passes the URI, and the crafted quotes append the option after it.
+    """
+    option = option_args[0]
+    check_command_line_rejected(
+        [PROBE_URI, *option_args],
+        f"Options ('{option}') cannot follow a BIP-21 payment URI",
+        budget,
+    )
 
 
 def run_tests():
@@ -151,6 +183,22 @@ def run_tests():
 
         print("\nTest 3: injected -platform does not reach Qt")
         check_argument_reaches_core(["-platform", "nosuchplatform"], budget)
+        print("  PASSED")
+
+        print("\nTest 4: -qwindowtitle behind a bitcoin: URI is rejected")
+        check_option_behind_uri_rejected(["-qwindowtitle", "injected"], budget)
+        print("  PASSED")
+
+        print("\nTest 5: -platform behind a bitcoin: URI is rejected")
+        check_option_behind_uri_rejected(["-platform", "nosuchplatform"], budget)
+        print("  PASSED")
+
+        print("\nTest 6: an unexpected loose token is rejected")
+        check_command_line_rejected(
+            ["notaurinoroption"],
+            "Command line contains unexpected token 'notaurinoroption'",
+            budget,
+        )
         print("  PASSED")
 
         print("\n" + "=" * 50)

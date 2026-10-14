@@ -30,6 +30,7 @@
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
+#include <qml/paymenturihandler.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
 #endif
@@ -110,6 +111,7 @@
 #include <QSettings>
 #include <QScopeGuard>
 #include <QString>
+#include <QStringList>
 #include <QStyleHints>
 #include <QTranslator>
 #include <QThread>
@@ -426,6 +428,39 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 // before Bitcoin Core rejects them. See https://achow101.com/2021/02/0.18-uri-vuln.
 int qt_argc = 1;
 const char* qt_argv = "bitcoin-core-app";
+
+const QLatin1String PAYMENT_URI_PREFIX{"bitcoin:"};
+
+// Collect bitcoin: URIs from the command line and reject every other loose token.
+// ArgsManager moves the first dashless token and everything after it into
+// m_command, which the GUI never reads, and splits that token on '=', which
+// truncates a URI carrying parameters. Mirrors src/qt/bitcoin.cpp.
+bool ParsePaymentUriArgs(int argc, char* argv[], QStringList& uris, std::string& error)
+{
+    bool uri_seen{false};
+    for (int i = 1; i < argc; ++i) {
+        const QString arg{QString::fromUtf8(argv[i])};
+        // ArgsManager rewrites a leading '/' to '-' on Windows.
+#ifdef WIN32
+        const bool is_option{arg.startsWith(QLatin1Char('-')) || arg.startsWith(QLatin1Char('/'))};
+#else
+        const bool is_option{arg.startsWith(QLatin1Char('-'))};
+#endif
+        if (arg.startsWith(PAYMENT_URI_PREFIX, Qt::CaseInsensitive)) {
+            uris.append(arg);
+            uri_seen = true;
+        } else if (is_option) {
+            if (uri_seen) {
+                error = strprintf("Options ('%s') cannot follow a BIP-21 payment URI", argv[i]);
+                return false;
+            }
+        } else {
+            error = strprintf("Command line contains unexpected token '%s', see bitcoin-core-app -h for a list of options.", argv[i]);
+            return false;
+        }
+    }
+    return true;
+}
 } // namespace
 
 
@@ -522,6 +557,12 @@ int QmlGuiMain(int argc, char* argv[])
         InitError(Untranslated(strprintf("Cannot parse command line arguments: %s\n", error)));
         return EXIT_FAILURE;
     }
+
+    QStringList payment_uri_args;
+    if (!ParsePaymentUriArgs(argc, argv, payment_uri_args, error)) {
+        InitError(Untranslated(error + "\n"));
+        return EXIT_FAILURE;
+    }
 #ifdef ENABLE_TEST_AUTOMATION
     ApplyTestSettingsDir();
 #endif
@@ -546,6 +587,9 @@ int QmlGuiMain(int argc, char* argv[])
     Clipboard clipboard;
     BitcoinUriModel bitcoin_uri_model;
     RegisterQmlTypes(app_mode, build_info, clipboard, bitcoin_uri_model);
+
+    PaymentUriHandler payment_uri_handler;
+    payment_uri_handler.queueRequests(payment_uri_args);
 
     const QString cli_lang = QString::fromStdString(gArgs.GetArg("-lang", ""));
     const QString startup_language = cli_lang.isEmpty()
@@ -768,6 +812,7 @@ int QmlGuiMain(int argc, char* argv[])
     engine->rootContext()->setContextProperty("peerListModelProxy", &peer_model_sort_proxy);
     engine->rootContext()->setContextProperty("banListModel", &ban_list_model);
     engine->rootContext()->setContextProperty("debugLogModel", &debug_log_model);
+    engine->rootContext()->setContextProperty("paymentUriHandler", &payment_uri_handler);
 
     RpcConsoleModel rpc_console_model{*node};
     shutdown_coordinator.addParticipant(&rpc_console_model, &RpcConsoleModel::drained,
