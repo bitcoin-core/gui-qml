@@ -679,6 +679,47 @@ TestCase {
         verify(findChild(edited, "activityRowRequestBadge").x >= findChild(edited, "activityRowLabel").width + 8)
     }
 
+    // Issue #851: the Activity toolbar's icon-only buttons gave no hint of what
+    // they do. The redesign replaced the file icon with a labelled "Export CSV"
+    // menu entry, so the unlabelled icons left are the overflow and
+    // active-filter buttons; each shows its accessible name on hover.
+    function test_activity_toolbar_icons_have_tooltips() {
+        const page = createPage()
+
+        const moreButton = findChild(page, "activityMoreButton")
+        const moreTooltip = findChild(page, "activityMoreButtonTooltip")
+        verify(moreButton !== null)
+        verify(moreTooltip !== null)
+        compare(moreTooltip.text, "More options")
+        verify(!moreTooltip.active)
+
+        const filtersButton = findChild(page, "activityActiveFiltersButton")
+        const filtersTooltip = findChild(page, "activityActiveFiltersButtonTooltip")
+        verify(filtersButton !== null)
+        verify(filtersTooltip !== null)
+        compare(filtersTooltip.text, filtersButton.Accessible.name)
+        verify(!filtersTooltip.active)
+    }
+
+    // Those tooltips hang down over the filter row and the list, both later
+    // siblings in the page layout, so the toolbar has to stack above them.
+    function test_activity_toolbar_stacks_above_filters_and_list() {
+        const page = createPage()
+        const toolbar = findChild(page, "activityToolbarRow")
+        const filters = findChild(page, "activityFilters")
+        verify(toolbar !== null)
+        verify(filters !== null)
+        verify(toolbar.z > filters.z)
+        verify(filters.z > 0)
+
+        // The bubble really does reach past the toolbar into their band.
+        const tooltip = findChild(page, "activityMoreButtonTooltip")
+        verify(tooltip !== null)
+        tooltip.shown = true
+        verify(tooltip.item !== null)
+        verify(tooltip.mapToItem(toolbar, 0, tooltip.height).y > toolbar.height)
+    }
+
     function test_filter_menus_export_and_wallet_switch() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
