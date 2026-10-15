@@ -890,17 +890,24 @@ TestCase {
         const row = findRow(page, "receive")
         const inset = row.mapToItem(page, 0, 0).x
         verify(inset > 0)
+        list.forceLayout()
         list.positionViewAtBeginning()
-        waitForRendering(page)
+        verify(waitForItemPolished(list))
+        tryCompare(list, "atYBeginning", true)
         verify(list.contentHeight > list.height)
         // Stay in the margin without landing on the scrollbar at the outer edge.
         const marginOffset = Math.min(2, inset / 4)
         const x = data.rightSide ? page.width - inset + marginOffset : inset - marginOffset
         const y = list.mapToItem(page, 0, list.height / 2).y
-        const start = list.contentY
         mouseMove(page, x, y)
-        mouseWheel(page, x, y, 0, -120, Qt.NoButton, Qt.NoModifier, 100)
-        tryVerify(function() { return list.contentY > start })
+        // Buffered, variable-height delegates can still adjust the list's
+        // origin. Send a scroll gesture and check its logical position instead
+        // of relying on one wheel event and a raw contentY snapshot.
+        tryVerify(function() {
+            mouseWheel(page, x, y, 0, -120, Qt.NoButton, Qt.NoModifier, 100)
+            return !list.atYBeginning
+        })
+        tryCompare(list, "moving", false)
         // The margin scrolls the list without becoming a transaction link.
         mouseClick(page, x, y)
         compare(page.depth, 1)
