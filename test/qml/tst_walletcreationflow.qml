@@ -269,6 +269,53 @@ TestCase {
         flow.finished.connect(function(openActivity) { finished = openActivity })
         findChild(complete, "importWalletSuccessOverviewButton").clicked()
         compare(finished, true)
+        compare(walletController.lastSelectedWalletName, "Imported wallet")
+    }
+
+    function test_import_in_progress_can_be_dismissed() {
+        const modal = createTemporaryObject(modalComponent, this)
+        modal.open()
+        tryVerify(function() { return modal.flow !== null })
+        const flow = modal.flow
+        flow.importingWallet = true
+        compare(flow.currentItem.showCloseButton, true)
+        compare(flow.navigationBar.showCloseButton, true)
+        compare(flow.currentItem.showBackButton, false)
+        compare(modal.closePolicy, Popup.CloseOnEscape)
+
+        flow.navigationBar.closeClicked()
+        tryCompare(modal, "visible", false)
+    }
+
+    function test_import_error_entry_opens_error_page() {
+        walletController.walletLoadError = "Data is not in recognized format."
+        const modal = createTemporaryObject(modalComponent, this)
+        modal.openForImportError()
+        tryVerify(function() { return modal.flow !== null && findChild(modal.flow, "walletImportErrorPage") !== null })
+        compare(findChild(modal.flow, "importWalletErrorDescription").text, "Data is not in recognized format.")
+
+        modal.close()
+        tryCompare(modal, "visible", false)
+        compare(modal.importErrorEntry, false)
+    }
+
+    function test_import_error_during_close_reopens_after_close() {
+        walletController.walletLoadError = "Data is not in recognized format."
+        const modal = createTemporaryObject(modalComponent, this)
+        modal.open()
+        tryCompare(modal, "opened", true)
+
+        modal.close()
+        verify(modal.visible)
+        verify(!modal.opened)
+        modal.openForImportError()
+        compare(modal.importErrorPending, true)
+
+        tryVerify(function() {
+            return modal.opened && modal.flow !== null
+                && findChild(modal.flow, "walletImportErrorPage") !== null
+        })
+        compare(modal.importErrorPending, false)
     }
 
     function test_import_choice_uses_selected_file() {

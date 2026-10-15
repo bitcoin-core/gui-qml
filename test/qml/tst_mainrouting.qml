@@ -296,4 +296,27 @@ TestCase {
         verify(findChild(window, "walletBadge") !== null)
         verify(findChild(window, "createWalletWizard") === null)
     }
+
+    function test_background_import_success_offers_to_open_wallet() {
+        const window = createMain(true)
+        compare(findChild(window, "walletCreationModal").opened, false)
+        walletController.lastImportedWalletName = "imported"
+        walletController.walletImportSucceeded()
+        const toast = findChild(window, "walletImportSucceededToast")
+        tryCompare(toast, "visible", true)
+        compare(findChild(toast, "walletImportSucceededToastText").text, "Wallet \"imported\" was imported.")
+        verify(walletController.lastSelectedWalletName !== "imported")
+        toast.actionTriggered()
+        compare(walletController.lastSelectedWalletName, "imported")
+        compare(toast.visible, false)
+    }
+
+    function test_import_success_with_modal_open_shows_no_toast() {
+        const window = createMain(true)
+        findChild(window, "desktopMenuActions").createWallet.trigger()
+        tryCompare(findChild(window, "walletCreationModal"), "opened", true)
+        walletController.lastImportedWalletName = "imported"
+        walletController.walletImportSucceeded()
+        compare(findChild(window, "walletImportSucceededToast").visible, false)
+    }
 }
