@@ -17,6 +17,7 @@ Popup {
     property string messageObjectName: "alertMessage"
     property real verticalOffset: 0
     default property alias actions: actionStore.data
+    property alias details: detailsColumn.data
 
     property var visibleActions: [defaultAction]
     readonly property real minimumActionWidth: {
@@ -155,7 +156,9 @@ Popup {
         }
 
         CoreText {
+            id: messageText
             objectName: root.messageObjectName
+            visible: root.message.length > 0
             Layout.fillWidth: true
             Layout.margins: 20
             text: root.message
@@ -165,6 +168,17 @@ Popup {
             lineHeightMode: Text.FixedHeight
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
+        }
+
+        ColumnLayout {
+            id: detailsColumn
+            visible: children.length > 0
+            Layout.fillWidth: true
+            Layout.topMargin: messageText.visible ? 0 : 20
+            Layout.leftMargin: 20
+            Layout.rightMargin: 20
+            Layout.bottomMargin: 20
+            spacing: 8
         }
 
         // The action buttons live in a Flow positioner, not a RowLayout, on
@@ -214,6 +228,7 @@ Popup {
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text
                         buttonSize: NeutralButton.Large
+                        enabled: actionDelegate.alertAction.enabled
                         backgroundColor: Theme.color.neutral2
                         hoverBackgroundColor: Theme.color.neutral3
                         onClicked: actionDelegate.triggerAction()
@@ -223,6 +238,7 @@ Popup {
                         anchors.fill: parent
                         horizontalPadding: 20
                         visible: !actionDelegate.neutralAction
+                        enabled: actionDelegate.alertAction.enabled
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text
                         backgroundColor: actionDelegate.alertAction.role === AlertAction.Destructive
