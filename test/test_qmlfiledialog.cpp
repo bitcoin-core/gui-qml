@@ -36,6 +36,7 @@ private Q_SLOTS:
     void onlyDirectoryModeShowsHiddenEntries();
     void propertiesReachTheDialog();
     void acceptedCarriesTheSelectedFile();
+    void canceledOpeningCannotAcceptAfterReopening();
 };
 
 void QmlFileDialogTests::saveModeAsksToSaveNotToOpen()
@@ -150,6 +151,28 @@ void QmlFileDialogTests::acceptedCarriesTheSelectedFile()
     QCOMPARE(selected_on_accept, expected);
     QCOMPARE(chooser.selectedFile(), expected);
     QVERIFY(!chooser.isVisible());
+}
+
+void QmlFileDialogTests::canceledOpeningCannotAcceptAfterReopening()
+{
+    QmlFileDialog chooser;
+    chooser.open();
+    auto* old_dialog = VisibleFileDialog();
+    QVERIFY(old_dialog);
+    QSignalSpy accepted(&chooser, &QmlFileDialog::accepted);
+    chooser.close();
+    chooser.open();
+    auto* fresh_dialog = VisibleFileDialog();
+    QVERIFY(fresh_dialog);
+    QVERIFY(fresh_dialog != old_dialog);
+    // Simulate a late platform response before deferred deletion runs.
+    QVERIFY(QMetaObject::invokeMethod(old_dialog, "accepted", Qt::DirectConnection));
+    QCOMPARE(accepted.count(), 0);
+    QVERIFY(QMetaObject::invokeMethod(fresh_dialog, "accepted", Qt::DirectConnection));
+    QCOMPARE(accepted.count(), 1);
+    QVERIFY(QMetaObject::invokeMethod(fresh_dialog, "accepted", Qt::DirectConnection));
+    QCOMPARE(accepted.count(), 1);
+    chooser.close();
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

@@ -9,6 +9,7 @@ import "../controls"
 
 ColumnLayout {
     id: root
+    property var interactionOwner: root
     property var wallet
     property var coins: wallet ? wallet.coinsListModel : null
     property bool selectionMode: true
@@ -358,6 +359,10 @@ ColumnLayout {
     CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.red; horizontalAlignment: Text.AlignLeft }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: sortMenu; parent: Overlay.overlay; objectName: "coinBrowserSortMenu"
         ContextMenuPicker {
             title: qsTr("Sort by")
@@ -373,6 +378,10 @@ ColumnLayout {
         }
     }
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: groupMenu; parent: Overlay.overlay; objectName: "coinBrowserGroupMenu"
         ContextMenuPicker {
             title: qsTr("Group by")
@@ -382,6 +391,10 @@ ColumnLayout {
         }
     }
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: filterMenu; parent: Overlay.overlay; objectName: "coinBrowserFilterMenu"
         ContextMenuPicker {
             title: qsTr("Coin type")
@@ -391,6 +404,10 @@ ColumnLayout {
         }
     }
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: amountPopup; parent: Overlay.overlay; objectName: "coinBrowserAmountFilterPopup"
         implicitWidth: Math.min(320, root.width)
         onAboutToShow: {
@@ -415,10 +432,18 @@ ColumnLayout {
         }
     }
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: clearFiltersMenu; parent: Overlay.overlay; objectName: "coinBrowserClearFiltersMenu"
         ContextMenuButton { text: qsTr("Clear filters"); role: ContextMenuButton.Destructive; onTriggered: { root.clearFilters(); clearFiltersMenu.close() } }
     }
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: coinContextMenu
         parent: Overlay.overlay
         objectName: "walletCoinContextMenu"
@@ -430,6 +455,10 @@ ColumnLayout {
     }
 
     AlertPopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root.interactionOwner
+        }
         id: lockedCoinAlert
         objectName: "lockedCoinSelectionAlert"
         parent: Overlay.overlay

@@ -57,6 +57,17 @@ TestCase {
         transactionSpy.target = null
         transactionSpy.clear()
     }
+    function test_request_modal_closes_when_detail_hides() {
+        const page = createDetail()
+        page.openPaymentRequestDetail("saved-request")
+        const popup = findChild(page, "transactionPaymentRequestModal")
+        tryCompare(popup, "opened", true)
+        verify(popup.contextIsValid())
+        page.visible = false
+        verify(!popup.contextIsValid())
+        tryCompare(popup, "visible", false)
+    }
+
     function test_speed_up_prompts_for_wallet_password() {
         testBumpModel.requireUnlock = true
         const page = createDetail()

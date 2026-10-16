@@ -323,6 +323,10 @@ Popup {
 
                             ContextMenu {
                                 id: actionsMenu
+                                interactionContext: WalletContext {
+                                    owner: root
+                                    target: delegate.name + ":" + delegate.loadState
+                                }
                                 onVisibleChanged: {
                                     if (visible) {
                                         if (root.activeContextMenu && root.activeContextMenu !== actionsMenu) {

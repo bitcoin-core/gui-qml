@@ -8,8 +8,9 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+ContextPopup {
     id: root
+    interactionContext: WalletContext {}
 
     property string popupObjectName: ""
     property string titleText: qsTr("Wallet update required")
@@ -106,7 +107,7 @@ Popup {
                 Layout.minimumWidth: 120
                 enabled: !root.busy
                 text: root.busy ? root.busyConfirmText : root.confirmText
-                onClicked: root.confirmed()
+                onClicked: if (root.contextIsValid()) root.confirmed()
             }
         }
     }

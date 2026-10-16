@@ -35,6 +35,7 @@ Page {
     onVisibleChanged: {
         if (!visible) {
             sweepAlert.close()
+            sendPassphrasePopup.close()
             externalSignerActions.reset()
             sending = false
             saveStatus = ""
@@ -58,8 +59,8 @@ Page {
         }
     }
 
-    onWalletChanged: sweepAlert.close()
-    onTransactionChanged: sweepAlert.close()
+    onWalletChanged: { sweepAlert.close(); sendPassphrasePopup.close() }
+    onTransactionChanged: { sweepAlert.close(); sendPassphrasePopup.close(); externalSignerActions.reset() }
 
     function requestSend() {
         if (sending || !wallet) return
@@ -107,7 +108,7 @@ Page {
             savePsbt(path)
         } else {
             savePsbtDialog.currentFile = defaultSavePsbtFileUrl()
-            savePsbtDialog.open()
+            savePsbtDialog.openForWallet()
         }
     }
 
@@ -132,15 +133,18 @@ Page {
         }
     }
 
-    AppFileDialog {
+    WalletFileDialog {
         id: savePsbtDialog
+        wallet: root.wallet
+        owner: root
+        operationTarget: root.transaction
         objectName: "sendTransactionReviewSaveDialog"
         title: qsTr("Save transaction as PSBT")
         fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
         defaultSuffix: "psbt"
         nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-        onAccepted: root.savePsbt(selectedFile.toString())
+        onAcceptedForWallet: function(wallet, file) { root.savePsbt(file.toString()) }
     }
 
     Item {
@@ -348,6 +352,11 @@ Page {
     }
 
     AlertPopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+            target: root.transaction
+        }
         id: sweepAlert
         objectName: "sendSweepAlert"
         parent: Overlay.overlay
@@ -371,6 +380,11 @@ Page {
     }
 
     WalletPassphrasePopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+            target: root.transaction
+        }
         id: sendPassphrasePopup
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
@@ -379,8 +393,11 @@ Page {
         confirmText: qsTr("Unlock and send")
         busyConfirmText: qsTr("Unlocking...")
         onSubmitted: (passphrase) => {
+            if (!sendPassphrasePopup.contextIsValid() || !root.wallet) return
+            const wallet = root.wallet
+            const reviewedTransaction = root.transaction
             busy = true
-            if (root.wallet.sendTransactionWithPassphrase(passphrase)) {
+            if (wallet.sendReviewedTransaction(reviewedTransaction, passphrase)) {
                 busy = false
                 close()
                 root.sending = true

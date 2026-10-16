@@ -65,6 +65,8 @@ TestCase {
         return null
     }
 
+    function cleanup() { walletController.setSelectedWalletObject(testWalletModel) }
+
     function waitForApproveCalls(wallet, count) {
         tryCompare(wallet, "approveCalls", count, 1000)
     }
@@ -72,6 +74,7 @@ TestCase {
     function test_waiting_state_persists_until_mock_completes() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
 
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet})
         verify(review !== null)
@@ -105,6 +108,7 @@ TestCase {
     function test_partial_success_shows_more_signatures_message() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
         wallet.currentTransactionReviewMessage = "Signed on external signer. More signatures are required."
 
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet, canSend: false})
@@ -113,6 +117,8 @@ TestCase {
         const button = findObjectByName(review, "externalSignerApproveButton")
         verify(button !== null)
 
+        review.beginApproval()
+        waitForApproveCalls(wallet, 1)
         wallet.externalSignerApprovalPartiallySucceeded()
 
         compare(review.reviewState, "partiallySigned")
@@ -124,6 +130,7 @@ TestCase {
     function test_error_state_retries_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
 
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet})
         verify(review !== null)
@@ -152,6 +159,7 @@ TestCase {
     function test_reset_cancels_pending_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
 
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet})
         verify(review !== null)
@@ -169,6 +177,7 @@ TestCase {
     function test_destroy_cancels_pending_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
 
         const review = reviewComponent.createObject(this, {wallet: wallet})
         verify(review !== null)
@@ -183,6 +192,7 @@ TestCase {
     function test_rapid_clicks_only_start_one_approval() {
         const wallet = createTemporaryObject(walletComponent, this)
         verify(wallet !== null)
+        walletController.setSelectedWalletObject(wallet)
 
         const review = createTemporaryObject(reviewComponent, this, {wallet: wallet})
         verify(review !== null)

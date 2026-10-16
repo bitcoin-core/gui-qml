@@ -56,6 +56,7 @@ public:
 
     Q_INVOKABLE void setSelectedWallet(QString path, QString wallet_format = QString());
     Q_INVOKABLE bool isWalletOpen(const QString& path);
+    Q_INVOKABLE WalletQmlModel* walletForName(const QString& name) const;
     Q_INVOKABLE void closeWallet(const QString& path);
     Q_INVOKABLE QString walletDisplayName(const QString& path) const;
     Q_INVOKABLE bool setWalletDisplayName(const QString& path, const QString& display_name);
@@ -73,6 +74,7 @@ public:
     Q_INVOKABLE QString homePath() const;
     Q_INVOKABLE QString walletNameAvailabilityError(const QString& name) const;
     Q_INVOKABLE bool openSelectedWalletLocation();
+    Q_INVOKABLE bool openWalletLocation(WalletQmlModel* wallet);
     Q_INVOKABLE void clearWalletLocationOpenError();
     Q_INVOKABLE void requestOpenWalletSettings();
     Q_INVOKABLE void refreshExternalSignerStatus();
@@ -122,8 +124,10 @@ Q_SIGNALS:
                            qint64 balance,
                            int keySchemeKind);
     void walletLoadSucceeded();
-    void walletImportSucceeded();
-    void walletCreateSucceeded();
+    // A newly opened wallet has been selected, including loads through RPC.
+    void walletOpened();
+    void walletImportSucceeded(WalletQmlModel* wallet);
+    void walletCreateSucceeded(WalletQmlModel* wallet);
     void walletMigrationInProgressChanged();
     void walletMigrationErrorChanged();
     void walletMigrationRequired(const QString& path);
@@ -152,6 +156,7 @@ private:
     void consumeWalletNotifications();
     WalletQmlModel* addOrSelectWalletModel(std::unique_ptr<interfaces::Wallet> wallet);
     void registerWalletModel(WalletQmlModel* wallet_model);
+    void selectWalletModel(WalletQmlModel* wallet_model);
     void removeWalletModel(WalletQmlModel* wallet_model, bool remove = false);
     void retireWallet(WalletQmlModel* wallet_model, bool remove);
     void checkShutdownFinished();
@@ -172,7 +177,7 @@ private:
     void applyWalletDisplayName(WalletQmlModel* wallet_model) const;
     bool walletNameExists(const QString& name) const;
     QString describeImportedWalletKeyScheme(interfaces::Wallet& wallet) const;
-    QString selectedWalletLocationPath() const;
+    QString walletLocationPath(WalletQmlModel* wallet) const;
     void setWalletCreateError(const QString& error);
     void setWalletLoadInProgress(bool in_progress);
     void setWalletLoadError(const QString& error);

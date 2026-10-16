@@ -28,6 +28,8 @@ TestCase {
     }
 
     function init() {
+        walletController.setSelectedWalletObject(testWalletModel)
+        testWalletModel.setCurrentTransaction(testWalletTransaction)
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
         testWalletModel.currentTransactionSweepsWallet = false
@@ -93,6 +95,133 @@ TestCase {
         tryCompare(amount, "animating", false)
         verify(amount.text.endsWith(" BTC"))
         compare(caption.text, "Available")
+    }
+
+    function test_manual_payment_request_applies_to_its_opening_wallet() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        page.openPaymentRequestImport()
+        const popup = findChild(page, "sendUriImportPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        findChild(popup, "sendUriImportInput").text = "bitcoin:bcrt1qmanualrequest?amount=0.4&message=opened-for-A"
+        findChild(popup, "sendUriImportApplyButton").clicked()
+        compare(testSendRecipient.address.address, "bcrt1qmanualrequest")
+        compare(testSendRecipient.amount.satoshi, 40000000)
+        compare(testSendRecipient.message, "opened-for-A")
+        tryCompare(popup, "visible", false)
+    }
+
+    function test_manual_payment_request_rejects_stale_apply() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        page.openPaymentRequestImport()
+        const popup = findChild(page, "sendUriImportPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        findChild(popup, "sendUriImportInput").text = "bitcoin:bcrt1qoldrequest?amount=0.4&message=opened-for-A"
+        walletController.setSelectedWallet("manual-uri-replacement")
+        testSendRecipient.address.setAddress("bcrt1qnewwalletdraft")
+        testSendRecipient.amount.satoshi = 75000000
+        testSendRecipient.message = ""
+        findChild(popup, "sendUriImportApplyButton").clicked()
+        compare(testSendRecipient.address.address, "bcrt1qnewwalletdraft")
+        compare(testSendRecipient.amount.satoshi, 75000000)
+        compare(testSendRecipient.message, "")
+        tryCompare(popup, "visible", false)
+    }
+
+    function test_prepare_password_rejects_stale_submission_and_reopens() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        const popup = findChild(page, "reviewPassphrasePopup")
+        verify(popup !== null)
+        const callsBefore = testWalletModel.prepareTransactionCalls
+        popup.open()
+        walletController.setSelectedWallet("prepare-password-replacement")
+        popup.submitPassphrase()
+        compare(testWalletModel.prepareTransactionCalls, callsBefore)
+        tryCompare(popup, "visible", false)
+        popup.open()
+        popup.submitPassphrase()
+        compare(testWalletModel.prepareTransactionCalls, callsBefore + 1)
+        tryCompare(findChild(page, "transactionReviewPopup"), "opened", true)
+    }
+
+    function test_review_closes_on_wallet_change_during_opening() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        verify(popup.visible)
+        verify(!popup.opened)
+        walletController.setSelectedWallet("review-opening-replacement")
+        tryCompare(popup, "visible", false)
+        compare(popup.reviewWallet, null)
+    }
+
+    function test_known_psbt_warning_rejects_stale_navigation() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        const popup = findChild(page, "knownPsbtTxPopup")
+        verify(popup !== null)
+        const viewed = []
+        page.viewTransactionInActivity.connect(function(txid) { viewed.push(txid) })
+        popup.txid = "old-wallet-tx"
+        popup.open()
+        walletController.setSelectedWallet("known-psbt-replacement")
+        findChild(popup.contentItem, "knownPsbtTxViewButton").clicked()
+        compare(viewed.length, 0)
+        tryCompare(popup, "visible", false)
+        popup.txid = "fresh-wallet-tx"
+        popup.open()
+        findChild(popup.contentItem, "knownPsbtTxViewButton").clicked()
+        compare(viewed.length, 1)
+        compare(viewed[0], "fresh-wallet-tx")
+    }
+
+    function test_replaced_imported_review_cleans_up_its_transaction_data() {
+        return [{tag: "close"}, {tag: "switch"}, {tag: "unreviewed-replacement"}]
+    }
+    function test_replaced_imported_review_cleans_up_its_transaction(data) {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = width
+        page.height = height
+        testWalletModel.currentTransactionIsImportedPsbt = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        tryCompare(popup, "opened", true)
+        compare(popup.reviewedTransaction, testWalletTransaction)
+        const before = testWalletModel.discardCurrentTransactionCalls
+
+        testWalletModel.setCurrentTransaction(testReplacementWalletTransaction)
+        testRecipientsModel.totalAmountSatoshi = 20000000
+        page.openTransactionReview()
+        compare(popup.reviewedTransaction, testReplacementWalletTransaction)
+        compare(testWalletModel.discardCurrentTransactionCalls, before)
+        compare(testRecipientsModel.totalAmountSatoshi, 20000000)
+
+        if (data.tag === "unreviewed-replacement") testWalletModel.setCurrentTransaction(testWalletTransaction)
+        if (data.tag === "switch") walletController.setSelectedWallet("replacement-review-wallet-change")
+        else popup.close()
+        tryCompare(popup, "visible", false)
+        compare(popup.reviewedTransaction, null)
+        compare(testWalletModel.discardCurrentTransactionCalls,
+            before + (data.tag === "unreviewed-replacement" ? 0 : 1))
+        compare(testRecipientsModel.totalAmountSatoshi,
+            data.tag === "unreviewed-replacement" ? 20000000 : 0)
+        testWalletModel.setCurrentTransaction(testWalletTransaction)
     }
 
     function test_review_only_psbt_closes_and_discards_on_wallet_change() {

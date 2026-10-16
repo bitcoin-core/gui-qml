@@ -103,6 +103,9 @@ TestCase {
 
         mouseClick(importButton, importButton.width / 2, importButton.height / 2)
         compare(importCount, 1)
+        tryCompare(popup, "visible", false)
+        popup.open()
+        tryCompare(popup, "opened", true)
 
         mouseClick(clearButton, clearButton.width / 2, clearButton.height / 2)
         compare(clearCount, 1)

@@ -151,6 +151,10 @@ ColumnLayout {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.walletModel
+            owner: root
+        }
         id: feePopup
         objectName: "feeSelectionPopup"
         modal: true

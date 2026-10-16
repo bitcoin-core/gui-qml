@@ -39,6 +39,10 @@ ColumnLayout {
         title: qsTr("Speed")
         trailingItem: PopupPicker {
             objectName: "feeSelectionPicker"
+            interactionContext: WalletContext {
+                wallet: root.walletModel
+                owner: root
+            }
             model: root.speedOptions
             subtitleRole: "subtitle"
             objectNameRole: "objectName"

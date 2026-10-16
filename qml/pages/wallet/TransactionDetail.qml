@@ -76,6 +76,10 @@ Page {
             objectName: "transactionDetailMoreButton"
             onClicked: moreMenu.open()
             ContextMenu {
+                interactionContext: WalletContext {
+                    wallet: root.wallet
+                    owner: root
+                }
                 id: moreMenu
                 objectName: "transactionDetailMoreMenu"
                 x: moreButton.width - width
@@ -103,7 +107,12 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
+    PaymentRequestModal {
+        id: paymentRequestModal
+        objectName: "transactionPaymentRequestModal"
+        wallet: root.wallet
+        interactionContext.owner: root
+    }
 
     ScrollView {
         id: scroll
@@ -245,6 +254,7 @@ Page {
     }
 
     SpeedUpOverlay {
+        interactionContext.owner: root
         id: speedUpOverlay
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
@@ -255,6 +265,10 @@ Page {
     }
 
     SpeedUpComplete {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: speedUpComplete
         onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
         onDone: close()

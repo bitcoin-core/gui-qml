@@ -348,8 +348,10 @@ def case_subpages_close_when_wallet_becomes_unselected(harness, checkpoints):
     select_wallet(gui, wallet_name)
     wait_for_wallet_ready(harness, gui)
     gui.wait_for_property("walletBadge", "noWalletLoaded", False, timeout_ms=5000)
+    gui.wait_for_property("activityTabButton", "checked", True, timeout_ms=5000)
+    open_wallet_settings(gui)
     gui.wait_for_property("walletNameRow", "visible", True, timeout_ms=5000)
-    checkpoints.checkpoint("wallet reselected from settings page", gui)
+    checkpoints.checkpoint("wallet reloaded into Activity and settings reopened", gui)
 
 
 def case_password_page_closes_when_selected_wallet_changes(harness, checkpoints):

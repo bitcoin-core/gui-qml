@@ -89,7 +89,11 @@ PageStack {
         when: stackView.wallet !== null
     }
 
-    PaymentRequestModal { id: paymentRequestModal; wallet: stackView.wallet }
+    PaymentRequestModal {
+        id: paymentRequestModal
+        wallet: stackView.wallet
+        interactionContext.owner: stackView
+    }
 
     initialItem: ActivityListPage {
         wallet: stackView.wallet

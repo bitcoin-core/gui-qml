@@ -18,6 +18,29 @@ Page {
     background: null
 
     property string pendingMigrationPath: ""
+    property var migrationAttempt: null
+    WalletContext {
+        id: migrationContext
+        wallet: walletController.selectedWallet
+        owner: root
+        target: root.pendingMigrationPath
+    }
+
+    function migratePendingWallet(passphrase) {
+        // Keep the dispatched token until its result arrives, even if invalidated.
+        if (migrationAttempt) return
+        migrationRequiredPopup.close()
+        migrationAttempt = migrationContext.begin()
+        if (migrationAttempt) walletController.migrateWallet(pendingMigrationPath, passphrase)
+    }
+
+    function finishMigrationAttempt() {
+        const context = migrationAttempt
+        migrationAttempt = null
+        if (!migrationContext.isValid(context)) return false
+        migrationContext.consume()
+        return true
+    }
 
     ButtonGroup { id: navigationTabs }
 
@@ -33,6 +56,7 @@ Page {
             return
         }
         closeConfirmationPopup.walletName = walletController.selectedWallet.name
+        closeConfirmationPopup.targetWallet = walletController.selectedWallet
         closeConfirmationPopup.open()
     }
 
@@ -133,6 +157,9 @@ Page {
         function onOpenReceiveRequested() {
             receiveTabButton.checked = true
         }
+        function onWalletOpened() {
+            root.openActivity()
+        }
         function onWalletLoadStateChanged(name, state, error) {
             if (state === WalletListModel.LoadError) {
                 loadErrorPopup.message = error
@@ -140,11 +167,15 @@ Page {
             }
         }
         function onWalletMigrationRequired(path) {
+            migrationContext.invalidate()
+            migrationRequiredPopup.close()
+            migrationPassphrasePopup.close()
             root.pendingMigrationPath = path
             migrationRequiredPopup.errorText = ""
             migrationRequiredPopup.open()
         }
         function onWalletMigrationPassphraseRequired(path) {
+            if (root.migrationAttempt && !root.finishMigrationAttempt()) return
             root.pendingMigrationPath = path
             migrationRequiredPopup.close()
             migrationPassphrasePopup.busy = false
@@ -152,14 +183,13 @@ Page {
             migrationPassphrasePopup.open()
         }
         function onWalletMigrationSucceeded() {
+            if (!root.finishMigrationAttempt()) return
             root.pendingMigrationPath = ""
             migrationRequiredPopup.close()
             migrationPassphrasePopup.close()
         }
         function onWalletMigrationFailed() {
-            if (root.pendingMigrationPath.length === 0) {
-                return
-            }
+            if (!root.finishMigrationAttempt()) return
             if (walletController.walletMigrationError.toLowerCase().indexOf("passphrase") !== -1) {
                 const showPassphraseError = migrationPassphrasePopup.opened
                 migrationRequiredPopup.close()
@@ -169,7 +199,6 @@ Page {
             } else {
                 migrationPassphrasePopup.busy = false
                 migrationPassphrasePopup.close()
-                migrationRequiredPopup.busy = false
                 migrationRequiredPopup.errorText = walletController.walletMigrationError
                 migrationRequiredPopup.open()
             }
@@ -212,6 +241,7 @@ Page {
                 }
                 onCloseWalletRequested: (name) => {
                     closeConfirmationPopup.walletName = name
+                    closeConfirmationPopup.targetWallet = walletController.walletForName(name)
                     closeConfirmationPopup.open()
                 }
             }
@@ -358,6 +388,7 @@ Page {
             }
         }
         ReceivePage {
+            requestPresentationOwner: activityPage
             onPaymentRequestCreated: {
                 activityPage.pop(null)
                 root.openActivity()
@@ -435,6 +466,8 @@ Page {
 
     WalletMigrationPopup {
         id: migrationRequiredPopup
+        interactionContext.owner: root
+        interactionContext.target: root.pendingMigrationPath
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPopup"
@@ -442,16 +475,18 @@ Page {
         cancelButtonObjectName: "walletMigrationCancelButton"
         confirmButtonObjectName: "walletMigrationConfirmButton"
         descriptionText: qsTr("This wallet uses a legacy format and needs to be updated before it can be opened.")
-        busy: walletController.walletMigrationInProgress
+        busy: walletController.walletMigrationInProgress || root.migrationAttempt !== null
+        onAboutToHide: migrationContext.invalidate()
         onConfirmed: {
             migrationRequiredPopup.errorText = ""
-            migrationRequiredPopup.close()
-            walletController.migrateWallet(root.pendingMigrationPath, "")
+            root.migratePendingWallet("")
         }
     }
 
     WalletPassphrasePopup {
         id: migrationPassphrasePopup
+        interactionContext.owner: root
+        interactionContext.target: root.pendingMigrationPath
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPassphrasePopup"
@@ -463,9 +498,11 @@ Page {
         descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
         confirmText: qsTr("Unlock and update")
         busyConfirmText: qsTr("Updating...")
+        onAboutToHide: migrationContext.invalidate()
         onSubmitted: (passphrase) => {
+            if (root.migrationAttempt) return
             migrationPassphrasePopup.busy = true
-            walletController.migrateWallet(root.pendingMigrationPath, passphrase)
+            root.migratePendingWallet(passphrase)
         }
     }
 
@@ -485,6 +522,12 @@ Page {
 
     AlertPopup {
         id: closeConfirmationPopup
+        property var targetWallet: null
+        interactionContext: WalletContext {
+            wallet: closeConfirmationPopup.targetWallet
+            owner: root
+            target: closeConfirmationPopup.walletName
+        }
         objectName: "walletCloseConfirmationPopup"
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)

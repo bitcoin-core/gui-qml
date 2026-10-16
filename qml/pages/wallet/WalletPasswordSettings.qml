@@ -79,6 +79,7 @@ SettingsPage {
     }
     StackView.onActivated: Qt.callLater(root.focusInitialPasswordField)
     Component.onDestruction: root.clearPasswordFields()
+    onWalletChanged: { root.clearPasswordFields(); root.clearResult() }
     onVisibleChanged: {
         if (!visible) {
             root.clearPasswordFields()

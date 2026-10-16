@@ -9,6 +9,7 @@ import org.bitcoincore.qt 1.0
 
 ContextMenu {
     id: root
+    interactionContext: WalletContext {}
     objectName: "sendOptionsPopup"
 
     property alias coinControlEnabled: coinControlToggle.checked

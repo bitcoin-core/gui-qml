@@ -10,13 +10,17 @@ import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
-Popup {
+ContextPopup {
     id: root
     objectName: "speedUpOverlay"
 
+    property var wallet: walletController.selectedWallet
+    interactionContext: WalletContext {
+        wallet: root.wallet
+        target: root.txid
+    }
     property string txid: ""
-    property var bumpModel: walletController.selectedWallet
-        ? walletController.selectedWallet.bumpModel : null
+    property var bumpModel: root.wallet ? root.wallet.bumpModel : null
     property int bumpState: root.bumpModel ? root.bumpModel.state : BumpTransactionModel.Idle
     property string bumpErrorText: root.bumpModel ? root.bumpModel.errorText : ""
     property bool readyToConfirm: root.bumpModel
@@ -58,10 +62,12 @@ Popup {
         }
     }
 
-    onClosed: {
-        if (root.bumpModel) {
-            root.bumpModel.reset()
-        }
+    property var openedBumpModel: null
+    onAboutToShow: openedBumpModel = root.bumpModel
+    onAboutToHide: {
+        speedUpPassphrasePopup.close()
+        if (openedBumpModel) openedBumpModel.reset()
+        openedBumpModel = null
     }
 
     background: Rectangle {
@@ -178,10 +184,11 @@ Popup {
                 Layout.preferredWidth: 1
                 enabled: root.readyToConfirm
                 onClicked: {
-                    if (!root.bumpModel) {
+                    if (!root.contextIsValid() || !root.bumpModel) {
                         return
                     }
-                    if (!root.bumpModel.confirmFeeBump() && root.bumpModel.needsUnlock) {
+                    const confirmed = root.bumpModel.confirmFeeBump()
+                    if (!confirmed && root.bumpModel.needsUnlock) {
                         speedUpPassphrasePopup.busy = false
                         speedUpPassphrasePopup.errorText = ""
                         speedUpPassphrasePopup.open()
@@ -192,8 +199,13 @@ Popup {
     }
 
     WalletPassphrasePopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+            target: root.txid
+        }
         id: speedUpPassphrasePopup
-        parent: Overlay.overlay
+        parent: root.parent
         width: Math.min(420, root.width - 40)
         popupObjectName: "speedUpPassphrasePopup"
         passphraseFieldObjectName: "speedUpPassphraseField"
@@ -205,7 +217,7 @@ Popup {
         confirmText: qsTr("Unlock and update")
         busyConfirmText: qsTr("Unlocking...")
         onSubmitted: (passphrase) => {
-            if (!root.bumpModel) {
+            if (!speedUpPassphrasePopup.contextIsValid() || !root.bumpModel) {
                 return
             }
             speedUpPassphrasePopup.busy = true

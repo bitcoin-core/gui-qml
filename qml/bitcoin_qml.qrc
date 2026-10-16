@@ -58,6 +58,7 @@
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestModal.qml</file>
         <file>components/OnboardingSettingsPopup.qml</file>
+        <file>components/WalletFileDialog.qml</file>
         <file>components/WalletCreationModal.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
         <file>components/PaymentRequestField.qml</file>
@@ -80,6 +81,9 @@
         <file>controls/AppFolderDialog.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/CloseButton.qml</file>
+        <file>controls/InteractionContext.qml</file>
+        <file>controls/ContextPopup.qml</file>
+        <file>controls/WalletContext.qml</file>
         <file>controls/ContextMenu.qml</file>
         <file>controls/ContextMenuButton.qml</file>
         <file>controls/ContextMenuDivider.qml</file>

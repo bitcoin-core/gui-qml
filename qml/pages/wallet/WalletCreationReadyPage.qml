@@ -12,6 +12,7 @@ OnboardingView {
     objectName: "walletCreationReadyPage"
     showNavigationBar: false
     usesSharedNavigation: true
+    property var wallet: walletController.selectedWallet
     property bool watchOnly: false
     property bool modalView: false
     property bool encryptedWallet: false
@@ -71,7 +72,7 @@ OnboardingView {
                     Layout.leftMargin: 4
                     buttonSize: NeutralButton.Large
                     text: qsTr("View file")
-                    onClicked: walletController.openSelectedWalletLocation()
+                    onClicked: if (root.wallet && root.wallet.available !== false) walletController.openWalletLocation(root.wallet)
                 }
                 CoreText {
                     objectName: "createWalletBackupErrorText"
