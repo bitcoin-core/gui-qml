@@ -246,6 +246,11 @@ Pane {
             onClicked: fieldsMenu.opened ? fieldsMenu.close() : fieldsMenu.open()
 
             ContextMenu {
+                interactionContext: WalletContext {
+                    wallet: root.wallet
+                    owner: root.interactionOwner
+                    target: root.request
+                }
                 id: fieldsMenu
                 objectName: "requestPaymentFieldsMenu"
                 x: customizeButton.width - width
@@ -320,6 +325,11 @@ Pane {
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
                 ContextMenu {
+                    interactionContext: WalletContext {
+                        wallet: root.wallet
+                        owner: root.interactionOwner
+                        target: root.request ? root.request.id + ":" + root.request.qrPayload : ""
+                    }
                     id: moreMenu
                     objectName: "paymentRequestMoreMenu"
                     x: moreButton.width - width
@@ -413,6 +423,11 @@ Pane {
                     }
                 }
                 ContextMenu {
+                    interactionContext: WalletContext {
+                        wallet: root.wallet
+                        owner: root.interactionOwner
+                        target: root.request ? root.request.id + ":" + root.request.qrPayload : ""
+                    }
                     id: qrMenu
                     objectName: "requestPaymentQRContextMenu"
                     ContextMenuButton {

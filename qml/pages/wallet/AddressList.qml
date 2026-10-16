@@ -112,6 +112,10 @@ SettingsPage {
     Component.onCompleted: addressModel.refresh()
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: pageMenu
         parent: Overlay.overlay
         modal: true
@@ -122,12 +126,17 @@ SettingsPage {
             checkable: false
             text: qsTr("Show used addresses")
             checked: addressModel.showUsed
-            onClicked: addressModel.showUsed = !addressModel.showUsed
+            onTriggered: addressModel.showUsed = !addressModel.showUsed
         }
     }
 
-    Popup {
+    ContextPopup {
         id: detailsPopup
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+            target: root.selectedAddress
+        }
         objectName: "addressDetailsPopup"
         readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
         property real verticalOffset: 0

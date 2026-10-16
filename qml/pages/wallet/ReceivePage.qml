@@ -16,6 +16,7 @@ Page {
     property var request: wallet ? wallet.currentPaymentRequest : null
     property var clipboard: Clipboard
     property var presentedRequest: null
+    property var requestPresentationOwner: root
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
     property string addressErrorText: ""
@@ -100,6 +101,10 @@ Page {
                     checked: receiveAddressTypeMenu.opened
                     onClicked: receiveAddressTypeMenu.opened ? receiveAddressTypeMenu.close() : receiveAddressTypeMenu.open()
                     ContextMenu {
+                        interactionContext: WalletContext {
+                            wallet: root.wallet
+                            owner: root
+                        }
                         id: receiveAddressTypeMenu
                         objectName: "receiveAddressTypeMenu"
                         x: receiveAddressSettingsButton.width - width
@@ -141,6 +146,10 @@ Page {
                     checked: receiveMoreMenu.opened
                     onClicked: receiveMoreMenu.opened ? receiveMoreMenu.close() : receiveMoreMenu.open()
                     ContextMenu {
+                        interactionContext: WalletContext {
+                            wallet: root.wallet
+                            owner: root
+                        }
                         id: receiveMoreMenu
                         objectName: "receiveMoreMenu"
                         x: receiveMoreButton.width - width
@@ -194,6 +203,8 @@ Page {
     PaymentRequestModal {
         id: requestModal
         wallet: root.wallet
+        // Creation may switch to Activity before presenting the saved request.
+        interactionContext.owner: root.visible ? root : root.requestPresentationOwner
         onClosed: {
             if (root.presentedRequest && root.request === root.presentedRequest) root.request.clear()
             root.presentedRequest = null
@@ -210,6 +221,10 @@ Page {
         }
     }
     WalletPassphrasePopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: passphrasePopup
         parent: Overlay.overlay
         width: Math.min(420, parent ? parent.width - 32 : 420)

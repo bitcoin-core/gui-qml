@@ -1154,7 +1154,11 @@ PageStack {
         }
     }
 
-    SendCoinSelection { id: coinSelectionPopup; wallet: root.wallet }
+    SendCoinSelection {
+        id: coinSelectionPopup
+        wallet: root.wallet
+        interactionContext.owner: root
+    }
 
     WalletPassphrasePopup {
         id: reviewPassphrasePopup

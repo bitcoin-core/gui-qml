@@ -9,7 +9,7 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+ContextPopup {
     id: root
 
     property string title: ""
@@ -94,12 +94,18 @@ Popup {
         visibleActions = actionStore.data.length > 0 ? actionStore.data : [defaultAction]
     }
 
+    function triggerAction(action, closePopup) {
+        if (!contextIsValid()) return
+        if (!interactionContext && closePopup) close()
+        action.triggered()
+        if (interactionContext && closePopup) close()
+    }
+
     function cancel() {
         for (let i = 0; i < visibleActions.length; ++i) {
             const action = visibleActions[i]
             if (action.role === AlertAction.Cancel || action.role === AlertAction.Neutral) {
-                close()
-                action.triggered()
+                root.triggerAction(action, true)
                 return
             }
         }
@@ -202,10 +208,7 @@ Popup {
                     height: 46
 
                     function triggerAction() {
-                        if (alertAction.closesPopup) {
-                            root.close()
-                        }
-                        alertAction.triggered()
+                        root.triggerAction(alertAction, alertAction.closesPopup)
                     }
 
                     NeutralButton {

@@ -9,9 +9,49 @@ TestCase {
     when: windowShown
     visible: true
     width: 900; height: 700
-    Component { id: factory; SendFeeSelection { walletModel: testWalletModel; width: 800 } }
-    function init() { testWalletModel.minimumCustomFeeRate = 0.1; testWalletModel.customFeeEnabled = false; testWalletModel.customFeeRate = ""; testWalletModel.targetBlocks = 6; testWalletModel.feeEstimatePending = false }
-    function cleanup() { testWalletModel.minimumCustomFeeRate = 0.1 }
+    Component { id: factory; SendFeeSelection { walletModel: walletController.selectedWallet; width: 800 } }
+    Component {
+        id: otherWalletComponent
+        QtObject {
+            property bool available: true
+            property int targetBlocks: 6
+            property bool customFeeEnabled: false
+            property bool feeEstimatePending: false
+            property real estimatedFeeSatoshi: 50
+            property string estimatedFeeRate: "1"
+            property string customFeeRate: ""
+            property bool customFeeRateValid: true
+            property real minimumCustomFeeRate: 0.1
+        }
+    }
+    function init() { walletController.setSelectedWalletObject(testWalletModel); testWalletModel.minimumCustomFeeRate = 0.1; testWalletModel.customFeeEnabled = false; testWalletModel.customFeeRate = ""; testWalletModel.targetBlocks = 6; testWalletModel.feeEstimatePending = false }
+    function cleanup() { walletController.setSelectedWalletObject(testWalletModel); testWalletModel.minimumCustomFeeRate = 0.1 }
+    function test_speed_picker_rejects_stale_selection_data() {
+        return [{tag: "wallet"}, {tag: "roundtrip"}, {tag: "unload"}, {tag: "hidden"}]
+    }
+    function test_speed_picker_rejects_stale_selection(data) {
+        const control = createTemporaryObject(factory, this)
+        const otherWallet = createTemporaryObject(otherWalletComponent, this)
+        if (data.tag === "unload") walletController.setSelectedWalletObject(otherWallet)
+        const picker = findChild(control, "feeSelectionPicker")
+        picker.open()
+        compare(picker.opened, true)
+        if (data.tag === "hidden") control.visible = false
+        else if (data.tag === "unload") otherWallet.available = false
+        else {
+            walletController.setSelectedWalletObject(otherWallet)
+            if (data.tag === "roundtrip") walletController.setSelectedWalletObject(testWalletModel)
+        }
+        picker.itemAtIndex(0).clicked()
+        compare(testWalletModel.targetBlocks, 6)
+        compare(otherWallet.targetBlocks, 6)
+        tryCompare(picker, "opened", false)
+
+        control.visible = true
+        walletController.setSelectedWalletObject(testWalletModel)
+        selectOption(control, 0)
+        compare(testWalletModel.targetBlocks, 2)
+    }
     function test_custom_rate_error_uses_configured_minimum() {
         const control = createTemporaryObject(factory, this)
         selectOption(control, 3)

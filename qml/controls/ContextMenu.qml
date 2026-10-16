@@ -6,7 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-Popup {
+ContextPopup {
     id: root
 
     property string title: ""
@@ -17,6 +17,13 @@ Popup {
     readonly property alias titleItem: _title
 
     default property alias menuItems: _column.data
+
+    function triggerAction(action, autoClose) {
+        if (!contextIsValid()) return
+        if (!interactionContext && autoClose) close()
+        action()
+        if (interactionContext && autoClose) close()
+    }
 
     padding: menuPadding
     focus: true
@@ -61,7 +68,9 @@ Popup {
         id: _column
         spacing: root.itemSpacing
         readonly property bool _contextMenuMarker: true
-        function _closeMenu() { root.close() }
+        function _triggerMenuAction(action, autoClose) {
+            root.triggerAction(action, autoClose)
+        }
 
         CoreText {
             id: _title

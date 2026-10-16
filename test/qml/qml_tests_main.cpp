@@ -1515,6 +1515,10 @@ public:
         ++m_fee_estimate_revision;
         Q_EMIT feeEstimateRevisionChanged();
     }
+    Q_INVOKABLE bool sendReviewedTransaction(QObject* transaction, const QString&)
+    {
+        return transaction && transaction == m_current_transaction && sendTransaction();
+    }
     Q_INVOKABLE bool sendTransaction()
     {
         ++m_send_transaction_calls;
@@ -1787,6 +1791,7 @@ class MockWalletController : public QObject
     Q_PROPERTY(QString walletCreateError MEMBER m_wallet_create_error NOTIFY walletCreateErrorChanged)
     Q_PROPERTY(bool walletMigrationInProgress MEMBER m_wallet_migration_in_progress NOTIFY walletMigrationInProgressChanged)
     Q_PROPERTY(QString walletMigrationError MEMBER m_wallet_migration_error NOTIFY walletMigrationErrorChanged)
+    Q_PROPERTY(bool deferWalletMigration MEMBER m_defer_wallet_migration)
     Q_PROPERTY(QString lastImportedWalletName MEMBER m_last_imported_wallet_name NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme MEMBER m_last_imported_wallet_key_scheme NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(bool canCreateExternalSignerWallet MEMBER m_can_create_external_signer_wallet NOTIFY externalSignerStatusChanged)
@@ -1811,6 +1816,7 @@ public:
     QString m_wallet_load_warnings;
     QString m_wallet_create_error;
     bool m_wallet_migration_in_progress{false};
+    bool m_defer_wallet_migration{false};
     QString m_wallet_migration_error;
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
@@ -1893,6 +1899,11 @@ public:
     }
     Q_INVOKABLE void migrateWallet(const QString&, const QString& = QString())
     {
+        if (m_defer_wallet_migration) {
+            m_wallet_migration_in_progress = true;
+            Q_EMIT walletMigrationInProgressChanged();
+            return;
+        }
         clearWalletMigrationStatus();
         Q_EMIT walletMigrationSucceeded();
     }
@@ -1938,6 +1949,7 @@ public:
     }
     Q_INVOKABLE void reset()
     {
+        m_defer_wallet_migration = false;
         m_last_selected_wallet_name.clear();
         m_last_closed_wallet_name.clear();
         m_close_wallet_calls = 0;
@@ -2001,6 +2013,11 @@ public:
         Q_EMIT walletLocationOpenErrorChanged();
         return false;
     }
+    Q_INVOKABLE QObject* walletForName(const QString&) const { return m_selected_wallet; }
+    Q_INVOKABLE bool openWalletLocation(QObject* wallet)
+    {
+        return wallet && wallet == m_selected_wallet && openSelectedWalletLocation();
+    }
     Q_INVOKABLE void clearWalletLocationOpenError()
     {
         if (m_wallet_location_open_error.isEmpty()) return;
@@ -2032,6 +2049,9 @@ Q_SIGNALS:
     void walletCreateSucceeded();
     void walletLoadSucceeded();
     void walletImportSucceeded();
+    void walletMigrationRequired(const QString& path);
+    void walletMigrationPassphraseRequired(const QString& path);
+    void walletMigrationFailed();
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
     void openSelectedWalletLocationCallsChanged();

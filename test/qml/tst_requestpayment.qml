@@ -583,6 +583,30 @@ TestCase {
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
     }
 
+    function test_request_again_cancels_when_presentation_ends_data() {
+        return [{tag: "hidden"}, {tag: "reopened"}]
+    }
+    function test_request_again_cancels_when_presentation_ends(data) {
+        const page = createPage()
+        const card = createRequest(page)
+        const requestId = card.request.id
+        const opened = walletController.openReceiveRequests
+        function finishPresentation() {
+            page.requestModal.closed.disconnect(finishPresentation)
+            if (data.tag === "hidden") page.visible = false
+            else page.requestModal.openRequest(requestId)
+        }
+        page.requestModal.closed.connect(finishPresentation)
+        findChild(card, "paymentRequestMoreButton").clicked()
+        tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
+        findChild(card, "requestPaymentAgainMenuButton").clicked()
+        if (data.tag === "hidden") tryCompare(page.requestModal, "visible", false)
+        else tryCompare(page.requestModal, "opened", true)
+        wait(0)
+        compare(testWalletModel.lastTemplateRequestId, "")
+        compare(walletController.openReceiveRequests, opened)
+    }
+
     function test_request_again_reveals_populated_hidden_fields() {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "0.001").editingFinished()
@@ -887,6 +911,50 @@ TestCase {
         editField(card, "requestPaymentAmountInput", "21000000.00000000")
         verify(card.saveFields())
         compare(card.request.amount.satoshi, 2100000000000000)
+    }
+
+    function test_saved_request_menu_rejects_stale_actions_data() {
+        return [
+            { tag: "delete", button: "requestPaymentDeleteMenuButton" },
+            { tag: "repeat", button: "requestPaymentAgainMenuButton" }
+        ]
+    }
+    function test_saved_request_menu_rejects_stale_actions(data) {
+        const page = createPage()
+        const card = createRequest(page)
+        const opened = walletController.openReceiveRequests
+        findChild(card, "paymentRequestMoreButton").clicked()
+        const menu = findChild(card, "paymentRequestMoreMenu")
+        tryCompare(menu, "opened", true)
+        walletController.setSelectedWallet("stale-request-" + data.tag)
+        findChild(card, data.button).clicked()
+        tryCompare(menu, "visible", false)
+        tryCompare(page.requestModal, "visible", false)
+        compare(testWalletModel.lastRemovedRequestId, "")
+        compare(testWalletModel.lastTemplateRequestId, "")
+        compare(page.requestModal.repeatRequestId, "")
+        createRequest(page)
+        page.requestModal.close()
+        tryCompare(page.requestModal, "visible", false)
+        compare(walletController.openReceiveRequests, opened)
+        compare(testWalletModel.lastTemplateRequestId, "")
+    }
+
+    function test_saved_request_qr_dialog_closes_with_wallet_context() {
+        const page = createPage()
+        const card = createRequest(page)
+        findChild(card, "paymentRequestMoreButton").clicked()
+        const menu = findChild(card, "paymentRequestMoreMenu")
+        tryCompare(menu, "opened", true)
+        findChild(card, "requestPaymentSaveQRMenuButton").clicked()
+        const dialog = findChild(card, "requestPaymentSaveQRDialog")
+        verify(dialog !== null)
+        verify(dialog.visible)
+        walletController.setSelectedWallet("qr-save-replacement")
+        verify(!dialog.visible)
+        tryCompare(page.requestModal, "visible", false)
+        dialog.selectAndAccept("file:///tmp/stale-request-qr.png")
+        compare(card.actionErrorText, "")
     }
 
     function test_delete_menu_closes_modal_and_clears_matching_request() {

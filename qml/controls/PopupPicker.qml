@@ -26,6 +26,7 @@ Control {
     property int iconSize: 18
     property var labelTextStyle: Theme.text.description
     property bool embedded: false
+    property alias interactionContext: popup.interactionContext
     readonly property string currentText: displayText.length > 0 ? displayText : _currentText()
     readonly property bool opened: popup.visible
 

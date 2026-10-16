@@ -6,8 +6,11 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "../controls"
 
-Popup {
+ContextPopup {
     id: root
+    interactionContext: WalletContext {
+        wallet: root.wallet
+    }
     objectName: "paymentRequestModal"
     property var wallet: walletController.selectedWallet
     property var openedWallet: null
@@ -16,6 +19,11 @@ Popup {
     property real verticalOffset: 0
     property string deletedRequestId: ""
     property string repeatRequestId: ""
+    WalletContext {
+        id: repeatContext
+        wallet: root.wallet
+        owner: root.interactionContext.owner
+    }
     readonly property real centeredY: parent ? Math.max(20, (parent.height - height) / 2) : 0
     readonly property alias card: card
 
@@ -32,6 +40,7 @@ Popup {
     background: null
 
     function openRequest(requestId, fromY) {
+        repeatContext.invalidate()
         if (!wallet || !wallet.loadPaymentRequestDetail(requestId)) return false
         originY = fromY === undefined ? -1 : fromY
         card.resetFields()
@@ -41,8 +50,9 @@ Popup {
     }
     onAboutToShow: if (scroll.contentItem) scroll.contentItem.contentY = 0
     onClosed: {
-        if (wallet && deletedRequestId) {
-            for (const request of [wallet.currentPaymentRequest, wallet.detailPaymentRequest]) {
+        const originalWallet = openedWallet
+        if (originalWallet && originalWallet === wallet && deletedRequestId) {
+            for (const request of [originalWallet.currentPaymentRequest, originalWallet.detailPaymentRequest]) {
                 if (request && request.id === deletedRequestId) request.clear()
             }
         }
@@ -51,11 +61,13 @@ Popup {
         card.resetFields()
         if (repeatRequestId) {
             const requestId = repeatRequestId
-            const requestWallet = wallet
+            const requestWallet = originalWallet
+            const context = repeatContext.current
             repeatRequestId = ""
             // Let the Receive page finish clearing its previous creation draft.
             Qt.callLater(function() {
-                if (!requestWallet || requestWallet !== root.wallet) return
+                if (!repeatContext.isValid(context)) return
+                repeatContext.take()
                 requestWallet.usePaymentRequestAsTemplate(requestId)
                 walletController.requestOpenReceive()
             })
@@ -93,6 +105,7 @@ Popup {
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         PaymentRequestCard {
             id: card
+            interactionOwner: root
             visible: root.visible
             width: scroll.availableWidth
             wallet: root.wallet
@@ -100,6 +113,8 @@ Popup {
             modalView: true
             onCloseRequested: root.close()
             onRequestAgain: function(requestId) {
+                if (!root.contextIsValid()) return
+                repeatContext.begin()
                 root.repeatRequestId = requestId
                 root.close()
             }

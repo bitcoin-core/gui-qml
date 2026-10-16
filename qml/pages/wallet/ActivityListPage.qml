@@ -471,6 +471,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: activityRowMenu
         objectName: "activityRowContextMenu"
         backgroundColor: Theme.color.neutral2
@@ -542,6 +546,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: moreMenu
         objectName: "activityMoreMenu"
         parent: moreButton
@@ -680,6 +688,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: datePopup
         objectName: "activityDateFilterPopup"
         parent: dateFilterButton
@@ -837,6 +849,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: typePopup
         objectName: "activityTypeFilterPopup"
         parent: typeFilterButton
@@ -870,6 +886,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: amountPopup
         objectName: "activityAmountFilterPopup"
         parent: amountFilterButton
@@ -915,6 +935,10 @@ Page {
     }
 
     ContextMenu {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+        }
         id: clearFiltersMenu
         objectName: "activityClearFiltersMenu"
         parent: activeFiltersButton

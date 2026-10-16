@@ -46,21 +46,17 @@ AbstractButton {
     implicitHeight: 36
 
     onClicked: {
-        if (root.autoClose) root._closeEnclosingMenu()
-        root.triggered()
-    }
-
-    function _closeEnclosingMenu() {
         let p = root.parent
         while (p) {
             // qmllint disable missing-property
-            if (p["_contextMenuMarker"] === true && typeof p["_closeMenu"] === "function") {
-                p["_closeMenu"]()
+            if (p["_contextMenuMarker"] === true && typeof p["_triggerMenuAction"] === "function") {
+                p["_triggerMenuAction"](function() { root.triggered() }, root.autoClose)
                 return
             }
             // qmllint enable missing-property
             p = p.parent
         }
+        root.triggered()
     }
 
     HoverHandler {

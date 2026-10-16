@@ -8,8 +8,9 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+ContextPopup {
     id: root
+    interactionContext: WalletContext {}
 
     property string popupObjectName: ""
     property string titleText: qsTr("Enter wallet password")
@@ -81,16 +82,22 @@ Popup {
     }
 
     function submitPassphrase() {
+        if (busy || !root.contextIsValid()) return
         const passphrase = passphraseField.text
         clearPassphraseField()
         root.submitted(passphrase)
     }
 
+    onAboutToShow: {
+        busy = false
+        errorText = ""
+        clearPassphraseField()
+    }
     onOpened: {
         clearPassphraseField()
         passphraseField.forceActiveFocus()
     }
-    onAboutToHide: clearPassphraseField()
+    onAboutToHide: { clearPassphraseField(); busy = false; errorText = "" }
     onClosed: clearPassphraseField()
     Component.onDestruction: clearPassphraseField()
 

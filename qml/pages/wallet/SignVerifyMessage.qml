@@ -303,6 +303,11 @@ SettingsPage {
     }
 
     WalletPassphrasePopup {
+        interactionContext: WalletContext {
+            wallet: root.wallet
+            owner: root
+            target: signAddressModel.address + "\n" + signMessageText.text
+        }
         id: signPassphrasePopup
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)

@@ -5,8 +5,11 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
-Popup {
+ContextPopup {
     id: root
+    interactionContext: WalletContext {
+        wallet: root.wallet
+    }
     objectName: "coinSelectionPopup"
     readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
     property real verticalOffset: 0
@@ -76,7 +79,7 @@ Popup {
     }
     onAboutToShow: { editingCoins = wallet.coinsListModel; browser.fallbackTarget = wallet.sendTotalSatoshi; editingCoins.beginSelection(); wallet.scheduleFeeEstimates() }
     onClosed: { if (editingCoins) editingCoins.cancelSelection(); editingCoins = null }
-    onWalletChanged: if (opened) close()
+    onWalletChanged: close()
     contentItem: ColumnLayout {
         spacing: 20
         RowLayout {
@@ -90,7 +93,7 @@ Popup {
             }
             CloseButton { objectName: "coinSelectionCloseButton"; onClicked: root.close() }
         }
-        CoinsList { id: browser; objectName: "sendCoinsList"; Layout.fillWidth: true; Layout.fillHeight: true; wallet: root.wallet; coins: root.editingCoins }
+        CoinsList { id: browser; interactionOwner: root; objectName: "sendCoinsList"; Layout.fillWidth: true; Layout.fillHeight: true; wallet: root.wallet; coins: root.editingCoins }
         RowLayout {
             Layout.fillWidth: true; spacing: 12
             CoreText {
@@ -106,7 +109,7 @@ Popup {
                 //: Apply these selected coins to the transaction.
                 text: qsTr("Use selected inputs")
                 enabled: root.editingCoins && root.editingCoins.selectedCoinsCount > 0
-                onClicked: { root.editingCoins.applySelection(); root.close() }
+                onClicked: { if (!root.contextIsValid() || !root.editingCoins) return; root.editingCoins.applySelection(); root.close() }
             }
         }
     }
