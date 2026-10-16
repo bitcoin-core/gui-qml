@@ -44,12 +44,22 @@ Item {
     }
 
     signal sendRequested()
+    WalletContext {
+        id: approvalContext
+        wallet: root.wallet
+        owner: root
+        target: root.wallet ? root.wallet.currentTransaction : null
+        onInvalidated: root.reset()
+    }
+    property var approvalOpening: null
 
     Layout.fillWidth: true
     implicitHeight: actionsColumn.implicitHeight
 
     function reset() {
         approveTimer.stop()
+        approvalContext.invalidate()
+        approvalOpening = null
         reviewState = "initial"
         errorMessage = ""
     }
@@ -59,6 +69,8 @@ Item {
             return
         }
         approveTimer.stop()
+        approvalOpening = approvalContext.begin()
+        if (!approvalOpening) return
         reviewState = "waiting"
         errorMessage = ""
         approveTimer.start()
@@ -75,8 +87,8 @@ Item {
         id: approveTimer
         interval: 1
         onTriggered: {
-            if (root.wallet) {
-                root.wallet.approveExternalSignerTransaction()
+            if (approvalContext.isValid(root.approvalOpening)) {
+                root.approvalOpening.wallet.approveExternalSignerTransaction()
             }
         }
     }
@@ -85,16 +97,19 @@ Item {
         target: root.wallet
 
         function onExternalSignerApprovalSucceeded() {
+            if (!approvalContext.isValid(root.approvalOpening)) return
             root.reviewState = "signed"
             root.errorMessage = ""
         }
 
         function onExternalSignerApprovalPartiallySucceeded() {
+            if (!approvalContext.isValid(root.approvalOpening)) return
             root.reviewState = "partiallySigned"
             root.errorMessage = ""
         }
 
         function onExternalSignerApprovalFailed(message, signerNotFound) {
+            if (!approvalContext.isValid(root.approvalOpening)) return
             root.reviewState = "error"
             root.errorMessage = message
         }

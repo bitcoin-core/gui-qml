@@ -8,8 +8,9 @@ import QtQuick.Layouts 1.15
 
 import "../../controls"
 
-Popup {
+ContextPopup {
     id: root
+    interactionContext: WalletContext {}
     objectName: "speedUpCompletePopup"
 
     property string txid: ""

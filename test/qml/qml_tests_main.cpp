@@ -1155,7 +1155,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
-    Q_PROPERTY(QObject* currentTransaction READ currentTransaction CONSTANT)
+    Q_PROPERTY(QObject* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(QVariantMap currentTransactionFlow MEMBER m_current_transaction_flow NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionIsImportedPsbt MEMBER m_current_transaction_is_imported_psbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanSend MEMBER m_current_transaction_can_send NOTIFY currentTransactionChanged)
@@ -1397,7 +1397,12 @@ public:
     void setBumpModel(QObject* model) { m_bump_model = model; }
     void setRecipients(QObject* model) { m_recipients = model; }
     void setCoinsListModel(QObject* model) { m_coins_list_model = model; }
-    void setCurrentTransaction(QObject* transaction) { m_current_transaction = transaction; }
+    Q_INVOKABLE void setCurrentTransaction(QObject* transaction)
+    {
+        if (m_current_transaction == transaction) return;
+        m_current_transaction = transaction;
+        Q_EMIT currentTransactionChanged();
+    }
     void setCurrentPaymentRequest(QObject* request) { m_current_payment_request = request; }
     Q_INVOKABLE void loadPaymentRequest(const QString& request_id)
     {
@@ -4171,6 +4176,7 @@ public Q_SLOTS:
         QQmlEngine::setObjectOwnership(&peer_details_model, QQmlEngine::CppOwnership);
         peer_list_model_proxy.setPeerDetailsForTest(&peer_details_model);
         static MockWalletQmlModelTransaction wallet_transaction;
+        static MockWalletQmlModelTransaction replacement_wallet_transaction;
         static MockPaymentRequest payment_request;
         static MockSendRecipient send_recipient;
         static MockRecipientsModel recipients_model;
@@ -4243,6 +4249,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("walletListModel"), &wallet_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletTransaction"), &wallet_transaction);
+        engine->rootContext()->setContextProperty(QStringLiteral("testReplacementWalletTransaction"), &replacement_wallet_transaction);
         engine->rootContext()->setContextProperty(QStringLiteral("testPaymentRequest"), &payment_request);
         engine->rootContext()->setContextProperty(QStringLiteral("testTransactionActivityModel"), &transaction_activity_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testSendRecipient"), &send_recipient);
