@@ -317,4 +317,21 @@ TestCase {
         compare(flow.importingWallet, false)
         compare(findChild(flow, "importWalletSuccessPage"), null)
     }
+    function test_completion_cannot_navigate_after_wallet_change_and_back() {
+        walletController.setSelectedWalletObject(testWalletModel)
+        const flow = createFlow()
+        flow.rememberCompletedWallet(testWalletModel)
+        let canceled = false
+        let navigated = false
+        flow.finished.connect(function(openActivity) {
+            if (openActivity) navigated = true
+            else canceled = true
+        })
+        walletController.setSelectedWalletObject(null)
+        verify(canceled)
+        walletController.setSelectedWalletObject(testWalletModel)
+        flow.goToCompletedWallet()
+        verify(!navigated)
+    }
+
 }

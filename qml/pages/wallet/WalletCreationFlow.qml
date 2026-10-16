@@ -21,6 +21,23 @@ Item {
     property bool completedWatchOnly: false
     property bool completedEncrypted: false
     property bool readyPending: false
+    property var completedWallet: null
+    WalletContext {
+        id: completionContext
+        wallet: root.completedWallet
+        owner: root
+        onInvalidated: root.finished(false)
+    }
+    function rememberCompletedWallet(wallet) {
+        completedWallet = wallet
+        completionContext.begin()
+    }
+    function goToCompletedWallet() {
+        const wallet = completionContext.take()
+        if (!wallet) return
+        walletController.setSelectedWallet(wallet.name)
+        root.finished(true)
+    }
     readonly property alias currentItem: pages.currentItem
     readonly property alias depth: pages.depth
     readonly property alias busy: pages.busy
@@ -98,9 +115,10 @@ Item {
 
     Connections {
         target: walletController
-        function onWalletCreateSucceeded() {
+        function onWalletCreateSucceeded(wallet) {
             if (!root.creatingWallet) return
             root.creatingWallet = false
+            root.rememberCompletedWallet(wallet || walletController.selectedWallet)
             if (root.currentItem && root.currentItem.clearSecrets)
                 root.currentItem.clearSecrets()
             root.showReady()
@@ -118,9 +136,10 @@ Item {
                 root.showImportResult()
             }
         }
-        function onWalletImportSucceeded() {
+        function onWalletImportSucceeded(wallet) {
             if (!root.importingWallet) return
             root.importingWallet = false
+            root.rememberCompletedWallet(wallet || walletController.selectedWallet)
             root.pendingImportResult = "success"
             root.showImportResult()
         }
@@ -232,7 +251,8 @@ Item {
     Component {
         id: readyPage
         WalletCreationReadyPage {
-            onDone: root.finished(true)
+            wallet: root.completedWallet
+            onDone: root.goToCompletedWallet()
         }
     }
 
@@ -246,7 +266,7 @@ Item {
     Component {
         id: importSuccess
         WalletImportCompletePage {
-            onDone: root.finished(true)
+            onDone: root.goToCompletedWallet()
         }
     }
     Component {
@@ -254,13 +274,13 @@ Item {
         ExternalSignerWalletForm {
             modalView: root.modalView
             onCancel: root.finished(false)
-            onCreated: root.push(externalConfirm, {}, StackView.Immediate)
+            onCreated: { root.rememberCompletedWallet(walletController.selectedWallet); root.push(externalConfirm, {}, StackView.Immediate) }
         }
     }
     Component {
         id: externalConfirm
         WalletCreationExternalReadyPage {
-            onDone: root.finished(true)
+            onDone: root.goToCompletedWallet()
         }
     }
 }
