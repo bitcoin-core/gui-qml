@@ -11,6 +11,7 @@ import "../pages/wallet"
 
 Pane {
     id: root
+    property var interactionOwner: root
     objectName: "paymentRequestCard"
     property var wallet
     property var request
@@ -160,17 +161,23 @@ Pane {
         clipboard.setText(request.qrPayload)
     }
 
+    WalletContext { id: qrContext; wallet: root.wallet; owner: root.interactionOwner; target: root.request ? root.request.qrPayload : "" }
+
     function captureQR(callback) {
         if (!sharing || !request.qrPayload) return false
         if (qrImage.status !== Image.Ready) {
             actionErrorText = qsTr("The QR code is not ready. Please try again.")
             return false
         }
+        const context = qrContext.begin()
         const requestId = request.id
         const payload = request.qrPayload
         return qrPanel.grabToImage(function(result) {
-            if (root.sharing && root.request.id === requestId && root.request.qrPayload === payload)
+            if (qrContext.isValid(context) && root.sharing && root.request
+                    && root.request.id === requestId && root.request.qrPayload === payload) {
+                qrContext.take()
                 callback(result)
+            }
         }, Qt.size(736, 736))
     }
     function copyQR() {
@@ -329,7 +336,7 @@ Pane {
                         visible: !root.paymentReceived
                         enabled: root.sharing
                         text: qsTr("Save QR code")
-                        onTriggered: if (root.sharing) saveDialog.open()
+                        onTriggered: if (root.sharing) saveDialog.openForWallet()
                     }
                     ContextMenuDivider { visible: !root.paymentReceived }
                     ContextMenuButton {
@@ -418,7 +425,7 @@ Pane {
                         objectName: "requestPaymentQRContextSave"
                         text: qsTr("Save QR code")
                         enabled: root.sharing
-                        onTriggered: if (root.sharing) saveDialog.open()
+                        onTriggered: if (root.sharing) saveDialog.openForWallet()
                     }
                 }
             }
@@ -484,7 +491,7 @@ Pane {
                         titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
                         valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
                         minimumRowHeight: 56
-                        value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
+                        value: root.request && root.wallet ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                         showDivider: true
                         dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
                     }
@@ -694,12 +701,15 @@ Pane {
         }
 
     }
-    AppFileDialog {
+    WalletFileDialog {
+        wallet: root.wallet
+        owner: root.interactionOwner
+        operationTarget: root.request ? root.request.id + ":" + root.request.qrPayload : ""
         id: saveDialog
         objectName: "requestPaymentSaveQRDialog"
         fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("PNG files (*.png)")]
         defaultSuffix: "png"
-        onAccepted: root.saveQRToFile(selectedFile)
+        onAcceptedForWallet: function(wallet, file) { root.saveQRToFile(file) }
     }
 }

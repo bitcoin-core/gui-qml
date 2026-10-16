@@ -9,6 +9,8 @@
 #include <QGuiApplication>
 #include <QWindow>
 
+#include <memory>
+
 QmlFileDialog::QmlFileDialog(QObject* parent)
     : QObject(parent)
 {
@@ -80,17 +82,26 @@ QFileDialog* QmlFileDialog::dialog()
     if (m_dialog) return m_dialog;
 
     m_dialog = new QFileDialog(nullptr);
-    connect(m_dialog, &QFileDialog::accepted, this, [this] {
-        setSelectedFile(m_dialog->selectedUrls().value(0));
-        Q_EMIT accepted();
+    auto* opening = m_dialog.data();
+    const auto accepted = std::make_shared<bool>(false);
+    connect(opening, &QFileDialog::accepted, this, [this, opening, accepted] {
+        if (m_dialog != opening || *accepted) return;
+        *accepted = true;
+        setSelectedFile(opening->selectedUrls().value(0));
+        if (m_dialog == opening) Q_EMIT this->accepted();
     });
-    connect(m_dialog, &QFileDialog::rejected, this, [this] { Q_EMIT rejected(); });
-    connect(m_dialog, &QFileDialog::finished, this, [this] { Q_EMIT visibleChanged(); });
+    connect(opening, &QFileDialog::rejected, this, [this, opening] {
+        if (m_dialog == opening) Q_EMIT rejected();
+    });
+    connect(opening, &QFileDialog::finished, this, [this, opening] {
+        if (m_dialog == opening) Q_EMIT visibleChanged();
+    });
     return m_dialog;
 }
 
 void QmlFileDialog::open()
 {
+    close();
     QFileDialog* dlg = dialog();
     dlg->setWindowTitle(m_title);
     dlg->setNameFilters(m_name_filters);
@@ -142,7 +153,12 @@ void QmlFileDialog::open()
 
 void QmlFileDialog::close()
 {
-    if (m_dialog) {
-        m_dialog->close();
-    }
+    if (!m_dialog) return;
+    auto* opening = m_dialog.data();
+    m_dialog = nullptr;
+    opening->disconnect(this);
+    opening->reject();
+    opening->deleteLater();
+    Q_EMIT visibleChanged();
+    Q_EMIT rejected();
 }

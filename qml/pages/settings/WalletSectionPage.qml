@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
@@ -61,20 +62,23 @@ SettingsPage {
             if (!root.wallet.backupWallet(automatedPath)) root.errorText = root.wallet.settingsError
             return
         }
-        backupDialog.open()
+        backupDialog.openForWallet()
     }
 
-    AppFileDialog {
+    WalletFileDialog {
         id: backupDialog
+        objectName: "walletBackupDialog"
+        wallet: root.wallet
+        owner: root
         fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
         currentFile: root.backupDefaultFileUrl()
         defaultSuffix: "bak"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
-        onAccepted: {
-            if (backupDialog.selectedFile.toString().length === 0) return
-            const normalized = root.resolvedBackupPath(backupDialog.selectedFile.toString())
-            if (!root.wallet.backupWallet(normalized)) root.errorText = root.wallet.settingsError
+        onAcceptedForWallet: function(wallet, file) {
+            const path = walletController.normalizeWalletPath(file.toString())
+            if (!path.length) return
+            if (!wallet.backupWallet(path)) root.errorText = wallet.settingsError
             else root.errorText = ""
         }
     }

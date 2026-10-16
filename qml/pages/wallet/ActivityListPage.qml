@@ -163,13 +163,15 @@ Page {
         property string activityGrouping: "month"
         property string activityDisplayDensity: "comfortable"
     }
-    AppFileDialog {
+    WalletFileDialog {
         id: exportDialog
+        wallet: root.wallet
+        owner: root
         objectName: "activityExportDialog"
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("Comma separated file (*.csv)")]
-        onAccepted: root.exportActivity(exportDialog.selectedFile.toString())
+        onAcceptedForWallet: function(wallet, file) { root.exportActivity(file.toString()) }
     }
     TextField {
         id: automationExportPathField
@@ -587,7 +589,7 @@ Page {
                     const path = automationExportPathField.text
                     automationExportPathField.text = ""
                     root.exportActivity(path)
-                } else exportDialog.open()
+                } else exportDialog.openForWallet()
             }
         }
     }
