@@ -658,6 +658,7 @@ private:
 private Q_SLOTS:
     void initTestCase();
     void cleanupTestCase();
+    void signingRejectsReplacedReviewBeforeUnlocking();
     void feeTargetIndex_mapsStandardTargets();
     void customFeeRateUpdatesEstimatedTarget();
     void maximumKeepsAmountWhenValidAddressCannotBeEstimated() {
@@ -3091,6 +3092,24 @@ void WalletQmlModelTests::saveReviewOnlyPsbt_preservesOriginalWithoutDerivationM
     QCOMPARE(saved_file.readAll(), original);
 }
 
+void WalletQmlModelTests::signingRejectsReplacedReviewBeforeUnlocking()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto path = WritePsbt(MakeReviewPsbt(), directory, QStringLiteral("review.psbt"));
+    model->importPsbtFromFile(path);
+    QPointer<WalletQmlModelTransaction> original = model->currentTransaction();
+    QVERIFY(original);
+    model->importPsbtFromFile(path);
+    QVERIFY(model->currentTransaction());
+    QVERIFY(original != model->currentTransaction());
+    wallet->fill_psbt_sign_args.clear();
+    QVERIFY(!model->sendReviewedTransaction(original, QStringLiteral("secret")));
+    QCOMPARE(model->transactionError(), QStringLiteral("This transaction review is no longer available."));
+    QVERIFY(wallet->fill_psbt_sign_args.empty());
+}
+
 void WalletQmlModelTests::discardCurrentTransaction_clearsReviewState()
 {
     auto [wallet, model] = MakePasswordWalletModel();
@@ -3253,7 +3272,7 @@ void WalletQmlModelTests::sendImportedPsbtWithPassphraseSignsOnceAndRelocks()
     QCOMPARE(wallet->unlock_calls, 0);
     QCOMPARE(std::count(wallet->fill_psbt_sign_args.begin(), wallet->fill_psbt_sign_args.end(), true), 0);
 
-    QVERIFY(model->sendTransactionWithPassphrase(QStringLiteral("secret")));
+    QVERIFY(model->sendReviewedTransaction(model->currentTransaction(), QStringLiteral("secret")));
     QCOMPARE(wallet->unlock_calls, 1);
     QCOMPARE(wallet->lock_calls, 1);
     QVERIFY(wallet->locked);

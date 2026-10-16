@@ -685,6 +685,8 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
 {
     if (m_stopping) return;
     m_stopping = true;
+    m_unload_requested->store(true);
+    Q_EMIT availableChanged();
     m_receive_payment_poll_timer.stop();
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
@@ -1052,7 +1054,7 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
 bool WalletQmlModel::backupWallet(const QString& path)
 {
     clearSettingsError();
-    if (!m_wallet) {
+    if (!available()) {
         setSettingsError(tr("No wallet is selected."));
         return false;
     }
@@ -2486,6 +2488,15 @@ bool WalletQmlModel::sendTransactionWithPassphrase(const QString& passphrase)
     return sendTransactionInternal(std::optional<SecureString>{QmlUtil::SecureStringFromQString(passphrase)});
 }
 
+bool WalletQmlModel::sendReviewedTransaction(WalletQmlModelTransaction* transaction, const QString& passphrase)
+{
+    if (!available() || !transaction || transaction != m_current_transaction) {
+        setTransactionStatus(tr("This transaction review is no longer available."));
+        return false;
+    }
+    return sendTransactionWithPassphrase(passphrase);
+}
+
 bool WalletQmlModel::broadcastCurrentTransaction()
 {
     clearTransactionStatus();
@@ -3192,9 +3203,13 @@ void WalletQmlModel::subscribeToWalletSignals()
             pending->fetch_sub(1);
         }, Qt::QueuedConnection);
     });
-    m_handler_unload = handleUnload([guard, bridge] {
+    m_handler_unload = handleUnload([guard, bridge, unloaded = m_unload_requested] {
+        unloaded->store(true);
         QMetaObject::invokeMethod(bridge.get(), [guard] {
-            if (guard && !guard->m_stopping) Q_EMIT guard->walletUnloaded();
+            if (guard && !guard->m_stopping) {
+                Q_EMIT guard->availableChanged();
+                Q_EMIT guard->walletUnloaded();
+            }
         }, Qt::QueuedConnection);
     });
 }

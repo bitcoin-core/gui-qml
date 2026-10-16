@@ -80,6 +80,9 @@
         <file>controls/AppFolderDialog.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/CloseButton.qml</file>
+        <file>controls/InteractionContext.qml</file>
+        <file>controls/ContextPopup.qml</file>
+        <file>controls/WalletContext.qml</file>
         <file>controls/ContextMenu.qml</file>
         <file>controls/ContextMenuButton.qml</file>
         <file>controls/ContextMenuDivider.qml</file>

@@ -2,6 +2,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQmlExpression>
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
@@ -1399,7 +1402,22 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
 
+    auto* original = controller.selectedWallet();
+    QVERIFY(original->available());
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("walletController", &controller);
+    QQmlExpression lookup(engine.rootContext(), nullptr,
+                         QStringLiteral("walletController.walletForName('alpha_wallet')"));
+    QCOMPARE(lookup.evaluate().value<QObject*>(), original);
+    QVERIFY(!lookup.hasError());
+    QCOMPARE(QQmlEngine::objectOwnership(original), QQmlEngine::CppOwnership);
+    engine.collectGarbage();
+    QCOMPARE(controller.selectedWallet(), original);
+    controller.setSelectedWallet("alpha_wallet");
+    QCOMPARE(selected_spy.count(), 0);
     alpha_state.notifyUnload();
+    // The backend unload is visible before its queued GUI notification.
+    QVERIFY(!original->available());
 
     QTRY_COMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
