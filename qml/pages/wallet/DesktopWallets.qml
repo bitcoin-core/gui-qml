@@ -157,6 +157,9 @@ Page {
         function onOpenReceiveRequested() {
             receiveTabButton.checked = true
         }
+        function onWalletOpened() {
+            root.openActivity()
+        }
         function onWalletLoadStateChanged(name, state, error) {
             if (state === WalletListModel.LoadError) {
                 loadErrorPopup.message = error

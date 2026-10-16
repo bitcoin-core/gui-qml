@@ -124,6 +124,8 @@ Q_SIGNALS:
                            qint64 balance,
                            int keySchemeKind);
     void walletLoadSucceeded();
+    // A newly opened wallet has been selected, including loads through RPC.
+    void walletOpened();
     void walletImportSucceeded(WalletQmlModel* wallet);
     void walletCreateSucceeded(WalletQmlModel* wallet);
     void walletMigrationInProgressChanged();

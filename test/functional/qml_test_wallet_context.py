@@ -29,13 +29,13 @@ def run_tests():
                      for name in ("context_A", "context_B")}
         rpc_call(port, "unloadwallet", ["context_B", False])
         gui.wait_for_property("walletBadge", "text", "context_A", timeout_ms=10000)
-        open_wallet_settings(gui)
 
         backup = Path(harness.tmpdir) / "existing-A.bak"
         rpc_call(port, "backupwallet", [str(backup)], wallet="context_A")
         original = backup.read_bytes()
 
         def start_backup():
+            open_wallet_settings(gui)
             gui.invoke("walletSettingsPage", "startBackup")
             gui.wait_for_property("walletBackupDialog", "visible", True, timeout_ms=10000)
 
@@ -47,6 +47,7 @@ def run_tests():
         start_backup()
         rpc_call(port, "loadwallet", ["context_B", False])
         gui.wait_for_property("walletBadge", "text", "context_B", timeout_ms=10000)
+        gui.wait_for_property("activityTabButton", "checked", True, timeout_ms=10000)
         gui.wait_for_property("walletBackupDialog", "visible", False, timeout_ms=10000)
         accept_callback(backup)
         assert backup.read_bytes() == original, "A's existing backup was modified"
@@ -65,6 +66,7 @@ def run_tests():
         gui.wait_for_property("walletBackupDialog", "visible", False, timeout_ms=10000)
         rpc_call(port, "loadwallet", ["context_A", False])
         gui.wait_for_property("walletBadge", "text", "context_A", timeout_ms=10000)
+        gui.wait_for_property("activityTabButton", "checked", True, timeout_ms=10000)
         accept_callback(backup)
         assert backup.read_bytes() == original, "Reloading A revived a canceled backup"
         print("PASS: unloading/reloading A leaves the existing backup unchanged")

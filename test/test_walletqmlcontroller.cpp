@@ -352,6 +352,7 @@ private Q_SLOTS:
     void initializedControllerClosesNonSelectedWalletWithoutChangingSelection();
     void reopeningRetiringWalletReportsLoadErrorAndSucceedsAfterDrain();
     void initializedControllerEmitsWalletLoadStateChanged();
+    void externalWalletLoadEmitsOpenedOnceAfterSelection();
     void initializedControllerHandlesExternalWalletUnload();
     void initializedControllerUnloadWalletsClearsSelectionAndOpenWallets();
     void initializedControllerEmitsLoadingThenLoadErrorOnFailedLoad();
@@ -1342,9 +1343,11 @@ void WalletQmlControllerTests::reopeningRetiringWalletReportsLoadErrorAndSucceed
     QTRY_COMPARE(retired.size(), 1);
     QVERIFY(executor->isDrained());
     QSignalSpy loaded{&controller, &WalletQmlController::walletLoadSucceeded};
+    QSignalSpy opened{&controller, &WalletQmlController::walletOpened};
     controller.setSelectedWallet("alpha_wallet", "sqlite");
     QCOMPARE(list.data(row, WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Loading));
     QTRY_COMPARE(loaded.size(), 1);
+    QCOMPARE(opened.size(), 1);
     QCOMPARE(loader.load_wallet_calls, 1);
     QVERIFY(controller.isWalletOpen("alpha_wallet"));
     QCOMPARE(list.data(row, WalletListModel::LoadStateRole).toInt(), static_cast<int>(WalletListModel::LoadState::Open));
@@ -1378,6 +1381,42 @@ void WalletQmlControllerTests::initializedControllerEmitsWalletLoadStateChanged(
     QCOMPARE(load_state_spy.at(1).at(0).toString(), QString{"beta_wallet"});
     QCOMPARE(load_state_spy.at(1).at(1).toBool(), true);
     QCOMPARE(loader.list_wallet_dir_calls, 0);
+}
+
+void WalletQmlControllerTests::externalWalletLoadEmitsOpenedOnceAfterSelection()
+{
+    FakeWallet::State alpha_state;
+    FakeWallet::State beta_state;
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.get_wallets_fn = [&]() {
+        std::vector<std::unique_ptr<interfaces::Wallet>> wallets;
+        wallets.emplace_back(std::make_unique<FakeWallet>("alpha_wallet", &alpha_state));
+        return wallets;
+    };
+    ConfigureExpectedControllerInitialization(node, loader);
+
+    DrainingWalletController controller(node);
+    controller.initialize();
+    QVERIFY(loader.captured_load_wallet_fn);
+    QSignalSpy opened{&controller, &WalletQmlController::walletOpened};
+    connect(&controller, &WalletQmlController::walletOpened, &controller, [&]() {
+        QCOMPARE(controller.selectedWallet()->name(), QString{"beta_wallet"});
+        QVERIFY(controller.isWalletLoaded());
+        QVERIFY(!controller.noWalletsFound());
+    });
+
+    loader.captured_load_wallet_fn(std::make_unique<FakeWallet>("beta_wallet", &beta_state));
+    QTRY_COMPARE(opened.size(), 1);
+
+    // Selecting an already open wallet and duplicate backend notifications
+    // must not turn into another closed-to-open navigation event.
+    controller.setSelectedWallet("alpha_wallet");
+    controller.setSelectedWallet("beta_wallet");
+    loader.captured_load_wallet_fn(std::make_unique<FakeWallet>("beta_wallet", nullptr));
+    QCoreApplication::processEvents();
+    QCOMPARE(opened.size(), 1);
 }
 
 void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload()

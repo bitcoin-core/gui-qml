@@ -59,6 +59,29 @@ TestCase {
         nodeModel.blockTipHeight = 0
     }
 
+    function test_wallet_opened_switches_to_activity_data() {
+        return [
+            { tag: "activity", tab: "activityTabButton" },
+            { tag: "send", tab: "sendTabButton" },
+            { tag: "receive", tab: "receiveTabButton" },
+            { tag: "node", tab: "blockClockTabButton" },
+            { tag: "peers", tab: "peersTabButton" },
+            { tag: "settings", tab: "desktopWalletSettingsTabButton" }
+        ]
+    }
+
+    function test_wallet_opened_switches_to_activity(data) {
+        const page = createDesktopWallets()
+        const tab = findChild(page, data.tab)
+        verify(tab !== null)
+        tab.checked = true
+        compare(tab.checked, true)
+
+        walletController.walletOpened()
+
+        compare(findChild(page, "activityTabButton").checked, true)
+    }
+
     function test_leaving_peers_tab_stops_refresh() {
         const page = createDesktopWallets()
         const peers = findChild(page, "peersTabButton")

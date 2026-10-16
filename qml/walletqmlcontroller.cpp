@@ -505,6 +505,7 @@ WalletQmlModel* WalletQmlController::addOrSelectWalletModel(std::unique_ptr<inte
     selectWalletModel(wallet_model);
     setWalletLoaded(true);
     setNoWalletsFound(false);
+    Q_EMIT walletOpened();
     return wallet_model;
 }
 

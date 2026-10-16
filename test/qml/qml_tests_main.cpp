@@ -2053,6 +2053,7 @@ Q_SIGNALS:
     void openWalletSettingsRequested();
     void walletCreateSucceeded();
     void walletLoadSucceeded();
+    void walletOpened();
     void walletImportSucceeded();
     void walletMigrationRequired(const QString& path);
     void walletMigrationPassphraseRequired(const QString& path);
