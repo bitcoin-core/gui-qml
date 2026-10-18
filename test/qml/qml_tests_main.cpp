@@ -5,6 +5,7 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QEvent>
 #include <QEventLoop>
@@ -1376,7 +1377,7 @@ public:
     int backupWalletCalls() const { return m_backup_wallet_calls; }
     Q_INVOKABLE QString estimatedFeeForTarget(const int target) const
     {
-        const QString estimate = m_fee_estimates.value(target);
+        QString estimate = m_fee_estimates.value(target);
         if (!estimate.isEmpty()) {
             return estimate;
         }
@@ -4119,6 +4120,11 @@ public Q_SLOTS:
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }
 
+    void processDeferredDeletes()
+    {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
     void cleanupTestCase()
     {
         QEventLoop loop;
@@ -4130,6 +4136,7 @@ public Q_SLOTS:
 
     void qmlEngineAvailable(QQmlEngine* engine)
     {
+        engine->rootContext()->setContextProperty(QStringLiteral("testEventLoop"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;

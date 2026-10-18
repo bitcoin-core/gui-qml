@@ -175,6 +175,9 @@ TestCase {
 
         review.beginApproval()
         review.destroy()
+        // destroy() queues deletion. Process it before wait() can dispatch the approval timer.
+        testEventLoop.processDeferredDeletes()
+        verify(!Qt.isQtObject(review))
         wait(50)
 
         compare(wallet.approveCalls, 0)
