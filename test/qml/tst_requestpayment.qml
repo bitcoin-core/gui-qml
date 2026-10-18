@@ -638,6 +638,7 @@ TestCase {
         tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
         findChild(card, "requestPaymentAgainMenuButton").clicked()
         tryCompare(page.requestModal, "visible", false)
+        tryCompare(testWalletModel, "lastTemplateRequestId", requestId)
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
 
         compare(testPaymentRequest.id, "")
