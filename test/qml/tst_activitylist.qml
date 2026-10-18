@@ -661,6 +661,7 @@ TestCase {
         compare(findRow(page, "consolidation").displayLabel, "Consolidation")
         compare(findRow(page, "split").displayLabel, "Split")
         const mixed = findRow(page, "mixed")
+        tryVerify(function() { return findChild(mixed, "activityAction_receipt") !== null })
         const receipt = findChild(mixed, "activityAction_receipt")
         compare(findChild(receipt, "activityActionLabel").visible, false)
         verify(findChild(receipt, "activityActionRequestBadge").visible)
@@ -887,6 +888,10 @@ TestCase {
     function test_scrolls_from_page_side_margins(data) {
         const page = createPage({width: data.pageWidth, height: 600})
         const list = findChild(page, "activityListView")
+        // Finish laying out the small fixture before sending input to the list.
+        list.cacheBuffer = list.contentHeight
+        tryVerify(function() { return list.itemAtIndex(list.count - 1) !== null })
+        list.forceLayout()
         const row = findRow(page, "receive")
         const inset = row.mapToItem(page, 0, 0).x
         verify(inset > 0)
@@ -897,10 +902,12 @@ TestCase {
         const marginOffset = Math.min(2, inset / 4)
         const x = data.rightSide ? page.width - inset + marginOffset : inset - marginOffset
         const y = list.mapToItem(page, 0, list.height / 2).y
+        tryCompare(list, "moving", false)
         const start = list.contentY
         mouseMove(page, x, y)
         mouseWheel(page, x, y, 0, -120, Qt.NoButton, Qt.NoModifier, 100)
         tryVerify(function() { return list.contentY > start })
+        tryCompare(list, "moving", false)
         // The margin scrolls the list without becoming a transaction link.
         mouseClick(page, x, y)
         compare(page.depth, 1)
