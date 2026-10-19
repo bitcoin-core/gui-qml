@@ -1950,6 +1950,7 @@ public:
     }
     Q_INVOKABLE void reset()
     {
+        setOpenWallets({});
         m_last_selected_wallet_name.clear();
         m_last_closed_wallet_name.clear();
         m_close_wallet_calls = 0;

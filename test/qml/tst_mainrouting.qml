@@ -56,6 +56,8 @@ TestCase {
         walletController.setInitialized(initialized === undefined ? true : initialized)
         walletController.setWalletLoaded(!no_wallets_found)
         walletController.setNoWalletsFound(no_wallets_found || false)
+        walletController.setOpenWallets(no_wallets_found ? [] : [testWalletModel])
+        walletController.setSelectedWalletObject(testWalletModel)
         walletListModel.setWalletDirLoaded(wallet_dir_loaded === undefined ? true : wallet_dir_loaded)
         windowUnderTest = mainWindowComponent.createObject(null)
         verify(windowUnderTest !== null)
@@ -178,6 +180,7 @@ TestCase {
             "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8"
         findChild(form, "createWalletFormCreateButton").clicked()
         tryVerify(function() { return findChild(wizard, "walletCreationReadyPage") !== null })
+        walletController.setOpenWallets([testWalletModel])
         walletController.setWalletLoaded(true)
         findChild(wizard, "createWalletReadyDoneButton").clicked()
 

@@ -73,12 +73,23 @@ PageStack {
 
     function openPaymentRequestImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPaymentRequestImport)
+        root.openWhileShown(sendPage.openPaymentRequestImport)
     }
 
     function openPsbtFileImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPsbtFileImport)
+        root.openWhileShown(sendPage.openPsbtFileImport)
+    }
+
+    // Counts how often this page was hidden. A deferred open is dropped if
+    // the page was hidden in between, even if it is shown again by then.
+    property int hiddenCount: 0
+
+    function openWhileShown(open) {
+        const hiddenCount = root.hiddenCount
+        Qt.callLater(function() {
+            if (root.visible && hiddenCount === root.hiddenCount) open()
+        })
     }
 
     function clearPrepareTransactionError() {
@@ -126,8 +137,12 @@ PageStack {
     // Re-check the clipboard whenever the Send tab becomes visible so the
     // banner appears even if the URI was copied before navigating here.
     onVisibleChanged: {
-        if (visible) sendPage.checkClipboard()
-        else reviewSweepAlert.close()
+        if (visible) {
+            sendPage.checkClipboard()
+        } else {
+            root.hiddenCount++
+            reviewSweepAlert.close()
+        }
     }
     onWalletChanged: {
         reviewSweepAlert.close()
@@ -280,8 +295,19 @@ PageStack {
 
             property WalletQmlModel reviewWallet: null
             property bool importedReview: false
+            // Set once the payment is sent, until the form is cleared. The
+            // popup can also close without Done, such as when the page is
+            // hidden, and the sent payment must not stay in the form.
+            property bool sent: false
+
+            function clearSentForm() {
+                if (!sent) return
+                sent = false
+                if (reviewWallet === root.wallet) root.resetSendForm()
+            }
 
             onClosed: {
+                clearSentForm()
                 const wallet = reviewWallet
                 const wasImported = importedReview
                 reviewStack.pop(null, StackView.Immediate)
@@ -317,6 +343,7 @@ PageStack {
                         wallet: transactionReviewPopup.reviewWallet
                         onBack: transactionReviewPopup.close()
                         onTransactionSent: (txid) => {
+                            transactionReviewPopup.sent = true
                             reviewStack.push(sendCompletePage, {
                                 "txid": txid,
                                 "targetBlocks": !transactionReviewPopup.importedReview && wallet && !wallet.customFeeEnabled
@@ -330,11 +357,11 @@ PageStack {
                     id: sendCompletePage
                     SendComplete {
                         onDone: {
-                            root.resetSendForm()
+                            transactionReviewPopup.clearSentForm()
                             transactionReviewPopup.close()
                         }
                         onViewNewTransaction: (txid) => {
-                            root.resetSendForm()
+                            transactionReviewPopup.clearSentForm()
                             transactionReviewPopup.close()
                             root.viewTransactionInActivity(txid)
                         }
@@ -345,6 +372,7 @@ PageStack {
 
         AppFileDialog {
             id: psbtOpenDialog
+            objectName: "sendPsbtOpenDialog"
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]

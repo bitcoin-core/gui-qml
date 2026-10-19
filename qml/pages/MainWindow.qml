@@ -446,6 +446,9 @@ ApplicationWindow {
             Component {
                 id: settingsPage
                 SettingsView {
+                    wallet: typeof walletController !== "undefined" && walletController.isWalletLoaded
+                        ? walletController.selectedWallet : null
+                    activeWalletName: wallet ? wallet.name : ""
                     onDoneClicked: nodeStack.pop()
                 }
             }

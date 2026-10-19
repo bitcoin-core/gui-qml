@@ -224,6 +224,8 @@
         <file>pages/wallet/WalletImportErrorPage.qml</file>
         <file>pages/wallet/WalletImportCompletePage.qml</file>
         <file>pages/wallet/DesktopWallets.qml</file>
+        <file>pages/wallet/WalletSettingsStack.qml</file>
+        <file>pages/wallet/WalletView.qml</file>
         <file>pages/wallet/ReceivePage.qml</file>
         <file>pages/wallet/SendTransactionReview.qml</file>
         <file>pages/wallet/SpeedUpOverlay.qml</file>

@@ -38,6 +38,7 @@ TestCase {
         walletController.initialized = true
         walletController.isWalletLoaded = true
         walletController.noWalletsFound = false
+        walletController.setOpenWallets([testWalletModel])
         walletController.setSelectedWalletObject(testWalletModel)
         walletListModel.reset()
         nodeModel.numPeers = 0
@@ -223,14 +224,17 @@ TestCase {
     function test_receive_view_addresses_opens_address_settings() {
         const page = createDesktopWallets()
         findChild(page, "receiveTabButton").clicked()
-        findChild(page, "receiveMoreButton").clicked()
-        tryCompare(findChild(page, "receiveMoreMenu"), "opened", true)
-        const historyButton = findChild(page, "requestPaymentHistoryButton")
+        const view = page.activeView
+        findChild(view, "receiveMoreButton").clicked()
+        tryCompare(findChild(view, "receiveMoreMenu"), "opened", true)
+        const historyButton = findChild(view, "requestPaymentHistoryButton")
         verify(historyButton !== null)
         historyButton.clicked()
         compare(findChild(page, "desktopWalletSettingsTabButton").checked, true)
-        tryCompare(findChild(page, "settingsPageContainer"), "depth", 2)
-        compare(findChild(page, "settingsPageContainer").currentItem.objectName, "addressListPage")
+        const walletSettings = page.activeView.settingsStack
+        tryCompare(walletSettings, "parent", page.walletSettingsHost)
+        tryCompare(walletSettings, "depth", 2)
+        compare(walletSettings.currentItem.objectName, "addressListPage")
     }
     function test_addresses_settings_preserves_details_popup() {
         const page = createDesktopWallets()
@@ -247,11 +251,14 @@ TestCase {
         verify(settingsContainer !== null)
         tryCompare(settingsPage, "selectedSectionId", "wallet")
         tryCompare(settingsContainer, "currentSectionId", "wallet")
-        tryCompare(settingsContainer, "depth", 2)
-        compare(settingsContainer.currentItem.objectName, "addressListPage")
-        verify(findChild(page, "walletSettingsPage") !== null)
+        compare(settingsContainer.currentItem.objectName, "walletSettingsHost")
+        const walletSettings = page.activeView.settingsStack
+        tryCompare(walletSettings, "parent", page.walletSettingsHost)
+        tryCompare(walletSettings, "depth", 2)
+        compare(walletSettings.currentItem.objectName, "addressListPage")
+        compare(walletSettings.get(0).objectName, "walletSettingsPage")
 
-        const introduction = findChild(page, "addressListIntroduction")
+        const introduction = findChild(walletSettings, "addressListIntroduction")
         verify(introduction !== null)
         compare(introduction.descriptionTextFormat, Text.StyledText)
         compare(introduction.description,
@@ -259,7 +266,7 @@ TestCase {
             + "<b>Single-use</b> addresses are intended for receiving one payment; avoiding address reuse helps protect your privacy.<br>"
             + "<b>Change</b> addresses are created and managed automatically when you send bitcoin, receiving any remaining amount back into your wallet.")
 
-        const detailsPopup = findChild(page, "addressDetailsPopup")
+        const detailsPopup = findChild(walletSettings, "addressDetailsPopup")
         verify(detailsPopup !== null)
         compare(detailsPopup.background.color, Theme.color.neutral1)
         compare(detailsPopup.background.border.color, Theme.color.neutral3)

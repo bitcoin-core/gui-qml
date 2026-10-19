@@ -308,6 +308,30 @@ TestCase {
         compare(testCoinsListModel.selectedCoinsCount, 0)
     }
 
+    function test_closing_review_clears_form_only_after_send() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
+        verify(page !== null)
+        page.width = testCase.width
+        page.height = testCase.height
+        page.visible = true
+        page.manualCoinSelection = true
+        page.openTransactionReview()
+        const popup = findChild(page, "transactionReviewPopup")
+        const reviewStack = findChild(popup, "sendTransactionReviewStack")
+        tryCompare(popup, "opened", true)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        compare(page.manualCoinSelection, true)
+
+        page.openTransactionReview()
+        tryCompare(popup, "opened", true)
+        findChild(popup.contentItem, "sendTransactionReviewSendButton").clicked()
+        tryCompare(reviewStack, "depth", 2)
+        popup.close()
+        tryCompare(popup, "visible", false)
+        compare(page.manualCoinSelection, false)
+    }
+
     function test_custom_fee_send_uses_generic_confirmation_text() {
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
