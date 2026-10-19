@@ -22,6 +22,8 @@ Page {
     signal paymentRequestRequested(string requestId)
 
     property bool showDoneButton: true
+    property var wallet: typeof walletController !== "undefined" && walletController.isWalletLoaded
+        ? walletController.selectedWallet : null
     property string selectedSectionId: ""
     property int sidebarWidth: 286
     readonly property alias sidebar: sidebar
@@ -152,26 +154,26 @@ Page {
     }
 
     function openWalletAddressHistory() {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        walletController.selectedWallet.addressListModel.refresh()
+        if (!root.wallet) return
+        root.wallet.addressListModel.refresh()
         root.selectSection("wallet", true)
         pageContainer.push(addressListPage)
     }
 
     function openWalletPassword(updating) {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        if (!root.wallet) return
         root.selectSection("wallet", true)
         pageContainer.push(walletPasswordPage, { "updating": updating })
     }
 
     function openSignVerifyMessage(initialTab) {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        if (!root.wallet) return
         root.selectSection("wallet", true)
         pageContainer.push(signVerifyPage, { "initialTab": initialTab })
     }
 
     function startWalletBackup() {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
+        if (!root.wallet) return
         root.selectSection("wallet", true)
         const walletSettingsPage = pageContainer.currentItem
         if (walletSettingsPage && typeof walletSettingsPage.startBackup === "function") {
@@ -283,15 +285,16 @@ Page {
         id: walletPage
 
         SettingsPages.WalletSectionPage {
+            wallet: root.wallet
             onSelectWalletRequested: root.selectWalletRequested()
             onPasswordRequested: pageContainer.push(walletPasswordPage, {
-                "updating": walletController.selectedWallet.isEncrypted
+                "updating": root.wallet ? root.wallet.isEncrypted : false
             })
             onSignVerifyMessageRequested: pageContainer.push(signVerifyPage)
             onCoinsRequested: pageContainer.push(coinsPage)
             onAddressesRequested: {
-                if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-                walletController.selectedWallet.addressListModel.refresh()
+                if (!root.wallet) return
+                root.wallet.addressListModel.refresh()
                 pageContainer.push(addressListPage)
             }
         }
@@ -299,13 +302,14 @@ Page {
 
     Component {
         id: coinsPage
-        WalletPages.WalletCoins { onBack: pageContainer.pop() }
+        WalletPages.WalletCoins { wallet: root.wallet; onBack: pageContainer.pop() }
     }
 
     Component {
         id: walletPasswordPage
 
         WalletPages.WalletPasswordSettings {
+            wallet: root.wallet
             onBack: pageContainer.pop()
             onSaved: pageContainer.pop()
         }
@@ -315,6 +319,7 @@ Page {
         id: signVerifyPage
 
         WalletPages.SignVerifyMessage {
+            wallet: root.wallet
             onBack: pageContainer.pop()
         }
     }
@@ -323,6 +328,7 @@ Page {
         id: addressListPage
 
         WalletPages.AddressList {
+            wallet: root.wallet
             onBack: pageContainer.pop()
             // Keep the Addresses page on the stack: leaving for the request
             // view and returning to settings should land back here, not on
@@ -372,10 +378,7 @@ Page {
         id: rpcConsolePage
 
         SettingsPages.SettingsRpcConsoleView {
-            walletName: typeof walletController !== "undefined"
-                && walletController.isWalletLoaded && walletController.selectedWallet
-                ? walletController.selectedWallet.name
-                : ""
+            walletName: root.wallet ? root.wallet.name : ""
         }
     }
 

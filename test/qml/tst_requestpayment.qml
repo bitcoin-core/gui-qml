@@ -19,7 +19,7 @@ TestCase {
     Component {
         id: requestPaymentComponent
 
-        ReceivePage {}
+        ReceivePage { wallet: testWalletModel }
     }
 
     function init() {

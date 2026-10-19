@@ -15,8 +15,8 @@ PageStack {
     objectName: "sendPage"
     vertical: true
 
-    property WalletQmlModel wallet: walletController.selectedWallet
-    property SendRecipient recipient: wallet.recipients.current
+    property WalletQmlModel wallet: null
+    property SendRecipient recipient: wallet ? wallet.recipients.current : null
     property string prepareTransactionErrorText: ""
     property bool manualCoinSelection: false
     readonly property bool externalSignerWallet: wallet !== null && wallet.hasExternalSigner
@@ -129,28 +129,24 @@ PageStack {
         if (visible) sendPage.checkClipboard()
         else reviewSweepAlert.close()
     }
-    onWalletChanged: reviewSweepAlert.close()
-
-    Connections {
-        target: walletController
-        function onSelectedWalletChanged() {
-            if (transactionReviewPopup.opened) {
-                transactionReviewPopup.close()
-            }
-            root.pop()
-            // Clear URI import state so stale results from the previous wallet
-            // are not shown when the user switches wallets and returns to Send.
-            sendPage.paymentRequestStatus = ""
-            sendPage.paymentRequestIsError = false
-            sendPage.paymentRequestMessage = ""
-            sendPage.showClipboardUriBanner = false
-            sendPage.m_pendingClipboardUri = ""
-            sendPage.m_filledUri = ""
-            sendPage.m_dismissedUri = ""
-            sendPage.m_applyingUri = false
-            sendPage.clearPendingPaymentUriPaste()
-            paymentUriOverwritePopup.close()
+    onWalletChanged: {
+        reviewSweepAlert.close()
+        if (transactionReviewPopup.opened) {
+            transactionReviewPopup.close()
         }
+        root.pop()
+        // Clear URI import state so stale results from the previous wallet
+        // are not shown when this page is pointed at another wallet.
+        sendPage.paymentRequestStatus = ""
+        sendPage.paymentRequestIsError = false
+        sendPage.paymentRequestMessage = ""
+        sendPage.showClipboardUriBanner = false
+        sendPage.m_pendingClipboardUri = ""
+        sendPage.m_filledUri = ""
+        sendPage.m_dismissedUri = ""
+        sendPage.m_applyingUri = false
+        sendPage.clearPendingPaymentUriPaste()
+        paymentUriOverwritePopup.close()
     }
 
     Connections {
@@ -243,6 +239,7 @@ PageStack {
 
         function openPsbtFileImport() {
             sendOptionsPopup.close()
+            psbtOpenDialog.targetWallet = root.wallet
             psbtOpenDialog.open()
         }
 
@@ -351,7 +348,15 @@ PageStack {
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-            onAccepted: sendPage.handlePsbtImportResult(root.wallet.importPsbtFromFile(selectedFile.toString()))
+            property WalletQmlModel targetWallet: null
+            onAccepted: {
+                const wallet = targetWallet
+                targetWallet = null
+                if (wallet && wallet === root.wallet) {
+                    sendPage.handlePsbtImportResult(wallet.importPsbtFromFile(selectedFile.toString()))
+                }
+            }
+            onRejected: targetWallet = null
         }
 
         // Kept hidden so functional tests can inject a PSBT path until the

@@ -15,7 +15,7 @@ SettingsPage {
     id: root
     objectName: "signVerifyMessagePage"
 
-    property WalletQmlModel wallet: walletController.selectedWallet
+    property WalletQmlModel wallet: null
     property var signVerifyModel: wallet ? wallet.signVerifyMessageModel : null
     property string verifyResultText: ""
     property bool verifyResultSuccess: false

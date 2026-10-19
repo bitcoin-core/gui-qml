@@ -18,7 +18,7 @@ TestCase {
     Component {
         id: sendComponent
 
-        SendCreate {}
+        SendCreate { wallet: testWalletModel }
     }
 
     Component {
@@ -114,7 +114,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
 
-        walletController.setSelectedWallet("review-only-wallet-change")
+        page.wallet = testSecondWalletModel
 
         tryCompare(popup, "opened", false)
         tryCompare(testWalletModel, "discardCurrentTransactionCalls", discardCallsBefore + 1)

@@ -18,6 +18,7 @@ Page {
     background: null
 
     property string pendingMigrationPath: ""
+    readonly property var activeWallet: walletController.isWalletLoaded ? walletController.selectedWallet : null
 
     ButtonGroup { id: navigationTabs }
 
@@ -350,14 +351,17 @@ Page {
         clip: true
         ActivityList {
             id: activityPage
+            wallet: root.activeWallet
         }
         SendCreate {
             id: sendPage
+            wallet: root.activeWallet
             onViewTransactionInActivity: (txid) => {
                 root.navigateToTransaction(txid)
             }
         }
         ReceivePage {
+            wallet: root.activeWallet
             onPaymentRequestCreated: {
                 activityPage.pop(null)
                 root.openActivity()
@@ -422,6 +426,7 @@ Page {
                 }
                 sourceComponent: SettingsView {
                     showDoneButton: false
+                    wallet: root.activeWallet
                     onSelectWalletRequested: root.openWalletSelection()
                     onReceiveRequested: receiveTabButton.checked = true
                     onPaymentRequestRequested: function(requestId) {

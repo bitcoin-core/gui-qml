@@ -21,7 +21,7 @@ TestCase {
     FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
     FontLoader { source: "qrc:/fonts/robotomono/regular" }
 
-    Component { id: pageComponent; ActivityList { width: 1180; height: 950 } }
+    Component { id: pageComponent; ActivityList { width: 1180; height: 950; wallet: testWalletModel } }
 
     Component {
         id: iconImageComponent
@@ -711,7 +711,7 @@ TestCase {
         proxy.searchText = "Robert"
         page.navigateToTransaction("batch")
         tryCompare(page, "depth", 2)
-        walletController.setSelectedWallet("another-wallet")
+        page.wallet = testSecondWalletModel
         tryCompare(page, "depth", 1)
     }
 
@@ -869,7 +869,7 @@ TestCase {
         testTransactionActivityModel.setRows(rows())
         proxy.setAmountRange(100, 500)
         proxy.typeFilters = [ActivityFilterProxyModel.Sent]
-        walletController.setSelectedWalletObject(null)
+        page.wallet = null
         tryCompare(proxy, "minAmount", -1)
         compare(proxy.maxAmount, -1)
         compare(proxy.typeFilters.length, 0)

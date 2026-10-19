@@ -12,7 +12,7 @@ import "../../components"
 Page {
     id: root
     objectName: "activityDetailsPage"
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
     property var transactionData: ({})
     property int outputIndex: -1
     property bool detailsExpanded: false

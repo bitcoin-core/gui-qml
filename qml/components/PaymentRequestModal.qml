@@ -9,7 +9,7 @@ import "../controls"
 Popup {
     id: root
     objectName: "paymentRequestModal"
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
     property var openedWallet: null
     property real originY: -1
     property bool reducedMotion: false

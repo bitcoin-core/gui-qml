@@ -16,7 +16,7 @@ SettingsPage {
     objectName: "walletPasswordSettingsPage"
 
     required property bool updating
-    property WalletQmlModel wallet: walletController.selectedWallet
+    property WalletQmlModel wallet: null
     property string errorText: ""
     property string successText: ""
     readonly property string resultText: successText.length > 0 ? successText : errorText

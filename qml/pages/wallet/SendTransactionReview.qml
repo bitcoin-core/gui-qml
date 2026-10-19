@@ -107,6 +107,7 @@ Page {
             savePsbt(path)
         } else {
             savePsbtDialog.currentFile = defaultSavePsbtFileUrl()
+            savePsbtDialog.targetWallet = wallet
             savePsbtDialog.open()
         }
     }
@@ -140,7 +141,13 @@ Page {
         currentFolder: "file://" + walletController.homePath()
         defaultSuffix: "psbt"
         nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-        onAccepted: root.savePsbt(selectedFile.toString())
+        property var targetWallet: null
+        onAccepted: {
+            const target = targetWallet
+            targetWallet = null
+            if (target && target === root.wallet) root.savePsbt(selectedFile.toString())
+        }
+        onRejected: targetWallet = null
     }
 
     Item {
