@@ -73,12 +73,23 @@ PageStack {
 
     function openPaymentRequestImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPaymentRequestImport)
+        root.openWhileShown(sendPage.openPaymentRequestImport)
     }
 
     function openPsbtFileImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPsbtFileImport)
+        root.openWhileShown(sendPage.openPsbtFileImport)
+    }
+
+    // Counts how often this page was hidden. A deferred open is dropped if
+    // the page was hidden in between, even if it is shown again by then.
+    property int hiddenCount: 0
+
+    function openWhileShown(open) {
+        const hiddenCount = root.hiddenCount
+        Qt.callLater(function() {
+            if (root.visible && hiddenCount === root.hiddenCount) open()
+        })
     }
 
     function clearPrepareTransactionError() {
@@ -126,8 +137,12 @@ PageStack {
     // Re-check the clipboard whenever the Send tab becomes visible so the
     // banner appears even if the URI was copied before navigating here.
     onVisibleChanged: {
-        if (visible) sendPage.checkClipboard()
-        else reviewSweepAlert.close()
+        if (visible) {
+            sendPage.checkClipboard()
+        } else {
+            root.hiddenCount++
+            reviewSweepAlert.close()
+        }
     }
     onWalletChanged: {
         reviewSweepAlert.close()
@@ -345,6 +360,7 @@ PageStack {
 
         AppFileDialog {
             id: psbtOpenDialog
+            objectName: "sendPsbtOpenDialog"
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]

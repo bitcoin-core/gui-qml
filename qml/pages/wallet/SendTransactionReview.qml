@@ -379,6 +379,7 @@ Page {
 
     WalletPassphrasePopup {
         id: sendPassphrasePopup
+        popupObjectName: "sendTransactionPassphrasePopup"
         parent: Overlay.overlay
         width: Math.min(420, root.width - 40)
         titleText: qsTr("Enter wallet password")

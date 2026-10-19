@@ -325,6 +325,17 @@ QObject* TestBridge::findObjectByName(const QString& name) const
     for (QObject* obj : matches) {
         if (obj->property("visible").toBool()) return obj;
     }
+    // Each open wallet has its own pages, so closed popups share names across
+    // wallets. Prefer one declared inside a visible item, which belongs to
+    // the wallet that is shown.
+    for (QObject* obj : matches) {
+        for (QObject* parent = obj->parent(); parent; parent = parent->parent()) {
+            if (auto* item = qobject_cast<QQuickItem*>(parent)) {
+                if (item->isVisible()) return obj;
+                break;
+            }
+        }
+    }
     // Fall back to the first match.
     return matches.first();
 }

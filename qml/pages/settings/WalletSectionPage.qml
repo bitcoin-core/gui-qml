@@ -67,6 +67,7 @@ SettingsPage {
 
     AppFileDialog {
         id: backupDialog
+        objectName: "walletSettingsBackupDialog"
         fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
         currentFile: root.backupDefaultFileUrl()
