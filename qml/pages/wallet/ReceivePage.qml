@@ -229,7 +229,8 @@ Page {
     }
     Connections {
         target: walletController
-        function onOpenReceiveRequested() {
+        function onOpenReceiveRequested(wallet) {
+            if (wallet !== root.wallet) return
             Qt.callLater(function() {
                 card.resetFields()
                 if (root.visible) root.prepareReceivingAddress()

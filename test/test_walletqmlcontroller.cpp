@@ -1232,6 +1232,9 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QVERIFY(controller.isWalletLoaded());
     QVERIFY(controller.isWalletOpen("alpha_wallet"));
     QVERIFY(controller.isWalletOpen("beta_wallet"));
+    QCOMPARE(controller.openWallets().size(), 2);
+    WalletQmlModel* beta_model = qobject_cast<WalletQmlModel*>(controller.openWallets().at(1));
+    QVERIFY(beta_model);
 
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
@@ -1242,6 +1245,12 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QObject::connect(&controller, &WalletQmlController::walletLoadStateChanged, [&]() {
         signal_order.append("walletLoadStateChanged");
     });
+    // Views are keyed by the open wallets, so the next wallet must be
+    // selected before the closed one leaves the list.
+    QObject::connect(&controller, &WalletQmlController::openWalletsChanged, [&]() {
+        signal_order.append("openWalletsChanged");
+        QCOMPARE(controller.selectedWallet(), beta_model);
+    });
 
     controller.closeWallet("alpha_wallet");
 
@@ -1251,8 +1260,9 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QCOMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
     QCOMPARE(load_state_spy.at(0).at(1).toBool(), false);
-    QCOMPARE(signal_order, QStringList({"selectedWalletChanged", "walletLoadStateChanged"}));
+    QCOMPARE(signal_order, QStringList({"selectedWalletChanged", "openWalletsChanged", "walletLoadStateChanged"}));
     QCOMPARE(controller.selectedWallet()->name(), QString{"beta_wallet"});
+    QCOMPARE(controller.openWallets(), QList<QObject*>({beta_model}));
     QVERIFY(controller.isWalletLoaded());
     QVERIFY(!controller.isWalletOpen("alpha_wallet"));
     QVERIFY(controller.isWalletOpen("beta_wallet"));

@@ -1797,6 +1797,7 @@ class MockWalletController : public QObject
     Q_PROPERTY(QString lastClosedWalletName READ lastClosedWalletName NOTIFY lastClosedWalletNameChanged)
     Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
     Q_PROPERTY(QObject* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
+    Q_PROPERTY(QList<QObject*> openWallets READ openWallets NOTIFY openWalletsChanged)
     Q_PROPERTY(int closePaymentRequestDetailRequests MEMBER m_close_payment_request_detail_requests NOTIFY closePaymentRequestDetailRequestsChanged)
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
@@ -1819,6 +1820,7 @@ public:
     QString m_external_signer_error;
     QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
     QObject* m_selected_wallet{nullptr};
+    QList<QObject*> m_open_wallets;
     QString m_last_selected_wallet_name;
     QString m_last_closed_wallet_name;
     int m_close_wallet_calls{0};
@@ -1830,6 +1832,7 @@ public:
     int m_open_selected_wallet_location_calls{0};
 
     QObject* selectedWallet() const { return m_selected_wallet; }
+    QList<QObject*> openWallets() const { return m_open_wallets; }
     QString lastSelectedWalletName() const { return m_last_selected_wallet_name; }
     QString lastClosedWalletName() const { return m_last_closed_wallet_name; }
     int closeWalletCalls() const { return m_close_wallet_calls; }
@@ -1896,7 +1899,16 @@ public:
         clearWalletMigrationStatus();
         Q_EMIT walletMigrationSucceeded();
     }
-    Q_INVOKABLE void requestOpenWalletSettings() { Q_EMIT openWalletSettingsRequested(); }
+    Q_INVOKABLE void requestOpenWalletSettings(QObject* wallet)
+    {
+        if (wallet) Q_EMIT openWalletSettingsRequested(wallet);
+    }
+    Q_INVOKABLE void setOpenWallets(const QList<QObject*>& wallets)
+    {
+        if (m_open_wallets == wallets) return;
+        m_open_wallets = wallets;
+        Q_EMIT openWalletsChanged();
+    }
     Q_INVOKABLE void setSelectedWalletObject(QObject* wallet)
     {
         if (m_selected_wallet == wallet) return;
@@ -1965,17 +1977,17 @@ public:
         Q_EMIT lastImportedWalletInfoChanged();
         Q_EMIT externalSignerStatusChanged();
     }
-    Q_INVOKABLE void requestClosePaymentRequestDetail()
+    Q_INVOKABLE void requestClosePaymentRequestDetail(QObject* wallet)
     {
         ++m_close_payment_request_detail_requests;
         Q_EMIT closePaymentRequestDetailRequestsChanged();
-        Q_EMIT closePaymentRequestDetailRequested();
+        if (wallet) Q_EMIT closePaymentRequestDetailRequested(wallet);
     }
-    Q_INVOKABLE void requestOpenReceive()
+    Q_INVOKABLE void requestOpenReceive(QObject* wallet)
     {
         ++m_open_receive_requests;
         Q_EMIT openReceiveRequestsChanged();
-        Q_EMIT openReceiveRequested();
+        if (wallet) Q_EMIT openReceiveRequested(wallet);
     }
     Q_INVOKABLE bool validateXpub(const QString& xpub)
     {
@@ -2024,11 +2036,12 @@ Q_SIGNALS:
     void lastClosedWalletNameChanged();
     void closeWalletCallsChanged();
     void selectedWalletChanged();
+    void openWalletsChanged();
     void closePaymentRequestDetailRequestsChanged();
-    void closePaymentRequestDetailRequested();
+    void closePaymentRequestDetailRequested(QObject* wallet);
     void openReceiveRequestsChanged();
-    void openReceiveRequested();
-    void openWalletSettingsRequested();
+    void openReceiveRequested(QObject* wallet);
+    void openWalletSettingsRequested(QObject* wallet);
     void walletCreateSucceeded();
     void walletLoadSucceeded();
     void walletImportSucceeded();
@@ -4170,6 +4183,23 @@ public Q_SLOTS:
         wallet_model.setCurrentTransaction(&wallet_transaction);
         wallet_model.setCurrentPaymentRequest(&payment_request);
         wallet_controller.setSelectedWalletObject(&wallet_model);
+        // A second, fully independent wallet for per-wallet view tests.
+        static MockWalletQmlModelTransaction second_wallet_transaction;
+        static MockPaymentRequest second_payment_request;
+        static MockSendRecipient second_send_recipient;
+        static MockRecipientsModel second_recipients_model;
+        static MockCoinsListModel second_coins_list_model;
+        static MockTransactionActivityModel second_transaction_activity_model;
+        static MockBumpTransactionModel second_bump_model;
+        static MockWalletQmlModel second_wallet_model;
+        second_recipients_model.setCurrent(&second_send_recipient);
+        second_wallet_model.setTransactionActivityModel(&second_transaction_activity_model);
+        second_wallet_model.setBumpModel(&second_bump_model);
+        second_wallet_model.setRecipients(&second_recipients_model);
+        second_wallet_model.setCoinsListModel(&second_coins_list_model);
+        second_wallet_model.setCurrentTransaction(&second_wallet_transaction);
+        second_wallet_model.setCurrentPaymentRequest(&second_payment_request);
+        second_wallet_model.setProperty("name", QStringLiteral("second"));
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
@@ -4222,6 +4252,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("walletController"), &wallet_controller);
         engine->rootContext()->setContextProperty(QStringLiteral("walletListModel"), &wallet_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testSecondWalletModel"), &second_wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletTransaction"), &wallet_transaction);
         engine->rootContext()->setContextProperty(QStringLiteral("testPaymentRequest"), &payment_request);
         engine->rootContext()->setContextProperty(QStringLiteral("testTransactionActivityModel"), &transaction_activity_model);

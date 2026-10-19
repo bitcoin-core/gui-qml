@@ -76,7 +76,9 @@ PageStack {
     Connections {
         target: walletController
         function onSelectedWalletChanged() { paymentRequestModal.close(); stackView.pop(null) }
-        function onClosePaymentRequestDetailRequested() { paymentRequestModal.close() }
+        function onClosePaymentRequestDetailRequested(wallet) {
+            if (wallet === stackView.wallet) paymentRequestModal.close()
+        }
     }
     Connections {
         target: stackView.wallet ? stackView.wallet.transactionActivityModel : null

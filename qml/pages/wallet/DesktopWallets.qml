@@ -127,11 +127,11 @@ Page {
 
     Connections {
         target: walletController
-        function onOpenWalletSettingsRequested() {
-            root.openSettingsRoute("wallet")
+        function onOpenWalletSettingsRequested(wallet) {
+            if (wallet === walletController.selectedWallet) root.openSettingsRoute("wallet")
         }
-        function onOpenReceiveRequested() {
-            receiveTabButton.checked = true
+        function onOpenReceiveRequested(wallet) {
+            if (wallet === walletController.selectedWallet) receiveTabButton.checked = true
         }
         function onWalletLoadStateChanged(name, state, error) {
             if (state === WalletListModel.LoadError) {

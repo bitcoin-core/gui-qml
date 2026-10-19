@@ -321,6 +321,12 @@ WalletQmlModel* WalletQmlController::selectedWallet() const
     return m_selected_wallet;
 }
 
+QList<QObject*> WalletQmlController::openWallets() const
+{
+    QMutexLocker locker(&m_wallets_mutex);
+    return QList<QObject*>(m_wallets.begin(), m_wallets.end());
+}
+
 void WalletQmlController::unloadWallets()
 {
     beginShutdown();
@@ -417,6 +423,9 @@ void WalletQmlController::removeWalletModel(WalletQmlModel* wallet_model, bool r
         m_selected_wallet = next_selected_wallet ? next_selected_wallet : m_empty_wallet;
         Q_EMIT selectedWalletChanged();
     }
+    // Select the next wallet before dropping this one, so views never see a
+    // selected wallet that is no longer open.
+    Q_EMIT openWalletsChanged();
 
     Q_EMIT walletLoadStateChanged(wallet_name,
                                   WalletListModel::LoadState::Closed,
@@ -472,6 +481,7 @@ WalletQmlModel* WalletQmlController::addOrSelectWalletModel(std::unique_ptr<inte
         m_selected_wallet = wallet_model;
         m_wallets.push_back(m_selected_wallet);
     }
+    Q_EMIT openWalletsChanged();
     subscribeWalletInfo(wallet_model);
     Q_EMIT walletLoadStateChanged(loaded_wallet_name,
                                   WalletListModel::LoadState::Open,
@@ -726,9 +736,10 @@ bool WalletQmlController::validateXpub(const QString& xpub) const
     return ext_pubkey.pubkey.IsValid();
 }
 
-void WalletQmlController::requestOpenWalletSettings()
+void WalletQmlController::requestOpenWalletSettings(WalletQmlModel* wallet)
 {
-    Q_EMIT openWalletSettingsRequested();
+    if (!wallet) return;
+    Q_EMIT openWalletSettingsRequested(wallet);
 }
 
 void WalletQmlController::refreshExternalSignerStatus()
@@ -760,14 +771,16 @@ void WalletQmlController::refreshExternalSignerStatus()
     setExternalSignerStatus(path_configured, signer_count, signer_name, error);
 }
 
-void WalletQmlController::requestOpenReceive()
+void WalletQmlController::requestOpenReceive(WalletQmlModel* wallet)
 {
-    Q_EMIT openReceiveRequested();
+    if (!wallet) return;
+    Q_EMIT openReceiveRequested(wallet);
 }
 
-void WalletQmlController::requestClosePaymentRequestDetail()
+void WalletQmlController::requestClosePaymentRequestDetail(WalletQmlModel* wallet)
 {
-    Q_EMIT closePaymentRequestDetailRequested();
+    if (!wallet) return;
+    Q_EMIT closePaymentRequestDetailRequested(wallet);
 }
 
 QString WalletQmlController::normalizeWalletPath(const QString& path) const
@@ -1139,6 +1152,7 @@ void WalletQmlController::initialize()
     }
     if (!m_wallets.empty()) {
         m_selected_wallet = m_wallets.front();
+        Q_EMIT openWalletsChanged();
         setWalletLoaded(true);
         setNoWalletsFound(false);
         Q_EMIT selectedWalletChanged();

@@ -28,6 +28,7 @@ class WalletQmlController : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(WalletQmlModel* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
+    Q_PROPERTY(QList<QObject*> openWallets READ openWallets NOTIFY openWalletsChanged)
     Q_PROPERTY(bool initialized READ initialized NOTIFY initializedChanged)
     Q_PROPERTY(bool isWalletLoaded READ isWalletLoaded NOTIFY isWalletLoadedChanged)
     Q_PROPERTY(bool noWalletsFound READ noWalletsFound NOTIFY noWalletsFoundChanged)
@@ -74,12 +75,13 @@ public:
     Q_INVOKABLE QString walletNameAvailabilityError(const QString& name) const;
     Q_INVOKABLE bool openSelectedWalletLocation();
     Q_INVOKABLE void clearWalletLocationOpenError();
-    Q_INVOKABLE void requestOpenWalletSettings();
+    Q_INVOKABLE void requestOpenWalletSettings(WalletQmlModel* wallet);
     Q_INVOKABLE void refreshExternalSignerStatus();
-    Q_INVOKABLE void requestOpenReceive();
-    Q_INVOKABLE void requestClosePaymentRequestDetail();
+    Q_INVOKABLE void requestOpenReceive(WalletQmlModel* wallet);
+    Q_INVOKABLE void requestClosePaymentRequestDetail(WalletQmlModel* wallet);
 
     WalletQmlModel* selectedWallet() const;
+    QList<QObject*> openWallets() const;
     void unloadWallets();
     void beginShutdown();
     bool initialized() const { return m_initialized; }
@@ -108,6 +110,7 @@ public:
 Q_SIGNALS:
     void walletsDrained();
     void selectedWalletChanged();
+    void openWalletsChanged();
     void initializedChanged();
     void isWalletLoadedChanged();
     void noWalletsFoundChanged();
@@ -131,11 +134,11 @@ Q_SIGNALS:
     void walletMigrationSucceeded();
     void walletMigrationFailed();
     void lastImportedWalletInfoChanged();
-    void openWalletSettingsRequested();
+    void openWalletSettingsRequested(WalletQmlModel* wallet);
     void externalSignerStatusChanged();
     void walletDisplayNamesChanged();
-    void openReceiveRequested();
-    void closePaymentRequestDetailRequested();
+    void openReceiveRequested(WalletQmlModel* wallet);
+    void closePaymentRequestDetailRequested(WalletQmlModel* wallet);
     void walletLocationOpenErrorChanged();
 
 public Q_SLOTS:

@@ -57,7 +57,7 @@ Popup {
             Qt.callLater(function() {
                 if (!requestWallet || requestWallet !== root.wallet) return
                 requestWallet.usePaymentRequestAsTemplate(requestId)
-                walletController.requestOpenReceive()
+                walletController.requestOpenReceive(requestWallet)
             })
         }
     }
