@@ -1150,6 +1150,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(qint64 availableSendBalanceSatoshi READ availableSendBalanceSatoshi NOTIFY balanceChanged)
     Q_PROPERTY(QObject* maximumRecipient READ maximumRecipient NOTIFY maximumRecipientChanged)
     Q_PROPERTY(QString name MEMBER m_name NOTIFY nameChanged)
+    Q_PROPERTY(bool available MEMBER m_available NOTIFY availableChanged)
     Q_PROPERTY(QString balance MEMBER m_balance NOTIFY balanceChanged)
     Q_PROPERTY(QObject* transactionActivityModel READ transactionActivityModel CONSTANT)
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
@@ -1220,6 +1221,7 @@ public:
 
     QString m_name{QStringLiteral("testwallet")};
     QString m_balance{QStringLiteral("1.00000000 BTC")};
+    bool m_available{true};
     QObject* m_transaction_activity_model{nullptr};
     QObject* m_bump_model{nullptr};
     QObject* m_recipients{nullptr};
@@ -1663,6 +1665,7 @@ public:
     }
 
 Q_SIGNALS:
+    void availableChanged();
     void nameChanged();
     void balanceChanged();
     void targetBlocksChanged();

@@ -25,8 +25,8 @@
 #include <support/allocators/secure.h>
 #include <wallet/coincontrol.h>
 
-#include <map>
 #include <atomic>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -78,6 +78,7 @@ public:
     Q_ENUM(PsbtImportResult)
 
 private:
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
     Q_PROPERTY(QString displayName READ displayName NOTIFY displayNameChanged)
     Q_PROPERTY(QString balance READ balance NOTIFY balanceChanged)
@@ -216,6 +217,9 @@ public:
     std::shared_ptr<interfaces::Wallet> walletHandle() const { return m_wallet; }
     interfaces::Node* node() const { return m_node; }
     std::shared_ptr<BackendExecutor> backendExecutor() const { return m_backend_executor; }
+    // False once the wallet is unloading or closing. Set from the unload
+    // notification's own thread, before the GUI hears about it.
+    bool available() const { return m_wallet && !m_unload_requested->load(); }
     void beginShutdown(bool remove_wallet = false);
     void removeWallet();
 
@@ -310,6 +314,7 @@ Q_SIGNALS:
     void securityStateChanged();
     void transactionErrorChanged();
     void transactionNeedsUnlockChanged();
+    void availableChanged();
     void walletUnloaded();
     void settingsErrorChanged();
     void addressListChanged();
@@ -420,6 +425,7 @@ private:
     std::unique_ptr<interfaces::Handler> m_handler_address_list_changed;
     std::unique_ptr<interfaces::Handler> m_handler_transaction_changed;
     std::unique_ptr<interfaces::Handler> m_handler_unload;
+    std::shared_ptr<std::atomic<bool>> m_unload_requested{std::make_shared<std::atomic<bool>>(false)};
     int m_display_unit{0};
     PsbtQmlModel* m_imported_psbt_model{nullptr};
 };

@@ -368,6 +368,42 @@ TestCase {
         verify(page.viewForWallet(testSecondWalletModel) !== null)
     }
 
+    function test_unloading_wallet_loses_its_view_before_it_leaves_the_list() {
+        const page = createShell()
+        try {
+            testSecondWalletModel.available = false
+            tryCompare(page.walletViews, "count", 1)
+            compare(page.viewForWallet(testSecondWalletModel), null)
+            compare(walletController.openWallets.length, 2)
+        } finally {
+            testSecondWalletModel.available = true
+        }
+    }
+
+    // The real controller order: the unloading wallet turns unavailable,
+    // and on a later event loop pass the next wallet is selected and the
+    // unloaded one leaves the open wallet list.
+    function test_unloading_the_selected_wallet_shows_the_next_wallet() {
+        const page = createShell()
+        const second = page.viewForWallet(testSecondWalletModel)
+        findChild(page, "sendTabButton").checked = true
+        try {
+            testWalletModel.available = false
+            wait(0)
+            compare(page.walletTabSelected, true)
+            walletController.setSelectedWalletObject(testSecondWalletModel)
+            walletController.setOpenWallets([testSecondWalletModel])
+            wait(50)
+            compare(page.activeView, second)
+            compare(page.walletTabSelected, true)
+            compare(findChild(page, "blockClockTabButton").checked, false)
+            compare(findChild(page, "activityTabButton").checked, true)
+            compare(second.visible, true)
+        } finally {
+            testWalletModel.available = true
+        }
+    }
+
     function test_closing_the_last_wallet_leaves_the_wallet_tabs() {
         const page = createShell()
         findChild(page, "sendTabButton").checked = true

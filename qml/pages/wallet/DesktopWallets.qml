@@ -45,8 +45,12 @@ Page {
 
     // Mirror walletController.openWallets in a ListModel so the Repeater
     // creates or destroys only the views of wallets that opened or closed.
+    // A wallet that is unloading loses its view at once, before the
+    // controller drops it from the list.
     function syncOpenWallets() {
-        const wallets = walletController.openWallets
+        const wallets = walletController.openWallets.filter(function(wallet) {
+            return wallet.available !== false
+        })
         for (let index = openWalletsModel.count - 1; index >= 0; --index) {
             if (wallets.indexOf(openWalletsModel.get(index).wallet) < 0) openWalletsModel.remove(index)
         }
@@ -448,6 +452,14 @@ Page {
                         if (active) root.showSettingsSection("wallet")
                     }
                     onWalletSelectionRequested: root.openWalletSelection()
+
+                    Connections {
+                        target: wallet
+                        ignoreUnknownSignals: true
+                        function onAvailableChanged() {
+                            Qt.callLater(root.syncOpenWallets)
+                        }
+                    }
                 }
             }
         }
