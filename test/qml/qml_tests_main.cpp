@@ -1815,10 +1815,12 @@ class MockWalletController : public QObject
     Q_PROPERTY(int closeWalletCalls READ closeWalletCalls NOTIFY closeWalletCallsChanged)
     Q_PROPERTY(QObject* selectedWallet READ selectedWallet NOTIFY selectedWalletChanged)
     Q_PROPERTY(QList<QObject*> openWallets READ openWallets NOTIFY openWalletsChanged)
+    Q_PROPERTY(QObject* openedWallet MEMBER m_opened_wallet NOTIFY openWalletsChanged)
+    Q_PROPERTY(QObject* lastLocationWallet MEMBER m_last_location_wallet NOTIFY openWalletLocationCallsChanged)
     Q_PROPERTY(int closePaymentRequestDetailRequests MEMBER m_close_payment_request_detail_requests NOTIFY closePaymentRequestDetailRequestsChanged)
     Q_PROPERTY(int openReceiveRequests MEMBER m_open_receive_requests NOTIFY openReceiveRequestsChanged)
     Q_PROPERTY(QString walletLocationOpenError READ walletLocationOpenError NOTIFY walletLocationOpenErrorChanged)
-    Q_PROPERTY(int openSelectedWalletLocationCalls READ openSelectedWalletLocationCalls NOTIFY openSelectedWalletLocationCallsChanged)
+    Q_PROPERTY(int openWalletLocationCalls READ openWalletLocationCalls NOTIFY openWalletLocationCallsChanged)
 
 public:
     bool m_initialized{true};
@@ -1838,15 +1840,20 @@ public:
     QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
     QObject* m_selected_wallet{nullptr};
     QList<QObject*> m_open_wallets;
+    // The wallet reported by create, import and load success; the selected
+    // wallet unless a test sets another.
+    QObject* m_opened_wallet{nullptr};
+    QObject* m_last_location_wallet{nullptr};
+    QObject* reportedWallet() const { return m_opened_wallet ? m_opened_wallet : m_selected_wallet; }
     QString m_last_selected_wallet_name;
     QString m_last_closed_wallet_name;
     int m_close_wallet_calls{0};
     int m_close_payment_request_detail_requests{0};
     int m_open_receive_requests{0};
     QString m_wallet_location_open_error;
-    bool m_open_selected_wallet_location_result{true};
-    QString m_open_selected_wallet_location_error;
-    int m_open_selected_wallet_location_calls{0};
+    bool m_open_wallet_location_result{true};
+    QString m_open_wallet_location_error;
+    int m_open_wallet_location_calls{0};
 
     QObject* selectedWallet() const { return m_selected_wallet; }
     QList<QObject*> openWallets() const { return m_open_wallets; }
@@ -1854,7 +1861,7 @@ public:
     QString lastClosedWalletName() const { return m_last_closed_wallet_name; }
     int closeWalletCalls() const { return m_close_wallet_calls; }
     QString walletLocationOpenError() const { return m_wallet_location_open_error; }
-    int openSelectedWalletLocationCalls() const { return m_open_selected_wallet_location_calls; }
+    int openWalletLocationCalls() const { return m_open_wallet_location_calls; }
     QString walletImportErrorTitle() const { return m_wallet_load_error.isEmpty() ? QString{} : QStringLiteral("Failed to load wallet"); }
     QString walletImportErrorDescription() const { return m_wallet_load_error; }
     QString walletImportErrorHelpText() const { return QString{}; }
@@ -1887,13 +1894,13 @@ public:
     Q_INVOKABLE void createWatchOnlyWallet(const QString& /*name*/, const QString& /*xpub*/)
     {
         clearWalletLoadStatus();
-        Q_EMIT walletCreateSucceeded();
+        Q_EMIT walletCreateSucceeded(reportedWallet());
     }
     Q_INVOKABLE void createSingleSigWallet(const QString&, const QString&)
     {
         clearWalletCreateStatus();
         clearWalletLoadStatus();
-        Q_EMIT walletCreateSucceeded();
+        Q_EMIT walletCreateSucceeded(reportedWallet());
     }
     Q_INVOKABLE bool createExternalSignerWallet(const QString&)
     {
@@ -1903,13 +1910,13 @@ public:
             Q_EMIT walletLoadErrorChanged();
             return false;
         }
-        Q_EMIT walletLoadSucceeded();
+        Q_EMIT walletLoadSucceeded(reportedWallet());
         return true;
     }
     Q_INVOKABLE void importWallet(const QString&)
     {
         clearWalletLoadStatus();
-        Q_EMIT walletImportSucceeded();
+        Q_EMIT walletImportSucceeded(reportedWallet());
     }
     Q_INVOKABLE void migrateWallet(const QString&, const QString& = QString())
     {
@@ -1967,14 +1974,16 @@ public:
     }
     Q_INVOKABLE void reset()
     {
+        m_opened_wallet = nullptr;
+        m_last_location_wallet = nullptr;
         m_last_selected_wallet_name.clear();
         m_last_closed_wallet_name.clear();
         m_close_wallet_calls = 0;
         m_close_payment_request_detail_requests = 0;
         m_open_receive_requests = 0;
-        m_open_selected_wallet_location_calls = 0;
-        m_open_selected_wallet_location_result = true;
-        m_open_selected_wallet_location_error.clear();
+        m_open_wallet_location_calls = 0;
+        m_open_wallet_location_result = true;
+        m_open_wallet_location_error.clear();
         clearWalletLocationOpenError();
         clearWalletLoadStatus();
         clearWalletCreateStatus();
@@ -1990,7 +1999,7 @@ public:
         Q_EMIT closeWalletCallsChanged();
         Q_EMIT closePaymentRequestDetailRequestsChanged();
         Q_EMIT openReceiveRequestsChanged();
-        Q_EMIT openSelectedWalletLocationCallsChanged();
+        Q_EMIT openWalletLocationCallsChanged();
         Q_EMIT lastImportedWalletInfoChanged();
         Q_EMIT externalSignerStatusChanged();
     }
@@ -2011,22 +2020,23 @@ public:
         QString t = xpub.trimmed();
         return t.length() >= 100 && (t.startsWith("xpub") || t.startsWith("tpub"));
     }
-    Q_INVOKABLE void setOpenSelectedWalletLocationResult(const bool result, const QString& error = QString())
+    Q_INVOKABLE void setOpenWalletLocationResult(const bool result, const QString& error = QString())
     {
-        m_open_selected_wallet_location_result = result;
-        m_open_selected_wallet_location_error = error;
+        m_open_wallet_location_result = result;
+        m_open_wallet_location_error = error;
     }
-    Q_INVOKABLE bool openSelectedWalletLocation()
+    Q_INVOKABLE bool openWalletLocation(QObject* wallet)
     {
-        ++m_open_selected_wallet_location_calls;
-        Q_EMIT openSelectedWalletLocationCallsChanged();
-        if (m_open_selected_wallet_location_result) {
+        m_last_location_wallet = wallet;
+        ++m_open_wallet_location_calls;
+        Q_EMIT openWalletLocationCallsChanged();
+        if (m_open_wallet_location_result) {
             clearWalletLocationOpenError();
             return true;
         }
-        m_wallet_location_open_error = m_open_selected_wallet_location_error.isEmpty()
+        m_wallet_location_open_error = m_open_wallet_location_error.isEmpty()
             ? QStringLiteral("Could not open wallet file location.")
-            : m_open_selected_wallet_location_error;
+            : m_open_wallet_location_error;
         Q_EMIT walletLocationOpenErrorChanged();
         return false;
     }
@@ -2059,12 +2069,12 @@ Q_SIGNALS:
     void openReceiveRequestsChanged();
     void openReceiveRequested(QObject* wallet);
     void openWalletSettingsRequested(QObject* wallet);
-    void walletCreateSucceeded();
-    void walletLoadSucceeded();
-    void walletImportSucceeded();
+    void walletCreateSucceeded(QObject* wallet);
+    void walletLoadSucceeded(QObject* wallet);
+    void walletImportSucceeded(QObject* wallet);
     void walletMigrationSucceeded();
     void walletLocationOpenErrorChanged();
-    void openSelectedWalletLocationCallsChanged();
+    void openWalletLocationCallsChanged();
 };
 
 class MockCoreSettingsModel;

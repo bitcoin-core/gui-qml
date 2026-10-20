@@ -24,7 +24,7 @@ OnboardingView {
         && loadedChildView.walletName.trim().length > 0
 
     signal cancel()
-    signal created()
+    signal created(var wallet)
 
     function submit() {
         if (!canCreate) return
@@ -58,10 +58,10 @@ OnboardingView {
 
     Connections {
         target: walletController
-        function onWalletLoadSucceeded() {
+        function onWalletLoadSucceeded(wallet) {
             if (!root.submitted) return
             root.submitted = false
-            root.created()
+            root.created(wallet)
         }
         function onWalletLoadErrorChanged() {
             if (root.submitted && walletController.walletLoadError.length > 0)

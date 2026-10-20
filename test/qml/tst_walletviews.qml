@@ -368,6 +368,25 @@ TestCase {
         verify(page.viewForWallet(testSecondWalletModel) !== null)
     }
 
+    function test_open_wallet_shows_that_wallet_only_while_it_is_open() {
+        const page = createShell()
+        findChild(page, "peersTabButton").checked = true
+
+        page.openWallet(testSecondWalletModel)
+        compare(walletController.lastSelectedWalletName, "second")
+
+        walletController.setSelectedWalletObject(testSecondWalletModel)
+        page.openWallet(testSecondWalletModel)
+        compare(findChild(page, "activityTabButton").checked, true)
+        compare(page.activeView.wallet, testSecondWalletModel)
+
+        walletController.setSelectedWalletObject(testWalletModel)
+        walletController.setOpenWallets([testWalletModel])
+        walletController.reset()
+        page.openWallet(testSecondWalletModel)
+        compare(walletController.lastSelectedWalletName, "")
+    }
+
     function test_unloading_wallet_loses_its_view_before_it_leaves_the_list() {
         const page = createShell()
         try {

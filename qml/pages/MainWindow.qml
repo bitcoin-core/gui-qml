@@ -356,8 +356,8 @@ ApplicationWindow {
 
     WalletCreationModal {
         id: walletCreationModal
-        onFinished: function(openActivity) {
-            if (openActivity) appWindow.routeToShell("openActivity")
+        onFinished: function(openActivity, wallet) {
+            if (openActivity) appWindow.routeToShell("openWallet", wallet)
         }
     }
 

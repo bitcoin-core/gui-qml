@@ -192,13 +192,13 @@ QString WalletQmlController::homePath() const
     return QDir::homePath();
 }
 
-QString WalletQmlController::selectedWalletLocationPath() const
+QString WalletQmlController::walletLocationPath(const WalletQmlModel* wallet) const
 {
-    if (!m_selected_wallet || m_selected_wallet == m_empty_wallet) {
+    if (!wallet || wallet == m_empty_wallet) {
         return {};
     }
 
-    const QString wallet_name{m_selected_wallet->name().trimmed()};
+    const QString wallet_name{wallet->name().trimmed()};
     if (wallet_name.isEmpty()) {
         return {};
     }
@@ -212,11 +212,11 @@ QString WalletQmlController::selectedWalletLocationPath() const
     return wallet_path.absoluteFilePath();
 }
 
-bool WalletQmlController::openSelectedWalletLocation()
+bool WalletQmlController::openWalletLocation(WalletQmlModel* wallet)
 {
     clearWalletLocationOpenError();
 
-    const QString wallet_path{selectedWalletLocationPath()};
+    const QString wallet_path{walletLocationPath(wallet)};
     if (wallet_path.isEmpty()) {
         setWalletLocationOpenError(tr("No wallet file is available to view."));
         return false;
@@ -532,9 +532,9 @@ void WalletQmlController::createWalletAsync(const QString& name,
             else setWalletLoadError(out.error);
             return;
         }
-        addOrSelectWalletModel(std::move(out.wallet));
-        if (load_action == WalletLoadAction::Load) Q_EMIT walletLoadSucceeded();
-        else if (load_action == WalletLoadAction::Create) Q_EMIT walletCreateSucceeded();
+        WalletQmlModel* wallet_model = addOrSelectWalletModel(std::move(out.wallet));
+        if (load_action == WalletLoadAction::Load) Q_EMIT walletLoadSucceeded(wallet_model);
+        else if (load_action == WalletLoadAction::Create) Q_EMIT walletCreateSucceeded(wallet_model);
     }, [this, report_create_error](std::exception_ptr) {
         m_deferred_wallet_name.clear();
         setWalletLoadInProgress(false);
@@ -1086,8 +1086,8 @@ void WalletQmlController::startWalletImport(const QString& path)
             return;
         }
         setLastImportedWalletInfo(QString::fromStdString(out.wallet->getWalletName()), describeImportedWalletKeyScheme(*out.wallet));
-        addOrSelectWalletModel(std::move(out.wallet));
-        Q_EMIT walletImportSucceeded();
+        WalletQmlModel* wallet_model = addOrSelectWalletModel(std::move(out.wallet));
+        Q_EMIT walletImportSucceeded(wallet_model);
     }, [this](std::exception_ptr) {
         setWalletLoadInProgress(false);
         setWalletLoadError(tr("Wallet import failed."));
@@ -1226,8 +1226,8 @@ void WalletQmlController::startWalletLoad(const QString& path, const QString& wa
             Q_EMIT walletLoadStateChanged(load_target, WalletListModel::LoadState::LoadError, error);
             return;
         }
-        addOrSelectWalletModel(std::move(out.wallet));
-        Q_EMIT walletLoadSucceeded();
+        WalletQmlModel* wallet_model = addOrSelectWalletModel(std::move(out.wallet));
+        Q_EMIT walletLoadSucceeded(wallet_model);
     }, [this, load_target](std::exception_ptr) {
         setWalletLoadInProgress(false);
         const QString error = tr("Wallet could not be opened.");

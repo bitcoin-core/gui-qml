@@ -15,6 +15,8 @@ OnboardingView {
     property bool watchOnly: false
     property bool modalView: false
     property bool encryptedWallet: false
+    // The wallet this page announces, not whichever wallet is selected.
+    property var wallet: null
     property bool navigationBackEnabled: false
     readonly property bool backupRequired: !watchOnly
     signal done()
@@ -71,7 +73,7 @@ OnboardingView {
                     Layout.leftMargin: 4
                     buttonSize: NeutralButton.Large
                     text: qsTr("View file")
-                    onClicked: walletController.openSelectedWalletLocation()
+                    onClicked: walletController.openWalletLocation(root.wallet)
                 }
                 CoreText {
                     objectName: "createWalletBackupErrorText"
