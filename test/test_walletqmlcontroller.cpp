@@ -1408,8 +1408,19 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     QTRY_VERIFY(alpha_state.hasUnload());
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
+    WalletQmlModel* alpha_model = controller.selectedWallet();
+    QVERIFY(alpha_model->available());
+    QSignalSpy available_spy(alpha_model, &WalletQmlModel::availableChanged);
 
     alpha_state.notifyUnload();
+
+    // Actions are refused from the moment the backend reports the unload,
+    // before the GUI thread hears about it or drops the wallet.
+    QVERIFY(!alpha_model->available());
+    QVERIFY(controller.isWalletOpen("alpha_wallet"));
+    QVERIFY(!alpha_model->backupWallet(QStringLiteral("/nonexistent/alpha.bak")));
+    QCOMPARE(alpha_model->settingsError(), QString{"This wallet is closing."});
+    QTRY_COMPARE(available_spy.count(), 1);
 
     QTRY_COMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});

@@ -685,6 +685,9 @@ void WalletQmlModel::beginShutdown(bool remove_wallet)
 {
     if (m_stopping) return;
     m_stopping = true;
+    const bool was_available{available()};
+    m_unload_requested->store(true);
+    if (was_available) Q_EMIT availableChanged();
     m_receive_payment_poll_timer.stop();
     if (m_transaction_activity_model) m_transaction_activity_model->stop();
     if (m_fee_estimation_timer) m_fee_estimation_timer->stop();
@@ -1002,6 +1005,10 @@ bool WalletQmlModel::encryptWallet(const QString& passphrase)
         setSettingsError(tr("No wallet is selected."));
         return false;
     }
+    if (!available()) {
+        setSettingsError(tr("This wallet is closing."));
+        return false;
+    }
     if (passphrase.isEmpty()) {
         setSettingsError(tr("Enter a new wallet password."));
         return false;
@@ -1024,6 +1031,10 @@ bool WalletQmlModel::changeWalletPassphrase(const QString& old_passphrase, const
     clearSettingsError();
     if (!m_wallet) {
         setSettingsError(tr("No wallet is selected."));
+        return false;
+    }
+    if (!available()) {
+        setSettingsError(tr("This wallet is closing."));
         return false;
     }
     if (old_passphrase.isEmpty()) {
@@ -1054,6 +1065,10 @@ bool WalletQmlModel::backupWallet(const QString& path)
     clearSettingsError();
     if (!m_wallet) {
         setSettingsError(tr("No wallet is selected."));
+        return false;
+    }
+    if (!available()) {
+        setSettingsError(tr("This wallet is closing."));
         return false;
     }
     if (path.trimmed().isEmpty()) {
@@ -1199,7 +1214,7 @@ bool WalletQmlModel::setCurrentPaymentRequestAddress(QString address)
 
 bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_type)
 {
-    if (!m_wallet || !m_receiving_address) return false;
+    if (!available() || !m_receiving_address) return false;
     auto* receiving = m_receiving_address;
     const QString type = address_type.isEmpty() ? defaultReceiveAddressType() : address_type;
     const auto available = availableReceiveAddressTypes();
@@ -1238,7 +1253,7 @@ bool WalletQmlModel::ensureReceivingAddress(bool next, const QString& address_ty
 
 bool WalletQmlModel::ensureReceivingAddressWithPassphrase(const QString& passphrase, bool next, const QString& address_type)
 {
-    if (!m_wallet || !m_receiving_address) return false;
+    if (!available() || !m_receiving_address) return false;
     auto secure_passphrase = QmlUtil::SecureStringFromQString(passphrase);
     const auto result = TryUnlockWithPassphrase(*m_wallet, secure_passphrase);
     if (result == WalletUnlockResult::IncorrectPassphrase) {
@@ -1253,7 +1268,7 @@ bool WalletQmlModel::ensureReceivingAddressWithPassphrase(const QString& passphr
 
 bool WalletQmlModel::commitReceivingPaymentRequest()
 {
-    if (!m_wallet || !m_receiving_address || !m_current_payment_request) return false;
+    if (!available() || !m_receiving_address || !m_current_payment_request) return false;
     if (!m_current_payment_request->id().isEmpty()) return false;
     // Reconcile before committing: never silently attach a draft to a different
     // address if a payment landed while the user was filling out the form.
@@ -1398,7 +1413,7 @@ bool WalletQmlModel::savePaymentRequest(PaymentRequest* request)
 
 bool WalletQmlModel::commitPaymentRequest()
 {
-    if (!m_wallet || !m_current_payment_request) {
+    if (!available() || !m_current_payment_request) {
         return false;
     }
 
@@ -1414,7 +1429,7 @@ bool WalletQmlModel::commitPaymentRequest()
 
 bool WalletQmlModel::commitPaymentRequestWithPassphrase(const QString& passphrase)
 {
-    if (!m_wallet || !m_current_payment_request) {
+    if (!available() || !m_current_payment_request) {
         return false;
     }
 
@@ -1476,7 +1491,7 @@ void WalletQmlModel::reloadReceiveRequests()
 
 bool WalletQmlModel::removeReceiveRequest(const QString& request_id)
 {
-    if (!m_wallet || !m_receive_requests) return false;
+    if (!available() || !m_receive_requests) return false;
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry) return false;
     const CTxDestination destination = DecodeDestination(entry->recipient.address);
@@ -1541,7 +1556,7 @@ bool WalletQmlModel::loadPaymentRequestDetail(const QString& request_id)
 bool WalletQmlModel::updatePaymentRequest(const QString& request_id, qint64 amount,
                                         const QString& label, const QString& message, const QString& note)
 {
-    if (!m_wallet || !m_receive_requests || !MoneyRange(amount)) return false;
+    if (!available() || !m_receive_requests || !MoneyRange(amount)) return false;
     const auto entry = m_receive_requests->entryById(request_id);
     if (!entry || entry->id <= 0 || entry->id > std::numeric_limits<unsigned int>::max()) return false;
     PaymentRequest edited;
@@ -2277,6 +2292,14 @@ bool WalletQmlModel::prepareTransactionWithPassphrase(const QString& passphrase)
 bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> passphrase)
 {
     clearTransactionStatus();
+    if (m_wallet && !available()) {
+        if (passphrase.has_value()) {
+            QmlUtil::ClearSecureString(*passphrase);
+            passphrase.reset();
+        }
+        setTransactionStatus(tr("This wallet is closing."));
+        return false;
+    }
     if (!m_wallet || !m_send_recipients || m_send_recipients->recipients().empty()) {
         if (passphrase.has_value()) {
             QmlUtil::ClearSecureString(*passphrase);
@@ -2399,7 +2422,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
 
 void WalletQmlModel::approveExternalSignerTransaction()
 {
-    if (!m_wallet || !m_current_transaction || !m_wallet->hasExternalSigner()) {
+    if (!available() || !m_current_transaction || !m_wallet->hasExternalSigner()) {
         Q_EMIT externalSignerApprovalFailed(tr("External signer not available."), true);
         return;
     }
@@ -2489,6 +2512,10 @@ bool WalletQmlModel::sendTransactionWithPassphrase(const QString& passphrase)
 bool WalletQmlModel::broadcastCurrentTransaction()
 {
     clearTransactionStatus();
+    if (m_wallet && !available()) {
+        setTransactionStatus(tr("This wallet is closing."));
+        return false;
+    }
     if (!m_node || !m_current_transaction || !m_current_psbt || !m_current_transaction_can_broadcast) {
         setTransactionStatus(tr("This transaction is not ready to broadcast."));
         return false;
@@ -2535,6 +2562,14 @@ bool WalletQmlModel::broadcastCurrentTransaction()
 bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphrase)
 {
     clearTransactionStatus();
+    if (m_wallet && !available()) {
+        if (passphrase.has_value()) {
+            QmlUtil::ClearSecureString(*passphrase);
+            passphrase.reset();
+        }
+        setTransactionStatus(tr("This wallet is closing."));
+        return false;
+    }
     if (!m_wallet || !m_current_transaction) {
         if (passphrase.has_value()) {
             QmlUtil::ClearSecureString(*passphrase);
@@ -2668,6 +2703,10 @@ WalletQmlModel::PsbtImportResult WalletQmlModel::importPsbtFromFile(const QStrin
     if (!m_imported_psbt_model) {
         return PsbtImportResult::PsbtUnsupported;
     }
+    if (m_wallet && !available()) {
+        m_imported_psbt_model->setError(tr("This wallet is closing."));
+        return PsbtImportResult::PsbtUnsupported;
+    }
 
     CMutableTransaction empty_tx;
     PartiallySignedTransaction psbt{empty_tx};
@@ -2702,6 +2741,9 @@ WalletQmlModel::PsbtImportResult WalletQmlModel::importPsbtFromFile(const QStrin
 
 QString WalletQmlModel::saveCurrentTransactionAsPsbt(const QString& path)
 {
+    if (m_wallet && !available()) {
+        return tr("This wallet is closing.");
+    }
     if (!m_wallet || !m_current_transaction) {
         return tr("No transaction is prepared.");
     }
@@ -3192,9 +3234,13 @@ void WalletQmlModel::subscribeToWalletSignals()
             pending->fetch_sub(1);
         }, Qt::QueuedConnection);
     });
-    m_handler_unload = handleUnload([guard, bridge] {
+    m_handler_unload = handleUnload([guard, bridge, unload_requested = m_unload_requested] {
+        unload_requested->store(true);
         QMetaObject::invokeMethod(bridge.get(), [guard] {
-            if (guard && !guard->m_stopping) Q_EMIT guard->walletUnloaded();
+            if (guard && !guard->m_stopping) {
+                Q_EMIT guard->availableChanged();
+                Q_EMIT guard->walletUnloaded();
+            }
         }, Qt::QueuedConnection);
     });
 }
