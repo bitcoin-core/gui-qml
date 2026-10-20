@@ -1155,7 +1155,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QObject* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(QObject* recipients READ recipients CONSTANT)
     Q_PROPERTY(QObject* coinsListModel READ coinsListModel CONSTANT)
-    Q_PROPERTY(QObject* currentTransaction READ currentTransaction CONSTANT)
+    Q_PROPERTY(QObject* currentTransaction READ currentTransaction NOTIFY currentTransactionChanged)
     Q_PROPERTY(QVariantMap currentTransactionFlow MEMBER m_current_transaction_flow NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionIsImportedPsbt MEMBER m_current_transaction_is_imported_psbt NOTIFY currentTransactionChanged)
     Q_PROPERTY(bool currentTransactionCanSend MEMBER m_current_transaction_can_send NOTIFY currentTransactionChanged)
@@ -1184,6 +1184,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(int prepareTransactionCalls READ prepareTransactionCalls NOTIFY prepareTransactionCallsChanged)
     Q_PROPERTY(int scheduleFeeEstimatesCalls READ scheduleFeeEstimatesCalls NOTIFY scheduleFeeEstimatesCallsChanged)
     Q_PROPERTY(int sendTransactionCalls READ sendTransactionCalls NOTIFY sendTransactionCallsChanged)
+    Q_PROPERTY(int sendTransactionWithPassphraseCalls MEMBER m_send_transaction_with_passphrase_calls NOTIFY sendTransactionCallsChanged)
     Q_PROPERTY(bool sendDraftSweepsWallet MEMBER m_send_draft_sweeps_wallet NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool currentTransactionSweepsWallet MEMBER m_current_transaction_sweeps_wallet NOTIFY currentTransactionChanged)
     Q_PROPERTY(int useMaximumCalls MEMBER m_use_maximum_calls NOTIFY walletInfoChanged)
@@ -1524,6 +1525,18 @@ public:
         }
         return m_send_transaction_result;
     }
+    Q_INVOKABLE bool sendTransactionWithPassphrase(const QString&)
+    {
+        ++m_send_transaction_with_passphrase_calls;
+        Q_EMIT sendTransactionCallsChanged();
+        return m_send_transaction_result;
+    }
+    /** Stand in for a new review or PSBT import replacing the transaction. */
+    Q_INVOKABLE void replaceCurrentTransactionForTest(QObject* transaction)
+    {
+        m_current_transaction = transaction;
+        Q_EMIT currentTransactionChanged();
+    }
     Q_INVOKABLE bool broadcastCurrentTransaction()
     {
         ++m_broadcast_current_transaction_calls;
@@ -1722,6 +1735,7 @@ private:
     int m_prepare_transaction_calls{0};
     int m_schedule_fee_estimates_calls{0};
     int m_send_transaction_calls{0};
+    int m_send_transaction_with_passphrase_calls{0};
     int m_broadcast_current_transaction_calls{0};
     int m_discard_current_transaction_calls{0};
     MockAddressListModel m_address_list_model;

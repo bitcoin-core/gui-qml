@@ -63,8 +63,12 @@ Page {
 
     function requestSend() {
         if (sending || !wallet) return
-        if (wallet.currentTransactionSweepsWallet) sweepAlert.open()
-        else commitSend()
+        if (wallet.currentTransactionSweepsWallet) {
+            sweepAlert.reviewedTransaction = wallet.currentTransaction
+            sweepAlert.open()
+        } else {
+            commitSend()
+        }
     }
 
     function commitSend() {
@@ -73,8 +77,25 @@ Page {
             sending = true
             transactionSent(transaction ? transaction.txid : "")
         } else if (wallet.transactionNeedsUnlock) {
+            sendPassphrasePopup.reviewedTransaction = wallet.currentTransaction
             sendPassphrasePopup.errorText = ""
             sendPassphrasePopup.open()
+        }
+    }
+
+    // The send confirmations authorize the transaction that was shown when
+    // they opened. A new review or PSBT import replaces the transaction
+    // object, which closes them and makes a pending submit stale; signing
+    // updates the same object.
+    function isCurrentTransaction(reviewed) {
+        return wallet !== null && reviewed !== null && reviewed === wallet.currentTransaction
+    }
+
+    Connections {
+        target: root.wallet
+        function onCurrentTransactionChanged() {
+            if (!root.isCurrentTransaction(sweepAlert.reviewedTransaction)) sweepAlert.close()
+            if (!root.isCurrentTransaction(sendPassphrasePopup.reviewedTransaction)) sendPassphrasePopup.close()
         }
     }
 
@@ -358,6 +379,7 @@ Page {
         id: sweepAlert
         objectName: "sendSweepAlert"
         parent: Overlay.overlay
+        property WalletQmlModelTransaction reviewedTransaction: null
         //: Final confirmation before sending a transaction that uses all available wallet funds.
         title: qsTr("Send all available funds?")
         //: Warns that a full-wallet send cannot be undone after confirmation on the network.
@@ -373,7 +395,9 @@ Page {
             //: Confirm and send the prepared transaction using all available wallet funds.
             text: qsTr("Send all funds")
             buttonObjectName: "sendSweepConfirmButton"
-            onTriggered: root.commitSend()
+            onTriggered: {
+                if (root.isCurrentTransaction(sweepAlert.reviewedTransaction)) root.commitSend()
+            }
         }
     }
 
@@ -386,7 +410,12 @@ Page {
         descriptionText: qsTr("Enter your wallet password to send this transaction.")
         confirmText: qsTr("Unlock and send")
         busyConfirmText: qsTr("Unlocking...")
+        property WalletQmlModelTransaction reviewedTransaction: null
         onSubmitted: (passphrase) => {
+            if (!root.isCurrentTransaction(reviewedTransaction)) {
+                close()
+                return
+            }
             busy = true
             if (root.wallet.sendTransactionWithPassphrase(passphrase)) {
                 busy = false
