@@ -42,7 +42,11 @@ std::optional<int64_t> SyncProgressTracker::addSample(int64_t monotonic_millisec
         progress_delta *
         static_cast<long double>(time_delta)};
     if (!std::isfinite(remaining) || remaining < 0.0L) return std::nullopt;
-    if (remaining > std::numeric_limits<int64_t>::max()) return std::numeric_limits<int64_t>::max();
+    // Where long double is no wider than double, the int64_t maximum rounds
+    // up to 2^63, which no longer fits in int64_t.
+    if (remaining >= static_cast<long double>(std::numeric_limits<int64_t>::max())) {
+        return std::numeric_limits<int64_t>::max();
+    }
     return static_cast<int64_t>(remaining);
 }
 
