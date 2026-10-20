@@ -146,6 +146,13 @@ Page {
         blockClockTabButton.checked = true
     }
 
+    // Show a wallet's Activity, as long as that wallet is still open.
+    function openWallet(wallet) {
+        if (!wallet || wallet.available === false || walletController.openWallets.indexOf(wallet) < 0) return
+        if (walletController.selectedWallet !== wallet) walletController.setSelectedWallet(wallet.name)
+        if (root.activeWallet === wallet) root.showWalletTab(WalletView.Activity)
+    }
+
     function openActivity() {
         if (root.activeView) root.showWalletTab(WalletView.Activity)
     }
