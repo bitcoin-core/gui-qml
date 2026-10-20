@@ -34,6 +34,7 @@ TestCase {
         testWalletModel.useMaximumCalls = 0
         testWalletModel.clearMaximum()
         testWalletModel.sendTransactionResult = true
+        testWalletModel.transactionNeedsUnlock = false
         testWalletModel.feeEstimatePending = false
         testWalletModel.customFeeEnabled = false
         testWalletModel.customFeeRate = ""
@@ -906,6 +907,107 @@ TestCase {
         review.wallet = null
         tryCompare(alert, "visible", false)
         compare(testWalletModel.sendTransactionCalls, calls)
+    }
+
+    // A confirmation for one payment draft must not survive the draft being
+    // replaced, for example by File > Open URI.
+    function test_review_sweep_alert_closes_when_draft_is_replaced() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.sendDraftSweepsWallet = true
+        testRecipientsModel.totalAmountSatoshi = 200000000
+        const alert = findChild(page, "sendReviewSweepAlert")
+        const prepareCalls = testWalletModel.prepareTransactionCalls
+
+        findChild(page, "sendReviewButton").clicked()
+        tryCompare(alert, "opened", true)
+        testRecipientsModel.totalAmountSatoshi = 10000000
+        tryCompare(alert, "visible", false)
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls)
+
+        // Switching off Use maximum is a different draft too.
+        testWalletModel.useMaximum()
+        findChild(page, "sendReviewButton").clicked()
+        tryCompare(alert, "opened", true)
+        // A maximum amount following fee estimates is not an edit.
+        testRecipientsModel.totalAmountSatoshi = 199990000
+        wait(50)
+        compare(alert.visible, true)
+        testWalletModel.clearMaximum()
+        tryCompare(alert, "visible", false)
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls)
+    }
+
+    function test_stale_review_sweep_confirmation_is_ignored() {
+        const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        testWalletModel.sendDraftSweepsWallet = true
+        testRecipientsModel.totalAmountSatoshi = 200000000
+        const alert = findChild(page, "sendReviewSweepAlert")
+        const prepareCalls = testWalletModel.prepareTransactionCalls
+        findChild(page, "sendReviewButton").clicked()
+        tryCompare(alert, "opened", true)
+        page.draftRevision++
+        findChild(alert.contentItem, "sendReviewSweepConfirmButton").clicked()
+        compare(testWalletModel.prepareTransactionCalls, prepareCalls)
+        compare(findChild(page, "transactionReviewPopup").opened, false)
+    }
+
+    // A password prompt authorizes only the transaction it was opened for.
+    // Importing another PSBT behind it closes it and rejects a submit.
+    function test_send_password_prompt_rejects_replaced_transaction() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        const prompt = findChild(review, "sendTransactionPassphrasePopup")
+        const replacement = testSecondWalletModel.currentTransaction
+        verify(prompt !== null)
+        verify(replacement !== testWalletModel.currentTransaction)
+        const reviewed = testWalletModel.currentTransaction
+        testWalletModel.sendTransactionResult = false
+        testWalletModel.transactionNeedsUnlock = true
+        const calls = testWalletModel.sendTransactionWithPassphraseCalls
+        try {
+            review.commitSend()
+            tryCompare(prompt, "opened", true)
+            // Signing status updates keep the same transaction object.
+            testWalletModel.replaceCurrentTransactionForTest(reviewed)
+            wait(50)
+            compare(prompt.visible, true)
+
+            testWalletModel.replaceCurrentTransactionForTest(replacement)
+            tryCompare(prompt, "visible", false)
+
+            testWalletModel.replaceCurrentTransactionForTest(reviewed)
+            review.commitSend()
+            tryCompare(prompt, "opened", true)
+            prompt.reviewedTransaction = replacement
+            prompt.submitted("password")
+            compare(testWalletModel.sendTransactionWithPassphraseCalls, calls)
+            tryCompare(prompt, "visible", false)
+
+            review.commitSend()
+            tryCompare(prompt, "opened", true)
+            testWalletModel.sendTransactionResult = true
+            prompt.submitted("password")
+            compare(testWalletModel.sendTransactionWithPassphraseCalls, calls + 1)
+        } finally {
+            testWalletModel.replaceCurrentTransactionForTest(reviewed)
+            testWalletModel.transactionNeedsUnlock = false
+        }
+    }
+
+    function test_review_sweep_alert_closes_when_transaction_is_replaced() {
+        const review = createTemporaryObject(reviewComponent, testCase.Window.window.contentItem, {width: 1000, height: 900})
+        const reviewed = testWalletModel.currentTransaction
+        testWalletModel.currentTransactionSweepsWallet = true
+        const calls = testWalletModel.sendTransactionCalls
+        const alert = findChild(review, "sendSweepAlert")
+        try {
+            findChild(review, "sendTransactionReviewSendButton").clicked()
+            tryCompare(alert, "opened", true)
+            testWalletModel.replaceCurrentTransactionForTest(testSecondWalletModel.currentTransaction)
+            tryCompare(alert, "visible", false)
+            compare(testWalletModel.sendTransactionCalls, calls)
+        } finally {
+            testWalletModel.replaceCurrentTransactionForTest(reviewed)
+        }
     }
 
     function test_review_subset_sends_without_sweep_alert() {

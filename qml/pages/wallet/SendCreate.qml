@@ -44,7 +44,10 @@ PageStack {
 
     function confirmTransactionReview() {
         if (!root.wallet) return
-        if (root.wallet.sendDraftSweepsWallet) reviewSweepAlert.open()
+        if (root.wallet.sendDraftSweepsWallet) {
+            reviewSweepAlert.draftRevision = root.draftRevision
+            reviewSweepAlert.open()
+        }
         else root.prepareTransactionForReview()
     }
 
@@ -79,6 +82,16 @@ PageStack {
     function openPsbtFileImport() {
         root.returnToSendForm()
         root.openWhileShown(sendPage.openPsbtFileImport)
+    }
+
+    // Counts edits to the payment draft. A confirmation applies only to the
+    // draft it was shown for, so any edit closes it, including one from
+    // outside the form such as File > Open URI.
+    property int draftRevision: 0
+
+    function draftChanged() {
+        root.draftRevision++
+        reviewSweepAlert.close()
     }
 
     // Counts how often this page was hidden. A deferred open is dropped if
@@ -167,6 +180,7 @@ PageStack {
     Connections {
         target: root.wallet ? root.wallet.recipients : null
         function onListCleared() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             sendPage.expandedRecipient = 0
             if (root.wallet) {
@@ -174,10 +188,18 @@ PageStack {
             }
         }
         function onCountChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
         }
+        function onTotalAmountChanged() {
+            // With Use maximum the amount follows fee estimates; only a
+            // fixed amount changing is an edit. Replacing the maximum
+            // amount clears the maximum recipient, handled below.
+            if (root.wallet && !root.wallet.maximumRecipient) root.draftChanged()
+        }
         function onCurrentRecipientChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
             sendPage.paymentRequestStatus = ""
@@ -191,8 +213,16 @@ PageStack {
     }
 
     Connections {
+        target: root.recipient ? root.recipient.address : null
+        function onFormattedAddressChanged() {
+            root.draftChanged()
+        }
+    }
+
+    Connections {
         target: root.wallet ? root.wallet.coinsListModel : null
         function onSelectedCoinsCountChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
         }
@@ -201,6 +231,7 @@ PageStack {
     Connections {
         target: root.wallet
         function onCurrentTransactionChanged() { reviewSweepAlert.close() }
+        function onMaximumRecipientChanged() { root.draftChanged() }
         function onCustomFeeEnabledChanged() {
             root.clearPrepareTransactionError()
         }
@@ -1155,6 +1186,7 @@ PageStack {
         id: reviewSweepAlert
         objectName: "sendReviewSweepAlert"
         parent: Overlay.overlay
+        property int draftRevision: -1
         //: Confirmation before reviewing a transaction that sends the wallet's entire available balance.
         title: qsTr("Use all available funds?")
         //: %1 is the total recipient amount with its unit, excluding the transaction fee.
@@ -1169,7 +1201,9 @@ PageStack {
             //: Confirm using all available funds before unlocking the wallet and reviewing; this does not send it.
             text: qsTr("Use maximum")
             buttonObjectName: "sendReviewSweepConfirmButton"
-            onTriggered: root.prepareTransactionForReview()
+            onTriggered: {
+                if (reviewSweepAlert.draftRevision === root.draftRevision) root.prepareTransactionForReview()
+            }
         }
     }
 
