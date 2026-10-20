@@ -972,9 +972,9 @@ QString WalletQmlModel::keySchemeDisplayText(KeyScheme scheme)
     case KeyScheme::ExternalSigner:
         return tr("External signer");
     case KeyScheme::SingleKey:
-    default:
         return tr("Single-key");
-    }
+    } // no default case, so the compiler can warn about missing cases
+    return tr("Single-key");
 }
 
 QString WalletQmlModel::privateKeysStatus() const

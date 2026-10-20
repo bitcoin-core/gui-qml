@@ -43,9 +43,8 @@ public:
             return "MOBILE";
         case DESKTOP:
             return "DESKTOP";
-        default:
-            return "DESKTOP";
-        }
+        } // no default case, so the compiler can warn about missing cases
+        return "DESKTOP";
     }
     Mode mode() const { return m_mode; }
 
