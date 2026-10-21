@@ -768,6 +768,59 @@ TestCase {
         compare(custom.description, "Storing recent blocks up to " + data.custom + " GB. Uses about " + (data.custom + 12) + " GB in total.")
     }
 
+    function test_choice_highlight_changes_without_fading_other_choices() {
+        optionsModel.prune = false
+        optionsModel.pruneSizeGB = 7
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const options = createTemporaryObject(storageOptions, this, { customStorage: true, customStorageAmount: 7 })
+        const reduce = findChild(options, "storageReduceOption")
+        const full = findChild(options, "storageFullOption")
+        const custom = findChild(options, "storageCustomOption")
+        mouseMove(reduce, reduce.width / 2, reduce.height / 2)
+        wait(200)
+        const customColor = custom.background.color
+        const selectedColor = Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
+
+        mouseClick(reduce)
+        compare(reduce.checked, true)
+        compare(full.checked, false)
+        compare(custom.checked, false)
+        compare(reduce.background.color, selectedColor)
+        compare(findButtonByText(findChild(reduce, "optionButtonHeader"), reduce.text).color, Theme.color.orange)
+        compare(full.background.color, Theme.color.neutral1)
+        compare(custom.background.color, customColor)
+        wait(40)
+        compare(custom.background.color, customColor)
+        mouseClick(reduce)
+        compare(reduce.background.color, selectedColor)
+        compare(findButtonByText(findChild(reduce, "optionButtonHeader"), reduce.text).color, Theme.color.orange)
+        compare(custom.background.color, customColor)
+
+        full.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Space)
+        compare(full.checked, true)
+        compare(full.background.color, selectedColor)
+        compare(findButtonByText(findChild(full, "optionButtonHeader"), full.text).color, Theme.color.orange)
+        compare(custom.background.color, customColor)
+    }
+
+    function test_location_choice_highlight_changes_without_fading() {
+        optionsModel.useDefaultDataDir()
+        const locations = createTemporaryObject(storageLocations, this)
+        const defaultOption = findChild(locations, "storageDefaultLocationOption")
+        const customOption = findChild(locations, "storageCustomLocationOption")
+        const selectedColor = Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
+        optionsModel.selectCustomDataDir("/tmp/onboarding-custom")
+        compare(customOption.checked, true)
+        compare(customOption.background.color, selectedColor)
+        mouseClick(defaultOption)
+        compare(defaultOption.checked, true)
+        compare(customOption.checked, false)
+        compare(defaultOption.background.color, selectedColor)
+        compare(customOption.background.color, Theme.color.neutral1)
+        compare(findButtonByText(findChild(defaultOption, "optionButtonHeader"), defaultOption.text).color, Theme.color.orange)
+    }
+
     function test_custom_storage_option_shows_entered_target_and_reduce_can_reselect() {
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 7
