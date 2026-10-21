@@ -53,7 +53,7 @@ AbstractButton {
             : "transparent"
 
         Behavior on color {
-            enabled: Theme.motion.animated
+            enabled: Theme.motion.animated && !button.surfaceSelectionStyle
             ColorAnimation { duration: Theme.motion.normal }
         }
         FocusBorder {
@@ -78,6 +78,7 @@ AbstractButton {
             spacing: 3
             Layout.fillWidth: true
             CoreText {
+                objectName: "optionButtonHeader"
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 visible: text.length > 0
