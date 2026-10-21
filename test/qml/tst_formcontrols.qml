@@ -22,6 +22,17 @@ TestCase {
     }
 
     Component {
+        id: optionButtonComponent
+
+        OptionButton {
+            width: 480
+            text: "Store all data"
+            description: "Uses about 870GB. Support the network."
+            surfaceSelectionStyle: true
+        }
+    }
+
+    Component {
         id: formRowComponent
 
         FormRow {
@@ -246,6 +257,21 @@ TestCase {
                 text: "/Users/example/Bitcoin"
             }
         }
+    }
+
+    function test_optionButtonSizesWithoutBadgeOrWarning() {
+        const button = createTemporaryObject(optionButtonComponent, host)
+        const header = findChild(button, "optionButtonHeader")
+        waitForRendering(button)
+        tryVerify(() => header.width > 0 && header.height > 0)
+        verify(button.height >= header.height + button.topPadding + button.bottomPadding)
+        const height = button.height
+        button.checked = true
+        waitForRendering(button)
+        compare(button.height, height)
+        button.checked = false
+        waitForRendering(button)
+        compare(button.height, height)
     }
 
     function test_formRowLoadsAndDisablesTrailingControl() {
