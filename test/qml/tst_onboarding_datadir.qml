@@ -10,17 +10,18 @@ import "../../qml/controls"
 import "../../qml/pages/onboarding"
 
 TestCase {
+    id: testCase
     name: "OnboardingDataDir"
     when: windowShown
     visible: true
-    width: 640
+    width: 800
     height: 665
 
     Component {
         id: fullWizard
         OnboardingWizard {
-            width: 640
-            height: 665
+            width: testCase.width
+            height: testCase.height
             assumedChainstateSize: 8
         }
     }
@@ -28,8 +29,8 @@ TestCase {
     Component {
         id: fullPreInitWizard
         OnboardingWizard {
-            width: 640
-            height: 665
+            width: testCase.width
+            height: testCase.height
             preInit: true
             assumedChainstateSize: 8
         }
@@ -38,8 +39,8 @@ TestCase {
     Component {
         id: storageLocation
         OnboardingStorageLocation {
-            width: 640
-            height: 665
+            width: testCase.width
+            height: testCase.height
             assumedChainstateSize: 8
         }
     }
@@ -47,8 +48,8 @@ TestCase {
     Component {
         id: storageAmount
         OnboardingStorageAmount {
-            width: 640
-            height: 665
+            width: testCase.width
+            height: testCase.height
             assumedBlockchainSize: 610
             assumedChainstateSize: 12
         }
@@ -84,8 +85,8 @@ TestCase {
     Component {
         id: connection
         OnboardingConnection {
-            width: 640
-            height: 665
+            width: testCase.width
+            height: testCase.height
         }
     }
 
@@ -630,7 +631,7 @@ TestCase {
         optionsModel.setCurrentStorageForTest(data.target)
         optionsModel.setStorageStatusForTest(false, 5, "", "")
         const page = createTemporaryObject(storageAmount, this, {
-            width: 800, height: 665, customStorage: true, customStorageAmount: 7
+            customStorage: true, customStorageAmount: 7
         })
         compare(page.subheading, "Keep your current setting or choose a change.")
         const reduce = findChild(page, "storageReduceOption")
