@@ -189,8 +189,15 @@ TestCase {
         compare(wizard.currentItem.objectName, "onboardingCover")
     }
 
-    function test_preinit_cover_info_button_opens_about() {
-        const wizard = createTemporaryObject(fullPreInitWizard, this)
+    function test_cover_about_hides_developer_options_data() {
+        return [
+            { tag: "preinit", preInit: true },
+            { tag: "normal", preInit: false }
+        ]
+    }
+
+    function test_cover_about_hides_developer_options(data) {
+        const wizard = createTemporaryObject(fullWizard, this, { preInit: data.preInit })
         verify(wizard !== null)
         compare(wizard.currentItem.objectName, "onboardingCover")
 
@@ -201,30 +208,31 @@ TestCase {
         infoButton.clicked()
         const popup = findChild(wizard.currentItem, "onboardingAboutPopup")
         verify(popup !== null)
-        tryCompare(popup, "visible", true)
+        tryCompare(popup, "opened", true)
         compare(popup.width, 532)
         compare(popup.height, 504)
         const aboutPage = findChild(popup, "aboutSettingsPage")
         verify(aboutPage !== null)
         compare(aboutPage.title, "About Bitcoin Core")
-        compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.neutral3)
+        compare(findChild(aboutPage, "aboutDeveloperRow").visible, false)
+        compare(findChild(popup, "settingsDeveloper"), null)
 
-        findChild(aboutPage, "aboutDeveloperRow").clicked()
-        const developerPage = findChild(popup, "settingsDeveloper")
-        verify(developerPage !== null)
-        const developerSection = findChild(developerPage, "developerSettingsSection")
-        verify(developerSection !== null)
-        compare(developerSection.backgroundColor, Theme.color.neutral2)
-        const dbcacheField = findChild(developerPage, "developerDbcacheField")
-        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
-        verify(dbcacheField !== null)
-        verify(scriptThreadsField !== null)
-        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
-        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
-        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
-        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
-        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
-        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+        const versionRow = findChild(aboutPage, "aboutVersionRow")
+        compare(findChild(versionRow, "aboutVersionRowValue").text, BuildInfo.fullClientVersion)
+        compare(versionRow.showDivider, false)
+        compare(versionRow.showsDisclosureIndicator, false)
+        compare(versionRow.activeFocusOnTab, false)
+        mouseClick(versionRow)
+        const externalPopup = findChild(aboutPage, "aboutExternalLinkPopup")
+        compare(externalPopup.visible, false)
+
+        mouseClick(findChild(aboutPage, "aboutLicenseRow"))
+        tryCompare(externalPopup, "opened", true)
+        compare(externalPopup.link.toString(), "https://github.com/bitcoin/bitcoin/blob/master/COPYING")
+        externalPopup.close()
+        tryCompare(externalPopup, "visible", false)
+        popup.close()
+        tryCompare(popup, "visible", false)
     }
 
     function test_normal_onboarding_starts_at_cover() {
