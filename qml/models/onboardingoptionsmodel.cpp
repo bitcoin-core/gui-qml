@@ -18,7 +18,9 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <exception>
+#include <limits>
 #include <utility>
 
 OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bool can_listen_ipc, QObject* parent)
@@ -207,6 +209,19 @@ void OnboardingOptionsModel::setPrune(bool prune)
 void OnboardingOptionsModel::setPruneSizeGB(int prune_size_gb)
 {
     m_core_settings.changePruneSizeGB(prune_size_gb);
+}
+
+QString OnboardingOptionsModel::commitPruneSizeGB(const QString& text, const QString& locale_name)
+{
+    int maximum = !storageCheckPending() && !storageAvailableText().isEmpty()
+        ? std::max(0, storageAvailableGB() - assumedChainstateSize())
+        : std::numeric_limits<int>::max() - assumedChainstateSize();
+    // An existing pruned node already holds its blocks. Keeping or lowering
+    // its target needs no more free space, so low space must not block it.
+    if (existingProfile() && currentPruneTargetMiB() > 1) {
+        maximum = std::max(maximum, QmlCoreSettings::PruneMiBToGB(currentPruneTargetMiB()));
+    }
+    return m_core_settings.commitPruneSizeGB(text, locale_name, maximum);
 }
 
 void OnboardingOptionsModel::keepCurrentStorage()

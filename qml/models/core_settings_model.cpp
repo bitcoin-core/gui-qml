@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/core_settings_model.h>
+#include <qml/localeinteger.h>
 
 #include <univalue.h>
 
@@ -197,6 +198,19 @@ QmlCoreSettings::Change CoreSettingsModel::changePruneSizeGB(int prune_size_gb)
     return mutate(ChangeOrigin::User, [prune_size_gb](QmlCoreSettings::Session& session) {
         return session.changePruneSizeGB(prune_size_gb);
     });
+}
+
+QString CoreSettingsModel::commitPruneSizeGB(const QString& text, const QString& locale_name, int maximum)
+{
+    if (!canEdit(QStringLiteral("prune"))) return tr("This setting is set by the command line.");
+    const auto value = ParseLocalizedInteger(text, locale_name, 1, std::numeric_limits<int>::max());
+    if (!value) return tr("Enter a whole number of at least 1 GB.");
+    if (*value > maximum) {
+        if (maximum < 1) return tr("There is not enough available storage for reduced storage in this data directory.");
+        return tr("Choose a value between 1 GB and %1 GB for this data directory.").arg(maximum);
+    }
+    changePruneSizeGB(*value);
+    return {};
 }
 
 QmlCoreSettings::Change CoreSettingsModel::changeProxyEnabled(bool enabled)
