@@ -90,6 +90,7 @@ public:
     void setPrune(bool prune);
     int pruneSizeGB() const { return m_core_settings.values().prune_size_gb; }
     void setPruneSizeGB(int prune_size_gb);
+    Q_INVOKABLE QString commitPruneSizeGB(const QString& text, const QString& locale_name);
     bool listen() const { return m_core_settings.values().listen; }
     void setListen(bool listen);
     bool natpmp() const { return m_core_settings.values().natpmp; }

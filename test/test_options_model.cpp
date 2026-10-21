@@ -19,6 +19,7 @@
 #include <qml/core_settings.h>
 #include <qml/datadir.h>
 #include <qml/guiargs.h>
+#include <qml/localeinteger.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/models/core_settings_model.h>
 #include <qml/models/onboardingoptionsmodel.h>
@@ -33,6 +34,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <limits>
 #include <stdexcept>
 
 #ifndef BITCOINQML_NO_TEST_MAIN
@@ -61,6 +63,12 @@ private Q_SLOTS:
     void mempoolSizeLoadedFromSettings();
     void mempoolSizeWritesSetting();
     void mempoolSizeDoesNotRewriteUnchangedSetting();
+    void localizedInteger_data();
+    void localizedInteger();
+    void localizedSettingsCommit_data();
+    void localizedSettingsCommit();
+    void invalidIntegerSettingsPreserveValues();
+    void onboardingIntegerCommitPreservesLimits();
     void legacyNumericSettingsWriteStrings();
     void externalSignerPathWritesSigner();
     void externalSignerPathClearedRemovesKey();
@@ -520,6 +528,137 @@ void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
     model.setMaxMempoolSizeMB(456);
     QCOMPARE(model.maxMempoolSizeMB(), 456);
     QCOMPARE(SettingWriteCount(node, "maxmempool"), 0);
+}
+
+void OptionsModelTests::localizedInteger_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<QString>("locale_name");
+    QTest::addColumn<bool>("valid");
+    QTest::addColumn<int>("expected");
+    QTest::newRow("plain") << QStringLiteral("1000") << QStringLiteral("en_US") << true << 1000;
+    QTest::newRow("comma") << QStringLiteral("1,000") << QStringLiteral("en_US") << true << 1000;
+    QTest::newRow("period") << QStringLiteral("1.000") << QStringLiteral("de_DE") << true << 1000;
+    QTest::newRow("french") << QLocale{"fr_FR"}.toString(1000) << QStringLiteral("fr_FR") << true << 1000;
+    QTest::newRow("arabic") << QLocale{"ar_EG"}.toString(1000) << QStringLiteral("ar_EG") << true << 1000;
+    QTest::newRow("negative") << QStringLiteral("-") + QLocale{"ar_EG"}.toString(1) << QStringLiteral("ar_EG") << true << -1;
+    QTest::newRow("zero") << QStringLiteral("0") << QStringLiteral("en_US") << true << 0;
+    QTest::newRow("int-max") << QStringLiteral("2,147,483,647") << QStringLiteral("en_US") << true << std::numeric_limits<int>::max();
+    QTest::newRow("int-min") << QStringLiteral("-2,147,483,648") << QStringLiteral("en_US") << true << std::numeric_limits<int>::min();
+    for (const auto* invalid : {"", "-", "1,00", "1,,000", "1,000,", "1.5", "1e3", "0x10", "1000GB", "2,147,483,648", "-2,147,483,649"}) {
+        QTest::newRow(invalid) << QString::fromLatin1(invalid) << QStringLiteral("en_US") << false << 0;
+    }
+    QTest::newRow("decimal-comma") << QStringLiteral("1,5") << QStringLiteral("de_DE") << false << 0;
+}
+
+void OptionsModelTests::localizedInteger()
+{
+    QFETCH(QString, text);
+    QFETCH(QString, locale_name);
+    QFETCH(bool, valid);
+    QFETCH(int, expected);
+    const auto value = ParseLocalizedInteger(text, locale_name, std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+    QCOMPARE(value.has_value(), valid);
+    if (value) QCOMPARE(*value, expected);
+}
+
+void OptionsModelTests::localizedSettingsCommit_data()
+{
+    QTest::addColumn<QString>("locale_name");
+    for (const auto* locale : {"en_US", "de_DE", "fr_FR", "ar_EG"}) {
+        QTest::newRow(locale) << QString::fromLatin1(locale);
+    }
+}
+
+void OptionsModelTests::localizedSettingsCommit()
+{
+    QFETCH(QString, locale_name);
+    const QLocale locale{locale_name};
+    MockNode node;
+    OptionsQmlModel model(node);
+    const int mempool_size = std::min(10000, model.maxMaxMempoolSizeMB());
+    model.setPrune(true);
+    node.update_rw_setting_arguments.clear();
+    QVERIFY(model.commitPruneSizeGB(locale.toString(1000), locale_name).isEmpty());
+    QVERIFY(model.commitMaxMempoolSizeMB(locale.toString(mempool_size), locale_name).isEmpty());
+    QVERIFY(model.commitDbcacheSizeMiB(locale.toString(1000), locale_name).isEmpty());
+    QVERIFY(model.commitScriptThreads(QStringLiteral("-") + locale.toString(1), locale_name).isEmpty());
+    QCOMPARE(model.pruneSizeGB(), 1000);
+    QCOMPARE(model.maxMempoolSizeMB(), mempool_size);
+    QCOMPARE(model.dbcacheSizeMiB(), 1000);
+    QCOMPARE(model.scriptThreads(), -1);
+    const auto* prune = FindSettingWrite(node, "prune");
+    const auto* mempool = FindSettingWrite(node, "maxmempool");
+    const auto* cache = FindSettingWrite(node, "dbcache");
+    const auto* threads = FindSettingWrite(node, "par");
+    QVERIFY(prune && mempool && cache && threads);
+    QCOMPARE(prune->get_str(), std::string{"953674"});
+    QCOMPARE(mempool->getInt<int>(), mempool_size);
+    QCOMPARE(cache->get_str(), std::string{"1000"});
+    QCOMPARE(threads->get_str(), std::string{"-1"});
+    node.update_rw_setting_arguments.clear();
+    QVERIFY(model.commitPruneSizeGB(QStringLiteral("1000"), locale_name).isEmpty());
+    QVERIFY(model.commitMaxMempoolSizeMB(QString::number(mempool_size), locale_name).isEmpty());
+    QVERIFY(model.commitDbcacheSizeMiB(QStringLiteral("1000"), locale_name).isEmpty());
+    QVERIFY(model.commitScriptThreads(QStringLiteral("-") + locale.toString(1), locale_name).isEmpty());
+    QVERIFY(node.update_rw_setting_arguments.empty());
+}
+
+void OptionsModelTests::invalidIntegerSettingsPreserveValues()
+{
+    MockNode node;
+    OptionsQmlModel model(node);
+    const int prune = model.pruneSizeGB();
+    const int mempool = model.maxMempoolSizeMB();
+    const int cache = model.dbcacheSizeMiB();
+    const int threads = model.scriptThreads();
+    for (const auto* invalid : {"", "-", "1,00", "1.5", "1e3", "0x10", "1000GB", "2,147,483,648"}) {
+        const QString text = QString::fromLatin1(invalid);
+        QVERIFY(!model.commitPruneSizeGB(text, "en_US").isEmpty());
+        QVERIFY(!model.commitMaxMempoolSizeMB(text, "en_US").isEmpty());
+        QVERIFY(!model.commitDbcacheSizeMiB(text, "en_US").isEmpty());
+        QVERIFY(!model.commitScriptThreads(text, "en_US").isEmpty());
+    }
+    QVERIFY(!model.commitPruneSizeGB("0", "en_US").isEmpty());
+    QVERIFY(!model.commitMaxMempoolSizeMB(QString::number(model.minMaxMempoolSizeMB() - 1), "en_US").isEmpty());
+    QVERIFY(!model.commitMaxMempoolSizeMB(QString::number(model.maxMaxMempoolSizeMB() + 1), "en_US").isEmpty());
+    QVERIFY(!model.commitDbcacheSizeMiB(QString::number(model.minDbcacheSizeMiB() - 1), "en_US").isEmpty());
+    QVERIFY(!model.commitDbcacheSizeMiB(QString::number(qint64{model.maxDbcacheSizeMiB()} + 1), "en_US").isEmpty());
+    QVERIFY(!model.commitScriptThreads(QString::number(model.minScriptThreads() - 1), "en_US").isEmpty());
+    QVERIFY(!model.commitScriptThreads(QString::number(model.maxScriptThreads() + 1), "en_US").isEmpty());
+    QCOMPARE(model.pruneSizeGB(), prune);
+    QCOMPARE(model.maxMempoolSizeMB(), mempool);
+    QCOMPARE(model.dbcacheSizeMiB(), cache);
+    QCOMPARE(model.scriptThreads(), threads);
+    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(!model.restartRequired());
+}
+
+void OptionsModelTests::onboardingIntegerCommitPreservesLimits()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    QFile conf(data_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(conf.write("prune=4096\n") > 0);
+    conf.close();
+    OnboardingOptionsModel model(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.storageCheckPending());
+    QVERIFY(model.previewError().isEmpty());
+    const int initial = model.pruneSizeGB();
+    QVERIFY(!model.commitPruneSizeGB("1,00", "en_US").isEmpty());
+    QVERIFY(!model.commitPruneSizeGB(QString::number(model.storageAvailableGB() + 1), "en_US").isEmpty());
+    QCOMPARE(model.pruneSizeGB(), initial);
+    QVERIFY(model.keepingCurrentStorage());
+    QVERIFY(!model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    QVERIFY(model.commitPruneSizeGB(QLocale{"ar_EG"}.toString(7), "ar_EG").isEmpty());
+    QCOMPARE(model.pruneSizeGB(), 7);
+    QVERIFY(model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    ArgsManager args;
+    QString error;
+    QVERIFY2(model.applyToArgs(args, &error), qPrintable(error));
+    QCOMPARE(args.GetIntArg("-prune", 0), QmlCoreSettings::PruneGBToMiB(7));
 }
 
 void OptionsModelTests::legacyNumericSettingsWriteStrings()
@@ -3140,6 +3279,10 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     model.setScriptThreads(8);
     model.setMaxMempoolSizeMB(700);
     model.setExternalSignerPath(QStringLiteral("changed-signer"));
+    QVERIFY(!model.commitPruneSizeGB("1,000", "en_US").isEmpty());
+    QVERIFY(!model.commitMaxMempoolSizeMB("10,000", "en_US").isEmpty());
+    QVERIFY(!model.commitDbcacheSizeMiB("1,000", "en_US").isEmpty());
+    QVERIFY(!model.commitScriptThreads("-1", "en_US").isEmpty());
 
     QCOMPARE(SettingToBool(args.GetPersistentSetting("server")), false);
     QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("prune"), -1), 0);

@@ -18,7 +18,9 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <exception>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -173,6 +175,14 @@ void OnboardingOptionsModel::setPrune(bool prune)
 void OnboardingOptionsModel::setPruneSizeGB(int prune_size_gb)
 {
     m_core_settings.changePruneSizeGB(prune_size_gb);
+}
+
+QString OnboardingOptionsModel::commitPruneSizeGB(const QString& text, const QString& locale_name)
+{
+    const int maximum = !storageCheckPending() && !storageAvailableText().isEmpty()
+        ? std::max(0, storageAvailableGB() - assumedChainstateSize())
+        : std::numeric_limits<int>::max() - assumedChainstateSize();
+    return m_core_settings.commitPruneSizeGB(text, locale_name, maximum);
 }
 
 void OnboardingOptionsModel::keepCurrentStorage()

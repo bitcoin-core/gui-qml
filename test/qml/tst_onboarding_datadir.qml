@@ -160,6 +160,16 @@ TestCase {
         compare(optionsModel.pruneSizeGB, 10)
     }
 
+    function test_storage_popup_commits_grouped_target_on_close() {
+        optionsModel.setStorageStatusForTest(false, 2000, "", "")
+        const page = createTemporaryObject(storageAmount, this)
+        const popup = openStorageSettings(page)
+        findChild(popup, "pruneTargetInput").validator.locale = "en_US"
+        editStorageTarget(popup, "1,000")
+        compare(optionsModel.pruneSizeGB, 1000)
+        compare(page.customStorageAmount, 1000)
+    }
+
     function test_storage_popup_reopens_with_current_target_and_no_stale_error() {
         const page = createTemporaryObject(storageAmount, this)
         verify(page !== null)
@@ -733,7 +743,7 @@ TestCase {
         input.editingFinished()
 
         compare(setting.showErrorText, true)
-        verify(setting.errorText.indexOf("111GB") !== -1)
+        verify(setting.errorText.indexOf("111 GB") !== -1)
         compare(optionsModel.pruneSizeGB, 2)
     }
 

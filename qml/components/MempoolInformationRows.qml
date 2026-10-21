@@ -3,9 +3,9 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
-import QtQuick 2.15 as QtQuickBase
 
 import "../controls"
 
@@ -64,23 +64,22 @@ ColumnLayout {
         Layout.fillWidth: true
         header: qsTr("Mempool size limit")
         state: root.maxMempoolStatus.canEdit === false ? "DISABLED" : "FILLED"
-        errorText: qsTr("This is not a valid mempool size. Please choose a value between %1 and %2 MB.")
-            .arg(optionsModel.minMaxMempoolSizeMB)
-            .arg(optionsModel.maxMaxMempoolSizeMB)
+        errorText: ""
         showErrorText: false
         infoText: root.maxMempoolStatus.infoText || ""
         showInfoText: !showErrorText && infoText.length > 0
         actionItem: ValueInput {
             parentState: mempoolLimitSetting.visualState
             description: optionsModel.maxMempoolSizeMB
-            validator: QtQuickBase.IntValidator {
+            validator: IntegerInputValidator {
                 bottom: optionsModel.minMaxMempoolSizeMB
                 top: optionsModel.maxMaxMempoolSizeMB
+                onInputRejected: mempoolLimitSetting.loadedItem.editingFinished()
             }
             onEditingFinished: {
-                const mempoolSize = parseInt(text, 10)
-                if (acceptableInput && checkValidity(optionsModel.minMaxMempoolSizeMB, optionsModel.maxMaxMempoolSizeMB, mempoolSize)) {
-                    optionsModel.maxMempoolSizeMB = mempoolSize
+                mempoolLimitSetting.errorText = optionsModel.commitMaxMempoolSizeMB(text, validator.locale)
+                if (mempoolLimitSetting.errorText.length === 0) {
+                    text = String(optionsModel.maxMempoolSizeMB)
                     mempoolLimitSetting.forceActiveFocus()
                     mempoolLimitSetting.showErrorText = false
                 } else {
