@@ -213,9 +213,16 @@ The `ctest.xml` report records the overall CTest results; `integration.xml` prov
 the individual test results, including application startup and shutdown failures.
 The process exit status remains authoritative if the parent itself is interrupted
 before finishing its report.
-Per-child deadlines are deferred until Core's subprocess helper supports termination.
-CTest currently limits the complete integration run to 25 minutes; direct binary
-invocations rely on the caller to cancel a hung process.
+Each child has a two-minute watchdog covering discovery or application startup,
+test execution, and shutdown. On timeout it logs the test name and duration to
+stderr and exits immediately, without running destructors or exit handlers. The
+parent records a failure, retains the profile and diagnostics, and continues with
+the remaining tests, even if the child's XML report is missing or incomplete.
+Set `QML_TEST_TIMEOUT` to a positive number of milliseconds to override this limit.
+Keep Qt Test's `QTEST_FUNCTION_TIMEOUT` (five minutes by default) higher than this
+limit so the child can time out before the parent.
+CTest additionally limits the complete integration run to 25 minutes. An outer
+timeout is still needed for hangs before the child can start its watchdog.
 
 `TestApplication` extends the production `BitcoinQmlApplication` and provides
 profile isolation, node and wallet initialization waits, test scheduling, and

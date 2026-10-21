@@ -10,6 +10,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QMetaMethod>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QSet>
 #include <QTest>
 
@@ -18,6 +20,7 @@
 #include <iostream>
 #include <optional>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -28,6 +31,7 @@ struct RunnerOptions {
     QString profile;
     QString profile_dir;
     QString selector;
+    int timeout_ms{120'000};
     bool discover{false};
     bool list_functions{false};
     bool list_modules{false};
@@ -213,6 +217,14 @@ namespace {
 std::optional<RunnerOptions> ParseOptions(int& argc, char* argv[])
 {
     RunnerOptions options;
+    if (qEnvironmentVariableIsSet("QML_TEST_TIMEOUT")) {
+        bool ok{false};
+        options.timeout_ms = qEnvironmentVariableIntValue("QML_TEST_TIMEOUT", &ok);
+        if (!ok || options.timeout_ms <= 0) {
+            std::cerr << "QML_TEST_TIMEOUT must be a positive number of milliseconds\n";
+            return std::nullopt;
+        }
+    }
     int output_index{1};
     for (int i{1}; i < argc; ++i) {
         const std::string_view argument{argv[i]};
@@ -285,6 +297,7 @@ void PrintModules(bool help)
                      "         --test=FUNCTION[:ROW] (select a function or data row)\n"
                      "         --profile-dir=PATH (retain failed profiles here)\n"
                      "Omitted options select all modules and their supported wallet modes.\n"
+                     "QML_TEST_TIMEOUT sets the child timeout in milliseconds (default: 120000).\n"
                      "Qt Test options control the combined output and reports.\n"
                      "Use -functions to list functions and -datatags to list individual rows.\n";
     }
@@ -329,6 +342,20 @@ int RunChild(int argc, char* argv[], const RunnerOptions& options)
         std::cerr << "A child requires a module, wallet mode, and a test or discovery request\n";
         return EXIT_FAILURE;
     }
+    // Cover discovery, application startup, and teardown even if the GUI thread
+    // is blocked. The parent reports the nonzero exit and retains diagnostics.
+    QSemaphore finished;
+    const auto name = CaseName({options.module, *options.wallet_mode, options.discover ? QString{} : options.selector}).toStdString();
+    std::thread watchdog{[&] {
+        if (finished.tryAcquire(1, options.timeout_ms)) return;
+        std::cerr << "Integration test " << name << " timed out after " << options.timeout_ms << " ms\n";
+        // Normal shutdown may be what hung, so do not run destructors or exit handlers.
+        std::_Exit(EXIT_FAILURE);
+    }};
+    const auto cancel_watchdog = qScopeGuard([&] {
+        finished.release();
+        watchdog.join();
+    });
     const auto profile = QDir{options.profile}.absolutePath();
     if (!PrepareIntegrationChild(profile, options.discover)) return EXIT_FAILURE;
     if (options.discover) return RunDiscovery(argc, argv, options);

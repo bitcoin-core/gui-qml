@@ -19,7 +19,7 @@ add_test(NAME bitcoinqml_integration_tests COMMAND bitcoinqml_integration_tests
   --profile-dir=${PROJECT_BINARY_DIR}/test-profiles
   -o ${PROJECT_BINARY_DIR}/test-reports/integration.xml,junitxml -o -,txt
 )
-# Core's subprocess helper has no termination API. CTest bounds the whole run.
+# Bound the whole run in addition to each child's watchdog.
 set_tests_properties(bitcoinqml_integration_tests PROPERTIES TIMEOUT 1500)
 
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
