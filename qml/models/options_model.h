@@ -30,6 +30,8 @@
 #include <QVariantList>
 #include <QUrl>
 
+#include <limits>
+
 namespace interfaces {
 class Node;
 }
@@ -99,10 +101,12 @@ public:
 
     int dbcacheSizeMiB() const { return m_dbcache_size_mib; }
     void setDbcacheSizeMiB(int new_dbcache_size_mib);
+    Q_INVOKABLE QString commitDbcacheSizeMiB(const QString& text, const QString& locale_name);
     bool listen() const { return m_core_settings.values().listen; }
     void setListen(bool new_listen);
     int maxMempoolSizeMB() const { return m_max_mempool_size_mb; }
     void setMaxMempoolSizeMB(int new_max_mempool_size_mb);
+    Q_INVOKABLE QString commitMaxMempoolSizeMB(const QString& text, const QString& locale_name);
     int maxMaxMempoolSizeMB() const { return m_max_max_mempool_size_mb; }
     int minMaxMempoolSizeMB() const { return m_min_max_mempool_size_mb; }
     int maxDbcacheSizeMiB() const { return m_max_dbcache_size_mib; }
@@ -115,8 +119,10 @@ public:
     void setPrune(bool new_prune);
     int pruneSizeGB() const { return m_core_settings.values().prune_size_gb; }
     void setPruneSizeGB(int new_prune_size);
+    Q_INVOKABLE QString commitPruneSizeGB(const QString& text, const QString& locale_name);
     int scriptThreads() const { return m_script_threads; }
     void setScriptThreads(int new_script_threads);
+    Q_INVOKABLE QString commitScriptThreads(const QString& text, const QString& locale_name);
     bool server() const { return m_core_settings.values().server; }
     void setServer(bool new_server);
     QString dataDir() const { return m_dataDir; }
@@ -267,7 +273,7 @@ private:
     // Properties that are exposed to QML.
     int m_dbcache_size_mib{DEFAULT_KERNEL_CACHE / 1_MiB};
     const int m_min_dbcache_size_mib{MIN_DBCACHE_BYTES / 1_MiB};
-    const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE / 1_MiB};
+    const int m_max_dbcache_size_mib{std::numeric_limits<int>::max()};
     int m_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
     const int m_min_max_mempool_size_mb{
         static_cast<int>((DEFAULT_CLUSTER_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
