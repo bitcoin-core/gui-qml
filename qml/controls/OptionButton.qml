@@ -66,19 +66,40 @@ Button {
         ColumnLayout {
             spacing: 3
             Layout.fillWidth: true
-            Header {
+            ColumnLayout {
                 objectName: "optionButtonHeader"
-                animateColors: !button.surfaceSelectionStyle
                 Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                center: false
-                header: button.text
-                headerSize: 18
-                headerMargin: 0
-                headerColor: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
-                description: button.description
-                descriptionSize: 15
-                descriptionMargin: 0
+                spacing: 0
+                Label {
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: button.text
+                    font.family: "BitcoinCoreSans"
+                    font.styleName: "Regular"
+                    font.pixelSize: 18
+                    color: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
+                    wrapMode: Text.WordWrap
+
+                    Behavior on color {
+                        enabled: !button.surfaceSelectionStyle
+                        ColorAnimation { duration: 150 }
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: button.description
+                    font.family: "BitcoinCoreSans"
+                    font.styleName: "Regular"
+                    font.pixelSize: 15
+                    color: Theme.color.neutral8
+                    wrapMode: Text.WordWrap
+
+                    Behavior on color {
+                        enabled: !button.surfaceSelectionStyle
+                        ColorAnimation { duration: 150 }
+                    }
+                }
             }
             Loader {
                 Layout.topMargin: 2
