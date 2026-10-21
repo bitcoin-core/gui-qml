@@ -62,7 +62,7 @@ ColumnLayout {
             ? qsTr("Your current setting") : recommended ? qsTr("Recommended") : ""
         description: root.currentPruneTargetMiB === 1
             ? qsTr("Prune older blocks manually to control storage use.")
-            : qsTr("Uses about %1GB. For regular wallet use.").arg(root.reduceRequiredGB)
+            : qsTr("Uses about %1GB with older data pruned, suitable for regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
         recommended: !root.existingProfile && root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
         checked: root.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
