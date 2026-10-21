@@ -17,6 +17,7 @@ AbstractButton {
     property string errorText: ""
     property bool showErrorText: errorText.length > 0
     property bool recommended: false
+    property string badgeText: recommended ? qsTr("Recommended") : ""
     property string image: ""
     property string customDir: ""
     property bool surfaceSelectionStyle: false
@@ -97,10 +98,10 @@ AbstractButton {
                 Accessible.ignored: true
             }
             Rectangle {
-                visible: button.recommended
+                visible: button.badgeText.length > 0
                 Layout.topMargin: 2
-                implicitWidth: recommendedText.implicitWidth + 14
-                implicitHeight: recommendedText.implicitHeight + 4
+                implicitWidth: badgeLabel.implicitWidth + 14
+                implicitHeight: badgeLabel.implicitHeight + 4
                 color: Theme.color.activeFill
                 radius: Theme.radius.xs
 
@@ -110,11 +111,12 @@ AbstractButton {
                 }
 
                 CoreText {
-                    id: recommendedText
+                    id: badgeLabel
+                    objectName: "optionBadge"
                     anchors.centerIn: parent
                     textStyle: Theme.text.captionStrong
                     color: Theme.color.activeForeground
-                    text: qsTr("Recommended")
+                    text: button.badgeText
                     wrap: false
                 }
             }

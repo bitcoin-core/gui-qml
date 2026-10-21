@@ -90,6 +90,16 @@ QByteArray clickObject(QObject* obj)
             QCoreApplication::sendEvent(window, &release);
             QCoreApplication::processEvents();
 
+            // Preserve exclusive-group behavior if the backend missed the mouse
+            // click. Calling toggle() would uncheck an already-selected choice.
+            if (clicked_connection && clicked_timer.isActive()) {
+                item->forceActiveFocus(Qt::OtherFocusReason);
+                QKeyEvent key_press(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+                QKeyEvent key_release(QEvent::KeyRelease, Qt::Key_Space, Qt::NoModifier);
+                QCoreApplication::sendEvent(item, &key_press);
+                QCoreApplication::sendEvent(item, &key_release);
+            }
+
             if (clicked_connection) {
                 const bool clicked_emitted{!clicked_timer.isActive()};
                 QObject::disconnect(clicked_connection);
