@@ -6,16 +6,16 @@
 #define BITCOIN_QML_TEST_TESTBRIDGE_H
 
 #include <QByteArray>
-#include <QHash>
 #include <QJsonValue>
 #include <QList>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QObject>
 #include <QQmlApplicationEngine>
-#include <QSet>
 #include <QString>
 
+#include <map>
+#include <set>
 #include <vector>
 
 /// Exposes QML object tree to external test scripts over a Unix domain socket.
@@ -72,7 +72,7 @@ private:
     QObject* resolveCurrentLeafItem(QObject* item) const;
 
     /// Recursively collect all named objects from the QML tree.
-    void collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, QSet<const QObject*>& visited, int depth) const;
+    void collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, std::set<const QObject*>& visited, int depth) const;
 
     /// Process a single JSON command and return the JSON response.
     QByteArray processCommand(const QByteArray& json_cmd);
@@ -106,7 +106,7 @@ private:
     QQmlApplicationEngine* m_engine;
     QLocalServer* m_server;
     std::vector<QLocalSocket*> m_clients;
-    QHash<QLocalSocket*, QByteArray> m_read_buffers;
+    std::map<QLocalSocket*, QByteArray> m_read_buffers;
     bool m_processing_client_data{false};
     bool m_pending_client_data{false};
 };
