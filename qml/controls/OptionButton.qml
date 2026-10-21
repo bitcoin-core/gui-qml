@@ -32,6 +32,7 @@ Button {
             : "transparent"
 
         Behavior on color {
+            enabled: !button.surfaceSelectionStyle
             ColorAnimation { duration: 150 }
         }
         FocusBorder {
@@ -66,6 +67,8 @@ Button {
             spacing: 3
             Layout.fillWidth: true
             Header {
+                objectName: "optionButtonHeader"
+                animateColors: !button.surfaceSelectionStyle
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 center: false

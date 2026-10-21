@@ -26,6 +26,7 @@ ColumnLayout {
     property int subtextSize: 15
     property color subtextColor: Theme.color.neutral9
     property bool wrap: true
+    property bool animateColors: true
 
     spacing: 0
     Loader {
@@ -44,6 +45,7 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
+                enabled: root.animateColors
                 ColorAnimation { duration: 150 }
             }
         }
@@ -64,6 +66,7 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
+                enabled: root.animateColors
                 ColorAnimation { duration: 150 }
             }
         }
@@ -83,6 +86,7 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
+                enabled: root.animateColors
                 ColorAnimation { duration: 150 }
             }
         }
