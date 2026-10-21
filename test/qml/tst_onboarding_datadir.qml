@@ -114,6 +114,9 @@ TestCase {
     }
 
     function openStorageSettings(page) {
+        waitForRendering(page)
+        const flickable = page.scrollView.contentItem
+        flickable.contentY = Math.max(0, flickable.contentHeight - flickable.height)
         mouseClick(findChild(page, "onboardingStorageSettingsButton"))
         const popup = findChild(page, "onboardingStorageSettingsPopup")
         tryCompare(popup, "opened", true)
@@ -506,7 +509,7 @@ TestCase {
         verify(fullOption !== null)
         compare(reduceOption.enabled, true)
         compare(fullOption.enabled, false)
-        compare(reduceOption.description, "Uses about 14GB. For regular wallet use.")
+        compare(reduceOption.description, "Uses about 14GB with older data pruned, suitable for regular wallet use.")
         compare(fullOption.description, "Uses about 622GB. Support the network.")
     }
 
@@ -536,8 +539,8 @@ TestCase {
         return [
             { tag: "full", target: 0, title: "Reduce storage", description: "Uses about 622GB. Support the network." },
             { tag: "manual", target: 1, title: "Manual pruning", description: "Prune older blocks manually to control storage use." },
-            { tag: "reduced", target: 1907, title: "Reduce storage", description: "Uses about 14GB. For regular wallet use." },
-            { tag: "custom", target: 4096, title: "Reduce storage", description: "Uses about 17GB. For regular wallet use." }
+            { tag: "reduced", target: 1907, title: "Reduce storage", description: "Uses about 14GB with older data pruned, suitable for regular wallet use." },
+            { tag: "custom", target: 4096, title: "Reduce storage", description: "Uses about 17GB with older data pruned, suitable for regular wallet use." }
         ]
     }
 

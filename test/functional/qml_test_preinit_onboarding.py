@@ -109,7 +109,7 @@ def click_existing_profile_to_connection(gui, datadir, expect_custom_storage=Tru
     gui.wait_for_property(current, "checked", True, timeout_ms=5000)
     if expect_custom_storage:
         assert current == "storageReduceOption"
-        assert gui.get_property(current, "description") == "Uses about 5GB. For regular wallet use."
+        assert gui.get_property(current, "description") == "Uses about 5GB with older data pruned, suitable for regular wallet use."
     assert not gui.get_property("storageFullOption", "recommended")
     assert not gui.get_property("storageReduceOption", "recommended")
 
@@ -594,7 +594,7 @@ def run_reset_storage_badge_flow():
                 assert current_storage_option(gui) == current
                 assert gui.get_property(current, "checked")
                 if config_target:
-                    assert gui.get_property(current, "description") == "Uses about 5GB. For regular wallet use."
+                    assert gui.get_property(current, "description") == "Uses about 5GB with older data pruned, suitable for regular wallet use."
                 gui.click("onboardingStorageAmountButton")
                 gui.wait_for_page("onboardingConnection")
                 gui.click("onboardingConnectionButton")
