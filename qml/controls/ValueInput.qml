@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Controls 2.15
 
 TextInput {
@@ -14,8 +15,9 @@ TextInput {
     property color textColor: root.filled ? Theme.color.neutral9 : Theme.color.neutral5
     enabled: true
     state: root.parentState
-    validator: IntValidator{}
-    maximumLength: 5
+    validator: IntegerInputValidator {
+        onInputRejected: root.editingFinished()
+    }
 
     states: [
         State {

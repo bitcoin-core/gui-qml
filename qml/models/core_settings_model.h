@@ -14,6 +14,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <limits>
 #include <utility>
 
 class ArgsManager;
@@ -108,6 +109,7 @@ public:
     QmlCoreSettings::Change changeServer(bool server);
     QmlCoreSettings::Change changePrune(bool prune);
     QmlCoreSettings::Change changePruneSizeGB(int prune_size_gb);
+    QString commitPruneSizeGB(const QString& text, const QString& locale_name, int maximum = std::numeric_limits<int>::max());
     QmlCoreSettings::Change changeProxyEnabled(bool enabled);
     QmlCoreSettings::Change changeTorEnabled(bool enabled);
     QmlCoreSettings::Change changeProxyLocation(const QString& location);
