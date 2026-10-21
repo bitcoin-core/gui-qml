@@ -31,6 +31,7 @@
 #include <common/settings.h>
 #include <util/translation.h>
 
+#include <algorithm>
 #include <atomic>
 #include <stdexcept>
 
@@ -114,6 +115,12 @@ private Q_SLOTS:
     void qmlOnboardedCurrentResetFlagShowsPreInitOnboarding();
     void qmlOnboardedLegacyResetFlagShowsPreInitOnboarding();
     void existingCoreProfileShowsFullOnboardingWithCurrentSettings();
+    void onboardingKeepCurrentStoragePreservesSetting_data();
+    void onboardingKeepCurrentStoragePreservesSetting();
+    void onboardingResetStorageUsesConfiguration_data();
+    void onboardingResetStorageUsesConfiguration();
+    void onboardingStorageChoiceResetsForAnotherDirectory();
+    void onboardingStorageDefaultsToFullWithoutInspectingBlockIndex();
     void freshExplicitDatadirPreviewReportsFreshProfile();
     void onboardingPreviewDetectsSettingsJsonProfile();
     void onboardingPreviewDetectsChainDataWithoutCreatingBlocksDir();
@@ -1857,6 +1864,196 @@ void OptionsModelTests::existingCoreProfileShowsFullOnboardingWithCurrentSetting
     QCOMPARE(preview.values.prune_size_gb, 5);
     QVERIFY(preview.profile.existing_profile);
     QVERIFY(preview.profile.has_config_file);
+}
+
+void OptionsModelTests::onboardingKeepCurrentStoragePreservesSetting_data()
+{
+    QTest::addColumn<int>("target_mib");
+    QTest::addColumn<bool>("settings_json");
+    QTest::newRow("unset-config") << -1 << false;
+    QTest::newRow("full-config") << 0 << false;
+    QTest::newRow("manual-config") << 1 << false;
+    QTest::newRow("reduced-config") << 1907 << false;
+    QTest::newRow("custom-config") << 4096 << false;
+    QTest::newRow("manual-settings") << 1 << true;
+    QTest::newRow("custom-settings") << 4096 << true;
+}
+
+void OptionsModelTests::onboardingKeepCurrentStoragePreservesSetting()
+{
+    QFETCH(int, target_mib);
+    QFETCH(bool, settings_json);
+    const int expected_target_mib = target_mib < 0 ? 0 : target_mib;
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    QFile conf(data_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    const QByteArray original_config = settings_json ? QByteArray{"prune=0\n"}
+        : target_mib < 0 ? QByteArray{"listen=1\n"} : QByteArray{"prune="} + QByteArray::number(target_mib) + '\n';
+    QCOMPARE(conf.write(original_config), original_config.size());
+    conf.close();
+    if (settings_json) {
+        QVERIFY(QDir(data_dir.path()).mkdir(QStringLiteral("regtest")));
+        QFile settings(data_dir.filePath(QStringLiteral("regtest/settings.json")));
+        QVERIFY(settings.open(QIODevice::WriteOnly | QIODevice::Text));
+        QVERIFY(settings.write("{\"prune\":" + QByteArray::number(target_mib) + "}\n") > 0);
+    }
+
+    const auto argv = TestArgvWithDataDir(data_dir.path());
+    OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QVERIFY2(model.previewError().isEmpty(), qPrintable(model.previewError()));
+    QVERIFY(model.existingProfile());
+    QVERIFY(model.keepingCurrentStorage());
+    QCOMPARE(model.currentPruneTargetMiB(), expected_target_mib);
+    const bool initial_prune = model.prune();
+    const int initial_target = model.pruneSizeGB();
+    model.setListen(!model.listen());
+
+    model.selectStorage(true, 2);
+    QVERIFY(!model.keepingCurrentStorage());
+    QVERIFY(model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    model.selectStorage(false, 2);
+    QVERIFY(!model.keepingCurrentStorage());
+    model.keepCurrentStorage();
+    QVERIFY(model.keepingCurrentStorage());
+    QCOMPARE(model.prune(), initial_prune);
+    QCOMPARE(model.pruneSizeGB(), initial_target);
+    QCOMPARE(model.currentPruneTargetMiB(), expected_target_mib);
+    QVERIFY(!model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    QVERIFY(model.applyRequest().touched_settings.contains(QStringLiteral("listen")));
+
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
+    QString apply_error;
+    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QCOMPARE(args.GetIntArg("-prune", 0), expected_target_mib);
+    args.LockSettings([&](const common::Settings& settings) {
+        QCOMPARE(settings.rw_settings.count("prune"), settings_json ? size_t{1} : size_t{0});
+        if (settings_json) QCOMPARE(SettingTo<int64_t>(settings.rw_settings.at("prune"), -1), target_mib);
+        QCOMPARE(settings.rw_settings.count("prune-prev"), size_t{0});
+    });
+    QVERIFY(conf.open(QIODevice::ReadOnly));
+    QCOMPARE(conf.readAll(), original_config);
+}
+
+void OptionsModelTests::onboardingResetStorageUsesConfiguration_data()
+{
+    QTest::addColumn<int>("config_target");
+    QTest::addColumn<int>("settings_target");
+    QTest::newRow("config-only") << 4096 << -1;
+    QTest::newRow("settings-only") << -1 << 4096;
+    QTest::newRow("config-after-reset") << 4096 << 1907;
+    QTest::newRow("full-after-reset") << 0 << 4096;
+}
+
+void OptionsModelTests::onboardingResetStorageUsesConfiguration()
+{
+    QFETCH(int, config_target);
+    QFETCH(int, settings_target);
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    QFile conf(data_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    const QByteArray original_config = config_target < 0 ? QByteArray{"listen=1\n"}
+        : QByteArray{"prune="} + QByteArray::number(config_target) + '\n';
+    QCOMPARE(conf.write(original_config), original_config.size());
+    conf.close();
+    if (settings_target >= 0) {
+        QVERIFY(QDir(data_dir.path()).mkdir(QStringLiteral("regtest")));
+        QFile settings(data_dir.filePath(QStringLiteral("regtest/settings.json")));
+        QVERIFY(settings.open(QIODevice::WriteOnly | QIODevice::Text));
+        QVERIFY(settings.write("{\"prune\":" + QByteArray::number(settings_target) + "}\n") > 0);
+    }
+
+    auto argv = TestArgvWithDataDir(data_dir.path());
+    argv.emplace_back("-resetguisettings");
+    OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    const int expected_target = std::max(0, config_target);
+    QVERIFY2(model.previewError().isEmpty(), qPrintable(model.previewError()));
+    QVERIFY(model.existingProfile());
+    QVERIFY(model.keepingCurrentStorage());
+    QCOMPARE(model.currentPruneTargetMiB(), expected_target);
+    QCOMPARE(model.prune(), expected_target > 1);
+    model.selectStorage(expected_target == 0, 2);
+    model.keepCurrentStorage();
+
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
+    QString apply_error;
+    QVERIFY2(model.applyToArgs(args, &apply_error), qPrintable(apply_error));
+    QCOMPARE(args.GetIntArg("-prune", 0), expected_target);
+    args.LockSettings([](const common::Settings& settings) {
+        QCOMPARE(settings.rw_settings.count("prune"), size_t{0});
+    });
+    QVERIFY(conf.open(QIODevice::ReadOnly));
+    QCOMPARE(conf.readAll(), original_config);
+}
+
+void OptionsModelTests::onboardingStorageChoiceResetsForAnotherDirectory()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir first_dir;
+    QTemporaryDir second_dir;
+    QTemporaryDir fresh_dir;
+    QVERIFY(first_dir.isValid());
+    QVERIFY(second_dir.isValid());
+    QVERIFY(fresh_dir.isValid());
+    QFile first_conf(first_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(first_conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(first_conf.write("prune=4096\n") > 0);
+    first_conf.close();
+    QFile second_conf(second_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(second_conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(second_conf.write("prune=1\n") > 0);
+    second_conf.close();
+
+    OnboardingOptionsModel model(TestArgv(), /*can_listen_ipc=*/false);
+    QVERIFY(model.selectCustomDataDir(first_dir.path()));
+    QCOMPARE(model.currentPruneTargetMiB(), 4096);
+    model.selectStorage(false, 2);
+    QVERIFY(!model.keepingCurrentStorage());
+    QVERIFY(model.selectCustomDataDir(second_dir.path()));
+    QCOMPARE(model.currentPruneTargetMiB(), 1);
+    QVERIFY(model.keepingCurrentStorage());
+    QVERIFY(!model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    QVERIFY(model.selectCustomDataDir(first_dir.path()));
+    QCOMPARE(model.currentPruneTargetMiB(), 4096);
+    QCOMPARE(model.pruneSizeGB(), 5);
+    QVERIFY(model.keepingCurrentStorage());
+    QVERIFY(model.selectCustomDataDir(fresh_dir.path()));
+    QVERIFY(!model.existingProfile());
+    QVERIFY(!model.keepingCurrentStorage());
+    QCOMPARE(model.currentPruneTargetMiB(), 0);
+}
+
+void OptionsModelTests::onboardingStorageDefaultsToFullWithoutInspectingBlockIndex()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    const QString index_path = data_dir.filePath(QStringLiteral("regtest/blocks/index"));
+    QVERIFY(QDir().mkpath(index_path));
+    QFile current(QDir(index_path).filePath(QStringLiteral("CURRENT")));
+    QVERIFY(current.open(QIODevice::WriteOnly));
+    const QByteArray contents{"This is not a LevelDB database.\n"};
+    QCOMPARE(current.write(contents), contents.size());
+    current.close();
+
+    OnboardingOptionsModel model(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.storageCheckPending());
+    QVERIFY2(model.storageErrorText().isEmpty(), qPrintable(model.storageErrorText()));
+    QVERIFY(model.existingProfile());
+    QVERIFY(model.keepingCurrentStorage());
+    QVERIFY(!model.prune());
+    QCOMPARE(model.currentPruneTargetMiB(), 0);
+    QVERIFY(model.canFinish());
+    QCOMPARE(QDir(index_path).entryList(QDir::Files), QStringList{QStringLiteral("CURRENT")});
+    QVERIFY(current.open(QIODevice::ReadOnly));
+    QCOMPARE(current.readAll(), contents);
 }
 
 void OptionsModelTests::freshExplicitDatadirPreviewReportsFreshProfile()

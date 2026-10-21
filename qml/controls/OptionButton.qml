@@ -12,6 +12,7 @@ Button {
     property string errorText: ""
     property bool showErrorText: errorText.length > 0
     property bool recommended: false
+    property string badgeText: recommended ? qsTr("Recommended") : ""
     property string image: ""
     property string customDir: ""
     property bool surfaceSelectionStyle: false
@@ -78,9 +79,10 @@ Button {
             }
             Loader {
                 Layout.topMargin: 2
-                active: button.recommended
+                active: button.badgeText.length > 0
                 visible: active
                 sourceComponent: Label {
+                    objectName: "optionBadge"
                     background: Rectangle {
                         color: Theme.color.neutral9
                         radius: 3
@@ -96,7 +98,7 @@ Button {
                     bottomPadding: 4
                     leftPadding: 7
                     color: Theme.color.neutral0
-                    text: qsTr("Recommended")
+                    text: button.badgeText
 
                     Behavior on color {
                         ColorAnimation { duration: 150 }

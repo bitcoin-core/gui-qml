@@ -158,6 +158,8 @@ void OnboardingOptionsModel::setDataDir(const QString& path)
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
     const QString effective = normalized.isEmpty() ? getDefaultDataDirString() : normalized;
     if (effective == m_data_dir) return;
+    m_core_settings.clearTouched(QStringLiteral("prune"));
+    m_prune_auto_recommended = false;
     m_data_dir = effective;
     Q_EMIT dataDirChanged(m_data_dir);
     refreshPreview();
@@ -171,6 +173,25 @@ void OnboardingOptionsModel::setPrune(bool prune)
 void OnboardingOptionsModel::setPruneSizeGB(int prune_size_gb)
 {
     m_core_settings.changePruneSizeGB(prune_size_gb);
+}
+
+void OnboardingOptionsModel::keepCurrentStorage()
+{
+    if (!existingProfile()) return;
+    m_core_settings.clearTouched(QStringLiteral("prune"));
+    applyPreviewValues(m_preview_values, m_core_settings.statuses());
+    m_prune_auto_recommended = false;
+    emitStorageStatusChanged();
+}
+
+void OnboardingOptionsModel::selectStorage(bool prune, int prune_size_gb)
+{
+    if (!m_core_settings.canEdit(QStringLiteral("prune"))) return;
+    m_core_settings.changePrune(prune);
+    if (prune) m_core_settings.changePruneSizeGB(prune_size_gb);
+    m_core_settings.markTouched(QStringLiteral("prune"));
+    m_prune_auto_recommended = false;
+    emitStorageStatusChanged();
 }
 
 void OnboardingOptionsModel::setListen(bool listen)
@@ -401,6 +422,8 @@ void OnboardingOptionsModel::refreshPreview()
     m_assumed_blockchain_size = preview.assumed_blockchain_size;
     m_assumed_chainstate_size = preview.assumed_chainstate_size;
     m_profile = preview.profile;
+    m_preview_values = preview.values;
+    m_current_prune_target_mib = preview.prune_target_mib;
     if (m_profile.existing_profile && m_prune_auto_recommended) {
         m_core_settings.changePruneRecommendation(preview.values.prune, preview.values.prune_size_gb, /*mark_touched=*/false);
         m_prune_auto_recommended = false;

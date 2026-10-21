@@ -2323,6 +2323,8 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(int assumedBlockchainSize MEMBER m_assumed_blockchain_size NOTIFY assumedSizesChanged)
     Q_PROPERTY(int assumedChainstateSize MEMBER m_assumed_chainstate_size NOTIFY assumedSizesChanged)
     Q_PROPERTY(bool existingProfile READ existingProfile WRITE setExistingProfile NOTIFY storageStatusChanged)
+    Q_PROPERTY(qint64 currentPruneTargetMiB MEMBER m_current_prune_target_mib NOTIFY storageStatusChanged)
+    Q_PROPERTY(bool keepingCurrentStorage MEMBER m_keeping_current_storage NOTIFY storageStatusChanged)
     Q_PROPERTY(bool storageCheckPending MEMBER m_storage_check_pending NOTIFY storageStatusChanged)
     Q_PROPERTY(QString storageStatus READ storageStatus NOTIFY storageStatusChanged)
     Q_PROPERTY(int storageAvailableGB MEMBER m_storage_available_gb NOTIFY storageStatusChanged)
@@ -2369,6 +2371,9 @@ public:
     int m_assumed_blockchain_size{610};
     int m_assumed_chainstate_size{12};
     bool m_existing_profile{false};
+    qint64 m_current_prune_target_mib{0};
+    int m_current_prune_size_gb{2};
+    bool m_keeping_current_storage{false};
     bool m_storage_check_pending{false};
     int m_storage_available_gb{123};
     QString m_storage_path_message{QStringLiteral("Directory already exists.")};
@@ -2424,6 +2429,30 @@ public:
         m_existing_profile = value;
         Q_EMIT storageStatusChanged();
         Q_EMIT canFinishChanged();
+    }
+    Q_INVOKABLE void setCurrentStorageForTest(qint64 target_mib)
+    {
+        m_current_prune_target_mib = target_mib;
+        m_current_prune_size_gb = target_mib > 1 ? (target_mib * 1024 * 1024 + 999999999) / 1000000000 : 2;
+        setPrune(target_mib > 1);
+        setPruneSizeGB(m_current_prune_size_gb);
+        m_existing_profile = true;
+        m_keeping_current_storage = true;
+        Q_EMIT storageStatusChanged();
+    }
+    Q_INVOKABLE void keepCurrentStorage()
+    {
+        setPrune(m_current_prune_target_mib > 1);
+        setPruneSizeGB(m_current_prune_size_gb);
+        m_keeping_current_storage = true;
+        Q_EMIT storageStatusChanged();
+    }
+    Q_INVOKABLE void selectStorage(bool prune, int target_gb)
+    {
+        setPrune(prune);
+        if (prune) setPruneSizeGB(target_gb);
+        m_keeping_current_storage = false;
+        Q_EMIT storageStatusChanged();
     }
     int storageMinimumRequiredGB() const { return m_existing_profile ? 1 : m_assumed_chainstate_size + 2; }
     int fullStorageRequiredGB() const { return m_assumed_blockchain_size + m_assumed_chainstate_size; }
@@ -2566,11 +2595,13 @@ public:
             Q_EMIT serverChanged();
         }
         if (m_prune != m_core_settings.prune()) {
+            m_keeping_current_storage = false;
             m_prune = m_core_settings.prune();
             Q_EMIT pruneChanged();
             Q_EMIT storageStatusChanged();
         }
         if (m_prune_size_gb != m_core_settings.pruneSizeGB()) {
+            m_keeping_current_storage = false;
             m_prune_size_gb = m_core_settings.pruneSizeGB();
             Q_EMIT pruneSizeGBChanged();
             Q_EMIT storageStatusChanged();

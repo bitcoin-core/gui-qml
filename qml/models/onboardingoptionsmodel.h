@@ -54,6 +54,8 @@ class OnboardingOptionsModel : public QObject
     Q_PROPERTY(int assumedBlockchainSize READ assumedBlockchainSize NOTIFY assumedSizesChanged)
     Q_PROPERTY(int assumedChainstateSize READ assumedChainstateSize NOTIFY assumedSizesChanged)
     Q_PROPERTY(bool existingProfile READ existingProfile NOTIFY storageStatusChanged)
+    Q_PROPERTY(qint64 currentPruneTargetMiB READ currentPruneTargetMiB NOTIFY storageStatusChanged)
+    Q_PROPERTY(bool keepingCurrentStorage READ keepingCurrentStorage NOTIFY storageStatusChanged)
     Q_PROPERTY(bool storageCheckPending READ storageCheckPending NOTIFY storageStatusChanged)
     Q_PROPERTY(QString storageStatus READ storageStatus NOTIFY storageStatusChanged)
     Q_PROPERTY(int storageAvailableGB READ storageAvailableGB NOTIFY storageStatusChanged)
@@ -112,6 +114,10 @@ public:
     int assumedBlockchainSize() const { return m_assumed_blockchain_size; }
     int assumedChainstateSize() const { return m_assumed_chainstate_size; }
     bool existingProfile() const { return m_profile.existing_profile; }
+    qint64 currentPruneTargetMiB() const { return m_current_prune_target_mib; }
+    bool keepingCurrentStorage() const { return existingProfile() && !m_core_settings.isTouched(QStringLiteral("prune")); }
+    Q_INVOKABLE void keepCurrentStorage();
+    Q_INVOKABLE void selectStorage(bool prune, int prune_size_gb);
     bool storageCheckPending() const { return m_storage_check_pending; }
     QString storageStatus() const;
     int storageAvailableGB() const;
@@ -178,6 +184,8 @@ private:
     CoreSettingsModel m_core_settings;
     QString m_preview_error;
     QmlOnboardingSettings::ProfileSummary m_profile;
+    QmlCoreSettings::Values m_preview_values;
+    int64_t m_current_prune_target_mib{0};
     int m_assumed_blockchain_size{0};
     int m_assumed_chainstate_size{0};
     uint64_t m_storage_request_id{0};
