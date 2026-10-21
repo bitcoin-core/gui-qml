@@ -137,9 +137,8 @@ TestCase {
         const page = createTemporaryObject(formPage, testCase)
         verify(page !== null)
         page.width = 360
-        wait(0)
 
+        tryVerify(() => page.secondaryButton.y > page.primaryButton.y)
         compare(page.primaryButton.width, page.secondaryButton.width)
-        verify(page.secondaryButton.y > page.primaryButton.y)
     }
 }
