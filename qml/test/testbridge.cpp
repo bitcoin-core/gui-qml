@@ -218,7 +218,7 @@ void TestBridge::handleNewConnection()
 {
     while (QLocalSocket* client = m_server->nextPendingConnection()) {
         m_clients.push_back(client);
-        m_read_buffers.insert(client, QByteArray{});
+        m_read_buffers.emplace(client, QByteArray{});
         connect(client, &QLocalSocket::readyRead, this, &TestBridge::handleClientData);
         connect(client, &QLocalSocket::disconnected, this, &TestBridge::handleClientDisconnected);
         qInfo("TestBridge: client connected");
@@ -289,7 +289,7 @@ void TestBridge::handleClientDisconnected()
     if (it != m_clients.end()) {
         m_clients.erase(it);
     }
-    m_read_buffers.remove(client);
+    m_read_buffers.erase(client);
     client->deleteLater();
     qInfo("TestBridge: client disconnected");
 }
@@ -300,12 +300,12 @@ QObject* TestBridge::findObjectByName(const QString& name) const
     // pushed into a StackView (which are visual children before QObject
     // parenting is fully settled) are also reachable.
     QList<QObject*> matches;
-    QSet<const QObject*> visited;
+    std::set<const QObject*> visited;
 
     struct Visitor {
         const QString& name;
         QList<QObject*>& matches;
-        QSet<const QObject*>& visited;
+        std::set<const QObject*>& visited;
         void visit(QObject* root) {
             if (!root || visited.contains(root)) return;
             visited.insert(root);
@@ -343,7 +343,7 @@ QObject* TestBridge::findNamedObjectInSubtree(QObject* root, const QString& name
 {
     if (!root || name.isEmpty()) return nullptr;
 
-    QSet<const QObject*> visited;
+    std::set<const QObject*> visited;
     QList<QObject*> stack{root};
     while (!stack.isEmpty()) {
         QObject* current = stack.takeLast();
@@ -402,7 +402,7 @@ QObject* TestBridge::findListItem(QObject* view_obj, int row) const
 QObject* TestBridge::resolveCurrentLeafItem(QObject* item) const
 {
     QObject* current = item;
-    QSet<const QObject*> seen;
+    std::set<const QObject*> seen;
     int guard = 0;
 
     while (current && guard < 64 && !seen.contains(current)) {
@@ -425,7 +425,7 @@ QObject* TestBridge::resolveCurrentLeafItem(QObject* item) const
     return current;
 }
 
-void TestBridge::collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, QSet<const QObject*>& visited, int depth) const
+void TestBridge::collectNamedObjects(QObject* root, std::vector<NamedObjectEntry>& results, std::set<const QObject*>& visited, int depth) const
 {
     if (!root) return;
     if (visited.contains(root)) return;
@@ -1211,7 +1211,7 @@ QByteArray TestBridge::cmdAnswerRuntimeDialog(unsigned int button)
 QByteArray TestBridge::cmdListObjects()
 {
     std::vector<NamedObjectEntry> objects;
-    QSet<const QObject*> visited;
+    std::set<const QObject*> visited;
     for (QObject* root : m_engine->rootObjects()) {
         collectNamedObjects(root, objects, visited, 0);
     }
