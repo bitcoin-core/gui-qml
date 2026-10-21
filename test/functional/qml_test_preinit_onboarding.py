@@ -58,6 +58,8 @@ def assert_preinit_cover_about_available(gui):
     gui.wait_for_object("onboardingCoverInfoButton", timeout_ms=10000)
     gui.click("onboardingCoverInfoButton")
     gui.wait_for_page("aboutSettingsPage", timeout_ms=10000)
+    assert not gui.get_property("aboutDeveloperRow", "visible")
+    assert not gui.object_exists("settingsDeveloper")
     gui.click("onboardingAboutCloseButton")
     gui.wait_for_page("onboardingCover", timeout_ms=10000)
 
