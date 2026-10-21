@@ -147,7 +147,7 @@ TestCase {
         compare(optionsModel.pruneSizeGB, 10)
         compare(page.customStorageAmount, 10)
         const custom = findChild(page, "storageCustomOption")
-        compare(custom.description, "Storing recent blocks up to 10 GB.")
+        compare(custom.description, "Storing recent blocks up to 10 GB. Uses about 22 GB in total.")
         compare(custom.checked, true)
 
         mouseClick(findChild(page, "storageReduceOption"))
@@ -510,8 +510,7 @@ TestCase {
     }
 
     function test_existing_profile_storage_amount_keeps_full_storage_available() {
-        optionsModel.existingProfile = true
-        optionsModel.prune = false
+        optionsModel.setCurrentStorageForTest(0)
         optionsModel.setStorageStatusForTest(false, 5, "", "")
 
         const page = createTemporaryObject(storageAmount, this)
@@ -526,7 +525,139 @@ TestCase {
         compare(reduceOption.enabled, true)
         tryCompare(fullOption, "enabled", true)
         compare(fullOption.checked, true)
+        compare(fullOption.visible, true)
+        compare(fullOption.badgeText, "Your current setting")
+        compare(fullOption.recommended, false)
         tryCompare(infoPage, "primaryButtonEnabled", true)
+    }
+
+    function test_keep_current_storage_data() {
+        return [
+            { tag: "full", target: 0, title: "Reduce storage", description: "Uses about 622GB. Support the network." },
+            { tag: "manual", target: 1, title: "Manual pruning", description: "Prune older blocks manually to control storage use." },
+            { tag: "reduced", target: 1907, title: "Reduce storage", description: "Uses about 14GB. For regular wallet use." },
+            { tag: "custom", target: 4096, title: "Reduce storage", description: "Uses about 17GB. For regular wallet use." }
+        ]
+    }
+
+    function test_keep_current_storage(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const page = createTemporaryObject(storageAmount, this)
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        const current = data.target === 0 ? full : reduce
+        const other = data.target === 0 ? reduce : full
+        compare(findChild(page, "storageKeepCurrentOption"), null)
+        compare(reduce.text, data.title)
+        compare(full.text, "Store all data")
+        verify(reduce.visible)
+        verify(full.visible)
+        compare(current.checked, true)
+        compare(other.checked, false)
+        compare(current.badgeText, "Your current setting")
+        compare(findChild(current, "optionBadge").text, "Your current setting")
+        compare(other.badgeText, "")
+        compare(current.description, data.description)
+        compare(full.recommended, false)
+        compare(reduce.recommended, false)
+        compare(full.description, "Uses about 622GB. Support the network.")
+        if (data.target > 0) {
+            compare(full.errorText, "Requires downloading the full blockchain again.")
+            const warning = findChild(full, "optionButtonErrorText")
+            verify(warning.visible)
+            compare(warning.text, "Requires downloading the full blockchain again.")
+            compare(warning.color, Theme.color.red)
+        } else {
+            compare(full.errorText, "")
+        }
+
+        other.clicked()
+        compare(other.checked, true)
+        compare(current.checked, false)
+        compare(current.badgeText, "Your current setting")
+        compare(other.badgeText, "")
+        current.clicked()
+        compare(current.checked, true)
+        compare(other.checked, false)
+        compare(optionsModel.keepingCurrentStorage, true)
+        compare(optionsModel.prune, data.target > 1)
+        compare(optionsModel.currentPruneTargetMiB, data.target)
+        compare(current.description, data.description)
+    }
+
+    function test_existing_pruned_profile_can_switch_with_limited_free_space() {
+        optionsModel.setCurrentStorageForTest(4096)
+        optionsModel.setStorageStatusForTest(false, 5, "", "")
+        const page = createTemporaryObject(storageAmount, this)
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        compare(reduce.checked, true)
+        compare(reduce.enabled, true)
+        compare(full.enabled, true)
+        compare(full.errorText, "Requires downloading the full blockchain again.\n622GB needed; 5GB available.")
+        compare(page.primaryButtonEnabled, true)
+
+        full.clicked()
+        compare(full.checked, true)
+        compare(reduce.enabled, true)
+        compare(page.primaryButtonEnabled, true)
+        reduce.clicked()
+        compare(reduce.checked, true)
+        compare(full.enabled, true)
+        compare(page.primaryButtonEnabled, true)
+    }
+
+    function test_keep_current_available_for_command_line_setting() {
+        optionsModel.setCurrentStorageForTest(1)
+        optionsModel.setCoreSettingStatusForTest("prune", false, "command_line", "Set by command line (-prune).", false)
+        const page = createTemporaryObject(storageAmount, this)
+        compare(findChild(page, "storageReduceOption").checked, true)
+        compare(findChild(page, "storageReduceOption").badgeText, "Your current setting")
+        compare(findChild(page, "storageReduceOption").enabled, false)
+        compare(findChild(page, "storageFullOption").enabled, false)
+    }
+
+    function test_existing_storage_choices_fit_minimum_window_data() {
+        return [ { tag: "full", target: 0 }, { tag: "reduced", target: 4096 } ]
+    }
+
+    function test_existing_storage_choices_fit_minimum_window(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 5, "", "")
+        const page = createTemporaryObject(storageAmount, this, {
+            width: 800, height: 665, customStorage: true, customStorageAmount: 7
+        })
+        compare(page.subheading, "Keep your current setting or choose a change.")
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        const custom = findChild(page, "storageCustomOption")
+        waitForRendering(page)
+        for (const option of [reduce, full, custom]) {
+            const position = option.mapToItem(page, 0, 0)
+            verify(position.x >= 0)
+            verify(position.x + option.width <= page.width)
+            const description = findButtonByText(option, option.description)
+            verify(description.height >= description.contentHeight)
+        }
+        verify(reduce.mapToItem(page, 0, reduce.height).y <= full.mapToItem(page, 0, 0).y)
+        verify(full.mapToItem(page, 0, full.height).y <= custom.mapToItem(page, 0, 0).y)
+        const flickable = page.scrollView.contentItem
+        flickable.contentY = Math.max(0, flickable.contentHeight - flickable.height)
+        const customBottom = custom.mapToItem(page.scrollView, 0, custom.height).y
+        verify(customBottom <= page.scrollView.height)
+        verify(page.primaryButton.visible)
+        verify(page.primaryButton.enabled)
+    }
+
+    function test_fresh_profile_does_not_offer_keep_current() {
+        const page = createTemporaryObject(storageAmount, this)
+        compare(findChild(page, "storageKeepCurrentOption"), null)
+        const reduce = findChild(page, "storageReduceOption")
+        compare(reduce.checked, true)
+        compare(reduce.badgeText, "Recommended")
+        compare(findChild(reduce, "optionBadge").text, "Recommended")
+        compare(findChild(page, "storageFullOption").badgeText, "")
     }
 
     function test_disabled_full_storage_does_not_hover() {
@@ -593,6 +724,50 @@ TestCase {
         compare(optionsModel.pruneSizeGB, 2)
     }
 
+    function test_existing_custom_storage_survives_reselecting_saved_option_data() {
+        return [
+            { tag: "full", target: 0, custom: 7 },
+            { tag: "reduced", target: 1907, custom: 7 },
+            { tag: "custom", target: 4096, custom: 7 },
+            { tag: "same-rounded-limit", target: 4096, custom: 5 },
+            { tag: "same-limit", target: 6675, custom: 7 }
+        ]
+    }
+
+    function test_existing_custom_storage_survives_reselecting_saved_option(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const page = createTemporaryObject(storageAmount, this)
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        if (data.target === 0) mouseClick(reduce)
+        const popup = openStorageSettings(page)
+        editStorageTarget(popup, String(data.custom))
+        tryCompare(popup, "visible", false)
+        const custom = findChild(page, "storageCustomOption")
+        verify(custom !== null)
+        mouseClick(custom)
+        compare(custom.checked, true)
+        compare(reduce.checked, false)
+
+        for (let i = 0; i < 2; ++i) {
+            mouseClick(reduce)
+            compare(reduce.checked, true)
+            compare(page.customStorage, true)
+            compare(page.customStorageAmount, data.custom)
+            compare(findChild(page, "storageCustomOption"), custom)
+            compare(custom.visible, true)
+            compare(custom.checked, false)
+        }
+        mouseClick(full)
+        compare(findChild(page, "storageCustomOption"), custom)
+        compare(custom.visible, true)
+        mouseClick(custom)
+        compare(custom.checked, true)
+        compare(optionsModel.pruneSizeGB, data.custom)
+        compare(custom.description, "Storing recent blocks up to " + data.custom + " GB. Uses about " + (data.custom + 12) + " GB in total.")
+    }
+
     function test_custom_storage_option_shows_entered_target_and_reduce_can_reselect() {
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 7
@@ -610,7 +785,7 @@ TestCase {
         verify(reduceOption !== null)
         compare(customOption.checked, true)
         compare(customOption.text, "Custom")
-        compare(customOption.description, "Storing recent blocks up to 7 GB.")
+        compare(customOption.description, "Storing recent blocks up to 7 GB. Uses about 19 GB in total.")
         verify(reduceOption.description.indexOf("14GB") !== -1)
         verify(reduceOption.description.indexOf("19GB") === -1)
 

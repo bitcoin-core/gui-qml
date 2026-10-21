@@ -50,6 +50,7 @@ struct PreviewResult {
     bool ok{false};
     QString error;
     QmlCoreSettings::Values values;
+    int64_t prune_target_mib{0};
     QVariantMap core_setting_statuses;
     int assumed_blockchain_size{0};
     int assumed_chainstate_size{0};
