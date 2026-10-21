@@ -317,6 +317,7 @@ TestCase {
     function test_connection_final_button_labels_start_commit_point() {
         const page = createTemporaryObject(connection, this)
         verify(page !== null)
+        compare(page.heading, "Connect to the network")
         const button = findChild(page, "onboardingConnectionButton")
         verify(button !== null)
         compare(button.text, "Start")
