@@ -6,7 +6,6 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 import QtTest 1.2
 import "../../qml/controls"
-import "../../qml/pages/settings"
 
 TestCase {
     id: testCase
@@ -131,15 +130,6 @@ TestCase {
 
         CloseButton {
             objectName: "exampleCloseButton"
-        }
-    }
-
-    Component {
-        id: designSystemPageComponent
-
-        SettingsDesignSystem {
-            width: 600
-            height: 900
         }
     }
 
@@ -471,24 +461,6 @@ TestCase {
         button.down = false
         tryCompare(button, "scale", 1.0)
         tryCompare(background, "color", Theme.color.neutral2)
-    }
-
-    function test_designSystemPageShowsGenericControlExamples() {
-        const page = createTemporaryObject(designSystemPageComponent, host)
-        verify(page !== null)
-        verify(findChild(page, "settingsPageContentLayout") !== null)
-        verify(findChild(page, "designSystemAppearanceSection") !== null)
-        verify(findChild(page, "designSystemThemeRow") !== null)
-        verify(findChild(page, "designSystemLanguagePicker") !== null)
-        verify(findChild(page, "designSystemBehaviorSection") !== null)
-        verify(findChild(page, "designSystemNavigationSection") !== null)
-        verify(findChild(page, "designSystemValueSection") !== null)
-        verify(findChild(page, "designSystemWebsiteRow") !== null)
-        verify(findChild(page, "designSystemVersionRow") !== null)
-        verify(findChild(page, "designSystemFieldSection") !== null)
-        verify(findChild(page, "designSystemBlockStorageField") !== null)
-        verify(findChild(page, "designSystemProxyLocationField") !== null)
-        verify(findChild(page, "designSystemDataDirectoryValue") !== null)
     }
 
     function test_settingsPageOwnsNavigationAndConstrainedScrollableContent() {

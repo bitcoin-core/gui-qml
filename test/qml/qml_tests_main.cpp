@@ -13,6 +13,7 @@
 #include <QHash>
 #include <QIcon>
 #include <QLocale>
+#include <QPixmap>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -4109,6 +4110,21 @@ public:
     }
 };
 
+// Stands in for the app's QR provider so QRImage loads without warnings.
+class TestQrProvider : public QQuickImageProvider
+{
+public:
+    TestQrProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
+
+    QPixmap requestPixmap(const QString&, QSize* size, const QSize& requested_size) override
+    {
+        QPixmap pixmap(requested_size.isValid() ? requested_size : QSize(1, 1));
+        pixmap.fill(Qt::white);
+        if (size) *size = pixmap.size();
+        return pixmap;
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4138,6 +4154,7 @@ public Q_SLOTS:
     {
         engine->rootContext()->setContextProperty(QStringLiteral("testEventLoop"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
+        engine->addImageProvider(QStringLiteral("qr"), new TestQrProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
         static MockBuildInfo build_info;
