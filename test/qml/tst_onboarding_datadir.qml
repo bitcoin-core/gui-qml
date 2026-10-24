@@ -8,6 +8,7 @@ import org.bitcoincore.qt 1.0
 import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/onboarding"
+import "../../qml/pages/settings"
 
 TestCase {
     name: "OnboardingDataDir"
@@ -56,8 +57,9 @@ TestCase {
 
     Component {
         id: storageSettings
-        StorageSettings {
+        StorageSettingsPage {
             width: 640
+            height: 665
             settingsModel: optionsModel
         }
     }
@@ -580,16 +582,13 @@ TestCase {
 
         const page = createTemporaryObject(storageSettings, this)
         verify(page !== null)
-        const setting = findChild(page, "pruneTargetSetting")
         const input = findChild(page, "pruneTargetInput")
-        verify(setting !== null)
         verify(input !== null)
 
         input.text = "200"
         input.editingFinished()
 
-        compare(setting.showErrorText, true)
-        verify(setting.errorText.indexOf("111GB") !== -1)
+        verify(page.pruneTargetError.indexOf("111 GB") !== -1)
         compare(optionsModel.pruneSizeGB, 2)
     }
 

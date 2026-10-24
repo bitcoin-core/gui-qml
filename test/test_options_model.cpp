@@ -463,7 +463,7 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
     OptionsQmlModel model(node);
     QVERIFY(!model.proxySettingsDirty());
 
-    // Simulate what ProxySettings.qml does: set address before enabling.
+    // Simulate what ProxySettingsPage.qml does: set address before enabling.
     model.setProxyAddress("127.0.0.1:9050");
     // Address changed but proxy is still disabled — should NOT be dirty since
     // the address is irrelevant when proxy is off.

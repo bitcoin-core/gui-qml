@@ -4,18 +4,19 @@
 
 import QtQuick 2.15
 import QtTest 1.2
-import "../../qml/components"
+import "../../qml/pages/settings"
 
 TestCase {
     name: "SettingsStatus"
     when: windowShown
+    visible: true
     width: 520
     height: 720
 
     Component {
         id: connectionSettingsComponent
 
-        ConnectionSettings {
+        ConnectionSettingsPage {
             width: 460
             height: 680
         }
@@ -36,12 +37,16 @@ TestCase {
         optionsModel.setCoreSettingStatusForTest("listen", false, "command_line", text, false)
 
         const page = createConnectionSettingsPage()
-        const row = findChild(page, "listenSetting")
+        const row = findChild(page, "listenSettingRow")
+        const toggle = findChild(page, "listenSwitch")
+        const info = findChild(page, "listenSettingRowSupportingText")
         verify(row !== null)
-        compare(row.state, "DISABLED")
+        verify(toggle !== null)
+        verify(info !== null)
         verify(!row.enabled)
-        compare(row.infoText, text)
-        compare(row.showInfoText, true)
+        verify(!toggle.enabled)
+        compare(info.visible, true)
+        compare(info.text, text)
     }
 
     function test_config_status_shows_gui_override_copy() {
@@ -49,11 +54,15 @@ TestCase {
         optionsModel.setCoreSettingStatusForTest("listen", true, "bitcoin_conf", text, true)
 
         const page = createConnectionSettingsPage()
-        const row = findChild(page, "listenSetting")
+        const row = findChild(page, "listenSettingRow")
+        const toggle = findChild(page, "listenSwitch")
+        const info = findChild(page, "listenSettingRowSupportingText")
         verify(row !== null)
-        compare(row.state, "FILLED")
+        verify(toggle !== null)
+        verify(info !== null)
         verify(row.enabled)
-        compare(row.infoText, text)
-        compare(row.showInfoText, true)
+        verify(toggle.enabled)
+        compare(info.visible, true)
+        compare(info.text, text)
     }
 }

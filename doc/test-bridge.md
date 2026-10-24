@@ -279,21 +279,6 @@ CoreText {
 When adding new QML pages or controls, include `objectName` for any element
 that a test might need to interact with or inspect.
 
-### `InformationPage` button naming
-
-`InformationPage` exposes a `buttonObjectName` property (default:
-`"continueButton"`) that controls the `objectName` of its built-in
-`ContinueButton`. Each page should override it with a unique name so tests
-can click the correct button unambiguously:
-
-```qml
-InformationPage {
-    objectName: "onboardingStrengthen"
-    buttonObjectName: "onboardingStrengthenButton"
-    ...
-}
-```
-
 ### Onboarding pages
 
 The following `objectName` values are set on the onboarding flow pages and

@@ -34,6 +34,7 @@ SettingsPage {
         showGradientBorder: false
 
         FormRow {
+            objectName: "listenSettingRow"
             Layout.fillWidth: true
             title: qsTr("Enable listening")
             dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
