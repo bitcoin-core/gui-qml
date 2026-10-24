@@ -40,7 +40,7 @@ OnboardingView {
         Icon {
             anchors.centerIn: parent
             source: "qrc:/icons/cross.svg"
-            color: Theme.color.white
+            color: Theme.color.neutral0
             size: 26
         }
     }

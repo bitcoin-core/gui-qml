@@ -12,6 +12,7 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     property color bgColor
+    property color textColor: Theme.color.white
     property bool shorten: false
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
@@ -24,7 +25,7 @@ Button {
     contentItem: CoreText {
         text: root.text
         font.pixelSize: root.textSize
-        color: Theme.color.white
+        color: root.textColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -70,6 +71,7 @@ Button {
                 visible: true
                 text: shorten ? qsTr("Signet") : qsTr("Signet Network")
                 bgColor: Theme.color.amber
+                textColor: Theme.color.neutral0
             }
         },
         State {
