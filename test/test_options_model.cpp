@@ -520,7 +520,7 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
     QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
 
-    // Simulate what ProxySettings.qml does: set address before enabling.
+    // Simulate what ProxySettingsPage.qml does: set address before enabling.
     model.setProxyAddress("127.0.0.1:9050");
     QTRY_VERIFY(!model.settingsPending());
     // Address changed but proxy is still disabled — should NOT be dirty since

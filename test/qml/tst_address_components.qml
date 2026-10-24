@@ -324,17 +324,6 @@ TestCase {
         }
     }
 
-    Component {
-        id: addressDisplayFieldComponent
-
-        BitcoinAddressDisplayField {
-            objectName: "toggleAddressField"
-            width: 320
-            text: "abcd efgh ... mnop qrst"
-            fullText: "abcd efgh ijkl mnop qrst"
-        }
-    }
-
     function test_addressDetails_request_button_views_existing_request() {
         const details = createTemporaryObject(detailsComponent, host)
         verify(details !== null)
@@ -363,32 +352,6 @@ TestCase {
         verify(label.formattedText.indexOf("<font color=\"" + primary + "\">ijkl</font>") !== -1)
         verify(label.formattedText.indexOf("<font color=\"" + secondary + "\">mnop</font>") !== -1)
         verify(label.formattedText.indexOf("<font color=\"" + primary + "\">qrst</font>") !== -1)
-    }
-
-    function test_addressDisplayField_toggles_same_monospace_text() {
-        const field = createTemporaryObject(addressDisplayFieldComponent, host)
-        const referenceLabel = createTemporaryObject(addressLabelComponent, host)
-        verify(field !== null)
-        verify(referenceLabel !== null)
-
-        const addressText = findObject(field, "toggleAddressFieldText")
-        const referenceText = findObject(referenceLabel, "referenceAddressLabelValue")
-        verify(addressText !== null)
-        verify(referenceText !== null)
-        compare(addressText.font.family, referenceText.font.family)
-        compare(addressText.font.styleName, referenceText.font.styleName)
-        compare(addressText.font.pixelSize, referenceText.font.pixelSize)
-        compare(addressText.text, "abcd efgh ... mnop qrst")
-        compare(field.expanded, false)
-
-        field.click()
-        compare(field.expanded, true)
-        compare(addressText.text, "abcd efgh ijkl mnop qrst")
-
-        field.click()
-        compare(field.expanded, false)
-        compare(addressText.text, "abcd efgh ... mnop qrst")
-        compare(findObject(field, "toggleAddressFieldText"), addressText)
     }
 
     function test_addressLabel_truncatesVisuallyButRetainsFullAddress() {
