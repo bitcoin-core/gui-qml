@@ -44,48 +44,48 @@ function formatRemainingSyncTime(milliseconds) {
 
     if (weeks > 0) {
         return {
-            text: "~" + weeks + (weeks === 1 ? " week" : " weeks") + " left",
+            text: weeks === 1 ? qsTr("~1 week left") : qsTr("~%1 weeks left").arg(weeks),
             estimating: false
         };
     }
     if (days > 0) {
         return {
-            text: "~" + days + (days === 1 ? " day" : " days") + " left",
+            text: days === 1 ? qsTr("~1 day left") : qsTr("~%1 days left").arg(days),
             estimating: false
         };
     }
     if (hours >= 5) {
         return {
-            text: "~" + hours + (hours === 1 ? " hour" : " hours") + " left",
+            text: qsTr("~%1 hours left").arg(hours),
             estimating: false
         };
     }
     if (hours > 0) {
         return {
-            text: "~" + hours + "h " + minutes + "m" + " left",
+            text: qsTr("~%1h %2m left").arg(hours).arg(minutes),
             estimating: false
         };
     }
     if (minutes >= 5) {
         return {
-            text: "~" + minutes + (minutes === 1 ? " minute" : " minutes") + " left",
+            text: qsTr("~%1 minutes left").arg(minutes),
             estimating: false
         };
     }
     if (minutes > 0) {
         return {
-            text: "~" + minutes + "m " + seconds + "s" + " left",
+            text: qsTr("~%1m %2s left").arg(minutes).arg(seconds),
             estimating: false
         };
     }
     if (seconds > 0) {
         return {
-            text: "~" + seconds + (seconds === 1 ? " second" : " seconds") + " left",
+            text: seconds === 1 ? qsTr("~1 second left") : qsTr("~%1 seconds left").arg(seconds),
             estimating: false
         };
     } else {
         return {
-            text: "Estimating",
+            text: qsTr("Estimating"),
             estimating: true
         };
     }

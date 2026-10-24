@@ -282,11 +282,11 @@ Page {
                         } else if (paused) {
                             qsTr("Paused")
                         } else if (connected && synced) {
-                            qsTr("Blocktime\n" +  Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
+                            qsTr("Blocktime\n%1").arg(Number(nodeModel.blockTipHeight).toLocaleString(Qt.locale(), 'f', 0))
                         } else if (connected && headerSyncActive) {
                             nodeModel.headerPresync ? qsTr("Pre-syncing headers") : qsTr("Syncing headers")
                         } else if (connected) {
-                            qsTr("Downloading blocks\n" +  syncState.text)
+                            qsTr("Downloading blocks\n%1").arg(syncState.text)
                         } else {
                             qsTr("Connecting")
                         }
