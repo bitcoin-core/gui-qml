@@ -109,6 +109,13 @@ AbstractButton {
 
     onClicked: copy()
 
+    FocusBorder {
+        objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+        visible: root.visualFocus
+        targetRadius: 5
+        z: 1
+    }
+
     contentItem: Item {
         id: content
         implicitHeight: root.interactive ? Math.max(addressText.paintedHeight, copiedRow.implicitHeight)

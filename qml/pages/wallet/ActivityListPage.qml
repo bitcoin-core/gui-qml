@@ -753,10 +753,22 @@ Page {
 
             // Return to the preset list.
             ItemDelegate {
+                id: presetsBackButton
                 objectName: "activityDatePresetsBack"
                 Layout.fillWidth: true
                 implicitHeight: 30
                 padding: 0
+                focusPolicy: Qt.StrongFocus
+                background: Item {
+                    FocusBorder {
+                        visible: presetsBackButton.visualFocus
+                        topMargin: 0
+                        bottomMargin: 0
+                        leftMargin: -4
+                        rightMargin: -4
+                        borderRadius: 5
+                    }
+                }
                 //: Accessibility label for the control that leaves the custom date range calendar and returns to the date presets.
                 Accessible.name: qsTr("Back to date presets")
                 Accessible.role: Accessible.Button

@@ -104,6 +104,7 @@ SettingsPage {
         iconSource: "image://images/ellipsis"
         iconColor: Theme.color.neutral9
         size: 28
+        accessibleName: qsTr("More options")
         onClicked: {
             root.openMenuAt(pageMenu, this);
         }

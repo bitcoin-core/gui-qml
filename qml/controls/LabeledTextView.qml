@@ -20,7 +20,6 @@ LabeledField {
     property int fieldCornerRadius: 10
     property int fieldPadding: 16
     property color fieldBackgroundColor: Theme.color.neutral1
-    property color focusBorderColor: Theme.color.orange
     property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color placeholderColor: enabled ? Theme.color.neutral6 : Theme.color.neutral4
     property var fieldTextStyle: Theme.text.description
@@ -50,10 +49,25 @@ LabeledField {
         background: Rectangle {
             color: root.fieldBackgroundColor
             radius: root.fieldCornerRadius
-            border.width: input.activeFocus ? 2 : 0
-            border.color: root.focusBorderColor
+
+            FieldBorderRings {
+                anchors.fill: parent
+                visible: input.activeFocus
+                cornerRadius: root.fieldCornerRadius
+                ringColor: root.activeBorderColor
+                outerObjectName: input.objectName.length > 0 ? input.objectName + "FocusRing" : ""
+            }
         }
 
         onTextChanged: root.textEdited(text)
+
+        Keys.onTabPressed: (event) => {
+            const next = input.nextItemInFocusChain(true)
+            if (next && next !== input) next.forceActiveFocus(Qt.TabFocusReason)
+        }
+        Keys.onBacktabPressed: (event) => {
+            const previous = input.nextItemInFocusChain(false)
+            if (previous && previous !== input) previous.forceActiveFocus(Qt.BacktabFocusReason)
+        }
     }
 }

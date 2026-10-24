@@ -28,26 +28,27 @@ TextField {
         radius: 5
     }
 
-    Icon {
-        id: visibleIcon
+    IconButton {
+        id: visibilityToggle
+        objectName: root.objectName.length > 0 ? root.objectName + "VisibilityToggle" : ""
         visible: root.hideText
         enabled: root.hideText
         z: 1
-        size: 24
+        size: 32
+        iconSize: 24
         anchors.right: root.right
-        anchors.rightMargin: 12
+        anchors.rightMargin: 8
         anchors.verticalCenter: root.verticalCenter
-        source: root.echoMode === TextInput.Normal ? "qrc:/icons/hidden" : "qrc:/icons/visible"
-        color: Theme.color.neutral5
-
-        TapHandler {
-            onTapped: root.echoMode = (root.echoMode === TextInput.Password)
-                ? TextInput.Normal
-                : TextInput.Password
-        }
-
-        HoverHandler {
-            cursorShape: Qt.PointingHandCursor
-        }
+        iconSource: root.echoMode === TextInput.Normal ? "qrc:/icons/hidden" : "qrc:/icons/visible"
+        iconColor: Theme.color.neutral5
+        hoverColor: Theme.color.neutral7
+        activeColor: Theme.color.neutral7
+        // Clicking keeps focus in the field; Tab still reaches the toggle.
+        focusPolicy: Qt.TabFocus
+        accessibleName: root.echoMode === TextInput.Normal ? qsTr("Hide password") : qsTr("Show password")
+        background: null
+        onClicked: root.echoMode = (root.echoMode === TextInput.Password)
+            ? TextInput.Normal
+            : TextInput.Password
     }
 }

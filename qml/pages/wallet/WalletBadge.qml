@@ -33,7 +33,7 @@ Button {
     background: Rectangle {
         radius: 11
         color: root.hovered || root.checked ? Theme.color.neutral2 : Theme.color.neutral0
-        FocusBorder { visible: root.visualFocus }
+        FocusBorder { visible: root.visualFocus; targetRadius: parent.radius }
     }
 
     contentItem: RowLayout {

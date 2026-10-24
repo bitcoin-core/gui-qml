@@ -62,7 +62,6 @@ Pane {
                         bottomMargin: -2
                         leftMargin: -2
                         rightMargin: -2
-                        border.color: Theme.color.orange
                     }
                 }
 

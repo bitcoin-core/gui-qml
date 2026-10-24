@@ -20,7 +20,7 @@ FormRow {
     property int textAlignment: Text.AlignRight
     property color fieldColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color placeholderColor: enabled ? Theme.color.neutral5 : Theme.color.neutral4
-    property color focusBorderColor: Theme.color.orange
+    property color focusBorderColor: Theme.color.neutral6
     property var fieldTextStyle: Theme.text.description
     readonly property var field: loadedTrailingItem
 
@@ -54,14 +54,10 @@ FormRow {
         Accessible.name: root.title
         Accessible.description: root.description
 
-        background: FocusBorder {
+        background: FieldBorderRings {
             visible: input.activeFocus
-            border.color: root.focusBorderColor
-            borderRadius: 6
-            topMargin: -2
-            bottomMargin: -2
-            leftMargin: -2
-            rightMargin: -2
+            cornerRadius: 4
+            ringColor: root.focusBorderColor
         }
 
         onTextChanged: {

@@ -24,7 +24,6 @@ LabeledField {
     property int fieldCornerRadius: 10
     property int fieldHorizontalPadding: fieldSurface ? 14 : 16
     property color fieldBackgroundColor: Theme.color.neutral1
-    property color focusBorderColor: fieldSurface ? Theme.color.neutral6 : Theme.color.orange
     property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color placeholderColor: enabled ? Theme.color.neutral6 : Theme.color.neutral4
     property var fieldTextStyle: Theme.text.description
@@ -61,8 +60,14 @@ LabeledField {
             background: Rectangle {
                 color: root.fieldSurface ? "transparent" : root.fieldBackgroundColor
                 radius: root.fieldCornerRadius
-                border.width: !root.fieldSurface && input.activeFocus ? 2 : 0
-                border.color: root.focusBorderColor
+
+                FieldBorderRings {
+                    anchors.fill: parent
+                    visible: !root.fieldSurface && input.activeFocus
+                    cornerRadius: root.fieldCornerRadius
+                    ringColor: root.activeBorderColor
+                    outerObjectName: input.objectName.length > 0 ? input.objectName + "FocusRing" : ""
+                }
             }
 
             onTextEdited: root.textEdited(text)

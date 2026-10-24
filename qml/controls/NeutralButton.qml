@@ -121,13 +121,10 @@ AbstractButton {
             Behavior on color { ColorAnimation { duration: 150 } }
         }
 
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            color: "transparent"
-            border.width: root.visualFocus ? 2 : 0
-            border.color: Theme.color.orange
+        FocusBorder {
             objectName: root.focusBorderObjectName
+            visible: root.visualFocus
+            targetRadius: root.backgroundRadius
         }
     }
 }

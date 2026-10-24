@@ -88,6 +88,14 @@ LabeledField {
                 event.accepted = true
             }
         }
+        Keys.onTabPressed: (event) => {
+            const next = input.nextItemInFocusChain(true)
+            if (next && next !== input) next.forceActiveFocus(Qt.TabFocusReason)
+        }
+        Keys.onBacktabPressed: (event) => {
+            const previous = input.nextItemInFocusChain(false)
+            if (previous && previous !== input) previous.forceActiveFocus(Qt.BacktabFocusReason)
+        }
 
         Component.onCompleted: if (root.interceptPaste) syncFromModel()
         // TextEdit.textEdited was added in Qt 6.9. Treat changes made while

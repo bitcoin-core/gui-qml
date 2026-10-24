@@ -110,9 +110,9 @@ Popup {
                 iconSize: 12
                 iconSource: "image://images/cross"
                 iconColor: Theme.color.neutral8
-                Accessible.name: qsTr("Close")
+                accessibleName: qsTr("Close")
                 background: Rectangle {
-                    radius: 5
+                    radius: closeButton.backgroundRadius
                     color: closeButton.down || closeButton.hovered
                         ? Theme.color.neutral2 : Theme.color.neutral1
                 }

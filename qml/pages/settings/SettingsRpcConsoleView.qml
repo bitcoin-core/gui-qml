@@ -49,7 +49,7 @@ SettingsPage {
 
         FocusBorder {
             objectName: fontSizeButton.objectName + "FocusBorder"
-            visible: fontSizeButton.activeFocus
+            visible: fontSizeButton.visualFocus
             borderRadius: 12
             z: 1
         }

@@ -33,6 +33,7 @@
 
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
+#include <qml/buttonkeyactivation.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 
@@ -4297,6 +4298,7 @@ class QmlTestsSetup : public QObject
 public Q_SLOTS:
     void applicationAvailable()
     {
+        static ButtonKeyActivation button_key_activation;
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
     }

@@ -42,7 +42,7 @@ Switch {
     FocusBorder {
         objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
         visible: root.visualFocus
-        borderRadius: Math.floor(height / 2)
+        targetRadius: Math.floor(root.height / 2)
         z: 1
     }
 }

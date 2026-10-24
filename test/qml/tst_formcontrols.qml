@@ -554,8 +554,8 @@ TestCase {
         compare(row.loadedBodyItem, null)
         compare(row.text, "127.0.0.1:9050")
         compare(row.field.horizontalAlignment, Text.AlignRight)
-        compare(row.focusBorderColor, Theme.color.orange)
-        compare(row.field.background.border.color, Theme.color.orange)
+        compare(row.focusBorderColor, Theme.color.neutral6)
+        compare(row.field.background.ringColor, Theme.color.neutral6)
 
         row.text = "127.0.0.1:9150"
         compare(row.field.text, "127.0.0.1:9150")
@@ -593,14 +593,16 @@ TestCase {
         compare(field.placeholderText, "Enter username...")
         compare(field.background.radius, 10)
         compare(field.background.color, Theme.color.neutral1)
-        compare(field.background.border.width, 0)
+        const focusRing = findChild(control, "exampleLabeledTextFieldInputFocusRing")
+        verify(focusRing !== null)
+        compare(focusRing.visible, false)
 
         field.forceActiveFocus()
-        tryCompare(field.background.border, "width", 2)
-        tryCompare(field.background.border, "color", Theme.color.orange)
+        tryCompare(focusRing, "visible", true)
+        compare(focusRing.parent.ringColor, Theme.color.neutral6)
         keyClick(Qt.Key_Return)
         tryCompare(field, "activeFocus", false)
-        compare(field.background.border.width, 0)
+        compare(focusRing.visible, false)
     }
 
     function test_passwordTextFieldComposesSecureEntryAndVisibilityToggle() {
