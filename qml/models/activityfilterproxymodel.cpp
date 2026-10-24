@@ -4,14 +4,17 @@
 
 #include <qml/models/activityfilterproxymodel.h>
 
+#include <qml/applocale.h>
 #include <qml/bitcoinunits.h>
 #include <qml/models/transaction.h>
 #include <qml/models/transactionactivitymodel.h>
 
 #include <algorithm>
 
+#include <QCoreApplication>
 #include <QDate>
 #include <QDateTime>
+#include <QEvent>
 #include <QFile>
 #include <QLocale>
 #include <QStringList>
@@ -65,6 +68,8 @@ ActivityFilterProxyModel::ActivityFilterProxyModel(QObject* parent)
     setDynamicSortFilter(true);
     setSortCaseSensitivity(Qt::CaseInsensitive);
     sort(0, Qt::DescendingOrder);
+    // Translator changes send LanguageChange to the application object only.
+    if (QCoreApplication::instance()) QCoreApplication::instance()->installEventFilter(this);
 
     connect(this, &QAbstractItemModel::rowsInserted, this, &ActivityFilterProxyModel::countChanged);
     connect(this, &QAbstractItemModel::rowsRemoved, this, &ActivityFilterProxyModel::countChanged);
@@ -95,10 +100,13 @@ QVariant ActivityFilterProxyModel::data(const QModelIndex& index, int role) cons
         const bool pending = QSortFilterProxyModel::data(index, TransactionActivityModel::IsPendingRole).toBool();
         const auto date = QDateTime::fromSecsSinceEpoch(QSortFilterProxyModel::data(index, TransactionActivityModel::TimestampRole).toLongLong());
         if (role == DateTimeLabelRole) {
-            return QLocale().toString(date, m_group_by == Day && !pending ? "h:mm AP" : "MMM d, h:mm AP");
+            if (m_group_by == Day && !pending) return QLocale().toString(date.time(), QLocale::ShortFormat);
+            return QLocale().toString(date, QLocale::ShortFormat);
         }
         if (role == SectionKeyRole) return pending ? QStringLiteral("pending") : date.toString(m_group_by == Day ? "yyyy-MM-dd" : "yyyy-MM");
-        return pending ? tr("Pending") : QLocale().toString(date.date(), m_group_by == Day ? "MMMM d, yyyy" : "MMMM yyyy");
+        if (pending) return tr("Pending");
+        const QLocale names = QmlNamesLocale();
+        return names.toString(date.date(), QmlWordDateFormat(m_group_by == Month ? QmlWordDate::MonthYear : QmlWordDate::Long, names));
     }
     return QSortFilterProxyModel::data(index, role);
 }
@@ -107,8 +115,21 @@ void ActivityFilterProxyModel::setGroupBy(GroupBy group_by)
 {
     if (m_group_by == group_by) return;
     m_group_by = group_by;
-    if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionKeyRole, SectionLabelRole, DateTimeLabelRole});
+    refreshDateLabels();
     Q_EMIT groupByChanged();
+}
+
+bool ActivityFilterProxyModel::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == QCoreApplication::instance() && event->type() == QEvent::LanguageChange) {
+        refreshDateLabels();
+    }
+    return QSortFilterProxyModel::eventFilter(watched, event);
+}
+
+void ActivityFilterProxyModel::refreshDateLabels()
+{
+    if (rowCount()) Q_EMIT dataChanged(index(0, 0), index(rowCount() - 1, 0), {SectionKeyRole, SectionLabelRole, DateTimeLabelRole});
 }
 
 void ActivityFilterProxyModel::setSourceModel(QAbstractItemModel* source_model)
