@@ -53,6 +53,8 @@ Button {
             visible: active
             Layout.rightMargin: 7
             sourceComponent: Button {
+                focusPolicy: Qt.NoFocus
+                Accessible.ignored: true
                 icon.source: button.image
                 icon.height: 40
                 icon.width: 40
@@ -110,6 +112,9 @@ Button {
                 visible: active
                 sourceComponent: Button {
                     id: container
+                    focusPolicy: Qt.NoFocus
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: button.customDir
                     background: Rectangle {
                         color: Theme.color.neutral2
                         radius: 5

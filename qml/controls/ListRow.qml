@@ -51,13 +51,15 @@ AbstractButton {
                 ? root.hoverBackgroundColor
                 : "transparent"
 
+        // Inset, so the clipped FormSection card does not cut the ring off.
         FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
-            borderRadius: root.cornerRadius + 2
-            topMargin: -2
-            bottomMargin: -2
-            leftMargin: -2
-            rightMargin: -2
+            targetRadius: root.cornerRadius
+            topMargin: 2
+            bottomMargin: 2
+            leftMargin: 2
+            rightMargin: 2
         }
     }
 

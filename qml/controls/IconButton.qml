@@ -18,12 +18,16 @@ Button {
     property color activeColor: Theme.color.orange
     property int size: 35
     property int iconSize: size
+    property int backgroundRadius: 5
     property alias iconSource: icon.source
+    required property string accessibleName
 
     hoverEnabled: AppMode.isDesktop
+    focusPolicy: Qt.StrongFocus
     height: root.size
     width: root.size
     padding: 0
+    Accessible.name: root.accessibleName
 
     HoverHandler {
         cursorShape: Qt.PointingHandCursor
@@ -32,12 +36,19 @@ Button {
     background: Rectangle {
         id: bg
         anchors.fill: parent
-        radius: 5
+        radius: root.backgroundRadius
         color: root.hovered || root.pressed ? Theme.color.neutral2 : Theme.color.background
 
         Behavior on color {
             ColorAnimation { duration: 150 }
         }
+    }
+
+    FocusBorder {
+        objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+        visible: root.visualFocus
+        targetRadius: root.backgroundRadius
+        z: 1
     }
 
     contentItem: Icon {

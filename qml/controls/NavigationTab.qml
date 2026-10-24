@@ -66,13 +66,14 @@ Button {
             color: Theme.color.neutral3
             visible: root.hovered
 
-            FocusBorder {
-                visible: root.visualFocus
-            }
-
             Behavior on color {
                 ColorAnimation { duration: 150 }
             }
+        }
+        FocusBorder {
+            anchors.fill: bg
+            visible: root.visualFocus
+            targetRadius: bg.radius
         }
         Rectangle {
             anchors.bottom: parent.bottom

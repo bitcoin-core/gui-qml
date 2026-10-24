@@ -31,7 +31,7 @@ AbstractButton {
 
         FocusBorder {
             visible: root.visualFocus
-            borderRadius: 14
+            targetRadius: parent.radius
         }
     }
 

@@ -1145,7 +1145,7 @@ TestCase {
                 compare(signerPathInput.rightPadding, 10)
                 compare(signerPathInput.background.color, Theme.color.neutral2)
                 compare(signerPathInput.background.radius, 5)
-                compare(signerPathFocusBorder.border.color, Theme.color.orange)
+                compare(signerPathFocusBorder.ringColor, Theme.color.neutral6)
                 compare(signerStatusIndicator.width, 10)
                 compare(signerStatusIndicator.height, 10)
             }

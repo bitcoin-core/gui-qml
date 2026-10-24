@@ -399,8 +399,18 @@ Page {
                     active: peerListModelProxy.transportFilters.length > 0
                     opened: transportFilterMenu.visible
                     defaultBgColor: Theme.color.neutral1
-                    KeyNavigation.tab: listView.count > 0 ? listView.itemAtIndex(0) : null
                     KeyNavigation.backtab: networkFilterButton
+                    // Resolve the first row on each press: itemAtIndex() is null while
+                    // that row is scrolled out and does not notify when it returns.
+                    Keys.onTabPressed: (event) => {
+                        if (listView.count === 0) {
+                            event.accepted = false
+                            return
+                        }
+                        listView.positionViewAtBeginning()
+                        const first = listView.itemAtIndex(0)
+                        if (first) first.forceActiveFocus(Qt.TabFocusReason)
+                    }
                     onClicked: transportFilterMenu.opened ? transportFilterMenu.close() : transportFilterMenu.open()
                 }
                 add: Transition {

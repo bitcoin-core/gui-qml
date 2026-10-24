@@ -16,17 +16,20 @@ LabeledTextField {
     echoMode: passwordVisible ? TextInput.Normal : TextInput.Password
     inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
 
-    trailingItem: Icon {
+    trailingItem: IconButton {
+        id: visibilityToggle
         objectName: root.visibilityToggleObjectName
-        source: root.passwordVisible ? "qrc:/icons/hidden" : "qrc:/icons/visible"
-        color: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-        size: 22
+        size: 30
+        iconSize: 22
+        iconSource: root.passwordVisible ? "qrc:/icons/hidden" : "qrc:/icons/visible"
+        iconColor: Theme.color.neutral7
+        hoverColor: Theme.color.neutral9
+        activeColor: Theme.color.neutral9
         enabled: root.enabled
-        Accessible.name: root.passwordVisible ? qsTr("Hide password") : qsTr("Show password")
+        // Clicking keeps focus in the field; Tab still reaches the toggle.
+        focusPolicy: Qt.TabFocus
+        accessibleName: root.passwordVisible ? qsTr("Hide password") : qsTr("Show password")
+        background: null
         onClicked: root.passwordVisible = !root.passwordVisible
-
-        HoverHandler {
-            cursorShape: Qt.PointingHandCursor
-        }
     }
 }

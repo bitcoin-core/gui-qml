@@ -14,6 +14,8 @@ import "../controls"
     property int leftMargin: -4
     property int rightMargin: -4
     property int borderRadius: 9
+    // Corner radius of the surrounded item; the ring then follows it at its offset.
+    property real targetRadius: -1
 
     anchors.fill: parent
     anchors.topMargin: root.topMargin
@@ -22,14 +24,10 @@ import "../controls"
     anchors.rightMargin: root.rightMargin
     border.width: 2
     border.color: Theme.color.purple
-    radius: root.borderRadius
+    radius: root.targetRadius >= 0 ? Math.max(0, root.targetRadius - root.leftMargin) : root.borderRadius
     color: "transparent"
 
     Behavior on border.color {
         ColorAnimation { duration: 150 }
-    }
-
-    Behavior on visible {
-        NumberAnimation { duration: 150 }
     }
 }

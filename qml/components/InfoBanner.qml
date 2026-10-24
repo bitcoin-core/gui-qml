@@ -68,8 +68,7 @@ Rectangle {
         anchors.rightMargin: 8
         size: 24
         iconSource: "image://images/cross"
-        Accessible.name: qsTr("Dismiss")
-        Accessible.role: Accessible.Button
+        accessibleName: qsTr("Dismiss")
         onClicked: root.dismissClicked()
     }
 
