@@ -464,8 +464,7 @@ Item {
         anchors.centerIn: parent
         width: 182
         height: 182
-        source: Theme.dark ? "qrc:/icons/onboarding-clock-face-dark.svg"
-            : "qrc:/icons/onboarding-clock-face-light.svg"
+        source: Theme.image.onboardingClockFace
         sourceSize.width: 400
         sourceSize.height: 400
         fillMode: Image.PreserveAspectFit

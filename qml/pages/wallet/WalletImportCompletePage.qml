@@ -31,7 +31,7 @@ OnboardingView {
 
     childView: FormSection {
         objectName: "importWalletInfoSection"
-        isOnSurface: true
+        surfaceLevel: 1
         showGradientBorder: false
         rowSpacing: 0
 

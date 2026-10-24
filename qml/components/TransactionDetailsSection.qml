@@ -64,7 +64,7 @@ ColumnLayout {
                 Layout.preferredWidth: Math.min(naturalWidth, idRow.availableWidth)
                 address: root.details.txid || ""
                 textStyle: Theme.text.monoCaption
-                embedded: true
+                surfaceLevel: 2
                 truncateWhenNeeded: true
                 leftPadding: 0
                 rightPadding: 0

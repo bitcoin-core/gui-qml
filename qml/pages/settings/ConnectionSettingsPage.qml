@@ -30,7 +30,7 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Incoming connections")
-        isOnSurface: root.onboardingModal
+        surfaceLevel: root.onboardingModal ? 1 : 0
         showGradientBorder: false
 
         FormRow {
@@ -78,7 +78,7 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Privacy")
-        isOnSurface: root.onboardingModal
+        surfaceLevel: root.onboardingModal ? 1 : 0
         showGradientBorder: false
 
         ListRow {

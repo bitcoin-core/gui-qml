@@ -146,7 +146,7 @@ ColumnLayout {
         DropdownButton {
             id: coinTypeButton
             objectName: "coinBrowserFilterButton"
-            implicitHeight: 40; isOnSurface: true
+            implicitHeight: 40; surfaceLevel: 1
             text: !root.coins || root.coins.filter === "all" ? qsTr("Coin type") : root.coins.filter === "locked" ? qsTr("Locked") : qsTr("Spendable")
             active: root.coins && root.coins.filter !== "all"
             opened: filterMenu.opened
@@ -155,7 +155,7 @@ ColumnLayout {
         DropdownButton {
             id: amountFilterButton
             objectName: "coinBrowserAmountFilterButton"
-            implicitHeight: 40; isOnSurface: true
+            implicitHeight: 40; surfaceLevel: 1
             text: qsTr("Amount")
             active: root.coins && (root.coins.minAmount >= 0 || root.coins.maxAmount >= 0)
             opened: amountPopup.opened
@@ -194,7 +194,7 @@ ColumnLayout {
             required property bool selected
             required property bool groupFirst
             required property bool groupLast
-            property bool isOnSurface: root.selectionMode
+            property int surfaceLevel: root.selectionMode ? 1 : 0
             property bool suppressNextRowClick: false
             objectName: "coinSelectionItem_" + index
             readonly property bool marked: root.selectionMode ? selected : root.markedIds.indexOf(coinId) >= 0
@@ -231,8 +231,8 @@ ColumnLayout {
                 id: rowBackground
                 radius: coinRow.groupFirst || coinRow.groupLast ? 10 : 0
                 color: coinRow.marked || coinRow.hovered
-                    ? (coinRow.isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2)
-                    : (coinRow.isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1)
+                    ? Theme.color.surface(coinRow.surfaceLevel + 2)
+                    : Theme.color.surface(coinRow.surfaceLevel + 1)
                 Rectangle {
                     visible: coinRow.groupFirst && !coinRow.groupLast
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
@@ -345,7 +345,7 @@ ColumnLayout {
         objectName: "coinBrowserSummary"
         visible: root.selectionMode || !root.walletSelectionActive
         Layout.fillWidth: true
-        isOnSurface: root.selectionMode
+        surfaceLevel: root.selectionMode ? 1 : 0
         showGradientBorder: false
         rowSpacing: 0
         ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }

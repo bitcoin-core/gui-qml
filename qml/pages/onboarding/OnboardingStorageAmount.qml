@@ -26,7 +26,7 @@ OnboardingView {
     readonly property string storageErrorText: root.settingsModel.storageErrorText || ""
     readonly property bool hasStorageResult: root.storageAvailableText.length > 0 && !root.storageCheckPending
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false

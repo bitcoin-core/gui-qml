@@ -58,7 +58,7 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Block storage")
-        isOnSurface: root.onboarding
+        surfaceLevel: root.onboarding ? 1 : 0
         showGradientBorder: false
 
         FormRow {
@@ -105,7 +105,7 @@ SettingsPage {
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Data directory")
-        isOnSurface: root.onboarding
+        surfaceLevel: root.onboarding ? 1 : 0
         showGradientBorder: false
         description: qsTr("Selected before startup. The data directory cannot be changed while the node is running.")
 

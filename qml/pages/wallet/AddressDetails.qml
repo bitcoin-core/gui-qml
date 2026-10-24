@@ -75,7 +75,7 @@ ColumnLayout {
                 objectName: "addressDetailsAddressLabel"
                 width: Math.min(380, Math.max(200, root.width * 0.68))
                 address: root.address
-                embedded: true
+                surfaceLevel: 2
                 textStyle: Theme.text.monoCaption
                 textAlignment: Text.AlignRight
                 leftPadding: 0

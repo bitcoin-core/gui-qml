@@ -10,53 +10,47 @@ TestCase {
     id: testCase
     name: "ThemeContrast"
 
-    property bool originalDark: true
-
-    readonly property var palettes: [
-        {tag: "dark", dark: true},
-        {tag: "light", dark: false}
-    ]
-
     readonly property var neutralSteps: ["neutral0", "neutral1", "neutral2", "neutral3", "neutral4"]
+    readonly property var surfaces: ["background", "surface1", "surface2", "surface3"]
 
     // WCAG 2 thresholds: 4.5:1 for text, 3:1 for focus indicators and glyphs.
-    // Neighbouring neutral steps must differ by at least 1.05:1, so hover,
-    // pressed and divider colors that step through the scale stay visible.
+    // Light surface3 fails both for neutral7 text and the focus ring, so only
+    // primary text is checked there.
+    // Neighbouring neutral steps and surfaces must differ by at least 1.05:1,
+    // so a level never looks the same as its parent and hover, pressed and
+    // divider colors stay visible.
     readonly property var textPairs: [
-        {fg: "neutral9", bg: "neutral0", min: 4.5},
-        {fg: "neutral9", bg: "neutral1", min: 4.5},
-        {fg: "neutral9", bg: "neutral2", min: 4.5},
-        {fg: "neutral7", bg: "neutral0", min: 4.5},
-        {fg: "neutral7", bg: "neutral1", min: 4.5},
-        {fg: "neutral7", bg: "neutral2", min: 4.5},
-        {fg: "amber", bg: "neutral0", min: 4.5},
-        {fg: "amber", bg: "neutral0", tint: "amber", alpha: 0.16, min: 4.5}
+        {fg: "neutral9", bg: "background", min: 4.5},
+        {fg: "neutral9", bg: "surface1", min: 4.5},
+        {fg: "neutral9", bg: "surface2", min: 4.5},
+        {fg: "neutral9", bg: "surface3", min: 4.5},
+        {fg: "neutral7", bg: "background", min: 4.5},
+        {fg: "neutral7", bg: "surface1", min: 4.5},
+        {fg: "neutral7", bg: "surface2", min: 4.5},
+        {fg: "warning", bg: "background", min: 4.5},
+        {fg: "warning", bg: "background", tint: "warning", alpha: 0.16, min: 4.5}
     ]
     readonly property var focusPairs: [
-        {fg: "purple", bg: "neutral0", min: 3},
-        {fg: "purple", bg: "neutral1", min: 3},
-        {fg: "purple", bg: "neutral2", min: 3}
+        {fg: "focus", bg: "background", min: 3},
+        {fg: "focus", bg: "surface1", min: 3},
+        {fg: "focus", bg: "surface2", min: 3}
     ]
     // Content drawn on accent fills. White on orange, green and red is below
     // 4.5:1 in both palettes; these minimums only stop it getting worse.
     readonly property var onAccentPairs: [
-        {fg: "white", bg: "orange", min: 2},
-        {fg: "white", bg: "green", min: 2.5},
-        {fg: "white", bg: "red", min: 3},
-        {fg: "neutral0", bg: "amber", min: 4.5}
+        {fg: "accentForeground", bg: "accent", min: 2},
+        {fg: "accentForeground", bg: "success", min: 2.5},
+        {fg: "accentForeground", bg: "danger", min: 3},
+        {fg: "neutral0", bg: "warning", min: 4.5}
     ]
-    readonly property real minimumNeutralStep: 1.05
+    readonly property var stateRoles: ["surfaceHover", "surfacePressed", "surfaceSelected", "surfaceDivider"]
+    readonly property real minimumStep: 1.05
 
-    function initTestCase() {
-        originalDark = Theme.dark
-    }
-
-    function cleanup() {
-        Theme.dark = originalDark
-    }
-
-    function cleanupTestCase() {
-        Theme.dark = originalDark
+    function palettesData() {
+        const data = []
+        for (let i = 0; i < Theme.palettes.length; ++i)
+            data.push({tag: Theme.palettes[i].paletteId, palette: Theme.palettes[i]})
+        return data
     }
 
     function channel(value) {
@@ -79,45 +73,71 @@ TestCase {
                        color.b * alpha + background.b * (1 - alpha), 1)
     }
 
-    function checkPairs(palette, pairs) {
-        Theme.dark = palette.dark
+    function checkPairs(data, pairs) {
+        const palette = data.palette
         for (const pair of pairs) {
-            const fg = Theme.color[pair.fg]
-            let bg = Theme.color[pair.bg]
+            const fg = palette[pair.fg]
+            let bg = palette[pair.bg]
             let name = pair.fg + " on " + pair.bg
             if (pair.tint !== undefined) {
-                bg = over(Theme.color[pair.tint], pair.alpha, bg)
+                bg = over(palette[pair.tint], pair.alpha, bg)
                 name = pair.fg + " on " + pair.tint + " " + pair.alpha + " over " + pair.bg
             }
             const ratio = contrast(fg, bg)
             verify(ratio >= pair.min,
-                   palette.tag + ": " + name + " is " + ratio.toFixed(2) + ":1, expected at least " + pair.min + ":1")
+                   data.tag + ": " + name + " is " + ratio.toFixed(2) + ":1, expected at least " + pair.min + ":1")
         }
     }
 
-    function test_text_data() { return palettes }
-    function test_text(data) { checkPairs(data, textPairs) }
-
-    function test_focus_data() { return palettes }
-    function test_focus(data) { checkPairs(data, focusPairs) }
-
-    function test_onAccent_data() { return palettes }
-    function test_onAccent(data) { checkPairs(data, onAccentPairs) }
-
-    function test_neutralSteps_data() { return palettes }
-    function test_neutralSteps(data) {
-        Theme.dark = data.dark
-        const direction = Math.sign(luminance(Theme.color[neutralSteps[neutralSteps.length - 1]])
-                                    - luminance(Theme.color[neutralSteps[0]]))
+    function checkSteps(data, steps) {
+        const palette = data.palette
+        const direction = Math.sign(luminance(palette[steps[steps.length - 1]]) - luminance(palette[steps[0]]))
         verify(direction !== 0)
-        for (let i = 0; i + 1 < neutralSteps.length; ++i) {
-            const a = Theme.color[neutralSteps[i]]
-            const b = Theme.color[neutralSteps[i + 1]]
-            const name = data.tag + ": " + neutralSteps[i] + " to " + neutralSteps[i + 1]
+        for (let i = 0; i + 1 < steps.length; ++i) {
+            const a = palette[steps[i]]
+            const b = palette[steps[i + 1]]
+            const name = data.tag + ": " + steps[i] + " to " + steps[i + 1]
             compare(Math.sign(luminance(b) - luminance(a)), direction, name + " is not monotonic")
             const ratio = contrast(a, b)
-            verify(ratio >= minimumNeutralStep,
-                   name + " is " + ratio.toFixed(3) + ":1, expected at least " + minimumNeutralStep + ":1")
+            verify(ratio >= minimumStep, name + " is " + ratio.toFixed(3) + ":1, expected at least " + minimumStep + ":1")
+        }
+    }
+
+    function test_text_data() { return palettesData() }
+    function test_text(data) { checkPairs(data, textPairs) }
+
+    function test_focus_data() { return palettesData() }
+    function test_focus(data) { checkPairs(data, focusPairs) }
+
+    function test_onAccent_data() { return palettesData() }
+    function test_onAccent(data) { checkPairs(data, onAccentPairs) }
+
+    function test_neutralSteps_data() { return palettesData() }
+    function test_neutralSteps(data) { checkSteps(data, neutralSteps) }
+
+    function test_surfaceSteps_data() { return palettesData() }
+    function test_surfaceSteps(data) {
+        checkSteps(data, surfaces)
+        for (let level = 0; level < surfaces.length; ++level)
+            verify(Qt.colorEqual(data.palette.surface(level), data.palette[surfaces[level]]), data.tag + ": surface(" + level + ")")
+    }
+
+    function test_stateRolesOverSurfaces_data() { return palettesData() }
+    function test_stateRolesOverSurfaces(data) {
+        const palette = data.palette
+        for (const surfaceName of surfaces) {
+            const surface = palette[surfaceName]
+            const ratios = {}
+            for (const role of stateRoles) {
+                const state = palette[role]
+                verify(state.a > 0 && state.a < 1, data.tag + ": " + role + " should be translucent")
+                ratios[role] = contrast(over(state, state.a, surface), surface)
+                verify(ratios[role] >= minimumStep,
+                       data.tag + ": " + role + " over " + surfaceName + " is " + ratios[role].toFixed(3)
+                       + ":1, expected at least " + minimumStep + ":1")
+            }
+            verify(ratios.surfacePressed > ratios.surfaceHover,
+                   data.tag + ": surfacePressed over " + surfaceName + " should differ more than surfaceHover")
         }
     }
 }

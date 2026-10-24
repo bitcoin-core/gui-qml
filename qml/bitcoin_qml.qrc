@@ -206,6 +206,9 @@
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletPasswordSettings.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
+        <file>themes/CoreDark.qml</file>
+        <file>themes/CoreLight.qml</file>
+        <file>themes/Palette.qml</file>
     </qresource>
     <qresource prefix="/icons">
         <file alias="alert-filled">res/icons/alert-filled.png</file>

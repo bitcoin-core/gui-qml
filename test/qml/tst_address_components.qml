@@ -360,7 +360,7 @@ TestCase {
 
         compare(label.displayAddress, label.address)
         compare(label.isTruncated, false)
-        compare(label.embedded, false)
+        compare(label.surfaceLevel, 1)
         compare(label.textAlignment, Text.AlignLeft)
         const valueText = findObject(label, "referenceAddressLabelValue")
         const copiedStatusText = findObject(label, "referenceAddressLabelCopiedStatusText")
@@ -387,7 +387,7 @@ TestCase {
 
         const background = findObject(label, "referenceAddressLabelBackground")
         verify(background !== null)
-        label.embedded = true
+        label.surfaceLevel = 2
         compare(background.opacity, 0)
         mouseMove(label, label.width / 2, label.height / 2)
         tryCompare(background, "color", Theme.color.neutral3)
@@ -616,7 +616,7 @@ TestCase {
         compare(addressRow.minimumRowHeight, 76)
         compare(addressRow.dividerColor, Theme.color.neutral3)
         compare(addressLabel.address, "bcrt1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv")
-        compare(addressLabel.embedded, true)
+        compare(addressLabel.surfaceLevel, 2)
         compare(addressLabel.truncateWhenNeeded, false)
         compare(addressLabel.textAlignment, Text.AlignRight)
         compare(addressLabel.isTruncated, false)

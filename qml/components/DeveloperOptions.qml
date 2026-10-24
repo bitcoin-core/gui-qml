@@ -9,7 +9,7 @@ import "../controls"
 ColumnLayout {
     id: root
     property bool showRestartNotice: false
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property string dbcacheText: String(optionsModel.dbcacheSizeMiB)
     property string scriptThreadsText: String(optionsModel.scriptThreads)
     property string dbcacheError: ""
@@ -26,14 +26,14 @@ ColumnLayout {
     FormSection {
         objectName: "developerSettingsSection"
         Layout.fillWidth: true
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         showGradientBorder: false
 
         TextFieldRow {
             id: dbcacheRow
             Layout.fillWidth: true
             title: qsTr("Database cache size (MiB)")
-            dividerColor: root.isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surface(root.surfaceLevel + 2)
             enabled: (root.coreStatuses.dbcache || ({})).canEdit !== false
             supportingText: (root.coreStatuses.dbcache || ({})).infoText || ""
             errorText: root.dbcacheError

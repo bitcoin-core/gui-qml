@@ -17,7 +17,7 @@ LabeledField {
     property alias readOnly: addressInput.readOnly
     readonly property alias field: addressInput.field
     property bool embedded: true
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property var fieldTextStyle: Theme.text.monoDescription
 
     signal textEdited(string text)
@@ -31,7 +31,7 @@ LabeledField {
             ? root.fieldObjectName
             : root.objectName.length > 0 ? root.objectName + "Field" : ""
         embedded: root.embedded
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         textStyle: root.fieldTextStyle
         labelText: root.label
         showLabel: false

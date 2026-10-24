@@ -14,7 +14,7 @@ OnboardingView {
     signal next()
     property bool useSharedMotion: false
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     showBackButton: false

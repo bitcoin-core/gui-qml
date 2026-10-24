@@ -24,6 +24,6 @@ Item {
         anchors.rightMargin: root.horizontalInset
         anchors.verticalCenter: parent.verticalCenter
         height: root.thickness
-        color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        color: Theme.color.menuDivider
     }
 }

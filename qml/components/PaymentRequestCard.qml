@@ -309,7 +309,7 @@ Pane {
                 iconSize: 24
                 iconColor: Theme.color.neutral7
                 activeIconColor: Theme.color.neutral8
-                isOnSurface: true
+                surfaceLevel: 1
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
                 ContextMenu {
@@ -457,7 +457,7 @@ Pane {
                 textStyle: Theme.text.monoDescription
                 interactive: !root.saved || root.sharing
                 clipboard: root.clipboard
-                embedded: true
+                surfaceLevel: 2
             }
         }
 
@@ -470,7 +470,7 @@ Pane {
                 //: Heading for the amount, recipient name, and message included in a payment request.
                 title: root.modalView ? "" : qsTr("Payment details")
                 headerTrailingItem: root.modalView ? null : customizationControl
-                isOnSurface: root.modalView
+                surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
                 showGradientBorder: false
                 ColumnLayout {
@@ -603,7 +603,7 @@ Pane {
                 Layout.fillWidth: true
                 title: root.modalView ? "" : qsTr("Private details")
                 headerTrailingItem: root.modalView ? null : noteRecommendation
-                isOnSurface: root.modalView
+                surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
                 showGradientBorder: false
 

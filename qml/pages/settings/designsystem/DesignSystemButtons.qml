@@ -78,8 +78,8 @@ DesignSystemSection {
             NeutralButton { text: "Export"; enabled: false }
         }
         DesignSystemState {
-            label: "isOnSurface: false"
-            NeutralButton { text: "Export"; isOnSurface: false }
+            label: "surfaceLevel: 0"
+            NeutralButton { text: "Export"; surfaceLevel: 0 }
         }
         DesignSystemState {
             label: "Large"
@@ -221,8 +221,8 @@ DesignSystemSection {
             OverflowMenuButton {}
         }
         DesignSystemState {
-            label: "isOnSurface: true"
-            OverflowMenuButton { isOnSurface: true }
+            label: "surfaceLevel: 1"
+            OverflowMenuButton { surfaceLevel: 1 }
         }
         DesignSystemState {
             label: "circular: true"
@@ -286,8 +286,8 @@ DesignSystemSection {
             DropdownButton { text: "Sent"; active: true }
         }
         DesignSystemState {
-            label: "isOnSurface: true"
-            DropdownButton { text: "All types"; isOnSurface: true }
+            label: "surfaceLevel: 1"
+            DropdownButton { text: "All types"; surfaceLevel: 1 }
         }
         DesignSystemState {
             label: "enabled: false"

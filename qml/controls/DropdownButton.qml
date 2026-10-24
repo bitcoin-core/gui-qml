@@ -13,7 +13,7 @@ NeutralButton {
     property string subtitle: ""
     property bool opened: false
     property bool active: false
-    isOnSurface: false
+    surfaceLevel: 0
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft
@@ -21,14 +21,14 @@ NeutralButton {
     property var subtitleTextStyle: labelTextStyle
     property color subtitleColor: Theme.color.neutral7
     property color caretColor: Theme.color.neutral9
-    property color hoverBgColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
-    property color defaultBgColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    property color hoverBgColor: Theme.color.surface(surfaceLevel + 2)
+    property color defaultBgColor: Theme.color.surface(surfaceLevel + 1)
 
     textColor: Theme.color.neutral9
     backgroundColor: active ? Theme.color.orange : defaultBgColor
     hoverBackgroundColor: active ? Theme.color.orange : hoverBgColor
     forceHoverBackground: opened || visualFocus
-    showBorder: isOnSurface
+    showBorder: surfaceLevel > 0
     backgroundRadius: 6
     focusBorderObjectName: "dropdownButtonFocusBorder"
     scale: 1

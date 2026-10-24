@@ -16,21 +16,33 @@ SettingsPage {
         objectName: "designSystemPageControlsSection"
         Layout.fillWidth: true
         title: "Page controls"
-        description: "Interacting with the samples below never changes a setting or wallet state; only the theme switch does."
+        description: "Interacting with the samples below never changes a setting or wallet state; only the palette picker does."
 
         FormRow {
             objectName: "designSystemThemeRow"
             Layout.fillWidth: true
-            title: "Theme"
+            title: "Palette"
             description: "Switch the palette every sample uses."
             showDivider: false
-            trailingItem: SegmentedPicker {
-                implicitWidth: 190
-                implicitHeight: 36
-                model: ["Light", "Dark"]
-                currentIndex: Theme.dark ? 1 : 0
-                onSelected: function(index, option) {
-                    Theme.dark = index === 1
+            trailingItem: PopupPicker {
+                objectName: "designSystemPalettePicker"
+                surfaceLevel: 1
+                subtitleRole: "description"
+                currentValue: Theme.paletteId
+                model: {
+                    const items = []
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        const palette = Theme.palettes[i]
+                        items.push({
+                            text: palette.displayName,
+                            value: palette.paletteId,
+                            description: palette.paletteId + (palette.isDark ? ", dark" : ", light")
+                        })
+                    }
+                    return items
+                }
+                onActivated: function(value) {
+                    Theme.paletteId = value
                 }
             }
         }

@@ -95,7 +95,7 @@ TestCase {
         ]
     }
     function init() {
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
         walletController.reset()
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
@@ -927,11 +927,11 @@ TestCase {
         const metadata = findChild(receive, "activityRowMetadata")
         verify(amount.y >= metadata.y + metadata.height)
         verify(receive.width <= page.width)
-        Theme.dark = false
+        Theme.paletteId = "core-light"
         page.width = 1180
         tryCompare(receive, "compact", false)
         tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.green)
         compare(page.currentItem.background.color, Theme.color.neutral0)
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
     }
 }

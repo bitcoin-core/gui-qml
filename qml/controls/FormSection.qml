@@ -15,11 +15,11 @@ Item {
     property Component headerTrailingItem
     property bool showBackground: true
     property bool showGradientBorder: true
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property int rowSpacing: 0
     property int sectionSpacing: 8
     property int cornerRadius: 16
-    property color backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
     property var titleTextStyle: Theme.text.subheading
     property var descriptionTextStyle: Theme.text.caption
     property var footerTextStyle: Theme.text.caption

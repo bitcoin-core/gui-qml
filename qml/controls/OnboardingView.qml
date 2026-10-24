@@ -42,7 +42,7 @@ Page {
     property bool animateContent: false
     property bool animateFooterAfterContent: false
     property int contentAnimationDelay: 0
-    property bool isOnSurface: true
+    property int surfaceLevel: 1
 
     readonly property alias scrollView: scrollView
     readonly property alias loadedChildView: childLoader.item
@@ -101,7 +101,7 @@ Page {
         height: visible ? implicitHeight : 0
         title: root.title
         contentSidePadding: root.contentSidePadding
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         showBackButton: root.showBackButton && !root.backButtonInFooter
         backButtonObjectName: root.backButtonInFooter ? "" : root.backButtonObjectName
         showCloseButton: root.showCloseButton
@@ -217,7 +217,7 @@ Page {
         maximumContentWidth: root.maximumContentWidth
         contentSidePadding: root.contentSidePadding
         fullWidth: root.footerFullWidth
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         showBackButton: root.showBackButton && root.backButtonInFooter
         backButtonObjectName: root.backButtonInFooter ? root.backButtonObjectName : ""
         primaryText: root.primaryButtonText

@@ -17,7 +17,7 @@ Item {
     property bool secondaryButtonIsLink: false
     property bool showBackButton: false
     property string backButtonObjectName: "onboardingFooterBackButton"
-    property bool isOnSurface: true
+    property int surfaceLevel: 1
     property real maximumContentWidth: 860
     property real contentSidePadding: width >= 640 ? 40 : 24
     property bool fullWidth: false
@@ -72,7 +72,7 @@ Item {
             visible: root.secondaryText.length > 0 && !root.secondaryButtonIsLink
             enabled: root.secondaryEnabled
             buttonSize: NeutralButton.Large
-            isOnSurface: root.isOnSurface
+            surfaceLevel: root.surfaceLevel
             width: root.compact ? actions.width : Math.min(actions.width, Math.max(140, implicitWidth))
             text: root.secondaryText
             onClicked: root.secondaryClicked()
@@ -95,7 +95,7 @@ Item {
         objectName: root.backButtonObjectName
         visible: root.showBackButton
         enabled: visible
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         anchors.left: parent.left
         anchors.leftMargin: root.fullWidth ? root.contentSidePadding
             : Math.max(root.contentSidePadding, (root.width - actions.width) / 2)
