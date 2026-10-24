@@ -117,7 +117,7 @@ SettingsPage {
     FormSection {
         objectName: "defaultProxySection"
         Layout.fillWidth: true
-        isOnSurface: root.onboardingModal
+        surfaceLevel: root.onboardingModal ? 1 : 0
         showGradientBorder: false
         title: qsTr("Default proxy")
         description: qsTr("Route peer connections through a SOCKS5 proxy. IPv4, IPv6, and Tor connections are supported.")
@@ -160,7 +160,7 @@ SettingsPage {
     FormSection {
         objectName: "torProxySection"
         Layout.fillWidth: true
-        isOnSurface: root.onboardingModal
+        surfaceLevel: root.onboardingModal ? 1 : 0
         showGradientBorder: false
         title: qsTr("Tor proxy")
         description: qsTr("Route Tor connections through a dedicated SOCKS5 proxy.")

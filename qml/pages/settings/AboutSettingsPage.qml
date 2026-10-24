@@ -24,7 +24,7 @@ SettingsPage {
 
     FormSection {
         Layout.fillWidth: true
-        isOnSurface: root.onboardingModal
+        surfaceLevel: root.onboardingModal ? 1 : 0
         showGradientBorder: false
 
         LinkRow {

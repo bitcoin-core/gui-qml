@@ -18,7 +18,7 @@ SettingsPage {
 
     DeveloperOptions {
         Layout.fillWidth: true
-        isOnSurface: root.onboarding
+        surfaceLevel: root.onboarding ? 1 : 0
         showRestartNotice: !root.onboarding && optionsModel.developerSettingsDirty
     }
 }

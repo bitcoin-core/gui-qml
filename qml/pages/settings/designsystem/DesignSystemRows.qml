@@ -40,7 +40,7 @@ DesignSystemSection {
         }
         DesignSystemState {
             width: 380
-            label: "isOnSurface: true, nested"
+            label: "surfaceLevel: 1, nested"
             FormSection {
                 Layout.fillWidth: true
                 title: "Outer section"
@@ -48,8 +48,8 @@ DesignSystemSection {
                 FormSection {
                     Layout.fillWidth: true
                     Layout.margins: 12
-                    isOnSurface: true
-                    title: "isOnSurface"
+                    surfaceLevel: 1
+                    title: "surfaceLevel: 1"
 
                     FormRow { Layout.fillWidth: true; title: "First row" }
                     FormRow { Layout.fillWidth: true; title: "Last row"; showDivider: false }
@@ -124,7 +124,7 @@ DesignSystemSection {
             description: "Trailing PopupPicker."
             trailingItem: PopupPicker {
                 objectName: "designSystemLanguagePicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 180
                 currentValue: root.exampleLanguage
                 model: [

@@ -9,7 +9,7 @@ import org.bitcoincore.qt 1.0
 NeutralButton {
     id: root
 
-    isOnSurface: false
+    surfaceLevel: 0
     property color iconColor: Theme.color.neutral7
     property color activeIconColor: Theme.color.orange
     property int size: 40
@@ -18,9 +18,9 @@ NeutralButton {
 
     iconSource: "image://images/ellipsis"
     iconSize: 40
-    backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
-    hoverBackgroundColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
-    showBorder: isOnSurface
+    backgroundColor: Theme.color.surface(surfaceLevel + 1)
+    hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
+    showBorder: surfaceLevel > 0
     backgroundRadius: circular ? size / 2 : 5
     scale: 1
 

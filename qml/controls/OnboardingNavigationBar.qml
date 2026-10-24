@@ -10,7 +10,7 @@ Item {
     property string title: ""
     property bool showBackButton: false
     property bool showCloseButton: false
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property real contentSidePadding: width >= 640 ? 40 : 24
     property real buttonSidePadding: contentSidePadding
     property int closeButtonSize: CloseButton.Medium
@@ -68,7 +68,7 @@ Item {
         Behavior on opacity {
             NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
         }
-        isOnSurface: root.isOnSurface
+        surfaceLevel: root.surfaceLevel
         onClicked: root.backClicked()
     }
 
@@ -112,7 +112,7 @@ Item {
             NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
         }
         buttonSize: root.closeButtonSize
-        backgroundColor: root.isOnSurface ? Theme.color.neutral2 : Theme.color.background
+        backgroundColor: root.surfaceLevel > 0 ? Theme.color.surface(root.surfaceLevel + 1) : Theme.color.background
         onClicked: root.closeClicked()
     }
 }

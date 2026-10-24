@@ -44,7 +44,7 @@ ColumnLayout {
             objectNameRole: "objectName"
             currentValue: root.presetIndex
             minimumMenuWidth: 340
-            embedded: true
+            surfaceLevel: 1
             onActivated: function(index) {
                 if (!root.walletModel) return
                 const option = root.speedOptions[index]

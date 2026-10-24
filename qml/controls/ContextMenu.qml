@@ -39,7 +39,7 @@ Popup {
 
     background: Rectangle {
         color: root.backgroundColor
-        border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        border.color: Theme.color.menuBorder
         border.width: 1
         radius: 5
         SurfaceGradientBorder {

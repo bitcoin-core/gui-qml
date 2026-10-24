@@ -25,7 +25,7 @@ Page {
     readonly property color consoleRequestColor: Theme.color.blue
     readonly property color consoleReplyColor:   Theme.color.neutral9
     readonly property color consoleTimeColor:    Theme.color.neutral7
-    readonly property color consoleKeyColor:     Theme.dark ? "#98C379" : "#3A7D2C"
+    readonly property color consoleKeyColor:     Theme.color.syntaxKey
     readonly property int minimumOutputFontPixelSize: 10
     readonly property int maximumOutputFontPixelSize: 18
     property int outputFontPixelSize: Theme.text.caption.pixelSize

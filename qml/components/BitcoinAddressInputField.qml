@@ -18,7 +18,7 @@ ColumnLayout {
     property string labelText: qsTr("Send to")
     property bool enabled: true
     property bool embedded: false
-    property bool isOnSurface: false
+    property int surfaceLevel: 0
     property color surfaceColor: Theme.color.neutral1
     property bool showLabel: true
     property var textStyle: Theme.text.monoBody
@@ -132,7 +132,7 @@ ColumnLayout {
             color: Theme.color.neutral9
             placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
             background: Rectangle {
-                color: root.isOnSurface ? root.surfaceColor
+                color: root.surfaceLevel > 0 ? root.surfaceColor
                     : root.embedded ? Theme.color.neutral2 : "transparent"
                 radius: root.embedded ? 10 : 0
 

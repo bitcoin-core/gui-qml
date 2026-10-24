@@ -30,7 +30,8 @@ TestCase {
     ]
 
     readonly property var specimenNames: [
-        "designSystemColorRoles", "designSystemColorLists", "designSystemTextRoles",
+        "designSystemColorBase", "designSystemColorRoles", "designSystemSurfaces", "designSystemColorLists",
+        "designSystemColorAliases", "designSystemTextRoles",
         "designSystemContinueButton", "designSystemNeutralButton", "designSystemOutlineButton",
         "designSystemTextButton", "designSystemLinkButton", "designSystemIconButton", "designSystemCloseButton",
         "designSystemCopyButton", "designSystemOverflowMenuButton", "designSystemFilterButton",
@@ -94,7 +95,11 @@ TestCase {
 
     function test_foundationsListEveryThemeRole() {
         const page = createPage()
-        for (const name of roleNames(Theme.color)) verify(findChild(page, "designSystemColor_" + name) !== null, name)
+        for (const name of roleNames(Theme.color)) {
+            const type = typeof Theme.color[name]
+            if (type === "string" || type === "boolean") continue
+            verify(findChild(page, "designSystemColor_" + name) !== null, name)
+        }
         let textRoleCount = 0
         for (const name of roleNames(Theme.text)) {
             if (Theme.text[name].pixelSize === undefined) continue
@@ -105,6 +110,49 @@ TestCase {
         verify(findChild(page, "designSystemColor_lavender") !== null)
         verify(findChild(page, "designSystemColor_confirmationColors") !== null)
         verify(findChild(page, "designSystemText_captionStrong") !== null)
+    }
+
+    function test_palettePickerFollowsEveryPalette() {
+        const originalPaletteId = Theme.paletteId
+        try {
+            const page = createPage()
+            const picker = findChild(page, "designSystemPalettePicker")
+            verify(picker !== null)
+            compare(picker.model.length, Theme.palettes.length)
+            const levels = ["background", "surface1", "surface2", "surface3"]
+            for (let i = 0; i < Theme.palettes.length; ++i) {
+                const palette = Theme.palettes[i]
+                picker.activated(picker.model[i].value)
+                compare(Theme.paletteId, palette.paletteId)
+                compare(picker.currentText, palette.displayName)
+                const neutral0 = findChild(page, "designSystemColor_neutral0")
+                verify(Qt.colorEqual(neutral0.value, palette.neutral0), palette.paletteId)
+                verify(findChild(page, "designSystemColor_surfaceHover") !== null)
+                verify(findChild(page, "designSystemColor_white") !== null)
+
+                let parentBox = null
+                for (let level = 0; level < levels.length; ++level) {
+                    const box = findChild(page, "designSystemSurface_" + levels[level])
+                    verify(box !== null, levels[level])
+                    verify(Qt.colorEqual(box.color, palette.surface(level)), palette.paletteId + " " + levels[level])
+                    if (parentBox !== null) {
+                        let ancestor = box.parent
+                        while (ancestor !== null && ancestor !== parentBox) ancestor = ancestor.parent
+                        verify(ancestor === parentBox, levels[level] + " is not nested in " + levels[level - 1])
+                    }
+                    for (const role of ["surfaceHover", "surfacePressed", "surfaceSelected"]) {
+                        const state = findChild(box, "designSystemSurfaceState_" + levels[level] + "_" + role)
+                        verify(state !== null, levels[level] + " " + role)
+                        verify(Qt.colorEqual(state.color, palette[role]), palette.paletteId + " " + levels[level] + " " + role)
+                    }
+                    const divider = findChild(box, "designSystemSurfaceDivider_" + levels[level])
+                    verify(Qt.colorEqual(divider.color, palette.surfaceDivider))
+                    parentBox = box
+                }
+            }
+        } finally {
+            Theme.paletteId = originalPaletteId
+        }
     }
 
     function test_menuAndAlertsOpen() {
@@ -320,7 +368,7 @@ TestCase {
                 for (const segment of segments)
                     compare(testAccessibility.info(segment).role, Accessible.PageTab, describe(segment))
             }
-            compare(testAccessibility.info(findChild(page, "designSystemThemeRow").loadedTrailingItem).name, "Theme")
+            compare(testAccessibility.info(findChild(page, "designSystemThemeRow")).name, "Palette")
 
             const badges = itemsOfType(page, "NetworkIndicator", [])
             compare(badges.length, 4)

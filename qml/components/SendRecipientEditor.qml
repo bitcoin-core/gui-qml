@@ -73,7 +73,7 @@ ColumnLayout {
         }
         FormSection {
             Layout.fillWidth: true
-            isOnSurface: true
+            surfaceLevel: 1
             showGradientBorder: false
             ValueRow {
                 visible: root.recipient && root.recipient.paymentRequestLabel.length > 0

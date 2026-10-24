@@ -2,47 +2,60 @@ pragma Singleton
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
+import org.bitcoincore.qt 1.0
+
+import "../themes"
+
 Control {
     id: root
-    property bool dark: true
+    property string paletteId: "core-dark"
+    readonly property bool dark: color.isDark
     property real blockclocksize: (5 / 12)
-    readonly property ColorSet color: dark ? darkColorSet : lightColorSet
+    readonly property list<Palette> palettes: [
+        CoreDark { id: coreDark },
+        CoreLight { id: coreLight }
+    ]
+    readonly property Palette color: activePalette
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
     readonly property TextSet text: TextSet {}
 
+    property Palette activePalette: coreDark
+    property bool settingsLoaded: false
+
     AppSettings {
         id: settings
-        property alias dark: root.dark
+        // Still written so that builds without palettes open in the same brightness.
+        property bool dark: true
         property alias blockclocksize: root.blockclocksize
     }
 
-    component ColorSet: QtObject {
-        required property color white
-        required property color background
-        required property color orange
-        required property color orangeLight1
-        required property color orangeLight2
-        required property color red
-        required property color green
-        required property color blue
-        required property color amber
-        required property color purple
-        required property color lavender
-        required property color neutral0
-        required property color neutral1
-        required property color neutral2
-        required property color neutral3
-        required property color neutral4
-        required property color neutral5
-        required property color neutral6
-        required property color neutral7
-        required property color neutral8
-        required property color neutral9
-        required property var neutral1SurfaceBorderGradient
-        required property var neutral2SurfaceBorderGradient
-        required property var primaryButtonBorderGradient
-        required property var destructiveButtonBorderGradient
-        required property var confirmationColors
+    // Builds before palettes only stored `dark`, which defaults to true.
+    function migratedPaletteId(storedId, storedDark) {
+        if (storedId !== undefined && storedId !== "") return storedId
+        return storedDark === false ? coreLight.paletteId : coreDark.paletteId
+    }
+
+    // An unknown id (a removed palette, or one from a newer build) keeps the remembered brightness.
+    function paletteFor(id, fallbackDark) {
+        for (let i = 0; i < palettes.length; ++i) {
+            if (palettes[i].paletteId === id) return palettes[i]
+        }
+        return fallbackDark ? coreDark : coreLight
+    }
+
+    onPaletteIdChanged: {
+        if (!settingsLoaded) return
+        activePalette = paletteFor(paletteId, activePalette.isDark)
+        GlobalSettings.setValue("palette", paletteId)
+    }
+
+    // The palette is shared by every chain; `dark` stays per chain, where older builds read it.
+    Component.onCompleted: {
+        paletteId = migratedPaletteId(String(GlobalSettings.value("palette", "")), settings.dark)
+        activePalette = paletteFor(paletteId, settings.dark)
+        settingsLoaded = true
+        GlobalSettings.setValue("palette", paletteId)
+        settings.dark = Qt.binding(function() { return root.dark })
     }
 
     component ImageSet: QtObject {
@@ -50,6 +63,7 @@ Control {
         required property url network
         required property url storage
         required property url tooltipArrow
+        required property url onboardingClockFace
     }
 
     component TextStyle: QtObject {
@@ -68,86 +82,13 @@ Control {
         })
     }
 
-    ColorSet {
-        id: darkColorSet
-        white: "#FFFFFF"
-        background: "black"
-        orange: "#F89B2A"
-        orangeLight1: "#FFAD4A"
-        orangeLight2: "#FFBF72"
-        red: "#EC6363"
-        green: "#36B46B"
-        blue: "#3CA3DE"
-        amber: "#C9B500"
-        purple: "#C075DC"
-        lavender: "#6877FD"
-        neutral0: "#000000"
-        neutral1: "#121212"
-        neutral2: "#222222"
-        neutral3: "#383838"
-        neutral4: "#5C5C5C"
-        neutral5: "#787878"
-        neutral6: "#949494"
-        neutral7: "#B0B0B0"
-        neutral8: "#CCCCCC"
-        neutral9: "#FFFFFF"
-        neutral1SurfaceBorderGradient: ["#272727", "#1B1B1B"]
-        neutral2SurfaceBorderGradient: ["#373737", "#2B2B2B"]
-        primaryButtonBorderGradient: ["#FFBA4A", "#FFA433"]
-        destructiveButtonBorderGradient: ["#FF8080", "#F36D6D"]
-        confirmationColors: [
-            "#FF1C1C", // red
-            "#ED6E46",
-            "#EE8847",
-            "#EFA148",
-            "#F0BB49",
-            "#F1D54A", // yellow
-        ]
-    }
-
-    ColorSet {
-        id: lightColorSet
-        white: "#FFFFFF"
-        background: "white"
-        orange: "#F7931A"
-        orangeLight1: "#FFAD4A"
-        orangeLight2: "#FFBF72"
-        red: "#EB5757"
-        green: "#27AE60"
-        blue: "#2D9CDB"
-        amber: "#726700"
-        purple: "#B763D7"
-        lavender: "#6877FD"
-        neutral0: "#FFFFFF"
-        neutral1: "#F6F6F6"
-        neutral2: "#EEEEEE"
-        neutral3: "#E2E2E2"
-        neutral4: "#C4C4C4"
-        neutral5: "#BBBBBB"
-        neutral6: "#999999"
-        neutral7: "#6B6B6B"
-        neutral8: "#404040"
-        neutral9: "#000000"
-        neutral1SurfaceBorderGradient: ["#F5F5F5", "#E6E6E6"]
-        neutral2SurfaceBorderGradient: ["#EDEDED", "#DEDEDE"]
-        primaryButtonBorderGradient: ["#FFB33A", "#FF9C23"]
-        destructiveButtonBorderGradient: ["#FF7474", "#F36262"]
-        confirmationColors: [
-            "#FF1C1C", // red
-            "#ED6E46",
-            "#EE8847",
-            "#EFA148",
-            "#F0BB49",
-            "#F1D54A", // yellow
-        ]
-    }
-
     ImageSet {
         id: darkImageSet
         blocktime: "image://images/blocktime-dark"
         network: "image://images/network-dark"
         storage: "image://images/storage-dark"
         tooltipArrow: "qrc:/icons/tooltip-arrow-dark"
+        onboardingClockFace: "qrc:/icons/onboarding-clock-face-dark.svg"
     }
 
     ImageSet {
@@ -156,6 +97,7 @@ Control {
         network: "image://images/network-light"
         storage: "image://images/storage-light"
         tooltipArrow: "qrc:/icons/tooltip-arrow-light"
+        onboardingClockFace: "qrc:/icons/onboarding-clock-face-light.svg"
     }
 
     component TextSet: QtObject {
@@ -292,9 +234,5 @@ Control {
             pixelSize: 13
             lineHeight: 19
         }
-    }
-
-    function toggleDark() {
-        dark = !dark
     }
 }

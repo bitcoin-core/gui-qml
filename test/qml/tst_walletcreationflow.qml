@@ -259,7 +259,7 @@ TestCase {
         verify(findChild(complete, "importWalletSuccessBadge") !== null)
         const infoSection = findChild(complete, "importWalletInfoSection")
         compare(infoSection.showBackground, true)
-        compare(infoSection.isOnSurface, true)
+        compare(infoSection.surfaceLevel, 1)
         compare(infoSection.showGradientBorder, false)
         compare(findChild(complete, "importWalletSuccessWalletName").text, "Imported wallet")
         compare(findChild(complete, "importWalletSuccessKeyScheme").text, "Single-key")

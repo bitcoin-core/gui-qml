@@ -374,7 +374,7 @@ TestCase {
         compare(button.hoverBgColor, Theme.color.neutral2)
         compare(menu.backgroundColor, Theme.color.neutral1)
 
-        picker.embedded = true
+        picker.surfaceLevel = 1
         compare(button.defaultBgColor, Theme.color.neutral2)
         compare(button.hoverBgColor, Theme.color.neutral3)
         compare(menu.backgroundColor, Theme.color.neutral2)

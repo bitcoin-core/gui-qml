@@ -70,11 +70,11 @@ DesignSystemSection {
         }
         DesignSystemState {
             width: 400
-            label: "embedded: true, monoCaption"
+            label: "surfaceLevel: 2, monoCaption"
             AddressLabel {
                 Layout.fillWidth: true
                 address: root.exampleAddress
-                embedded: true
+                surfaceLevel: 2
                 textStyle: Theme.text.monoCaption
             }
         }
