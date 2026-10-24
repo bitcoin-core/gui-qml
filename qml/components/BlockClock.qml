@@ -195,7 +195,7 @@ Item {
             PropertyChanges {
                 target: root
                 header: Number(root.nodeModelRef !== null ? root.nodeModelRef.blockTipHeight : 0).toLocaleString(Qt.locale(), 'f', 0)
-                subText: "Blocktime"
+                subText: qsTr("Blocktime")
                 estimating: false
             }
         },
@@ -204,7 +204,7 @@ Item {
             name: "PAUSE"; when: paused && !faulted && !offline
             PropertyChanges {
                 target: root
-                header: "Paused"
+                header: qsTr("Paused")
                 headerSize: dial.width * (3/25)
                 subText: ""
                 estimating: false
@@ -223,7 +223,7 @@ Item {
             name: "ERROR"; when: faulted
             PropertyChanges {
                 target: root
-                header: "Error"
+                header: qsTr("Error")
                 headerSize: dial.width * (3/25)
             }
             PropertyChanges {

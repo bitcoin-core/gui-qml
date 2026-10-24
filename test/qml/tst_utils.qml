@@ -30,4 +30,26 @@ TestCase {
     function test_nodeConnectionIcon_thresholds(data) {
         compare(Utils.nodeConnectionIcon(data.peers), data.icon)
     }
+
+    function test_remainingSyncTime_data() {
+        return [
+            { tag: "estimating", milliseconds: 0, text: "Estimating", estimating: true },
+            { tag: "second", milliseconds: 1000, text: "~1 second left", estimating: false },
+            { tag: "seconds", milliseconds: 59000, text: "~59 seconds left", estimating: false },
+            { tag: "minute-seconds", milliseconds: 61000, text: "~1m 1s left", estimating: false },
+            { tag: "minutes", milliseconds: 300000, text: "~5 minutes left", estimating: false },
+            { tag: "hour-minutes", milliseconds: 3660000, text: "~1h 1m left", estimating: false },
+            { tag: "hours", milliseconds: 18000000, text: "~5 hours left", estimating: false },
+            { tag: "day", milliseconds: 86400000, text: "~1 day left", estimating: false },
+            { tag: "days", milliseconds: 172800000, text: "~2 days left", estimating: false },
+            { tag: "week", milliseconds: 604800000, text: "~1 week left", estimating: false },
+            { tag: "weeks", milliseconds: 1209600000, text: "~2 weeks left", estimating: false }
+        ]
+    }
+
+    function test_remainingSyncTime(data) {
+        const result = Utils.formatRemainingSyncTime(data.milliseconds)
+        compare(result.text, data.text)
+        compare(result.estimating, data.estimating)
+    }
 }
