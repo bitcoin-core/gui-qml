@@ -19,6 +19,7 @@
 #include <node/context.h>
 #include <node/interface_ui.h>
 #include <noui.h>
+#include <qml/applocale.h>
 #include <qml/appmode.h>
 #include <qml/backendexecutor.h>
 #include <qml/quithandler.h>
@@ -115,7 +116,6 @@
 #include <QScopeGuard>
 #include <QString>
 #include <QStyleHints>
-#include <QTranslator>
 #include <QThread>
 #include <QUrl>
 #include <QVariant>
@@ -521,27 +521,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     app.setOrganizationDomain(QAPP_ORG_DOMAIN);
     app.setApplicationName(QAPP_APP_NAME_DEFAULT);
 
-    // Manages translators swapped on runtime language changes.
-    // app_translator: bitcoin-qt strings (shared C++ layer)
-    // qml_translator: QML-app-specific strings
-    std::unique_ptr<QTranslator> app_translator;
-    std::unique_ptr<QTranslator> qml_translator;
-    const auto reset_translator = [](std::unique_ptr<QTranslator>& t) {
-        if (t) { QCoreApplication::removeTranslator(t.get()); t.reset(); }
-    };
-    const auto install_language = [&](const QString& lang) {
-        reset_translator(app_translator);
-        reset_translator(qml_translator);
-        if (!lang.isEmpty()) {
-            auto t = std::make_unique<QTranslator>();
-            if (t->load(QStringLiteral(":/translations/bitcoin_%1.qm").arg(lang)))
-                { QCoreApplication::installTranslator(t.get()); app_translator = std::move(t); }
-
-            auto tq = std::make_unique<QTranslator>();
-            if (tq->load(QStringLiteral(":/translations/bitcoin_qml_%1.qm").arg(lang)))
-                { QCoreApplication::installTranslator(tq.get()); qml_translator = std::move(tq); }
-        }
-    };
+    QmlTranslations translations;
 
     // Parse command-line options. We do this after qt in order to show an error if there are problems parsing these.
     SetupServerArgs(gArgs, init->canListenIpc());
@@ -583,7 +563,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         ? QSettings().value(SettingsKeys::LANGUAGE, QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(gArgs.GetChainTypeString()))).toString()
         : cli_lang;
     if (quit_handler.isQuitRequested()) return EXIT_SUCCESS;
-    install_language(startup_language);
+    translations.install(startup_language);
 
     std::vector<std::string> command_line_args;
     command_line_args.reserve(argc);
@@ -860,11 +840,11 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     engine->rootContext()->setContextProperty("testAutomationEnabled", false);
 #endif
     // Keep the startup language until the settings snapshot is ready.
-    if (options_model.settingsReady()) install_language(options_model.language());
+    if (options_model.settingsReady()) translations.install(options_model.language());
 
     // Retranslate the QML UI immediately when the user picks a new language.
     QObject::connect(&options_model, &OptionsQmlModel::languageChanged, [&]() {
-        install_language(options_model.language());
+        translations.install(options_model.language());
         engine->retranslate();
     });
 
