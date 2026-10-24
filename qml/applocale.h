@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QML_APPLOCALE_H
 #define BITCOIN_QML_APPLOCALE_H
 
+#include <QLocale>
 #include <QString>
 #include <QTranslator>
 
@@ -13,7 +14,7 @@
 class QmlTranslations
 {
 public:
-    void install(const QString& language);
+    void install(const QString& language, const QLocale& system_locale = QLocale::system());
 
 private:
     std::unique_ptr<QTranslator> m_app_translator;

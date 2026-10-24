@@ -58,6 +58,7 @@ add_executable(bitcoinqml_unit_tests
   test_transactionactivity.cpp
   test_transactionactivitymodel.cpp
   test_activityfilterproxymodel.cpp
+  test_applocale.cpp
   test_qtinfolog.cpp
   test_qtmessagefilter.cpp
   test_rpccommandexecutor.cpp
