@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include <qml/applocale.h>
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
 #include <qml/components/blockclockdial.h>
@@ -4172,6 +4173,9 @@ public Q_SLOTS:
         wallet_controller.setSelectedWalletObject(&wallet_model);
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
+        qmlRegisterSingletonType<QmlAppLocale>("org.bitcoincore.qt", 1, 0, "AppLocale", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new QmlAppLocale;
+        });
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",
             1,
