@@ -113,7 +113,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.color.neutral1
-        border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        border.color: Theme.color.menuBorder
         border.width: 1
         radius: 5
     }

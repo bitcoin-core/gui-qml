@@ -31,7 +31,7 @@ SettingsPage {
                 model: [qsTr("Light"), qsTr("Dark")]
                 currentIndex: Theme.dark ? 1 : 0
                 onSelected: function(index, option) {
-                    Theme.dark = index === 1
+                    Theme.paletteId = index === 1 ? "core-dark" : "core-light"
                 }
             }
         }
@@ -42,7 +42,7 @@ SettingsPage {
             title: qsTranslate("SettingsDisplay", "Block status size")
             trailingItem: PopupPicker {
                 objectName: "displayBlockStatusSizePicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 520
                 subtitleRole: "description"
                 iconRole: "icon"
@@ -75,7 +75,7 @@ SettingsPage {
             showDivider: false
             trailingItem: PopupPicker {
                 objectName: "displayMoneyFontPicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 400
                 subtitleRole: "description"
                 currentValue: optionsModel.moneyFontChoice
@@ -108,7 +108,7 @@ SettingsPage {
             title: qsTranslate("SettingsDisplay", "Display unit")
             trailingItem: PopupPicker {
                 objectName: "displayUnitPicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 400
                 subtitleRole: "description"
                 objectNameRole: "objectName"

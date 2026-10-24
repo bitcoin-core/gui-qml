@@ -269,7 +269,7 @@ TestCase {
         verify(backButton !== null)
         compare(backButton, wizard.currentItem.footerBackButton)
         tryCompare(backButton, "opacity", 1)
-        compare(backButton.isOnSurface, false)
+        compare(backButton.surfaceLevel, 0)
         const backButtonX = backButton.x
         const backButtonY = backButton.y
 

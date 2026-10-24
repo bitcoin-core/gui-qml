@@ -94,7 +94,7 @@ Rectangle {
             truncated: true
             leadingCharacterCount: root.width < 240 ? 4 : 8
             trailingCharacterCount: root.width < 240 ? 4 : 8
-            embedded: true
+            surfaceLevel: 2
             interactive: root.interactive
             textStyle: Theme.text.monoCaption
             leftPadding: 0

@@ -133,9 +133,9 @@ DesignSystemSection {
             }
         }
         DesignSystemState {
-            label: "embedded: true"
+            label: "surfaceLevel: 1"
             PopupPicker {
-                embedded: true
+                surfaceLevel: 1
                 model: root.pickerOptions
                 currentValue: root.pickerValue
                 onActivated: function(value) {

@@ -128,7 +128,7 @@ TestCase {
         AppMode.walletEnabled = true
         AppMode.isDesktop = true
         nodeModel.mempoolInformationAvailable = true
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
         optionsModel.settingsReady = true
         optionsModel.settingsPending = false

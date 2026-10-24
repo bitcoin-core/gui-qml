@@ -15,7 +15,7 @@ OnboardingView {
     signal next()
     property var settingsModel: optionsModel
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false
