@@ -255,6 +255,7 @@ Page {
                 ButtonGroup.group: navigationTabs
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
+                    selectedColor: blockClockTabButton.textActiveColor
                     renderingActive: root.visible
                 }
 

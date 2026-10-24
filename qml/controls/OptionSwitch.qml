@@ -10,6 +10,9 @@ Switch {
     implicitWidth: 45
     implicitHeight: 28
     focusPolicy: Qt.StrongFocus
+    opacity: enabled ? 1.0 : 0.4
+    // Fade the control as one layer, so the track does not show through the thumb.
+    layer.enabled: !enabled
     background: Rectangle {
         radius: Math.floor(height / 2)
         color: root.checked ? Theme.color.orange : Theme.color.neutral4

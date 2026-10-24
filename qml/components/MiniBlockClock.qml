@@ -15,6 +15,7 @@ Item {
 
     property real iconSize: 18
     property bool pageSelected: false
+    property color selectedColor: Theme.color.orange
     property bool renderingActive: true
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
@@ -44,8 +45,8 @@ Item {
     readonly property real pausedBarWidth: Math.max(root.pausedStrokeWidth, Math.round(root.width * 0.11))
     readonly property real pausedBarHeight: Math.max(root.pausedStrokeWidth, Math.round(root.height * 0.42))
     readonly property real pausedBarSpacing: Math.max(root.pausedStrokeWidth, Math.round(root.width * 0.12))
-    readonly property color dialGlyphColor: root.pageSelected ? Theme.color.confirmationColors[5] : Theme.color.neutral9
-    readonly property color pausedGlyphColor: root.pageSelected ? Theme.color.confirmationColors[5] : Theme.color.neutral6
+    readonly property color dialGlyphColor: root.pageSelected ? root.selectedColor : Theme.color.neutral9
+    readonly property color pausedGlyphColor: root.pageSelected ? root.selectedColor : Theme.color.neutral6
 
     implicitWidth: iconSize
     implicitHeight: iconSize
@@ -71,7 +72,10 @@ Item {
         useGradientArcWhenSynced: !root.pageSelected
         backgroundColor: Theme.color.neutral3
         timeTickColor: "transparent"
-        confirmationColors: Theme.color.confirmationColors
+        confirmationColors: root.pageSelected
+            ? [root.selectedColor, root.selectedColor, root.selectedColor,
+               root.selectedColor, root.selectedColor, root.selectedColor]
+            : Theme.color.confirmationColors
         renderingActive: root.presentationActive
     }
 
@@ -117,7 +121,7 @@ Item {
         visible: root.showOfflineState
         anchors.centerIn: parent
         source: "image://images/network-light"
-        color: root.pageSelected ? Theme.color.confirmationColors[5] : Theme.color.red
+        color: root.pageSelected ? root.selectedColor : Theme.color.red
         size: root.width
     }
 

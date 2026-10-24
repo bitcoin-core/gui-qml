@@ -26,6 +26,9 @@ Controls.Slider {
     snapMode: discrete ? Controls.Slider.SnapAlways : Controls.Slider.NoSnap
     live: true
     enabled: to > from
+    opacity: enabled ? 1.0 : 0.4
+    // Fade the control as one layer, so the track does not show through the thumb.
+    layer.enabled: !enabled
 
     handle: Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "Handle" : "sliderHandle"

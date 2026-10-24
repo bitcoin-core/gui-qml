@@ -58,7 +58,7 @@ ApplicationWindow {
 
         Rectangle {
             anchors.fill: parent
-            color: "black"
+            color: Theme.color.background
         }
 
         MouseArea {
@@ -67,9 +67,12 @@ ApplicationWindow {
             hoverEnabled: true
         }
 
-        BusyIndicator {
+        SpinningIndicator {
             objectName: "preInitStartupBusyIndicator"
             anchors.centerIn: parent
+            width: 32
+            height: 32
+            strokeWidth: 3
             running: appWindow.starting
         }
 
