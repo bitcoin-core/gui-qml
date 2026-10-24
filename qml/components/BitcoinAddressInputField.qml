@@ -118,6 +118,8 @@ ColumnLayout {
             enabled: root.enabled
             placeholderText: qsTr("Enter address...")
             text: ""
+            Accessible.name: root.labelText
+            Accessible.description: root.errorText
             Component.onCompleted: syncFromAddress()
             wrapMode: Text.WrapAnywhere
             verticalAlignment: TextEdit.AlignVCenter

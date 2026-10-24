@@ -340,6 +340,8 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 3
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Block clock")
+                Accessible.description: blockClockTooltip.text
                 customContent: MiniBlockClock {
                     pageSelected: blockClockTabButton.checked
                     selectedColor: blockClockTabButton.textActiveColor
@@ -390,6 +392,7 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 4
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Peers")
                 onCheckedChanged: {
                     if (checked) {
                         peerTableModel.startAutoRefresh()
@@ -414,6 +417,7 @@ Page {
                 Layout.preferredWidth: 30
                 property int index: 5
                 ButtonGroup.group: navigationTabs
+                Accessible.name: qsTr("Settings")
 
                 Tooltip {
                     anchors.top: settingsTabButton.bottom

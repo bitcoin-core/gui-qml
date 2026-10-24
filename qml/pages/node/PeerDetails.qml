@@ -217,6 +217,7 @@ Page {
 
             SegmentedPicker {
                 objectName: "peerDetailsSections"
+                Accessible.name: qsTr("Peer details")
                 Layout.fillWidth: true
                 model: [qsTr("Information"), qsTr("Relay data"), qsTr("Network traffic")]
                 currentIndex: root.sectionIndex

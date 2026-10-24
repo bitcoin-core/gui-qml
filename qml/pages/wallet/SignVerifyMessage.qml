@@ -96,6 +96,7 @@ SettingsPage {
 
     SegmentedPicker {
         objectName: "signVerifyMessageModePicker"
+        Accessible.name: qsTr("Sign or verify message")
         Layout.fillWidth: true
         Layout.maximumWidth: 400
         Layout.alignment: Qt.AlignHCenter

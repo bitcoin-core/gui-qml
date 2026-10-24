@@ -14,6 +14,7 @@ DesignSystemSection {
     property string exampleBlockClockMode: "compact"
     property bool exampleStartupEnabled: true
     property bool exampleNotificationsEnabled: false
+    property bool exampleAcknowledged: false
     property url lastExampleLink: ""
 
     title: "Rows and sections"
@@ -171,7 +172,6 @@ DesignSystemSection {
             trailingItem: OptionSwitch {
                 objectName: "designSystemStartupSwitch"
                 checked: root.exampleStartupEnabled
-                Accessible.name: "Open at login"
                 onToggled: root.exampleStartupEnabled = checked
             }
         }
@@ -181,7 +181,6 @@ DesignSystemSection {
             title: "Notifications"
             trailingItem: OptionSwitch {
                 checked: root.exampleNotificationsEnabled
-                Accessible.name: "Notifications"
                 onToggled: root.exampleNotificationsEnabled = checked
             }
         }
@@ -204,6 +203,21 @@ DesignSystemSection {
                     root.exampleBlockClockMode = option.value
                 }
             }
+        }
+
+        ListRow {
+            objectName: "designSystemAcknowledgementRow"
+            Layout.fillWidth: true
+            description: "Acknowledgements are a ListRow that toggles its trailing switch; the row is the only focus stop."
+            showDivider: false
+            accessibleRole: Accessible.CheckBox
+            trailingItem: OptionSwitch {
+                checked: root.exampleAcknowledged
+                focusPolicy: Qt.NoFocus
+                Accessible.ignored: true
+                onToggled: root.exampleAcknowledged = checked
+            }
+            onClicked: root.exampleAcknowledged = !root.exampleAcknowledged
         }
     }
 

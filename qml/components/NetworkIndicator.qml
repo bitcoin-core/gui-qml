@@ -9,8 +9,10 @@ import "../components"
 
 import org.bitcoincore.qt 1.0
 
-Button {
+// A status badge, not a control: it takes no focus or clicks.
+Control {
     id: root
+    property string text: ""
     property color bgColor
     property color textColor: Theme.color.white
     property bool shorten: false
@@ -21,6 +23,12 @@ Button {
     bottomPadding: 2
     leftPadding: 7
     rightPadding: 7
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            implicitContentWidth + leftPadding + rightPadding)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                             implicitContentHeight + topPadding + bottomPadding)
+    Accessible.role: Accessible.StaticText
+    Accessible.name: text
     state: show && root.chainModelRef !== null ? root.chainModelRef.networkName : "MAIN"
     contentItem: CoreText {
         text: root.text
@@ -28,6 +36,7 @@ Button {
         color: root.textColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
+        Accessible.ignored: true
     }
     background: Rectangle {
         id: bg

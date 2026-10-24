@@ -26,6 +26,7 @@ ColumnLayout {
     spacing: 18
 
     LabeledField {
+        id: addressGroup
         objectName: "sendAddressGroup"
         Layout.fillWidth: true
         label: qsTr("Bitcoin address")
@@ -44,6 +45,7 @@ ColumnLayout {
             inputObjectName: "sendAddressInput"
             Layout.fillWidth: true
             embedded: false
+            labelText: addressGroup.label
             showLabel: false
             showErrorMessage: false
             interceptPaste: true

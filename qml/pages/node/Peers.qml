@@ -457,6 +457,10 @@ Page {
                         KeyNavigation.backtab: delegate.index === 0
                             ? transportFilterButton : listView.itemAtIndex(delegate.index - 1)
                         KeyNavigation.priority: KeyNavigation.BeforeItem
+                        Accessible.name: delegate.address
+                        Accessible.description: root.joinedDetails([delegate.direction,
+                            delegate.connectionType === delegate.direction ? "" : delegate.connectionType,
+                            delegate.network, delegate.transport, delegate.subversion])
                         onClicked: root.peerSelected(peerListModelProxy.peerDetailsAt(index))
                         MouseArea {
                             anchors.fill: parent
