@@ -895,10 +895,21 @@ PageStack {
                                                 visible: root.wallet.recipients.count > 1
                                                 Layout.fillWidth: true; spacing: 10
                                                 AbstractButton {
+                                                    id: recipientToggle
                                                     objectName: "sendEditRecipient_" + recipientCard.index
                                                     Layout.fillWidth: true; implicitHeight: 36
+                                                    focusPolicy: Qt.StrongFocus
                                                     //: Accessible action to expand or collapse one recipient in the stack.
                                                     Accessible.name: qsTr("Edit recipient %1").arg(recipientCard.index + 1)
+                                                    //: Accessible state of one recipient in the stack.
+                                                    Accessible.description: recipientCard.expanded ? qsTr("Expanded") : qsTr("Collapsed")
+                                                    background: Item {
+                                                        FocusBorder {
+                                                            objectName: recipientToggle.objectName + "FocusBorder"
+                                                            visible: recipientToggle.visualFocus
+                                                            targetRadius: 6
+                                                        }
+                                                    }
                                                     onClicked: {
                                                         const wasExpanded = recipientCard.expanded
                                                         root.wallet.recipients.setCurrentIndex(recipientCard.index)

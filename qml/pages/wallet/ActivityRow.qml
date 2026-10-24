@@ -136,7 +136,7 @@ Item {
         background: Item {
             FocusBorder {
                 visible: parentButton.visualFocus
-                borderRadius: 16
+                targetRadius: rowSurface.radius
                 topMargin: 2
                 bottomMargin: 2
                 leftMargin: 2

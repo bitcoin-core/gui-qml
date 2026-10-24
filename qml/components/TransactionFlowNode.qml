@@ -147,6 +147,7 @@ Rectangle {
         Repeater {
             model: root.requests
             delegate: AbstractButton {
+                id: requestButton
                 required property var modelData
                 objectName: "transactionFlowRequest_" + modelData.requestId
                 Layout.fillWidth: true
@@ -157,6 +158,11 @@ Rectangle {
                 background: Rectangle {
                     color: Qt.rgba(Theme.color.lavender.r, Theme.color.lavender.g, Theme.color.lavender.b, 0.18)
                     radius: 6
+
+                    FocusBorder {
+                        visible: requestButton.visualFocus
+                        targetRadius: parent.radius
+                    }
                 }
                 contentItem: RowLayout {
                     spacing: 6

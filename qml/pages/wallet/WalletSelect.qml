@@ -91,6 +91,13 @@ Popup {
         root.closeWalletRequested(name)
     }
 
+    function focusRow(index) {
+        if (index < 0 || index >= listView.count) return
+        listView.positionViewAtIndex(index, ListView.Contain)
+        const row = listView.itemAtIndex(index)
+        if (row) row.forceActiveFocus(Qt.TabFocusReason)
+    }
+
     Connections {
         target: walletController
         function onWalletLoadSucceeded() {
@@ -194,14 +201,22 @@ Popup {
                 checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
                 enabled: !walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
+                focusPolicy: Qt.StrongFocus
                 leftPadding: 10
                 rightPadding: 10
                 topPadding: 0
                 bottomPadding: 0
+                Accessible.role: Accessible.ListItem
+                Accessible.name: delegate.displayName
+                Accessible.description: delegate.statusText
+                Accessible.selected: delegate.checked
+
+                Keys.onUpPressed: root.focusRow(delegate.index - 1)
+                Keys.onDownPressed: root.focusRow(delegate.index + 1)
 
                 background: Rectangle {
                     radius: 6
-                    color: delegate.hovered || delegate.visualFocus ? Theme.color.neutral3
+                    color: delegate.hovered ? Theme.color.neutral3
                         : delegate.checked ? Theme.color.neutral2 : "transparent"
                     Rectangle {
                         visible: delegate.loadState === WalletListModel.Open
@@ -209,6 +224,16 @@ Popup {
                         width: parent.width
                         height: 1
                         color: Theme.color.neutral2
+                    }
+
+                    FocusBorder {
+                        objectName: delegate.objectName + "FocusBorder"
+                        visible: delegate.visualFocus
+                        targetRadius: parent.radius
+                        topMargin: 2
+                        bottomMargin: 2
+                        leftMargin: 2
+                        rightMargin: 2
                     }
                 }
 
@@ -314,9 +339,10 @@ Popup {
                             iconSource: "image://images/ellipsis"
                             iconColor: delegate.nameColor
                             hoverColor: Theme.color.neutral9
-                            Accessible.name: qsTr("Actions for %1").arg(delegate.displayName)
+                            backgroundRadius: 6
+                            accessibleName: qsTr("Actions for %1").arg(delegate.displayName)
                             background: Rectangle {
-                                radius: 6
+                                radius: actionsButton.backgroundRadius
                                 color: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
                             }
                             onClicked: actionsMenu.visible ? actionsMenu.close() : actionsMenu.open()

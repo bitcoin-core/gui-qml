@@ -107,15 +107,11 @@ AbstractButton {
                     radius: 8
                     color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
 
-                    FocusBorder {
+                    FieldBorderRings {
                         objectName: "addressRowNoteFocusBorder"
+                        anchors.fill: parent
                         visible: noteField.activeFocus
-                        border.color: Theme.color.orange
-                        borderRadius: 10
-                        topMargin: -2
-                        bottomMargin: -2
-                        leftMargin: -2
-                        rightMargin: -2
+                        cornerRadius: parent.radius
                     }
                 }
 
@@ -158,7 +154,17 @@ AbstractButton {
                 cursorShape: Qt.PointingHandCursor
             }
 
-            background: null
+            background: Item {
+                FocusBorder {
+                    objectName: "addressRowDetailsButtonFocusBorder"
+                    visible: detailsButton.visualFocus
+                    borderRadius: 8
+                    topMargin: 6
+                    bottomMargin: 6
+                    leftMargin: 0
+                    rightMargin: 0
+                }
+            }
 
             contentItem: RowLayout {
                 spacing: 8

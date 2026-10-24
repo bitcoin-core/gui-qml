@@ -51,12 +51,21 @@ Controls.CheckBox {
         y: (root.height - height) / 2
         radius: 6
         color: root.checked ? root.checkedColor : "transparent"
-        border.width: root.visualFocus || !root.checked ? 2 : 0
-        border.color: root.visualFocus ? Theme.color.orange : root.borderColor
+        border.width: root.checked ? 0 : 2
+        border.color: root.borderColor
+        opacity: root.enabled ? 1.0 : 0.4
+        // Fade the box as one layer, so the fill does not show through the check.
+        layer.enabled: !root.enabled
 
         Behavior on color {
             enabled: root.animationsEnabled
             ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+            visible: root.visualFocus
+            targetRadius: indicator.radius
         }
 
         Canvas {

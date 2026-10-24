@@ -273,7 +273,7 @@ Control {
             objectName: navigationButton.objectName.length > 0
                 ? navigationButton.objectName + "FocusBorder"
                 : ""
-            visible: navigationButton.activeFocus
+            visible: navigationButton.visualFocus
             borderRadius: 9
             z: 1
         }

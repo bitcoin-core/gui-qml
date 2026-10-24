@@ -67,6 +67,8 @@ AbstractButton {
            visible: active
            sourceComponent: Button {
                id: icon_button
+               focusPolicy: Qt.NoFocus
+               Accessible.ignored: true
                padding: 0
                display: AbstractButton.IconOnly
                height: root.iconHeight
@@ -97,6 +99,8 @@ AbstractButton {
             visible: active
             sourceComponent: AbstractButton {
                 id: container
+                focusPolicy: Qt.NoFocus
+                Accessible.ignored: true
                 topPadding: button_background.active ? 0 : 4
                 bottomPadding: button_background.active ? 0 : 4
                 rightPadding: 0

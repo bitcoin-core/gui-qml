@@ -156,15 +156,15 @@ DesignSystemSection {
 
         DesignSystemState {
             label: "rest"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; Accessible.name: "Settings" }
+            IconButton { iconSource: "image://images/gear"; iconSize: 24; accessibleName: "Settings" }
         }
         DesignSystemState {
             label: "checked: true"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; checkable: true; checked: true; Accessible.name: "Settings" }
+            IconButton { iconSource: "image://images/gear"; iconSize: 24; checkable: true; checked: true; accessibleName: "Settings" }
         }
         DesignSystemState {
             label: "enabled: false"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; enabled: false; Accessible.name: "Settings" }
+            IconButton { iconSource: "image://images/gear"; iconSize: 24; enabled: false; accessibleName: "Settings" }
         }
     }
 

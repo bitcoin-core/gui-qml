@@ -39,6 +39,7 @@ Page {
                     hoverColor: Theme.color.neutral9
                     size: 34
                     iconSize: 24
+                    accessibleName: qsTr("Peers")
                     Layout.alignment: Qt.AlignVCenter
                     onClicked: root.peersClicked()
                 }
@@ -49,6 +50,7 @@ Page {
                     hoverColor: Theme.color.neutral9
                     size: 34
                     iconSize: 34
+                    accessibleName: qsTr("Settings")
                     Layout.alignment: Qt.AlignVCenter
                     onClicked: root.settingsClicked()
                 }

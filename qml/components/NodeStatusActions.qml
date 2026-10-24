@@ -20,6 +20,7 @@ RowLayout {
         hoverColor: Theme.color.orangeLight1
         activeColor: Theme.color.orange
         size: 34
+        accessibleName: qsTr("Node warnings")
         onClicked: warningsPopup.open()
     }
 
@@ -30,6 +31,7 @@ RowLayout {
         hoverColor: Theme.color.neutral9
         activeColor: Theme.color.orange
         size: 34
+        accessibleName: qsTr("Node information")
         onClicked: informationPopup.open()
     }
 

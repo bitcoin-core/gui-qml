@@ -42,8 +42,8 @@ Controls.Slider {
         border.color: "#E6E6E6"
 
         FocusBorder {
-            visible: root.visualFocus && parent.activeFocus
-            borderRadius: 14
+            visible: root.visualFocus
+            targetRadius: parent.radius
         }
     }
 

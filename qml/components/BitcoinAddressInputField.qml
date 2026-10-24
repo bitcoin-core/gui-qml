@@ -133,8 +133,12 @@ ColumnLayout {
                 color: root.isOnSurface ? root.surfaceColor
                     : root.embedded ? Theme.color.neutral2 : "transparent"
                 radius: root.embedded ? 10 : 0
-                border.width: root.embedded && addressInput.activeFocus ? 2 : 0
-                border.color: Theme.color.orange
+
+                FieldBorderRings {
+                    anchors.fill: parent
+                    visible: root.embedded && addressInput.activeFocus
+                    cornerRadius: parent.radius
+                }
             }
             selectByMouse: true
 
@@ -143,6 +147,14 @@ ColumnLayout {
                     root.pasteRequested()
                     event.accepted = true
                 }
+            }
+            Keys.onTabPressed: (event) => {
+                const next = addressInput.nextItemInFocusChain(true)
+                if (next && next !== addressInput) next.forceActiveFocus(Qt.TabFocusReason)
+            }
+            Keys.onBacktabPressed: (event) => {
+                const previous = addressInput.nextItemInFocusChain(false)
+                if (previous && previous !== addressInput) previous.forceActiveFocus(Qt.BacktabFocusReason)
             }
 
             onTextChanged: {

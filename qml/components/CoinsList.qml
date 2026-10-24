@@ -233,7 +233,6 @@ ColumnLayout {
                 color: coinRow.marked || coinRow.hovered
                     ? (coinRow.isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2)
                     : (coinRow.isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1)
-                border.color: coinRow.visualFocus ? Theme.color.orange : "transparent"
                 Rectangle {
                     visible: coinRow.groupFirst && !coinRow.groupLast
                     anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
@@ -255,6 +254,14 @@ ColumnLayout {
                     anchors.rightMargin: 12
                     height: 1
                     color: Theme.color.neutral3
+                }
+                FocusBorder {
+                    visible: coinRow.visualFocus
+                    topMargin: 2
+                    bottomMargin: 2
+                    leftMargin: 2
+                    rightMargin: 2
+                    targetRadius: rowBackground.radius
                 }
             }
             BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }

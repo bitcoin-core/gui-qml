@@ -21,6 +21,7 @@
 #include <noui.h>
 #include <qml/appmode.h>
 #include <qml/backendexecutor.h>
+#include <qml/buttonkeyactivation.h>
 #include <qml/quithandler.h>
 #include <qml/shutdowncoordinator.h>
 #include <qml/startupdialog.h>
@@ -465,6 +466,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     // Route onboarding worker diagnostics to Core's logger as soon as logging is configured.
     qInstallMessageHandler(StartupDebugMessageHandler);
     QmlQuitHandler quit_handler;
+    ButtonKeyActivation button_key_activation;
     app.setQuitOnLastWindowClosed(false);
     const auto drain_workers_before_application_destruction = qScopeGuard([] {
         QEventLoop worker_drain_loop;

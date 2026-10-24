@@ -102,15 +102,11 @@ SettingsPage {
                             color: Theme.color.neutral2
                             radius: 5
 
-                            FocusBorder {
+                            FieldBorderRings {
                                 objectName: "externalSignerPathFocusBorder"
+                                anchors.fill: parent
                                 visible: signerPathInput.activeFocus
-                                border.color: Theme.color.orange
-                                borderRadius: 7
-                                topMargin: -2
-                                bottomMargin: -2
-                                leftMargin: -2
-                                rightMargin: -2
+                                cornerRadius: parent.radius
                             }
                         }
                         onEditingFinished: root.checkDevice()

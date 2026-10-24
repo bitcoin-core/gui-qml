@@ -46,7 +46,7 @@ FormRow {
             selectByMouse: true
             padding: 4
             Accessible.name: root.label
-            background: FocusBorder { visible: input.activeFocus; border.color: Theme.color.orange; borderRadius: 6 }
+            background: FieldBorderRings { visible: input.activeFocus; cornerRadius: 4 }
             onTextEdited: root.modified = text !== root.value
             onEditingFinished: root.editingFinished()
         }

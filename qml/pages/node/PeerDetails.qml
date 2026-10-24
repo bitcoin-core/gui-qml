@@ -200,16 +200,10 @@ Page {
                     Layout.alignment: Qt.AlignTop
                     size: 40
                     iconSize: 20
-                    focusPolicy: Qt.StrongFocus
                     iconSource: "image://images/ellipsis"
                     iconColor: Theme.color.neutral8
+                    accessibleName: qsTr("Peer actions")
                     onClicked: actionMenu.open()
-                    FocusBorder {
-                        objectName: "peerActionsButtonFocusBorder"
-                        visible: actionButton.visualFocus
-                        borderRadius: 12
-                        z: 1
-                    }
                     PeerActionsMenu {
                         id: actionMenu
                         objectName: "peerActionsMenu"

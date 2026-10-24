@@ -131,7 +131,17 @@ Rectangle {
             visible: root.actionText !== ""
             text: root.actionText
             padding: 6
-            background: null
+            focusPolicy: Qt.StrongFocus
+            background: Item {
+                FocusBorder {
+                    visible: actionButton.visualFocus
+                    topMargin: 0
+                    bottomMargin: 0
+                    leftMargin: 0
+                    rightMargin: 0
+                    borderRadius: 6
+                }
+            }
             contentItem: CoreText {
                 text: actionButton.text
                 color: root.textColor
@@ -153,20 +163,23 @@ Rectangle {
             color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.4)
         }
 
-        Icon {
+        IconButton {
+            id: closeButton
             objectName: root.objectName !== "" ? root.objectName + "CloseButton" : ""
             visible: root.showsCloseButton
-            source: "image://images/cross"
-            color: root.textColor
-            size: 14
-            enabled: true
-            padding: 6
-            Accessible.role: Accessible.Button
-            Accessible.name: qsTr("Dismiss")
-            onClicked: root.dismissed()
-            HoverHandler {
-                cursorShape: Qt.PointingHandCursor
+            size: 24
+            iconSize: 14
+            iconSource: "image://images/cross"
+            iconColor: root.textColor
+            hoverColor: root.textColor
+            activeColor: root.textColor
+            accessibleName: qsTr("Dismiss")
+            background: Rectangle {
+                radius: closeButton.backgroundRadius
+                color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b,
+                    closeButton.down ? 0.2 : closeButton.hovered ? 0.12 : 0)
             }
+            onClicked: root.dismissed()
         }
     }
 }

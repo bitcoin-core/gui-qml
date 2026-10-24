@@ -445,15 +445,19 @@ ColumnLayout {
                                 : dayCell.hovered
                                     ? Theme.color.neutral2
                                     : "transparent"
-                    // The 2px neutral keyboard focus ring wins over the 1px
-                    // orange today ring, so the focused day is always
-                    // identifiable.
-                    border.width: dayCell.keyFocused ? 2 : 1
-                    border.color: dayCell.keyFocused
-                        ? Theme.color.neutral9
-                        : dayCell.isToday && !dayCell.endpoint
-                            ? Theme.color.orange
-                            : "transparent"
+                    border.width: 1
+                    border.color: dayCell.isToday && !dayCell.endpoint ? Theme.color.orange : "transparent"
+
+                    // The keyboard focus ring covers the 1px orange today
+                    // ring, so the focused day is always identifiable.
+                    FocusBorder {
+                        visible: dayCell.keyFocused
+                        topMargin: 0
+                        bottomMargin: 0
+                        leftMargin: 0
+                        rightMargin: 0
+                        targetRadius: parent.radius
+                    }
                 }
 
                 contentItem: CoreText {
@@ -532,8 +536,19 @@ ColumnLayout {
         implicitWidth: 28
         implicitHeight: 28
         padding: 0
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: AppMode.isDesktop
         Accessible.role: Accessible.Button
         Accessible.name: navButton.accessibleName
+        background: Rectangle {
+            radius: 5
+            color: navButton.down ? Theme.color.neutral3 : navButton.hovered ? Theme.color.neutral2 : "transparent"
+
+            FocusBorder {
+                visible: navButton.visualFocus
+                targetRadius: parent.radius
+            }
+        }
         contentItem: Item {
             // Two plain Icons rather than a Repeater over a 1-or-2 model: a
             // delegate inside an inline component is not wrapped in an implicit
