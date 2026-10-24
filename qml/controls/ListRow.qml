@@ -29,9 +29,15 @@ AbstractButton {
     property color hoverBackgroundColor: Theme.color.neutral2
     property color selectedTextColor: Theme.color.orange
 
-    Accessible.name: title
-    Accessible.description: description
+    // A trailing switch only mirrors the row, which is the control and
+    // reports the switch's state.
+    readonly property var trailingControl: loadedTrailingItem
+
+    Accessible.name: title.length > 0 ? title : description
+    Accessible.description: title.length > 0 ? description : ""
     Accessible.role: accessibleRole
+    checkable: trailingControl !== null && trailingControl.checkable === true
+    checked: checkable && trailingControl.checked
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     padding: 0

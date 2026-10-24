@@ -32,12 +32,14 @@ Controls.RangeSlider {
     layer.enabled: !enabled
 
     first.handle: Thumb {
+        node: root.first
         objectName: "rangeSliderLowerHandle"
         x: root.leftPadding + root.first.visualPosition * (root.availableWidth - width)
         y: root.topPadding + (root.availableHeight - height) / 2
         Accessible.name: qsTr("Lower value")
     }
     second.handle: Thumb {
+        node: root.second
         objectName: "rangeSliderUpperHandle"
         x: root.leftPadding + root.second.visualPosition * (root.availableWidth - width)
         y: root.topPadding + (root.availableHeight - height) / 2
@@ -62,6 +64,22 @@ Controls.RangeSlider {
     }
 
     component Thumb: Rectangle {
+        required property var node
+        // Read by the accessibility value interface of each handle.
+        readonly property real value: node.value
+        readonly property real minimumValue: root.from
+        readonly property real maximumValue: root.to
+
+        Accessible.role: Accessible.Slider
+        // Step as the arrow keys do, which also report the move.
+        Accessible.onIncreaseAction: {
+            node.increase()
+            node.moved()
+        }
+        Accessible.onDecreaseAction: {
+            node.decrease()
+            node.moved()
+        }
         implicitWidth: 28
         implicitHeight: 20
         radius: 10

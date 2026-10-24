@@ -108,7 +108,7 @@ Control {
                 Accessible.ignored: true
             }
 
-            AbstractButton {
+            ItemDelegate {
                 id: button
                 objectName: delegate.modelData.objectName || "settingsSidebar_" + delegate.modelData.id
                 anchors.left: parent.left

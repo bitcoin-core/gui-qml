@@ -33,6 +33,7 @@ LabeledField {
         embedded: root.embedded
         isOnSurface: root.isOnSurface
         textStyle: root.fieldTextStyle
+        labelText: root.label
         showLabel: false
         onTextChanged: root.textEdited(root.text)
         onEditingFinished: root.editingFinished()
