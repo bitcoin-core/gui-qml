@@ -1,0 +1,195 @@
+// Copyright (c) 2026 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+
+import "../../../controls"
+
+DesignSystemSection {
+    id: root
+
+    title: "Navigation"
+    description: "Top bars, page headings and tabs. Back buttons here do nothing."
+
+    DesignSystemSpecimen {
+        objectName: "designSystemNavigationBar2"
+        Layout.fillWidth: true
+        name: "NavigationBar2"
+
+        DesignSystemState {
+            width: parent.width
+            label: "showBackButton, centerItem, rightItem"
+            NavigationBar2 {
+                Layout.fillWidth: true
+                showBackButton: true
+                centerItem: CoreText {
+                    text: "Title"
+                    font: Theme.text.heading.font
+                    lineHeight: Theme.text.heading.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    wrap: false
+                }
+                rightItem: NavButton {
+                    text: "Done"
+                }
+            }
+        }
+        DesignSystemState {
+            width: parent.width
+            label: "leftItem, rightItem"
+            NavigationBar2 {
+                Layout.fillWidth: true
+                leftItem: NavButton {
+                    iconSource: "image://images/gear"
+                    Accessible.name: "Settings"
+                }
+                rightItem: NavButton {
+                    text: "Skip"
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemSettingsHeader"
+        Layout.fillWidth: true
+        name: "SettingsHeader"
+        note: "The header of every SettingsPage, including this one."
+
+        DesignSystemState {
+            width: 380
+            label: "compact back button"
+            SettingsHeader {
+                Layout.fillWidth: true
+                title: "Display"
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "backButtonText, rightItem"
+            SettingsHeader {
+                Layout.fillWidth: true
+                title: "Debug log"
+                backButtonText: "Settings"
+                rightItem: NavButton {
+                    iconSource: "image://images/refresh"
+                    iconWidth: 20
+                    iconHeight: 20
+                    Accessible.name: "Refresh"
+                }
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "showBackButton: false"
+            SettingsHeader {
+                Layout.fillWidth: true
+                title: "Settings"
+                showBackButton: false
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemPageHeading"
+        Layout.fillWidth: true
+        name: "PageHeading"
+
+        DesignSystemState {
+            width: 380
+            label: "title"
+            PageHeading { Layout.fillWidth: true; title: "Peers" }
+        }
+        DesignSystemState {
+            width: 380
+            label: "title, description"
+            PageHeading {
+                Layout.fillWidth: true
+                title: "Storage"
+                description: "Where and how much blockchain data is kept."
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "trailingItem"
+            PageHeading {
+                Layout.fillWidth: true
+                title: "Wallets"
+                trailingItem: NeutralButton { text: "Add" }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemHeader"
+        Layout.fillWidth: true
+        name: "Header"
+        note: "Legacy heading, still used by several popups, OptionButton and the start-up error page."
+
+        DesignSystemState {
+            width: 380
+            label: "center: true"
+            Header {
+                Layout.fillWidth: true
+                header: "There was an issue starting up."
+                headerBold: true
+                headerSize: 21
+                description: "Description under the header."
+                subtext: "Subtext under the description."
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "center: false"
+            Header {
+                Layout.fillWidth: true
+                center: false
+                header: "Store all data"
+                headerSize: 18
+                description: "Uses about 600GB. Support the network."
+                descriptionSize: 15
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemNavigationTab"
+        Layout.fillWidth: true
+        name: "NavigationTab"
+
+        ButtonGroup {
+            id: tabGroup
+        }
+
+        DesignSystemState {
+            label: "checked: true"
+            NavigationTab { text: "Activity"; checked: true; ButtonGroup.group: tabGroup }
+        }
+        DesignSystemState {
+            label: "rest"
+            NavigationTab { text: "Send"; ButtonGroup.group: tabGroup }
+        }
+        DesignSystemState {
+            label: "rest"
+            NavigationTab { text: "Receive"; ButtonGroup.group: tabGroup }
+        }
+        DesignSystemState {
+            label: "iconSource"
+            NavigationTab {
+                implicitWidth: 60
+                iconSource: "image://images/gear"
+                iconColor: Theme.color.neutral7
+                iconSize: 24
+                Accessible.name: "Settings"
+                ButtonGroup.group: tabGroup
+            }
+        }
+        DesignSystemState {
+            label: "enabled: false"
+            NavigationTab { text: "Disabled"; enabled: false }
+        }
+    }
+}
