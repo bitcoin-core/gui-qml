@@ -8,7 +8,7 @@ import QtTest 1.2
 import "../../qml/controls"
 
 TestCase {
-    name: "SendOptionsPopup"
+    name: "SendCreateOptionsPopup"
     when: windowShown
     width: 400
     height: 300
@@ -22,7 +22,7 @@ TestCase {
     Component {
         id: popupComponent
 
-        SendOptionsPopup {
+        SendCreateOptionsPopup {
             x: 20
             y: 20
         }
@@ -58,46 +58,20 @@ TestCase {
         return null
     }
 
-    function test_aliases_default_to_false() {
-        const popup = createPopup()
-        compare(popup.coinControlEnabled, false)
-        compare(popup.multipleRecipientsEnabled, false)
-    }
-
-    function test_alias_assignments_drive_toggle_state() {
-        const popup = createPopup()
-
-        popup.coinControlEnabled = true
-        popup.multipleRecipientsEnabled = true
-        compare(popup.coinControlEnabled, true)
-        compare(popup.multipleRecipientsEnabled, true)
-    }
-
-    function test_clicking_toggles_updates_aliases() {
-        const popup = createPopup()
-        const coinToggle = findObject(popup, "sendOptionsCoinControlToggle")
-        const multipleToggle = findObject(popup, "sendOptionsMultipleRecipientsToggle")
-
-        verify(coinToggle !== null)
-        verify(multipleToggle !== null)
-
-        mouseClick(coinToggle, coinToggle.width / 2, coinToggle.height / 2)
-        compare(popup.coinControlEnabled, true)
-
-        mouseClick(multipleToggle, multipleToggle.width / 2, multipleToggle.height / 2)
-        compare(popup.multipleRecipientsEnabled, true)
-    }
-
     function test_action_rows_emit_signals() {
         const popup = createPopup()
+        const paymentRequestButton = findObject(popup, "sendOptionsOpenPaymentRequestButton")
         const importButton = findObject(popup, "sendImportPsbtFromFileButton")
         const clearButton = findObject(popup, "sendClearFormButton")
 
+        verify(paymentRequestButton !== null)
         verify(importButton !== null)
         verify(clearButton !== null)
 
+        let paymentRequestCount = 0
         let importCount = 0
         let clearCount = 0
+        popup.openPaymentRequest.connect(function() { paymentRequestCount += 1 })
         popup.importPsbtFromFileRequested.connect(function() { importCount += 1 })
         popup.clearFormRequested.connect(function() { clearCount += 1 })
 
@@ -106,5 +80,8 @@ TestCase {
 
         mouseClick(clearButton, clearButton.width / 2, clearButton.height / 2)
         compare(clearCount, 1)
+
+        mouseClick(paymentRequestButton, paymentRequestButton.width / 2, paymentRequestButton.height / 2)
+        compare(paymentRequestCount, 1)
     }
 }

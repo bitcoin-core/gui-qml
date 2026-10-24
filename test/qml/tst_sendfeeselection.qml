@@ -43,6 +43,20 @@ TestCase {
             compare(control.customSelected, false)
         }
     }
+    function test_preset_follows_wallet_target_and_emits_fee_changed() {
+        const control = createTemporaryObject(factory, this)
+        const picker = findChild(control, "feeSelectionPicker")
+        testWalletModel.targetBlocks = 10
+        compare(picker.currentText, "Flexible")
+        testWalletModel.targetBlocks = 2
+        compare(picker.currentText, "Priority")
+
+        let targets = []
+        control.feeChanged.connect(function(target) { targets.push(target) })
+        selectOption(control, 1)
+        selectOption(control, 2)
+        compare(targets, [6, 10])
+    }
     function test_custom_slider_and_rate_are_editable() {
         const control = createTemporaryObject(factory, this)
         const rate = findChild(control, "feeSelectionCustomRateInput")
