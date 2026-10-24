@@ -6,6 +6,7 @@
 #define BITCOIN_QML_APPLOCALE_H
 
 #include <QLocale>
+#include <QObject>
 #include <QString>
 #include <QTranslator>
 
@@ -15,10 +16,31 @@ class QmlTranslations
 {
 public:
     void install(const QString& language, const QLocale& system_locale = QLocale::system());
+    // The UI languages can differ from the regional locale, such as LANGUAGE=es with LANG=en_US.
+    void install(const QString& language, const QLocale& system_locale, const QStringList& ui_languages);
 
 private:
     std::unique_ptr<QTranslator> m_app_translator;
     std::unique_ptr<QTranslator> m_qml_translator;
 };
+
+// Dates written with words follow the app language; numeric dates and times stay with QLocale().
+QLocale QmlNamesLocale();
+
+enum class QmlWordDate { Long, MonthYear };
+
+QString QmlWordDateFormat(QmlWordDate kind, const QLocale& names = QmlNamesLocale(), const QLocale& regional = QLocale());
+QString QmlWordDateFormat(QmlWordDate kind, const QLocale& names, const QLocale& regional, const QString& regional_format);
+
+class QmlAppLocale : public QObject
+{
+    Q_OBJECT
+
+public:
+    using QObject::QObject;
+    Q_INVOKABLE QString wordDateFormat(const QString& names_locale, bool month_year) const;
+};
+
+QString QmlLocaleName(const QLocale& locale);
 
 #endif // BITCOIN_QML_APPLOCALE_H

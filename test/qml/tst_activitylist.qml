@@ -902,6 +902,28 @@ TestCase {
         compare(button.text, "Date")
     }
 
+    function test_calendar_names_follow_ui_language_script() {
+        const page = createPage()
+        mouseClick(findChild(page, "activityDateFilterButton"))
+        const menu = findChild(page, "activityDateFilterPopup")
+        tryCompare(menu, "opened", true)
+        mouseClick(findChild(menu.contentItem, "activityDateCustomRange"))
+        const calendar = findChild(page, "activityCalendar")
+        tryCompare(calendar, "visible", true)
+        calendar.seed(new Date(2026, 0, 1), new Date(2026, 0, 15))
+        const label = findChild(calendar, "calendarMonthLabel")
+        const previous = Qt.uiLanguage
+        try {
+            // The month and year order follows the host's regional format.
+            Qt.uiLanguage = "sr_Latn_RS"
+            verify(label.text.indexOf("januar") >= 0, label.text)
+            Qt.uiLanguage = "sr_Cyrl_RS"
+            verify(label.text.indexOf("јануар") >= 0, label.text)
+        } finally {
+            Qt.uiLanguage = previous
+        }
+    }
+
     function test_amount_slider_updates_live_and_resets() {
         const page = createPage({width: 390})
         const proxy = findChild(page, "activityFilterProxyModel")

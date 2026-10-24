@@ -349,6 +349,9 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
         return new MotionPreference(StartupMotionMode());
     });
+    qmlRegisterSingletonType<QmlAppLocale>("org.bitcoincore.qt", 1, 0, "AppLocale", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        return new QmlAppLocale;
+    });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
@@ -883,10 +886,12 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 #endif
     // Keep the startup language until the settings snapshot is ready.
     if (options_model.settingsReady()) translations.install(options_model.language());
+    engine->setUiLanguage(QmlLocaleName(QmlNamesLocale()));
 
     // Retranslate the QML UI immediately when the user picks a new language.
     QObject::connect(&options_model, &OptionsQmlModel::languageChanged, [&]() {
         translations.install(options_model.language());
+        engine->setUiLanguage(QmlLocaleName(QmlNamesLocale()));
         engine->retranslate();
     });
 
