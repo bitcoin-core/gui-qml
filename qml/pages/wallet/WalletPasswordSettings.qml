@@ -163,7 +163,10 @@ SettingsPage {
                 description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
                 showDivider: false
                 accessibleRole: Accessible.CheckBox
-                trailingItem: OptionSwitch { }
+                trailingItem: OptionSwitch {
+                    focusPolicy: Qt.NoFocus
+                    Accessible.ignored: true
+                }
                 onClicked: loadedTrailingItem.toggle()
             }
 

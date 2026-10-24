@@ -5,6 +5,7 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QAccessible>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QEvent>
@@ -4126,6 +4127,33 @@ public:
     }
 };
 
+// Reads what a screen reader receives for an item. Controls fill in their
+// roles, names and states only once an assistive tool attaches. On older Qt
+// (6.5 and earlier) activate() only reaches the items that already exist,
+// and they don't track later changes, so tests call it after creating items
+// and again after changing them.
+class TestAccessibility : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE void activate() { QAccessible::setActive(true); }
+    Q_INVOKABLE void deactivate() { QAccessible::setActive(false); }
+    Q_INVOKABLE QVariantMap info(QObject* object) const
+    {
+        QVariantMap result;
+        QAccessibleInterface* iface = object ? QAccessible::queryAccessibleInterface(object) : nullptr;
+        if (!iface) return result;
+        const QAccessible::State state = iface->state();
+        result[QStringLiteral("role")] = int(iface->role());
+        result[QStringLiteral("name")] = iface->text(QAccessible::Name);
+        result[QStringLiteral("description")] = iface->text(QAccessible::Description);
+        result[QStringLiteral("checkable")] = bool(state.checkable);
+        result[QStringLiteral("checked")] = bool(state.checked);
+        return result;
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4159,6 +4187,7 @@ public Q_SLOTS:
         engine->addImageProvider(QStringLiteral("qr"), new TestQrProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
+        static TestAccessibility test_accessibility;
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
@@ -4258,6 +4287,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }

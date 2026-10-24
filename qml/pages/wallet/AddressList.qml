@@ -227,6 +227,7 @@ SettingsPage {
     }
 
     SegmentedPicker {
+        Accessible.name: qsTr("Addresses")
         Layout.fillWidth: true
         Layout.maximumWidth: 360
         Layout.alignment: Qt.AlignHCenter

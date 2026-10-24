@@ -7,6 +7,13 @@ import QtQuick.Controls 2.15
 
 Switch {
     id: root
+
+    // Set by a hosting FormRow, whose label names the switch.
+    property string rowTitle: ""
+    property string rowDescription: ""
+
+    Accessible.name: text.length > 0 ? text : rowTitle
+    Accessible.description: rowDescription
     implicitWidth: 45
     implicitHeight: 28
     focusPolicy: Qt.StrongFocus

@@ -14,6 +14,9 @@ Item {
 
     implicitWidth: 18
     implicitHeight: 18
+    Accessible.role: Accessible.ProgressBar
+    Accessible.name: qsTr("Loading")
+    Accessible.ignored: !running || !visible
 
     Canvas {
         id: arc

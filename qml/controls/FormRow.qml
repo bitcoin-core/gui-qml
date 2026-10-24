@@ -39,9 +39,13 @@ Control {
     property var titleTextStyle: Theme.text.description
     property var descriptionTextStyle: Theme.text.caption
     property var supportingTextStyle: Theme.text.caption
+    // A trailing control that declares rowTitle is the row's focus stop and
+    // takes the row's label as its accessible name.
+    readonly property bool trailingItemNamedByRow: loadedTrailingItem !== null
+        && "rowTitle" in loadedTrailingItem
 
-    Accessible.name: title
-    Accessible.description: description
+    Accessible.name: trailingItemNamedByRow ? "" : title
+    Accessible.description: trailingItemNamedByRow ? "" : description
     padding: 0
     leftPadding: 16
     rightPadding: 16
@@ -65,6 +69,19 @@ Control {
                 ColorAnimation { duration: 150 }
             }
         }
+    }
+
+    Binding {
+        target: root.trailingItemNamedByRow ? root.loadedTrailingItem : null
+        property: "rowTitle"
+        value: root.title
+    }
+
+    Binding {
+        target: root.trailingItemNamedByRow && "rowDescription" in root.loadedTrailingItem
+            ? root.loadedTrailingItem : null
+        property: "rowDescription"
+        value: root.description
     }
 
     contentItem: Item {
@@ -114,6 +131,7 @@ Control {
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     elide: Text.ElideRight
+                    Accessible.ignored: root.trailingItemNamedByRow
                 }
 
                 CoreText {
@@ -127,6 +145,7 @@ Control {
                     lineHeightMode: Text.FixedHeight
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
+                    Accessible.ignored: root.trailingItemNamedByRow
                 }
 
                 CoreText {

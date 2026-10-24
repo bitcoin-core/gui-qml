@@ -42,5 +42,6 @@ Item {
         anchors.fill: parent
         visible: !root.animating
         wrap: false
+        Accessible.ignored: true
     }
 }

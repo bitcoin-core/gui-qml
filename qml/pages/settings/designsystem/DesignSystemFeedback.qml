@@ -158,6 +158,34 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
+        objectName: "designSystemNetworkIndicator"
+        Layout.fillWidth: true
+        name: "NetworkIndicator"
+        note: "A badge on every network but main. Screen readers read it as text; it takes no focus."
+
+        DesignSystemState {
+            label: "TEST"
+            NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "TEST" } }
+        }
+        DesignSystemState {
+            label: "TESTNET4"
+            NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "TESTNET4" } }
+        }
+        DesignSystemState {
+            label: "SIGNET"
+            NetworkIndicator { chainModelRef: QtObject { readonly property string networkName: "SIGNET" } }
+        }
+        DesignSystemState {
+            label: "REGTEST, shorten: true"
+            NetworkIndicator {
+                textSize: 11
+                shorten: true
+                chainModelRef: QtObject { readonly property string networkName: "REGTEST" }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
         objectName: "designSystemConfirmationPill"
         Layout.fillWidth: true
         name: "ConfirmationPill"

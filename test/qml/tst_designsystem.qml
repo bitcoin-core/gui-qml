@@ -46,11 +46,19 @@ TestCase {
         "designSystemNavigationBar2", "designSystemSettingsHeader", "designSystemPageHeading", "designSystemHeader",
         "designSystemNavigationTab",
         "designSystemInfoBanner", "designSystemSettingsRestartNotice", "designSystemToastBanner",
-        "designSystemStatusPill", "designSystemConfirmationPill", "designSystemTooltip",
+        "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemConfirmationPill", "designSystemTooltip",
         "designSystemSkeleton", "designSystemSpinningIndicator",
         "designSystemContextMenu", "designSystemAlertPopup",
         "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemQRImage"
     ]
+
+    // Roles a screen reader treats as plain containers, and the roles a
+    // clickable control may have.
+    readonly property var noSemanticRoles: [Accessible.NoRole, Accessible.Client, Accessible.Pane, Accessible.Grouping,
+        Accessible.Border, Accessible.Whitespace, Accessible.Separator]
+    readonly property var buttonRoles: [Accessible.Button, Accessible.CheckBox, Accessible.RadioButton,
+        Accessible.PageTab, Accessible.ListItem, Accessible.MenuItem, Accessible.Link, Accessible.ButtonMenu,
+        Accessible.ButtonDropDown, Accessible.ComboBox]
 
     Component {
         id: designSystemPageComponent
@@ -223,6 +231,198 @@ TestCase {
         }
         compare(current, visited[0], "Tab cycles back to " + describe(current) + " before reaching the first stop")
         verify(visited.length > 50, "only " + visited.length + " tab stops")
+    }
+
+    function isType(item, typeName) {
+        // QML types print as Name_QMLTYPE_n(...), delegates add _QML_n.
+        return new RegExp("^" + typeName + "(_QMLTYPE_\\d+)?(_QML_\\d+)?\\(").test(String(item))
+    }
+
+    function isIcon(item) {
+        return isType(item, "Icon")
+    }
+
+    function isButton(item) {
+        return item.checkable !== undefined && item.autoRepeat !== undefined && item.pressed !== undefined
+    }
+
+    function isTabStop(item) {
+        return item.activeFocusOnTab === true
+            || (item.focusPolicy !== undefined && (item.focusPolicy & Qt.TabFocus) !== 0)
+    }
+
+    function accessibilityProblems(item, problems) {
+        if (!item.visible || item.opacity === 0) return problems
+        const ignored = item.Accessible.ignored
+        if (isIcon(item) && !ignored) problems.push("decorative Icon is not ignored: " + describe(item))
+        // A disabled button drawn as a label (a non-interactive AddressLabel,
+        // OptionButton's directory chip) is static text, not a control.
+        const staticButton = isButton(item) && !isTabStop(item)
+            && (!item.enabled || item.Accessible.role === Accessible.StaticText)
+        if (!ignored && !staticButton && (isButton(item) || isTabStop(item))) {
+            const info = testAccessibility.info(item)
+            const what = describe(item) + " (role " + info.role + ")"
+            // Qt never exposes a name for a password field, so its text can't leak.
+            const passwordField = item.Accessible.passwordEdit === true
+            if (!passwordField && (!info.name || info.name.length === 0)) problems.push("no accessible name: " + what)
+            if (testCase.noSemanticRoles.indexOf(info.role) !== -1) problems.push("no accessible role: " + what)
+            if (isButton(item) && testCase.buttonRoles.indexOf(info.role) === -1) problems.push("button has a non-button role: " + what)
+            if (isButton(item) && item.checkable && (!info.checkable || info.checked !== item.checked))
+                problems.push("check state not exposed: " + what)
+        }
+        if (!ignored) {
+            const role = item.Accessible.role
+            if ((role === Accessible.PageTabList || role === Accessible.ProgressBar) && item.Accessible.name.length === 0)
+                problems.push("unnamed " + (role === Accessible.ProgressBar ? "progress indicator" : "tab list") + ": " + describe(item))
+        }
+        for (let i = 0; i < item.children.length; ++i) accessibilityProblems(item.children[i], problems)
+        return problems
+    }
+
+    function test_controlsExposeNameRoleAndState() {
+        const page = createPage()
+        testAccessibility.activate()
+        try {
+            const problems = accessibilityProblems(page, [])
+            compare(problems.join("\n"), "")
+        } finally {
+            testAccessibility.deactivate()
+        }
+    }
+
+    function itemsOfType(item, typeName, result) {
+        if (!item.visible) return result
+        if (isType(item, typeName)) result.push(item)
+        for (let i = 0; i < item.children.length; ++i) itemsOfType(item.children[i], typeName, result)
+        return result
+    }
+
+    function test_tabsBadgesAndIndicatorsUseTheirRoles() {
+        const page = createPage()
+        testAccessibility.activate()
+        try {
+
+            const tabs = itemsOfType(page, "NavigationTab", [])
+            verify(tabs.length > 0)
+            for (const tab of tabs) {
+                const info = testAccessibility.info(tab)
+                compare(info.role, Accessible.PageTab, describe(tab))
+                compare(info.checkable, true, describe(tab))
+                compare(info.checked, tab.checked, describe(tab))
+            }
+
+            const pickers = itemsOfType(page, "SegmentedPicker", [])
+            verify(pickers.length > 0)
+            for (const picker of pickers) {
+                compare(testAccessibility.info(picker).role, Accessible.PageTabList, describe(picker))
+                const segments = itemsOfType(picker, "ToggleButton", [])
+                compare(segments.length, picker.model.length, describe(picker))
+                for (const segment of segments)
+                    compare(testAccessibility.info(segment).role, Accessible.PageTab, describe(segment))
+            }
+            compare(testAccessibility.info(findChild(page, "designSystemThemeRow").loadedTrailingItem).name, "Theme")
+
+            const badges = itemsOfType(page, "NetworkIndicator", [])
+            compare(badges.length, 4)
+            for (const badge of badges) {
+                const info = testAccessibility.info(badge)
+                compare(info.role, Accessible.StaticText, describe(badge))
+                compare(info.name, badge.text)
+                compare(badge.focusPolicy, Qt.NoFocus)
+            }
+
+            const spinners = itemsOfType(page, "SpinningIndicator", [])
+            verify(spinners.length > 0)
+            for (const spinner of spinners) {
+                compare(spinner.Accessible.ignored, !spinner.running, describe(spinner))
+                compare(testAccessibility.info(spinner).role, Accessible.ProgressBar)
+                compare(testAccessibility.info(spinner).name, "Loading")
+            }
+        } finally {
+            testAccessibility.deactivate()
+        }
+    }
+
+    function test_segmentedPickerArrowKeysMoveSelection() {
+        const page = createPage()
+        const picker = itemsOfType(findChild(page, "designSystemSegmentedPicker"), "SegmentedPicker", [])[0]
+        const segments = itemsOfType(picker, "ToggleButton", [])
+        compare(picker.currentIndex, 0)
+        segments[0].forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Right)
+        compare(picker.currentIndex, 1)
+        verify(segments[1].activeFocus)
+        keyClick(Qt.Key_Left)
+        compare(picker.currentIndex, 0)
+        verify(segments[0].activeFocus)
+        keyClick(Qt.Key_Left)
+        compare(picker.currentIndex, 0)
+    }
+
+    function test_addressesAndAmountsReadAsOneValue() {
+        const page = createPage()
+        testAccessibility.activate()
+        try {
+            const addresses = itemsOfType(findChild(page, "designSystemAddressLabel"), "AddressLabel", [])
+            verify(addresses.length > 0)
+            let interactiveCount = 0
+            for (const label of addresses) {
+                const info = testAccessibility.info(label)
+                compare(info.name, label.address)
+                compare(info.role, label.interactive ? Accessible.Button : Accessible.StaticText)
+                if (label.interactive) {
+                    verify(info.description.length > 0)
+                    ++interactiveCount
+                }
+                for (const text of itemsOfType(label, "CoreText", [])) verify(text.Accessible.ignored, describe(text))
+            }
+            verify(interactiveCount > 0)
+
+            const amounts = itemsOfType(findChild(page, "designSystemBitcoinAmountDisplayLabel"), "BitcoinAmountDisplayLabel", [])
+            verify(amounts.length > 0)
+            for (const amount of amounts) {
+                const info = testAccessibility.info(amount)
+                compare(info.role, Accessible.StaticText)
+                compare(info.name, amount.text)
+                for (const text of itemsOfType(amount, "CoreText", [])) verify(text.Accessible.ignored, describe(text))
+            }
+        } finally {
+            testAccessibility.deactivate()
+        }
+    }
+
+    function test_rowsNameTheirControls() {
+        const page = createPage()
+        testAccessibility.activate()
+        try {
+            const startup = testAccessibility.info(findChild(page, "designSystemStartupSwitch"))
+            compare(startup.name, "Open at login")
+            compare(startup.description, "Start the app after signing in.")
+            // The row itself stays unnamed, so the label is read once.
+            compare(testAccessibility.info(findChild(page, "designSystemStartupRow")).name, "")
+
+            const acknowledgement = findChild(page, "designSystemAcknowledgementRow")
+            let info = testAccessibility.info(acknowledgement)
+            compare(info.role, Accessible.CheckBox)
+            compare(info.name, acknowledgement.description)
+            compare(info.checkable, true)
+            compare(info.checked, false)
+            acknowledgement.clicked()
+            testAccessibility.activate()
+            compare(testAccessibility.info(acknowledgement).checked, true)
+            const toggle = acknowledgement.loadedTrailingItem
+            acknowledgement.forceActiveFocus(Qt.TabFocusReason)
+            for (let i = 0; i < 3; ++i) {
+                keyClick(Qt.Key_Space)
+                compare(acknowledgement.checked, toggle.checked)
+            }
+            compare(toggle.checked, false)
+            toggle.toggle()
+            compare(acknowledgement.checked, true)
+            verify(acknowledgement.loadedTrailingItem.Accessible.ignored)
+        } finally {
+            testAccessibility.deactivate()
+        }
     }
 
     function test_existingFormExamplesStayAvailable() {

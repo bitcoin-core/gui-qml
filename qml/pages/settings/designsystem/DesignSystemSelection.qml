@@ -85,6 +85,7 @@ DesignSystemSection {
         DesignSystemState {
             label: "implicitHeight: 45"
             SegmentedPicker {
+                Accessible.name: "Example picker"
                 implicitWidth: 300
                 model: root.pickerOptions
                 currentIndex: root.segmentIndex
@@ -96,6 +97,7 @@ DesignSystemSection {
         DesignSystemState {
             label: "implicitHeight: 36"
             SegmentedPicker {
+                Accessible.name: "Example picker"
                 implicitWidth: 220
                 implicitHeight: 36
                 model: ["Light", "Dark"]
@@ -105,6 +107,7 @@ DesignSystemSection {
         DesignSystemState {
             label: "enabled: false"
             SegmentedPicker {
+                Accessible.name: "Example picker"
                 implicitWidth: 220
                 implicitHeight: 36
                 enabled: false
@@ -216,15 +219,15 @@ DesignSystemSection {
 
         DesignSystemState {
             label: "rest"
-            Slider { value: 40 }
+            Slider { value: 40; Accessible.name: "Example slider" }
         }
         DesignSystemState {
             label: "discrete: true"
-            Slider { from: 1; to: 8; value: 3; discrete: true }
+            Slider { from: 1; to: 8; value: 3; discrete: true; Accessible.name: "Example slider" }
         }
         DesignSystemState {
             label: "enabled: false"
-            Slider { value: 40; enabled: false }
+            Slider { value: 40; enabled: false; Accessible.name: "Example slider" }
         }
     }
 
@@ -235,11 +238,11 @@ DesignSystemSection {
 
         DesignSystemState {
             label: "rest"
-            RangeSlider { lowerValue: 20; upperValue: 70 }
+            RangeSlider { lowerValue: 20; upperValue: 70; Accessible.name: "Example range" }
         }
         DesignSystemState {
             label: "enabled: false"
-            RangeSlider { lowerValue: 20; upperValue: 70; enabled: false }
+            RangeSlider { lowerValue: 20; upperValue: 70; enabled: false; Accessible.name: "Example range" }
         }
     }
 

@@ -100,7 +100,8 @@ AbstractButton {
     bottomPadding: 4
     implicitHeight: content.implicitHeight + topPadding + bottomPadding
     Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
-    Accessible.name: interactive ? (showCopiedStatus ? qsTr("Copied") : qsTr("Copy address")) : address
+    Accessible.name: address
+    Accessible.description: interactive ? qsTr("Copies the address") : ""
 
     HoverHandler {
         enabled: root.interactive && root.enabled
@@ -137,6 +138,7 @@ AbstractButton {
             text: root.formattedText
             wrapMode: root.isTruncated ? Text.NoWrap : Text.WordWrap
             opacity: root.showCopiedStatus ? 0 : 1
+            Accessible.ignored: true
 
             Behavior on opacity {
                 NumberAnimation { duration: 150 }
@@ -177,6 +179,7 @@ AbstractButton {
                 font: root.textStyle.font
                 lineHeight: root.textStyle.lineHeight
                 lineHeightMode: Text.FixedHeight
+                Accessible.ignored: true
             }
         }
     }

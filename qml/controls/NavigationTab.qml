@@ -6,7 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 
-Button {
+TabButton {
     property color bgActiveColor: Theme.color.orange
     property color textColor: Theme.color.neutral7
     property color textHoverColor: Theme.color.neutral9
@@ -18,6 +18,7 @@ Button {
 
     id: root
     checkable: true
+    Accessible.role: Accessible.PageTab
     hoverEnabled: AppMode.isDesktop
     implicitHeight: 60
     implicitWidth: 80

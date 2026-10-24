@@ -11,9 +11,20 @@ Control {
 
     property var model: []
     property int currentIndex: 0
+    // Set by a hosting FormRow, whose label names the picker.
+    property string rowTitle: ""
+    property string rowDescription: ""
     readonly property string currentText: model.length > currentIndex ? optionText(model[currentIndex]) : ""
 
     signal selected(int index, var option)
+
+    function moveSelection(index) {
+        if (index < 0 || index >= root.model.length) return
+        const segment = segments.itemAt(index)
+        if (!segment || !segment.enabled) return
+        segment.forceActiveFocus(Qt.TabFocusReason)
+        root.selected(index, root.model[index])
+    }
 
     function optionText(option) {
         if (typeof option === "object" && option !== null && option.text !== undefined) {
@@ -25,6 +36,9 @@ Control {
     implicitHeight: 45
     implicitWidth: 360
     padding: 5
+    Accessible.role: Accessible.PageTabList
+    Accessible.name: rowTitle
+    Accessible.description: rowDescription
 
     background: Rectangle {
         color: Theme.color.neutral2
@@ -41,6 +55,7 @@ Control {
         spacing: 5
 
         Repeater {
+            id: segments
             model: root.model
 
             ToggleButton {
@@ -63,6 +78,9 @@ Control {
                 bgHoverColor: checked ? Theme.color.orange : Theme.color.neutral4
                 bgActiveColor: Theme.color.orange
                 bgDefaultColor: Theme.color.neutral2
+                Accessible.role: Accessible.PageTab
+                Keys.onLeftPressed: root.moveSelection(index - 1)
+                Keys.onRightPressed: root.moveSelection(index + 1)
 
                 onClicked: {
                     root.selected(index, modelData)
