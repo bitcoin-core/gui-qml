@@ -114,11 +114,7 @@ Page {
             text: qsTr("Back")
             onClicked: root.back()
         }
-        centerItem: Header {
-            headerBold: true
-            headerSize: 18
-            header: qsTr("Console")
-        }
+        title: qsTr("Console")
         TapHandler {
             grabPermissions: PointerHandler.TakeOverForbidden
             onTapped: inputField.focus = false
@@ -147,8 +143,6 @@ Page {
         rightColumnRole: ""
         categoryRole: "category"
         fontPixelSize: root.outputFontPixelSize
-        fontFamily: Theme.text.monoFamily
-        fontStyleName: "Regular"
         textLineHeight: Math.round(root.outputFontPixelSize * 1.4)
         contentColor: Theme.color.neutral9
         leftColumnColor: root.consoleTimeColor
@@ -279,8 +273,7 @@ Page {
                 objectName: "consoleInput"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                font.family: Theme.text.monoFamily
-                font.pixelSize: 13
+                font: Theme.text.monoCaption.font
                 color: Theme.color.neutral9
                 placeholderText: qsTr("Enter command…")
                 placeholderTextColor: Theme.color.neutral7

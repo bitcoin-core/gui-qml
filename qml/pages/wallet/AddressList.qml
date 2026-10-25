@@ -193,7 +193,7 @@ SettingsPage {
         visible: root.errorText.length > 0
         text: root.errorText
         color: Theme.color.red
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
 
@@ -207,7 +207,7 @@ SettingsPage {
             return addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
         }
         color: Theme.color.neutral6
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
 

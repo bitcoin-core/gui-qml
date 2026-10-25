@@ -98,7 +98,7 @@ TestCase {
         verify(findChild(form, "onboardingScrollView") !== null)
         compare(form.showBackButton, true)
         compare(form.title, "")
-        compare(form.heading, "View-only wallet")
+        compare(form.heading, "Watch-only wallet")
         compare(findChild(form, "watchOnlyXpubPasteButton"), null)
         const name = findChild(form, "createWalletNameInput")
         const xpub = findChild(form, "watchOnlyXpubInput")

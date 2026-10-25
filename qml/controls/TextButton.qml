@@ -9,17 +9,15 @@ import org.bitcoincore.qt 1.0
 
 Button {
     id: root
-    property int textSize: 18
+    property var textStyle: Theme.text.buttonStrong
     property color textColor: Theme.color.orange
     property color bgColor: Theme.color.background
-    property bool bold: true
     property bool rightalign: false
     padding: Theme.space.l
     hoverEnabled: AppMode.isDesktop
     contentItem: CoreText {
         text: root.text
-        bold: root.bold
-        font.pixelSize: root.textSize
+        textStyle: root.textStyle
         color: root.textColor
         horizontalAlignment: rightalign ? Text.AlignRight : Text.AlignHCenter
         Behavior on color {

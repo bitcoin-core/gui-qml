@@ -118,9 +118,7 @@ SettingsPage {
                 Layout.fillWidth: true
                 text: root.settingsModel.dataDir
                 color: Theme.color.neutral7
-                font: Theme.text.caption.font
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.monoCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }

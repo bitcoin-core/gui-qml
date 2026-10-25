@@ -31,9 +31,7 @@ RowLayout {
             objectName: "dialogHeaderTitle"
             Layout.fillWidth: true
             text: root.title
-            font: Theme.text.subtitle.font
-            lineHeight: Theme.text.subtitle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.subtitle
             color: Theme.color.neutral9
             horizontalAlignment: Text.AlignLeft
             wrapMode: Text.WordWrap
@@ -44,9 +42,7 @@ RowLayout {
             Layout.fillWidth: true
             visible: text.length > 0
             text: root.description
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.description
             color: Theme.color.neutral7
             horizontalAlignment: Text.AlignLeft
             wrapMode: Text.WordWrap

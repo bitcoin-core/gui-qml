@@ -107,9 +107,7 @@ ColumnLayout {
             anchors.verticalCenter: parent.verticalCenter
             horizontalAlignment: Text.AlignLeft
             text: root.labelText
-            font: Theme.text.body.font
-            lineHeight: Theme.text.body.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.body
         }
 
         TextField {
@@ -292,9 +290,7 @@ ColumnLayout {
         CoreText {
             id: errorTextLabel
             text: root.errorText
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.description
             color: Theme.color.red
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true

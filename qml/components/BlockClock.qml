@@ -107,8 +107,8 @@ Item {
     Label {
         id: mainText
         anchors.centerIn: dial
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         font.pixelSize: dial.width * (4/25)
         color: Theme.color.neutral9
 
@@ -120,8 +120,8 @@ Item {
 
     TextMetrics {
         id: subTextMetrics
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         font.pixelSize: Math.max(1, Math.round(dial.width * (9/100)))
         text: subText.text
     }
@@ -134,8 +134,8 @@ Item {
         anchors.horizontalCenter: root.horizontalCenter
         width: dial.width * (4/5)
         horizontalAlignment: Text.AlignHCenter
-        font.family: "BitcoinCoreSans"
-        font.styleName: "Semi Bold"
+        font.family: Theme.text.family
+        font.weight: Theme.text.strongWeight
         readonly property int desiredPixelSize: subTextMetrics.font.pixelSize
         readonly property real desiredTextWidth: Math.max(subTextMetrics.width, subTextMetrics.advanceWidth)
         font.pixelSize: subText.desiredTextWidth > subText.width

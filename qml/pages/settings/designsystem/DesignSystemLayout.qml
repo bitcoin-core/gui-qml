@@ -250,9 +250,7 @@ DesignSystemSection {
                         width: 200
                         text: modelData[0]
                         color: Theme.color.neutral7
-                        font: Theme.text.monoCaption.font
-                        lineHeight: Theme.text.monoCaption.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.monoCaption
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideRight
                         wrap: false
@@ -262,9 +260,7 @@ DesignSystemSection {
                         width: Math.max(0, breakpointRow.width - breakpointName.width - breakpointRow.spacing)
                         text: String(modelData[1])
                         color: Theme.color.neutral9
-                        font: Theme.text.monoCaption.font
-                        lineHeight: Theme.text.monoCaption.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.monoCaption
                         horizontalAlignment: Text.AlignLeft
                     }
                 }

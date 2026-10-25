@@ -162,7 +162,7 @@ AbstractButton {
             visible: root.count > 0
             Layout.rightMargin: (root.size - root.iconSize) / 2
             text: root.count
-            font: Theme.text.description.font
+            textStyle: Theme.text.description
             color: root.active ? root.activeIconColor : root.inactiveIconColor
         }
         Item { Layout.fillWidth: true; visible: root.count === 0 }

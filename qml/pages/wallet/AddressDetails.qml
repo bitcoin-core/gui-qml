@@ -97,7 +97,7 @@ ColumnLayout {
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
             //: Placeholder shown when an address has no private note yet.
-            placeholderText: qsTr("Add note...")
+            placeholderText: qsTr("Add note…")
             enabled: root.canEditLabel
             readOnly: !root.canEditLabel
             errorText: root.noteErrorText

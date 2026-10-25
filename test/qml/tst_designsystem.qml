@@ -33,7 +33,7 @@ TestCase {
 
     readonly property var specimenNames: [
         "designSystemColorBase", "designSystemColorRoles", "designSystemSurfaces", "designSystemColorLists",
-        "designSystemColorAliases", "designSystemTextRoles",
+        "designSystemColorAliases", "designSystemTypeSet", "designSystemTextRoles",
         "designSystemMotionDurations", "designSystemMotionEasing", "designSystemMotionTransitions",
         "designSystemMotionHelpers",
         "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
@@ -50,7 +50,7 @@ TestCase {
         "designSystemBitcoinAddressInputField", "designSystemBitcoinAmountInputField",
         "designSystemFormSection", "designSystemFormRowSection", "designSystemSwitchRowSection",
         "designSystemListRowSection", "designSystemValueSection", "designSystemKeyValueRow",
-        "designSystemNavigationBar2", "designSystemSettingsHeader", "designSystemPageHeading", "designSystemHeader",
+        "designSystemNavigationBar2", "designSystemSettingsHeader", "designSystemPageHeading",
         "designSystemNavigationTab",
         "designSystemInfoBanner", "designSystemSettingsRestartNotice", "designSystemToastBanner",
         "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemConfirmationPill", "designSystemTooltip",
@@ -116,6 +116,7 @@ TestCase {
         verify(findChild(page, "designSystemColor_lavender") !== null)
         verify(findChild(page, "designSystemColor_confirmationColors") !== null)
         verify(findChild(page, "designSystemText_captionStrong") !== null)
+        verify(findChild(page, "designSystemText_amountDescription") !== null)
     }
 
     function test_motionSectionListsTokensAndSwitchesModeForThePage() {

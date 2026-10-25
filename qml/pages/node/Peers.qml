@@ -64,11 +64,7 @@ Page {
             text: qsTr("Back")
             onClicked: root.back()
         }
-        centerItem: Header {
-            headerBold: true
-            headerSize: 18
-            header: qsTr("Peers")
-        }
+        title: qsTr("Peers")
     }
 
     AppSettings {
@@ -237,9 +233,7 @@ Page {
                     CoreText {
                         Layout.fillWidth: true
                         text: qsTr("Peers")
-                        font: Theme.text.headline.font
-                        lineHeight: Theme.text.headline.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.headline
                         horizontalAlignment: Text.AlignLeft
                         color: Theme.color.neutral9
                     }
@@ -247,9 +241,7 @@ Page {
                         objectName: "peersDescriptionLabel"
                         Layout.fillWidth: true
                         text: qsTr("Peers are nodes you exchange transaction data with.")
-                        font: Theme.text.description.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.description
                         horizontalAlignment: Text.AlignLeft
                         color: Theme.color.neutral6
                         wrapMode: Text.WordWrap
@@ -508,9 +500,7 @@ Page {
                                     id: idText
                                     anchors.centerIn: parent
                                     text: "#" + delegate.nodeId
-                                    font: Theme.text.description.font
-                                    lineHeight: Theme.text.description.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.description
                                     color: Theme.color.neutral8
                                     wrap: false
                                 }
@@ -522,9 +512,7 @@ Page {
                                 CoreText {
                                     Layout.fillWidth: true
                                     text: delegate.address
-                                    font: Theme.text.monoDescription.font
-                                    lineHeight: Theme.text.monoDescription.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.monoDescription
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral9
                                     elide: Text.ElideMiddle
@@ -535,9 +523,7 @@ Page {
                                     text: root.joinedDetails([delegate.direction,
                                         delegate.connectionType === delegate.direction ? "" : delegate.connectionType,
                                         delegate.network, delegate.transport])
-                                    font: Theme.text.description.font
-                                    lineHeight: Theme.text.description.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.description
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral7
                                     elide: Text.ElideRight
@@ -546,9 +532,7 @@ Page {
                                 CoreText {
                                     Layout.fillWidth: true
                                     text: delegate.subversion
-                                    font: Theme.text.monoCaption.font
-                                    lineHeight: Theme.text.monoCaption.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.monoCaption
                                     horizontalAlignment: Text.AlignLeft
                                     color: Theme.color.neutral6
                                     elide: Text.ElideRight
@@ -561,18 +545,14 @@ Page {
                                     CoreText {
                                         objectName: delegate.objectName + "Sent"
                                         text: "↑ " + delegate.sent
-                                        font: Theme.text.monoCaption.font
-                                        lineHeight: Theme.text.monoCaption.lineHeight
-                                        lineHeightMode: Text.FixedHeight
+                                        textStyle: Theme.text.monoCaption
                                         color: Theme.color.purple
                                         wrap: false
                                     }
                                     CoreText {
                                         objectName: delegate.objectName + "Received"
                                         text: "↓ " + delegate.received
-                                        font: Theme.text.monoCaption.font
-                                        lineHeight: Theme.text.monoCaption.lineHeight
-                                        lineHeightMode: Text.FixedHeight
+                                        textStyle: Theme.text.monoCaption
                                         color: Theme.color.blue
                                         wrap: false
                                     }
@@ -594,9 +574,7 @@ Page {
                     visible: peerListModelProxy.count === 0
                     text: searchField.text.length > 0 || root.filterCount() > 0
                         ? qsTr("No peers match your filters") : qsTr("No peers connected")
-                    font: Theme.text.description.font
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral6
                 }
             }
@@ -609,9 +587,7 @@ Page {
                     objectName: "connectedPeersLabel"
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: qsTr("%1 connected").arg(nodeModel.numPeers)
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     horizontalAlignment: Text.AlignHCenter
                     color: Theme.color.neutral6
                 }
@@ -620,10 +596,9 @@ Page {
                     objectName: "viewBannedPeersButton"
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: banListModel.count > 0
-                    text: qsTr("View %1 banned %2").arg(banListModel.count).arg(
-                        banListModel.count === 1 ? qsTr("peer") : qsTr("peers"))
-                    textSize: 13
-                    bold: false
+                    text: banListModel.count === 1 ? qsTr("View 1 banned peer…")
+                        : qsTr("View %1 banned peers…").arg(banListModel.count.toLocaleString(Qt.locale(), "f", 0))
+                    textStyle: Theme.text.caption
                     onClicked: bannedPeersPopup.open()
                 }
             }

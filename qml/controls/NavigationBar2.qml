@@ -7,6 +7,10 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 Pane {
+    id: root
+    // Shown in the center as a heading unless a centerItem replaces it.
+    property string title: ""
+    property string titleObjectName: ""
     property alias leftItem: left_section.contentItem
     property alias centerItem: center_section.contentItem
     property alias rightItem: right_section.contentItem
@@ -25,15 +29,15 @@ Pane {
             Layout.preferredWidth: Math.floor(Math.max(left_div.implicitWidth, right_div.implicitWidth))
             contentItem: RowLayout {
                 NavButton {
-                    objectName: backButtonObjectName
-                    visible: showBackButton
+                    objectName: root.backButtonObjectName
+                    visible: root.showBackButton
                     iconSource: "image://images/caret-left"
-                    text: backButtonText
+                    text: root.backButtonText
                     onClicked: {
-                        if (navigationStack) {
-                            navigationStack.goBack()
+                        if (root.navigationStack) {
+                            root.navigationStack.goBack()
                         }
-                        backClicked()
+                        root.backClicked()
                     }
                 }
                 Section {
@@ -45,6 +49,16 @@ Pane {
         }
         Section {
             id: center_section
+            // A title may shrink and elide; other center items keep their implicit width.
+            Layout.minimumWidth: root.title.length > 0 ? 0 : implicitWidth
+            contentItem: CoreText {
+                objectName: root.titleObjectName
+                text: root.title
+                textStyle: Theme.text.heading
+                color: Theme.color.neutral9
+                wrap: false
+                elide: Text.ElideRight
+            }
         }
         Div {
             id: right_div

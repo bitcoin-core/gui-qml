@@ -135,7 +135,7 @@ TestCase {
     }
 
     function test_display_unit_command_is_always_available_until_shutdown() {
-        compare(actionsUnderTest.toggleDisplayUnit.text, "Toggle display unit")
+        compare(actionsUnderTest.toggleDisplayUnit.text, "Toggle Display Unit")
         compare(actionsUnderTest.toggleDisplayUnit.shortcut, "Ctrl+B")
         compare(actionsUnderTest.toggleDisplayUnit.enabled, true)
         actionsUnderTest.toggleDisplayUnit.trigger()

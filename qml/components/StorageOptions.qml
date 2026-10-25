@@ -45,7 +45,7 @@ ColumnLayout {
         visible: !root.storageOptionsEditable && root.pruneSetting.infoText.length > 0
         text: root.pruneSetting.infoText
         color: Theme.color.neutral7
-        font.pixelSize: 15
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
     OptionButton {

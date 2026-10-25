@@ -123,7 +123,16 @@ TestCase {
     }
 
     function openStorageSettings(page) {
-        mouseClick(findChild(page, "onboardingStorageSettingsButton"))
+        const button = findChild(page, "onboardingStorageSettingsButton")
+        // The expanded storage options can push the button under the footer;
+        // focusing it scrolls it into view first.
+        button.forceActiveFocus()
+        const scrollView = findChild(page, "onboardingScrollView")
+        tryVerify(function() {
+            const position = button.mapToItem(scrollView, 0, 0)
+            return position.y >= 0 && position.y + button.height <= scrollView.height
+        })
+        mouseClick(button)
         const popup = findChild(page, "onboardingStorageSettingsPopup")
         tryCompare(popup, "opened", true)
         return popup

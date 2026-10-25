@@ -85,7 +85,7 @@ DialogPopup {
                     Layout.fillWidth: true
                     title: qsTr("Original fee")
                     value: root.bumpModel ? root.bumpModel.oldFee : ""
-                    valueTextStyle: Theme.text.monoCaption
+                    valueTextStyle: Theme.text.amountCaption
                     valueMaximumWidth: root.availableWidth * 0.6
                     dividerColor: Theme.color.neutral3
                 }
@@ -96,7 +96,7 @@ DialogPopup {
                     Layout.fillWidth: true
                     title: qsTr("New fee")
                     value: root.bumpModel ? root.bumpModel.newFee : ""
-                    valueTextStyle: Theme.text.monoCaption
+                    valueTextStyle: Theme.text.amountCaption
                     valueMaximumWidth: root.availableWidth * 0.6
                     showDivider: false
                 }
@@ -106,7 +106,7 @@ DialogPopup {
                 objectName: "speedUpErrorText"
                 visible: root.bumpModel && root.bumpModel.state === BumpTransactionModel.Failed
                 text: root.bumpModel ? root.bumpModel.errorText : ""
-                font.pixelSize: 15
+                textStyle: Theme.text.description
                 color: Theme.color.red
                 Layout.fillWidth: true
                 Layout.topMargin: 10
@@ -159,7 +159,7 @@ DialogPopup {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to update this transaction.")
         confirmText: qsTr("Unlock and update")
-        busyConfirmText: qsTr("Unlocking...")
+        busyConfirmText: qsTr("Unlocking…")
         onSubmitted: (passphrase) => {
             if (!root.bumpModel) {
                 return

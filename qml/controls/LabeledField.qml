@@ -66,9 +66,7 @@ Control {
                 Layout.fillWidth: true
                 text: root.label
                 color: root.labelColor
-                font: root.labelTextStyle.font
-                lineHeight: root.labelTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.labelTextStyle
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
@@ -136,9 +134,7 @@ Control {
             Layout.topMargin: visible ? root.messageSpacing : 0
             text: root.errorText.length > 0 ? root.errorText : root.supportingText
             color: root.errorText.length > 0 ? root.errorTextColor : root.supportingTextColor
-            font: root.messageTextStyle.font
-            lineHeight: root.messageTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.messageTextStyle
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

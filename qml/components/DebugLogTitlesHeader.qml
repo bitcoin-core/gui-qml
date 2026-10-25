@@ -11,7 +11,7 @@ import "../controls"
 Control {
     id: root
 
-    property int typeColumnWidth: 32
+    property int typeColumnWidth: 48
     property int timeColumnWidth: 80
     property int cornerRadius: Theme.radius.card
 
@@ -50,9 +50,9 @@ Control {
         CoreText {
             text: qsTr("Type")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.preferredWidth: root.typeColumnWidth
         }
@@ -60,9 +60,9 @@ Control {
         CoreText {
             text: qsTr("Time")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.preferredWidth: root.timeColumnWidth
         }
@@ -70,9 +70,9 @@ Control {
         CoreText {
             text: qsTr("Message")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true
             Layout.minimumWidth: 0

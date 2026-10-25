@@ -18,6 +18,7 @@ Rectangle {
     property string text: ""
     property string textObjectName: ""
     property color textColor: tintColor
+    property var messageTextStyle: Theme.text.description
     property color backgroundColor: Qt.rgba(
         tintColor.r,
         tintColor.g,
@@ -166,9 +167,7 @@ Rectangle {
             // text.
             textFormat: Text.PlainText
             color: root.textColor
-            font.pixelSize: 15
-            lineHeightMode: Text.FixedHeight
-            lineHeight: 21
+            textStyle: root.messageTextStyle
             horizontalAlignment: root.iconSource != "" ? Text.AlignLeft : Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             wrapMode: Text.WordWrap
@@ -193,7 +192,7 @@ Rectangle {
             contentItem: CoreText {
                 text: actionButton.text
                 color: root.textColor
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 opacity: actionButton.hovered ? 0.75 : 1.0

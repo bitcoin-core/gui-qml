@@ -29,8 +29,7 @@ Button {
     contentItem: CoreText {
         id: buttonText
         text: parent.text
-        font.pixelSize: Theme.text.caption.pixelSize
-        bold: root.textBold
+        textStyle: root.textBold ? Theme.text.captionStrong : Theme.text.caption
         color: root.textColor
 
         Behavior on color {
@@ -62,7 +61,7 @@ Button {
             name: "CHECKED"; when: root.checked
             PropertyChanges { target: bg; color: root.bgActiveColor }
             PropertyChanges { target: buttonText; color: root.textActiveColor }
-            PropertyChanges { target: buttonText; bold: root.textActiveBold }
+            PropertyChanges { target: buttonText; textStyle: root.textActiveBold ? Theme.text.captionStrong : Theme.text.caption }
         },
         State {
             name: "HOVER"; when: root.hovered

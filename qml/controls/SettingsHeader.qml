@@ -115,8 +115,7 @@ Pane {
             wrap: false
             elide: Text.ElideRight
             text: root.title
-            font.pixelSize: 18
-            bold: true
+            textStyle: Theme.text.heading
             color: Theme.color.neutral9
 
             Behavior on color {

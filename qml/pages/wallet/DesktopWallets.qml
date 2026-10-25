@@ -330,7 +330,7 @@ Page {
         rightItem: RowLayout {
             spacing: 5
             NetworkIndicator {
-                textSize: 11
+                textStyle: Theme.text.caption
                 shorten: true
             }
             NavigationTab {
@@ -565,7 +565,7 @@ Page {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter the wallet password to complete the legacy wallet update.")
         confirmText: qsTr("Unlock and update")
-        busyConfirmText: qsTr("Updating...")
+        busyConfirmText: qsTr("Updating…")
         onSubmitted: (passphrase) => {
             migrationPassphrasePopup.busy = true
             walletController.migrateWallet(root.pendingMigrationPath, passphrase)
@@ -589,7 +589,7 @@ Page {
         id: closeConfirmationPopup
         objectName: "walletCloseConfirmationPopup"
         parent: Overlay.overlay
-        title: qsTr("Close wallet")
+        title: qsTr("Close wallet?")
 
         property string walletName: ""
         message: qsTr("Do you want to close the wallet \"%1\"?").arg(walletName)

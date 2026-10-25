@@ -17,7 +17,7 @@ Control {
     property bool isWarning: false
     property bool alternate: false
 
-    property int typeColumnWidth: 32
+    property int typeColumnWidth: 48
     property int timeColumnWidth: 80
 
     readonly property color indicatorColor: isError
@@ -65,8 +65,8 @@ Control {
             objectName: root.objectName.length > 0 ? root.objectName + "Time" : ""
             text: root.timestamp.length > 0 ? root.timestamp : "—"
             color: Theme.color.neutral7
-            font.family: Theme.text.monoFamily
-            font.pixelSize: 11
+            textStyle: Theme.text.monoCaption
+            wrap: false
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
             Layout.preferredWidth: root.timeColumnWidth

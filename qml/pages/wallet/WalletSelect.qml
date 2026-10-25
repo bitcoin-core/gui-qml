@@ -9,6 +9,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
+import "../../components"
 
 Popup {
     id: root
@@ -146,7 +147,7 @@ Popup {
                 leftPadding: 10
                 text: section === "open" ? qsTr("Open wallets") : qsTr("Closed wallets")
                 horizontalAlignment: Text.AlignLeft
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral6
             }
 
@@ -181,7 +182,7 @@ Popup {
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
                         return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
-                            ? (balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel)
+                            ? optionsModel.displayUnitLabelForAmount(balanceSatoshi) : optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
@@ -262,31 +263,14 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.displayName
                             horizontalAlignment: Text.AlignLeft
-                            font: Theme.text.menuItemStrong.font
+                            textStyle: Theme.text.menuItemStrong
                             color: delegate.nameColor
                             wrap: false
                             elide: Text.ElideRight
 
-                            ToolTip {
-                                id: nameTooltip
+                            HoverToolTip {
                                 text: delegate.displayName
                                 visible: delegate.hovered && nameText.truncated
-                                delay: Theme.motion.tooltipDelay
-                                padding: 8
-                                background: Rectangle {
-                                    color: Theme.color.neutral0
-                                    border.color: Theme.color.neutral4
-                                    border.width: 1
-                                    radius: 5
-                                }
-                                contentItem: CoreText {
-                                    text: nameTooltip.text
-                                    color: (delegate.hovered ? Theme.color.neutral9 : Theme.color.neutral8)
-                                    font.pixelSize: 13
-                                    horizontalAlignment: Text.AlignLeft
-                                    wrapMode: Text.WordWrap
-                                    width: Math.min(implicitWidth, 220)
-                                }
                             }
                         }
 
@@ -295,8 +279,8 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.statusText
                             horizontalAlignment: Text.AlignLeft
-                            font: delegate.loadState === WalletListModel.Open
-                                ? Theme.text.monoCaption.font : Theme.text.caption.font
+                            textStyle: delegate.loadState === WalletListModel.Open
+                                ? Theme.text.amountCaption : Theme.text.caption
                             color: delegate.statusColor
                             wrap: false
                             elide: Text.ElideRight
@@ -392,7 +376,7 @@ Popup {
                                 ContextMenuButton {
                                     objectName: "walletSelectClose_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                                     visible: delegate.loadState === WalletListModel.Open
-                                    text: qsTr("Close wallet")
+                                    text: qsTr("Close wallet…")
                                     iconSource: "image://images/cross"
                                     onTriggered: {
                                         actionsMenu.close()
@@ -438,7 +422,7 @@ Popup {
         }
         ContextMenuButton {
             objectName: "walletSelectAddWalletButton"
-            text: qsTr("Add wallet")
+            text: qsTr("Add wallet…")
             textColor: Theme.color.orange
             hoverTextColor: Theme.color.orange
             iconSource: "image://images/plus-filled"

@@ -40,9 +40,7 @@ Control {
                 Layout.fillWidth: true
                 text: root.title
                 color: Theme.color.neutral9
-                font: root.titleTextStyle.font
-                lineHeight: root.titleTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.titleTextStyle
                 horizontalAlignment: root.titleAlignment
                 wrap: false
                 elide: Text.ElideRight
@@ -54,9 +52,7 @@ Control {
                 Layout.fillWidth: true
                 text: root.description
                 color: Theme.color.neutral7
-                font: root.descriptionTextStyle.font
-                lineHeight: root.descriptionTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.descriptionTextStyle
                 horizontalAlignment: Text.AlignHCenter
                 textFormat: root.descriptionTextFormat
                 wrap: true

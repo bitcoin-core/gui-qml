@@ -29,7 +29,7 @@ Page {
             text: qsTr("Back")
             onClicked: root.back()
         }
-        centerItem: Header { headerBold: true; headerSize: 18; header: qsTr("Peers") }
+        title: qsTr("Peers")
     }
 
     function selectPeer(peerDetails) {
@@ -110,7 +110,7 @@ Page {
                         : peerListModelProxy.count === 0
                             ? qsTr("No peers match your search or filters")
                             : qsTr("Select a peer to view its details")
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral6
                 }
             }

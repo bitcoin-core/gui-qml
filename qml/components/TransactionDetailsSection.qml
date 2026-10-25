@@ -22,7 +22,7 @@ ColumnLayout {
             ? Qt.formatDateTime(new Date(Number(details.timestamp) * 1000), "yyyy-MM-dd hh:mm:ss") : unavailable},
         {key: "Fee", title: qsTr("Network fee"), value: coinbase ? qsTr("Not applicable")
             : details.feeKnown ? qsTr("%1 sats").arg(Number(details.feeSat).toLocaleString(Qt.locale(), 'f', 0)) : unavailable},
-        {key: "FeeRate", title: qsTr("Fee rate"), value: coinbase ? qsTr("Not applicable")
+        {key: "FeeRate", mono: true, title: qsTr("Fee rate"), value: coinbase ? qsTr("Not applicable")
             : details.feeRateSatPerVb !== undefined && details.feeRateSatPerVb !== null
                 ? qsTr("%1 sat/vB").arg(Number(details.feeRateSatPerVb).toLocaleString(Qt.locale(), 'f', 2)) : unavailable},
         {key: "Block", title: qsTr("Block"), value: details.statusKnown === false ? unavailable
@@ -30,11 +30,11 @@ ColumnLayout {
             : details.depth > 0 ? unavailable : qsTr("Not mined"), hidden: !root.showBlock}
     ].filter(function(field) { return !field.hidden })
     readonly property var detailFields: [
-        {key: "Size", title: qsTr("Size"), value: details.size > 0 ? qsTr("%1 bytes").arg(details.size) : unavailable},
-        {key: "VirtualSize", title: qsTr("Virtual size"), value: details.virtualSize > 0 ? qsTr("%1 vB").arg(details.virtualSize) : unavailable},
-        {key: "Weight", title: qsTr("Weight units"), value: details.weight > 0 ? qsTr("%1 WU").arg(details.weight) : unavailable},
-        {key: "Version", title: qsTr("Version"), value: details.version !== undefined && details.version !== null ? String(details.version) : unavailable},
-        {key: "LockTime", title: qsTr("Locktime"), value: details.lockTime !== undefined && details.lockTime !== null ? String(details.lockTime) : unavailable},
+        {key: "Size", mono: true, title: qsTr("Size"), value: details.size > 0 ? qsTr("%1 bytes").arg(details.size) : unavailable},
+        {key: "VirtualSize", mono: true, title: qsTr("Virtual size"), value: details.virtualSize > 0 ? qsTr("%1 vB").arg(details.virtualSize) : unavailable},
+        {key: "Weight", mono: true, title: qsTr("Weight units"), value: details.weight > 0 ? qsTr("%1 WU").arg(details.weight) : unavailable},
+        {key: "Version", mono: true, title: qsTr("Version"), value: details.version !== undefined && details.version !== null ? String(details.version) : unavailable},
+        {key: "LockTime", mono: true, title: qsTr("Locktime"), value: details.lockTime !== undefined && details.lockTime !== null ? String(details.lockTime) : unavailable},
         {key: "Rbf", title: qsTr("Replace by fee"), value: coinbase ? qsTr("Not applicable")
             : details.signalsRbf === undefined || details.signalsRbf === null ? unavailable
             : details.signalsRbf ? qsTr("Signaled") : qsTr("Not signaled")}

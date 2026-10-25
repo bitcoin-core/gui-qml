@@ -20,15 +20,13 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 4
         Layout.rightMargin: 4
-        spacing: 2
+        spacing: Theme.space.xs
 
         CoreText {
             Layout.fillWidth: true
             text: root.title
             color: Theme.color.neutral9
-            font: Theme.text.subheading.font
-            lineHeight: Theme.text.subheading.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.title
             horizontalAlignment: Text.AlignLeft
             wrap: false
             elide: Text.ElideRight
@@ -39,9 +37,7 @@ ColumnLayout {
             Layout.fillWidth: true
             text: root.description
             color: Theme.color.neutral7
-            font: Theme.text.caption.font
-            lineHeight: Theme.text.caption.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.description
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

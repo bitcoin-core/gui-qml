@@ -34,7 +34,7 @@ Page {
             objectName: "languageSearch"
             Layout.fillWidth: true
             Layout.bottomMargin: 8
-            placeholderText: qsTr("Search...")
+            placeholderText: qsTr("Search…")
         }
 
         Separator {
@@ -90,7 +90,7 @@ Page {
                         Layout.topMargin: 14
                         Layout.bottomMargin: 14
                         text: optionsModel.languageLabel(delegate.modelData)
-                        font.pixelSize: 18
+                        textStyle: Theme.text.body
                         color: Theme.color.neutral9
                         horizontalAlignment: Text.AlignLeft
                         wrap: false

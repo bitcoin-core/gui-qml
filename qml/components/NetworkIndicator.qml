@@ -18,7 +18,7 @@ Control {
     property bool shorten: false
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
-    property int textSize: 15
+    property var textStyle: Theme.text.description
     topPadding: Theme.space.xxs
     bottomPadding: Theme.space.xxs
     leftPadding: Theme.space.m
@@ -32,7 +32,7 @@ Control {
     state: show && root.chainModelRef !== null ? root.chainModelRef.networkName : "MAIN"
     contentItem: CoreText {
         text: root.text
-        font.pixelSize: root.textSize
+        textStyle: root.textStyle
         color: root.textColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
@@ -61,7 +61,7 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet") : qsTr("Test Network")
+                text: shorten ? qsTr("Testnet") : qsTr("Test network")
                 bgColor: Theme.color.green
             }
         },
@@ -70,7 +70,7 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Testnet4") : qsTr("Test Network (v4)")
+                text: shorten ? qsTr("Testnet4") : qsTr("Test network (v4)")
                 bgColor: Theme.color.green
             }
         },
@@ -79,7 +79,7 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Signet") : qsTr("Signet Network")
+                text: shorten ? qsTr("Signet") : qsTr("Signet network")
                 bgColor: Theme.color.amber
                 textColor: Theme.color.neutral0
             }
@@ -89,7 +89,7 @@ Control {
             PropertyChanges {
                 target: root
                 visible: true
-                text: shorten ? qsTr("Regtest") : qsTr("Regtest Mode")
+                text: shorten ? qsTr("Regtest") : qsTr("Regtest mode")
                 bgColor: Theme.color.blue
             }
         }

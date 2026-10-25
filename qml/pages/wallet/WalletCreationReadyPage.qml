@@ -54,7 +54,7 @@ OnboardingView {
                 Layout.fillWidth: true
                 text: qsTr("BACKUP")
                 color: Theme.color.neutral6
-                font: Theme.text.captionStrong.font
+                textStyle: Theme.text.captionStrong
                 horizontalAlignment: Text.AlignLeft
             }
 
@@ -81,7 +81,7 @@ OnboardingView {
                     Layout.fillWidth: true
                     text: walletController.walletLocationOpenError
                     color: Theme.color.red
-                    font: Theme.text.caption.font
+                    textStyle: Theme.text.caption
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignLeft
                 }

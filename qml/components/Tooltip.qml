@@ -121,7 +121,7 @@ Item {
             objectName: root.textObjectName
             text: ""
             color: root.textColor
-            font: root.textStyle.font
+            textStyle: root.textStyle
             wrapMode: Text.NoWrap
             elide: Text.ElideRight
             Layout.fillWidth: true
