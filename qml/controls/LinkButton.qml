@@ -36,7 +36,7 @@ AbstractButton {
         CoreText {
             Layout.fillWidth: true
             text: root.text
-            font: root.textStyle.font
+            textStyle: root.textStyle
             color: root.textColor
             horizontalAlignment: Text.AlignHCenter
         }

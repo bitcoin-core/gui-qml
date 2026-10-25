@@ -92,9 +92,7 @@ DialogPopup {
                             CoreText {
                                 Layout.fillWidth: true
                                 text: bannedPeerRow.address
-                                font: Theme.text.monoDescription.font
-                                lineHeight: Theme.text.monoDescription.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.monoDescription
                                 color: Theme.color.neutral9
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideMiddle
@@ -103,9 +101,7 @@ DialogPopup {
                             CoreText {
                                 Layout.fillWidth: true
                                 text: qsTr("Until %1").arg(bannedPeerRow.banUntil)
-                                font: Theme.text.caption.font
-                                lineHeight: Theme.text.caption.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 color: Theme.color.neutral6
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
@@ -127,7 +123,7 @@ DialogPopup {
                 anchors.centerIn: parent
                 visible: bannedPeersList.count === 0
                 text: qsTr("No banned peers")
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 color: Theme.color.neutral6
             }
         }

@@ -109,9 +109,7 @@ Page {
             CoreText {
                 Layout.fillWidth: true
                 text: qsTr("Transaction sent")
-                font: Theme.text.headline.font
-                lineHeight: Theme.text.headline.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.headline
                 horizontalAlignment: Text.AlignHCenter
             }
 
@@ -120,9 +118,7 @@ Page {
                 Layout.fillWidth: true
                 text: root.descriptionText
                 color: Theme.color.neutral7
-                font: Theme.text.description.font
-                lineHeight: Theme.text.description.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignHCenter
             }
         }

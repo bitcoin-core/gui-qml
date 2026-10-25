@@ -123,7 +123,7 @@ SettingsPage {
                 labelObjectName: "walletPasswordCurrentLabel"
                 fieldObjectName: "walletPasswordCurrentField"
                 visibilityToggleObjectName: "walletPasswordCurrentVisibilityToggle"
-                placeholderText: qsTr("Enter current password...")
+                placeholderText: qsTr("Enter current password…")
                 fieldBackgroundColor: Theme.color.neutral2
                 onTextEdited: root.clearResult()
                 onAccepted: newPassword.field.forceActiveFocus()
@@ -137,7 +137,7 @@ SettingsPage {
                 labelObjectName: "walletPasswordNewLabel"
                 fieldObjectName: "walletPasswordNewField"
                 visibilityToggleObjectName: "walletPasswordNewVisibilityToggle"
-                placeholderText: root.updating ? qsTr("Enter new password...") : qsTr("Enter password...")
+                placeholderText: root.updating ? qsTr("Enter new password…") : qsTr("Enter password…")
                 fieldBackgroundColor: Theme.color.neutral2
                 onTextEdited: root.clearResult()
                 onAccepted: confirmPassword.field.forceActiveFocus()
@@ -151,7 +151,7 @@ SettingsPage {
                 labelObjectName: "walletPasswordConfirmLabel"
                 fieldObjectName: "walletPasswordConfirmField"
                 visibilityToggleObjectName: "walletPasswordConfirmVisibilityToggle"
-                placeholderText: root.updating ? qsTr("Enter new password again...") : qsTr("Enter password again...")
+                placeholderText: root.updating ? qsTr("Enter new password again…") : qsTr("Enter password again…")
                 fieldBackgroundColor: Theme.color.neutral2
                 onTextEdited: root.clearResult()
             }

@@ -28,7 +28,7 @@ NeutralButton {
         CoreText {
             id: label
             text: root.text
-            font: root.textStyle.font
+            textStyle: root.textStyle
             color: root.textColor
         }
         Icon {

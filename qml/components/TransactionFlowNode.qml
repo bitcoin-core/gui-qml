@@ -55,26 +55,33 @@ Rectangle {
         y: 12
         width: parent.width - 32
         spacing: Theme.space.s
-        RowLayout {
+        Item {
             Layout.fillWidth: true
-            spacing: Theme.space.ml
+            implicitHeight: Math.max(flowTitle.implicitHeight, flowAmount.visible ? flowAmount.implicitHeight : 0)
             CoreText {
-                Layout.fillWidth: true
+                id: flowTitle
+                objectName: "transactionFlowTitle"
+                width: Math.max(0, parent.width - (flowAmount.visible ? flowAmount.width + Theme.space.ml : 0))
+                height: parent.height
                 text: root.title
                 textFormat: Text.PlainText
                 color: root.accentColor
-                font: Theme.text.captionStrong.font
+                textStyle: Theme.text.captionStrong
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
             }
             BitcoinAmountDisplayLabel {
+                id: flowAmount
                 objectName: "transactionFlowAmountWide"
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.min(implicitWidth, parent.width)
                 displayUnit: root.displayUnit
                 visible: !root.compact
                 // Amounts being reviewed or confirmed never roll through other digits.
                 animateUnitChanges: false
                 text: root.amountText
-                font: Theme.text.monoCaption.font
+                textStyle: Theme.text.amountCaption
             }
         }
         BitcoinAmountDisplayLabel {
@@ -84,7 +91,7 @@ Rectangle {
             animateUnitChanges: false
             Layout.fillWidth: true
             text: root.amountText
-            font: Theme.text.monoCaption.font
+            textStyle: Theme.text.amountCaption
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
         }
@@ -112,7 +119,7 @@ Rectangle {
                 : root.entry.kind === "coinbase" ? qsTr("Newly mined bitcoin")
                 : root.entry.previousTxid ? String(root.entry.previousTxid).substring(0, 8) + "…:" + root.entry.previousOutputIndex
                 : qsTr("No standard address")
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             color: Theme.color.neutral7
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
@@ -129,7 +136,7 @@ Rectangle {
                 id: dataTypeLabel
                 anchors.centerIn: parent
                 text: root.entry.dataType || ""
-                font: Theme.text.captionStrong.font
+                textStyle: Theme.text.captionStrong
                 color: Theme.color.neutral8
                 textFormat: Text.PlainText
             }
@@ -141,7 +148,7 @@ Rectangle {
             Layout.minimumWidth: 0
             text: root.dataText
             textFormat: Text.PlainText
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             color: Theme.color.neutral7
             horizontalAlignment: Text.AlignLeft
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
@@ -173,11 +180,11 @@ Rectangle {
                         Layout.fillWidth: true
                         text: qsTr("Payment request #%1").arg(modelData.requestId || "")
                         color: Theme.color.lavender
-                        font: Theme.text.caption.font
+                        textStyle: Theme.text.caption
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideRight
                     }
-                    CoreText { text: "→"; color: Theme.color.lavender; font: Theme.text.caption.font }
+                    CoreText { text: "→"; color: Theme.color.lavender; textStyle: Theme.text.caption }
                 }
                 leftPadding: Theme.space.m
                 rightPadding: Theme.space.m

@@ -19,7 +19,19 @@ Control {
     ]
     readonly property Palette color: activePalette
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
-    readonly property TextSet text: TextSet {}
+    property string typeSetId: "core"
+    readonly property list<TypeSet> typeSets: [
+        CoreTypeSet { id: coreTypeSet }
+    ]
+    readonly property TypeSet typeSet: typeSetFor(typeSetId)
+    // The Display setting's money font; the preinit window's options model has none.
+    readonly property var moneyFont: typeof optionsModel !== "undefined" && optionsModel
+        && optionsModel.moneyFont !== undefined ? optionsModel.moneyFont : null
+    readonly property TextSet text: TextSet {
+        typeSet: root.typeSet
+        moneyFamily: root.moneyFont ? root.moneyFont.family : root.typeSet.monoFamily
+        moneyWeight: root.moneyFont ? root.moneyFont.weight : root.typeSet.monoWeight
+    }
     readonly property MotionSet motion: MotionSet { reduceRequested: root.reduceMotion }
     readonly property SpaceSet space: SpaceSet {}
     readonly property RadiusSet radius: RadiusSet {}
@@ -49,6 +61,13 @@ Control {
             if (palettes[i].paletteId === id) return palettes[i]
         }
         return fallbackDark ? coreDark : coreLight
+    }
+
+    function typeSetFor(id) {
+        for (let i = 0; i < typeSets.length; ++i) {
+            if (typeSets[i].typeSetId === id) return typeSets[i]
+        }
+        return coreTypeSet
     }
 
     onPaletteIdChanged: {
@@ -207,7 +226,7 @@ Control {
 
     component TextStyle: QtObject {
         required property string family
-        required property string styleName
+        required property int weight
         required property int pixelSize
 
         // Default line height is 140% of pixelSize; each role overrides with the spec value.
@@ -216,7 +235,7 @@ Control {
 
         readonly property font font: Qt.font({
             family: family,
-            styleName: styleName,
+            weight: weight,
             pixelSize: pixelSize
         })
     }
@@ -241,43 +260,49 @@ Control {
 
     component TextSet: QtObject {
         id: textSetRoot
-        readonly property string family: "BitcoinCoreSans"
-        readonly property string monoFamily: "Roboto Mono"
+        required property TypeSet typeSet
+        required property string moneyFamily
+        required property int moneyWeight
+        readonly property string family: typeSet.family
+        readonly property string monoFamily: typeSet.monoFamily
+        readonly property int regularWeight: typeSet.regularWeight
+        readonly property int strongWeight: typeSet.strongWeight
+        readonly property int monoWeight: typeSet.monoWeight
 
         // Headers — Semi Bold
         readonly property TextStyle display: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 36
             lineHeight: 44
         }
         readonly property TextStyle headline: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 28
             lineHeight: 34
         }
         readonly property TextStyle title: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 24
             lineHeight: 28
         }
         readonly property TextStyle subtitle: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 21
             lineHeight: 25
         }
         readonly property TextStyle heading: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 18
             lineHeight: 21
         }
         readonly property TextStyle subheading: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 15
             lineHeight: 18
         }
@@ -285,37 +310,37 @@ Control {
         // Body — Regular
         readonly property TextStyle lead: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 24
             lineHeight: 36
         }
         readonly property TextStyle bodyLarge: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 21
             lineHeight: 31
         }
         readonly property TextStyle body: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 18
             lineHeight: 27
         }
         readonly property TextStyle description: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 15
             lineHeight: 22
         }
         readonly property TextStyle caption: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 13
             lineHeight: 19
         }
         readonly property TextStyle captionStrong: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 13
             lineHeight: 19
         }
@@ -323,13 +348,13 @@ Control {
         // Controls
         readonly property TextStyle button: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 18
             lineHeight: 22
         }
         readonly property TextStyle buttonStrong: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 18
             lineHeight: 22
         }
@@ -337,39 +362,65 @@ Control {
         // Menu
         readonly property TextStyle menuItem: TextStyle {
             family: textSetRoot.family
-            styleName: "Regular"
+            weight: textSetRoot.regularWeight
             pixelSize: 15
             lineHeight: 22
         }
         readonly property TextStyle menuItemStrong: TextStyle {
             family: textSetRoot.family
-            styleName: "Semi Bold"
+            weight: textSetRoot.strongWeight
             pixelSize: 15
             lineHeight: 22
         }
 
-        // Mono — Roboto Mono Regular
+        // Mono: technical values (addresses, txids, paths, sizes)
         readonly property TextStyle monoLead: TextStyle {
             family: textSetRoot.monoFamily
-            styleName: "Regular"
+            weight: textSetRoot.monoWeight
             pixelSize: 24
             lineHeight: 36
         }
         readonly property TextStyle monoBody: TextStyle {
             family: textSetRoot.monoFamily
-            styleName: "Regular"
+            weight: textSetRoot.monoWeight
             pixelSize: 18
             lineHeight: 27
         }
         readonly property TextStyle monoDescription: TextStyle {
             family: textSetRoot.monoFamily
-            styleName: "Regular"
+            weight: textSetRoot.monoWeight
             pixelSize: 15
             lineHeight: 22
         }
         readonly property TextStyle monoCaption: TextStyle {
             family: textSetRoot.monoFamily
-            styleName: "Regular"
+            weight: textSetRoot.monoWeight
+            pixelSize: 13
+            lineHeight: 19
+        }
+
+        // Amounts: the Display setting's money font
+        readonly property TextStyle amountLead: TextStyle {
+            family: textSetRoot.moneyFamily
+            weight: textSetRoot.moneyWeight
+            pixelSize: 24
+            lineHeight: 36
+        }
+        readonly property TextStyle amountBody: TextStyle {
+            family: textSetRoot.moneyFamily
+            weight: textSetRoot.moneyWeight
+            pixelSize: 18
+            lineHeight: 27
+        }
+        readonly property TextStyle amountDescription: TextStyle {
+            family: textSetRoot.moneyFamily
+            weight: textSetRoot.moneyWeight
+            pixelSize: 15
+            lineHeight: 22
+        }
+        readonly property TextStyle amountCaption: TextStyle {
+            family: textSetRoot.moneyFamily
+            weight: textSetRoot.moneyWeight
             pixelSize: 13
             lineHeight: 19
         }

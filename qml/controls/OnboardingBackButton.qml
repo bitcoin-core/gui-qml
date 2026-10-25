@@ -27,7 +27,7 @@ NeutralButton {
             x: backChevron.width - 3
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
-            font: Theme.text.captionStrong.font
+            textStyle: Theme.text.captionStrong
             color: root.textColor
             wrap: false
         }

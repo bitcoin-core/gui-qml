@@ -14,7 +14,7 @@ AlertPopup {
     property string titleText: qsTr("Wallet update required")
     property string descriptionText: ""
     property string confirmText: qsTr("Update wallet")
-    property string busyConfirmText: qsTr("Updating...")
+    property string busyConfirmText: qsTr("Updating…")
     property string cancelButtonObjectName: ""
     property string confirmButtonObjectName: ""
 

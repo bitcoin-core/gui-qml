@@ -52,14 +52,14 @@ AbstractButton {
             CoreText {
                 Layout.fillWidth: true
                 text: root.title
-                font: Theme.text.subheading.font
+                textStyle: Theme.text.subheading
                 color: Theme.color.neutral9
                 horizontalAlignment: Text.AlignLeft
             }
             CoreText {
                 Layout.fillWidth: true
                 text: root.description
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignLeft
                 wrapMode: Text.WordWrap

@@ -178,7 +178,7 @@ DesignSystemSection {
         DesignSystemState {
             label: "REGTEST, shorten: true"
             NetworkIndicator {
-                textSize: 11
+                textStyle: Theme.text.caption
                 shorten: true
                 chainModelRef: QtObject { readonly property string networkName: "REGTEST" }
             }

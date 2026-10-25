@@ -115,7 +115,7 @@ Controls.CheckBox {
         leftPadding: root.indicator.width + root.spacing
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignLeft
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
         color: root.enabled ? Theme.color.neutral7 : Theme.color.neutral5
         wrapMode: Text.WordWrap
     }

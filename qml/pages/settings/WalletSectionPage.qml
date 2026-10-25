@@ -117,7 +117,7 @@ SettingsPage {
         visible: !root.walletLoaded
         Layout.preferredWidth: 220
         Layout.alignment: Qt.AlignHCenter
-        text: root.noWalletsAvailable ? qsTr("Add wallet") : qsTr("Select wallet")
+        text: root.noWalletsAvailable ? qsTr("Add wallet…") : qsTr("Select wallet…")
         onClicked: root.selectWalletRequested()
     }
 

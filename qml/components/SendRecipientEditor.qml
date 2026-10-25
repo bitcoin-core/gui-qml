@@ -67,7 +67,7 @@ ColumnLayout {
         CoreText {
             Layout.fillWidth: true
             text: qsTr("Payment request")
-            font: Theme.text.description.font
+            textStyle: Theme.text.description
             color: Theme.color.neutral7
             horizontalAlignment: Text.AlignLeft
         }

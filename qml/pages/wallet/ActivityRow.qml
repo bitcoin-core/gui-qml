@@ -186,9 +186,7 @@ Item {
                         objectName: "activityRowLabel"
                         width: Math.min(implicitWidth, Math.max(0, parent.width - (requestBadge.visible ? 26 : 0)))
                         text: root.displayLabel
-                        font: Theme.text.subheading.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.subheading
                         color: root.isInactive ? Theme.color.neutral6 : Theme.color.neutral9
                         horizontalAlignment: Text.AlignLeft
                         wrap: false
@@ -224,9 +222,7 @@ Item {
                     objectName: "activityRowMetadata"
                     Layout.fillWidth: true
                     text: root.metadata
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
@@ -314,11 +310,7 @@ Item {
                                 objectName: "activityActionLabel"
                                 width: Math.min(implicitWidth, Math.max(0, parent.width - (childBadge.visible ? 26 : 0)))
                                 text: childRow.actionLabel
-                                font.family: Theme.text.caption.family
-                                font.styleName: Theme.text.caption.styleName
-                                font.pixelSize: 14
-                                lineHeight: 20
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 color: root.isInactive ? Theme.color.neutral6 : Theme.color.neutral9
                                 horizontalAlignment: Text.AlignLeft
                                 wrap: false
@@ -355,11 +347,7 @@ Item {
                             Layout.fillWidth: true
                             text: childRow.modelData.direction === TransactionActivityModel.ReceiveAction ? qsTr("Received")
                                 : childRow.modelData.direction === TransactionActivityModel.InternalAction ? qsTr("Internal") : qsTr("Sent")
-                            font.family: Theme.text.caption.family
-                            font.styleName: Theme.text.caption.styleName
-                            font.pixelSize: 12
-                            lineHeight: 17
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.caption
                             color: Theme.color.neutral6
                             horizontalAlignment: Text.AlignLeft
                         }
@@ -369,8 +357,7 @@ Item {
                             text: childRow.modelData.amount
                             color: Theme.color.neutral7
                             horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 14
-                            lineHeight: 20
+                            textStyle: Theme.text.amountCaption
                         }
                     }
                     AmountText {
@@ -379,8 +366,7 @@ Item {
                         Layout.preferredWidth: root.amountWidth
                         text: childRow.modelData.amount
                         color: Theme.color.neutral7
-                        font.pixelSize: 14
-                        lineHeight: 20
+                        textStyle: Theme.text.amountCaption
                     }
                     // Keep amounts aligned with the parent despite the tighter child spacing.
                     Item {
@@ -414,11 +400,7 @@ Item {
     }
 
     component AmountText: BitcoinAmountDisplayLabel {
-        font.family: optionsModel.moneyFont.family
-        font.weight: optionsModel.moneyFont.weight
-        font.pixelSize: Theme.text.description.pixelSize
-        lineHeight: Theme.text.description.lineHeight
-        lineHeightMode: Text.FixedHeight
+        textStyle: Theme.text.amountDescription
         horizontalAlignment: Text.AlignRight
         wrap: false
         elide: Text.ElideRight

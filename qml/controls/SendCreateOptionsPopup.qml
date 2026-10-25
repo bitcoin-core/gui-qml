@@ -21,7 +21,7 @@ ContextMenu {
 
     ContextMenuButton {
         objectName: "sendOptionsOpenPaymentRequestButton"
-        text: qsTr("Open payment request")
+        text: qsTr("Open payment request…")
         autoClose: true
         onTriggered: root.openPaymentRequest()
     }
@@ -30,7 +30,7 @@ ContextMenu {
 
     ContextMenuButton {
         objectName: "sendImportPsbtFromFileButton"
-        text: qsTr("Import PSBT from file…")
+        text: qsTr("Import PSBT…")
         onTriggered: root.importPsbtFromFileRequested()
     }
 

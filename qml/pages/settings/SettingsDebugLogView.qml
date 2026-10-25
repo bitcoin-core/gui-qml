@@ -271,7 +271,7 @@ SettingsPage {
                 visible: logList.count === 0 && debugLogModel.logAvailable
                 text: root.emptyMessage()
                 color: Theme.color.neutral7
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }

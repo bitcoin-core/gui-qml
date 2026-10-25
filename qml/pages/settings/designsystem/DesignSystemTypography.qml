@@ -20,11 +20,26 @@ DesignSystemSection {
         return names
     }
 
+    function weightName(weight) {
+        return weight === Font.DemiBold ? "DemiBold" : weight === Font.Normal ? "Normal" : String(weight)
+    }
+
     readonly property var textRoles: roleNames(Theme.text)
 
     title: "Typography"
-    description: "Every Theme.text role in the active type set (" + Theme.text.family + ", " + Theme.text.monoFamily
-        + "), read from the TextSet. The shaded box is the line box set by lineHeight."
+    description: "Every Theme.text role, read from the TextSet and applied with CoreText.textStyle. "
+        + "Amount roles follow the Display setting's money font. The shaded box is the line box set by lineHeight."
+
+    CoreText {
+        objectName: "designSystemTypeSet"
+        Layout.fillWidth: true
+        text: "TypeSet \"" + Theme.typeSet.typeSetId + "\" · sans " + Theme.text.family
+            + " · mono " + Theme.text.monoFamily + " · money " + Theme.text.amountBody.family
+            + " · weights " + root.weightName(Theme.text.regularWeight) + "/" + root.weightName(Theme.text.strongWeight)
+        color: Theme.color.neutral7
+        textStyle: Theme.text.monoCaption
+        horizontalAlignment: Text.AlignLeft
+    }
 
     // Positioners keep changing Repeater delegates out of the Qt 6.4 layout engine.
     Column {
@@ -59,9 +74,7 @@ DesignSystemSection {
                         width: parent.width
                         text: typographySample.modelData
                         color: Theme.color.neutral9
-                        font: typographySample.textStyle.font
-                        lineHeight: typographySample.textStyle.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: typographySample.textStyle
                         horizontalAlignment: Text.AlignLeft
                         wrap: false
                         elide: Text.ElideRight
@@ -70,12 +83,10 @@ DesignSystemSection {
 
                 CoreText {
                     Layout.fillWidth: true
-                    text: typographySample.textStyle.family + " " + typographySample.textStyle.styleName
+                    text: typographySample.textStyle.family + " " + root.weightName(typographySample.textStyle.weight)
                         + " · " + typographySample.textStyle.pixelSize + "/" + typographySample.textStyle.lineHeight
                     color: Theme.color.neutral7
-                    font: Theme.text.monoCaption.font
-                    lineHeight: Theme.text.monoCaption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.monoCaption
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     elide: Text.ElideRight

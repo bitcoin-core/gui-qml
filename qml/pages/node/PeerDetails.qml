@@ -173,9 +173,7 @@ Page {
                         spacing: 10
                         CoreText {
                             text: details ? qsTr("Peer #%1").arg(details.nodeId) : qsTr("Peer")
-                            font: Theme.text.headline.font
-                            lineHeight: Theme.text.headline.lineHeight
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.headline
                             color: Theme.color.neutral9
                             horizontalAlignment: Text.AlignLeft
                             wrap: false
@@ -184,9 +182,7 @@ Page {
                     CoreText {
                         Layout.fillWidth: true
                         text: details ? details.address : ""
-                        font: Theme.text.monoDescription.font
-                        lineHeight: Theme.text.monoDescription.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.monoDescription
                         color: Theme.color.neutral6
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideMiddle
@@ -416,9 +412,7 @@ Page {
             width: parent.width
             leftPadding: root.compact ? 4 : 8
             text: parent.title
-            font: Theme.text.subheading.font
-            lineHeight: Theme.text.subheading.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.subheading
             color: Theme.color.neutral8
             horizontalAlignment: Text.AlignLeft
         }

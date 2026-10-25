@@ -194,9 +194,7 @@ SettingsPage {
                     Layout.fillWidth: true
                     text: root.signVerifyModel ? root.signVerifyModel.signingError : ""
                     color: Theme.color.red
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     wrap: true
                 }
 
@@ -316,7 +314,7 @@ SettingsPage {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter the wallet password to sign this message.")
         confirmText: qsTr("Unlock and sign")
-        busyConfirmText: qsTr("Signing...")
+        busyConfirmText: qsTr("Signing…")
         onSubmitted: (passphrase) => {
             signPassphrasePopup.busy = true
             if (root.signVerifyModel.signMessageWithPassphrase(

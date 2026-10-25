@@ -14,8 +14,8 @@ FormRow {
     property int valueMaximumWidth: 260
     property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color valueIconColor: valueColor
-    property var valueTextStyle: Theme.text.description
     property bool amountValue: false
+    property var valueTextStyle: amountValue ? Theme.text.amountDescription : Theme.text.description
     property string valueUnit: ""
     property bool animateUnitChanges: true
 
@@ -28,9 +28,7 @@ FormRow {
             Layout.maximumWidth: root.valueMaximumWidth
             text: root.value
             color: root.valueColor
-            font: root.valueTextStyle.font
-            lineHeight: root.valueTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
             wrap: false
             elide: Text.ElideMiddle
@@ -44,9 +42,7 @@ FormRow {
             unit: root.value === "—" ? "" : root.valueUnit
             animateUnitChanges: root.animateUnitChanges
             color: root.valueColor
-            font: root.valueTextStyle.font
-            lineHeight: root.valueTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
             wrap: false
             elide: Text.ElideMiddle

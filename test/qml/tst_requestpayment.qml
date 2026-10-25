@@ -248,7 +248,7 @@ TestCase {
         verify(amountOption.selected)
         verify(messageOption.selected)
         verify(!recipientOption.selected)
-        compare(recipientOption.text, "Recipient Name")
+        compare(recipientOption.text, "Recipient name")
 
         mouseClick(recipientOption)
         verify(recipient.visible)
@@ -402,7 +402,7 @@ TestCase {
         const menu = findChild(page, "receiveAddressTypeMenu")
         tryCompare(menu, "opened", true)
         const picker = findChild(page, "receiveAddressTypePicker")
-        compare(picker.title, "Address Type")
+        compare(picker.title, "Address type")
         compare(picker.model.length, 4)
         tryVerify(function() { return picker.itemAtIndex(3) !== null })
         for (let i = 0; i < 4; ++i) {
@@ -468,7 +468,7 @@ TestCase {
         mouseClick(findChild(card, "requestPaymentQRContextArea"), 20, 20, Qt.RightButton)
         tryCompare(requestMenu, "opened", true)
         compare(findChild(card, "requestPaymentQRContextCopy").text, "Copy QR code")
-        compare(findChild(card, "requestPaymentQRContextSave").text, "Save QR code")
+        compare(findChild(card, "requestPaymentQRContextSave").text, "Save QR code…")
         card.request.paymentReceived = true
         tryCompare(requestMenu, "visible", false)
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)

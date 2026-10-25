@@ -18,8 +18,6 @@ InfoBanner {
     contentSpacing: 10
     iconSize: Theme.size.icon.xl
     textRightMargin: iconSize
-    messageFontPixelSize: 15
-    messageLineHeight: 21
     backgroundColor: Qt.rgba(Theme.color.blue.r, Theme.color.blue.g, Theme.color.blue.b, 0.25)
     iconColor: Theme.color.blue
     messageColor: Theme.color.blue

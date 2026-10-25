@@ -96,12 +96,7 @@ Item {
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            // Bind font properties directly for older Qt versions.
-            font.family: Theme.text.captionStrong.family
-            font.styleName: Theme.text.captionStrong.styleName
-            font.pixelSize: Theme.text.captionStrong.pixelSize
-            lineHeight: Theme.text.captionStrong.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.captionStrong
             wrap: false
             color: Theme.color.neutral6
         }
@@ -170,9 +165,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: _row.rowText
                                 horizontalAlignment: Text.AlignLeft
-                                font: Theme.text.menuItem.font
-                                lineHeight: Theme.text.menuItem.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.menuItem
                                 wrap: false
                                 elide: Text.ElideRight
                                 color: _row._highlighted ? _row._hoverColor : _row._idleColor
@@ -184,9 +177,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: _row.subtitle
                                 horizontalAlignment: Text.AlignLeft
-                                font: Theme.text.caption.font
-                                lineHeight: Theme.text.caption.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 wrap: false
                                 elide: Text.ElideRight
                                 color: Theme.color.neutral6

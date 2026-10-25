@@ -35,8 +35,6 @@ Button {
     property int backgroundRadius: Theme.radius.s
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
-    property int textFontPixelSize: textStyle.pixelSize
-    property string textFontStyleName: textStyle.styleName
 
     contentItem: Item {
         implicitWidth: contentRow.implicitWidth
@@ -71,9 +69,7 @@ Button {
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
                 color: root.textColor
-                bold: root.bold
-                fontStyleName: root.textFontStyleName
-                font.pixelSize: root.textFontPixelSize
+                textStyle: root.textStyle
             }
         }
     }

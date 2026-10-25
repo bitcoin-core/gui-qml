@@ -51,7 +51,7 @@ OnboardingView {
             objectName: "walletTypeViewOnly"
             Layout.fillWidth: true
             enabled: !root.importingWallet
-            title: qsTr("View-only")
+            title: qsTr("Watch-only")
             description: qsTr("Keep an eye on another wallet you have.")
             iconSource: "image://images/visible-filled"
             onClicked: root.watchOnlySelected()
@@ -63,7 +63,7 @@ OnboardingView {
             visible: walletController.canCreateExternalSignerWallet
             title: walletController.externalSignerName.length > 0
                 ? qsTr("External signer") : qsTr("Hardware wallet")
-            description: qsTr("Sign with a connected device")
+            description: qsTr("Sign with a connected device.")
             iconSource: "image://images/devices-filled"
             onClicked: root.externalSignerSelected()
         }

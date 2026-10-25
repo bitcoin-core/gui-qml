@@ -22,34 +22,27 @@ DesignSystemSection {
         name: "BitcoinAmountDisplayLabel"
 
         DesignSystemState {
-            label: "monoBody, BTC"
+            label: "amountBody, BTC"
             BitcoinAmountDisplayLabel {
                 amount: "0.00150000"
                 unit: "BTC"
-                font: Theme.text.monoBody.font
-                lineHeight: Theme.text.monoBody.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.amountBody
             }
         }
         DesignSystemState {
-            label: "description, sats"
+            label: "default (amountDescription), sats"
             BitcoinAmountDisplayLabel {
                 amount: "150,000"
                 unit: "sats"
-                font: Theme.text.description.font
-                lineHeight: Theme.text.description.lineHeight
-                lineHeightMode: Text.FixedHeight
                 color: Theme.color.neutral7
             }
         }
         DesignSystemState {
-            label: "headline"
+            label: "amountLead"
             BitcoinAmountDisplayLabel {
                 amount: "1.25000000"
                 unit: "BTC"
-                font: Theme.text.headline.font
-                lineHeight: Theme.text.headline.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.amountLead
             }
         }
     }

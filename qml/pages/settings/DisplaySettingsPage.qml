@@ -85,7 +85,7 @@ SettingsPage {
                         description: qsTr("Included with Bitcoin Core")
                     },
                     {
-                        text: qsTr("System Monospace"),
+                        text: qsTr("System monospace"),
                         value: "best_system",
                         description: qsTr("Uses your operating system’s default monospaced font")
                     }
@@ -154,7 +154,7 @@ SettingsPage {
             trailingItem: CoreText {
                 text: optionsModel.languageLabel(optionsModel.language)
                 color: Theme.color.neutral7
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
             }
             onClicked: root.StackView.view.push(languagePage)
         }
@@ -222,6 +222,7 @@ SettingsPage {
                 objectName: "thirdPartyTransactionUrlsInput"
                 Layout.fillWidth: true
                 text: optionsModel.thirdPartyTransactionUrls
+                font: Theme.text.monoDescription.font
                 placeholderText: "https://example.com/tx/%s"
                 onEditingFinished: optionsModel.thirdPartyTransactionUrls = text
             }

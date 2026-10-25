@@ -21,9 +21,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.name
         color: Theme.color.neutral9
-        font: Theme.text.captionStrong.font
-        lineHeight: Theme.text.captionStrong.lineHeight
-        lineHeightMode: Text.FixedHeight
+        textStyle: Theme.text.subheading
         horizontalAlignment: Text.AlignLeft
         wrap: false
         elide: Text.ElideRight
@@ -34,9 +32,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.note
         color: Theme.color.neutral7
-        font: Theme.text.caption.font
-        lineHeight: Theme.text.caption.lineHeight
-        lineHeightMode: Text.FixedHeight
+        textStyle: Theme.text.caption
         horizontalAlignment: Text.AlignLeft
         wrap: true
     }

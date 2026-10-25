@@ -14,7 +14,7 @@ Page {
     id: root
     objectName: "sendTransactionReviewPage"
     background: Rectangle { color: Theme.color.background }
-    title: qsTr("Review Transaction")
+    title: qsTr("Review transaction")
 
     property WalletQmlModel wallet: null
     readonly property WalletQmlModelTransaction transaction: wallet ? wallet.currentTransaction : null
@@ -145,12 +145,8 @@ Page {
         rightPadding: leftPadding
         topPadding: 16
         bottomPadding: 12
-        centerItem: CoreText {
-            objectName: "sendTransactionReviewTitle"
-            text: root.title
-            font: Theme.text.heading.font
-            wrap: false
-        }
+        title: root.title
+        titleObjectName: "sendTransactionReviewTitle"
         rightItem: CloseButton {
             id: reviewCloseButton
             objectName: "sendTransactionReviewCloseButton"
@@ -218,8 +214,6 @@ Page {
                 Layout.fillWidth: true
                 backgroundColor: Theme.color.neutral1
                 contentMargin: 20
-                messageFontPixelSize: Theme.text.description.font.pixelSize
-                messageLineHeight: Theme.text.description.lineHeight
                 message: root.reviewMessage.length ? root.reviewMessage
                     : qsTr("This wallet does not have the keys to sign this transaction.")
             }
@@ -258,7 +252,7 @@ Page {
                                 objectName: "sendTransactionReviewRecipient" + index + "Amount"
                                 text: modelData.amount
                                 animateUnitChanges: false
-                                font: Theme.text.monoDescription.font
+                                textStyle: Theme.text.amountDescription
                                 color: Theme.color.neutral9
                             }
                         }
@@ -284,6 +278,7 @@ Page {
                     title: qsTr("Fee rate")
                     value: root.transaction && root.transaction.reviewFeeRate.length > 0
                         ? qsTr("%1 sat/vB").arg(root.transaction.reviewFeeRate) : "—"
+                    valueTextStyle: Theme.text.monoDescription
                     showDivider: false
                 }
             }
@@ -373,7 +368,7 @@ Page {
                 Layout.fillWidth: true
                 text: root.wallet ? root.wallet.transactionError : ""
                 color: Theme.color.red
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 wrap: true
             }
 
@@ -414,7 +409,7 @@ Page {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to send this transaction.")
         confirmText: qsTr("Unlock and send")
-        busyConfirmText: qsTr("Unlocking...")
+        busyConfirmText: qsTr("Unlocking…")
         property WalletQmlModelTransaction reviewedTransaction: null
         onSubmitted: (passphrase) => {
             if (!root.isCurrentTransaction(reviewedTransaction)) {

@@ -56,7 +56,7 @@ ApplicationWindow {
         color: Theme.color.blue
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        font.pixelSize: 15
+        textStyle: Theme.text.description
     }
 
     Item {
