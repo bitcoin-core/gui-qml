@@ -317,7 +317,7 @@ DialogPopup {
                         onClicked: actionDelegate.triggerAction()
                     }
 
-                    ContinueButton {
+                    PrimaryButton {
                         id: primaryButton
                         anchors.fill: parent
                         horizontalPadding: Theme.space.xl
