@@ -340,7 +340,7 @@ Page {
                     text: qsTr("Save transaction")
                     onClicked: root.startSavePsbt()
                 }
-                ContinueButton {
+                PrimaryButton {
                     objectName: "sendTransactionReviewSendButton"
                     visible: (root.showSend && !externalSignerActions.visible) || root.showBroadcast
                     enabled: !root.sending

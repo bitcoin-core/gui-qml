@@ -56,7 +56,7 @@ Item {
         layoutDirection: Qt.RightToLeft
         spacing: Theme.space.ml
 
-        ContinueButton {
+        PrimaryButton {
             id: primaryButton
             objectName: root.primaryButtonObjectName
             visible: root.primaryText.length > 0

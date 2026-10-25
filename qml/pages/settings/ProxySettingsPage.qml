@@ -195,7 +195,7 @@ SettingsPage {
         }
     }
 
-    ContinueButton {
+    PrimaryButton {
         objectName: "proxySettingsSaveButton"
         Layout.alignment: Qt.AlignRight
         Layout.preferredWidth: 140

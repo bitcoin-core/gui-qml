@@ -18,29 +18,29 @@ DesignSystemSection {
     description: "Each button in the states its properties support. Hover, press and Tab to see the interactive states."
 
     DesignSystemSpecimen {
-        objectName: "designSystemContinueButton"
+        objectName: "designSystemPrimaryButton"
         Layout.fillWidth: true
-        name: "ContinueButton"
+        name: "PrimaryButton"
 
         DesignSystemState {
             label: "rest"
-            ContinueButton { Layout.preferredWidth: 180; text: "Continue" }
+            PrimaryButton { Layout.preferredWidth: 180; text: "Continue" }
         }
         DesignSystemState {
             label: "iconSource"
-            ContinueButton { Layout.preferredWidth: 180; text: "Receive"; iconSource: "image://images/plus" }
+            PrimaryButton { Layout.preferredWidth: 180; text: "Receive"; iconSource: "image://images/plus" }
         }
         DesignSystemState {
             label: "busy: true"
-            ContinueButton { Layout.preferredWidth: 180; text: "Sending"; busy: true }
+            PrimaryButton { Layout.preferredWidth: 180; text: "Sending"; busy: true }
         }
         DesignSystemState {
             label: "enabled: false"
-            ContinueButton { Layout.preferredWidth: 180; text: "Continue"; enabled: false }
+            PrimaryButton { Layout.preferredWidth: 180; text: "Continue"; enabled: false }
         }
         DesignSystemState {
             label: "destructive: true"
-            ContinueButton {
+            PrimaryButton {
                 Layout.preferredWidth: 180
                 text: "Delete"
                 destructive: true
@@ -48,7 +48,7 @@ DesignSystemSection {
         }
         DesignSystemState {
             label: "destructive, enabled: false"
-            ContinueButton {
+            PrimaryButton {
                 Layout.preferredWidth: 180
                 text: "Delete"
                 enabled: false

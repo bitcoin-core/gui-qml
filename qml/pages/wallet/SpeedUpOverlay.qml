@@ -128,7 +128,7 @@ DialogPopup {
                     onClicked: root.close()
                 }
 
-                ContinueButton {
+                PrimaryButton {
                     objectName: "updateTransactionButton"
                     text: qsTr("Update transaction")
                     Layout.fillWidth: true
