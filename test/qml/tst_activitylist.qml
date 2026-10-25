@@ -248,7 +248,7 @@ TestCase {
         verify(findChild(batch, "activityAction_elisabeth") !== null)
         const icon = findChild(batch, "activityRowIcon")
         compare(icon.iconSource.toString(), "qrc:/icons/activity-send.svg")
-        compare(icon.accent, Theme.color.orange)
+        compare(icon.accent, Theme.color.txOutgoing)
         const children = findChild(batch, "activityRowChildren")
         verify(children.height >= findChild(batch, "activityAction_robert").height
             + findChild(batch, "activityAction_elisabeth").height)
@@ -262,7 +262,7 @@ TestCase {
         testTransactionActivityModel.setRows(updated)
         const incomingIcon = findChild(findRow(page, "batch"), "activityRowIcon")
         compare(incomingIcon.iconSource.toString(), "qrc:/icons/activity-receive.svg")
-        compare(incomingIcon.accent, Theme.color.green)
+        compare(incomingIcon.accent, Theme.color.txIncoming)
     }
 
     function test_whole_row_highlights_and_opens_transaction_data() {
@@ -297,7 +297,7 @@ TestCase {
         const x = target.width / 2
         const y = data.target.length > 0 ? target.height / 2 : row.height - 3
         mouseMove(target, x, y)
-        tryCompare(findChild(row, "activityRowBackground"), "color", Theme.color.neutral2)
+        tryCompare(findChild(row, "activityRowBackground"), "color", Theme.color.surface2)
         compare(findChild(row, "activityRowLabel").color, Theme.color.neutral9)
 
         mouseClick(target, x, y)
@@ -363,14 +363,14 @@ TestCase {
         verify(findChild(receive, "activityRowMetadata").text.endsWith("5 confirmations"))
         compare(findChild(receive, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-receive.svg")
         verify(!findChild(receive, "activityPendingRing").visible)
-        compare(findChild(receive, "activityRowAmount").color, Theme.color.green)
+        compare(findChild(receive, "activityRowAmount").color, Theme.color.txIncoming)
         verify(findChild(receive, "activityRowRequestBadge").visible)
         const request = findChild(page, "activityRequest_invoice")
         verify(request !== null)
         verify(findChild(request, "activityRowMetadata").text.includes("Payment request · Awaiting payment"))
         compare(findChild(request, "activityRowAmount").color, Theme.color.neutral7)
         compare(findChild(request, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-payment-request.svg")
-        compare(findChild(request, "activityRowIcon").accent, Theme.color.lavender)
+        compare(findChild(request, "activityRowIcon").accent, Theme.color.paymentRequest)
         verify(findChild(request, "activityPendingRing").visible)
         mouseClick(findChild(request, "activityRowOpenButton"))
         tryCompare(findChild(page, "paymentRequestModal"), "opened", true)
@@ -394,7 +394,7 @@ TestCase {
         verify(total !== null)
         compare(proxy.pendingBalanceSat, 10000)
         compare(total.text, "+10000 sats")
-        compare(total.color, Theme.color.green)
+        compare(total.color, Theme.color.txIncoming)
         verify(waitForRendering(page))
         fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset, 0.1)
         compare(findChild(findChild(page, "activityRequest_invoice"), "activityRowAmount").color, Theme.color.neutral7)
@@ -608,9 +608,8 @@ TestCase {
         compare(selfSend.displayLabel, "Sent to yourself")
         compare(selfSend.hasChildren, false)
         compare(findChild(selfSend, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
-        compare(findChild(selfSend, "activityRowIcon").accent, Theme.color.purple)
-        const purple = Theme.color.purple
-        compare(findChild(selfSend, "activityRowIcon").color, Qt.rgba(purple.r, purple.g, purple.b, 64 / 255))
+        compare(findChild(selfSend, "activityRowIcon").accent, Theme.color.txInternal)
+        compare(findChild(selfSend, "activityRowIcon").color, Theme.color.tint(Theme.color.txInternal))
         fixture.label = "Personal savings"
         testTransactionActivityModel.setRows([fixture])
         compare(findRow(page, "self").displayLabel, "Personal savings")
@@ -777,9 +776,9 @@ TestCase {
         verify(sent.selected && sentToSelf.selected && !all.selected)
         compare(proxy.typeFilters.length, 2)
         compare(badge.count, 1)
-        compare(button.background.color, Theme.color.orange)
-        compare(findChild(button, "dropdownButtonCaret").color, Theme.color.neutral9)
-        compare(badge.background.color, Theme.color.orange)
+        compare(button.background.color, Theme.color.activeFill)
+        compare(findChild(button, "dropdownButtonCaret").color, Theme.color.activeForeground)
+        compare(badge.background.color, Theme.color.activeFill)
         verify(findRow(page, "batch") !== null)
         verify(findRow(page, "consolidation") !== null)
         verify(findRow(page, "split") !== null)
@@ -946,8 +945,8 @@ TestCase {
         Theme.paletteId = "core-light"
         page.width = 1180
         tryCompare(receive, "compact", false)
-        tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.green)
-        compare(page.currentItem.background.color, Theme.color.neutral0)
+        tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.txIncoming)
+        compare(page.currentItem.background.color, Theme.color.background)
         Theme.paletteId = "core-dark"
     }
 }

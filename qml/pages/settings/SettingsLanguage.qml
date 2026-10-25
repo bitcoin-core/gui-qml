@@ -100,7 +100,7 @@ Page {
                     Icon {
                         visible: delegate.modelData === optionsModel.language
                         source: "image://images/check"
-                        color: Theme.color.orange
+                        color: Theme.color.neutral9
                         size: 24
                     }
                 }

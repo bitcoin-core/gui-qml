@@ -52,7 +52,7 @@ DesignSystemSection {
                 Rectangle {
                     Layout.preferredWidth: Theme.space[spaceSample.modelData]
                     Layout.preferredHeight: Theme.space.l
-                    color: Theme.color.orange
+                    color: Theme.color.accent
                 }
             }
         }
@@ -80,7 +80,7 @@ DesignSystemSection {
                     radius: Theme.radius[radiusSample.modelData]
                     color: Theme.color.surface2
                     border.width: 1
-                    border.color: Theme.color.neutral4
+                    border.color: Theme.color.controlBorder
                 }
             }
         }
@@ -96,7 +96,7 @@ DesignSystemSection {
                 radius: height / 2
                 color: Theme.color.surface2
                 border.width: 1
-                border.color: Theme.color.neutral4
+                border.color: Theme.color.controlBorder
             }
         }
     }
@@ -124,7 +124,7 @@ DesignSystemSection {
                     radius: Theme.radius.s
                     color: Theme.color.surface2
                     border.width: 1
-                    border.color: Theme.color.neutral4
+                    border.color: Theme.color.controlBorder
                 }
             }
         }

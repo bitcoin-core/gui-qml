@@ -25,16 +25,16 @@ Control {
     property string errorText: ""
     property int labelSpacing: Theme.space.s
     property int messageSpacing: Theme.space.s
-    property color labelColor: enabled ? Theme.color.neutral8 : Theme.color.neutral4
-    property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-    property color errorTextColor: Theme.color.red
+    property color labelColor: enabled ? Theme.color.neutral8 : Theme.color.disabledContent
+    property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+    property color errorTextColor: Theme.color.dangerText
     property var labelTextStyle: Theme.text.description
     property var messageTextStyle: Theme.text.caption
     property bool fieldSurface: false
     property bool fieldFocused: false
-    property color fieldBackgroundColor: Theme.color.neutral2
+    property color fieldBackgroundColor: Theme.color.surface2
     property color focusBorderColor: Theme.color.neutral6
-    property color errorBorderColor: Theme.color.red
+    property color errorBorderColor: Theme.color.danger
     readonly property color activeBorderColor: errorText.length > 0 ? errorBorderColor : focusBorderColor
     readonly property bool showFieldBorder: fieldSurface && (errorText.length > 0 || fieldFocused)
     property int fieldCornerRadius: Theme.radius.field

@@ -254,11 +254,11 @@ TestCase {
         tryVerify(function() { return row.loadedTrailingItem !== null })
         compare(row.loadedTrailingItem.objectName, "exampleSwitch")
         compare(row.loadedTrailingItem.enabled, true)
-        compare(row.dividerColor, Theme.color.neutral2)
+        compare(row.dividerColor, Theme.color.surfaceDivider)
 
         row.enabled = false
         compare(row.loadedTrailingItem.enabled, false)
-        tryCompare(findChild(row, "exampleRowTitle"), "color", Theme.color.neutral4)
+        tryCompare(findChild(row, "exampleRowTitle"), "color", Theme.color.disabledContent)
     }
 
     function test_formRowValidationChangesHeightWithoutChangingPreferredWidth() {
@@ -284,7 +284,7 @@ TestCase {
         verify(section !== null)
         const card = findChild(section, "exampleSectionCard")
         verify(card !== null)
-        compare(card.color, Theme.color.neutral1)
+        compare(card.color, Theme.color.surface1)
         compare(card.radius, 16)
         const footer = findChild(section, "exampleSectionFooter")
         verify(footer !== null)
@@ -380,14 +380,14 @@ TestCase {
         const menu = findChild(picker, "examplePickerMenu")
         verify(button !== null)
         verify(menu !== null)
-        compare(button.defaultBgColor, Theme.color.neutral1)
-        compare(button.hoverBgColor, Theme.color.neutral2)
-        compare(menu.backgroundColor, Theme.color.neutral1)
+        compare(button.defaultBgColor, Theme.color.surface1)
+        compare(button.hoverBgColor, Theme.color.surface2)
+        compare(menu.backgroundColor, Theme.color.surface1)
 
         picker.surfaceLevel = 1
-        compare(button.defaultBgColor, Theme.color.neutral2)
-        compare(button.hoverBgColor, Theme.color.neutral3)
-        compare(menu.backgroundColor, Theme.color.neutral2)
+        compare(button.defaultBgColor, Theme.color.surface2)
+        compare(button.hoverBgColor, Theme.color.surface3)
+        compare(menu.backgroundColor, Theme.color.surface2)
 
         picker.currentValue = "dark"
         compare(picker.currentText, "Dark")
@@ -409,12 +409,12 @@ TestCase {
         verify(background !== null)
 
         compare(button.buttonSize, NeutralButton.Large)
-        compare(button.backgroundColor, Theme.color.neutral2)
-        compare(button.currentBackgroundColor, Theme.color.neutral2)
+        compare(button.backgroundColor, Theme.color.surface2)
+        compare(button.currentBackgroundColor, Theme.color.surface2)
         compare(button.implicitHeight, 46)
 
         button.down = true
-        compare(button.currentBackgroundColor, Theme.color.neutral3)
+        compare(button.currentBackgroundColor, Theme.color.surface3)
         tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
@@ -427,23 +427,23 @@ TestCase {
         verify(button !== null)
 
         compare(button.enabled, false)
-        compare(button.background.color, Theme.color.orange)
-        compare(button.textColor, Theme.color.white)
+        compare(button.background.color, Theme.color.accent)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.opacity, 0.4)
 
         button.down = true
-        compare(button.background.color, Theme.color.orange)
-        compare(button.textColor, Theme.color.white)
+        compare(button.background.color, Theme.color.accent)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.scale, 1.0)
 
         button.enabled = true
-        tryCompare(button.background, "color", Theme.color.orangeLight2)
-        compare(button.textColor, Theme.color.white)
+        tryCompare(button.background, "color", Theme.color.accentPressed)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.opacity, 1.0)
         tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
-        tryCompare(button.background, "color", Theme.color.orange)
+        tryCompare(button.background, "color", Theme.color.accent)
         tryCompare(button, "scale", 1.0)
     }
 
@@ -605,7 +605,7 @@ TestCase {
         compare(label.text, "Username")
         compare(field.placeholderText, "Enter username...")
         compare(field.background.radius, 10)
-        compare(field.background.color, Theme.color.neutral1)
+        compare(field.background.color, Theme.color.surface1)
         const focusRing = findChild(control, "exampleLabeledTextFieldInputFocusRing")
         verify(focusRing !== null)
         compare(focusRing.visible, false)

@@ -12,7 +12,7 @@ FormRow {
     property url valueIconSource: ""
     property int valueIconSize: 18
     property int valueMaximumWidth: 260
-    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
+    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     property color valueIconColor: valueColor
     property bool amountValue: false
     property var valueTextStyle: amountValue ? Theme.text.amountDescription : Theme.text.description

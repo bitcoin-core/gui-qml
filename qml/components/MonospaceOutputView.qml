@@ -55,8 +55,8 @@ Item {
     property color requestLeftColumnColor: leftColumnColor
     property color replyLeftColumnColor: leftColumnColor
     property color errorLeftColumnColor: leftColumnColor
-    property color selectionColor:    Theme.color.orange
-    property color selectedTextColor: Theme.color.white
+    property color selectionColor:    Theme.color.selection
+    property color selectedTextColor: Theme.color.selectedText
     property string searchText: ""
     readonly property int searchResultCount: _searchMatches.length
     property int currentSearchResultIndex: -1

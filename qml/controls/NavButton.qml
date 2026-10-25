@@ -16,7 +16,7 @@ AbstractButton {
     property bool busy: false
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property url iconSource: ""
-    property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.neutral2
+    property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     hoverEnabled: AppMode.isDesktop && !busy
     topPadding: text_background.active ? 7 : 14
     bottomPadding: text_background.active ? 7 : 14
@@ -28,22 +28,17 @@ AbstractButton {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: Rectangle {
+    background: StateBackground {
         id: bg
         height: root.height
         width: root.width
         radius: Theme.radius.s
-        color: root.down ? Theme.color.neutral3
-            : root.hovered ? Theme.color.neutral2
-            : Theme.color.background
+        stateColor: root.down ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover
+            : "transparent"
 
         FocusBorder {
             visible: root.visualFocus
-        }
-
-        Behavior on color {
-            enabled: Theme.motion.animated
-            ColorAnimation { duration: Theme.motion.normal }
         }
     }
     contentItem: RowLayout {

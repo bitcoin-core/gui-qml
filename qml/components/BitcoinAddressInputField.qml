@@ -19,7 +19,7 @@ ColumnLayout {
     property bool enabled: true
     property bool embedded: false
     property int surfaceLevel: 0
-    property color surfaceColor: Theme.color.neutral1
+    property color surfaceColor: Theme.color.surface1
     property bool showLabel: true
     property var textStyle: Theme.text.monoBody
     property alias inputObjectName: addressInput.objectName
@@ -128,10 +128,10 @@ ColumnLayout {
             height: root.embedded ? Math.max(52, contentHeight + topPadding + bottomPadding) : Math.max(contentHeight, 32)
             font: root.textStyle.font
             color: Theme.color.neutral9
-            placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+            placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
             background: Rectangle {
                 color: root.surfaceLevel > 0 ? root.surfaceColor
-                    : root.embedded ? Theme.color.neutral2 : "transparent"
+                    : root.embedded ? Theme.color.surface2 : "transparent"
                 radius: root.embedded ? 10 : 0
 
                 FieldBorderRings {
@@ -202,13 +202,13 @@ ColumnLayout {
         Icon {
             source: "image://images/alert-filled"
             size: 22
-            color: Theme.color.red
+            color: Theme.color.danger
         }
 
         CoreText {
             text: root.errorText
             textStyle: Theme.text.description
-            color: Theme.color.red
+            color: Theme.color.dangerText
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true
         }

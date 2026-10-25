@@ -119,9 +119,9 @@ TestCase {
 
     function test_confirmation_states_data() {
         return [{tag: "zero", depth: 0, color: Theme.color.neutral7, text: "Unconfirmed"},
-            {tag: "one", depth: 1, color: Theme.color.amber, text: "1 confirmation"},
-            {tag: "five", depth: 5, color: Theme.color.amber, text: "5 confirmations"},
-            {tag: "six", depth: 6, color: Theme.color.green, text: "6 confirmations"}]
+            {tag: "one", depth: 1, color: Theme.color.warning, text: "1 confirmation"},
+            {tag: "five", depth: 5, color: Theme.color.warning, text: "5 confirmations"},
+            {tag: "six", depth: 6, color: Theme.color.success, text: "6 confirmations"}]
     }
     function test_confirmation_states(data) {
         const page = createDetail(transaction({depth: data.depth}))
@@ -188,7 +188,7 @@ TestCase {
         compare(page.actionLabel, data.label)
         if (data.type === TransactionActivityModel.InternalTransfer) {
             compare(findChild(page, "transactionDetailIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
-            compare(findChild(page, "transactionDetailIcon").accent, Theme.color.purple)
+            compare(findChild(page, "transactionDetailIcon").accent, Theme.color.txInternal)
         }
         compare(findChild(page, "transactionDetailNote"), null)
         compare(findChild(page, "transactionDetailFlow").inputEntries.length, data.inputs)
@@ -226,9 +226,9 @@ TestCase {
         tryCompare(overlay, "opened", true)
         verify(overlay.readyToConfirm)
         compare(overlay.verticalOffset, 0)
-        compare(overlay.background.color, Theme.color.neutral1)
+        compare(overlay.background.color, Theme.color.surface1)
         compare(overlay.background.border.color, Theme.color.surface2)
-        compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.neutral2)
+        compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.surface2)
         compare(findChild(overlay.contentItem, "speedUpOriginalFeeRow").value, testBumpModel.oldFee)
         compare(findChild(overlay.contentItem, "speedUpNewFeeRow").value, testBumpModel.newFee)
         mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))

@@ -32,7 +32,7 @@ Button {
 
     background: StateBackground {
         radius: Theme.radius.cardInset
-        stateColor: root.hovered || root.checked ? Theme.color.neutral2 : Theme.color.neutral0
+        stateColor: root.hovered || root.checked ? Theme.color.surfaceHover : "transparent"
         FocusBorder { visible: root.visualFocus; targetRadius: parent.radius }
     }
 

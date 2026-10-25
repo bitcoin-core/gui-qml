@@ -12,9 +12,9 @@ Controls.RangeSlider {
     property alias maxValue: root.to
     property alias lowerValue: root.first.value
     property alias upperValue: root.second.value
-    property color trackColor: Theme.color.neutral2
-    property color trackHighlightColor: Theme.color.orange
-    property color thumbColor: Theme.color.white
+    property color trackColor: Theme.color.sliderTrack
+    property color trackHighlightColor: Theme.color.accent
+    property color thumbColor: Theme.color.accentForeground
 
     implicitWidth: 260
     implicitHeight: 44
@@ -85,7 +85,7 @@ Controls.RangeSlider {
         radius: height / 2
         color: root.thumbColor
         border.width: 1
-        border.color: "#E6E6E6"
+        border.color: Theme.color.controlBorder
         FocusBorder { visible: root.visualFocus && parent.activeFocus; borderRadius: 14 }
     }
 }

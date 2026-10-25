@@ -13,7 +13,7 @@ Rectangle {
     property var entry: ({})
     property int displayUnit: optionsModel.displayUnit
     property string walletName: qsTr("Your wallet")
-    property color accentColor: Theme.color.purple
+    property color accentColor: Theme.color.txInternal
     property bool input: false
     property bool interactive: true
     property bool selected: false
@@ -40,7 +40,7 @@ Rectangle {
         satoshi: root.entry.amountKnown ? root.entry.amountSat : 0
     }
 
-    color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.2)
+    color: Theme.color.tint(accentColor)
     border.width: 2
     border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.6)
     radius: Theme.radius.cardInset
@@ -131,7 +131,7 @@ Rectangle {
             implicitWidth: dataTypeLabel.implicitWidth + 20
             implicitHeight: dataTypeLabel.implicitHeight + 8
             radius: height / 2
-            color: Theme.color.neutral3
+            color: Theme.color.surface3
             CoreText {
                 id: dataTypeLabel
                 anchors.centerIn: parent
@@ -165,7 +165,7 @@ Rectangle {
                 Accessible.name: qsTr("View associated payment request")
                 onClicked: root.paymentRequestRequested(String(modelData.requestId || ""))
                 background: Rectangle {
-                    color: Qt.rgba(Theme.color.lavender.r, Theme.color.lavender.g, Theme.color.lavender.b, 0.18)
+                    color: Theme.color.paymentRequestTint
                     radius: 6
 
                     FocusBorder {
@@ -175,16 +175,16 @@ Rectangle {
                 }
                 contentItem: RowLayout {
                     spacing: Theme.space.s
-                    Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.lavender; size: 16 }
+                    Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.paymentRequest; size: 16 }
                     CoreText {
                         Layout.fillWidth: true
                         text: qsTr("Payment request #%1").arg(modelData.requestId || "")
-                        color: Theme.color.lavender
+                        color: Theme.color.paymentRequestText
                         textStyle: Theme.text.caption
                         horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideRight
                     }
-                    CoreText { text: "→"; color: Theme.color.lavender; textStyle: Theme.text.caption }
+                    CoreText { text: "→"; color: Theme.color.paymentRequestText; textStyle: Theme.text.caption }
                 }
                 leftPadding: Theme.space.m
                 rightPadding: Theme.space.m

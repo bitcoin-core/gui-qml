@@ -699,7 +699,7 @@ PageStack {
                 Layout.fillWidth: true
                 placeholderText: qsTr("bitcoin:address?amount=…")
                 background: Rectangle {
-                    color: Theme.color.neutral2
+                    color: Theme.color.surface2
                     radius: Theme.radius.field
                     border.width: 0
                 }
@@ -862,7 +862,7 @@ PageStack {
                                         padding: 12
                                         implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
                                         background: Rectangle {
-                                            color: Theme.color.neutral1
+                                            color: Theme.color.surface1
                                             radius: Theme.radius.card
                                         }
                                         contentItem: ColumnLayout {
@@ -895,8 +895,8 @@ PageStack {
                                                         spacing: 10
                                                         Rectangle {
                                                             implicitWidth: 28; implicitHeight: 28; radius: height / 2
-                                                            color: recipientCard.expanded ? Theme.color.orange : Theme.color.neutral3
-                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; textStyle: Theme.text.subheading; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
+                                                            color: recipientCard.expanded ? Theme.color.accent : Theme.color.surface3
+                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; textStyle: Theme.text.subheading; color: recipientCard.expanded ? Theme.color.accentForeground : Theme.color.neutral9 }
                                                         }
                                                         CoreText {
                                                             Layout.fillWidth: true
@@ -946,7 +946,7 @@ PageStack {
                                 objectName: "sendPaymentRequestStatusText"
                                 visible: sendPage.paymentRequestIsError && sendPage.paymentRequestStatus.length > 0
                                 Layout.leftMargin: 16; Layout.rightMargin: 16
-                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.red; textStyle: Theme.text.description
+                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
                             }
 
                             NeutralButton {
@@ -1041,7 +1041,7 @@ PageStack {
                                 ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.amountBody }
                             }
 
-                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.red }
+                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.dangerText }
                             ContinueButton {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true

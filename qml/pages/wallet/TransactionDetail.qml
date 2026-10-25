@@ -48,7 +48,7 @@ Page {
     readonly property real detailContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     signal showTransaction(string txid)
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
     title: qsTr("Transaction")
 
@@ -133,7 +133,7 @@ Page {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
                     amount: root.amount
-                    amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.green : Theme.color.neutral9
+                    amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.txIncoming : Theme.color.neutral9
                     subtitle: root.actionLabel + (root.transactionData.timestamp
                         ? " · " + new Date(root.transactionData.timestamp * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat) : "")
                     iconComponent: ActivityIcon {
@@ -157,7 +157,7 @@ Page {
                             implicitWidth: inactiveText.implicitWidth + 24
                             implicitHeight: 30
                             radius: height / 2
-                            color: Theme.color.neutral2
+                            color: Theme.color.surface2
                             CoreText {
                                 id: inactiveText
                                 anchors.centerIn: parent
@@ -188,7 +188,7 @@ Page {
                     objectName: "speedUpBanner"
                     visible: root.canBump
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
+                    backgroundColor: Theme.color.surface1
                     contentMargin: 20
                     bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
                     message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee.")
@@ -199,7 +199,7 @@ Page {
                     objectName: "replacedBanner"
                     visible: root.replacedByTxid.length > 0
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
+                    backgroundColor: Theme.color.surface1
                     contentMargin: 20
                     bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
                     title: qsTr("Replaced by a newer transaction")
@@ -212,7 +212,7 @@ Page {
                     objectName: "transactionMaturityBanner"
                     visible: !root.inactive && root.transactionData.blocksToMaturity > 0
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
+                    backgroundColor: Theme.color.surface1
                     contentMargin: 20
                     message: qsTr("This mining reward will be spendable after %1 more blocks.").arg(root.transactionData.blocksToMaturity || 0)
                 }

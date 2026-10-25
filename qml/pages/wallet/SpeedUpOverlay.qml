@@ -78,7 +78,7 @@ DialogPopup {
             FormSection {
                 objectName: "speedUpFeeSection"
                 Layout.fillWidth: true
-                backgroundColor: Theme.color.neutral2
+                backgroundColor: Theme.color.surface2
                 ValueRow {
                     objectName: "speedUpOriginalFeeRow"
                     amountValue: true
@@ -88,7 +88,7 @@ DialogPopup {
                     value: root.bumpModel ? root.bumpModel.oldFee : ""
                     valueTextStyle: Theme.text.amountCaption
                     valueMaximumWidth: root.availableWidth * 0.6
-                    dividerColor: Theme.color.neutral3
+                    dividerColor: Theme.color.surfaceDivider
                 }
                 ValueRow {
                     objectName: "speedUpNewFeeRow"
@@ -108,7 +108,7 @@ DialogPopup {
                 visible: root.bumpModel && root.bumpModel.state === BumpTransactionModel.Failed
                 text: root.bumpModel ? root.bumpModel.errorText : ""
                 textStyle: Theme.text.description
-                color: Theme.color.red
+                color: Theme.color.dangerText
                 Layout.fillWidth: true
                 Layout.topMargin: 10
                 wrap: true

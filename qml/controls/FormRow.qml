@@ -21,7 +21,7 @@ Control {
     property alias bodyItem: bodyContainer.data
     readonly property Item loadedBodyItem: bodyContainer.children.length > 0 ? bodyContainer.children[0] : null
     property bool showDivider: true
-    property color dividerColor: Theme.color.neutral2
+    property color dividerColor: Theme.color.surfaceDivider
     property int minimumRowHeight: description.length > 0 || supportingText.length > 0 || errorText.length > 0 ? 62 : 48
     property int dividerLeftInset: leftPadding
     property int dividerRightInset: rightPadding
@@ -31,11 +31,11 @@ Control {
     property string disclosureIndicatorObjectName: root.objectName.length > 0
         ? root.objectName + "DisclosureIndicator"
         : ""
-    property color disclosureIndicatorColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-    property color titleColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
-    property color descriptionColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-    property color supportingTextColor: enabled ? Theme.color.blue : Theme.color.neutral4
-    property color errorTextColor: enabled ? Theme.color.red : Theme.color.neutral4
+    property color disclosureIndicatorColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+    property color titleColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    property color descriptionColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+    property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+    property color errorTextColor: enabled ? Theme.color.dangerText : Theme.color.disabledContent
     property var titleTextStyle: Theme.text.description
     property var descriptionTextStyle: Theme.text.caption
     property var supportingTextStyle: Theme.text.caption

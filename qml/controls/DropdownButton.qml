@@ -25,8 +25,8 @@ NeutralButton {
     property color defaultBgColor: Theme.color.surface(surfaceLevel + 1)
 
     textColor: Theme.color.neutral9
-    backgroundColor: active ? Theme.color.orange : defaultBgColor
-    hoverBackgroundColor: active ? Theme.color.orange : hoverBgColor
+    backgroundColor: active ? Theme.color.activeFill : defaultBgColor
+    hoverBackgroundColor: active ? Theme.color.activeFill : hoverBgColor
     forceHoverBackground: opened || visualFocus
     showBorder: surfaceLevel > 0
     backgroundRadius: 6
@@ -61,7 +61,7 @@ NeutralButton {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
-                color: root.enabled ? root.active ? Theme.color.white : root.textColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.textColor : Theme.color.disabledContent
                 horizontalAlignment: root.textAlignment
                 elide: Text.ElideRight
                 wrap: false
@@ -74,7 +74,7 @@ NeutralButton {
                 visible: root.subtitle !== ""
                 Layout.alignment: Qt.AlignVCenter
                 text: root.subtitle
-                color: root.enabled ? root.subtitleColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.subtitleColor : Theme.color.disabledContent
                 wrap: false
                 textStyle: root.subtitleTextStyle
             }
@@ -87,7 +87,7 @@ NeutralButton {
                 Layout.preferredHeight: root.caretSize
                 source: root.caretSource
                 size: root.caretSize
-                color: root.enabled ? root.active ? Theme.color.white : root.caretColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.caretColor : Theme.color.disabledContent
                 rotation: root.opened ? 180 : 0
 
                 Behavior on rotation {

@@ -11,7 +11,7 @@ NeutralButton {
 
     surfaceLevel: 0
     property color iconColor: Theme.color.neutral7
-    property color activeIconColor: Theme.color.orange
+    property color activeIconColor: Theme.color.neutral9
     property int size: Theme.size.iconButton
     property bool circular: false
     readonly property alias iconItem: ellipsisIcon
@@ -45,7 +45,7 @@ NeutralButton {
                 ? root.checked || root.hovered || root.down
                     ? root.activeIconColor
                     : root.iconColor
-                : Theme.color.neutral4
+                : Theme.color.disabledContent
             size: root.iconSize
             hoverEnabled: false
 

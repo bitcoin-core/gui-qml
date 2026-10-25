@@ -9,9 +9,9 @@ import org.bitcoincore.qt 1.0
 Controls.CheckBox {
     id: root
 
-    property color checkedColor: Theme.color.orange
-    property color borderColor: Theme.color.neutral4
-    property color checkColor: Theme.color.white
+    property color checkedColor: Theme.color.accent
+    property color borderColor: Theme.color.controlBorder
+    property color checkColor: Theme.color.accentForeground
     property bool animationsEnabled: Theme.motion.animated
 
     padding: 0
@@ -116,7 +116,7 @@ Controls.CheckBox {
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignLeft
         textStyle: Theme.text.description
-        color: root.enabled ? Theme.color.neutral7 : Theme.color.neutral5
+        color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
         wrapMode: Text.WordWrap
     }
 }

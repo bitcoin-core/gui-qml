@@ -261,7 +261,7 @@ TestCase {
 
         const detailsPopup = findChild(page, "addressDetailsPopup")
         verify(detailsPopup !== null)
-        compare(detailsPopup.background.color, Theme.color.neutral1)
+        compare(detailsPopup.background.color, Theme.color.surface1)
         compare(detailsPopup.background.border.color, Theme.color.surface2)
         verify(detailsPopup.enterTransition !== null)
         verify(detailsPopup.exitTransition !== null)

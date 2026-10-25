@@ -18,15 +18,17 @@ ApplicationWindow {
     minimumWidth: SizeClass.windowMinimumWidth
     minimumHeight: 665
     color: Theme.color.background
-    palette.window: Theme.color.neutral1 // Context menu background
+    palette.window: Theme.color.surface1 // Context menu background
     palette.windowText: Theme.color.neutral8 // Menu item text and icons
     palette.dark: Theme.color.menuBorder // Menu border
     palette.mid: Theme.color.menuDivider // Menu separators
-    palette.light: Theme.color.neutral3 // Highlighted menu item background
-    palette.midlight: Theme.color.neutral3 // Pressed menu item background
-    palette.disabled.windowText: Theme.color.neutral4 // Disabled item text and icons
-    palette.disabled.light: Theme.color.neutral1 // Disabled item highlight background
-    palette.disabled.midlight: Theme.color.neutral1 // Disabled item pressed background
+    palette.light: Theme.color.surface3 // Highlighted menu item background
+    palette.midlight: Theme.color.surface3 // Pressed menu item background
+    palette.disabled.windowText: Theme.color.disabledContent // Disabled item text and icons
+    palette.disabled.light: Theme.color.surface1 // Disabled item highlight background
+    palette.disabled.midlight: Theme.color.surface1 // Disabled item pressed background
+    palette.highlight: Theme.color.selection // Text selection in fields
+    palette.highlightedText: Theme.color.selectedText
 
     // The window starts hidden and is shown at the end of Component.onCompleted,
     // after the saved size has been applied (below). Applying the size while

@@ -12,9 +12,9 @@ Controls.Slider {
     property alias maxValue: root.to
     property alias currentValue: root.value
     property bool discrete: false
-    property color trackColor: Theme.color.neutral2
-    property color trackHighlightColor: Theme.color.orange
-    property color thumbColor: Theme.color.white
+    property color trackColor: Theme.color.sliderTrack
+    property color trackHighlightColor: Theme.color.accent
+    property color thumbColor: Theme.color.accentForeground
 
     implicitWidth: 260
     implicitHeight: 44
@@ -39,7 +39,7 @@ Controls.Slider {
         radius: height / 2
         color: root.thumbColor
         border.width: 1
-        border.color: "#E6E6E6"
+        border.color: Theme.color.controlBorder
 
         FocusBorder {
             visible: root.visualFocus

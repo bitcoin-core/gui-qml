@@ -23,7 +23,7 @@ import "../controls"
     anchors.leftMargin: root.leftMargin
     anchors.rightMargin: root.rightMargin
     border.width: Theme.focusRing.width
-    border.color: Theme.color.purple
+    border.color: Theme.color.focus
     radius: root.targetRadius >= 0 ? Math.max(0, root.targetRadius - root.leftMargin) : root.borderRadius
     color: "transparent"
 

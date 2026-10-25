@@ -18,8 +18,8 @@ Item {
     property color iconColor: Theme.color.neutral9
     property int iconSize: Theme.size.icon.s
     property color textColor: Theme.color.neutral9
-    property color backgroundColor: Theme.color.neutral1
-    property color borderColor: Theme.color.neutral2
+    property color backgroundColor: Theme.color.surface1
+    property color borderColor: Theme.color.menuBorder
     property bool shown: true
     property bool motionEnabled: Theme.motion.animated
     property int horizontalPadding: Theme.space.ml

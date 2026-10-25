@@ -130,9 +130,9 @@ TestCase {
         compare(page.maximumContentWidth, 706)
         compare(page.selectedMode, 0)
         compare(signCard.radius, 16)
-        compare(address.background.color, Theme.color.neutral2)
+        compare(address.background.color, Theme.color.surface2)
         compare(address.background.radius, 10)
-        compare(message.background.color, Theme.color.neutral2)
+        compare(message.background.color, Theme.color.surface2)
         compare(address.font.family, Theme.text.monoDescription.family)
         compare(address.font.pixelSize, Theme.text.monoDescription.pixelSize)
         verify(message.height > address.height)
@@ -195,9 +195,9 @@ TestCase {
         verify(signClearButton !== null)
         verify(signClearButtonBackground !== null)
         compare(signClearButton.buttonSize, NeutralButton.Large)
-        compare(signClearButton.backgroundColor, Theme.color.neutral2)
+        compare(signClearButton.backgroundColor, Theme.color.surface2)
         compare(signButton.enabled, false)
-        compare(signButton.background.color, Theme.color.orange)
+        compare(signButton.background.color, Theme.color.accent)
         compare(signButton.opacity, 0.4)
         compare(page.signingComplete, false)
         compare(signAddressEntry.readOnly, false)
@@ -206,7 +206,7 @@ TestCase {
         compare(signMessageEntry.showCopyButton, false)
         compare(signatureOutput.readOnly, true)
         compare(signatureOutput.wrapMode, TextEdit.WrapAnywhere)
-        compare(signatureOutput.fieldBackgroundColor, Theme.color.neutral2)
+        compare(signatureOutput.fieldBackgroundColor, Theme.color.surface2)
         compare(signatureOutput.showCopyButton, true)
         compare(signatureOutput.copyButtonEnabled, true)
         compare(copySignatureButton.text, "Copy")
@@ -216,7 +216,7 @@ TestCase {
         compare(signAddress.text, "1ValidLegacyAddress")
         compare(signMessage.text, "Signed statement")
         tryCompare(signButton, "enabled", true)
-        compare(signButton.background.color, Theme.color.orange)
+        compare(signButton.background.color, Theme.color.accent)
         compare(signButton.opacity, 1.0)
         page.submitSign()
         tryCompare(mockSignVerifyModel, "signature", "test-signature")
@@ -261,15 +261,15 @@ TestCase {
         verify(verifyClearButton !== null)
         verify(verifyClearButtonBackground !== null)
         compare(verifyClearButton.buttonSize, NeutralButton.Large)
-        compare(verifyClearButton.backgroundColor, Theme.color.neutral2)
+        compare(verifyClearButton.backgroundColor, Theme.color.surface2)
         compare(verifyButton.enabled, false)
-        compare(verifyButton.background.color, Theme.color.orange)
+        compare(verifyButton.background.color, Theme.color.accent)
         compare(verifyButton.opacity, 0.4)
         verifyAddress.text = "1ValidLegacyAddress"
         verifyMessage.text = "Signed statement"
         verifySignature.text = "test-signature"
         tryCompare(verifyButton, "enabled", true)
-        compare(verifyButton.background.color, Theme.color.orange)
+        compare(verifyButton.background.color, Theme.color.accent)
         compare(verifyButton.opacity, 1.0)
         page.submitVerify()
         compare(page.verifyResultSuccess, true)
@@ -283,27 +283,19 @@ TestCase {
             resultIcon.width / 2,
             resultIcon.height / 2)
         verify(Math.abs(iconCenter.y - resultBanner.height / 2) < 0.5)
-        compare(resultBanner.tintColor, Theme.color.green)
-        compare(resultBanner.backgroundColor, Qt.rgba(
-            Theme.color.green.r,
-            Theme.color.green.g,
-            Theme.color.green.b,
-            0.25))
-        compare(resultBanner.iconColor, Theme.color.green)
-        compare(resultBanner.textColor, Theme.color.green)
-        tryCompare(resultText, "color", Theme.color.green)
+        compare(resultBanner.tintColor, Theme.color.success)
+        compare(resultBanner.backgroundColor, Theme.color.successTint)
+        compare(resultBanner.iconColor, Theme.color.success)
+        compare(resultBanner.textColor, Theme.color.successText)
+        tryCompare(resultText, "color", Theme.color.successText)
 
         verifyMessage.text = "Changed statement"
         page.submitVerify()
         compare(resultText.text, "Message verification failed.")
-        compare(resultBanner.tintColor, Theme.color.red)
-        compare(resultBanner.backgroundColor, Qt.rgba(
-            Theme.color.red.r,
-            Theme.color.red.g,
-            Theme.color.red.b,
-            0.25))
-        compare(resultBanner.iconColor, Theme.color.red)
-        compare(resultBanner.textColor, Theme.color.red)
-        tryCompare(resultText, "color", Theme.color.red)
+        compare(resultBanner.tintColor, Theme.color.danger)
+        compare(resultBanner.backgroundColor, Theme.color.dangerTint)
+        compare(resultBanner.iconColor, Theme.color.danger)
+        compare(resultBanner.textColor, Theme.color.dangerText)
+        tryCompare(resultText, "color", Theme.color.dangerText)
     }
 }

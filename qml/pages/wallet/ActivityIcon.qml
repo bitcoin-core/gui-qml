@@ -20,12 +20,12 @@ Rectangle {
     readonly property bool neutral: !paymentRequest && activityType === TransactionActivityModel.Other
     readonly property color accent: {
         if (inactive) return Theme.color.neutral6
-        if (paymentRequest) return Theme.color.lavender
+        if (paymentRequest) return Theme.color.paymentRequest
         if (activityType === TransactionActivityModel.Consolidation
             || activityType === TransactionActivityModel.Split
-            || activityType === TransactionActivityModel.InternalTransfer) return Theme.color.purple
+            || activityType === TransactionActivityModel.InternalTransfer) return Theme.color.txInternal
         if (neutral) return Theme.color.neutral7
-        return incoming ? Theme.color.green : Theme.color.orange
+        return incoming ? Theme.color.txIncoming : Theme.color.txOutgoing
     }
     readonly property url iconSource: {
         if (paymentRequest) return "qrc:/icons/activity-payment-request.svg"
@@ -41,10 +41,9 @@ Rectangle {
     implicitWidth: 44
     implicitHeight: 44
     radius: width / 2
-    color: inactive ? Theme.color.neutral2 : dashed ? "transparent"
-        : neutral ? Theme.color.neutral2
-        : Qt.rgba(accent.r, accent.g, accent.b,
-            activityType === TransactionActivityModel.Send || (multiple && !incoming) ? 79 / 255 : 64 / 255)
+    color: inactive ? Theme.color.surface2 : dashed ? "transparent"
+        : neutral ? Theme.color.surface2
+        : Theme.color.tint(accent)
 
     Canvas {
         id: pendingRing

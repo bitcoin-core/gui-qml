@@ -11,10 +11,10 @@ StatusPill {
     property bool statusKnown: true
     property bool inactive: false
     accentColor: !statusKnown || inactive || confirmations <= 0 ? Theme.color.neutral7
-        : confirmations < 6 ? Theme.color.amber : Theme.color.green
+        : confirmations < 6 ? Theme.color.warning : Theme.color.success
     text: !statusKnown ? qsTr("Status unavailable")
         : !inactive && confirmations === 0 ? qsTr("Unconfirmed")
         : confirmations === 1 ? qsTr("1 confirmation") : qsTr("%1 confirmations").arg(Math.max(0, confirmations))
-    backgroundColor: !statusKnown || inactive || confirmations <= 0 ? Theme.color.neutral2
-        : Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.16)
+    backgroundColor: !statusKnown || inactive || confirmations <= 0 ? Theme.color.surface2
+        : Theme.color.tint(accentColor)
 }

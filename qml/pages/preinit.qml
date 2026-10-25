@@ -17,6 +17,8 @@ ApplicationWindow {
     minimumWidth: 800
     minimumHeight: 665
     color: Theme.color.background
+    palette.highlight: Theme.color.selection
+    palette.highlightedText: Theme.color.selectedText
     visible: true
 
     property bool completed: false
@@ -53,7 +55,7 @@ ApplicationWindow {
         anchors.margins: 20
         visible: !appWindow.starting && optionsModel.previewError.length > 0
         text: optionsModel.previewError
-        color: Theme.color.blue
+        color: Theme.color.dangerText
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
         textStyle: Theme.text.description

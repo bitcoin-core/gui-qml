@@ -21,7 +21,7 @@ Item {
     property alias maxValue: trafficGraph.maxValue
     property alias valueList: trafficGraph.valueList
     property double maxRateBps
-    property color unitLabelColor: Theme.color.neutral9
+    property color unitLabelColor: Theme.color.neutral7
 
     height: 250
 
@@ -29,11 +29,11 @@ Item {
         id: trafficGraph
         height: root.height
         width: root.width
-        backgroundColor: root.backgroundColor
-        borderColor: root.borderColor
-        gradientColor: root.fillColor
-        lineColor: root.lineColor
-        markerLineColor: root.markerLineColor
+        backgroundColor: Theme.color.surface1
+        borderColor: Theme.color.surfaceDivider
+        gradientColor: Theme.color.trafficReceived
+        lineColor: Theme.color.trafficReceived
+        markerLineColor: Theme.color.surfaceDivider
         maxSamples: root.maxSamples
         maxValue: root.maxValue
         valueList: root.valueList

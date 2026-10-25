@@ -26,7 +26,7 @@ FormRow {
     enabled: editable
     showDivider: false
     minimumRowHeight: 56
-    titleColor: editable ? Theme.color.neutral7 : Theme.color.neutral4
+    titleColor: editable ? Theme.color.neutral7 : Theme.color.disabledContent
     onValueChanged: if (!modified) input.text = value
     onEditableChanged: if (!editable) reset()
     Component.onCompleted: reset()
@@ -39,8 +39,8 @@ FormRow {
             implicitHeight: Theme.size.control
             enabled: root.editable
             font: root.fieldTextStyle.font
-            color: root.editable ? Theme.color.neutral9 : Theme.color.neutral4
-            placeholderTextColor: Theme.color.neutral5
+            color: root.editable ? Theme.color.neutral9 : Theme.color.disabledContent
+            placeholderTextColor: Theme.color.placeholder
             horizontalAlignment: Text.AlignRight
             verticalAlignment: TextInput.AlignVCenter
             selectByMouse: true

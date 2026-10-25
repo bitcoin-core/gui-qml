@@ -157,7 +157,7 @@ SettingsPage {
                     label: qsTr("Message")
                     fieldObjectName: "signMessageMessageField"
                     placeholderText: qsTr("Enter the message you want to sign")
-                    fieldBackgroundColor: Theme.color.neutral2
+                    fieldBackgroundColor: Theme.color.surface2
                     readOnly: root.signingComplete
                     showCopyButton: root.signingComplete
                     copyButtonObjectName: "signMessageCopyMessageButton"
@@ -193,7 +193,7 @@ SettingsPage {
                         && !root.signVerifyModel.signingNeedsUnlock
                     Layout.fillWidth: true
                     text: root.signVerifyModel ? root.signVerifyModel.signingError : ""
-                    color: Theme.color.red
+                    color: Theme.color.dangerText
                     textStyle: Theme.text.caption
                     wrap: true
                 }
@@ -208,7 +208,7 @@ SettingsPage {
                     readOnly: true
                     wrapMode: TextEdit.WrapAnywhere
                     fieldTextStyle: Theme.text.monoCaption
-                    fieldBackgroundColor: Theme.color.neutral2
+                    fieldBackgroundColor: Theme.color.surface2
                     showCopyButton: true
                     copyButtonObjectName: "signMessageCopySignatureButton"
                     onCopyRequested: Clipboard.setText(root.signVerifyModel ? root.signVerifyModel.signature : "")
@@ -251,7 +251,7 @@ SettingsPage {
                     label: qsTr("Message")
                     fieldObjectName: "verifyMessageMessageField"
                     placeholderText: qsTr("Enter the signed message")
-                    fieldBackgroundColor: Theme.color.neutral2
+                    fieldBackgroundColor: Theme.color.surface2
                 }
 
                 LabeledTextView {
@@ -262,7 +262,7 @@ SettingsPage {
                     fieldObjectName: "verifyMessageSignatureField"
                     placeholderText: qsTr("Enter the message signature")
                     fieldHeight: 84
-                    fieldBackgroundColor: Theme.color.neutral2
+                    fieldBackgroundColor: Theme.color.surface2
                 }
 
                 RowLayout {
@@ -292,7 +292,7 @@ SettingsPage {
                     objectName: "verifyMessageResultBanner"
                     shown: root.verifyResultText.length > 0
                     Layout.fillWidth: true
-                    tintColor: root.verifyResultSuccess ? Theme.color.green : Theme.color.red
+                    tintColor: root.verifyResultSuccess ? Theme.color.success : Theme.color.danger
                     iconSource: root.verifyResultSuccess
                         ? "image://images/check"
                         : "image://images/info-filled"

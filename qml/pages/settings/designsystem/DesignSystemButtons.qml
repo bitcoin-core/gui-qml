@@ -40,22 +40,20 @@ DesignSystemSection {
             ContinueButton { Layout.preferredWidth: 180; text: "Continue"; enabled: false }
         }
         DesignSystemState {
-            label: "backgroundColor: red"
+            label: "destructive: true"
             ContinueButton {
                 Layout.preferredWidth: 180
                 text: "Delete"
-                backgroundColor: Theme.color.red
-                backgroundHoverColor: Qt.lighter(Theme.color.red, 1.1)
-                backgroundPressedColor: Qt.darker(Theme.color.red, 1.1)
+                destructive: true
             }
         }
         DesignSystemState {
-            label: "red, enabled: false"
+            label: "destructive, enabled: false"
             ContinueButton {
                 Layout.preferredWidth: 180
                 text: "Delete"
                 enabled: false
-                backgroundColor: Theme.color.red
+                destructive: true
             }
         }
     }

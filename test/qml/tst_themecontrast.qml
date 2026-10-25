@@ -28,9 +28,26 @@ TestCase {
         {fg: "neutral7", bg: "surface1", min: 4.5},
         {fg: "neutral7", bg: "surface2", min: 4.5},
         {fg: "warning", bg: "background", min: 4.5},
-        {fg: "warning", bg: "background", tint: "warning", alpha: 0.16, min: 4.5}
+        {fg: "placeholder", bg: "surface1", min: 4.5},
+        {fg: "placeholder", bg: "surface2", min: 4.5},
+        {fg: "accentText", bg: "background", min: 4.5},
+        {fg: "accentText", bg: "surface1", min: 4.5},
+        {fg: "selectedText", bg: "selection", min: 4.5}
+    ]
+    // Text on a tint uses the hue's *Text role. accentText is only checked
+    // over background: over surface1 it is 4.28:1 in light.
+    readonly property var tintTextPairs: [
+        {hue: "accent", bg: "background"},
+        {hue: "danger", bg: "background"}, {hue: "danger", bg: "surface1"},
+        {hue: "success", bg: "background"}, {hue: "success", bg: "surface1"},
+        {hue: "info", bg: "background"}, {hue: "info", bg: "surface1"},
+        {hue: "warning", bg: "background"}, {hue: "warning", bg: "surface1"},
+        {hue: "paymentRequest", bg: "background"}, {hue: "paymentRequest", bg: "surface1"}
     ]
     readonly property var focusPairs: [
+        {fg: "controlBorder", bg: "surface1", min: 3},
+        {fg: "controlBorder", bg: "surface2", min: 3},
+        {fg: "sliderTrack", bg: "surface1", min: 3},
         {fg: "focus", bg: "background", min: 3},
         {fg: "focus", bg: "surface1", min: 3},
         {fg: "focus", bg: "surface2", min: 3}
@@ -41,7 +58,8 @@ TestCase {
         {fg: "accentForeground", bg: "accent", min: 2},
         {fg: "accentForeground", bg: "success", min: 2.5},
         {fg: "accentForeground", bg: "danger", min: 3},
-        {fg: "neutral0", bg: "warning", min: 4.5}
+        {fg: "warningForeground", bg: "warning", min: 4.5},
+        {fg: "activeForeground", bg: "activeFill", min: 4.5}
     ]
     readonly property var stateRoles: ["surfaceHover", "surfacePressed", "surfaceSelected", "surfaceDivider"]
     readonly property real minimumStep: 1.05
@@ -108,6 +126,19 @@ TestCase {
 
     function test_focus_data() { return palettesData() }
     function test_focus(data) { checkPairs(data, focusPairs) }
+
+    function test_textOnTints_data() { return palettesData() }
+    function test_textOnTints(data) {
+        const palette = data.palette
+        for (const pair of tintTextPairs) {
+            const tinted = over(palette[pair.hue], palette.tintAlpha, palette[pair.bg])
+            verify(Qt.colorEqual(palette.tint(palette[pair.hue]), palette[pair.hue + "Tint"]), data.tag + ": " + pair.hue + "Tint")
+            verify(Qt.colorEqual(palette.textFor(palette[pair.hue]), palette[pair.hue + "Text"]), data.tag + ": textFor(" + pair.hue + ")")
+            const ratio = contrast(palette[pair.hue + "Text"], tinted)
+            verify(ratio >= 4.5, data.tag + ": " + pair.hue + "Text on " + pair.hue + "Tint over " + pair.bg + " is "
+                   + ratio.toFixed(2) + ":1, expected at least 4.5:1")
+        }
+    }
 
     function test_onAccent_data() { return palettesData() }
     function test_onAccent(data) { checkPairs(data, onAccentPairs) }

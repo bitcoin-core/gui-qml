@@ -35,12 +35,12 @@ OnboardingView {
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: Theme.color.amber
+            color: Theme.color.danger
         }
         Icon {
             anchors.centerIn: parent
             source: "qrc:/icons/cross.svg"
-            color: Theme.color.neutral0
+            color: Theme.color.accentForeground
             size: 26
         }
     }

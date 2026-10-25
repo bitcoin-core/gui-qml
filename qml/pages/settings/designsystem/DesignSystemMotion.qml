@@ -56,13 +56,13 @@ DesignSystemSection {
                     Layout.preferredWidth: 140
                     Layout.preferredHeight: 8
                     radius: 4
-                    color: Theme.color.neutral2
+                    color: Theme.color.surface2
 
                     Rectangle {
                         id: fill
                         height: parent.height
                         radius: parent.radius
-                        color: Theme.color.orange
+                        color: Theme.color.accent
                         width: parent.width
                     }
 
@@ -106,7 +106,7 @@ DesignSystemSection {
                     Layout.preferredWidth: 140
                     Layout.preferredHeight: 16
                     radius: 8
-                    color: Theme.color.neutral2
+                    color: Theme.color.surface2
 
                     Rectangle {
                         id: dot
@@ -114,7 +114,7 @@ DesignSystemSection {
                         width: 16
                         height: 16
                         radius: 8
-                        color: Theme.color.orange
+                        color: Theme.color.accent
                     }
 
                     NumberAnimation {
@@ -158,8 +158,8 @@ DesignSystemSection {
                     x: 10
                     y: 12 + offset
                     radius: 10
-                    color: Theme.color.neutral1
-                    border.color: Theme.color.neutral2
+                    color: Theme.color.surface1
+                    border.color: Theme.color.surface2
                     border.width: 1
                 }
 
@@ -198,8 +198,8 @@ DesignSystemSection {
                     y: 8
                     radius: 10
                     transformOrigin: Item.TopLeft
-                    color: Theme.color.neutral1
-                    border.color: Theme.color.neutral2
+                    color: Theme.color.surface1
+                    border.color: Theme.color.surface2
                     border.width: 1
                 }
 

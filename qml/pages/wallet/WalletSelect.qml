@@ -111,7 +111,7 @@ Popup {
     }
 
     background: Rectangle {
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         border.color: Theme.color.menuBorder
         border.width: 1
         radius: Theme.radius.m
@@ -189,10 +189,10 @@ Popup {
                     }
                 }
                 readonly property color statusColor: {
-                    if (loadState === WalletListModel.LoadError) return Theme.color.red
-                    return delegate.checked ? Theme.color.orange : Theme.color.neutral9
+                    if (loadState === WalletListModel.LoadError) return Theme.color.dangerText
+                    return delegate.checked ? Theme.color.accentText : Theme.color.neutral9
                 }
-                readonly property color nameColor: delegate.checked ? Theme.color.orange : Theme.color.neutral9
+                readonly property color nameColor: delegate.checked ? Theme.color.accentText : Theme.color.neutral9
 
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
@@ -215,14 +215,15 @@ Popup {
 
                 background: StateBackground {
                     radius: Theme.radius.sidebarRow
-                    stateColor: delegate.hovered ? Theme.color.neutral3
-                        : delegate.checked ? Theme.color.neutral2 : "transparent"
+                    stateColor: delegate.down ? Theme.color.surfacePressed
+                        : delegate.checked ? Theme.color.surfaceSelected
+                        : delegate.hovered ? Theme.color.surfaceHover : "transparent"
                     Rectangle {
                         visible: delegate.loadState === WalletListModel.Open
                             && delegate.index > 0 && !delegate.checked && !delegate.hovered
                         width: parent.width
                         height: 1
-                        color: Theme.color.neutral2
+                        color: Theme.color.surfaceDivider
                     }
 
                     FocusBorder {
@@ -300,12 +301,12 @@ Popup {
                             width: 20
                             height: 20
                             radius: width / 2
-                            color: Theme.color.orange
+                            color: Theme.color.accent
                             Icon {
                                 anchors.centerIn: parent
                                 size: 14
                                 source: "image://images/check-bold"
-                                color: Theme.color.neutral0
+                                color: Theme.color.background
                             }
                         }
 
@@ -320,12 +321,12 @@ Popup {
                             iconSize: 18
                             iconSource: "image://images/ellipsis"
                             iconColor: delegate.nameColor
-                            hoverColor: Theme.color.neutral9
                             backgroundRadius: 6
                             accessibleName: qsTr("Actions for %1").arg(delegate.displayName)
                             background: StateBackground {
                                 radius: actionsButton.backgroundRadius
-                                stateColor: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
+                                stateColor: actionsButton.pressed ? Theme.color.surfacePressed
+                                    : actionsButton.hovered ? Theme.color.surfaceHover : "transparent"
                             }
                             onClicked: actionsMenu.visible ? actionsMenu.close() : actionsMenu.open()
 
@@ -346,7 +347,7 @@ Popup {
                                     if (root.activeContextMenu === actionsMenu) root.activeContextMenu = null
                                 }
                                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
-                                backgroundColor: Theme.color.neutral2
+                                backgroundColor: Theme.color.surface2
                                 // Close immediately before the owning row can be removed or reordered.
                                 exit: null
                                 objectName: "walletSelectActionsMenu_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
@@ -423,8 +424,8 @@ Popup {
         ContextMenuButton {
             objectName: "walletSelectAddWalletButton"
             text: qsTr("Add wallet…")
-            textColor: Theme.color.orange
-            hoverTextColor: Theme.color.orange
+            textColor: Theme.color.accentText
+            hoverTextColor: Theme.color.accentText
             iconSource: "image://images/plus-filled"
             enabled: !walletController.walletLoadInProgress
             onTriggered: {

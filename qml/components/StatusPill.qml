@@ -10,8 +10,9 @@ import "../controls"
 Control {
     id: root
     property string text: ""
-    property color accentColor: Theme.color.orange
-    property color backgroundColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.16)
+    property color accentColor: Theme.color.accent
+    property color textColor: Theme.color.textFor(accentColor)
+    property color backgroundColor: Theme.color.tint(accentColor)
     property bool showDot: true
 
     leftPadding: Theme.space.ml
@@ -37,7 +38,7 @@ Control {
         }
         CoreText {
             text: root.text
-            color: root.accentColor
+            color: root.textColor
             textStyle: Theme.text.captionStrong
         }
     }

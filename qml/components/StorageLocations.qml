@@ -101,7 +101,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.validationError.length > 0
         text: root.validationError
-        color: Theme.color.blue
+        color: Theme.color.dangerText
         horizontalAlignment: Text.AlignLeft
         textStyle: Theme.text.description
     }
@@ -109,7 +109,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.validationError.length === 0 && root.storageErrorText.length > 0
         text: root.storageErrorText
-        color: Theme.color.blue
+        color: Theme.color.dangerText
         horizontalAlignment: Text.AlignLeft
         textStyle: Theme.text.description
     }

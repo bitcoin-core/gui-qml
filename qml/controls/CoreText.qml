@@ -11,7 +11,8 @@ Text {
     property var textStyle: null
     property bool bold: false
     property bool wrap: true
-    color: enabled ? Theme.color.neutral9 : Theme.color.neutral4
+    color: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    linkColor: Theme.color.accentText
     font.family: textStyle ? textStyle.family : Theme.text.family
     font.weight: textStyle ? textStyle.weight : bold ? Theme.text.strongWeight : Theme.text.regularWeight
     font.pixelSize: textStyle ? textStyle.pixelSize : 13

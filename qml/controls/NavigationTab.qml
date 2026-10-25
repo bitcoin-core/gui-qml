@@ -7,10 +7,10 @@ import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 
 TabButton {
-    property color bgActiveColor: Theme.color.orange
+    property color bgActiveColor: Theme.color.accent
     property color textColor: Theme.color.neutral7
     property color textHoverColor: Theme.color.neutral9
-    property color textActiveColor: Theme.color.orange
+    property color textActiveColor: Theme.color.accentText
     property color iconColor: "transparent"
     property string iconSource: ""
     property int iconSize: 30
@@ -63,7 +63,7 @@ TabButton {
             height: parent.height - 5
             width: parent.width
             radius: Theme.radius.s
-            color: Theme.color.neutral3
+            color: Theme.color.surfaceHover
             visible: root.hovered
 
             Behavior on color {

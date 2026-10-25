@@ -78,7 +78,7 @@ OnboardingView {
                     visible: text.length > 0
                     Layout.fillWidth: true
                     text: walletController.walletLocationOpenError
-                    color: Theme.color.red
+                    color: Theme.color.dangerText
                     textStyle: Theme.text.caption
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignLeft

@@ -13,10 +13,10 @@ AbstractButton {
     property bool active: false
     property int count: 0
     property color inactiveIconColor: Theme.color.neutral6
-    property color activeIconColor: Theme.color.white
-    property color activeBackgroundColor: Theme.color.orange
-    property color backgroundColor: Theme.color.neutral1
-    property color hoverBackgroundColor: Theme.color.neutral2
+    property color activeIconColor: Theme.color.activeForeground
+    property color activeBackgroundColor: Theme.color.activeFill
+    property color backgroundColor: Theme.color.surface1
+    property color hoverBackgroundColor: Theme.color.surface2
     property int size: Theme.size.control
     property int iconSize: Theme.size.icon.xl
     property int transitionDuration: Theme.motion.normal
@@ -85,9 +85,9 @@ AbstractButton {
                 anchors.centerIn: parent
                 property color color: root.enabled
                     ? root.hovered || root.down
-                        ? Theme.color.orange
+                        ? Theme.color.neutral9
                         : root.inactiveIconColor
-                    : Theme.color.neutral4
+                    : Theme.color.disabledContent
                 property int size: root.iconSize
                 width: size
                 height: size
@@ -122,7 +122,7 @@ AbstractButton {
                 id: activeFilterIcon
                 objectName: root.objectName.length > 0 ? root.objectName + "ActiveIcon" : ""
                 anchors.centerIn: parent
-                property color color: root.enabled ? root.activeIconColor : Theme.color.neutral4
+                property color color: root.enabled ? root.activeIconColor : Theme.color.disabledContent
                 property int size: root.iconSize
                 width: size
                 height: size

@@ -79,29 +79,29 @@ DesignSystemSection {
 
         DesignSystemState {
             width: 380
-            label: "tintColor: green"
+            label: "tintColor: success"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.green
+                tintColor: Theme.color.success
                 iconSource: "image://images/check"
                 text: "Signature verified."
             }
         }
         DesignSystemState {
             width: 380
-            label: "tintColor: red"
+            label: "tintColor: danger"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.red
+                tintColor: Theme.color.danger
                 iconSource: "image://images/alert-filled"
                 text: "The message could not be verified."
             }
         }
         DesignSystemState {
             width: 380
-            label: "tintColor: blue (default)"
+            label: "tintColor: info (default)"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
@@ -115,7 +115,7 @@ DesignSystemSection {
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.red
+                tintColor: Theme.color.danger
                 iconSource: "image://images/alert-filled"
                 text: "Connection lost."
                 actionText: "Retry"
@@ -145,15 +145,15 @@ DesignSystemSection {
         }
         DesignSystemState {
             label: "accentColor: green"
-            StatusPill { text: "Connected"; accentColor: Theme.color.green }
+            StatusPill { text: "Connected"; accentColor: Theme.color.success }
         }
         DesignSystemState {
             label: "accentColor: red"
-            StatusPill { text: "Offline"; accentColor: Theme.color.red }
+            StatusPill { text: "Offline"; accentColor: Theme.color.danger }
         }
         DesignSystemState {
             label: "showDot: false"
-            StatusPill { text: "Watch only"; accentColor: Theme.color.blue; showDot: false }
+            StatusPill { text: "Watch only"; accentColor: Theme.color.info; showDot: false }
         }
     }
 
@@ -280,7 +280,7 @@ DesignSystemSection {
         }
         DesignSystemState {
             label: "color: orange"
-            SpinningIndicator { running: true; color: Theme.color.orange }
+            SpinningIndicator { running: true; color: Theme.color.accent }
         }
         DesignSystemState {
             label: "running: false"

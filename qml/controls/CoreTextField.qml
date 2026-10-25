@@ -14,13 +14,13 @@ TextField {
     implicitWidth: 450
     font: Theme.text.description.font
     color: Theme.color.neutral9
-    placeholderTextColor: Theme.color.neutral5
+    placeholderTextColor: Theme.color.placeholder
     echoMode: hideText ? TextInput.Password : TextInput.Normal
     verticalAlignment: TextInput.AlignVCenter
     rightPadding: hideText ? 46 : 20
     leftPadding: Theme.space.xl
     background: Rectangle {
-        border.color: Theme.color.neutral5
+        border.color: Theme.color.controlBorder
         border.width: 1
         color: "transparent"
         radius: Theme.radius.field

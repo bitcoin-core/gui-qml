@@ -29,7 +29,7 @@ SettingsPage {
 
         LinkRow {
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("Website")
             value: "bitcoincore.org"
             link: "https://bitcoincore.org"
@@ -38,7 +38,7 @@ SettingsPage {
 
         LinkRow {
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("Source code")
             value: "github.com/bitcoin/bitcoin"
             link: "https://github.com/bitcoin/bitcoin"
@@ -47,7 +47,7 @@ SettingsPage {
 
         LinkRow {
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("License")
             value: "MIT"
             link: "https://opensource.org/licenses/MIT"
@@ -57,7 +57,7 @@ SettingsPage {
         LinkRow {
             objectName: "aboutVersionRow"
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("Version")
             value: BuildInfo.fullClientVersion
             link: "https://bitcoin.org/en/download"

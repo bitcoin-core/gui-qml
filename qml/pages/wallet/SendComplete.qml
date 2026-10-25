@@ -55,7 +55,7 @@ Page {
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Theme.color.green
+                color: Theme.color.success
             }
 
             Canvas {
@@ -89,7 +89,7 @@ Page {
                                    start[1] + (end[1] - start[1]) * fraction)
                         remaining -= length
                     }
-                    ctx.strokeStyle = Theme.color.white
+                    ctx.strokeStyle = Theme.color.accentForeground
                     ctx.lineWidth = 5
                     ctx.lineCap = "round"
                     ctx.lineJoin = "round"

@@ -61,7 +61,6 @@ OnboardingView {
             Layout.fillWidth: true
             Layout.leftMargin: 16
             Layout.rightMargin: 16
-            color: Theme.color.neutral3
         }
         KeyValueRow {
             Layout.fillWidth: true

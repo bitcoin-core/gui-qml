@@ -36,7 +36,6 @@ Page {
                     objectName: "peersTabButton"
                     iconSource: Utils.nodeConnectionIcon(nodeModel.numPeers)
                     iconColor: Theme.color.neutral7
-                    hoverColor: Theme.color.neutral9
                     size: 34
                     iconSize: 24
                     accessibleName: qsTr("Peers")
@@ -47,7 +46,6 @@ Page {
                     objectName: "nodeSettingsButton"
                     iconSource: "image://images/gear"
                     iconColor: Theme.color.neutral9
-                    hoverColor: Theme.color.neutral9
                     size: 34
                     iconSize: 34
                     accessibleName: qsTr("Settings")

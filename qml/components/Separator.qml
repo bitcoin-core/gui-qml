@@ -8,10 +8,5 @@ import "../controls"
 
 Rectangle {
     height: 1
-    color: enabled ? Theme.color.neutral3 : Theme.color.neutral2
-
-    Behavior on color {
-        enabled: Theme.motion.animated
-        ColorAnimation { duration: Theme.motion.normal }
-    }
+    color: Theme.color.surfaceDivider
 }

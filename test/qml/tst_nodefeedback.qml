@@ -153,8 +153,8 @@ TestCase {
 
         const surface = findChild(popup, "alertPopupSurface")
         verify(surface !== null)
-        compare(surface.color, Theme.color.neutral1)
-        compare(surface.border.color, Theme.color.neutral2)
+        compare(surface.color, Theme.color.surface1)
+        compare(surface.border.color, Theme.color.surface2)
         compare(surface.radius, 10)
         compare(popup.dim, true)
         verify(popup.enterTransition !== null)
@@ -164,7 +164,7 @@ TestCase {
         compare(popup.visibleActions[1].buttonObjectName, "alertDeleteButton")
         const deleteButton = waitForChild(testWindow.contentItem, "alertDeleteButton")
         verify(deleteButton !== null)
-        compare(deleteButton.backgroundColor, Theme.color.red)
+        compare(deleteButton.backgroundColor, Theme.color.danger)
 
         deleteButton.clicked()
         tryCompare(popup, "opened", false)

@@ -66,7 +66,7 @@ DesignSystemSection {
                     Rectangle {
                         width: sampleText.contentWidth
                         height: parent.height
-                        color: Theme.color.neutral2
+                        color: Theme.color.surface2
                     }
 
                     CoreText {

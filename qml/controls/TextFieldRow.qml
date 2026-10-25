@@ -18,8 +18,8 @@ FormRow {
     property int echoMode: TextInput.Normal
     property int fieldWidth: 180
     property int textAlignment: Text.AlignRight
-    property color fieldColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
-    property color placeholderColor: enabled ? Theme.color.neutral5 : Theme.color.neutral4
+    property color fieldColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    property color placeholderColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
     property color focusBorderColor: Theme.color.neutral6
     property var fieldTextStyle: Theme.text.description
     readonly property var field: loadedTrailingItem

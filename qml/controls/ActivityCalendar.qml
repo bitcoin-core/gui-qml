@@ -436,16 +436,16 @@ ColumnLayout {
                     // Hover and press tints mark the day as clickable; the
                     // range tint wins so the preview stays readable.
                     color: dayCell.endpoint
-                        ? Theme.color.orange
+                        ? Theme.color.accent
                         : dayCell.ranged
-                            ? Theme.color.neutral3
+                            ? Theme.color.surfaceSelected
                             : dayCell.down
-                                ? Theme.color.neutral4
+                                ? Theme.color.surfacePressed
                                 : dayCell.hovered
-                                    ? Theme.color.neutral2
+                                    ? Theme.color.surfaceHover
                                     : "transparent"
                     border.width: 1
-                    border.color: dayCell.isToday && !dayCell.endpoint ? Theme.color.orange : "transparent"
+                    border.color: dayCell.isToday && !dayCell.endpoint ? Theme.color.accent : "transparent"
 
                     // The keyboard focus ring covers the 1px orange today
                     // ring, so the focused day is always identifiable.
@@ -463,7 +463,7 @@ ColumnLayout {
                     text: dayCell.modelData ? dayCell.modelData.getDate() : ""
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    color: dayCell.endpoint ? Theme.color.white : Theme.color.neutral9
+                    color: dayCell.endpoint ? Theme.color.accentForeground : Theme.color.neutral9
                     // Mark today by weight too, so it does not rely on the ring color alone.
                     textStyle: dayCell.isToday ? Theme.text.captionStrong : Theme.text.caption
                 }
@@ -482,8 +482,8 @@ ColumnLayout {
         readonly property string accessibleValue: chip.value !== "" ? chip.value : qsTr("no date selected")
         implicitHeight: Math.max(Theme.size.controlLarge, chipColumn.implicitHeight + 2 * Theme.space.s)
         radius: Theme.radius.s
-        color: Theme.color.neutral2
-        border.color: chip.highlighted ? Theme.color.orange : "transparent"
+        color: Theme.color.surface2
+        border.color: chip.highlighted ? Theme.color.accent : "transparent"
         border.width: 1
         Accessible.role: Accessible.StaticText
         Accessible.name: chip.highlighted
@@ -542,7 +542,7 @@ ColumnLayout {
         Accessible.name: navButton.accessibleName
         background: Rectangle {
             radius: Theme.radius.s
-            color: navButton.down ? Theme.color.neutral3 : navButton.hovered ? Theme.color.neutral2 : "transparent"
+            color: navButton.down ? Theme.color.surfacePressed : navButton.hovered ? Theme.color.surfaceHover : "transparent"
 
             FocusBorder {
                 visible: navButton.visualFocus
@@ -560,13 +560,13 @@ ColumnLayout {
                 spacing: -5
                 Icon {
                     source: navButton.iconSource
-                    color: Theme.color.orange
+                    color: Theme.color.neutral9
                     size: Theme.size.icon.s
                 }
                 Icon {
                     visible: navButton.doubled
                     source: navButton.iconSource
-                    color: Theme.color.orange
+                    color: Theme.color.neutral9
                     size: Theme.size.icon.s
                 }
             }

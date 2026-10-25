@@ -235,7 +235,7 @@ Page {
         primaryComponent: Rectangle {
             objectName: "settingsSidebarSurface"
             readonly property alias sidebar: sidebar
-            color: Theme.color.neutral1
+            color: Theme.color.surface1
 
             Behavior on color {
                 enabled: Theme.motion.animated

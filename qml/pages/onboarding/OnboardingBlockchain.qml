@@ -54,7 +54,7 @@ OnboardingView {
                             width: 14
                             height: 14
                             radius: 2
-                            color: index === 9 ? Theme.color.orange : "#F9D63C"
+                            color: index === 9 ? Theme.color.accent : Theme.color.illustrationSignal
                         }
                     }
                 }

@@ -27,7 +27,7 @@ Page {
     signal transactionRequested(string txid)
     signal paymentRequestRequested(string requestId)
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
     Component.onCompleted: ready = true
     onWalletChanged: if (ready) {
@@ -370,7 +370,7 @@ Page {
                             visible: sectionHeader.isPending && activityFilterProxy.pendingBalanceSat !== 0
                             text: visible ? activityFilterProxy.pendingBalance : ""
                             textStyle: Theme.text.amountDescription
-                            color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.green
+                            color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.txIncoming
                                 : activityFilterProxy.pendingBalanceSat < 0 ? Theme.color.neutral9 : Theme.color.neutral7
                             horizontalAlignment: Text.AlignRight
                         }
@@ -470,7 +470,7 @@ Page {
     ContextMenu {
         id: activityRowMenu
         objectName: "activityRowContextMenu"
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
         margins: 8
         property string txid: ""
@@ -693,14 +693,14 @@ Page {
                     spacing: 4
                     Icon {
                         source: "image://images/caret-left"
-                        color: Theme.color.orange
+                        color: Theme.color.accentText
                         size: 14
                     }
                     CoreText {
                         Layout.fillWidth: true
                         //: Activity custom date range: link back to the list of date presets.
                         text: qsTr("Presets")
-                        color: Theme.color.orange
+                        color: Theme.color.accentText
                         textStyle: Theme.text.captionStrong
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
@@ -728,7 +728,7 @@ Page {
                     textStyle: Theme.text.menuItemStrong
                     // Nothing to reset until a date has been picked.
                     enabled: calendar.hasSelection
-                    textColor: enabled ? Theme.color.neutral7 : Theme.color.neutral5
+                    textColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
                     // A disabled control still receives hover, which would
                     // trigger the button's hover recolor; gate it on enabled.
                     hoverEnabled: enabled && AppMode.isDesktop
@@ -748,7 +748,7 @@ Page {
                     text: qsTr("Apply")
                     textStyle: Theme.text.menuItemStrong
                     enabled: calendar.valid
-                    textColor: enabled ? Theme.color.orange : Theme.color.neutral5
+                    textColor: enabled ? Theme.color.accentText : Theme.color.disabledContent
                     hoverEnabled: enabled && AppMode.isDesktop
                     // Pass ISO strings rather than the Dates: a JS Date
                     // converted straight to QDate can shift a day across

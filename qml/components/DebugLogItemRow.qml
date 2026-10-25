@@ -21,8 +21,8 @@ Control {
     property int timeColumnWidth: 80
 
     readonly property color indicatorColor: isError
-        ? Theme.color.red
-        : isWarning ? Theme.color.amber : "transparent"
+        ? Theme.color.danger
+        : isWarning ? Theme.color.warning : "transparent"
     readonly property string typeLabel: isError
         ? qsTr("Error")
         : isWarning ? qsTr("Warning") : qsTr("Regular")
@@ -34,7 +34,7 @@ Control {
     padding: 0
 
     background: Rectangle {
-        color: root.alternate ? Theme.color.neutral2 : Theme.color.neutral1
+        color: root.alternate ? Theme.color.surface2 : Theme.color.surface1
 
         Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
     }
@@ -84,8 +84,8 @@ Control {
             textFormat: Text.PlainText
             wrapMode: Text.WrapAnywhere
             color: Theme.color.neutral9
-            selectionColor: Theme.color.orange
-            selectedTextColor: Theme.color.white
+            selectionColor: Theme.color.selection
+            selectedTextColor: Theme.color.selectedText
             font: Theme.text.monoCaption.font
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true

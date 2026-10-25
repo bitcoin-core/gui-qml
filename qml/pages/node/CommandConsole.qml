@@ -14,7 +14,7 @@ Page {
     objectName: "commandConsole"
     signal back()
     background: Rectangle {
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         radius: Theme.radius.card
     }
     clip: true
@@ -22,7 +22,7 @@ Page {
     // Theme-aware palette for model-generated inline spans (welcome links and
     // JSON keys). Row-level colours are applied by QML so the
     // output follows the design-system tokens.
-    readonly property color consoleRequestColor: Theme.color.blue
+    readonly property color consoleRequestColor: Theme.color.infoText
     readonly property color consoleReplyColor:   Theme.color.neutral9
     readonly property color consoleTimeColor:    Theme.color.neutral7
     readonly property color consoleKeyColor:     Theme.color.syntaxKey
@@ -53,7 +53,7 @@ Page {
     function _pushPalette() {
         rpcConsoleModel.requestColor = consoleRequestColor
         rpcConsoleModel.replyColor   = consoleReplyColor
-        rpcConsoleModel.errorColor   = Theme.color.red
+        rpcConsoleModel.errorColor   = Theme.color.dangerText
         rpcConsoleModel.keyColor     = consoleKeyColor
     }
     // Focus the command input when the console becomes the active view, so the
@@ -148,11 +148,10 @@ Page {
         leftColumnColor: root.consoleTimeColor
         requestContentColor: root.consoleRequestColor
         replyContentColor: root.consoleReplyColor
-        errorContentColor: Theme.color.red
+        errorContentColor: Theme.color.dangerText
         requestLeftColumnColor: root.consoleRequestColor
         replyLeftColumnColor: root.consoleTimeColor
         errorLeftColumnColor: root.consoleTimeColor
-        selectionColor: Theme.color.orange
         accessibleName: qsTr("Console output")
         autoScrollToBottom: true
         searchText: root.searchText
@@ -176,7 +175,7 @@ Page {
         width: Math.min(inputField.width, 360)
         height: Math.min(autocompleteList.contentHeight + 2 * menuPadding, 228)
         minMenuWidth: 0
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         focus: false
         // Deliberately NOT CloseOnPressOutside: a real mouse press on the submit
         // button would otherwise close this popup (and clear filteredCommands)
@@ -231,7 +230,7 @@ Page {
             bottom: parent.bottom
         }
         height: 64
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         radius: Theme.radius.card
 
         Rectangle {
@@ -243,7 +242,7 @@ Page {
                 right: parent.right
             }
             height: 1
-            color: Theme.color.neutral2
+            color: Theme.color.surfaceDivider
         }
 
         RowLayout {
@@ -261,7 +260,7 @@ Page {
             Icon {
                 objectName: "consolePromptIcon"
                 source: "image://images/caret-right"
-                color: Theme.color.orange
+                color: Theme.color.accent
                 size: 16
                 Layout.preferredWidth: 16
                 Layout.preferredHeight: 16
@@ -276,17 +275,17 @@ Page {
                 font: Theme.text.monoCaption.font
                 color: Theme.color.neutral9
                 placeholderText: qsTr("Enter command…")
-                placeholderTextColor: Theme.color.neutral7
+                placeholderTextColor: Theme.color.placeholder
                 leftPadding: 12
                 rightPadding: 12
                 topPadding: 0
                 bottomPadding: 0
                 verticalAlignment: TextInput.AlignVCenter
                 background: Rectangle {
-                    color: Theme.color.neutral2
+                    color: Theme.color.surface2
                     radius: Theme.radius.field
                     border.width: inputField.activeFocus ? 2 : 0
-                    border.color: Theme.color.orange
+                    border.color: Theme.color.accent
                 }
 
                 // Enter accepts the highlighted autocomplete suggestion when the

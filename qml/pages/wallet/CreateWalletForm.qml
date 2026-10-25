@@ -107,7 +107,7 @@ OnboardingView {
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
-            fieldBackgroundColor: Theme.color.neutral2
+            fieldBackgroundColor: Theme.color.surface2
             onTextEdited: {
                 root.nameError = ""
                 walletController.clearWalletCreateStatus()
@@ -166,7 +166,7 @@ OnboardingView {
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
-            fieldBackgroundColor: Theme.color.neutral2
+            fieldBackgroundColor: Theme.color.surface2
             onTextEdited: walletController.clearWalletCreateStatus()
         }
         PasswordTextField {
@@ -180,7 +180,7 @@ OnboardingView {
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
-            fieldBackgroundColor: Theme.color.neutral2
+            fieldBackgroundColor: Theme.color.surface2
             errorText: text.length > 0 && passwordEntry.text !== text
                 ? qsTr("Passwords don't match") : ""
             onTextEdited: walletController.clearWalletCreateStatus()
@@ -228,7 +228,7 @@ OnboardingView {
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
-            fieldBackgroundColor: Theme.color.neutral2
+            fieldBackgroundColor: Theme.color.surface2
             errorText: text.trim().length > 0 && !root.validXpub
                 ? qsTr("Enter a valid extended public key (xpub)") : ""
             onTextEdited: walletController.clearWalletLoadStatus()
@@ -240,7 +240,7 @@ OnboardingView {
             Layout.fillWidth: true
             text: root.nameError.length > 0 ? root.nameError
                 : root.watchOnly ? walletController.walletLoadError : walletController.walletCreateError
-            color: Theme.color.red
+            color: Theme.color.dangerText
             textStyle: Theme.text.caption
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignLeft

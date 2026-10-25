@@ -26,7 +26,7 @@ Item {
     property real detailMinimumWidth: 240
     // 0 leaves the columns to separate themselves by their backgrounds.
     property real separatorWidth: 1
-    property color separatorColor: Theme.color.neutral2
+    property color separatorColor: Theme.color.surfaceDivider
     property int transitionDuration: Theme.motion.navigation
 
     readonly property bool isCompact: SizeClass.isCompact(width)

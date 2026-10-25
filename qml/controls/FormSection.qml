@@ -89,7 +89,7 @@ Item {
             SurfaceGradientBorder {
                 anchors.fill: parent
                 visible: root.showBackground && root.showGradientBorder
-                    && Qt.colorEqual(root.backgroundColor, Theme.color.neutral2)
+                    && Qt.colorEqual(root.backgroundColor, Theme.color.surface2)
                 surfaceColor: card.color
                 cornerRadius: card.radius
             }

@@ -33,7 +33,7 @@ TestCase {
 
     readonly property var specimenNames: [
         "designSystemColorBase", "designSystemColorRoles", "designSystemSurfaces", "designSystemColorLists",
-        "designSystemColorAliases", "designSystemTypeSet", "designSystemTextRoles",
+        "designSystemColorTints", "designSystemTypeSet", "designSystemTextRoles",
         "designSystemMotionDurations", "designSystemMotionEasing", "designSystemMotionTransitions",
         "designSystemMotionHelpers",
         "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
@@ -103,7 +103,7 @@ TestCase {
         const page = createPage()
         for (const name of roleNames(Theme.color)) {
             const type = typeof Theme.color[name]
-            if (type === "string" || type === "boolean") continue
+            if (type === "string" || type === "boolean" || type === "number") continue
             verify(findChild(page, "designSystemColor_" + name) !== null, name)
         }
         let textRoleCount = 0
@@ -113,7 +113,7 @@ TestCase {
             ++textRoleCount
         }
         verify(textRoleCount > 0)
-        verify(findChild(page, "designSystemColor_lavender") !== null)
+        verify(findChild(page, "designSystemColor_accent") !== null)
         verify(findChild(page, "designSystemColor_confirmationColors") !== null)
         verify(findChild(page, "designSystemText_captionStrong") !== null)
         verify(findChild(page, "designSystemText_amountDescription") !== null)
@@ -208,7 +208,8 @@ TestCase {
                 const neutral0 = findChild(page, "designSystemColor_neutral0")
                 verify(Qt.colorEqual(neutral0.value, palette.neutral0), palette.paletteId)
                 verify(findChild(page, "designSystemColor_surfaceHover") !== null)
-                verify(findChild(page, "designSystemColor_white") !== null)
+                verify(findChild(page, "designSystemColor_accentForeground") !== null)
+                verify(findChild(page, "designSystemColorTint_success") !== null)
 
                 let parentBox = null
                 for (let level = 0; level < levels.length; ++level) {

@@ -100,18 +100,14 @@ SettingsPage {
                 implicitWidth: 10
                 implicitHeight: 10
                 radius: width / 2
-                color: Theme.color.green
+                color: Theme.color.trafficReceived
             }
             bodyItem: NetworkTrafficGraph {
                 objectName: "networkTrafficReceivedGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
-                backgroundColor: Theme.color.neutral1
-                borderColor: Theme.color.neutral3
-                fillColor: Theme.color.green
-                lineColor: Theme.color.green
-                markerLineColor: Theme.color.neutral3
-                unitLabelColor: Theme.color.neutral7
+                fillColor: Theme.color.trafficReceived
+                lineColor: Theme.color.trafficReceived
                 maxSamples: root.trafficGraphScale
                 maxValue: networkTrafficTower.maxReceivedRateBps
                 valueList: networkTrafficTower.receivedRateList
@@ -130,18 +126,14 @@ SettingsPage {
                 implicitWidth: 10
                 implicitHeight: 10
                 radius: width / 2
-                color: Theme.color.blue
+                color: Theme.color.trafficSent
             }
             bodyItem: NetworkTrafficGraph {
                 objectName: "networkTrafficSentGraph"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 250
-                backgroundColor: Theme.color.neutral1
-                borderColor: Theme.color.neutral3
-                fillColor: Theme.color.blue
-                lineColor: Theme.color.blue
-                markerLineColor: Theme.color.neutral3
-                unitLabelColor: Theme.color.neutral7
+                fillColor: Theme.color.trafficSent
+                lineColor: Theme.color.trafficSent
                 maxSamples: root.trafficGraphScale
                 maxValue: networkTrafficTower.maxSentRateBps
                 valueList: networkTrafficTower.sentRateList

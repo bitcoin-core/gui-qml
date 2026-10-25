@@ -73,7 +73,7 @@ Item {
         paused: root.paused || root.faulted || root.offline
         connected: root.connected && !root.offline
         synced: root.synced
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
         renderingActive: root.presentationActive

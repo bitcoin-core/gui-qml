@@ -342,7 +342,7 @@ Page {
             }
         }
         background: Rectangle {
-            color: Theme.color.neutral2
+            color: Theme.color.surfaceDivider
             anchors.bottom: navBar.bottom
             anchors.bottomMargin: 4
             height: 1

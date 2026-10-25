@@ -76,7 +76,7 @@ LabeledField {
         textFormat: TextEdit.PlainText
         font: root.textStyle.font
         color: Theme.color.neutral9
-        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+        placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
         background: Item {}
         selectByMouse: true
         Accessible.name: root.label

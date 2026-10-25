@@ -93,7 +93,7 @@ OnboardingView {
             text: root.defaultWalletName
             supportingText: qsTr("You cannot change this later.")
             fieldSurface: true
-            fieldBackgroundColor: Theme.color.neutral2
+            fieldBackgroundColor: Theme.color.surface2
             enabled: !root.creatingWallet
             onTextEdited: {
                 root.nameError = ""
@@ -106,7 +106,7 @@ OnboardingView {
             Layout.fillWidth: true
             visible: text.length > 0
             text: root.nameError.length > 0 ? root.nameError : walletController.walletLoadError
-            color: Theme.color.red
+            color: Theme.color.dangerText
             textStyle: Theme.text.caption
             wrap: true
             horizontalAlignment: Text.AlignLeft

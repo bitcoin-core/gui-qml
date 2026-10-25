@@ -22,9 +22,9 @@ ColumnLayout {
     property string walletName: qsTr("Your wallet")
     property string selectedEntryId: ""
     property bool interactive: true
-    property color walletColor: Theme.color.purple
-    property color externalColor: Theme.color.orange
-    property color feeColor: Theme.color.blue
+    property color walletColor: Theme.color.txInternal
+    property color externalColor: Theme.color.txOutgoing
+    property color feeColor: Theme.color.info
     property color dataColor: Theme.color.neutral8
     property color unknownColor: Theme.color.neutral6
     readonly property var inputEntries: flow.inputs || []
@@ -113,7 +113,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         implicitHeight: contents.height + 48
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         radius: Theme.radius.card
         ColumnLayout {
             id: contents

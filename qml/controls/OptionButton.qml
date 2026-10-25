@@ -22,12 +22,12 @@ Button {
     background: Rectangle {
         objectName: "optionButtonBackground"
         border.width: button.surfaceSelectionStyle ? 0 : 1
-        border.color: !button.enabled ? Theme.color.neutral4 : button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
+        border.color: !button.enabled ? Theme.color.disabledContent : button.checked ? Theme.color.neutral9 : button.hovered ? Theme.color.neutral7 : Theme.color.neutral5
         radius: 10
         color: button.surfaceSelectionStyle
             ? button.checked
-                ? Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-                : button.hovered ? Theme.color.neutral2 : Theme.color.neutral1
+                ? Qt.tint(Theme.color.surface1, Theme.color.surfaceSelected)
+                : button.hovered ? Qt.tint(Theme.color.surface1, Theme.color.surfaceHover) : Theme.color.surface1
             : "transparent"
 
         Behavior on color {
@@ -73,7 +73,7 @@ Button {
                 visible: text.length > 0
                 text: button.text
                 textStyle: Theme.text.button
-                color: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
+                color: Theme.color.neutral9
                 horizontalAlignment: Text.AlignLeft
             }
             CoreText {
@@ -92,7 +92,7 @@ Button {
                 sourceComponent: Rectangle {
                     implicitWidth: recommendedText.implicitWidth + 14
                     implicitHeight: recommendedText.implicitHeight + 4
-                    color: Theme.color.neutral9
+                    color: Theme.color.activeFill
                     radius: 3
 
                     Behavior on color {
@@ -104,7 +104,7 @@ Button {
                         id: recommendedText
                         anchors.centerIn: parent
                         textStyle: Theme.text.captionStrong
-                        color: Theme.color.neutral0
+                        color: Theme.color.activeForeground
                         text: qsTr("Recommended")
                         wrap: false
                     }
@@ -121,7 +121,7 @@ Button {
                     Accessible.role: Accessible.StaticText
                     Accessible.name: button.customDir
                     background: Rectangle {
-                        color: Theme.color.neutral2
+                        color: Theme.color.surface2
                         radius: 5
                     }
                     contentItem: CoreText {
@@ -140,7 +140,7 @@ Button {
                 sourceComponent: CoreText {
                     objectName: "optionButtonErrorText"
                     textStyle: Theme.text.description
-                    color: Theme.color.red
+                    color: Theme.color.dangerText
                     text: button.errorText
                     horizontalAlignment: Text.AlignLeft
                 }
@@ -156,7 +156,7 @@ Button {
             Icon {
                 anchors.centerIn: parent
                 source: "image://images/check"
-                color: button.surfaceSelectionStyle ? Theme.color.orange : Theme.color.neutral9
+                color: Theme.color.neutral9
                 size: 24
             }
         }
