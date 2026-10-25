@@ -108,12 +108,9 @@ Page {
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "consoleBackButton"
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
+        showBackButton: true
+        backButtonObjectName: "consoleBackButton"
+        onBackClicked: root.back()
         title: qsTr("Console")
         TapHandler {
             grabPermissions: PointerHandler.TakeOverForbidden
@@ -177,6 +174,8 @@ Page {
         minMenuWidth: 0
         backgroundColor: Theme.color.surface2
         focus: false
+        // Modeless: the user keeps typing in the field while it is open.
+        modal: false
         // Deliberately NOT CloseOnPressOutside: a real mouse press on the submit
         // button would otherwise close this popup (and clear filteredCommands)
         // before the button's onClicked fires, so the button could never act on
@@ -233,7 +232,7 @@ Page {
         color: Theme.color.surface1
         radius: Theme.radius.card
 
-        Rectangle {
+        Separator {
             id: inputDivider
             objectName: "consoleInputDivider"
             anchors {
@@ -241,8 +240,6 @@ Page {
                 left: parent.left
                 right: parent.right
             }
-            height: 1
-            color: Theme.color.surfaceDivider
         }
 
         RowLayout {
@@ -284,8 +281,13 @@ Page {
                 background: Rectangle {
                     color: Theme.color.surface2
                     radius: Theme.radius.field
-                    border.width: inputField.activeFocus ? 2 : 0
-                    border.color: Theme.color.accent
+
+                    FieldBorderRings {
+                        objectName: "consoleInputFocusRing"
+                        anchors.fill: parent
+                        visible: inputField.activeFocus
+                        cornerRadius: parent.radius
+                    }
                 }
 
                 // Enter accepts the highlighted autocomplete suggestion when the

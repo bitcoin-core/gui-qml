@@ -308,44 +308,23 @@ Pane {
                 objectName: "paymentRequestMoreButton"
                 circular: true
                 size: 30
-                iconSize: Theme.size.icon.xl
                 iconColor: Theme.color.neutral7
                 activeIconColor: Theme.color.neutral8
                 surfaceLevel: 1
                 checked: moreMenu.opened
                 onClicked: moreMenu.opened ? moreMenu.close() : moreMenu.open()
-                ContextMenu {
+                PaymentRequestActionsMenu {
                     id: moreMenu
                     objectName: "paymentRequestMoreMenu"
                     x: moreButton.width - width
                     y: moreButton.height + 8
-                    ContextMenuButton {
-                        objectName: "requestPaymentCopyQRMenuButton"
-                        visible: !root.paymentReceived
-                        enabled: root.sharing
-                        text: qsTr("Copy QR code")
-                        onTriggered: root.copyQR()
-                    }
-                    ContextMenuButton {
-                        objectName: "requestPaymentSaveQRMenuButton"
-                        visible: !root.paymentReceived
-                        enabled: root.sharing
-                        text: qsTr("Save QR code…")
-                        onTriggered: if (root.sharing) saveDialog.open()
-                    }
-                    ContextMenuDivider { visible: !root.paymentReceived }
-                    ContextMenuButton {
-                        objectName: "requestPaymentAgainMenuButton"
-                        text: qsTr("Request again")
-                        onTriggered: root.requestAgain(root.request.id)
-                    }
-                    ContextMenuDivider {}
-                    ContextMenuButton {
-                        objectName: "requestPaymentDeleteMenuButton"
-                        text: qsTr("Delete payment request")
-                        role: ContextMenuButton.Destructive
-                        onTriggered: root.deleteRequest()
-                    }
+                    showsQrActions: !root.paymentReceived
+                    qrActionsEnabled: root.sharing
+                    showsRequestAgain: true
+                    onCopyQrRequested: root.copyQR()
+                    onSaveQrRequested: if (root.sharing) saveDialog.open()
+                    onRequestAgainRequested: root.requestAgain(root.request.id)
+                    onDeleteRequested: root.deleteRequest()
                 }
             }
             CloseButton {
@@ -465,7 +444,6 @@ Pane {
                 headerTrailingItem: root.modalView ? null : customizationControl
                 surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
-                showGradientBorder: false
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 0
@@ -595,7 +573,6 @@ Pane {
                 headerTrailingItem: root.modalView ? null : noteRecommendation
                 surfaceLevel: root.modalView ? 1 : 0
                 cornerRadius: root.modalView ? 12 : 16
-                showGradientBorder: false
 
                 PaymentRequestField {
                     id: noteInput
@@ -644,7 +621,7 @@ Pane {
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }
-        TextButton {
+        LinkButton {
             visible: !root.modalView && !!root.wallet && !!root.wallet.receivingAddress
                 && (root.wallet.receivingAddress.address === "" || root.wallet.receivingAddress.paymentReceived)
             Layout.alignment: Qt.AlignHCenter
@@ -672,8 +649,9 @@ Pane {
                 ? qsTr("Checking payments…") : qsTr("Update payment request")
             onClicked: root.saveFields()
         }
-        OutlineButton {
+        NeutralButton {
             objectName: "requestPaymentCopyButton"
+            buttonSize: NeutralButton.Large
             visible: root.saved && !root.modified && !root.paymentReceived
             enabled: root.sharing
             Layout.fillWidth: true

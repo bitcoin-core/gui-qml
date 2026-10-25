@@ -290,7 +290,7 @@ TestCase {
         verify(networkTrafficSentGraph !== null)
         compare(networkTrafficHeading.descriptionTextStyle.font.pixelSize,
             Theme.text.description.font.pixelSize)
-        compare(networkTrafficDescription.horizontalAlignment, Text.AlignHCenter)
+        compare(networkTrafficDescription.horizontalAlignment, Text.AlignLeft)
         compare(networkTrafficSection.backgroundColor, Theme.color.surface1)
         compare(networkTrafficSentRow.bottomPadding, 16)
         compare(networkTrafficRangePicker.model.length, 4)
@@ -820,6 +820,15 @@ TestCase {
             compare(displayUnitPicker.currentText, unit.text)
         }
 
+        const reduceMotionRow = findChild(view, "displayReduceMotionRow")
+        verify(reduceMotionRow !== null)
+        compare(reduceMotionRow.checked, Theme.reduceMotion)
+        const reduceMotion = Theme.reduceMotion
+        reduceMotionRow.switchItem.toggle()
+        reduceMotionRow.switchItem.toggled()
+        compare(Theme.reduceMotion, !reduceMotion)
+        Theme.reduceMotion = reduceMotion
+
         designSystemRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
         verify(findChild(view, "displayDesignSystemPage") !== null)
@@ -999,7 +1008,7 @@ TestCase {
                 const signerPathRow = findChild(view, "externalSignerPathRow")
                 const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
-                const signerPathFocusBorder = findChild(view, "externalSignerPathFocusBorder")
+                const signerPathFocusBorder = findChild(view, "externalSignerPathInputFocusRing")
                 const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
                 const signerStatusText = findChild(view, "externalSignerStatusText")
                 const checkDeviceButton = findChild(view, "externalSignerCheckDeviceButton")
@@ -1023,12 +1032,11 @@ TestCase {
                     "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
                 compare(signerStatusIndicator.color, Theme.color.danger)
                 compare(checkDeviceButton.text, "Check device")
-                compare(signerPathInput.implicitHeight, 37)
-                compare(signerPathInput.leftPadding, 15)
-                compare(signerPathInput.rightPadding, 10)
+                compare(signerPathInput.height, Theme.size.control)
+                compare(signerPathInput.Accessible.name, "Signer path")
                 compare(signerPathInput.background.color, Theme.color.surface2)
                 compare(signerPathInput.background.radius, Theme.radius.field)
-                compare(signerPathFocusBorder.ringColor, Theme.color.neutral6)
+                compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)
                 compare(signerStatusIndicator.width, 10)
                 compare(signerStatusIndicator.height, 10)
             }

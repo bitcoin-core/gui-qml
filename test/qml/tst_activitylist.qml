@@ -31,7 +31,7 @@ TestCase {
     function test_activity_svg_resources_load_data() {
         return ["activity-send", "activity-receive", "activity-multiple", "activity-payment-request",
             "activity-consolidation", "activity-split", "activity-internal", "activity-invoice",
-            "check", "coinbase", "file"].map(function(name) { return { tag: name, name: name } })
+            "coinbase", "file"].map(function(name) { return { tag: name, name: name } })
     }
 
     function test_activity_svg_resources_load(data) {
@@ -161,7 +161,8 @@ TestCase {
         verify(item !== null)
         const target = data.child ? findChild(item, "activityAction_robert") : item
         mouseClick(target, target.width / 2, target.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        // Transactions and payment requests each have their shared actions menu.
+        const menu = findChild(page, data.request ? "activityRequestContextMenu" : "activityRowContextMenu")
         tryCompare(menu, "opened", true)
         // With motion off the menu opens before its rows are laid out.
         verify(waitForItemPolished(menu.contentItem))
@@ -169,11 +170,17 @@ TestCase {
         const copyId = findChild(menu.contentItem, "activityCopyTransactionId")
         const copyRaw = findChild(menu.contentItem, "activityCopyRawTransaction")
         const copyRequest = findChild(menu.contentItem, "activityCopyPaymentRequest")
-        compare(copyId.visible, !data.request)
-        compare(copyRaw.visible, !data.request)
-        compare(copyRequest.visible, data.request)
-        compare(findChild(menu.contentItem, "activityDeletePaymentRequest").visible, data.request)
-        compare(findChild(menu.contentItem, "activityDeletePaymentRequestDivider").visible, data.request)
+        compare(copyId !== null, !data.request)
+        compare(copyRaw !== null, !data.request)
+        compare(copyRequest !== null, data.request)
+        if (data.request) {
+            verify(copyRequest.visible)
+            verify(findChild(menu.contentItem, "activityDeletePaymentRequest").visible)
+            verify(findChild(menu.contentItem, "activityDeletePaymentRequestDivider").visible)
+        } else {
+            verify(copyId.visible)
+            verify(copyRaw.visible)
+        }
         if (data.request) {
             mouseClick(copyRequest)
             compare(Clipboard.text(), "bitcoin:bc1qexample?amount=0.0001&label=Invoice")
@@ -196,7 +203,7 @@ TestCase {
         const page = createPage()
         const item = findChild(page, "activityRequest_invoice")
         mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        const menu = findChild(page, "activityRequestContextMenu")
         tryCompare(menu, "opened", true)
         const copy = findChild(menu.contentItem, "activityCopyPaymentRequest")
         verify(!copy.enabled)
@@ -212,7 +219,7 @@ TestCase {
         const page = createPage()
         const item = findChild(page, "activityRequest_invoice")
         mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        const menu = findChild(page, "activityRequestContextMenu")
         tryCompare(menu, "opened", true)
         const button = findChild(menu.contentItem, "activityDeletePaymentRequest")
         compare(button.role, ContextMenuButton.Destructive)
@@ -297,7 +304,7 @@ TestCase {
         const x = target.width / 2
         const y = data.target.length > 0 ? target.height / 2 : row.height - 3
         mouseMove(target, x, y)
-        tryCompare(findChild(row, "activityRowBackground"), "color", Theme.color.surface2)
+        tryCompare(findChild(row, "activityRowBackground"), "color", Qt.tint(Theme.color.surface1, Theme.color.surfaceHover))
         compare(findChild(row, "activityRowLabel").color, Theme.color.neutral9)
 
         mouseClick(target, x, y)
@@ -396,7 +403,7 @@ TestCase {
         compare(total.text, "+10000 sats")
         compare(total.color, Theme.color.txIncoming)
         verify(waitForRendering(page))
-        fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset, 0.1)
+        fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset - Theme.space.xs, 0.1)
         compare(findChild(findChild(page, "activityRequest_invoice"), "activityRowAmount").color, Theme.color.neutral7)
 
         findChild(page, "activitySearchField").text = "Robert"
@@ -531,7 +538,7 @@ TestCase {
         fixture[3].depth = 3
         testTransactionActivityModel.setRows(fixture)
         tryCompare(page.currentItem, "depth", 3)
-        verify(!findChild(page.currentItem, "transactionDetailsError").visible)
+        tryVerify(function() { return !findChild(page.currentItem, "transactionDetailsError").visible })
     }
 
     function test_request_modal_preserves_activity_and_transaction_navigation() {

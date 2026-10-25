@@ -6,6 +6,7 @@
 
 #include <QAbstractListModel>
 #include <QAccessible>
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QEvent>
@@ -13,8 +14,10 @@
 #include <QFont>
 #include <QHash>
 #include <QIcon>
+#include <QImage>
 #include <QLocale>
 #include <QPixmap>
+#include <QPointF>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -4158,6 +4161,20 @@ public:
     }
 };
 
+class TestImage : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE QColor pixelAt(const QImage& image, const QPointF& point, qreal logical_width) const
+    {
+        if (image.isNull() || logical_width <= 0) return {};
+        // The grab has device pixels; the sample point uses item coordinates.
+        const qreal ratio = image.width() / logical_width;
+        return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4192,6 +4209,7 @@ public Q_SLOTS:
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
         static TestAccessibility test_accessibility;
+        static TestImage test_image;
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
@@ -4298,6 +4316,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
+        engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }

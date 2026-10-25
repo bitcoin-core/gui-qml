@@ -71,7 +71,6 @@ SettingsPage {
             objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
-            showDivider: false
             trailingItem: PopupPicker {
                 objectName: "displayMoneyFontPicker"
                 surfaceLevel: 1
@@ -94,6 +93,15 @@ SettingsPage {
                     optionsModel.moneyFontChoice = value
                 }
             }
+        }
+
+        SwitchRow {
+            objectName: "displayReduceMotionRow"
+            Layout.fillWidth: true
+            title: qsTr("Reduce motion")
+            showDivider: false
+            checked: Theme.reduceMotion
+            onToggled: Theme.reduceMotion = checked
         }
     }
 
@@ -218,11 +226,12 @@ SettingsPage {
                 description: qsTr("Use %s for the transaction hash. Separate multiple URLs with |.")
             }
 
-            CoreTextField {
-                objectName: "thirdPartyTransactionUrlsInput"
+            LabeledTextField {
                 Layout.fillWidth: true
+                label: qsTr("URLs")
+                fieldObjectName: "thirdPartyTransactionUrlsInput"
+                fieldTextStyle: Theme.text.monoDescription
                 text: optionsModel.thirdPartyTransactionUrls
-                font: Theme.text.monoDescription.font
                 placeholderText: "https://example.com/tx/%s"
                 onEditingFinished: optionsModel.thirdPartyTransactionUrls = text
             }

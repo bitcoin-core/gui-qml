@@ -53,9 +53,7 @@ SettingsPage {
             if (root.updating) {
                 root.successText = qsTr("Password updated successfully.")
             } else {
-                if (acknowledgement.loadedTrailingItem) {
-                    acknowledgement.loadedTrailingItem.checked = false
-                }
+                acknowledgement.checked = false
                 root.saved()
             }
         } else {
@@ -109,7 +107,9 @@ SettingsPage {
         objectName: "walletPasswordFormSection"
         Layout.fillWidth: true
 
-        ColumnLayout {
+        // Qt 6.4 caches the checkbox's unwrapped height in nested layouts.
+        // A positioner follows its height as the text wraps and scales.
+        Column {
             Layout.fillWidth: true
             Layout.margins: passwordSection.contentInset
             spacing: 20
@@ -118,7 +118,7 @@ SettingsPage {
                 id: currentPassword
                 objectName: "walletPasswordCurrentEntry"
                 visible: root.updating
-                Layout.fillWidth: true
+                width: parent.width
                 label: qsTr("Current password")
                 labelObjectName: "walletPasswordCurrentLabel"
                 fieldObjectName: "walletPasswordCurrentField"
@@ -132,7 +132,7 @@ SettingsPage {
             PasswordTextField {
                 id: newPassword
                 objectName: "walletPasswordNewEntry"
-                Layout.fillWidth: true
+                width: parent.width
                 label: root.updating ? qsTr("New password") : qsTr("Choose a password")
                 labelObjectName: "walletPasswordNewLabel"
                 fieldObjectName: "walletPasswordNewField"
@@ -146,7 +146,7 @@ SettingsPage {
             PasswordTextField {
                 id: confirmPassword
                 objectName: "walletPasswordConfirmEntry"
-                Layout.fillWidth: true
+                width: parent.width
                 label: root.updating ? qsTr("Confirm new password") : qsTr("Confirm password")
                 labelObjectName: "walletPasswordConfirmLabel"
                 fieldObjectName: "walletPasswordConfirmField"
@@ -156,35 +156,28 @@ SettingsPage {
                 onTextEdited: root.clearResult()
             }
 
-            ListRow {
+            // Consent in a form is a checkbox.
+            CheckBox {
                 id: acknowledgement
                 objectName: "walletPasswordConfirmToggle"
                 visible: !root.updating
-                Layout.fillWidth: true
-                description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-                showDivider: false
-                accessibleRole: Accessible.CheckBox
-                trailingItem: OptionSwitch {
-                    focusPolicy: Qt.NoFocus
-                    Accessible.ignored: true
-                }
-                onClicked: loadedTrailingItem.toggle()
+                width: parent.width
+                text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
             }
 
             ToastBanner {
                 objectName: "walletPasswordResultBanner"
                 shown: root.resultText.length > 0
-                Layout.fillWidth: true
-                tintColor: root.resultSuccess ? Theme.color.success : Theme.color.danger
-                iconSource: root.resultSuccess ? "image://images/check" : "image://images/info-filled"
+                width: parent.width
+                tone: root.resultSuccess ? ToastBanner.Success : ToastBanner.Error
                 text: root.resultText
                 textObjectName: "walletPasswordErrorText"
             }
 
             ContinueButton {
                 objectName: "walletPasswordSaveButton"
-                Layout.preferredWidth: Math.min(320, parent.width)
-                Layout.alignment: Qt.AlignHCenter
+                width: Math.min(320, parent.width)
+                anchors.horizontalCenter: parent.horizontalCenter
                 text: root.updating ? qsTr("Update password") : qsTr("Set password")
                 enabled: walletController.initialized
                     && newPassword.text !== ""
@@ -192,7 +185,7 @@ SettingsPage {
                     && newPassword.text === confirmPassword.text
                     && (root.updating
                         ? currentPassword.text !== ""
-                        : acknowledgement.loadedTrailingItem && acknowledgement.loadedTrailingItem.checked)
+                        : acknowledgement.checked)
                 onClicked: {
                     root.clearResult()
                     const ok = root.updating

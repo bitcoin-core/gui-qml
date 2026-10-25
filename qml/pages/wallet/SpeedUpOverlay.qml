@@ -121,7 +121,8 @@ DialogPopup {
                 columnSpacing: 12
                 rowSpacing: 12
 
-                OutlineButton {
+                NeutralButton {
+                    buttonSize: NeutralButton.Large
                     text: qsTr("Cancel")
                     Layout.fillWidth: true
                     Layout.preferredWidth: 1

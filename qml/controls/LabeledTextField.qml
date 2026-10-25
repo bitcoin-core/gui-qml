@@ -27,6 +27,9 @@ LabeledField {
     property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     property color placeholderColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
     property var fieldTextStyle: Theme.text.description
+    // For a field whose visible label is a section title outside it.
+    property string accessibleName: label
+    property string accessibleDescription: errorText.length > 0 ? errorText : supportingText
     fieldFocused: input.activeFocus
 
     signal textEdited(string text)
@@ -54,8 +57,8 @@ LabeledField {
             rightPadding: trailingLoader.active
                 ? trailingLoader.width + (root.fieldSurface ? root.fieldHorizontalPadding : root.fieldHorizontalPadding * 2)
                 : (root.fieldSurface ? 0 : root.fieldHorizontalPadding)
-            Accessible.name: root.label
-            Accessible.description: root.errorText.length > 0 ? root.errorText : root.supportingText
+            Accessible.name: root.accessibleName
+            Accessible.description: root.accessibleDescription
 
             background: Rectangle {
                 color: root.fieldSurface ? "transparent" : root.fieldBackgroundColor

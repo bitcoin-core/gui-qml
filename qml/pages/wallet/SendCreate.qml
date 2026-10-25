@@ -690,20 +690,16 @@ PageStack {
             objectName: "sendUriImportPopup"
             parent: Overlay.overlay
             title: qsTr("Open payment request")
-            initialFocusItem: uriImportInput
+            initialFocusItem: uriImportInput.field
             implicitWidth: Math.max(420, horizontalActionsWidth + 40)
 
-            content: CoreTextField {
+            content: LabeledTextField {
                 id: uriImportInput
-                objectName: "sendUriImportInput"
                 Layout.fillWidth: true
+                label: qsTr("Payment request")
+                fieldObjectName: "sendUriImportInput"
                 placeholderText: qsTr("bitcoin:address?amount=…")
-                background: Rectangle {
-                    color: Theme.color.surface2
-                    radius: Theme.radius.field
-                    border.width: 0
-                }
-                onAccepted: if (uriImportApply.enabled) sendUriImportPopup.trigger(uriImportApply)
+                fieldBackgroundColor: Theme.color.surface2
             }
 
             AlertAction {
@@ -908,12 +904,9 @@ PageStack {
                                                             text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
                                                         }
                                                         BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; textStyle: Theme.text.amountDescription }
-                                                        Icon {
-                                                            source: "image://images/caret-right"
-                                                            rotation: recipientCard.expanded ? 90 : 0
-                                                            size: 9
+                                                        CaretRightIcon {
+                                                            expanded: recipientCard.expanded
                                                             color: Theme.color.neutral6
-                                                            Behavior on rotation { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                                                         }
                                                     }
                                                 }
@@ -1024,8 +1017,9 @@ PageStack {
                                     text: root.selectedInputsActive ? (root.wallet.coinsListModel.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount))
                                         : qsTr("%1 inputs selected automatically").arg(root.wallet.estimatedInputCount)
                                 }
-                                OutlineButton {
+                                NeutralButton {
                                     objectName: "sendUseAutomaticInputsButton"
+                                    buttonSize: NeutralButton.Large
                                     visible: false
                                     text: qsTr("Use automatic selection")
                                     onClicked: { root.wallet.clearSelectedCoins(); root.wallet.coinsListModel.update(); root.scheduleFeeEstimates() }
@@ -1067,7 +1061,7 @@ PageStack {
                 Item {
                     anchors.fill: parent
 
-                    CoreTextField {
+                    TextField {
                         id: fileImportPathInput
                         objectName: "sendImportPaymentRequestFilePathInput"
                         visible: false
@@ -1079,7 +1073,7 @@ PageStack {
                         onClicked: sendPage.applyPaymentRequestFromFile(fileImportPathInput.text)
                     }
 
-                    CoreTextField {
+                    TextField {
                         id: dropUriInput
                         objectName: "sendDropUriInput"
                         visible: false
@@ -1094,7 +1088,7 @@ PageStack {
                     // Exercises the DropArea hasUrls + file:// branch.
                     // Passes the raw URL to applyPaymentRequestFromFile so C++
                     // handles the platform-correct toLocalFile() conversion.
-                    CoreTextField {
+                    TextField {
                         id: dropFileUrlInput
                         objectName: "sendDropFileUrlInput"
                         visible: false

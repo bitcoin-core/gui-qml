@@ -181,8 +181,10 @@ Item {
 
             childView: Item {
                 implicitHeight: root.walletDiscoveryReady ? 0 : 48
-                BusyIndicator {
+                SpinningIndicator {
                     objectName: "createWalletDiscoveryBusyIndicator"
+                    size: 32
+                    color: Theme.color.neutral7
                     anchors.centerIn: parent
                     visible: !root.walletDiscoveryReady
                     running: visible

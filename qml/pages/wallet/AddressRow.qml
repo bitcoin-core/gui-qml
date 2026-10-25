@@ -79,7 +79,7 @@ AbstractButton {
                 bottomPadding: 0
             }
 
-            CoreTextField {
+            TextField {
                 id: noteField
                 objectName: "addressRowNoteField"
                 property string submittedText: root.label

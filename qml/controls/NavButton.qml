@@ -10,18 +10,22 @@ import org.bitcoincore.qt 1.0
 
 AbstractButton {
     id: root
-    property int iconHeight: 30
-    property int iconWidth: 30
+    // One back-caret size across top bars.
+    property int iconHeight: Theme.size.icon.xl
+    property int iconWidth: Theme.size.icon.xl
+    property string iconObjectName: ""
+    readonly property bool iconOnly: !text_background.active && button_background.active
     property bool bold: true
     property bool busy: false
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property url iconSource: ""
     property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     hoverEnabled: AppMode.isDesktop && !busy
-    topPadding: text_background.active ? 7 : 14
-    bottomPadding: text_background.active ? 7 : 14
-    rightPadding: text_background.active ? 22 : 14
-    leftPadding: text_background.active ? 2 : 14
+    // An icon-only button is a square Theme.size.iconButton target.
+    topPadding: text_background.active ? 7 : iconOnly ? (Theme.size.iconButton - iconHeight) / 2 : 14
+    bottomPadding: topPadding
+    rightPadding: text_background.active ? 22 : iconOnly ? (Theme.size.iconButton - iconWidth) / 2 : 14
+    leftPadding: text_background.active ? 2 : iconOnly ? rightPadding : 14
 
     HoverHandler {
         enabled: root.enabled && root.hoverEnabled
@@ -51,6 +55,7 @@ AbstractButton {
            active: root.iconSource.toString().length > 0
            visible: active
            sourceComponent: Icon {
+               objectName: root.iconObjectName
                source: root.iconSource
                color: root.iconColor
                size: root.iconHeight
