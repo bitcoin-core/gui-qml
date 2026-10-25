@@ -1047,7 +1047,7 @@ PageStack {
                             }
 
                             CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.dangerText }
-                            ContinueButton {
+                            PrimaryButton {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true
                                 text: qsTr("Review transaction")

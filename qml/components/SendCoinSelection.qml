@@ -57,7 +57,7 @@ DialogPopup {
             }
             //: Discard changes to the input selection.
             NeutralButton { objectName: "coinSelectionCancelButton"; text: qsTr("Cancel"); implicitHeight: Theme.size.controlLarge; onClicked: root.close() }
-            ContinueButton {
+            PrimaryButton {
                 objectName: "coinSelectionDoneButton"
                 //: Apply these selected coins to the transaction.
                 text: qsTr("Use selected inputs")

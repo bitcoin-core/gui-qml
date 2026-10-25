@@ -117,7 +117,7 @@ Item {
             color: root.statusColor
         }
 
-        ContinueButton {
+        PrimaryButton {
             objectName: root.buttonObjectName
             Layout.fillWidth: true
             text: root.buttonText

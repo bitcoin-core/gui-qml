@@ -651,7 +651,7 @@ Pane {
             text: qsTr("Try again")
             onClicked: root.retryAddressRequested()
         }
-        ContinueButton {
+        PrimaryButton {
             objectName: "requestPaymentGenerateButton"
             visible: !root.saved
             Layout.topMargin: root.modalView ? 0 : 16
@@ -661,7 +661,7 @@ Pane {
             text: qsTr("Create payment request")
             onClicked: root.createRequest()
         }
-        ContinueButton {
+        PrimaryButton {
             objectName: "requestPaymentUpdateButton"
             visible: root.saved && root.modified
             Layout.fillWidth: true

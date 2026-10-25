@@ -174,7 +174,7 @@ SettingsPage {
                 textObjectName: "walletPasswordErrorText"
             }
 
-            ContinueButton {
+            PrimaryButton {
                 objectName: "walletPasswordSaveButton"
                 width: Math.min(320, parent.width)
                 anchors.horizontalCenter: parent.horizontalCenter

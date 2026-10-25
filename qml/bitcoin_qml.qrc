@@ -73,7 +73,7 @@
         <file>controls/ContextMenuToggle.qml</file>
         <file>controls/CopyButton.qml</file>
         <file>controls/ActivityCalendar.qml</file>
-        <file>controls/ContinueButton.qml</file>
+        <file>controls/PrimaryButton.qml</file>
         <file>controls/DropdownButton.qml</file>
         <file>controls/CheckBox.qml</file>
         <file>controls/CoreText.qml</file>
