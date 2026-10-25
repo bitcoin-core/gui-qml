@@ -428,11 +428,9 @@ Page {
                 }
             }
         }
-        background: Rectangle {
-            color: Theme.color.surfaceDivider
+        background: Separator {
             anchors.bottom: navBar.bottom
             anchors.bottomMargin: 4
-            height: 1
             width: parent.width
         }
     }

@@ -112,8 +112,9 @@ SettingsPage {
         titleAlignment: Text.AlignHCenter
     }
 
-    OutlineButton {
+    NeutralButton {
         objectName: "walletSettingsEmptyAction"
+        buttonSize: NeutralButton.Large
         visible: !root.walletLoaded
         Layout.preferredWidth: 220
         Layout.alignment: Qt.AlignHCenter

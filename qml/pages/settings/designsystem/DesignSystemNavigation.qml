@@ -18,6 +18,7 @@ DesignSystemSection {
         objectName: "designSystemNavigationBar2"
         Layout.fillWidth: true
         name: "NavigationBar2"
+        note: "The one top bar: back button (NavButton, 24 px caret), centered heading title that elides, right item and close button. SettingsHeader is a configuration of it."
 
         DesignSystemState {
             width: parent.width
@@ -29,6 +30,17 @@ DesignSystemSection {
                 rightItem: NavButton {
                     text: "Done"
                 }
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "icon-only back, showCloseButton"
+            NavigationBar2 {
+                Layout.fillWidth: true
+                showBackButton: true
+                backButtonText: ""
+                title: "Review"
+                showCloseButton: true
             }
         }
         DesignSystemState {
@@ -104,6 +116,16 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 title: "Storage"
                 description: "Where and how much blockchain data is kept."
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "titleAlignment: AlignHCenter"
+            PageHeading {
+                Layout.fillWidth: true
+                title: "Saving…"
+                titleAlignment: Text.AlignHCenter
+                description: "The description follows the title (descriptionAlignment)."
             }
         }
         DesignSystemState {

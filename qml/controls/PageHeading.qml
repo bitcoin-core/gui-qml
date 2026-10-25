@@ -18,6 +18,8 @@ Control {
     property var descriptionTextStyle: Theme.text.description
     property int descriptionTextFormat: Text.AutoText
     property int titleAlignment: Text.AlignLeft
+    // Settings intros follow their left-aligned title.
+    property int descriptionAlignment: titleAlignment
 
     Accessible.name: title
     Accessible.description: description
@@ -53,7 +55,7 @@ Control {
                 text: root.description
                 color: Theme.color.neutral7
                 textStyle: root.descriptionTextStyle
-                horizontalAlignment: Text.AlignHCenter
+                horizontalAlignment: root.descriptionAlignment
                 textFormat: root.descriptionTextFormat
                 wrap: true
             }

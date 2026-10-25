@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
@@ -32,6 +33,7 @@ Page {
     Component.onCompleted: ready = true
     onWalletChanged: if (ready) {
         activityRowMenu.close()
+        activityRequestMenu.close()
         clearFilters()
         activityFilterProxy.searchText = ""
         searchField.text = ""
@@ -336,6 +338,30 @@ Page {
             ListView {
                 id: listView
                 objectName: "activityListView"
+                function ensureFocusedItemVisible() {
+                    const window = root.Window.window
+                    const item = window ? window.activeFocusItem : null
+                    let ancestor = item
+                    while (ancestor && ancestor !== listView.contentItem) ancestor = ancestor.parent
+                    if (!ancestor) return
+                    const position = item.mapToItem(listView, 0, 0)
+                    const margin = Theme.space.m
+                    let y = listView.contentY
+                    if (position.y < margin) y += position.y - margin
+                    else if (position.y + item.height > listView.height - margin)
+                        y += position.y + item.height - listView.height + margin
+                    listView.contentY = Math.max(listView.originY,
+                        Math.min(y, listView.originY + listView.contentHeight - listView.height))
+                }
+                Timer {
+                    id: focusScrollTimer
+                    interval: 0
+                    onTriggered: listView.ensureFocusedItemVisible()
+                }
+                Connections {
+                    target: root.Window.window
+                    function onActiveFocusItemChanged() { focusScrollTimer.restart() }
+                }
                 anchors.fill: parent
                 clip: true
                 model: activityFilterProxy
@@ -353,8 +379,8 @@ Page {
                     RowLayout {
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.leftMargin: root.activitySideInset
-                        anchors.rightMargin: root.activitySideInset
+                        anchors.leftMargin: root.activitySideInset + Theme.space.xs
+                        anchors.rightMargin: root.activitySideInset + Theme.space.xs
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 12
                         spacing: 12
@@ -407,13 +433,13 @@ Page {
                         firstInSection: activityDelegate.ListView.section !== activityDelegate.ListView.previousSection
                         lastInSection: activityDelegate.ListView.section !== activityDelegate.ListView.nextSection
                         onContextMenuRequested: function(x, y) {
-                            const point = activityRow.mapToItem(activityRowMenu.parent, x, y)
-                            activityRowMenu.txid = activityRow.txid
-                            activityRowMenu.requestId = activityRow.requestId
-                            activityRowMenu.isRequest = activityRow.isPendingRequest
-                            activityRowMenu.x = point.x
-                            activityRowMenu.y = point.y
-                            activityRowMenu.open()
+                            const menu = activityRow.isPendingRequest ? activityRequestMenu : activityRowMenu
+                            const point = activityRow.mapToItem(menu.parent, x, y)
+                            if (activityRow.isPendingRequest) activityRequestMenu.requestId = activityRow.requestId
+                            else activityRowMenu.txid = activityRow.txid
+                            menu.x = point.x
+                            menu.y = point.y
+                            menu.open()
                         }
                         onActivated: function(txid, requestId, isRequest) {
                             if (isRequest) root.paymentRequestRequested(requestId)
@@ -444,8 +470,10 @@ Page {
                     textStyle: Theme.text.description
                     color: Theme.color.neutral7
                 }
-                Button {
+                NeutralButton {
                     objectName: "activityRetryButton"
+                    surfaceLevel: 0
+                    Layout.alignment: Qt.AlignHCenter
                     visible: root.wallet && !!root.wallet.transactionActivityModel.loadError
                     text: qsTr("Try again")
                     onClicked: root.wallet.transactionActivityModel.reload()
@@ -467,51 +495,40 @@ Page {
         }
     }
 
-    ContextMenu {
+    TransactionActionsMenu {
         id: activityRowMenu
         objectName: "activityRowContextMenu"
         backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
-        margins: 8
-        property string txid: ""
+        itemObjectNamePrefix: "activity"
+        rawTransaction: function(txid) {
+            return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
+        }
+        onExplorerLinkRequested: function(url) { explorerLinkPopup.openLink(url) }
+    }
+
+    PaymentRequestActionsMenu {
+        id: activityRequestMenu
+        objectName: "activityRequestContextMenu"
         property string requestId: ""
-        property bool isRequest: false
-        ContextMenuButton {
-            objectName: "activityCopyTransactionId"
-            visible: !activityRowMenu.isRequest
-            text: qsTr("Copy transaction ID")
-            onTriggered: Clipboard.setText(activityRowMenu.txid)
+        backgroundColor: Theme.color.surface2
+        parent: Overlay.overlay
+        showsCopyRequest: true
+        copyRequestEnabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
+        copyRequestObjectName: "activityCopyPaymentRequest"
+        deleteObjectName: "activityDeletePaymentRequest"
+        onCopyRequestRequested: {
+            const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRequestMenu.requestId) : ""
+            if (uri.length === 0) return
+            Clipboard.setText(uri)
         }
-        ContextMenuButton {
-            objectName: "activityCopyRawTransaction"
-            visible: !activityRowMenu.isRequest
-            text: qsTr("Copy raw transaction hex")
-            onTriggered: {
-                const hex = root.wallet ? root.wallet.transactionActivityModel.rawTransaction(activityRowMenu.txid) : ""
-                if (hex.length > 0) Clipboard.setText(hex)
-            }
-        }
-        ContextMenuButton {
-            objectName: "activityCopyPaymentRequest"
-            visible: activityRowMenu.isRequest
-            enabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
-            text: qsTr("Copy payment request")
-            onTriggered: {
-                const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRowMenu.requestId) : ""
-                if (uri.length > 0) Clipboard.setText(uri)
-            }
-        }
-        ContextMenuDivider {
-            objectName: "activityDeletePaymentRequestDivider"
-            visible: activityRowMenu.isRequest
-        }
-        ContextMenuButton {
-            objectName: "activityDeletePaymentRequest"
-            visible: activityRowMenu.isRequest
-            text: qsTr("Delete payment request")
-            role: ContextMenuButton.Destructive
-            onTriggered: deleteRequestConfirmation.confirmDelete(root.wallet, activityRowMenu.requestId)
-        }
+        onDeleteRequested: deleteRequestConfirmation.confirmDelete(root.wallet, activityRequestMenu.requestId)
+    }
+
+    // The explorer receives the transaction ID, so opening it is confirmed.
+    ExternalPopup {
+        id: explorerLinkPopup
+        objectName: "activityExplorerLinkPopup"
     }
 
     PaymentRequestDeleteConfirmation {
@@ -582,7 +599,7 @@ Page {
         objectName: "activityExportResultPopup"
         parent: Overlay.overlay
         tone: root.exportSucceeded ? AlertPopup.Success : AlertPopup.Error
-        iconSource: root.exportSucceeded ? "image://images/check" : "image://images/cross"
+        iconSource: root.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
         title: root.exportResultTitle()
         titleObjectName: "activityExportResultTitle"
         message: root.exportResultDescription()
@@ -721,17 +738,15 @@ Page {
                 Layout.fillWidth: true
                 Layout.topMargin: 2
 
-                TextButton {
+                LinkButton {
                     objectName: "activityDateRangeReset"
                     //: Button that clears the Activity custom date range.
                     text: qsTr("Reset")
                     textStyle: Theme.text.menuItemStrong
                     // Nothing to reset until a date has been picked.
                     enabled: calendar.hasSelection
-                    textColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
-                    // A disabled control still receives hover, which would
-                    // trigger the button's hover recolor; gate it on enabled.
-                    hoverEnabled: enabled && AppMode.isDesktop
+                    textColor: !enabled ? Theme.color.disabledContent
+                        : down || hovered ? Theme.color.neutral9 : Theme.color.neutral7
                     // Clear the picked dates and drop the applied filter,
                     // but stay in the calendar so a new range can be picked.
                     onClicked: {
@@ -742,14 +757,12 @@ Page {
 
                 Item { Layout.fillWidth: true }
 
-                TextButton {
+                LinkButton {
                     objectName: "activityDateRangeApply"
                     //: Button that applies the picked Activity custom date range.
                     text: qsTr("Apply")
                     textStyle: Theme.text.menuItemStrong
                     enabled: calendar.valid
-                    textColor: enabled ? Theme.color.accentText : Theme.color.disabledContent
-                    hoverEnabled: enabled && AppMode.isDesktop
                     // Pass ISO strings rather than the Dates: a JS Date
                     // converted straight to QDate can shift a day across
                     // time zones. applyCustomRange selects the custom

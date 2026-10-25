@@ -162,6 +162,8 @@ Control {
                         anchors.centerIn: parent
                         width: parent.size
                         height: parent.size
+                        // The image provider needs a requested size.
+                        sourceSize: Qt.size(parent.size, parent.size)
                         source: parent.source
                         color: parent.color
                         fillMode: Image.PreserveAspectFit

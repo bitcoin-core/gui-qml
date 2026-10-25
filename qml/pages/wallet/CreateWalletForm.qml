@@ -81,10 +81,8 @@ OnboardingView {
         property alias encryptWallet: encryptCheck.checked
         property alias passwordText: passwordEntry.text
         property alias confirmText: confirmEntry.text
-        readonly property bool passwordLossAcknowledged: acknowledgement.loadedTrailingItem
-            ? acknowledgement.loadedTrailingItem.checked : false
-        readonly property bool unencryptedWalletAcknowledged: unencryptedAcknowledgement.loadedTrailingItem
-            ? unencryptedAcknowledgement.loadedTrailingItem.checked : false
+        readonly property bool passwordLossAcknowledged: acknowledgement.checked
+        readonly property bool unencryptedWalletAcknowledged: unencryptedAcknowledgement.checked
 
         function clearSecrets() {
             passwordEntry.text = ""
@@ -115,105 +113,75 @@ OnboardingView {
             }
         }
 
-        Separator {
-            Layout.fillWidth: true
-            Layout.topMargin: 4
-            Layout.bottomMargin: 4
-        }
-
-        CoreText {
+        // Consent in a form is a checkbox; nothing applies until Create.
+        FormSection {
+            objectName: "createWalletSecuritySection"
             visible: !root.watchOnly
             Layout.fillWidth: true
-            text: qsTr("SECURITY")
-            color: Theme.color.neutral6
-            textStyle: Theme.text.captionStrong
-            horizontalAlignment: Text.AlignLeft
-        }
+            Layout.topMargin: 8
+            showBackground: false
+            title: qsTr("Security")
+            rowSpacing: 16
 
-        CheckBox {
-            id: encryptCheck
-            objectName: "createWalletEncryptCheckBox"
-            visible: !root.watchOnly
-            Layout.fillWidth: true
-            text: qsTr("Encrypt this wallet with a strong password.")
-            checked: true
-            onCheckedChanged: {
-                if (!checked && acknowledgement.loadedTrailingItem)
-                    acknowledgement.loadedTrailingItem.checked = false
-                if (checked && unencryptedAcknowledgement.loadedTrailingItem)
-                    unencryptedAcknowledgement.loadedTrailingItem.checked = false
+            CheckBox {
+                id: encryptCheck
+                objectName: "createWalletEncryptCheckBox"
+                Layout.fillWidth: true
+                text: qsTr("Encrypt this wallet with a strong password.")
+                description: qsTr("Recommended")
+                checked: true
+                onCheckedChanged: {
+                    if (!checked) acknowledgement.checked = false
+                    if (checked) unencryptedAcknowledgement.checked = false
+                }
             }
-        }
-        CoreText {
-            visible: !root.watchOnly
-            Layout.fillWidth: true
-            Layout.leftMargin: 30
-            Layout.topMargin: -12
-            text: qsTr("Recommended")
-            color: Theme.color.neutral7
-            textStyle: Theme.text.caption
-            horizontalAlignment: Text.AlignLeft
-        }
 
-        PasswordTextField {
-            id: passwordEntry
-            objectName: "createWalletPasswordEntry"
-            visible: !root.watchOnly && encryptCheck.checked
-            Layout.fillWidth: true
-            label: qsTr("Password")
-            fieldObjectName: "createWalletPasswordInput"
-            placeholderText: qsTr("Enter password…")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            onTextEdited: walletController.clearWalletCreateStatus()
-        }
-        PasswordTextField {
-            id: confirmEntry
-            objectName: "createWalletConfirmPasswordEntry"
-            visible: !root.watchOnly && encryptCheck.checked
-            Layout.fillWidth: true
-            label: qsTr("Confirm password")
-            fieldObjectName: "createWalletPasswordRepeatInput"
-            placeholderText: qsTr("Enter password again…")
-            fieldSurface: true
-            labelSpacing: 6
-            messageSpacing: 8
-            fieldBackgroundColor: Theme.color.surface2
-            errorText: text.length > 0 && passwordEntry.text !== text
-                ? qsTr("Passwords don't match") : ""
-            onTextEdited: walletController.clearWalletCreateStatus()
-        }
-
-        ListRow {
-            id: acknowledgement
-            objectName: "createWalletPasswordConfirmToggle"
-            visible: !root.watchOnly && encryptCheck.checked
-            Layout.fillWidth: true
-            description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-            showDivider: false
-            accessibleRole: Accessible.CheckBox
-            trailingItem: OptionSwitch {
-                focusPolicy: Qt.NoFocus
-                Accessible.ignored: true
+            PasswordTextField {
+                id: passwordEntry
+                objectName: "createWalletPasswordEntry"
+                visible: encryptCheck.checked
+                Layout.fillWidth: true
+                label: qsTr("Password")
+                fieldObjectName: "createWalletPasswordInput"
+                placeholderText: qsTr("Enter password…")
+                fieldSurface: true
+                labelSpacing: 6
+                messageSpacing: 8
+                fieldBackgroundColor: Theme.color.surface2
+                onTextEdited: walletController.clearWalletCreateStatus()
             }
-            onClicked: loadedTrailingItem.toggle()
-        }
-
-        ListRow {
-            id: unencryptedAcknowledgement
-            objectName: "createWalletUnencryptedConfirmToggle"
-            visible: !root.watchOnly && !encryptCheck.checked
-            Layout.fillWidth: true
-            description: qsTr("I understand this wallet will be unencrypted. Anyone with access to its file may be able to spend my bitcoin. I cannot set a password later.")
-            showDivider: false
-            accessibleRole: Accessible.CheckBox
-            trailingItem: OptionSwitch {
-                focusPolicy: Qt.NoFocus
-                Accessible.ignored: true
+            PasswordTextField {
+                id: confirmEntry
+                objectName: "createWalletConfirmPasswordEntry"
+                visible: encryptCheck.checked
+                Layout.fillWidth: true
+                label: qsTr("Confirm password")
+                fieldObjectName: "createWalletPasswordRepeatInput"
+                placeholderText: qsTr("Enter password again…")
+                fieldSurface: true
+                labelSpacing: 6
+                messageSpacing: 8
+                fieldBackgroundColor: Theme.color.surface2
+                errorText: text.length > 0 && passwordEntry.text !== text
+                    ? qsTr("Passwords don't match") : ""
+                onTextEdited: walletController.clearWalletCreateStatus()
             }
-            onClicked: loadedTrailingItem.toggle()
+
+            CheckBox {
+                id: acknowledgement
+                objectName: "createWalletPasswordConfirmToggle"
+                visible: encryptCheck.checked
+                Layout.fillWidth: true
+                text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
+            }
+
+            CheckBox {
+                id: unencryptedAcknowledgement
+                objectName: "createWalletUnencryptedConfirmToggle"
+                visible: !encryptCheck.checked
+                Layout.fillWidth: true
+                text: qsTr("I understand this wallet will be unencrypted. Anyone with access to its file may be able to spend my bitcoin. I cannot set a password later.")
+            }
         }
 
         LabeledTextArea {

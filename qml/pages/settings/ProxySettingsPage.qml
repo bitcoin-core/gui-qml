@@ -108,31 +108,29 @@ SettingsPage {
     onBack: root.requestBack()
     Component.onCompleted: root.resetProxyDraft()
 
-    SettingsRestartNotice {
+    ToastBanner {
         objectName: "proxyRestartNotice"
-        visible: !root.onboardingModal && root.settingsModel.proxySettingsDirty
+        shown: !root.onboardingModal && root.settingsModel.proxySettingsDirty
         Layout.fillWidth: true
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 
     FormSection {
         objectName: "defaultProxySection"
         Layout.fillWidth: true
         surfaceLevel: root.onboardingModal ? 1 : 0
-        showGradientBorder: false
         title: qsTr("Default proxy")
         description: qsTr("Route peer connections through a SOCKS5 proxy. IPv4, IPv6, and Tor connections are supported.")
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             dividerColor: Theme.color.surfaceDivider
             title: qsTr("Enable")
             supportingText: root.proxySetting.infoText
             enabled: root.proxySetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "proxyEnableSwitch"
-                checked: root.draftProxyEnabled
-                onToggled: root.draftProxyEnabled = checked
-            }
+            switchObjectName: "proxyEnableSwitch"
+            checked: root.draftProxyEnabled
+            onToggled: root.draftProxyEnabled = checked
         }
 
         TextFieldRow {
@@ -161,21 +159,18 @@ SettingsPage {
         objectName: "torProxySection"
         Layout.fillWidth: true
         surfaceLevel: root.onboardingModal ? 1 : 0
-        showGradientBorder: false
         title: qsTr("Tor proxy")
         description: qsTr("Route Tor connections through a dedicated SOCKS5 proxy.")
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             dividerColor: Theme.color.surfaceDivider
             title: qsTr("Enable")
             supportingText: root.onionSetting.infoText
             enabled: root.onionSetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "torEnableSwitch"
-                checked: root.draftTorEnabled
-                onToggled: root.draftTorEnabled = checked
-            }
+            switchObjectName: "torEnableSwitch"
+            checked: root.draftTorEnabled
+            onToggled: root.draftTorEnabled = checked
         }
 
         TextFieldRow {

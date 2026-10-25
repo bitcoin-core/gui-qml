@@ -60,10 +60,7 @@ ColumnLayout {
         errorText = coins.setCoinsLocked([coinId], locked) ? "" : qsTr("This coin could not be updated. Try again.")
     }
     function openMenu(menu, button) {
-        const p = button.mapToItem(Overlay.overlay, button.width, button.height + 6)
-        menu.x = Math.max(12, Math.min(p.x - menu.width, Overlay.overlay.width - menu.width - 12))
-        menu.y = Math.max(12, Math.min(p.y, Overlay.overlay.height - menu.height - 12))
-        menu.open()
+        menu.openBelow(button, Theme.space.s)
     }
     function clearFilters() {
         if (!coins) return
@@ -84,41 +81,36 @@ ColumnLayout {
             text: root.coins ? root.coins.searchText : ""
             onTextChanged: if (root.coins) root.coins.searchText = text
         }
-        NeutralButton {
+        IconButton {
             id: sortButton
             objectName: "coinBrowserSortButton"
-            implicitWidth: 40; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
+            toolbar: true
+            surfaceLevel: 1
             iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/arrow-up-down.svg"
-            text: ""
-            Accessible.name: qsTr("Sort coins")
+            accessibleName: qsTr("Sort coins")
             onClicked: root.openMenu(sortMenu, sortButton)
         }
-        NeutralButton {
+        IconButton {
             id: groupButton
             objectName: "coinBrowserGroupButton"
-            implicitWidth: 40; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
+            toolbar: true
+            surfaceLevel: 1
             iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/group-by.svg"
-            text: ""
-            Accessible.name: qsTr("Group coins")
+            accessibleName: qsTr("Group coins")
             onClicked: root.openMenu(groupMenu, groupButton)
         }
-        NeutralButton {
+        IconButton {
             id: selectionButton
             objectName: "walletCoinsSelectionButton"
             visible: !root.selectionMode
-            implicitWidth: visible ? 40 : 0; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
+            toolbar: true
+            surfaceLevel: 1
             iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/checklist.svg"
-            text: ""
-            backgroundColor: root.walletSelectionActive ? Theme.color.activeFill : Theme.color.surface2
-            hoverBackgroundColor: root.walletSelectionActive ? Theme.color.activeFill : Theme.color.surface3
-            textColor: root.walletSelectionActive ? Theme.color.activeForeground : Theme.color.neutral9
-            Accessible.name: qsTr("Select coins")
+            accessibleName: qsTr("Select coins")
+            checked: root.walletSelectionActive
             Accessible.checkable: true
             Accessible.checked: root.walletSelectionActive
             onClicked: {
@@ -177,6 +169,7 @@ ColumnLayout {
             width: list.width; height: 44
             CoreText {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
+                anchors.leftMargin: Theme.space.xs; anchors.rightMargin: Theme.space.xs
                 text: parent.section; horizontalAlignment: Text.AlignLeft; wrap: false; elide: Text.ElideMiddle
                 textStyle: root.coins && root.coins.groupBy === "address" ? Theme.text.monoDescription : Theme.text.subheading
                 color: Theme.color.neutral9
@@ -202,7 +195,7 @@ ColumnLayout {
             height: root.coins && root.coins.groupBy === "address"
                 ? (label.length > 0 ? 72 : 52)
                 : (label.length > 0 ? 92 : 72)
-            leftPadding: 12; rightPadding: 12
+            leftPadding: Theme.space.cardInset; rightPadding: Theme.space.cardInset
             onClicked: {
                 if (suppressNextRowClick) {
                     suppressNextRowClick = false
@@ -227,42 +220,17 @@ ColumnLayout {
             Accessible.name: (label.length ? label + " " : "") + address + " " + rowAmount.displayWithUnit
             Accessible.checkable: root.selectionMode || root.walletSelectionActive
             Accessible.checked: marked
-            background: StateBackground {
+            background: GroupedRowBackground {
                 id: rowBackground
-                radius: coinRow.groupFirst || coinRow.groupLast ? 10 : 0
-                stateColor: coinRow.marked || coinRow.hovered
-                    ? Theme.color.surface(coinRow.surfaceLevel + 2)
-                    : Theme.color.surface(coinRow.surfaceLevel + 1)
-                Rectangle {
-                    visible: coinRow.groupFirst && !coinRow.groupLast
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: parent.height / 2
-                    color: rowBackground.color
-                }
-                Rectangle {
-                    visible: coinRow.groupLast && !coinRow.groupFirst
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                    height: parent.height / 2
-                    color: rowBackground.color
-                }
-                Rectangle {
-                    visible: !coinRow.groupLast
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    anchors.leftMargin: 50
-                    anchors.rightMargin: Theme.space.ml
-                    height: 1
-                    color: Theme.color.surfaceDivider
-                }
-                FocusBorder {
-                    visible: coinRow.visualFocus
-                    topMargin: Theme.space.xxs
-                    bottomMargin: Theme.space.xxs
-                    leftMargin: Theme.space.xxs
-                    rightMargin: Theme.space.xxs
-                    targetRadius: rowBackground.radius
-                }
+                firstInGroup: coinRow.groupFirst
+                lastInGroup: coinRow.groupLast
+                surfaceLevel: coinRow.surfaceLevel
+                hovered: coinRow.hovered
+                pressed: coinRow.down
+                selected: coinRow.marked
+                showFocus: coinRow.visualFocus
+                dividerLeftInset: coinRow.leftPadding
+                dividerRightInset: coinRow.rightPadding
             }
             BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }
             contentItem: RowLayout {
@@ -345,7 +313,6 @@ ColumnLayout {
         visible: root.selectionMode || !root.walletSelectionActive
         Layout.fillWidth: true
         surfaceLevel: root.selectionMode ? 1 : 0
-        showGradientBorder: false
         rowSpacing: 0
         ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: Theme.color.surfaceDivider }
         ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }

@@ -95,6 +95,32 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
+        objectName: "designSystemSelectableText"
+        Layout.fillWidth: true
+        name: "SelectableText"
+        note: "Read-only text the user can select and copy, such as peer details, log lines and raw transactions."
+
+        DesignSystemState {
+            width: 400
+            label: "monoCaption, WrapAnywhere"
+            SelectableText {
+                Layout.fillWidth: true
+                textStyle: Theme.text.monoCaption
+                wrapMode: TextEdit.WrapAnywhere
+                text: "0200000001e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855000000006a47"
+            }
+        }
+        DesignSystemState {
+            width: 400
+            label: "placeholderText"
+            SelectableText {
+                Layout.fillWidth: true
+                placeholderText: "Unavailable"
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
         objectName: "designSystemQRImage"
         Layout.fillWidth: true
         name: "QRImage"
