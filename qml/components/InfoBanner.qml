@@ -33,8 +33,8 @@ Rectangle {
     property int contentSpacing: Theme.space.l
     property int iconSize: Theme.size.icon.xl
     property int textRightMargin: 0
-    property int messageFontPixelSize: 13
-    property int messageLineHeight: 0
+    property var titleTextStyle: Theme.text.subheading
+    property var messageTextStyle: Theme.text.description
     property color backgroundColor: Qt.rgba(Theme.color.blue.r, Theme.color.blue.g, Theme.color.blue.b, 0.2)
     property color iconColor: Theme.color.neutral7
     property color titleColor: Theme.color.neutral9
@@ -97,8 +97,7 @@ Rectangle {
                     objectName: root.titleObjectName
                     visible: root.title !== ""
                     text: root.title
-                    font.pixelSize: 15
-                    bold: true
+                    textStyle: root.titleTextStyle
                     color: root.titleColor
                     horizontalAlignment: Text.AlignLeft
                     Layout.fillWidth: true
@@ -108,9 +107,7 @@ Rectangle {
                     objectName: root.messageObjectName
                     visible: root.message !== ""
                     text: root.message
-                    font.pixelSize: root.messageFontPixelSize
-                    lineHeightMode: root.messageLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                    lineHeight: root.messageLineHeight > 0 ? root.messageLineHeight : 1.0
+                    textStyle: root.messageTextStyle
                     color: root.messageColor
                     horizontalAlignment: Text.AlignLeft
                     Layout.fillWidth: true
@@ -153,8 +150,7 @@ Rectangle {
                 objectName: root.titleObjectName
                 visible: root.title !== ""
                 text: root.title
-                font.pixelSize: 15
-                bold: true
+                textStyle: root.titleTextStyle
                 color: root.titleColor
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
@@ -164,9 +160,7 @@ Rectangle {
                 objectName: root.messageObjectName
                 visible: root.message !== ""
                 text: root.message
-                font.pixelSize: root.messageFontPixelSize
-                lineHeightMode: root.messageLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
-                lineHeight: root.messageLineHeight > 0 ? root.messageLineHeight : 1.0
+                textStyle: root.messageTextStyle
                 color: root.messageColor
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true

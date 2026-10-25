@@ -18,7 +18,6 @@ AbstractButton {
     property int iconSize: large ? 20 : 15
     property int contentSpacing: large ? 4 : 8
     property var textStyle: large ? Theme.text.buttonStrong : Theme.text.captionStrong
-    property int textFontPixelSize: textStyle.pixelSize
     property color textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral5
     property int surfaceLevel: 1
     property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
@@ -85,11 +84,7 @@ AbstractButton {
                 elide: Text.ElideRight
                 visible: root.text.length > 0
                 text: root.text
-                font: Qt.font({
-                    family: root.textStyle.family,
-                    styleName: root.textStyle.styleName,
-                    pixelSize: root.textFontPixelSize
-                })
+                textStyle: root.textStyle
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
             }

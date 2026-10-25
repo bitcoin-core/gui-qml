@@ -30,9 +30,7 @@ ListRow {
             Layout.maximumWidth: root.valueMaximumWidth
             text: root.value
             color: root.valueColor
-            font: root.valueTextStyle.font
-            lineHeight: root.valueTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
             wrap: false
             elide: Text.ElideMiddle

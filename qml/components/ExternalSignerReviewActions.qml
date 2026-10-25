@@ -38,7 +38,7 @@ Item {
     readonly property string buttonText: {
         if (reviewState === "signed") return qsTr("Send")
         if (reviewState === "partiallySigned") return qsTr("More signatures required")
-        if (reviewState === "waiting") return qsTr("Waiting for approval...")
+        if (reviewState === "waiting") return qsTr("Waiting for approval…")
         if (reviewState === "error") return qsTr("Retry external signer")
         return qsTr("Approve on external signer")
     }
@@ -113,9 +113,7 @@ Item {
             horizontalAlignment: Text.AlignLeft
             wrap: true
             text: root.statusText
-            font: Theme.text.body.font
-            lineHeight: Theme.text.body.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.body
             color: root.statusColor
         }
 

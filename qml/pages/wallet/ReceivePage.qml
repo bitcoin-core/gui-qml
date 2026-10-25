@@ -86,9 +86,7 @@ Page {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Receive bitcoin")
-                    font: Theme.text.headline.font
-                    lineHeight: Theme.text.headline.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.headline
                     horizontalAlignment: Text.AlignLeft
                 }
                 OverflowMenuButton {
@@ -109,7 +107,7 @@ Page {
                         dim: false
                         ContextMenuPicker {
                             objectName: "receiveAddressTypePicker"
-                            title: qsTr("Address Type")
+                            title: qsTr("Address type")
                             textRole: "label"
                             valueRole: "id"
                             subtitleRole: "description"

@@ -91,7 +91,7 @@ SettingsPage {
                         placeholderText: qsTr("Enter external signer path")
                         placeholderTextColor: Theme.color.neutral7
                         color: Theme.color.neutral9
-                        font: Theme.text.description.font
+                        font: Theme.text.monoDescription.font
                         selectByMouse: true
                         leftPadding: 15
                         rightPadding: 10
@@ -137,9 +137,7 @@ SettingsPage {
                             Layout.fillWidth: true
                             text: root.signerStatusText
                             color: Theme.color.neutral7
-                            font: Theme.text.description.font
-                            lineHeight: Theme.text.description.lineHeight
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.description
                             horizontalAlignment: Text.AlignLeft
                             wrap: true
                         }

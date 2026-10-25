@@ -187,9 +187,7 @@ DialogPopup {
             Layout.leftMargin: Theme.space.xl
             Layout.rightMargin: Theme.space.xl
             text: root.title
-            font: Theme.text.subtitle.font
-            lineHeight: Theme.text.subtitle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.subtitle
             color: Theme.color.neutral9
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -229,9 +227,7 @@ DialogPopup {
                     text: root.message
                     textFormat: root.messageTextFormat
                     color: Theme.color.neutral8
-                    font: Theme.text.description.font
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.description
                     wrapMode: root.messageWrapMode
                     horizontalAlignment: root.messageAlignment
                 }
@@ -250,9 +246,7 @@ DialogPopup {
                 visible: text.length > 0
                 text: root.errorText
                 color: Theme.color.danger
-                font: Theme.text.description.font
-                lineHeight: Theme.text.description.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.description
                 wrapMode: Text.WordWrap
                 horizontalAlignment: root.messageAlignment
             }

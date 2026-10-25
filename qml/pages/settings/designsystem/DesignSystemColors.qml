@@ -85,9 +85,7 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 text: swatch.role
                 color: Theme.color.neutral9
-                font: Theme.text.caption.font
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.caption
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
@@ -97,9 +95,7 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 text: swatch.detail
                 color: Theme.color.neutral7
-                font: Theme.text.monoCaption.font
-                lineHeight: Theme.text.monoCaption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.monoCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
@@ -132,9 +128,7 @@ DesignSystemSection {
                 text: box.roleName + "  ·  surface(" + box.level + ")  ·  "
                     + Theme.color.surface(box.level).toString().toUpperCase()
                 color: Theme.color.neutral9
-                font: Theme.text.captionStrong.font
-                lineHeight: Theme.text.captionStrong.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.captionStrong
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
@@ -160,7 +154,7 @@ DesignSystemSection {
                             anchors.centerIn: parent
                             text: stateSample.modelData
                             color: Theme.color.neutral9
-                            font: Theme.text.caption.font
+                            textStyle: Theme.text.caption
                             wrap: false
                         }
                     }
@@ -263,9 +257,7 @@ DesignSystemSection {
                     Layout.fillWidth: true
                     text: listSample.modelData
                     color: Theme.color.neutral9
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                 }
@@ -309,9 +301,7 @@ DesignSystemSection {
                                 CoreText {
                                     text: String(stopSample.modelData).toUpperCase()
                                     color: Theme.color.neutral7
-                                    font: Theme.text.monoCaption.font
-                                    lineHeight: Theme.text.monoCaption.lineHeight
-                                    lineHeightMode: Text.FixedHeight
+                                    textStyle: Theme.text.monoCaption
                                     horizontalAlignment: Text.AlignLeft
                                     wrap: false
                                 }

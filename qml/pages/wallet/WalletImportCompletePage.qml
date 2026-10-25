@@ -44,14 +44,14 @@ OnboardingView {
             key: CoreText {
                 text: qsTr("Wallet name")
                 color: Theme.color.neutral7
-                font: Theme.text.body.font
+                textStyle: Theme.text.description
             }
             value: CoreText {
                 objectName: "importWalletSuccessWalletName"
                 text: walletController.lastImportedWalletName.length > 0
                     ? walletController.lastImportedWalletName : qsTr("Unknown")
                 color: Theme.color.neutral9
-                font: Theme.text.subheading.font
+                textStyle: Theme.text.description
                 wrap: true
                 horizontalAlignment: Text.AlignRight
             }
@@ -72,14 +72,14 @@ OnboardingView {
             key: CoreText {
                 text: qsTr("Key scheme")
                 color: Theme.color.neutral7
-                font: Theme.text.body.font
+                textStyle: Theme.text.description
             }
             value: CoreText {
                 objectName: "importWalletSuccessKeyScheme"
                 text: walletController.lastImportedWalletKeyScheme.length > 0
                     ? walletController.lastImportedWalletKeyScheme : qsTr("Unknown")
                 color: Theme.color.neutral9
-                font: Theme.text.subheading.font
+                textStyle: Theme.text.description
                 wrap: true
                 horizontalAlignment: Text.AlignRight
             }

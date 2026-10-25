@@ -187,9 +187,7 @@ Page {
                     Layout.topMargin: defaultImage.visible || imageLoader.visible ? 24 : 0
                     text: root.heading
                     color: Theme.color.neutral9
-                    font: Theme.text.headline.font
-                    lineHeight: Theme.text.headline.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.headline
                     wrap: true
                     horizontalAlignment: Text.AlignHCenter
                     opacity: root.animateContent ? 0 : 1
@@ -206,9 +204,7 @@ Page {
                     Layout.topMargin: root.heading.length > 0 ? 16 : 0
                     text: root.subheading
                     color: Theme.color.neutral7
-                    font: Theme.text.description.font
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.description
                     wrap: true
                     horizontalAlignment: Text.AlignHCenter
                     opacity: root.animateContent ? 0 : 1

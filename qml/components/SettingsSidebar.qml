@@ -94,14 +94,10 @@ Control {
                     leftMargin: 10
                     rightMargin: 10
                 }
-                height: Theme.text.caption.lineHeight
+                height: Theme.text.captionStrong.lineHeight
                 text: delegate.groupTitle
                 color: Theme.color.neutral6
-                font.family: Theme.text.caption.family
-                font.pixelSize: Theme.text.caption.pixelSize
-                fontStyleName: "Semi Bold"
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.captionStrong
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
@@ -147,7 +143,7 @@ Control {
                     color: delegate.modelData.id === root.currentSectionId
                         ? Theme.color.orange
                         : Theme.color.neutral9
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight

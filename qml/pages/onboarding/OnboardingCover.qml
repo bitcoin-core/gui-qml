@@ -41,9 +41,7 @@ OnboardingView {
             Layout.fillWidth: true
             text: qsTr("100% open-source & open-design")
             color: Theme.color.neutral7
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.description
             horizontalAlignment: Text.AlignHCenter
         }
 

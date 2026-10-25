@@ -50,7 +50,7 @@ OnboardingView {
             visible: text.length > 0
             text: root.storageErrorText.length > 0 ? root.storageErrorText : root.storageWarningText
             color: root.storageErrorText.length > 0 ? Theme.color.red : Theme.color.neutral7
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             wrap: true
             horizontalAlignment: Text.AlignHCenter
         }

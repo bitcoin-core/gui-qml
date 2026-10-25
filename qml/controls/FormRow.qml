@@ -126,9 +126,7 @@ Control {
                     Layout.fillWidth: true
                     text: root.title
                     color: root.titleColor
-                    font: root.titleTextStyle.font
-                    lineHeight: root.titleTextStyle.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: root.titleTextStyle
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     elide: Text.ElideRight
@@ -141,9 +139,7 @@ Control {
                     Layout.fillWidth: true
                     text: root.description
                     color: root.descriptionColor
-                    font: root.descriptionTextStyle.font
-                    lineHeight: root.descriptionTextStyle.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: root.descriptionTextStyle
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
                     Accessible.ignored: root.trailingItemNamedByRow
@@ -155,9 +151,7 @@ Control {
                     Layout.fillWidth: true
                     text: root.errorText.length > 0 ? root.errorText : root.supportingText
                     color: root.errorText.length > 0 ? root.errorTextColor : root.supportingTextColor
-                    font: root.supportingTextStyle.font
-                    lineHeight: root.supportingTextStyle.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: root.supportingTextStyle
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
                 }

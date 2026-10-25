@@ -14,6 +14,7 @@ Item {
     property string text: !amount.length || !unit.length ? amount
         : unitPrefix ? unit + " " + amount : amount + " " + unit
     property string displayText: text
+    property alias textStyle: label.textStyle
     property alias font: label.font
     property alias color: label.color
     property alias horizontalAlignment: label.horizontalAlignment
@@ -30,6 +31,8 @@ Item {
     property bool supportsAnimation: false
 
     readonly property real naturalWidth: label.implicitWidth
+
+    textStyle: Theme.text.amountDescription
 
     implicitWidth: naturalWidth
     implicitHeight: label.implicitHeight

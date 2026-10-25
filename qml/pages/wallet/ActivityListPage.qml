@@ -204,15 +204,13 @@ Page {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Activity")
-                    font: Theme.text.headline.font
-                    lineHeight: Theme.text.headline.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.headline
                     horizontalAlignment: Text.AlignLeft
                 }
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Your wallet’s payments and transactions")
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
@@ -220,7 +218,7 @@ Page {
                     visible: SizeClass.isCompact(root.width)
                     Layout.fillWidth: true
                     text: root.countText()
-                    font: Theme.text.caption.font
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
@@ -230,7 +228,7 @@ Page {
                 visible: !SizeClass.isCompact(root.width)
                 Layout.alignment: Qt.AlignVCenter
                 text: root.countText()
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
             }
         }
@@ -364,14 +362,14 @@ Page {
                             objectName: "activitySectionTitle"
                             Layout.fillWidth: true
                             text: sectionHeader.section
-                            font: Theme.text.subheading.font
+                            textStyle: Theme.text.subheading
                             horizontalAlignment: Text.AlignLeft
                         }
                         CoreText {
                             objectName: sectionHeader.isPending ? "activityPendingBalance" : ""
                             visible: sectionHeader.isPending && activityFilterProxy.pendingBalanceSat !== 0
                             text: visible ? activityFilterProxy.pendingBalance : ""
-                            font: Theme.text.subheading.font
+                            textStyle: Theme.text.amountDescription
                             color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.green
                                 : activityFilterProxy.pendingBalanceSat < 0 ? Theme.color.neutral9 : Theme.color.neutral7
                             horizontalAlignment: Text.AlignRight
@@ -437,13 +435,13 @@ Page {
                     objectName: "activityEmptyStateTitle"
                     Layout.fillWidth: true
                     text: root.emptyActivityTitle()
-                    font: Theme.text.heading.font
+                    textStyle: Theme.text.heading
                 }
                 CoreText {
                     objectName: "activityEmptyStateDescription"
                     Layout.fillWidth: true
                     text: root.emptyActivityDescription()
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral7
                 }
                 Button {
@@ -567,7 +565,7 @@ Page {
         ContextMenuDivider {}
         ContextMenuButton {
             objectName: "activityExportButton"
-            text: qsTr("Export CSV")
+            text: qsTr("Export CSV…")
             iconSource: "qrc:/icons/export"
             onTriggered: {
                 if (automationExportPathField.text.length > 0) {
@@ -703,7 +701,7 @@ Page {
                         //: Activity custom date range: link back to the list of date presets.
                         text: qsTr("Presets")
                         color: Theme.color.orange
-                        font.pixelSize: 14
+                        textStyle: Theme.text.captionStrong
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -727,7 +725,7 @@ Page {
                     objectName: "activityDateRangeReset"
                     //: Button that clears the Activity custom date range.
                     text: qsTr("Reset")
-                    textSize: 15
+                    textStyle: Theme.text.menuItemStrong
                     // Nothing to reset until a date has been picked.
                     enabled: calendar.hasSelection
                     textColor: enabled ? Theme.color.neutral7 : Theme.color.neutral5
@@ -748,7 +746,7 @@ Page {
                     objectName: "activityDateRangeApply"
                     //: Button that applies the picked Activity custom date range.
                     text: qsTr("Apply")
-                    textSize: 15
+                    textStyle: Theme.text.menuItemStrong
                     enabled: calendar.valid
                     textColor: enabled ? Theme.color.orange : Theme.color.neutral5
                     hoverEnabled: enabled && AppMode.isDesktop
@@ -826,7 +824,7 @@ Page {
                 objectName: "activityAmountRangeLabel"
                 Layout.fillWidth: true
                 text: qsTr("%1 to %2").arg(lowerAmountFormatter.display).arg(upperAmountFormatter.displayWithUnit)
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignLeft
             }
             RangeSlider {

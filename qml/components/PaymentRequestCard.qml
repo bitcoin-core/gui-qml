@@ -264,7 +264,7 @@ Pane {
                     model: [
                         { text: qsTr("Amount"), value: "amount", objectName: "requestPaymentShowAmount" },
                         { text: qsTr("Message"), value: "message", objectName: "requestPaymentShowMessage" },
-                        { text: qsTr("Recipient Name"), value: "recipient", objectName: "requestPaymentShowRecipientName" }
+                        { text: qsTr("Recipient name"), value: "recipient", objectName: "requestPaymentShowRecipientName" }
                     ]
                     onActivated: function(value) {
                         if (value === "amount") root.showAmount = !root.showAmount
@@ -282,9 +282,7 @@ Pane {
         CoreText {
             objectName: "requestPaymentNoteRecommendation"
             text: qsTr("Recommended")
-            font: Theme.text.caption.font
-            lineHeight: Theme.text.caption.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.caption
             color: Theme.color.neutral6
             wrap: false
         }
@@ -301,7 +299,7 @@ Pane {
                 objectName: "requestPaymentTitle"
                 Layout.fillWidth: true
                 text: qsTr("Payment request")
-                font: Theme.text.title.font
+                textStyle: Theme.text.subtitle
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
@@ -332,7 +330,7 @@ Pane {
                         objectName: "requestPaymentSaveQRMenuButton"
                         visible: !root.paymentReceived
                         enabled: root.sharing
-                        text: qsTr("Save QR code")
+                        text: qsTr("Save QR code…")
                         onTriggered: if (root.sharing) saveDialog.open()
                     }
                     ContextMenuDivider { visible: !root.paymentReceived }
@@ -419,7 +417,7 @@ Pane {
                     }
                     ContextMenuButton {
                         objectName: "requestPaymentQRContextSave"
-                        text: qsTr("Save QR code")
+                        text: qsTr("Save QR code…")
                         enabled: root.sharing
                         onTriggered: if (root.sharing) saveDialog.open()
                     }
@@ -430,8 +428,8 @@ Pane {
                 visible: root.saved && !!root.request.createdIso
                 Layout.fillWidth: true
                 Layout.topMargin: root.sharing ? 4 : 0
-                text: visible ? qsTr("Created %1").arg(Qt.formatDateTime(new Date(root.request.createdIso), "MMM d, h:mm AP")) : ""
-                font: Theme.text.caption.font
+                text: visible ? qsTr("Created %1").arg(new Date(root.request.createdIso).toLocaleString(Qt.locale(), Locale.ShortFormat)) : ""
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
@@ -449,7 +447,7 @@ Pane {
                     anchors.centerIn: parent
                     text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
                     color: root.paymentReceived ? Theme.color.green : Theme.color.lavender
-                    font: Theme.text.captionStrong.font
+                    textStyle: Theme.text.captionStrong
                 }
             }
             AddressLabel {
@@ -579,9 +577,7 @@ Pane {
                     Layout.fillWidth: true
                     //: Footer explaining that the payment details above are shared with the person paying.
                     text: qsTr("These details appear in the payment link and QR code.")
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
@@ -640,9 +636,7 @@ Pane {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Your note stays in this wallet. Only you can see it.")
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral6
                     horizontalAlignment: Text.AlignLeft
                     wrap: true
@@ -655,7 +649,7 @@ Pane {
             Layout.fillWidth: true
             text: root.errorText
             color: Theme.color.red
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

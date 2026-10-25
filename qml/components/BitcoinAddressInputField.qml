@@ -86,9 +86,7 @@ ColumnLayout {
             anchors.verticalCenter: addressInput.verticalCenter
             horizontalAlignment: Text.AlignLeft
             text: root.labelText
-            font: Theme.text.body.font
-            lineHeight: Theme.text.body.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.body
         }
 
         TextArea {
@@ -116,7 +114,7 @@ ColumnLayout {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             enabled: root.enabled
-            placeholderText: qsTr("Enter address...")
+            placeholderText: qsTr("Enter address…")
             text: ""
             Accessible.name: root.labelText
             Accessible.description: root.errorText
@@ -209,9 +207,7 @@ ColumnLayout {
 
         CoreText {
             text: root.errorText
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.description
             color: Theme.color.red
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true

@@ -258,9 +258,7 @@ Page {
                     Layout.bottomMargin: Theme.space.xxl
                     text: qsTr("Settings")
                     color: Theme.color.neutral9
-                    font: Theme.text.display.font
-                    lineHeight: Theme.text.display.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.display
                     horizontalAlignment: Text.AlignLeft
                 }
 

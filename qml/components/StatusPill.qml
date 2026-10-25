@@ -38,7 +38,7 @@ Control {
         CoreText {
             text: root.text
             color: root.accentColor
-            font: Theme.text.captionStrong.font
+            textStyle: Theme.text.captionStrong
         }
     }
 }

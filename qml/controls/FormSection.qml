@@ -51,9 +51,7 @@ Item {
                     Layout.fillWidth: true
                     text: root.title
                     color: Theme.color.neutral9
-                    font: root.titleTextStyle.font
-                    lineHeight: root.titleTextStyle.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: root.titleTextStyle
                     horizontalAlignment: Text.AlignLeft
                     wrap: false
                     elide: Text.ElideRight
@@ -73,9 +71,7 @@ Item {
                 Layout.fillWidth: true
                 text: root.description
                 color: Theme.color.neutral7
-                font: root.descriptionTextStyle.font
-                lineHeight: root.descriptionTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.descriptionTextStyle
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
@@ -120,9 +116,7 @@ Item {
             Layout.rightMargin: Theme.space.xs
             text: root.footerText
             color: Theme.color.neutral7
-            font: root.footerTextStyle.font
-            lineHeight: root.footerTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.footerTextStyle
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

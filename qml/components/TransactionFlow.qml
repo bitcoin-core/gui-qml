@@ -88,7 +88,7 @@ ColumnLayout {
             visible: root.title.length > 0
             Layout.fillWidth: true
             text: root.title
-            font: Theme.text.subheading.font
+            textStyle: Theme.text.subheading
             horizontalAlignment: Text.AlignLeft
         }
         CoreText {
@@ -98,15 +98,14 @@ ColumnLayout {
             text: (inputCount === 1 ? qsTr("1 input") : qsTr("%1 inputs").arg(inputCount)) + " · "
                 + (outputCount === 1 ? qsTr("1 output") : qsTr("%1 outputs").arg(outputCount))
             color: Theme.color.neutral7
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
         }
         TextButton {
             objectName: "transactionFlowOutputsToggle"
             visible: root.canCollapseOutputs
             Layout.alignment: Qt.AlignLeft
             text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
-            textSize: Theme.text.caption.pixelSize
-            bold: false
+            textStyle: Theme.text.caption
             padding: Theme.space.m
             onClicked: root.outputsExpanded = !root.outputsExpanded
         }
@@ -136,8 +135,8 @@ ColumnLayout {
                 Item {
                     width: root.diagramWidth
                     height: viewport.height
-                    CoreText { text: qsTr("Inputs"); color: Theme.color.neutral7; font: Theme.text.caption.font }
-                    CoreText { x: root.geometry.outputX; text: qsTr("Outputs"); color: Theme.color.neutral7; font: Theme.text.caption.font }
+                    CoreText { text: qsTr("Inputs"); color: Theme.color.neutral7; textStyle: Theme.text.caption }
+                    CoreText { x: root.geometry.outputX; text: qsTr("Outputs"); color: Theme.color.neutral7; textStyle: Theme.text.caption }
                     Item {
                         id: diagram
                         y: 36
@@ -221,7 +220,7 @@ ColumnLayout {
                 Layout.fillWidth: true
                 text: root.geometry.amountsKnown ? qsTr("Connections are not to scale.")
                     : qsTr("Some amounts are unavailable")
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
@@ -236,7 +235,7 @@ ColumnLayout {
                         required property var modelData
                         spacing: Theme.space.s
                         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: modelData.color }
-                        CoreText { text: modelData.label; color: Theme.color.neutral7; font: Theme.text.caption.font }
+                        CoreText { text: modelData.label; color: Theme.color.neutral7; textStyle: Theme.text.caption }
                     }
                 }
             }

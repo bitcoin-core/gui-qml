@@ -54,7 +54,7 @@ void OnboardingStorageTests::pendingCheckReturnsCheckingStatus()
     const QmlOnboardingStorage::Info info = QmlOnboardingStorage::Evaluate(state);
 
     QCOMPARE(info.status, QStringLiteral("checking"));
-    QCOMPARE(info.available_text, QStringLiteral("Checking available storage..."));
+    QCOMPARE(info.available_text, QStringLiteral("Checking available storage…"));
     QVERIFY(!info.enough_for_selected);
     QVERIFY(!info.enough_for_full);
 }

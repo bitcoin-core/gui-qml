@@ -63,17 +63,16 @@ DialogPopup {
                             key: CoreText {
                                 text: modelData.label
                                 color: Theme.color.neutral7
-                                font.pixelSize: 13
+                                textStyle: Theme.text.caption
                                 horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignTop
-                                wrap: false
                             }
                             value: CoreText {
                                 id: informationValue
                                 objectName: "nodeInformationValue_" + index
                                 text: modelData.value
                                 color: Theme.color.neutral9
-                                font.pixelSize: 13
+                                textStyle: modelData.mono ? Theme.text.monoCaption : Theme.text.caption
                                 wrapMode: Text.WordWrap
                                 horizontalAlignment: Text.AlignLeft
                                 verticalAlignment: Text.AlignTop

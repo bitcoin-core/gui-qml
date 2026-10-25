@@ -103,7 +103,7 @@ ColumnLayout {
         text: root.validationError
         color: Theme.color.blue
         horizontalAlignment: Text.AlignLeft
-        font.pixelSize: 15
+        textStyle: Theme.text.description
     }
     CoreText {
         Layout.fillWidth: true
@@ -111,14 +111,14 @@ ColumnLayout {
         text: root.storageErrorText
         color: Theme.color.blue
         horizontalAlignment: Text.AlignLeft
-        font.pixelSize: 15
+        textStyle: Theme.text.description
     }
     CoreText {
         Layout.fillWidth: true
         visible: root.validationError.length === 0 && root.storageErrorText.length === 0 && root.storageCheckPending
-        text: qsTr("Checking available storage...")
+        text: qsTr("Checking available storage…")
         color: Theme.color.neutral7
         horizontalAlignment: Text.AlignLeft
-        font.pixelSize: 15
+        textStyle: Theme.text.description
     }
 }

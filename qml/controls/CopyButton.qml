@@ -124,9 +124,7 @@ AbstractButton {
                     anchors.centerIn: parent
                     text: root.copyText
                     color: root._textColor
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     opacity: root.copied ? 0 : 1
                     scale: root.copied ? root._swapScale : 1
 
@@ -140,9 +138,7 @@ AbstractButton {
                     anchors.centerIn: parent
                     text: root.copiedText
                     color: root._textColor
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     opacity: root.copied ? 1 : 0
                     scale: root.copied ? 1 : root._swapScale
 

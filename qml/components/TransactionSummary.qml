@@ -47,10 +47,13 @@ ColumnLayout {
                 animateUnitChanges: false
                 text: root.amountValue
                 color: root.amountColor
-                font.family: Theme.text.monoLead.font.family
-                font.styleName: Theme.text.monoLead.font.styleName
+                textStyle: Theme.text.amountLead
                 font.pixelSize: 48
                 font.letterSpacing: -1.5
+                // The role's fixed line height is for its own 24 px size; at 48 px
+                // it puts the baseline the unit aligns to below the digits.
+                lineHeightMode: Text.ProportionalHeight
+                lineHeight: 1
                 fontSizeMode: Text.HorizontalFit
                 minimumPixelSize: 22
                 wrap: false
@@ -63,7 +66,7 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignBaseline
                 text: root.amountUnit
                 color: Theme.color.neutral7
-                font.pixelSize: root.width < 500 ? 18 : 22
+                textStyle: root.width < 500 ? Theme.text.body : Theme.text.bodyLarge
                 wrap: false
             }
         }
@@ -73,7 +76,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.subtitle
         color: Theme.color.neutral7
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
     }
     Loader {
         visible: !!root.statusComponent

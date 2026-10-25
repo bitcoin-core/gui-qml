@@ -67,44 +67,46 @@ Button {
         ColumnLayout {
             spacing: 3
             Layout.fillWidth: true
-            Header {
+            CoreText {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
-                center: false
-                header: button.text
-                headerSize: 18
-                headerMargin: 0
-                headerColor: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
-                description: button.description
-                descriptionSize: 15
-                descriptionMargin: 0
+                visible: text.length > 0
+                text: button.text
+                textStyle: Theme.text.button
+                color: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
+                horizontalAlignment: Text.AlignLeft
+            }
+            CoreText {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                visible: text.length > 0
+                text: button.description
+                textStyle: Theme.text.description
+                color: Theme.color.neutral8
+                horizontalAlignment: Text.AlignLeft
             }
             Loader {
                 Layout.topMargin: 2
                 active: button.recommended
                 visible: active
-                sourceComponent: Label {
-                    background: Rectangle {
-                        color: Theme.color.neutral9
-                        radius: 3
-
-                        Behavior on color {
-                            enabled: Theme.motion.animated
-                            ColorAnimation { duration: Theme.motion.normal }
-                        }
-                    }
-                    font.styleName: "Regular"
-                    font.pixelSize: 13
-                    topPadding: 3
-                    rightPadding: 7
-                    bottomPadding: 4
-                    leftPadding: 7
-                    color: Theme.color.neutral0
-                    text: qsTr("Recommended")
+                sourceComponent: Rectangle {
+                    implicitWidth: recommendedText.implicitWidth + 14
+                    implicitHeight: recommendedText.implicitHeight + 4
+                    color: Theme.color.neutral9
+                    radius: 3
 
                     Behavior on color {
                         enabled: Theme.motion.animated
                         ColorAnimation { duration: Theme.motion.normal }
+                    }
+
+                    CoreText {
+                        id: recommendedText
+                        anchors.centerIn: parent
+                        textStyle: Theme.text.captionStrong
+                        color: Theme.color.neutral0
+                        text: qsTr("Recommended")
+                        wrap: false
                     }
                 }
             }
@@ -122,14 +124,11 @@ Button {
                         color: Theme.color.neutral2
                         radius: 5
                     }
-                    font.family: "BitcoinCoreSans"
-                    font.styleName: "Semi Bold"
-                    font.pixelSize: 13
-                    contentItem: Text {
-                        font: container.font
+                    contentItem: CoreText {
+                        textStyle: Theme.text.monoCaption
                         color: Theme.color.neutral9
                         text: button.customDir
-                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignLeft
                     }
                 }
             }
@@ -138,16 +137,12 @@ Button {
                 Layout.fillWidth: true
                 active: button.showErrorText && button.errorText.length > 0
                 visible: active
-                sourceComponent: Label {
+                sourceComponent: CoreText {
                     objectName: "optionButtonErrorText"
-                    Layout.fillWidth: true
-                    font.family: "BitcoinCoreSans"
-                    font.styleName: "Regular"
-                    font.pixelSize: 15
+                    textStyle: Theme.text.description
                     color: Theme.color.red
                     text: button.errorText
                     horizontalAlignment: Text.AlignLeft
-                    wrapMode: Text.WordWrap
                 }
             }
         }

@@ -104,7 +104,7 @@ TestCase {
     function test_section_title_uses_bold_caption_typography() {
         const menu = openMenu(titledMenuComponent)
         compare(menu.titleItem.font.pixelSize, Theme.text.captionStrong.pixelSize)
-        compare(menu.titleItem.font.styleName, "Semi Bold")
+        compare(menu.titleItem.font.weight, Font.DemiBold)
         compare(menu.titleItem.lineHeight, Theme.text.captionStrong.lineHeight)
     }
 

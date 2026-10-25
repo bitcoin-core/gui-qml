@@ -49,7 +49,7 @@ OnboardingView {
     }
 
     title: ""
-    heading: watchOnly ? qsTr("View-only wallet") : qsTr("Single-key wallet")
+    heading: watchOnly ? qsTr("Watch-only wallet") : qsTr("Single-key wallet")
     subheading: watchOnly
         ? qsTr("See balances and activity without keeping spending keys in this app. An external signer is needed to spend.")
         : qsTr("You can control it in this application.\nWallet data will be stored locally in your hard drive.")
@@ -102,7 +102,7 @@ OnboardingView {
             Layout.fillWidth: true
             label: qsTr("Wallet name")
             fieldObjectName: "createWalletNameInput"
-            placeholderText: qsTr("Eg. My bitcoin wallet...")
+            placeholderText: qsTr("e.g. My bitcoin wallet")
             supportingText: qsTr("You cannot change this later.")
             fieldSurface: true
             labelSpacing: 6
@@ -126,7 +126,7 @@ OnboardingView {
             Layout.fillWidth: true
             text: qsTr("SECURITY")
             color: Theme.color.neutral6
-            font: Theme.text.captionStrong.font
+            textStyle: Theme.text.captionStrong
             horizontalAlignment: Text.AlignLeft
         }
 
@@ -151,7 +151,7 @@ OnboardingView {
             Layout.topMargin: -12
             text: qsTr("Recommended")
             color: Theme.color.neutral7
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             horizontalAlignment: Text.AlignLeft
         }
 
@@ -162,7 +162,7 @@ OnboardingView {
             Layout.fillWidth: true
             label: qsTr("Password")
             fieldObjectName: "createWalletPasswordInput"
-            placeholderText: qsTr("Enter password...")
+            placeholderText: qsTr("Enter password…")
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
@@ -176,7 +176,7 @@ OnboardingView {
             Layout.fillWidth: true
             label: qsTr("Confirm password")
             fieldObjectName: "createWalletPasswordRepeatInput"
-            placeholderText: qsTr("Enter password again...")
+            placeholderText: qsTr("Enter password again…")
             fieldSurface: true
             labelSpacing: 6
             messageSpacing: 8
@@ -223,7 +223,7 @@ OnboardingView {
             Layout.fillWidth: true
             label: qsTr("Extended public key (xpub)")
             inputObjectName: "watchOnlyXpubInput"
-            placeholderText: qsTr("Enter your key...")
+            placeholderText: qsTr("Enter your key…")
             supportingText: qsTr("Only public information is imported. Private keys stay with your signer.")
             fieldSurface: true
             labelSpacing: 6
@@ -241,7 +241,7 @@ OnboardingView {
             text: root.nameError.length > 0 ? root.nameError
                 : root.watchOnly ? walletController.walletLoadError : walletController.walletCreateError
             color: Theme.color.red
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignLeft
         }

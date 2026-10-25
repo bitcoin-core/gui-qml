@@ -247,7 +247,7 @@ SettingsPage {
                 color: debugLogModel.openError.length > 0
                     ? Theme.color.red
                     : Theme.color.neutral7
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }

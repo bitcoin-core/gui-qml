@@ -34,7 +34,7 @@ Grid {
                 objectName: fieldRow.objectName + "Value"
                 Layout.fillWidth: true
                 text: fieldRow.value
-                font: Theme.text.description.font
+                textStyle: fieldRow.modelData.mono ? Theme.text.monoDescription : Theme.text.description
                 horizontalAlignment: Text.AlignLeft
                 textFormat: Text.PlainText
                 wrap: true

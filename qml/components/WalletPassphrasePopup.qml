@@ -15,7 +15,7 @@ AlertPopup {
     property string titleText: qsTr("Enter wallet password")
     property string descriptionText: ""
     property string confirmText: qsTr("Continue")
-    property string busyConfirmText: qsTr("Working...")
+    property string busyConfirmText: qsTr("Working…")
     property string passphraseFieldObjectName: ""
     property string cancelButtonObjectName: ""
     property string confirmButtonObjectName: ""
@@ -52,7 +52,7 @@ AlertPopup {
         objectName: root.passphraseFieldObjectName
         Layout.fillWidth: true
         hideText: true
-        placeholderText: qsTr("Enter password...")
+        placeholderText: qsTr("Enter password…")
         background: Rectangle {
             color: Theme.color.neutral2
             radius: Theme.radius.s

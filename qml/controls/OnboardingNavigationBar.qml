@@ -81,7 +81,7 @@ Item {
         opacity: 0
         visible: opacity > 0 && text.length > 0
         color: Theme.color.neutral9
-        font: Theme.text.subheading.font
+        textStyle: Theme.text.subheading
         wrap: false
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter
@@ -95,7 +95,7 @@ Item {
         opacity: 0
         visible: opacity > 0 && text.length > 0
         color: Theme.color.neutral9
-        font: Theme.text.subheading.font
+        textStyle: Theme.text.subheading
         wrap: false
         elide: Text.ElideRight
         horizontalAlignment: Text.AlignHCenter

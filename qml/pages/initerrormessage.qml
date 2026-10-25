@@ -27,7 +27,7 @@ ApplicationWindow {
         id: errorAlert
         objectName: "initErrorPopup"
         dim: false
-        title: qsTr("There was an issue starting up.")
+        title: qsTr("There was an issue starting up")
         message: root.errorMessage
         messageObjectName: "initErrorMessage"
         messageTextFormat: Text.PlainText

@@ -178,8 +178,8 @@ ColumnLayout {
             CoreText {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
                 text: parent.section; horizontalAlignment: Text.AlignLeft; wrap: false; elide: Text.ElideMiddle
-                font: root.coins && root.coins.groupBy === "address" ? Theme.text.monoCaption.font : Theme.text.captionStrong.font
-                color: Theme.color.neutral7
+                textStyle: root.coins && root.coins.groupBy === "address" ? Theme.text.monoDescription : Theme.text.subheading
+                color: Theme.color.neutral9
             }
         }
         delegate: ItemDelegate {
@@ -305,10 +305,10 @@ ColumnLayout {
                     RowLayout {
                         visible: coinRow.label.length > 0
                         Layout.fillWidth: true
-                        CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; font: Theme.text.subheading.font; wrap: false; elide: Text.ElideRight }
+                        CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.subheading; wrap: false; elide: Text.ElideRight }
                     }
-                    CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; font: Theme.text.monoCaption.font; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
-                    CoreText { Layout.fillWidth: true; text: Qt.formatDateTime(coinRow.date, "MMM d, h:mm AP"); horizontalAlignment: Text.AlignLeft; font: Theme.text.caption.font; color: Theme.color.neutral7; wrap: false }
+                    CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.monoCaption; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
+                    CoreText { Layout.fillWidth: true; text: coinRow.date ? new Date(coinRow.date).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
                 }
                 RowLayout {
                     spacing: Theme.space.s
@@ -319,16 +319,15 @@ ColumnLayout {
                         Layout.preferredHeight: visible ? 20 : 0
                         Icon { anchors.centerIn: parent; source: "qrc:/icons/lock.fill.svg"; size: 16; color: Theme.color.neutral6 }
                         HoverHandler { id: lockHover }
-                        ToolTip {
+                        HoverToolTip {
                             visible: lockHover.hovered
-                            delay: Theme.motion.tooltipDelay
                             text: qsTr("Locked from automatic coin selection")
                         }
                     }
                     BitcoinAmountDisplayLabel {
                         Layout.preferredWidth: Math.min(190, implicitWidth); Layout.alignment: Qt.AlignVCenter
                         amount: rowAmount.localizedDisplay; unit: rowAmount.unitLabel; horizontalAlignment: Text.AlignRight
-                        font: Theme.text.monoDescription.font; wrap: false
+                        textStyle: Theme.text.amountDescription; wrap: false
                     }
                 }
             }
@@ -337,7 +336,7 @@ ColumnLayout {
             anchors.centerIn: parent; width: parent.width - 32
             visible: list.count === 0
             text: root.coins && root.coins.coinCount > 0 ? qsTr("No coins match your search or filters.") : qsTr("No coins in this wallet yet.")
-            font: Theme.text.description.font; color: Theme.color.neutral7
+            textStyle: Theme.text.description; color: Theme.color.neutral7
         }
     }
 
@@ -358,7 +357,7 @@ ColumnLayout {
     RowLayout {
         visible: !root.selectionMode && root.walletSelectionActive
         Layout.fillWidth: true
-        CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font }
+        CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description }
         NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
         NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
     }
@@ -410,7 +409,7 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: Theme.space.ml
             spacing: Theme.space.m
-            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); font: Theme.text.description.font; horizontalAlignment: Text.AlignLeft }
+            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
                 minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0

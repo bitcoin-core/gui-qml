@@ -48,7 +48,7 @@ Info Evaluate(const State& state)
 
     if (state.check_pending) {
         info.status = QStringLiteral("checking");
-        info.available_text = QObject::tr("Checking available storage...");
+        info.available_text = QObject::tr("Checking available storage…");
         return info;
     }
 

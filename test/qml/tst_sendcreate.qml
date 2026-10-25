@@ -184,7 +184,7 @@ TestCase {
         const closeButton = findChild(popup.contentItem, "sendTransactionReviewCloseButton")
         verify(reviewTitle !== null)
         verify(closeButton !== null)
-        compare(reviewTitle.text, "Review Transaction")
+        compare(reviewTitle.text, "Review transaction")
         compare(closeButton.size, 30)
         compare(closeButton.iconSize, 10)
         const summary = findChild(popup.contentItem, "sendTransactionReviewSummary")

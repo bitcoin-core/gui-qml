@@ -73,12 +73,7 @@ Popup {
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            // Bind font properties directly for older Qt versions.
-            font.family: Theme.text.captionStrong.family
-            font.styleName: Theme.text.captionStrong.styleName
-            font.pixelSize: Theme.text.captionStrong.pixelSize
-            lineHeight: Theme.text.captionStrong.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.captionStrong
             wrap: false
             color: Theme.color.neutral6
         }

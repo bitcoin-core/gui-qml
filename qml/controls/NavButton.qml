@@ -15,9 +15,6 @@ AbstractButton {
     property bool bold: true
     property bool busy: false
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
-    property int textSize: textStyle.pixelSize
-    property int textFontPixelSize: textSize
-    property string textFontStyleName: textStyle.styleName
     property url iconSource: ""
     property color iconColor: enabled ? Theme.color.neutral9 : Theme.color.neutral2
     hoverEnabled: AppMode.isDesktop && !busy
@@ -82,8 +79,7 @@ AbstractButton {
                 topPadding: button_background.active ? 0 : 4
                 bottomPadding: button_background.active ? 0 : 4
                 leftPadding: button_background.active ? 0 : 20
-                fontStyleName: root.textFontStyleName
-                font.pixelSize: root.textFontPixelSize
+                textStyle: root.textStyle
                 text: root.text
                 Accessible.ignored: true
             }

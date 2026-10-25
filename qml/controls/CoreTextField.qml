@@ -12,9 +12,7 @@ TextField {
 
     implicitHeight: 56
     implicitWidth: 450
-    font.family: "BitcoinCoreSans"
-    font.styleName: "Regular"
-    font.pixelSize: 18
+    font: Theme.text.description.font
     color: Theme.color.neutral9
     placeholderTextColor: Theme.color.neutral5
     echoMode: hideText ? TextInput.Password : TextInput.Normal

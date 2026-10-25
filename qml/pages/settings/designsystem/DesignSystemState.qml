@@ -26,9 +26,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.label
         color: Theme.color.neutral7
-        font: Theme.text.monoCaption.font
-        lineHeight: Theme.text.monoCaption.lineHeight
-        lineHeightMode: Text.FixedHeight
+        textStyle: Theme.text.monoCaption
         horizontalAlignment: Text.AlignLeft
         wrap: true
     }

@@ -3,8 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 import "../../controls"
+import "../../components"
 
 Item {
     id: root
@@ -38,7 +38,8 @@ Item {
         }
     }
     HoverHandler { id: hover }
-    ToolTip.visible: hover.hovered
-    ToolTip.delay: Theme.motion.tooltipDelay
-    ToolTip.text: Accessible.name
+    HoverToolTip {
+        visible: hover.hovered
+        text: root.statusText
+    }
 }

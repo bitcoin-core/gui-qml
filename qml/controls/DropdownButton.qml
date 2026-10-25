@@ -65,9 +65,7 @@ NeutralButton {
                 horizontalAlignment: root.textAlignment
                 elide: Text.ElideRight
                 wrap: false
-                font: root.labelTextStyle.font
-                lineHeight: root.labelTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.labelTextStyle
             }
 
             CoreText {
@@ -78,9 +76,7 @@ NeutralButton {
                 text: root.subtitle
                 color: root.enabled ? root.subtitleColor : Theme.color.neutral4
                 wrap: false
-                font: root.subtitleTextStyle.font
-                lineHeight: root.subtitleTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.subtitleTextStyle
             }
 
             Icon {

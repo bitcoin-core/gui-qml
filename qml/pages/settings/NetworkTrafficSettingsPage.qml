@@ -40,13 +40,13 @@ SettingsPage {
     }
 
     function formatBytes(bytes) {
-        const suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"]
+        const units = [qsTr("%1 Bytes"), qsTr("%1 KB"), qsTr("%1 MB"), qsTr("%1 GB"), qsTr("%1 TB"), qsTr("%1 PB")]
         let index = 0
-        while (bytes >= 1000 && index < suffixes.length - 1) {
+        while (bytes >= 1000 && index < units.length - 1) {
             bytes /= 1000
             index++
         }
-        return bytes.toFixed(0) + " " + suffixes[index]
+        return units[index].arg(Number(bytes).toLocaleString(Qt.locale(), "f", 0))
     }
 
     function updateNetworkTrafficActivity() {

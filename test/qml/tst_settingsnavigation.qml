@@ -165,7 +165,7 @@ TestCase {
         compare(walletGroup.text, "Wallet")
         compare(generalGroup.text, "General")
         compare(networkGroup.text, "Network")
-        compare(walletGroup.font.styleName, "Semi Bold")
+        compare(walletGroup.font.weight, Font.DemiBold)
 
         let activatedSection = ""
         sidebar.sectionActivated.connect(function(sectionId) {
@@ -430,13 +430,13 @@ TestCase {
         compare(heading.title, "")
         compare(title.visible, false)
         compare(heading.description, "Add a wallet to manage its settings.")
-        compare(action.text, "Add wallet")
+        compare(action.text, "Add wallet…")
 
         walletController.noWalletsFound = false
         compare(heading.title, "No wallet selected")
         compare(title.visible, true)
         compare(heading.description, "Select a wallet to manage wallet-specific settings.")
-        compare(action.text, "Select wallet")
+        compare(action.text, "Select wallet…")
     }
 
     function test_settingsViewPinsSidebarAndLetsPageContainerGrow() {
@@ -799,7 +799,7 @@ TestCase {
         const embeddedMoneyFontWidth = moneyFontPicker.width
         moneyFontPicker.activated("best_system")
         compare(optionsModel.moneyFontChoice, "best_system")
-        compare(moneyFontPicker.currentText, "System Monospace")
+        compare(moneyFontPicker.currentText, "System monospace")
         tryVerify(function() { return moneyFontPicker.width > embeddedMoneyFontWidth })
         moneyFontPicker.activated("embedded")
         compare(optionsModel.moneyFontChoice, "embedded")

@@ -67,17 +67,18 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps)) + "/s"
+            //: Network traffic rate axis label. %1 is a size such as "10 KB".
+            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps)))
             color: root.unitLabelColor
-            font.pixelSize: 13
+            textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
             Layout.leftMargin: 5
             Layout.bottomMargin: Theme.space.s
         }
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps / 10)) + "/s"
+            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps / 10)))
             color: root.unitLabelColor
-            font.pixelSize: 13
+            textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
             Layout.leftMargin: 5
             Layout.bottomMargin: 5
@@ -90,12 +91,12 @@ Item {
     }
 
     function formatBytes(bytes) {
-        var suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
+        var units = [qsTr("%1 Bytes"), qsTr("%1 KB"), qsTr("%1 MB"), qsTr("%1 GB"), qsTr("%1 TB"), qsTr("%1 PB")];
         var index = 0;
-        while (bytes >= 1000 && index < suffixes.length - 1) {
+        while (bytes >= 1000 && index < units.length - 1) {
             bytes /= 1000;
             index++;
         }
-        return bytes.toFixed(0) + " " + suffixes[index];
+        return units[index].arg(Number(bytes).toLocaleString(Qt.locale(), "f", 0));
     }
 }

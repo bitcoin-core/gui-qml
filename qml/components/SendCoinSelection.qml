@@ -51,7 +51,7 @@ DialogPopup {
             Layout.fillWidth: true; spacing: 12
             CoreText {
                 objectName: "coinSelectionTotalSelectedText"
-                Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.neutral7
+                Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.neutral7
                 //: The count includes selected coins hidden by filters or search.
                 text: root.editingCoins ? (root.editingCoins.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.editingCoins.selectedCoinsCount)) : ""
             }

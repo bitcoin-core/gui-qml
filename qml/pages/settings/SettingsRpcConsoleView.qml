@@ -190,7 +190,7 @@ SettingsPage {
         Layout.rightMargin: 12
         text: qsTr("Use ↑↓ arrows to navigate history. Type help for an overview of available commands. Type help-console for console syntax help.")
         color: Theme.color.neutral7
-        font: Theme.text.caption.font
+        textStyle: Theme.text.caption
         horizontalAlignment: Text.AlignHCenter
         wrap: true
     }

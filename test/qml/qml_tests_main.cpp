@@ -2420,7 +2420,7 @@ public:
     }
     QString storageAvailableText() const
     {
-        return m_storage_check_pending ? QStringLiteral("Checking available storage...") : QStringLiteral("%1GB available").arg(m_storage_available_gb);
+        return m_storage_check_pending ? QStringLiteral("Checking available storage…") : QStringLiteral("%1GB available").arg(m_storage_available_gb);
     }
     bool existingProfile() const { return m_existing_profile; }
     void setExistingProfile(bool value)

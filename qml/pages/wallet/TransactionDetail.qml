@@ -65,12 +65,8 @@ Page {
             iconSource: "image://images/caret-left"
             onClicked: if (root.StackView.view) root.StackView.view.pop()
         }
-        centerItem: CoreText {
-            objectName: "transactionDetailTitle"
-            text: root.title
-            font: Theme.text.heading.font
-            wrap: false
-        }
+        title: root.title
+        titleObjectName: "transactionDetailTitle"
         rightItem: OverflowMenuButton {
             id: moreButton
             objectName: "transactionDetailMoreButton"
@@ -139,7 +135,7 @@ Page {
                     amount: root.amount
                     amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.green : Theme.color.neutral9
                     subtitle: root.actionLabel + (root.transactionData.timestamp
-                        ? " · " + Qt.formatDateTime(new Date(root.transactionData.timestamp * 1000), "MMM d, h:mm AP") : "")
+                        ? " · " + new Date(root.transactionData.timestamp * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat) : "")
                     iconComponent: ActivityIcon {
                         objectName: "transactionDetailIcon"
                         iconSize: 48
@@ -167,7 +163,7 @@ Page {
                                 anchors.centerIn: parent
                                 text: root.inactiveLabel
                                 color: Theme.color.neutral7
-                                font: Theme.text.captionStrong.font
+                                textStyle: Theme.text.captionStrong
                             }
                         }
                     }
@@ -195,9 +191,7 @@ Page {
                     backgroundColor: Theme.color.neutral1
                     contentMargin: 20
                     bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
-                    messageFontPixelSize: Theme.text.description.font.pixelSize
-                    messageLineHeight: Theme.text.description.lineHeight
-                    message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee")
+                    message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee.")
                     primaryButtonText: qsTr("Speed up")
                     onPrimaryClicked: speedUpOverlay.open()
                 }

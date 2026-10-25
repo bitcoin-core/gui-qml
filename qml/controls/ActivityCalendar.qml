@@ -305,8 +305,7 @@ ColumnLayout {
             text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
-            font.pixelSize: 15
-            bold: true
+            textStyle: Theme.text.subheading
         }
 
         CalNavButton {
@@ -346,7 +345,7 @@ ColumnLayout {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 color: Theme.color.neutral6
-                font.pixelSize: 12
+                textStyle: Theme.text.caption
             }
         }
     }
@@ -465,9 +464,8 @@ ColumnLayout {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: dayCell.endpoint ? Theme.color.white : Theme.color.neutral9
-                    font.pixelSize: 13
                     // Mark today by weight too, so it does not rely on the ring color alone.
-                    bold: dayCell.isToday
+                    textStyle: dayCell.isToday ? Theme.text.captionStrong : Theme.text.caption
                 }
             }
         }
@@ -482,7 +480,7 @@ ColumnLayout {
         property bool highlighted: false
         //: Read for an Activity date range endpoint that has no date picked yet.
         readonly property string accessibleValue: chip.value !== "" ? chip.value : qsTr("no date selected")
-        implicitHeight: Theme.size.controlLarge
+        implicitHeight: Math.max(Theme.size.controlLarge, chipColumn.implicitHeight + 2 * Theme.space.s)
         radius: Theme.radius.s
         color: Theme.color.neutral2
         border.color: chip.highlighted ? Theme.color.orange : "transparent"
@@ -494,6 +492,7 @@ ColumnLayout {
             //: Accessibility name of an inactive Activity date range endpoint. %1 is "From" or "To", %2 the picked date or "no date selected".
             : qsTr("%1, %2").arg(chip.label).arg(chip.accessibleValue)
         ColumnLayout {
+            id: chipColumn
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 10
@@ -504,18 +503,19 @@ ColumnLayout {
                 Layout.fillWidth: true
                 text: chip.label
                 color: Theme.color.neutral7
-                font.pixelSize: 11
                 // Weight marks the active endpoint too, so the state does not
                 // rely on the border color alone.
-                bold: chip.highlighted
+                textStyle: chip.highlighted ? Theme.text.captionStrong : Theme.text.caption
                 horizontalAlignment: Text.AlignLeft
+                wrap: false
+                elide: Text.ElideRight
             }
             CoreText {
                 Layout.fillWidth: true
                 //: Placeholder in the Activity date range From/To field before a date is picked.
                 text: chip.value !== "" ? chip.value : qsTr("Select date")
                 color: chip.value !== "" ? Theme.color.neutral9 : Theme.color.neutral6
-                font.pixelSize: 14
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignLeft
                 // CoreText wraps by default, which would defeat the elide and
                 // overflow the fixed-height chip on long dates.

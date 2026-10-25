@@ -121,8 +121,8 @@ DesignSystemSection {
             TextButton { text: "Disconnect" }
         }
         DesignSystemState {
-            label: "bold: false"
-            TextButton { text: "Disconnect"; bold: false }
+            label: "textStyle: button"
+            TextButton { text: "Disconnect"; textStyle: Theme.text.button }
         }
         DesignSystemState {
             label: "enabled: false"

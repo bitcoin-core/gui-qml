@@ -39,8 +39,8 @@ Item {
     // ── Style ────────────────────────────────────────────────────────────
 
     property int   fontPixelSize:    12
-    property string fontFamily:      "monospace"
-    property string fontStyleName:   ""
+    property string fontFamily:      Theme.text.monoFamily
+    property int   fontWeight:       Theme.text.monoWeight
     property int   textLineHeight:   0
     property int   contentTextFormat: Text.PlainText
     property color contentColor:     Theme.color.neutral9
@@ -219,14 +219,14 @@ Item {
     TextMetrics {
         id: leftMetrics
         font.family: root.fontFamily
-        font.styleName: root.fontStyleName
+        font.weight: root.fontWeight
         font.pixelSize: root.fontPixelSize
         text: root.leftColumnSample
     }
     TextMetrics {
         id: rightMetrics
         font.family: root.fontFamily
-        font.styleName: root.fontStyleName
+        font.weight: root.fontWeight
         font.pixelSize: root.fontPixelSize
         text: root.rightColumnSample
     }
@@ -317,7 +317,7 @@ Item {
                         text: root.leftColumnRole !== ""
                               ? (rowRoot.model[root.leftColumnRole] ?? "") : ""
                         font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
+                        font.weight: root.fontWeight
                         font.pixelSize: root.fontPixelSize
                         lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
                         lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight
@@ -339,7 +339,7 @@ Item {
                         textFormat: root.contentTextFormat
                         wrapMode: Text.WrapAnywhere
                         font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
+                        font.weight: root.fontWeight
                         font.pixelSize: root.fontPixelSize
                         color: rowRoot.effectiveContentColor
                         selectionColor: root.selectionColor
@@ -357,7 +357,7 @@ Item {
                         text: root.rightColumnRole !== ""
                               ? (rowRoot.model[root.rightColumnRole] ?? "") : ""
                         font.family: root.fontFamily
-                        font.styleName: root.fontStyleName
+                        font.weight: root.fontWeight
                         font.pixelSize: root.fontPixelSize
                         lineHeight: root.textLineHeight > 0 ? root.textLineHeight : 1.0
                         lineHeightMode: root.textLineHeight > 0 ? Text.FixedHeight : Text.ProportionalHeight

@@ -88,7 +88,7 @@ TestCase {
 
         compare(review.reviewState, "waiting")
         compare(review.statusText, "Waiting for approval on external signer.")
-        compare(review.buttonText, "Waiting for approval...")
+        compare(review.buttonText, "Waiting for approval…")
         verify(!button.enabled)
 
         waitForApproveCalls(wallet, 1)

@@ -21,17 +21,11 @@ DesignSystemSection {
 
         DesignSystemState {
             width: parent.width
-            label: "showBackButton, centerItem, rightItem"
+            label: "showBackButton, title, rightItem"
             NavigationBar2 {
                 Layout.fillWidth: true
                 showBackButton: true
-                centerItem: CoreText {
-                    text: "Title"
-                    font: Theme.text.heading.font
-                    lineHeight: Theme.text.heading.lineHeight
-                    lineHeightMode: Text.FixedHeight
-                    wrap: false
-                }
+                title: "Title"
                 rightItem: NavButton {
                     text: "Done"
                 }
@@ -119,38 +113,6 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 title: "Wallets"
                 trailingItem: NeutralButton { text: "Add" }
-            }
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemHeader"
-        Layout.fillWidth: true
-        name: "Header"
-        note: "Legacy heading, still used by several popups, OptionButton and the start-up error page."
-
-        DesignSystemState {
-            width: 380
-            label: "center: true"
-            Header {
-                Layout.fillWidth: true
-                header: "There was an issue starting up."
-                headerBold: true
-                headerSize: 21
-                description: "Description under the header."
-                subtext: "Subtext under the description."
-            }
-        }
-        DesignSystemState {
-            width: 380
-            label: "center: false"
-            Header {
-                Layout.fillWidth: true
-                center: false
-                header: "Store all data"
-                headerSize: 18
-                description: "Uses about 600GB. Support the network."
-                descriptionSize: 15
             }
         }
     }

@@ -74,9 +74,7 @@ DialogPopup {
                             Layout.fillWidth: true
                             text: modelData
                             color: Theme.color.neutral8
-                            font: Theme.text.description.font
-                            lineHeight: Theme.text.description.lineHeight
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.description
                             wrapMode: Text.WordWrap
                             horizontalAlignment: Text.AlignLeft
                         }
@@ -89,7 +87,7 @@ DialogPopup {
                     visible: nodeModel.warningList.length === 0
                     text: qsTr("No current warnings.")
                     color: Theme.color.neutral7
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     horizontalAlignment: Text.AlignLeft
                 }
             }

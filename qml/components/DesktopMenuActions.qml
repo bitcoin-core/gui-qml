@@ -78,25 +78,25 @@ QtObject {
         onTriggered: root.backupWalletRequested()
     }
     readonly property MenuCommand openUri: MenuCommand {
-        text: qsTr("Open &URI…")
+        text: qsTr("Open &Payment Request…")
         visible: root.walletMode
         enabled: root.loadedWalletEnabled
         onTriggered: root.openUriRequested()
     }
     readonly property MenuCommand signMessage: MenuCommand {
-        text: qsTr("Sign &message…")
+        text: qsTr("Sign &Message…")
         visible: root.walletMode
         enabled: root.loadedWalletEnabled
         onTriggered: root.signMessageRequested()
     }
     readonly property MenuCommand verifyMessage: MenuCommand {
-        text: qsTr("&Verify message…")
+        text: qsTr("&Verify Message…")
         visible: root.walletMode
         enabled: root.loadedWalletEnabled
         onTriggered: root.verifyMessageRequested()
     }
     readonly property MenuCommand loadPsbt: MenuCommand {
-        text: qsTr("&Load PSBT from file…")
+        text: qsTr("&Import PSBT…")
         visible: root.walletMode
         enabled: root.loadedWalletEnabled
         onTriggered: root.loadPsbtRequested()
@@ -139,7 +139,7 @@ QtObject {
         onTriggered: root.pasteRequested()
     }
     readonly property MenuCommand toggleDisplayUnit: MenuCommand {
-        text: qsTr("Toggle display unit")
+        text: qsTr("Toggle Display Unit")
         shortcut: qsTr("Ctrl+B")
         enabled: root.commandEnabled
         onTriggered: root.toggleDisplayUnitRequested()

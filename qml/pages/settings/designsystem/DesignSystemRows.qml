@@ -149,9 +149,7 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 text: "/Users/example/Bitcoin"
                 color: Theme.color.neutral7
-                font: Theme.text.monoCaption.font
-                lineHeight: Theme.text.monoCaption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.monoCaption
                 horizontalAlignment: Text.AlignLeft
                 wrap: true
             }
@@ -340,16 +338,12 @@ DesignSystemSection {
                     key: CoreText {
                         text: "Fee rate"
                         color: Theme.color.neutral7
-                        font: Theme.text.description.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.description
                         horizontalAlignment: Text.AlignLeft
                     }
                     value: CoreText {
                         text: "12 sat/vB"
-                        font: Theme.text.monoDescription.font
-                        lineHeight: Theme.text.monoDescription.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.monoDescription
                         horizontalAlignment: Text.AlignLeft
                     }
                 }
@@ -359,16 +353,12 @@ DesignSystemSection {
                     key: CoreText {
                         text: "Size"
                         color: Theme.color.neutral7
-                        font: Theme.text.description.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.description
                         horizontalAlignment: Text.AlignLeft
                     }
                     value: CoreText {
                         text: "141 vB"
-                        font: Theme.text.monoDescription.font
-                        lineHeight: Theme.text.monoDescription.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.monoDescription
                         horizontalAlignment: Text.AlignLeft
                     }
                 }

@@ -130,9 +130,7 @@ AbstractButton {
             height: paintedHeight
             horizontalAlignment: root.textAlignment
             verticalAlignment: Text.AlignTop
-            font: root.textStyle.font
-            lineHeight: root.textStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.textStyle
             textFormat: Text.RichText
             text: root.formattedText
             wrapMode: root.isTruncated ? Text.NoWrap : Text.WordWrap

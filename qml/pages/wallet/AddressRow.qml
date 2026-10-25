@@ -88,7 +88,7 @@ AbstractButton {
                 text: root.pendingLabel
                 placeholderText: root.canEditLabel
                     //: Placeholder shown when an address has no label yet.
-                    ? qsTr("Add label...")
+                    ? qsTr("Add label…")
                     : qsTr("Change address")
                 placeholderTextColor: Theme.color.neutral6
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
@@ -175,11 +175,7 @@ AbstractButton {
                     Layout.fillWidth: true
                     text: root.displayAmount
                     color: root.hasAmount ? Theme.color.green : Theme.color.neutral7
-                    font.family: optionsModel.moneyFont.family
-                    font.weight: optionsModel.moneyFont.weight
-                    font.pixelSize: Theme.text.description.font.pixelSize
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.amountDescription
                     horizontalAlignment: Text.AlignRight
                     elide: Text.ElideRight
                     wrap: false

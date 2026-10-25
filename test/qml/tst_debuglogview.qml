@@ -222,7 +222,7 @@ TestCase {
 
         compare(row.typeColumnWidth, titles.typeColumnWidth)
         compare(row.timeColumnWidth, titles.timeColumnWidth)
-        compare(titles.typeColumnWidth, 32)
+        compare(titles.typeColumnWidth, 48)
         compare(titles.timeColumnWidth, 80)
         tryVerify(function() {
             return findChild(row, "debugLogItemRow_0Message").width > 0

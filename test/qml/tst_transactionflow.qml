@@ -370,6 +370,8 @@ TestCase {
         for (let i = 0; i < paths.length; ++i) compare(flow.ribbonObjects[i], paths[i])
         const output = findChild(flow, "transactionFlowOutput_327")
         const path = flow.ribbonObjects.find(function(item) { return item.ribbon.id === "out:output:327" })
+        // Card heights settle in a later, coalesced measurement pass.
+        tryVerify(function() { return Math.abs(path.ribbon.endY - (output.y + output.height / 2)) < 0.01 })
         fuzzyCompare(path.ribbon.endX, output.x, 0.01)
         fuzzyCompare(path.ribbon.endY, output.y + output.height / 2, 0.01)
         mouseClick(findChild(flow, "transactionFlowOutputsToggle"))

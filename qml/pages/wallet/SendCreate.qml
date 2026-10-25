@@ -774,7 +774,7 @@ PageStack {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 6
                             //: Main heading of the transaction creation form.
-                            CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); font: Theme.text.headline.font; horizontalAlignment: Text.AlignLeft }
+                            CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); textStyle: Theme.text.headline; horizontalAlignment: Text.AlignLeft }
                             RowLayout {
                                 id: availableBalanceRow
                                 Layout.fillWidth: true
@@ -784,7 +784,7 @@ PageStack {
                                     id: availableBalanceCaption
                                     objectName: "sendAvailableCaption"
                                     text: qsTr("Available")
-                                    font: Theme.text.description.font
+                                    textStyle: Theme.text.description
                                     color: Theme.color.neutral7
                                     horizontalAlignment: Text.AlignLeft
                                     Layout.alignment: Qt.AlignBaseline
@@ -793,7 +793,7 @@ PageStack {
                                     objectName: "sendAvailableAmount"
                                     amount: availableAmount.localizedDisplay
                                     unit: availableAmount.unitLabel
-                                    font: Theme.text.description.font
+                                    textStyle: Theme.text.amountDescription
                                     color: Theme.color.neutral7
                                     horizontalAlignment: Text.AlignLeft
                                     Layout.alignment: Qt.AlignBaseline
@@ -822,7 +822,7 @@ PageStack {
                         }
                     }
                     //: Reminder for wallets that sign on a separate hardware device.
-                    CoreText { visible: root.externalSignerWallet; Layout.fillWidth: true; text: qsTr("Have your external signer ready to approve this transaction."); horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.neutral7 }
+                    CoreText { visible: root.externalSignerWallet; Layout.fillWidth: true; text: qsTr("Have your external signer ready to approve this transaction."); horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.neutral7 }
                     GridLayout {
                         id: sendSections
                         Layout.fillWidth: true
@@ -896,7 +896,7 @@ PageStack {
                                                         Rectangle {
                                                             implicitWidth: 28; implicitHeight: 28; radius: height / 2
                                                             color: recipientCard.expanded ? Theme.color.orange : Theme.color.neutral3
-                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; font: Theme.text.subheading.font; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
+                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; textStyle: Theme.text.subheading; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
                                                         }
                                                         CoreText {
                                                             Layout.fillWidth: true
@@ -904,10 +904,10 @@ PageStack {
                                                             horizontalAlignment: Text.AlignLeft
                                                             wrap: false
                                                             elide: Text.ElideRight
-                                                            font: Theme.text.subheading.font
+                                                            textStyle: Theme.text.subheading
                                                             text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
                                                         }
-                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; font: Theme.text.monoDescription.font }
+                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; textStyle: Theme.text.amountDescription }
                                                         Icon {
                                                             source: "image://images/caret-right"
                                                             rotation: recipientCard.expanded ? 90 : 0
@@ -946,7 +946,7 @@ PageStack {
                                 objectName: "sendPaymentRequestStatusText"
                                 visible: sendPage.paymentRequestIsError && sendPage.paymentRequestStatus.length > 0
                                 Layout.leftMargin: 16; Layout.rightMargin: 16
-                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.red; font: Theme.text.description.font
+                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.red; textStyle: Theme.text.description
                             }
 
                             NeutralButton {
@@ -1037,15 +1037,15 @@ PageStack {
                                 title: qsTr("Summary")
                                 BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
                                 BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
-                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
-                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
+                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel }
+                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.amountBody }
                             }
 
-                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.red }
+                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.red }
                             ContinueButton {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true
-                                text: qsTr("Review Transaction")
+                                text: qsTr("Review transaction")
                                 enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
                                     && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: root.confirmTransactionReview()
@@ -1152,7 +1152,7 @@ PageStack {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to prepare this transaction for review.")
         confirmText: qsTr("Unlock and continue")
-        busyConfirmText: qsTr("Unlocking...")
+        busyConfirmText: qsTr("Unlocking…")
         onSubmitted: (passphrase) => {
             reviewPassphrasePopup.busy = true
             if (root.wallet.prepareTransactionWithPassphrase(passphrase)) {

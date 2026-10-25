@@ -126,7 +126,7 @@ TestCase {
         verify(host_layout !== null)
         const picker = host_layout.picker
         compare(picker.titleItem.font.pixelSize, Theme.text.captionStrong.pixelSize)
-        compare(picker.titleItem.font.styleName, "Semi Bold")
+        compare(picker.titleItem.font.weight, Font.DemiBold)
         compare(picker.titleItem.lineHeight, Theme.text.captionStrong.lineHeight)
     }
 

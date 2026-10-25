@@ -53,7 +53,7 @@ OnboardingView {
             visible: text.length > 0
             text: walletController.walletImportErrorHelpText
             color: Theme.color.neutral6
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             wrap: true
             horizontalAlignment: Text.AlignHCenter
         }

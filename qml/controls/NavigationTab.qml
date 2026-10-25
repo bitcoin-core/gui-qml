@@ -41,10 +41,9 @@ TabButton {
         }
         CoreText {
             id: buttonText
-            font.pixelSize: 15
+            textStyle: Theme.text.subheading
             text: root.text
             color: root.textColor
-            bold: true
             visible: !customContentLoader.active && root.text !== ""
             anchors.centerIn: parent
         }
