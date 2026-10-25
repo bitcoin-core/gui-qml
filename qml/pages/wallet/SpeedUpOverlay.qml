@@ -40,12 +40,12 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
     enter: Transition {
-        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 300; easing.type: Easing.OutCubic }
-        NumberAnimation { property: "verticalOffset"; from: -30; to: 0; duration: 300; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.slow); easing.type: Theme.motion.easing.enter }
+        NumberAnimation { property: "verticalOffset"; from: -Theme.motion.dialogOffset; to: 0; duration: Theme.motion.travel(Theme.motion.slow); easing.type: Theme.motion.easing.enter }
     }
     exit: Transition {
-        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.InCubic }
-        NumberAnimation { property: "verticalOffset"; from: 0; to: -30; duration: 250; easing.type: Easing.InCubic }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.exit }
+        NumberAnimation { property: "verticalOffset"; to: -Theme.motion.dialogOffset; duration: Theme.motion.travel(Theme.motion.exit); easing.type: Theme.motion.easing.exit }
     }
     Overlay.modal: Rectangle {
         color: root.modalOverlayColor
@@ -66,7 +66,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.color.neutral1
-        radius: 10
+        radius: Theme.radius.popup
         border.color: Theme.color.neutral3
         border.width: 1
         SurfaceGradientBorder {
@@ -127,6 +127,7 @@ Popup {
             ValueRow {
                 objectName: "speedUpOriginalFeeRow"
                 amountValue: true
+                animateUnitChanges: false
                 Layout.fillWidth: true
                 title: qsTr("Original fee")
                 value: root.bumpModel ? root.bumpModel.oldFee : ""
@@ -137,6 +138,7 @@ Popup {
             ValueRow {
                 objectName: "speedUpNewFeeRow"
                 amountValue: true
+                animateUnitChanges: false
                 Layout.fillWidth: true
                 title: qsTr("New fee")
                 value: root.bumpModel ? root.bumpModel.newFee : ""
@@ -160,7 +162,7 @@ Popup {
         GridLayout {
             Layout.fillWidth: true
             Layout.topMargin: 24
-            columns: root.width < 480 ? 1 : 2
+            columns: root.width < SizeClass.stackColumnsMax ? 1 : 2
             columnSpacing: 12
             rowSpacing: 12
 

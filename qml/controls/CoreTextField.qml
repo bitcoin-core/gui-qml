@@ -20,12 +20,12 @@ TextField {
     echoMode: hideText ? TextInput.Password : TextInput.Normal
     verticalAlignment: TextInput.AlignVCenter
     rightPadding: hideText ? 46 : 20
-    leftPadding: 20
+    leftPadding: Theme.space.xl
     background: Rectangle {
         border.color: Theme.color.neutral5
         border.width: 1
         color: "transparent"
-        radius: 5
+        radius: Theme.radius.field
     }
 
     IconButton {
@@ -35,9 +35,9 @@ TextField {
         enabled: root.hideText
         z: 1
         size: 32
-        iconSize: 24
+        iconSize: Theme.size.icon.xl
         anchors.right: root.right
-        anchors.rightMargin: 8
+        anchors.rightMargin: Theme.space.m
         anchors.verticalCenter: root.verticalCenter
         iconSource: root.echoMode === TextInput.Normal ? "qrc:/icons/hidden" : "qrc:/icons/visible"
         iconColor: Theme.color.neutral5

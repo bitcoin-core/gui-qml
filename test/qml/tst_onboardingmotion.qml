@@ -13,6 +13,17 @@ TestCase {
     width: 224
     height: 224
 
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Component {
         id: stillMotion
         OnboardingMotion { reducedMotion: true }

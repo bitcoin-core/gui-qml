@@ -193,7 +193,6 @@ DesignSystemSection {
             showDivider: false
             trailingItem: SegmentedPicker {
                 implicitWidth: 220
-                implicitHeight: 36
                 model: [
                     { text: "Compact", value: "compact" },
                     { text: "Showcase", value: "showcase" }

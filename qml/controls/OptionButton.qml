@@ -31,7 +31,8 @@ Button {
             : "transparent"
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
         FocusBorder {
             visible: button.enabled && button.visualFocus
@@ -88,7 +89,8 @@ Button {
                         radius: 3
 
                         Behavior on color {
-                            ColorAnimation { duration: 150 }
+                            enabled: Theme.motion.animated
+                            ColorAnimation { duration: Theme.motion.normal }
                         }
                     }
                     font.styleName: "Regular"
@@ -101,7 +103,8 @@ Button {
                     text: qsTr("Recommended")
 
                     Behavior on color {
-                        ColorAnimation { duration: 150 }
+                        enabled: Theme.motion.animated
+                        ColorAnimation { duration: Theme.motion.normal }
                     }
                 }
             }

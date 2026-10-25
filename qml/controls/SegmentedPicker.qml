@@ -33,7 +33,7 @@ Control {
         return option
     }
 
-    implicitHeight: 45
+    implicitHeight: Theme.size.control
     implicitWidth: 360
     padding: 5
     Accessible.role: Accessible.PageTabList
@@ -42,10 +42,11 @@ Control {
 
     background: Rectangle {
         color: Theme.color.neutral2
-        radius: 8
+        radius: Theme.radius.m
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -70,7 +71,7 @@ Control {
                 autoExclusive: true
                 checked: index === root.currentIndex
                 text: root.optionText(modelData)
-                bgRadius: 5
+                bgRadius: Theme.radius.s
                 textColor: Theme.color.neutral9
                 textHoverColor: checked ? Theme.color.white : Theme.color.neutral9
                 textActiveColor: Theme.color.white

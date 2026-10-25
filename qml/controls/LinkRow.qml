@@ -23,7 +23,7 @@ ListRow {
     accessibleRole: Accessible.Link
 
     trailingItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
 
         CoreText {
             objectName: root.objectName.length > 0 ? root.objectName + "Value" : ""

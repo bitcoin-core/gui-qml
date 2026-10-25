@@ -92,7 +92,7 @@ ColumnLayout {
     }
 
     Layout.fillWidth: true
-    spacing: 4
+    spacing: Theme.space.xs
 
     Item {
         id: inputRow

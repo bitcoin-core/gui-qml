@@ -38,6 +38,7 @@
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/globalsettings.h>
+#include <qml/motionpreference.h>
 
 class MockAppMode : public QObject
 {
@@ -4230,6 +4231,9 @@ public Q_SLOTS:
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
         qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
             return new GlobalSettings(QCoreApplication::applicationName());
+        });
+        qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new MotionPreference(QStringLiteral("off"));
         });
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",

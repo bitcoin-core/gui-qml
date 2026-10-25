@@ -24,6 +24,8 @@ Item {
     property alias lineHeight: label.lineHeight
     property alias lineHeightMode: label.lineHeightMode
     property bool animateUnitChanges: true
+    // The digit roll moves text, so reduced motion shows the new value at once.
+    readonly property bool rollsUnitChanges: animateUnitChanges && !Theme.motion.reduced
     property bool animating: false
     property bool supportsAnimation: false
 

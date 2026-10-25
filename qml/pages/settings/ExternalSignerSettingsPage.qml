@@ -100,7 +100,7 @@ SettingsPage {
                         verticalAlignment: TextInput.AlignVCenter
                         background: Rectangle {
                             color: Theme.color.neutral2
-                            radius: 5
+                            radius: Theme.radius.field
 
                             FieldBorderRings {
                                 objectName: "externalSignerPathFocusBorder"
@@ -127,7 +127,8 @@ SettingsPage {
                             color: root.signerConnected ? Theme.color.green : Theme.color.red
 
                             Behavior on color {
-                                ColorAnimation { duration: 150 }
+                                enabled: Theme.motion.animated
+                                ColorAnimation { duration: Theme.motion.normal }
                             }
                         }
 

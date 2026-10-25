@@ -39,23 +39,28 @@ Item {
         valueList: root.valueList
 
         Behavior on backgroundColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on borderColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on gradientColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on lineColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on markerLineColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -67,7 +72,7 @@ Item {
             font.pixelSize: 13
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
             Layout.leftMargin: 5
-            Layout.bottomMargin: 6
+            Layout.bottomMargin: Theme.space.s
         }
         CoreText {
             text: formatBytes(formatMagnitude(root.maxRateBps / 10)) + "/s"

@@ -15,7 +15,7 @@ ApplicationWindow {
     id: appWindow
     objectName: "appWindow"
     title: qsTr("Bitcoin Core App")
-    minimumWidth: 800
+    minimumWidth: SizeClass.windowMinimumWidth
     minimumHeight: 665
     color: Theme.color.background
     palette.window: Theme.color.neutral1 // Context menu background
@@ -131,7 +131,8 @@ ApplicationWindow {
 
 
     Behavior on color {
-        ColorAnimation { duration: 150 }
+        enabled: Theme.motion.animated
+        ColorAnimation { duration: Theme.motion.normal }
     }
 
     Loader {

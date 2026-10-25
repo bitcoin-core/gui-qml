@@ -218,6 +218,8 @@ TestCase {
         if (!card.hasFields) editField(card, "requestPaymentYourNameInput", "Request")
         card.createRequest()
         tryCompare(page.requestModal, "opened", true)
+        // Without an enter transition the window drops the next press until it renders a frame.
+        waitForRendering(page.requestModal.contentItem, 1000)
         return page.requestModal.card
     }
 
@@ -641,9 +643,10 @@ TestCase {
         tryCompare(testWalletModel, "lastTemplateRequestId", requestId)
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
 
+        // The template is applied after the modal has closed (Qt.callLater).
+        tryCompare(findChild(page.draftCard, "requestPaymentMessageInput"), "text", "Lunch split")
         compare(testPaymentRequest.id, "")
         compare(findChild(page.draftCard, "requestPaymentAmountInput").text, "0.00100000")
-        compare(findChild(page.draftCard, "requestPaymentMessageInput").text, "Lunch split")
         compare(findChild(page.draftCard, "requestPaymentYourNameInput").text, "Hal")
         verify(findChild(page.draftCard, "requestPaymentAmountField").visible)
         verify(findChild(page.draftCard, "requestPaymentMessageRow").visible)

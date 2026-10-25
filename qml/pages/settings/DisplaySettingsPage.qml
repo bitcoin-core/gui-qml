@@ -27,7 +27,6 @@ SettingsPage {
             trailingItem: SegmentedPicker {
                 objectName: "displayThemePicker"
                 implicitWidth: 190
-                implicitHeight: 36
                 model: [qsTr("Light"), qsTr("Dark")]
                 currentIndex: Theme.dark ? 1 : 0
                 onSelected: function(index, option) {

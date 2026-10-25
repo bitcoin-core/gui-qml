@@ -77,13 +77,13 @@ ColumnLayout {
             : ownership === "fee" ? feeColor : unknownColor
     }
 
-    spacing: 12
+    spacing: Theme.space.ml
     GridLayout {
         visible: root.title.length > 0 || root.canCollapseOutputs
         Layout.fillWidth: true
-        columns: root.width < 640 ? 1 : 3
-        columnSpacing: 12
-        rowSpacing: 4
+        columns: SizeClass.isCompact(root.width) ? 1 : 3
+        columnSpacing: Theme.space.ml
+        rowSpacing: Theme.space.xs
         CoreText {
             visible: root.title.length > 0
             Layout.fillWidth: true
@@ -107,7 +107,7 @@ ColumnLayout {
             text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
             textSize: Theme.text.caption.pixelSize
             bold: false
-            padding: 8
+            padding: Theme.space.m
             onClicked: root.outputsExpanded = !root.outputsExpanded
         }
     }
@@ -115,13 +115,13 @@ ColumnLayout {
         Layout.fillWidth: true
         implicitHeight: contents.height + 48
         color: Theme.color.neutral1
-        radius: 16
+        radius: Theme.radius.card
         ColumnLayout {
             id: contents
             x: 24
             y: 24
             width: parent.width - 48
-            spacing: 16
+            spacing: Theme.space.l
             Flickable {
                 id: viewport
                 objectName: "transactionFlowViewport"
@@ -228,13 +228,13 @@ ColumnLayout {
             }
             Flow {
                 Layout.fillWidth: true
-                spacing: 16
+                spacing: Theme.space.l
                 Repeater {
                     model: [{ label: qsTr("Wallet-owned"), color: root.walletColor },
                         { label: qsTr("Not wallet-owned"), color: root.externalColor }, { label: qsTr("Fee"), color: root.feeColor }]
                     delegate: Row {
                         required property var modelData
-                        spacing: 6
+                        spacing: Theme.space.s
                         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 7; height: 7; radius: 2; color: modelData.color }
                         CoreText { text: modelData.label; color: Theme.color.neutral7; font: Theme.text.caption.font }
                     }

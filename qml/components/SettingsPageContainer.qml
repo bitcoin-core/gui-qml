@@ -15,8 +15,19 @@ Page {
     readonly property bool canGoBack: internal.currentStack ? internal.currentStack.canGoBack : false
     readonly property var currentItem: internal.currentStack ? internal.currentStack.currentItem : null
     readonly property var stack: internal.currentStack
+    // Gives each section's root page a Back button that emits rootBackRequested
+    // (compact SettingsView, where the sidebar is the previous screen).
+    property bool showRootBackButton: false
 
     signal sectionChanged(string sectionId)
+    signal rootBackRequested()
+
+    function configureRootPage(rootPage) {
+        if (!rootPage || rootPage.showBackButton === undefined || rootPage.back === undefined) return
+        rootPage.showBackButton = Qt.binding(function() { return root.showRootBackButton })
+        if (rootPage.backButtonObjectName === "") rootPage.backButtonObjectName = "settingsSectionBackButton"
+        rootPage.back.connect(root.rootBackRequested)
+    }
 
     function showSection(sectionId, page, properties) {
         if (!page) {
@@ -45,6 +56,7 @@ Page {
             nextSectionStacks[sectionId] = nextStack
             internal.sectionStacks = nextSectionStacks
             nextStack.push(page, properties || {}, StackView.Immediate)
+            root.configureRootPage(nextStack.currentItem)
         }
 
         if (internal.currentStack) internal.currentStack.visible = false

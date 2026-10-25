@@ -7,7 +7,7 @@ import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 
 Button {
-    property int bgRadius: 5
+    property int bgRadius: Theme.radius.s
     property color bgDefaultColor: Theme.color.neutral2
     property color bgHoverColor: Theme.color.neutral2
     property color bgActiveColor: Theme.color.neutral5
@@ -21,8 +21,8 @@ Button {
     checkable: true
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
-    leftPadding: 12
-    rightPadding: 12
+    leftPadding: Theme.space.ml
+    rightPadding: Theme.space.ml
     topPadding: 5
     bottomPadding: 5
 
@@ -34,7 +34,8 @@ Button {
         color: root.textColor
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -44,7 +45,8 @@ Button {
         radius: root.bgRadius
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 

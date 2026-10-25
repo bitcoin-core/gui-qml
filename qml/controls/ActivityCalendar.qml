@@ -15,7 +15,7 @@ import org.bitcoincore.qt 1.0
 // applying or clearing the filter is left to the caller.
 ColumnLayout {
     id: root
-    spacing: 8
+    spacing: Theme.space.m
 
     // Public interface ------------------------------------------------------
 
@@ -249,7 +249,7 @@ ColumnLayout {
     // click will set.
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: Theme.space.m
 
         DateRangeChip {
             objectName: "activityDateFromChip"
@@ -277,7 +277,7 @@ ColumnLayout {
     // jump a year (to reach distant dates fast).
     RowLayout {
         Layout.fillWidth: true
-        spacing: 2
+        spacing: Theme.space.xxs
 
         CalNavButton {
             objectName: "calendarPrevYear"
@@ -359,7 +359,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         columns: 7
         columnSpacing: 0
-        rowSpacing: 2
+        rowSpacing: Theme.space.xxs
 
         // The grid is a single tab stop; arrows move the focus ring between
         // days, PageUp/PageDown step a month (with Ctrl, a year), Enter or Space
@@ -482,8 +482,8 @@ ColumnLayout {
         property bool highlighted: false
         //: Read for an Activity date range endpoint that has no date picked yet.
         readonly property string accessibleValue: chip.value !== "" ? chip.value : qsTr("no date selected")
-        implicitHeight: 46
-        radius: 5
+        implicitHeight: Theme.size.controlLarge
+        radius: Theme.radius.s
         color: Theme.color.neutral2
         border.color: chip.highlighted ? Theme.color.orange : "transparent"
         border.width: 1
@@ -497,8 +497,8 @@ ColumnLayout {
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 10
-            anchors.topMargin: 6
-            anchors.bottomMargin: 6
+            anchors.topMargin: Theme.space.s
+            anchors.bottomMargin: Theme.space.s
             spacing: 1
             CoreText {
                 Layout.fillWidth: true
@@ -533,15 +533,15 @@ ColumnLayout {
         property url iconSource
         property bool doubled: false
         property string accessibleName: ""
-        implicitWidth: 28
-        implicitHeight: 28
+        implicitWidth: Theme.size.iconButtonSmall
+        implicitHeight: Theme.size.iconButtonSmall
         padding: 0
         focusPolicy: Qt.StrongFocus
         hoverEnabled: AppMode.isDesktop
         Accessible.role: Accessible.Button
         Accessible.name: navButton.accessibleName
         background: Rectangle {
-            radius: 5
+            radius: Theme.radius.s
             color: navButton.down ? Theme.color.neutral3 : navButton.hovered ? Theme.color.neutral2 : "transparent"
 
             FocusBorder {
@@ -561,13 +561,13 @@ ColumnLayout {
                 Icon {
                     source: navButton.iconSource
                     color: Theme.color.orange
-                    size: 14
+                    size: Theme.size.icon.s
                 }
                 Icon {
                     visible: navButton.doubled
                     source: navButton.iconSource
                     color: Theme.color.orange
-                    size: 14
+                    size: Theme.size.icon.s
                 }
             }
         }

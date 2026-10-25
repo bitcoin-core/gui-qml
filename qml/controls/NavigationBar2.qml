@@ -18,7 +18,7 @@ Pane {
     signal backClicked
 
     background: null
-    padding: 4
+    padding: Theme.space.xs
     contentItem: RowLayout {
         Div {
             id: left_div

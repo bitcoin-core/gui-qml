@@ -11,7 +11,7 @@ Item {
     property bool showBackButton: false
     property bool showCloseButton: false
     property int surfaceLevel: 0
-    property real contentSidePadding: width >= 640 ? 40 : 24
+    property real contentSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     property real buttonSidePadding: contentSidePadding
     property int closeButtonSize: CloseButton.Medium
     property string backButtonObjectName: "onboardingBackButton"
@@ -44,16 +44,16 @@ Item {
         target: outgoingTitle
         property: "opacity"
         to: 0
-        duration: 160
-        easing.type: Easing.OutCubic
+        duration: Theme.motion.normal
+        easing.type: Theme.motion.easing.enter
     }
     NumberAnimation {
         id: currentTitleFade
         target: currentTitle
         property: "opacity"
         to: 1
-        duration: 160
-        easing.type: Easing.OutCubic
+        duration: Theme.motion.normal
+        easing.type: Theme.motion.easing.enter
     }
 
     OnboardingBackButton {
@@ -66,7 +66,8 @@ Item {
         enabled: root.showBackButton
         opacity: root.showBackButton ? 1 : 0
         Behavior on opacity {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            enabled: Theme.motion.animated
+            NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
         }
         surfaceLevel: root.surfaceLevel
         onClicked: root.backClicked()
@@ -109,7 +110,8 @@ Item {
         enabled: root.showCloseButton
         opacity: root.showCloseButton ? 1 : 0
         Behavior on opacity {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            enabled: Theme.motion.animated
+            NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
         }
         buttonSize: root.closeButtonSize
         backgroundColor: root.surfaceLevel > 0 ? Theme.color.surface(root.surfaceLevel + 1) : Theme.color.background

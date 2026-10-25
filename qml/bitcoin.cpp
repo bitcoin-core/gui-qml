@@ -30,6 +30,7 @@
 #include <qml/clipboard.h>
 #include <qml/datadir.h>
 #include <qml/globalsettings.h>
+#include <qml/motionpreference.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
@@ -274,6 +275,15 @@ void ApplyTestSettingsDir()
 }
 #endif
 
+QString StartupMotionMode()
+{
+#ifdef ENABLE_TEST_AUTOMATION
+    const QString test_mode{QString::fromStdString(gArgs.GetArg("-test-motion", ""))};
+    if (test_mode == QLatin1String("full") || test_mode == QLatin1String("reduced") || test_mode == QLatin1String("off")) return test_mode;
+#endif
+    return SystemPrefersReducedMotion() ? QStringLiteral("reduced") : QStringLiteral("full");
+}
+
 void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, BitcoinUriModel& bitcoin_uri_model)
 {
     static bool registered{false};
@@ -305,6 +315,9 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     });
     qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
         return new GlobalSettings(QStringLiteral(QAPP_APP_NAME_DEFAULT));
+    });
+    qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        return new MotionPreference(StartupMotionMode());
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");

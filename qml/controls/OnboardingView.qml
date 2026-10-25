@@ -36,7 +36,7 @@ Page {
     property string secondaryButtonObjectName: "onboardingSecondaryButton"
     property bool secondaryButtonIsLink: false
     property real maximumContentWidth: 860
-    property real contentSidePadding: width >= 640 ? 40 : 24
+    property real contentSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     property real childTopMargin: 48
     property bool footerFullWidth: false
     property bool animateContent: false
@@ -96,6 +96,19 @@ Page {
         if (animateContent) contentEntrance.start()
     }
 
+    // The first click or key press ends the entrance, so it never holds up the user.
+    function finishEntrance() {
+        if (!contentEntrance.running && !footerEntrance.running && footerBar.opacity === 1) return
+        contentEntrance.complete()
+        footerEntrance.stop()
+        footerBar.opacity = 1
+    }
+
+    Keys.onPressed: function(event) {
+        root.finishEntrance()
+        event.accepted = false
+    }
+
     header: OnboardingNavigationBar {
         visible: root.showNavigationBar
         height: visible ? implicitHeight : 0
@@ -125,11 +138,18 @@ Page {
             width: scrollView.availableWidth
             height: content.height + 96
 
+            // Inside the Flickable, so it sees taps before the Flickable takes them.
+            TapHandler {
+                objectName: "onboardingEntranceTapHandler"
+                enabled: contentEntrance.running || footerEntrance.running
+                onTapped: root.finishEntrance()
+            }
+
             ColumnLayout {
                 id: content
                 objectName: "onboardingContent"
                 anchors.top: parent.top
-                anchors.topMargin: 8
+                anchors.topMargin: Theme.space.m
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.max(0, Math.min(parent.width - root.contentSidePadding * 2,
                                             root.maximumContentWidth))
@@ -228,7 +248,6 @@ Page {
         secondaryButtonObjectName: root.secondaryButtonObjectName
         secondaryButtonIsLink: root.secondaryButtonIsLink
         opacity: root.animateContent && root.animateFooterAfterContent ? 0 : 1
-        enabled: !root.animateFooterAfterContent || opacity === 1
         onBackClicked: root.goBack()
         onPrimaryClicked: root.primaryClicked()
         onSecondaryClicked: root.secondaryClicked()
@@ -243,31 +262,31 @@ Page {
         SequentialAnimation {
             PauseAnimation { duration: root.contentAnimationDelay + 100 }
             ParallelAnimation {
-                NumberAnimation { target: defaultImage; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: defaultImageOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: imageLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: imageLoaderOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: defaultImage; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: defaultImageOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: imageLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: imageLoaderOffset; property: "y"; from: 16; to: 0; duration: 400; easing.type: Theme.motion.easing.enter }
             }
         }
         SequentialAnimation {
             PauseAnimation { duration: root.contentAnimationDelay + 180 }
             ParallelAnimation {
-                NumberAnimation { target: headingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: headingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: headingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: headingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Theme.motion.easing.enter }
             }
         }
         SequentialAnimation {
             PauseAnimation { duration: root.contentAnimationDelay + 260 }
             ParallelAnimation {
-                NumberAnimation { target: subheadingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: subheadingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: subheadingText; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: subheadingOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Theme.motion.easing.enter }
             }
         }
         SequentialAnimation {
             PauseAnimation { duration: root.contentAnimationDelay + 340 }
             ParallelAnimation {
-                NumberAnimation { target: childLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Easing.InOutCubic }
-                NumberAnimation { target: childOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Easing.InOutCubic }
+                NumberAnimation { target: childLoader; property: "opacity"; from: 0; to: 1; duration: 400; easing.type: Theme.motion.easing.enter }
+                NumberAnimation { target: childOffset; property: "y"; from: 12; to: 0; duration: 400; easing.type: Theme.motion.easing.enter }
             }
         }
     }
@@ -278,7 +297,7 @@ Page {
         property: "opacity"
         from: 0
         to: 1
-        duration: 160
-        easing.type: Easing.InOutCubic
+        duration: Theme.motion.normal
+        easing.type: Theme.motion.easing.enter
     }
 }

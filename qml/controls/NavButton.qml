@@ -35,7 +35,7 @@ AbstractButton {
         id: bg
         height: root.height
         width: root.width
-        radius: 5
+        radius: Theme.radius.s
         color: root.down ? Theme.color.neutral3
             : root.hovered ? Theme.color.neutral2
             : Theme.color.background
@@ -45,7 +45,8 @@ AbstractButton {
         }
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
     contentItem: RowLayout {

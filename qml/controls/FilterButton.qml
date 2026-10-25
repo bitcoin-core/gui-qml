@@ -17,9 +17,9 @@ AbstractButton {
     property color activeBackgroundColor: Theme.color.orange
     property color backgroundColor: Theme.color.neutral1
     property color hoverBackgroundColor: Theme.color.neutral2
-    property int size: 36
-    property int iconSize: 24
-    property int transitionDuration: 140
+    property int size: Theme.size.control
+    property int iconSize: Theme.size.icon.xl
+    property int transitionDuration: Theme.motion.normal
     property real minimizedIconScale: 0.72
     readonly property Item iconItem: active ? activeFilterIcon : inactiveFilterIcon
     readonly property alias inactiveIconItem: inactiveFilterIcon
@@ -42,8 +42,8 @@ AbstractButton {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: Rectangle {
-        color: root.active ? root.activeBackgroundColor : root.hovered || root.down ? root.hoverBackgroundColor : root.backgroundColor
+    background: StateBackground {
+        stateColor: root.active ? root.activeBackgroundColor : root.hovered || root.down ? root.hoverBackgroundColor : root.backgroundColor
         radius: 6
 
         FocusBorder {
@@ -72,7 +72,7 @@ AbstractButton {
     }
 
     contentItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
         Item {
             Layout.leftMargin: (root.size - root.iconSize) / 2
             Layout.preferredWidth: root.iconSize
@@ -98,18 +98,21 @@ AbstractButton {
                 scale: root.active ? root.minimizedIconScale : 1
 
                 Behavior on color {
-                    ColorAnimation { duration: 150 }
+                    enabled: Theme.motion.animated
+                    ColorAnimation { duration: Theme.motion.normal }
                 }
                 Behavior on opacity {
+                    enabled: Theme.motion.animated
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
                 Behavior on scale {
+                    enabled: !Theme.motion.reduced
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
             }
@@ -130,18 +133,21 @@ AbstractButton {
                 scale: root.active ? 1 : root.minimizedIconScale
 
                 Behavior on color {
-                    ColorAnimation { duration: 150 }
+                    enabled: Theme.motion.animated
+                    ColorAnimation { duration: Theme.motion.normal }
                 }
                 Behavior on opacity {
+                    enabled: Theme.motion.animated
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
                 Behavior on scale {
+                    enabled: !Theme.motion.reduced
                     NumberAnimation {
                         duration: root.transitionDuration
-                        easing.type: Easing.OutCubic
+                        easing.type: Theme.motion.easing.enter
                     }
                 }
             }

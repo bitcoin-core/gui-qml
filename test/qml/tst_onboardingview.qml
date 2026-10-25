@@ -15,6 +15,16 @@ TestCase {
     width: 900
     height: 600
 
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Component {
         id: stackComponent
         StackView {
@@ -90,6 +100,7 @@ TestCase {
     }
 
     function test_navigationBarCrossFadesTitleAndButtons() {
+        Theme.motion.mode = "full"
         const bar = createTemporaryObject(navigationBarComponent, testCase)
         verify(bar !== null)
         const back = findChild(bar, "onboardingBackButton")

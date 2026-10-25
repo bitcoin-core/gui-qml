@@ -13,7 +13,7 @@ Control {
     property string description: ""
     property alias trailingItem: trailingLoader.sourceComponent
     property alias loadedTrailingItem: trailingLoader.item
-    property int contentSpacing: 16
+    property int contentSpacing: Theme.space.l
     property var titleTextStyle: Theme.text.headline
     property var descriptionTextStyle: Theme.text.description
     property int descriptionTextFormat: Text.AutoText
@@ -32,7 +32,7 @@ Control {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            spacing: 4
+            spacing: Theme.space.xs
 
             CoreText {
                 objectName: root.objectName.length > 0 ? root.objectName + "Title" : ""

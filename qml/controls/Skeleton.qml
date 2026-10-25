@@ -11,7 +11,7 @@ Rectangle {
     property int shimmerDuration: 2500
     property bool loading: true
 
-    radius: 3
+    radius: Theme.radius.xs
 
     gradient: Gradient {
         orientation: Gradient.Horizontal
@@ -32,8 +32,9 @@ Rectangle {
         }
     }
 
+    // Under reduced motion skeletons stay static placeholders.
     ParallelAnimation  {
-        running: loading
+        running: root.loading && root.visible && Theme.motion.decorativeLoops
         loops: Animation.Infinite
         NumberAnimation {
             target: stop1
@@ -41,7 +42,7 @@ Rectangle {
             from: -1.0
             to: 1.0
             duration: root.shimmerDuration
-            easing.type: Easing.Linear
+            easing.type: Theme.motion.easing.loop
         }
         NumberAnimation {
             target: stop2
@@ -49,7 +50,7 @@ Rectangle {
             from: -0.5
             to: 1.5
             duration: root.shimmerDuration;
-            easing.type: Easing.Linear
+            easing.type: Theme.motion.easing.loop
         }
         NumberAnimation {
             target: stop3
@@ -57,7 +58,7 @@ Rectangle {
             from: 0.0
             to: 2.0
             duration: root.shimmerDuration
-            easing.type: Easing.Linear
+            easing.type: Theme.motion.easing.loop
         }
     }
 }

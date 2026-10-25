@@ -15,6 +15,16 @@ TestCase {
     width: 640
     height: 640
 
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Item {
         id: host
         anchors.fill: parent
@@ -392,6 +402,7 @@ TestCase {
     }
 
     function test_outlineButtonUsesLargeNeutralAppearance() {
+        Theme.motion.mode = "full"
         const button = createTemporaryObject(outlineButtonComponent, host)
         verify(button !== null)
         const background = findChild(button, "exampleOutlineButtonBackground")
@@ -404,13 +415,14 @@ TestCase {
 
         button.down = true
         compare(button.currentBackgroundColor, Theme.color.neutral3)
-        tryCompare(button, "scale", 0.98)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button, "scale", 1.0)
     }
 
     function test_continueButtonKeepsPrimaryColorWhenDisabled() {
+        Theme.motion.mode = "full"
         const button = createTemporaryObject(continueButtonComponent, host)
         verify(button !== null)
 
@@ -428,7 +440,7 @@ TestCase {
         tryCompare(button.background, "color", Theme.color.orangeLight2)
         compare(button.textColor, Theme.color.white)
         compare(button.opacity, 1.0)
-        tryCompare(button, "scale", 0.98)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button.background, "color", Theme.color.orange)
@@ -436,6 +448,7 @@ TestCase {
     }
 
     function test_closeButtonInteractionStates() {
+        Theme.motion.mode = "full"
         const button = createTemporaryObject(closeButtonComponent, host)
         verify(button !== null)
         const background = findChild(button, "exampleCloseButtonBackground")
@@ -456,7 +469,7 @@ TestCase {
 
         button.down = true
         tryCompare(background, "color", Theme.color.neutral3)
-        tryCompare(button, "scale", 0.95)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button, "scale", 1.0)

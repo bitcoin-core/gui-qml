@@ -44,7 +44,7 @@ Page {
         default: return qsTr("Transaction")
         }
     }
-    readonly property real sidePadding: width < 640 ? 16 : 40
+    readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real detailContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     signal showTransaction(string txid)
 
@@ -60,7 +60,7 @@ Page {
         bottomPadding: 4
         leftItem: NavButton {
             objectName: "activityDetailsBackButton"
-            text: root.width < 640 ? "" : qsTr("Activity")
+            text: SizeClass.isCompact(root.width) ? "" : qsTr("Activity")
             Accessible.name: qsTr("Back to Activity")
             iconSource: "image://images/caret-left"
             onClicked: if (root.StackView.view) root.StackView.view.pop()
@@ -152,7 +152,7 @@ Page {
                             visible: root.inactiveLabel.length > 0
                             implicitWidth: inactiveText.implicitWidth + 24
                             implicitHeight: 30
-                            radius: 15
+                            radius: height / 2
                             color: Theme.color.neutral2
                             CoreText {
                                 id: inactiveText
@@ -185,9 +185,8 @@ Page {
                     visible: root.canBump
                     Layout.fillWidth: true
                     backgroundColor: Theme.color.neutral1
-                    radius: 16
                     contentMargin: 20
-                    bannerLayout: width < 640 ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+                    bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
                     messageFontPixelSize: Theme.text.description.font.pixelSize
                     messageLineHeight: Theme.text.description.lineHeight
                     message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee")
@@ -199,9 +198,8 @@ Page {
                     visible: root.replacedByTxid.length > 0
                     Layout.fillWidth: true
                     backgroundColor: Theme.color.neutral1
-                    radius: 16
                     contentMargin: 20
-                    bannerLayout: width < 640 ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+                    bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
                     title: qsTr("Replaced by a newer transaction")
                     message: root.replacedByTxid.substring(0, 12) + "…" + root.replacedByTxid.slice(-12)
                     primaryButtonText: qsTr("View replacement")

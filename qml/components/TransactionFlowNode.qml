@@ -43,7 +43,7 @@ Rectangle {
     color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.2)
     border.width: 2
     border.color: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.6)
-    radius: 10
+    radius: Theme.radius.cardInset
     implicitHeight: Math.max(80, content.height + 24)
     height: implicitHeight
     Accessible.role: Accessible.Grouping
@@ -54,10 +54,10 @@ Rectangle {
         x: 16
         y: 12
         width: parent.width - 32
-        spacing: 6
+        spacing: Theme.space.s
         RowLayout {
             Layout.fillWidth: true
-            spacing: 12
+            spacing: Theme.space.ml
             CoreText {
                 Layout.fillWidth: true
                 text: root.title
@@ -71,7 +71,8 @@ Rectangle {
                 objectName: "transactionFlowAmountWide"
                 displayUnit: root.displayUnit
                 visible: !root.compact
-                animationAvailableWidth: Math.max(0, parent.width - parent.spacing)
+                // Amounts being reviewed or confirmed never roll through other digits.
+                animateUnitChanges: false
                 text: root.amountText
                 font: Theme.text.monoCaption.font
             }
@@ -80,6 +81,7 @@ Rectangle {
             objectName: "transactionFlowAmountCompact"
             displayUnit: root.displayUnit
             visible: root.compact
+            animateUnitChanges: false
             Layout.fillWidth: true
             text: root.amountText
             font: Theme.text.monoCaption.font
@@ -151,7 +153,7 @@ Rectangle {
                 required property var modelData
                 objectName: "transactionFlowRequest_" + modelData.requestId
                 Layout.fillWidth: true
-                implicitHeight: 36
+                implicitHeight: Theme.size.control
                 enabled: root.interactive
                 Accessible.name: qsTr("View associated payment request")
                 onClicked: root.paymentRequestRequested(String(modelData.requestId || ""))
@@ -165,7 +167,7 @@ Rectangle {
                     }
                 }
                 contentItem: RowLayout {
-                    spacing: 6
+                    spacing: Theme.space.s
                     Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.lavender; size: 16 }
                     CoreText {
                         Layout.fillWidth: true
@@ -177,8 +179,8 @@ Rectangle {
                     }
                     CoreText { text: "→"; color: Theme.color.lavender; font: Theme.text.caption.font }
                 }
-                leftPadding: 8
-                rightPadding: 8
+                leftPadding: Theme.space.m
+                rightPadding: Theme.space.m
             }
         }
     }

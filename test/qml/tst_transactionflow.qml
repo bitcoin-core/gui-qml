@@ -54,8 +54,7 @@ TestCase {
             // The model publishes a fresh snapshot when formatting changes.
             flow.flow = snapshot()
             compare(findChild(flow, "transactionFlowOutput_0"), node)
-            tryCompare(label, "animating", true)
-            tryCompare(label, "animating", false)
+            compare(label.animating, false)
             verify(label.text.endsWith(unit === BitcoinAmount.SAT ? " sats" : " BTC"))
         }
     }

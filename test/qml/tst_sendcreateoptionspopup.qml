@@ -75,11 +75,16 @@ TestCase {
         popup.importPsbtFromFileRequested.connect(function() { importCount += 1 })
         popup.clearFormRequested.connect(function() { clearCount += 1 })
 
+        // Each action closes the menu, so reopen it before the next click.
         mouseClick(importButton, importButton.width / 2, importButton.height / 2)
         compare(importCount, 1)
+        popup.open()
+        tryCompare(popup, "opened", true)
 
         mouseClick(clearButton, clearButton.width / 2, clearButton.height / 2)
         compare(clearCount, 1)
+        popup.open()
+        tryCompare(popup, "opened", true)
 
         mouseClick(paymentRequestButton, paymentRequestButton.width / 2, paymentRequestButton.height / 2)
         compare(paymentRequestCount, 1)

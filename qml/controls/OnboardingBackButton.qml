@@ -8,7 +8,7 @@ NeutralButton {
     id: root
 
     buttonSize: NeutralButton.Medium
-    leftPadding: 2
+    leftPadding: Theme.space.xxs
     text: qsTr("Back")
 
     contentItem: Item {

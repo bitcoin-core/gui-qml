@@ -19,7 +19,7 @@ Item {
     property string backButtonObjectName: "onboardingFooterBackButton"
     property int surfaceLevel: 1
     property real maximumContentWidth: 860
-    property real contentSidePadding: width >= 640 ? 40 : 24
+    property real contentSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     property bool fullWidth: false
     readonly property bool compact: actions.width < 420
     readonly property alias primaryButton: primaryButton
@@ -46,7 +46,7 @@ Item {
         id: actions
         objectName: "onboardingFooterActions"
         anchors.top: separator.bottom
-        anchors.topMargin: 24
+        anchors.topMargin: Theme.space.xxl
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.max(0, root.fullWidth
             ? root.width - root.contentSidePadding * 2
@@ -54,7 +54,7 @@ Item {
                        root.maximumContentWidth))
         height: childrenRect.height
         layoutDirection: Qt.RightToLeft
-        spacing: 12
+        spacing: Theme.space.ml
 
         ContinueButton {
             id: primaryButton

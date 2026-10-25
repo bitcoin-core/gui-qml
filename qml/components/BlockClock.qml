@@ -77,17 +77,21 @@ Item {
         timeTickColor: Theme.color.neutral5
         confirmationColors: Theme.color.confirmationColors
         renderingActive: root.presentationActive
+        animateDial: Theme.motion.decorativeLoops
 
         Behavior on backgroundColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on timeTickColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on confirmationColors {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -109,7 +113,8 @@ Item {
         color: Theme.color.neutral9
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -140,14 +145,14 @@ Item {
         color: Theme.color.neutral4
 
         Behavior on color {
-            enabled: !subText.estimating
-            ColorAnimation { duration: 150 }
+            enabled: !subText.estimating && Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         SequentialAnimation {
             id: estimatingTime
             objectName: "blockClockEstimatingAnimation"
-            running: root.presentationActive && subText.estimating
+            running: root.presentationActive && subText.estimating && Theme.motion.decorativeLoops
             loops: Animation.Infinite
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral4; to: Theme.color.neutral6; duration: 1000 }
             ColorAnimation { target: subText; property: "color"; from: Theme.color.neutral6; to: Theme.color.neutral4; duration: 1000 }

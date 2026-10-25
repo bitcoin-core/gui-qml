@@ -14,8 +14,8 @@ Control {
     property color backgroundColor: Qt.rgba(accentColor.r, accentColor.g, accentColor.b, 0.16)
     property bool showDot: true
 
-    leftPadding: 12
-    rightPadding: 12
+    leftPadding: Theme.space.ml
+    rightPadding: Theme.space.ml
     topPadding: 5
     bottomPadding: 5
     implicitHeight: 30
@@ -32,7 +32,7 @@ Control {
             visible: root.showDot
             width: root.showDot ? 6 : 0
             height: root.showDot ? 6 : 0
-            radius: 3
+            radius: Theme.radius.xs
             color: root.accentColor
         }
         CoreText {

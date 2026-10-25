@@ -136,6 +136,7 @@ add_executable(bitcoinqml_qmltests
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/globalsettings.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/motionpreference.h
   ${QMLTESTS_QRC_CPP}
 )
 

@@ -18,7 +18,7 @@ Button {
     property color activeColor: Theme.color.orange
     property int size: 35
     property int iconSize: size
-    property int backgroundRadius: 5
+    property int backgroundRadius: Theme.radius.s
     property alias iconSource: icon.source
     required property string accessibleName
 
@@ -40,7 +40,8 @@ Button {
         color: root.hovered || root.pressed ? Theme.color.neutral2 : Theme.color.background
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
@@ -60,7 +61,8 @@ Button {
         hoverEnabled: false
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 

@@ -26,7 +26,7 @@ Page {
     readonly property string reviewMessage: wallet ? wallet.currentTransactionReviewMessage : ""
     readonly property bool showWarning: reviewMessage.length > 0
         || (wallet && wallet.keySchemeKind === WalletQmlModel.WatchOnly && !canBroadcast)
-    readonly property real sidePadding: width < 640 ? 16 : 40
+    readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real reviewContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     property bool sending: false
     property string saveStatus: ""
@@ -185,7 +185,6 @@ Page {
                 visible: root.showWarning
                 Layout.fillWidth: true
                 backgroundColor: Theme.color.neutral1
-                radius: 16
                 contentMargin: 20
                 messageFontPixelSize: Theme.text.description.font.pixelSize
                 messageLineHeight: Theme.text.description.lineHeight
@@ -226,6 +225,7 @@ Page {
                             trailingItem: BitcoinAmountDisplayLabel {
                                 objectName: "sendTransactionReviewRecipient" + index + "Amount"
                                 text: modelData.amount
+                                animateUnitChanges: false
                                 font: Theme.text.monoDescription.font
                                 color: Theme.color.neutral9
                             }
@@ -262,6 +262,7 @@ Page {
                 ValueRow {
                     objectName: "sendTransactionReviewFee"
                     amountValue: true
+                    animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("Total fees")
                     value: root.transaction ? root.transaction.fee : ""
@@ -270,6 +271,7 @@ Page {
                 ValueRow {
                     objectName: "sendTransactionReviewTotal"
                     amountValue: true
+                    animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("Total amount")
                     value: root.transaction ? root.transaction.total : ""
@@ -307,7 +309,7 @@ Page {
                     objectName: "sendTransactionReviewSaveButton"
                     buttonSize: NeutralButton.Large
                     enabled: !!root.transaction && !root.sending
-                    width: parent.width < 540 || !root.showSend && !root.showBroadcast || externalSignerActions.visible
+                    width: parent.width < SizeClass.stackColumnsMax || !root.showSend && !root.showBroadcast || externalSignerActions.visible
                         ? parent.width : (parent.width - 12) / 2
                     height: 46
                     text: qsTr("Save transaction")
@@ -317,7 +319,7 @@ Page {
                     objectName: "sendTransactionReviewSendButton"
                     visible: (root.showSend && !externalSignerActions.visible) || root.showBroadcast
                     enabled: !root.sending
-                    width: parent.width < 540 ? parent.width : (parent.width - 12) / 2
+                    width: parent.width < SizeClass.stackColumnsMax ? parent.width : (parent.width - 12) / 2
                     height: 46
                     text: root.showBroadcast ? qsTr("Broadcast transaction") : qsTr("Send transaction")
                     onClicked: root.showBroadcast ? root.commitBroadcast() : root.requestSend()
@@ -325,7 +327,7 @@ Page {
             }
 
             ToastBanner {
-                visible: root.saveStatus.length > 0
+                shown: root.saveStatus.length > 0
                 Layout.fillWidth: true
                 tintColor: root.saveError ? Theme.color.red : Theme.color.green
                 iconSource: root.saveError ? "image://images/info-filled" : "image://images/check"

@@ -24,7 +24,7 @@ AbstractButton {
     property alias disclosureIndicatorColor: row.disclosureIndicatorColor
     property bool selected: false
     property int accessibleRole: Accessible.ListItem
-    property int cornerRadius: 16
+    property int cornerRadius: Theme.radius.listRow
     property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
     property color hoverBackgroundColor: Theme.color.neutral2
     property color selectedTextColor: Theme.color.orange
@@ -62,10 +62,10 @@ AbstractButton {
             objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
             targetRadius: root.cornerRadius
-            topMargin: 2
-            bottomMargin: 2
-            leftMargin: 2
-            rightMargin: 2
+            topMargin: Theme.space.xxs
+            bottomMargin: Theme.space.xxs
+            leftMargin: Theme.space.xxs
+            rightMargin: Theme.space.xxs
         }
     }
 

@@ -40,8 +40,8 @@ SettingsPage {
         Accessible.role: Accessible.Button
         Accessible.name: accessibleName
 
-        background: Rectangle {
-            color: fontSizeButton.hovered || fontSizeButton.pressed
+        background: StateBackground {
+            stateColor: fontSizeButton.hovered || fontSizeButton.pressed
                 ? Theme.color.neutral2
                 : "transparent"
             radius: 8
@@ -80,7 +80,7 @@ SettingsPage {
         id: warningBanner
         objectName: "rpcConsoleWarningBanner"
         Layout.fillWidth: true
-        visible: root.warningVisible
+        shown: root.warningVisible
         iconSource: "image://images/alert-filled"
         iconColor: Theme.color.red
         textColor: Theme.color.neutral9
@@ -136,7 +136,7 @@ SettingsPage {
 
             background: Rectangle {
                 color: Theme.color.neutral1
-                radius: 8
+                radius: Theme.radius.card
             }
 
             contentItem: RowLayout {

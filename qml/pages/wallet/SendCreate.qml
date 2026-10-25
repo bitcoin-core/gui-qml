@@ -217,7 +217,7 @@ PageStack {
         id: sendPage
         objectName: "walletSendPage"
         background: null
-        readonly property real pageSidePadding: width < 640 ? 16 : 40
+        readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
 
         function handlePsbtImportResult(result) {
             sendOptionsPopup.close()
@@ -265,19 +265,31 @@ PageStack {
             enter: Transition {
                 NumberAnimation {
                     property: "verticalOffset"
-                    from: transactionReviewPopup.height
+                    from: Theme.motion.reduced ? 0 : transactionReviewPopup.height
                     to: 0
-                    duration: 350
-                    easing.type: Easing.OutCubic
+                    duration: Theme.motion.travel(Theme.motion.slow)
+                    easing.type: Theme.motion.easing.enter
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    from: Theme.motion.reduced ? 0 : 1
+                    to: 1
+                    duration: Theme.motion.fade(Theme.motion.slow)
+                    easing.type: Theme.motion.easing.enter
                 }
             }
             exit: Transition {
                 NumberAnimation {
                     property: "verticalOffset"
-                    from: 0
-                    to: transactionReviewPopup.height
-                    duration: 280
-                    easing.type: Easing.InCubic
+                    to: Theme.motion.reduced ? 0 : transactionReviewPopup.height
+                    duration: Theme.motion.travel(Theme.motion.exit)
+                    easing.type: Theme.motion.easing.exit
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    to: Theme.motion.reduced ? 0 : 1
+                    duration: Theme.motion.fade(Theme.motion.exit)
+                    easing.type: Theme.motion.easing.exit
                 }
             }
 
@@ -306,12 +318,12 @@ PageStack {
                 initialItem: reviewPage
                 transform: Translate { y: transactionReviewPopup.verticalOffset }
                 pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.moderate); easing.type: Theme.motion.easing.enter }
                 }
                 pushExit: Transition {
                     // Keep Review visible under the fading Complete page until
                     // the Complete background is fully opaque.
-                    NumberAnimation { property: "opacity"; from: 1; to: 1; duration: 180 }
+                    NumberAnimation { property: "opacity"; from: 1; to: 1; duration: Theme.motion.fade(Theme.motion.moderate) }
                 }
 
                 Component {
@@ -687,7 +699,7 @@ PageStack {
             background: Rectangle {
                 color: Theme.color.neutral1
                 border.color: Theme.color.neutral2
-                radius: 5
+                radius: Theme.radius.popup
                 border.width: 1
                 SurfaceGradientBorder {
                     anchors.fill: parent
@@ -713,7 +725,7 @@ PageStack {
                     placeholderText: qsTr("bitcoin:address?amount=…")
                     background: Rectangle {
                         color: Theme.color.neutral2
-                        radius: 5
+                        radius: Theme.radius.field
                         border.width: 0
                     }
                 }
@@ -850,7 +862,7 @@ PageStack {
                     GridLayout {
                         id: sendSections
                         Layout.fillWidth: true
-                        columns: width >= 900 ? 2 : 1
+                        columns: width >= SizeClass.wideWidthMin ? 2 : 1
                         columnSpacing: 24
                         rowSpacing: 24
 
@@ -887,7 +899,7 @@ PageStack {
                                         implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
                                         background: Rectangle {
                                             color: Theme.color.neutral1
-                                            radius: 10
+                                            radius: Theme.radius.card
                                         }
                                         contentItem: ColumnLayout {
                                             spacing: 12
@@ -918,7 +930,7 @@ PageStack {
                                                     contentItem: RowLayout {
                                                         spacing: 10
                                                         Rectangle {
-                                                            implicitWidth: 28; implicitHeight: 28; radius: 14
+                                                            implicitWidth: 28; implicitHeight: 28; radius: height / 2
                                                             color: recipientCard.expanded ? Theme.color.orange : Theme.color.neutral3
                                                             CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; font: Theme.text.subheading.font; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
                                                         }
@@ -937,7 +949,7 @@ PageStack {
                                                             rotation: recipientCard.expanded ? 90 : 0
                                                             size: 9
                                                             color: Theme.color.neutral6
-                                                            Behavior on rotation { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                                            Behavior on rotation { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                                                         }
                                                     }
                                                 }
@@ -1010,7 +1022,7 @@ PageStack {
                                     showDivider: root.manualCoinSelection || root.selectedInputsActive
                                     trailingItem: SegmentedPicker {
                                         objectName: "sendCoinControlPicker"
-                                        implicitWidth: 190; implicitHeight: 36
+                                        implicitWidth: 190
                                         model: [qsTr("Automatic"), qsTr("Manual")]
                                         currentIndex: root.manualCoinSelection || root.selectedInputsActive ? 1 : 0
                                         onSelected: function(index, option) {
@@ -1061,8 +1073,8 @@ PageStack {
                                 title: qsTr("Summary")
                                 BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
                                 BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
-                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
-                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
+                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
+                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
                             }
 
                             CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.red }

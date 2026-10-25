@@ -11,6 +11,7 @@ Rectangle {
     color: enabled ? Theme.color.neutral3 : Theme.color.neutral2
 
     Behavior on color {
-        ColorAnimation { duration: 150 }
+        enabled: Theme.motion.animated
+        ColorAnimation { duration: Theme.motion.normal }
     }
 }

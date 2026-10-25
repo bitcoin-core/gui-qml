@@ -15,7 +15,7 @@ ContextMenuButton {
     Accessible.checked: checked
 
     contentItem: RowLayout {
-        spacing: 7
+        spacing: Theme.space.m
 
         CoreText {
             Layout.fillWidth: true

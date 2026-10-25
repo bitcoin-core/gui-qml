@@ -83,7 +83,7 @@ DesignSystemSection {
         note: "Each segment is a ToggleButton, which has no other user."
 
         DesignSystemState {
-            label: "implicitHeight: 45"
+            label: "default"
             SegmentedPicker {
                 Accessible.name: "Example picker"
                 implicitWidth: 300
@@ -95,21 +95,10 @@ DesignSystemSection {
             }
         }
         DesignSystemState {
-            label: "implicitHeight: 36"
-            SegmentedPicker {
-                Accessible.name: "Example picker"
-                implicitWidth: 220
-                implicitHeight: 36
-                model: ["Light", "Dark"]
-                currentIndex: 1
-            }
-        }
-        DesignSystemState {
             label: "enabled: false"
             SegmentedPicker {
                 Accessible.name: "Example picker"
                 implicitWidth: 220
-                implicitHeight: 36
                 enabled: false
                 model: ["Light", "Dark"]
             }

@@ -27,18 +27,40 @@ Rectangle {
     property string actionText: ""
     // When > 0, auto-emits dismissed() after this many seconds while visible.
     property int dismissAfter: 0
+    // Bind shown rather than visible, so the banner fades out instead of snapping.
+    property bool shown: true
+    // The last message, shown while the banner fades out after its text is cleared.
+    property string _displayedText: text
 
     signal actionTriggered()
     signal dismissed()
 
     color: backgroundColor
-    radius: 15
+    radius: Theme.radius.card
     implicitHeight: contentRow.height + 16
     opacity: 0
+    visible: shown || hideAnim.running
+
+    onTextChanged: if (text.length > 0) _displayedText = text
+    onShownChanged: {
+        if (shown) {
+            // Shown again mid fade-out: visible never went false, so fade back in here.
+            if (hideAnim.running) {
+                hideAnim.stop()
+                fadeInAnim.restart()
+            }
+            return
+        }
+        fadeInAnim.stop()
+        fadeOutAnim.stop()
+        dismissTimer.stop()
+        hideAnim.restart()
+    }
 
     onVisibleChanged: {
         if (visible) {
             fadeOutAnim.stop()
+            hideAnim.stop()
             dismissTimer.stop()
             fadeInAnim.restart()
         } else {
@@ -53,10 +75,9 @@ Rectangle {
         id: fadeInAnim
         target: root
         property: "opacity"
-        from: 0
         to: 1
-        duration: 150
-        easing.type: Easing.OutCubic
+        duration: Theme.motion.normal
+        easing.type: Theme.motion.easing.enter
         onStopped: {
             if (root.dismissAfter > 0) {
                 dismissTimer.start()
@@ -68,11 +89,19 @@ Rectangle {
         id: fadeOutAnim
         target: root
         property: "opacity"
-        from: 1
         to: 0
-        duration: 150
-        easing.type: Easing.InCubic
+        duration: Theme.motion.fast
+        easing.type: Theme.motion.easing.exit
         onStopped: root.dismissed()
+    }
+
+    NumberAnimation {
+        id: hideAnim
+        target: root
+        property: "opacity"
+        to: 0
+        duration: Theme.motion.fast
+        easing.type: Theme.motion.easing.exit
     }
 
     Timer {
@@ -86,8 +115,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 15
-        anchors.rightMargin: 15
+        anchors.leftMargin: Theme.space.l
+        anchors.rightMargin: Theme.space.l
         height: contentRow.height
     }
 
@@ -95,14 +124,14 @@ Rectangle {
         id: contentRow
         parent: contentFrame
         width: parent.width
-        spacing: 8
+        spacing: Theme.space.m
 
         Icon {
             objectName: root.objectName !== "" ? root.objectName + "Icon" : ""
             visible: root.iconSource != ""
             source: root.iconSource
             color: root.iconColor
-            size: 24
+            size: Theme.size.icon.xl
             Layout.preferredWidth: 24
             Layout.preferredHeight: 24
             Layout.alignment: Qt.AlignVCenter
@@ -116,7 +145,7 @@ Rectangle {
                 && !root.showsCloseButton
                 ? 24
                 : 0
-            text: root.text
+            text: hideAnim.running ? root._displayedText : root.text
             color: root.textColor
             font.pixelSize: 15
             lineHeightMode: Text.FixedHeight
@@ -130,7 +159,7 @@ Rectangle {
             id: actionButton
             visible: root.actionText !== ""
             text: root.actionText
-            padding: 6
+            padding: Theme.space.s
             focusPolicy: Qt.StrongFocus
             background: Item {
                 FocusBorder {
@@ -168,7 +197,7 @@ Rectangle {
             objectName: root.objectName !== "" ? root.objectName + "CloseButton" : ""
             visible: root.showsCloseButton
             size: 24
-            iconSize: 14
+            iconSize: Theme.size.icon.s
             iconSource: "image://images/cross"
             iconColor: root.textColor
             hoverColor: root.textColor

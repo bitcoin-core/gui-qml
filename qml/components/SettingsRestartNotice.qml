@@ -10,14 +10,13 @@ InfoBanner {
     Layout.fillWidth: true
     Layout.maximumWidth: 450
     Layout.alignment: Qt.AlignHCenter
-    radius: 15
     iconSource: "image://images/info-filled"
     message: qsTr("Restart the application for these changes to take effect.")
     bannerLayout: InfoBanner.Layout.Horizontal
-    horizontalContentMargin: 15
+    horizontalContentMargin: Theme.space.l
     verticalContentMargin: 10
     contentSpacing: 10
-    iconSize: 24
+    iconSize: Theme.size.icon.xl
     textRightMargin: iconSize
     messageFontPixelSize: 15
     messageLineHeight: 21

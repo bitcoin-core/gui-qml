@@ -12,7 +12,7 @@ Popup {
     property var wallet: walletController.selectedWallet
     property var openedWallet: null
     property real originY: -1
-    property bool reducedMotion: false
+    property bool reducedMotion: Theme.motion.reduced
     property real verticalOffset: 0
     property string deletedRequestId: ""
     property string repeatRequestId: ""
@@ -70,21 +70,21 @@ Popup {
 
     Overlay.modal: Rectangle {
         color: Qt.rgba(0, 0, 0, 0.6)
-        Behavior on opacity { NumberAnimation { duration: 180 } }
+        Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
     }
     enter: Transition {
         ParallelAnimation {
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180 }
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.moderate); easing.type: Theme.motion.easing.enter }
             NumberAnimation {
                 property: "verticalOffset"
                 from: root.reducedMotion ? 0 : root.originY >= 0 ? root.originY - root.centeredY : 16
                 to: 0
-                duration: root.reducedMotion ? 0 : 280
-                easing.type: Easing.OutCubic
+                duration: root.reducedMotion ? 0 : Theme.motion.slow
+                easing.type: Theme.motion.easing.enter
             }
         }
     }
-    exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 150 } }
+    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.motion.normal; easing.type: Theme.motion.easing.exit } }
     contentItem: ScrollView {
         id: scroll
         clip: true

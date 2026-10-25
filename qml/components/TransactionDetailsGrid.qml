@@ -13,8 +13,8 @@ Grid {
     required property int wideColumns
     property bool lastRowDivider: false
     Layout.fillWidth: true
-    columns: width >= 900 ? wideColumns : width >= 520 ? 2 : 1
-    columnSpacing: 16
+    columns: width >= SizeClass.wideWidthMin ? wideColumns : width >= 520 ? 2 : 1
+    columnSpacing: Theme.space.l
     rowSpacing: 0
     Repeater {
         model: fieldsGrid.fields

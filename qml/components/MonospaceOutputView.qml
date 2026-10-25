@@ -66,11 +66,11 @@ Item {
 
     // ── Layout metrics ───────────────────────────────────────────────────
 
-    property int horizontalPadding: 16
-    property int topPadding: 16
-    property int bottomPadding: 16
-    property int rowSpacing: 2
-    property int columnSpacing: 8
+    property int horizontalPadding: Theme.space.l
+    property int topPadding: Theme.space.l
+    property int bottomPadding: Theme.space.l
+    property int rowSpacing: Theme.space.xxs
+    property int columnSpacing: Theme.space.m
     property int leftColumnWidth: 0
     property int rightColumnWidth: 0
 

@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
+import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -14,6 +15,8 @@ TestCase {
     when: windowShown
     width: 900
     height: 700
+
+    property string motionMode: ""
 
     Component {
         id: sendComponent
@@ -27,7 +30,12 @@ TestCase {
         SendTransactionReview { wallet: testWalletModel }
     }
 
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     function init() {
+        motionMode = Theme.motion.mode
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
         testWalletModel.currentTransactionSweepsWallet = false
@@ -73,6 +81,7 @@ TestCase {
     }
 
     function test_available_balance_keeps_caption_static() {
+        Theme.motion.mode = "full"
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
         page.width = testCase.width
@@ -999,6 +1008,7 @@ TestCase {
         const popup = findChild(page, "coinSelectionPopup")
         popup.open()
         tryCompare(popup, "opened", true)
+        tryVerify(function() { return findChild(popup.contentItem, "coinSelectionItem_2") !== null })
         findChild(popup.contentItem, "coinSelectionItem_2").clicked()
         const alert = findChild(page, "lockedCoinSelectionAlert")
         tryCompare(alert, "opened", true)

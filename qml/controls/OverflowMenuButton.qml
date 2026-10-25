@@ -12,7 +12,7 @@ NeutralButton {
     surfaceLevel: 0
     property color iconColor: Theme.color.neutral7
     property color activeIconColor: Theme.color.orange
-    property int size: 40
+    property int size: Theme.size.iconButton
     property bool circular: false
     readonly property alias iconItem: ellipsisIcon
 
@@ -50,7 +50,8 @@ NeutralButton {
             hoverEnabled: false
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }

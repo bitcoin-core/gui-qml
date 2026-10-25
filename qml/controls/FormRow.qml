@@ -25,8 +25,8 @@ Control {
     property int minimumRowHeight: description.length > 0 || supportingText.length > 0 || errorText.length > 0 ? 62 : 48
     property int dividerLeftInset: leftPadding
     property int dividerRightInset: rightPadding
-    property int contentSpacing: 12
-    property int bodySpacing: 8
+    property int contentSpacing: Theme.space.ml
+    property int bodySpacing: Theme.space.m
     property bool showsDisclosureIndicator: false
     property string disclosureIndicatorObjectName: root.objectName.length > 0
         ? root.objectName + "DisclosureIndicator"
@@ -47,8 +47,8 @@ Control {
     Accessible.name: trailingItemNamedByRow ? "" : title
     Accessible.description: trailingItemNamedByRow ? "" : description
     padding: 0
-    leftPadding: 16
-    rightPadding: 16
+    leftPadding: Theme.space.cardInset
+    rightPadding: Theme.space.cardInset
     topPadding: 10
     bottomPadding: 10
     implicitWidth: 320
@@ -66,7 +66,8 @@ Control {
             color: root.dividerColor
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }
@@ -117,7 +118,7 @@ Control {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignVCenter
-                spacing: 2
+                spacing: Theme.space.xxs
 
                 CoreText {
                     objectName: root.objectName.length > 0 ? root.objectName + "Title" : ""

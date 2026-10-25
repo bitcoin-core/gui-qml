@@ -29,7 +29,8 @@ Popup {
     Overlay.modeless: Rectangle {
         color: Qt.rgba(0, 0, 0, 0.5)
         Behavior on opacity {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+            enabled: Theme.motion.animated
+            NumberAnimation { duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.enter }
         }
     }
 
@@ -38,46 +39,43 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -12
+            from: Theme.motion.reduced ? 0 : -12
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "scale"
-            from: 0.96
+            from: Theme.motion.popoverScale
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -12
-            duration: 250
-            easing.type: Easing.InCubic
+            to: Theme.motion.reduced ? 0 : -12
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "scale"
-            from: 1
-            to: 0.96
-            duration: 250
-            easing.type: Easing.InCubic
+            to: Theme.motion.popoverScale
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -115,7 +113,7 @@ Popup {
         color: Theme.color.neutral1
         border.color: Theme.color.menuBorder
         border.width: 1
-        radius: 5
+        radius: Theme.radius.m
     }
 
     ButtonGroup {
@@ -214,9 +212,9 @@ Popup {
                 Keys.onUpPressed: root.focusRow(delegate.index - 1)
                 Keys.onDownPressed: root.focusRow(delegate.index + 1)
 
-                background: Rectangle {
-                    radius: 6
-                    color: delegate.hovered ? Theme.color.neutral3
+                background: StateBackground {
+                    radius: Theme.radius.sidebarRow
+                    stateColor: delegate.hovered ? Theme.color.neutral3
                         : delegate.checked ? Theme.color.neutral2 : "transparent"
                     Rectangle {
                         visible: delegate.loadState === WalletListModel.Open
@@ -273,7 +271,7 @@ Popup {
                                 id: nameTooltip
                                 text: delegate.displayName
                                 visible: delegate.hovered && nameText.truncated
-                                delay: 500
+                                delay: Theme.motion.tooltipDelay
                                 padding: 8
                                 background: Rectangle {
                                     color: Theme.color.neutral0
@@ -341,9 +339,9 @@ Popup {
                             hoverColor: Theme.color.neutral9
                             backgroundRadius: 6
                             accessibleName: qsTr("Actions for %1").arg(delegate.displayName)
-                            background: Rectangle {
+                            background: StateBackground {
                                 radius: actionsButton.backgroundRadius
-                                color: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
+                                stateColor: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
                             }
                             onClicked: actionsMenu.visible ? actionsMenu.close() : actionsMenu.open()
 

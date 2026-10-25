@@ -23,7 +23,7 @@ Item {
     property var currentValue
     property url selectionIconSource: "image://images/check"
     property int iconSize: 18
-    property int rowHeight: 36
+    property int rowHeight: Theme.size.control
     property int subtitleRowHeight: 52
     readonly property alias titleItem: _title
 
@@ -91,7 +91,7 @@ Item {
             visible: root.title !== ""
             Layout.fillWidth: true
             Layout.leftMargin: 10
-            Layout.rightMargin: 8
+            Layout.rightMargin: Theme.space.m
             Layout.topMargin: visible ? 8 : 0
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
@@ -145,7 +145,7 @@ Item {
                     onTriggered: root.activated(_row.rowValue)
 
                     contentItem: RowLayout {
-                        spacing: 7
+                        spacing: Theme.space.m
 
                         Item {
                             visible: _row.rowIconSource.toString() !== ""
@@ -164,7 +164,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
-                            spacing: 2
+                            spacing: Theme.space.xxs
 
                             CoreText {
                                 Layout.fillWidth: true
@@ -203,7 +203,7 @@ Item {
                                 visible: _row.selected
                                 source: root.selectionIconSource
                                 color: Theme.color.orange
-                                size: 20
+                                size: Theme.size.icon.l
                             }
                         }
                     }

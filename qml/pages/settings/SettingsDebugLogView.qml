@@ -259,7 +259,7 @@ SettingsPage {
             Layout.fillWidth: true
             Layout.preferredHeight: 44
             color: Theme.color.neutral1
-            radius: 16
+            radius: Theme.radius.card
 
             Rectangle {
                 objectName: "debugLogTableFooterTopFill"

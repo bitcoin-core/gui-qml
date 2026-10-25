@@ -17,8 +17,8 @@ LabeledField {
     property alias wrapMode: input.wrapMode
     readonly property alias field: input
     property int fieldHeight: 132
-    property int fieldCornerRadius: 10
-    property int fieldPadding: 16
+    property int fieldCornerRadius: Theme.radius.field
+    property int fieldPadding: Theme.space.l
     property color fieldBackgroundColor: Theme.color.neutral1
     property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
     property color placeholderColor: enabled ? Theme.color.neutral6 : Theme.color.neutral4

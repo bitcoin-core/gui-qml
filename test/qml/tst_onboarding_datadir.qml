@@ -17,6 +17,8 @@ TestCase {
     width: 640
     height: 665
 
+    property string motionMode: ""
+
     Component {
         id: fullWizard
         OnboardingWizard {
@@ -92,11 +94,16 @@ TestCase {
     }
 
     function init() {
+        motionMode = Theme.motion.mode
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 2
         optionsModel.setStorageStatusForTest(false, 123, "", "")
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
     }
 
     function triggerButton(rootItem, objectName) {
@@ -131,6 +138,8 @@ TestCase {
         for (let i = 0; i < target.length; ++i) keyClick(target.charAt(i))
         mouseClick(findChild(popup, "onboardingStorageSettingsCloseButton"))
         tryCompare(popup, "visible", false)
+        // Without an exit transition the window drops the next press until it renders a frame.
+        waitForRendering(popup.parent, 1000)
     }
 
     function test_storage_popup_commits_latest_custom_target_after_selecting_reduce() {
@@ -232,15 +241,37 @@ TestCase {
     }
 
     function test_cover_footer_appears_after_content() {
+        Theme.motion.mode = "full"
         const wizard = createTemporaryObject(fullWizard, this)
         verify(wizard !== null)
         const footer = wizard.currentItem.footer
         compare(footer.opacity, 0)
-        compare(footer.enabled, false)
-        wait(1800)
-        compare(footer.opacity, 0)
-        tryCompare(footer, "opacity", 1, 2000)
         compare(footer.enabled, true)
+        tryCompare(footer, "opacity", 1, 4000)
+    }
+
+    function test_first_click_or_key_finishes_onboarding_entrance() {
+        Theme.motion.mode = "full"
+        let wizard = createTemporaryObject(fullWizard, this)
+        let cover = wizard.currentItem
+        compare(cover.footer.opacity, 0)
+        mouseClick(cover, 20, 120)
+        compare(cover.footer.opacity, 1)
+        compare(findChild(cover, "onboardingContent").children.every(item => !item.visible || item.opacity === 1), true)
+
+        wizard = createTemporaryObject(fullWizard, this)
+        cover = wizard.currentItem
+        compare(cover.footer.opacity, 0)
+        cover.forceActiveFocus()
+        keyClick(Qt.Key_Shift)
+        compare(cover.footer.opacity, 1)
+    }
+
+    function test_reduced_motion_shows_onboarding_at_once() {
+        Theme.motion.mode = "reduced"
+        const wizard = createTemporaryObject(fullWizard, this)
+        compare(wizard.currentItem.footer.opacity, 1)
+        compare(wizard.currentItem.footer.enabled, true)
     }
 
     function test_full_preinit_wizard_can_go_back_from_storage_amount() {
@@ -248,7 +279,6 @@ TestCase {
         verify(wizard !== null)
         compare(wizard.currentItem.objectName, "onboardingCover")
         compare(findChild(wizard.currentItem, "onboardingWizardBackButton").visible, false)
-        compare(wizard.currentItem.footer.opacity, 0)
         const separator = findChild(wizard.currentItem, "onboardingFooterSeparator")
         const actions = findChild(wizard.currentItem, "onboardingFooterActions")
         verify(separator !== null)

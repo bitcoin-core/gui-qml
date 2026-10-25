@@ -44,32 +44,30 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -30
+            from: -Theme.motion.dialogOffset
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -30
-            duration: 250
-            easing.type: Easing.InCubic
+            to: -Theme.motion.dialogOffset
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -96,7 +94,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.color.neutral1
-        radius: 10
+        radius: Theme.radius.popup
         border.color: Theme.color.neutral2
         border.width: 1
         SurfaceGradientBorder {
@@ -128,8 +126,8 @@ Popup {
 
         Header {
             Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 20
+            Layout.margins: Theme.space.xl
+            Layout.topMargin: Theme.space.xl
             header: root.descriptionText
             headerBold: false
             headerSize: 16
@@ -139,13 +137,13 @@ Popup {
             id: passphraseField
             objectName: root.passphraseFieldObjectName
             Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
+            Layout.leftMargin: Theme.space.xl
+            Layout.rightMargin: Theme.space.xl
             hideText: true
             placeholderText: qsTr("Enter password...")
             background: Rectangle {
                 color: Theme.color.neutral2
-                radius: 5
+                radius: Theme.radius.s
                 border.color: Theme.color.neutral2
                 border.width: 1
             }
@@ -159,9 +157,9 @@ Popup {
         CoreText {
             objectName: root.errorTextObjectName
             Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.topMargin: 12
+            Layout.leftMargin: Theme.space.xl
+            Layout.rightMargin: Theme.space.xl
+            Layout.topMargin: Theme.space.ml
             visible: text.length > 0
             text: root.errorText
             color: Theme.color.red
@@ -171,9 +169,9 @@ Popup {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 20
-            spacing: 15
+            Layout.margins: Theme.space.xl
+            Layout.topMargin: Theme.space.xl
+            spacing: Theme.space.l
 
             OutlineButton {
                 objectName: root.cancelButtonObjectName

@@ -19,7 +19,7 @@ Page {
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
     property string addressErrorText: ""
-    readonly property real pageSidePadding: width < 640 ? 16 : 40
+    readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
     readonly property alias requestModal: requestModal
     readonly property alias draftCard: card

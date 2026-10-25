@@ -105,12 +105,13 @@ SettingsPage {
     }
 
     FormSection {
+        id: passwordSection
         objectName: "walletPasswordFormSection"
         Layout.fillWidth: true
 
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: 20
+            Layout.margins: passwordSection.contentInset
             spacing: 20
 
             PasswordTextField {
@@ -172,7 +173,7 @@ SettingsPage {
 
             ToastBanner {
                 objectName: "walletPasswordResultBanner"
-                visible: root.resultText.length > 0
+                shown: root.resultText.length > 0
                 Layout.fillWidth: true
                 readonly property color resultColor: root.resultSuccess ? Theme.color.green : Theme.color.red
                 backgroundColor: Qt.rgba(resultColor.r, resultColor.g, resultColor.b, 0.25)

@@ -71,7 +71,7 @@ ColumnLayout {
     onAddressChanged: syncFromAddress()
 
     Layout.fillWidth: true
-    spacing: 4
+    spacing: Theme.space.xs
 
     Item {
         id: inputRow
@@ -198,8 +198,8 @@ ColumnLayout {
         id: addressIssue
         Layout.fillWidth: true
         visible: root.showErrorMessage && root.errorText.length > 0
-        spacing: 8
-        Layout.topMargin: 4
+        spacing: Theme.space.m
+        Layout.topMargin: Theme.space.xs
 
         Icon {
             source: "image://images/alert-filled"

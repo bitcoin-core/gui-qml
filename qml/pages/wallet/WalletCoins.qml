@@ -11,7 +11,7 @@ Page {
     id: root
     objectName: "walletCoinsPage"
     property WalletQmlModel wallet: walletController.selectedWallet
-    readonly property real contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
+    readonly property real contentHorizontalPadding: Theme.space.pagePadding(width)
     readonly property real maximumContentWidth: 840
     signal back()
     background: null
@@ -23,8 +23,8 @@ Page {
     CoinsList {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        anchors.topMargin: parent.width < 600 ? 16 : 28
-        anchors.bottomMargin: parent.width < 600 ? 16 : 28
+        anchors.topMargin: Theme.space.xl
+        anchors.bottomMargin: SizeClass.isCompact(parent.width) ? 16 : 28
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.max(0, Math.min(parent.width - root.contentHorizontalPadding * 2,
                                     root.maximumContentWidth))

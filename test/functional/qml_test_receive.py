@@ -25,7 +25,7 @@ import time
 from urllib.parse import urlparse
 
 from qml_driver import QmlDriver, QmlDriverError
-from qml_test_harness import GUI_STARTUP_TIMEOUT, dump_qml_tree, qsettings_sandbox_args
+from qml_test_harness import GUI_STARTUP_TIMEOUT, TEST_MOTION_ARGS, dump_qml_tree, qsettings_sandbox_args
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
 
@@ -71,7 +71,7 @@ def _relaunch_gui(harness):
         harness.gui_binary,
         f"-datadir={harness.gui_datadir}",
         f"-test-automation={harness.socket_path}",
-    ] + settings_args + [
+    ] + TEST_MOTION_ARGS + settings_args + [
         "-qml_onboarded=1",
         "-logtimemicros",
         "-debug",

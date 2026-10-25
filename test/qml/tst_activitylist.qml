@@ -94,7 +94,13 @@ TestCase {
                 timestamp: new Date(2026, 6, 12, 17, 40).getTime() / 1000})
         ]
     }
+    property string motionMode: ""
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
     function init() {
+        motionMode = Theme.motion.mode
         Theme.paletteId = "core-dark"
         walletController.reset()
         walletController.initialized = true
@@ -157,6 +163,8 @@ TestCase {
         mouseClick(target, target.width / 2, target.height / 2, Qt.RightButton)
         const menu = findChild(page, "activityRowContextMenu")
         tryCompare(menu, "opened", true)
+        // With motion off the menu opens before its rows are laid out.
+        verify(waitForItemPolished(menu.contentItem))
         compare(page.depth, 1)
         const copyId = findChild(menu.contentItem, "activityCopyTransactionId")
         const copyRaw = findChild(menu.contentItem, "activityCopyRawTransaction")
@@ -439,7 +447,7 @@ TestCase {
         tryCompare(menu, "visible", false)
         tryCompare(single, "isCompact", true)
         tryVerify(function() { return single.height < comfortableHeight && batch.height < comfortableBatchHeight })
-        compare(findChild(single, "activityRowIcon").width, 32)
+        tryCompare(findChild(single, "activityRowIcon"), "width", 32)
         verify(findChild(single, "activityRowLabel").visible)
         verify(!findChild(single, "activityRowAddress").visible)
         verify(findChild(findRow(page, "no-note"), "activityRowAddress").visible)
@@ -717,6 +725,7 @@ TestCase {
     }
 
     function test_filter_button_animates_and_reserves_space() {
+        Theme.motion.mode = "full"
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
         const button = findChild(page, "activityTypeFilterButton")

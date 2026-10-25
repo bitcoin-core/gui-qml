@@ -78,6 +78,16 @@ TestCase {
     }
 
     Component {
+        id: compactSettingsViewComponent
+
+        SettingsView {
+            width: 390
+            height: 700
+            selectedSectionId: "display"
+        }
+    }
+
+    Component {
         id: firstPage
 
         Item {
@@ -446,12 +456,72 @@ TestCase {
         compare(sidebarHeading.text, "Settings")
         compare(sidebarHeading.font.pixelSize, Theme.text.display.font.pixelSize)
         compare(sidebarHeading.horizontalAlignment, Text.AlignLeft)
-        tryCompare(view.pageContainer, "x", view.sidebarWidth)
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        verify(pageColumn !== null)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
         tryCompare(view.pageContainer, "width", view.width - view.sidebarWidth)
+        compare(findChild(view, "navigationSplitSeparator").visible, false)
 
-        verify(displayPage.contentHorizontalPadding >= 24)
+        verify(displayPage.contentHorizontalPadding >= Theme.space.pageCompact)
         verify(displayPage.contentLayout.width <= displayPage.maximumContentWidth)
         verify(displayPage.contentLayout.width < view.pageContainer.width)
+    }
+
+    function test_compactSettingsShowOneColumnWithBackToTheSidebar() {
+        const view = createTemporaryObject(compactSettingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        const split = findChild(view, "settingsSplitView")
+        const sidebarColumn = findChild(view, "navigationSplitPrimary")
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        const sidebarSurface = findChild(view, "settingsSidebarSurface")
+        verify(split !== null)
+        verify(sidebarSurface !== null)
+
+        compare(view.compact, true)
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        compare(sidebarColumn.x, 0)
+        compare(sidebarSurface.width, 390)
+        compare(pageColumn.x, 390)
+        compare(pageColumn.visible, false)
+        compare(view.sidebar.currentSectionId, "")
+
+        view.sidebar.sectionActivated("connection")
+        tryCompare(pageColumn, "x", 0)
+        compare(pageColumn.visible, true)
+        compare(view.pageContainer.width, 390)
+        compare(sidebarColumn.x, -390)
+        compare(sidebarColumn.visible, false)
+        const connectionPage = findChild(view, "connectionSettingsPage")
+        verify(connectionPage !== null)
+        compare(connectionPage.showBackButton, true)
+
+        const back = findChild(connectionPage, "settingsSectionBackButton")
+        verify(back !== null)
+        back.clicked()
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        tryCompare(pageColumn, "x", 390)
+        compare(sidebarColumn.x, 0)
+        compare(view.selectedSectionId, "connection")
+
+        view.openWalletSettings()
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(view.selectedSectionId, "wallet")
+
+        view.width = 900
+        compare(view.compact, false)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
+        compare(sidebarSurface.width, view.sidebarWidth)
+        compare(connectionPage.showBackButton, false)
+        compare(view.sidebar.currentSectionId, "wallet")
+
+        // Narrowing shows the open section's page, even when the list was
+        // the last compact column.
+        split.showPrimary()
+        view.selectSection("display")
+        view.width = 390
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(pageColumn.x, 0)
+        compare(view.pageContainer.currentSectionId, "display")
     }
 
     function test_dataHeavyPagesUseAvailableWidthWithResponsivePadding() {
@@ -462,7 +532,7 @@ TestCase {
         view.selectSection("network-traffic")
         const networkTrafficPage = findChild(view, "networkTrafficSettingsPage")
         verify(networkTrafficPage !== null)
-        verify(networkTrafficPage.contentHorizontalPadding >= 24)
+        verify(networkTrafficPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(networkTrafficPage.contentLayout, "width",
             networkTrafficPage.scrollView.availableWidth
                 - networkTrafficPage.contentHorizontalPadding * 2)
@@ -473,7 +543,7 @@ TestCase {
         const debugLogContent = findChild(view, "debugLogContentLayout")
         verify(debugLogPage !== null)
         verify(debugLogContent !== null)
-        verify(debugLogPage.contentHorizontalPadding >= 24)
+        verify(debugLogPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(debugLogContent, "width",
             debugLogPage.width - debugLogPage.contentHorizontalPadding * 2)
         verify(debugLogContent.width > 840)
@@ -562,7 +632,7 @@ TestCase {
         compare(header.title, "RPC console")
         compare(header.showBackButton, false)
         compare(page.maximumContentWidth, page.width)
-        verify(page.contentHorizontalPadding >= 24)
+        verify(page.contentHorizontalPadding >= Theme.space.pageCompact)
         compare(heading.description, "Execute RPC commands and inspect their responses.")
         compare(warning.text,
                 "Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")
@@ -957,7 +1027,7 @@ TestCase {
                 compare(signerPathInput.leftPadding, 15)
                 compare(signerPathInput.rightPadding, 10)
                 compare(signerPathInput.background.color, Theme.color.neutral2)
-                compare(signerPathInput.background.radius, 5)
+                compare(signerPathInput.background.radius, Theme.radius.field)
                 compare(signerPathFocusBorder.ringColor, Theme.color.neutral6)
                 compare(signerStatusIndicator.width, 10)
                 compare(signerStatusIndicator.height, 10)

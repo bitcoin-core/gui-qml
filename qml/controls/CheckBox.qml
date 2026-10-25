@@ -12,11 +12,11 @@ Controls.CheckBox {
     property color checkedColor: Theme.color.orange
     property color borderColor: Theme.color.neutral4
     property color checkColor: Theme.color.white
-    property bool animationsEnabled: true
+    property bool animationsEnabled: Theme.motion.animated
 
     padding: 0
     spacing: 10
-    implicitHeight: 28
+    implicitHeight: Theme.size.controlSmall
     focusPolicy: Qt.StrongFocus
     hoverEnabled: AppMode.isDesktop
 
@@ -38,8 +38,8 @@ Controls.CheckBox {
         property: "checkProgress"
         from: 0
         to: 1
-        duration: 350
-        easing.type: Easing.OutCubic
+        duration: Theme.motion.slow
+        easing.type: Theme.motion.easing.enter
     }
 
     indicator: Rectangle {
@@ -59,7 +59,7 @@ Controls.CheckBox {
 
         Behavior on color {
             enabled: root.animationsEnabled
-            ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+            ColorAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
         }
 
         FocusBorder {

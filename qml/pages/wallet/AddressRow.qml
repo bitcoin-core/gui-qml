@@ -104,7 +104,7 @@ AbstractButton {
                 bottomPadding: 4
 
                 background: Rectangle {
-                    radius: 8
+                    radius: Theme.radius.field
                     color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
 
                     FieldBorderRings {
@@ -215,7 +215,7 @@ AbstractButton {
     }
 
     background: Rectangle {
-        radius: 16
+        radius: Theme.radius.listRow
         color: "transparent"
 
         FocusBorder {

@@ -71,6 +71,7 @@ SettingsPage {
     }
 
     FormSection {
+        id: trafficSection
         objectName: "networkTrafficSection"
         Layout.fillWidth: true
 
@@ -78,11 +79,10 @@ SettingsPage {
             objectName: "networkTrafficRangePicker"
             Accessible.name: qsTr("Time range")
             Layout.fillWidth: true
-            Layout.leftMargin: 16
-            Layout.rightMargin: 16
-            Layout.topMargin: 16
+            Layout.leftMargin: trafficSection.contentInset
+            Layout.rightMargin: trafficSection.contentInset
+            Layout.topMargin: trafficSection.contentInset
             Layout.bottomMargin: 6
-            implicitHeight: 36
             model: root.scaleOptions
             currentIndex: root.scaleIndex(root.trafficGraphScale)
             onSelected: function(index, option) {

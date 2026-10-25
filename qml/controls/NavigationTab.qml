@@ -63,12 +63,13 @@ TabButton {
             id: bg
             height: parent.height - 5
             width: parent.width
-            radius: 5
+            radius: Theme.radius.s
             color: Theme.color.neutral3
             visible: root.hovered
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
         FocusBorder {

@@ -131,7 +131,7 @@ Item {
         objectName: "walletCreationNavigationBar"
         width: parent.width
         surfaceLevel: root.modalView ? 1 : 0
-        buttonSidePadding: width >= 640 ? 24 : 16
+        buttonSidePadding: SizeClass.isCompact(width) ? 16 : 24
         closeButtonSize: CloseButton.Large
         visible: root.currentItem && root.currentItem.usesSharedNavigation === true
         height: visible ? implicitHeight : 0

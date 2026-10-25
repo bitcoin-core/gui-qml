@@ -14,10 +14,10 @@ PageStack {
     property var wallet: walletController.selectedWallet
 
     replaceEnter: Transition {
-        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.enter }
     }
     replaceExit: Transition {
-        NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 250; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.exit }
     }
 
     function openPaymentRequest(requestId) {

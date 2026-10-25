@@ -12,7 +12,7 @@ Popup {
     property string title: ""
     property int minMenuWidth: 240
     property int itemSpacing: 0
-    property int menuPadding: 6
+    property int menuPadding: Theme.space.s
     property color backgroundColor: Theme.color.neutral1
     readonly property alias titleItem: _title
 
@@ -41,7 +41,7 @@ Popup {
         color: root.backgroundColor
         border.color: Theme.color.menuBorder
         border.width: 1
-        radius: 5
+        radius: Theme.radius.m
         SurfaceGradientBorder {
             anchors.fill: parent
             visible: root.modal
@@ -51,10 +51,10 @@ Popup {
     }
 
     enter: Transition {
-        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 120; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
     }
     exit: Transition {
-        NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 100; easing.type: Easing.InCubic }
+        NumberAnimation { property: "opacity"; to: 0.0; duration: Theme.motion.fast; easing.type: Theme.motion.easing.exit }
     }
 
     contentItem: ColumnLayout {
@@ -68,7 +68,7 @@ Popup {
             visible: root.title !== ""
             Layout.fillWidth: true
             Layout.leftMargin: 10
-            Layout.rightMargin: 8
+            Layout.rightMargin: Theme.space.m
             Layout.topMargin: visible ? 8 : 0
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title

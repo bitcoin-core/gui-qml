@@ -91,12 +91,12 @@ Item {
     implicitHeight: parentContent.height + childrenColumn.height + (showChildren ? 12 : 0)
     height: implicitHeight
 
-    Rectangle {
+    StateBackground {
         id: rowSurface
         objectName: "activityRowBackground"
         anchors.fill: parent
-        color: rowHover.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
-        radius: 16
+        stateColor: rowHover.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
+        radius: Theme.radius.listRow
         Rectangle {
             anchors.top: parent.top
             width: parent.width
