@@ -119,6 +119,7 @@ TestCase {
         popup.open()
         tryCompare(popup, "opened", true)
         const list = findChild(popup, "walletSelectList")
+        verify(waitForItemPolished(list))
         for (const group of ["open", "closed"]) {
             const heading = findChild(list, "walletSelectSection_" + group)
             compare(heading !== null && heading.visible, data.groups.indexOf(group) !== -1)

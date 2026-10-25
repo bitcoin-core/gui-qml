@@ -36,8 +36,11 @@ Page {
     property int sidebarWidth: 286
     readonly property bool optionsEditable: typeof optionsModel === "undefined"
         || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
-    readonly property alias sidebar: sidebar
-    readonly property alias pageContainer: pageContainer
+    // Compact widths show one column: the sidebar is the root list, and
+    // choosing a section slides its page over it until Back.
+    readonly property bool compact: splitView.isCompact
+    readonly property SettingsSidebar sidebar: splitView.primaryItem ? splitView.primaryItem.sidebar : null
+    readonly property SettingsPageContainer pageContainer: splitView.detailItem
     readonly property var groupTitles: ({
         "wallet": qsTr("Wallet"),
         "general": qsTr("General"),
@@ -143,16 +146,22 @@ Page {
     }
 
     function selectSection(sectionId, forceReload) {
+        if (!root.pageContainer) return
         const resolvedId = root.sectionIsVisible(sectionId) ? sectionId : root.firstVisibleSectionId()
         if (resolvedId.length === 0) {
             root.selectedSectionId = ""
-            pageContainer.clear()
+            root.pageContainer.clear()
             return
         }
 
-        if (forceReload === true) pageContainer.clear()
+        if (forceReload === true) root.pageContainer.clear()
         root.selectedSectionId = resolvedId
-        pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
+        root.pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
+    }
+
+    function showSectionPage(sectionId, forceReload) {
+        root.selectSection(sectionId, forceReload)
+        if (root.selectedSectionId.length > 0) splitView.showDetail()
     }
 
     function ensureVisibleSelection() {
@@ -160,7 +169,7 @@ Page {
     }
 
     function openWalletSettings() {
-        root.selectSection("wallet")
+        root.showSectionPage("wallet")
     }
 
     background: null
@@ -171,11 +180,15 @@ Page {
         if (visible) root.selectSection(root.selectedSectionId)
     }
 
-    Component.onCompleted: root.selectSection(
-        root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
+    Component.onCompleted: {
+        root.selectSection(
+            root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
+        internal.completed = true
+    }
 
     QtObject {
         id: internal
+        property bool completed: false
         property Item walletSettingsHost: null
     }
 
@@ -190,28 +203,35 @@ Page {
         color: optionsModel.settingsError ? Theme.color.red : Theme.color.neutral7
     }
 
-    contentItem: RowLayout {
-        spacing: 0
+    contentItem: NavigationSplitView {
+        id: splitView
+        objectName: "settingsSplitView"
+        primaryMinimumWidth: root.sidebarWidth
+        primaryPreferredWidth: root.sidebarWidth
+        primaryMaximumWidth: root.sidebarWidth
+        separatorWidth: 0
 
-        Rectangle {
-            id: sidebarSurface
+        // Narrowing the window keeps the page that was on screen.
+        onIsCompactChanged: {
+            if (isCompact && internal.completed && root.selectedSectionId.length > 0) showDetail()
+        }
+
+        primaryComponent: Rectangle {
             objectName: "settingsSidebarSurface"
-            Layout.preferredWidth: root.sidebarWidth
-            Layout.minimumWidth: root.sidebarWidth
-            Layout.maximumWidth: root.sidebarWidth
-            Layout.fillHeight: true
+            readonly property alias sidebar: sidebar
             color: Theme.color.neutral1
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                anchors.topMargin: 20
-                anchors.bottomMargin: 16
+                anchors.leftMargin: Theme.space.xl
+                anchors.rightMargin: Theme.space.xl
+                anchors.topMargin: Theme.space.xl
+                anchors.bottomMargin: Theme.space.l
                 spacing: 0
 
                 CoreText {
@@ -219,7 +239,7 @@ Page {
                     Layout.fillWidth: true
                     Layout.leftMargin: 10
                     Layout.rightMargin: 10
-                    Layout.bottomMargin: 24
+                    Layout.bottomMargin: Theme.space.xxl
                     text: qsTr("Settings")
                     color: Theme.color.neutral9
                     font: Theme.text.display.font
@@ -235,16 +255,17 @@ Page {
                     Layout.fillHeight: true
                     model: root.sections
                     groupTitles: root.groupTitles
-                    currentSectionId: root.selectedSectionId
+                    // The compact list is a menu of destinations, not a selection.
+                    currentSectionId: splitView.isCompact ? "" : root.selectedSectionId
                     onSectionActivated: function(sectionId) {
                         // Re-selecting the current section from the sidebar
                         // returns to its root; pushed sub-pages such as the
                         // address list otherwise survive tab round trips.
                         if (sectionId === root.selectedSectionId) {
-                            pageContainer.resetSection(sectionId)
+                            root.pageContainer.resetSection(sectionId)
                             if (sectionId === "wallet") root.walletSettingsResetRequested()
                         }
-                        root.selectSection(sectionId)
+                        root.showSectionPage(sectionId)
                     }
                 }
 
@@ -253,20 +274,18 @@ Page {
                     visible: root.showDoneButton
                     text: qsTr("Done")
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.bottomMargin: 20
+                    Layout.bottomMargin: Theme.space.xl
                     onClicked: root.doneClicked()
                 }
             }
         }
 
-        SettingsPageContainer {
-            id: pageContainer
+        detailComponent: SettingsPageContainer {
             objectName: "settingsPageContainer"
             disabledSectionIds: root.optionsEditable ? []
                 : ["external-signer", "display", "window-behavior", "storage", "connection"]
-            Layout.minimumWidth: 0
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            showRootBackButton: splitView.isCompact
+            onRootBackRequested: splitView.showPrimary()
         }
     }
 

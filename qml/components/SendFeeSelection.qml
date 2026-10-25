@@ -127,6 +127,7 @@ ColumnLayout {
     ValueRow {
         objectName: "feeSelectionEstimateLabel"
         amountValue: true
+        animateUnitChanges: false
         Layout.fillWidth: true
         title: qsTr("Fee amount")
         showDivider: false

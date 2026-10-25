@@ -23,15 +23,15 @@ ColumnLayout {
     signal pasteRequested(string field)
     signal edited()
     signal removeRequested()
-    spacing: 18
+    spacing: Theme.space.l
 
     LabeledField {
         id: addressGroup
         objectName: "sendAddressGroup"
         Layout.fillWidth: true
         label: qsTr("Bitcoin address")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         fieldSurface: true
         fieldFocused: addressField.field.activeFocus
         errorText: root.recipient ? root.recipient.addressError : ""
@@ -63,7 +63,7 @@ ColumnLayout {
         visible: root.recipient && root.recipient.hasPaymentRequest
             && (root.recipient.paymentRequestLabel.length > 0 || root.recipient.message.length > 0)
         Layout.fillWidth: true
-        spacing: 8
+        spacing: Theme.space.m
         CoreText {
             Layout.fillWidth: true
             text: qsTr("Payment request")
@@ -99,8 +99,8 @@ ColumnLayout {
         objectName: "sendAmountGroup"
         Layout.fillWidth: true
         label: qsTr("Amount")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         messageObjectName: "sendAmountStatusText"
         fieldSurface: true
         fieldFocused: amountField.field.activeFocus
@@ -139,8 +139,8 @@ ColumnLayout {
         Layout.fillWidth: true
         label: qsTr("Note to self")
         supportingText: qsTr("Recommended")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         fieldSurface: true
         inputObjectName: "sendNoteInput"
         interceptPaste: true

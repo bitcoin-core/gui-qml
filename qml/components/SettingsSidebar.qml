@@ -15,10 +15,10 @@ Control {
     property var model: []
     property var groupTitles: ({})
     property string currentSectionId: ""
-    property int rowHeight: 36
-    property int groupSpacing: 16
+    property int rowHeight: Theme.size.control
+    property int groupSpacing: Theme.space.l
     property int groupTitleHeight: 25
-    property int cornerRadius: 8
+    property int cornerRadius: Theme.radius.sidebarRow
     property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
     property color hoverBackgroundColor: Theme.color.neutral2
     readonly property var visibleSections: root.filteredSections()
@@ -135,10 +135,10 @@ Control {
                     FocusBorder {
                         visible: button.visualFocus
                         borderRadius: root.cornerRadius + 2
-                        topMargin: -2
-                        bottomMargin: -2
-                        leftMargin: -2
-                        rightMargin: -2
+                        topMargin: -Theme.focusRing.offsetDense
+                        bottomMargin: -Theme.focusRing.offsetDense
+                        leftMargin: -Theme.focusRing.offsetDense
+                        rightMargin: -Theme.focusRing.offsetDense
                     }
                 }
 
@@ -153,7 +153,8 @@ Control {
                     elide: Text.ElideRight
 
                     Behavior on color {
-                        ColorAnimation { duration: 150 }
+                        enabled: Theme.motion.animated
+                        ColorAnimation { duration: Theme.motion.normal }
                     }
                 }
 

@@ -45,8 +45,8 @@ FormRow {
         inputMethodHints: root.inputMethodHints
         echoMode: root.echoMode
         selectByMouse: true
-        leftPadding: 4
-        rightPadding: 4
+        leftPadding: Theme.space.xs
+        rightPadding: Theme.space.xs
         color: root.fieldColor
         font: root.fieldTextStyle.font
         horizontalAlignment: root.textAlignment

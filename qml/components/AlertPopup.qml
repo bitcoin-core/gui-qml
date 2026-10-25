@@ -55,32 +55,30 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -30
+            from: -Theme.motion.dialogOffset
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -30
-            duration: 250
-            easing.type: Easing.InCubic
+            to: -Theme.motion.dialogOffset
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -115,7 +113,7 @@ Popup {
     background: Rectangle {
         objectName: "alertPopupSurface"
         color: Theme.color.neutral1
-        radius: 10
+        radius: Theme.radius.popup
         border.color: Theme.color.neutral2
         border.width: 1
         SurfaceGradientBorder {
@@ -157,7 +155,7 @@ Popup {
         CoreText {
             objectName: root.messageObjectName
             Layout.fillWidth: true
-            Layout.margins: 20
+            Layout.margins: Theme.space.xl
             text: root.message
             color: Theme.color.neutral8
             font: Theme.text.description.font
@@ -178,9 +176,9 @@ Popup {
         Flow {
             id: actionRow
             Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.bottomMargin: 20
+            Layout.leftMargin: Theme.space.xl
+            Layout.rightMargin: Theme.space.xl
+            Layout.bottomMargin: Theme.space.xl
             spacing: 10
             readonly property bool stacked: width < root.horizontalActionsWidth
 
@@ -199,7 +197,7 @@ Popup {
 
                     width: actionRow.stacked ? actionRow.width
                         : Math.max(0, (actionRow.width - actionRow.spacing * (root.visibleActions.length - 1)) / root.visibleActions.length)
-                    height: 46
+                    height: Theme.size.controlLarge
 
                     function triggerAction() {
                         if (alertAction.closesPopup) {
@@ -221,7 +219,7 @@ Popup {
 
                     ContinueButton {
                         anchors.fill: parent
-                        horizontalPadding: 20
+                        horizontalPadding: Theme.space.xl
                         visible: !actionDelegate.neutralAction
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text

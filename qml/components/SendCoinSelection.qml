@@ -18,10 +18,10 @@ Popup {
     height: Math.min(800, parent.height - 40)
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-    leftPadding: width < 600 ? 16 : 40
-    rightPadding: width < 600 ? 16 : 40
-    topPadding: width < 600 ? 20 : 30
-    bottomPadding: width < 600 ? 20 : 30
+    leftPadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
+    rightPadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
+    topPadding: SizeClass.isCompact(width) ? 20 : 30
+    bottomPadding: SizeClass.isCompact(width) ? 20 : 30
     modal: true; dim: true; focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
@@ -30,32 +30,30 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -30
+            from: -Theme.motion.dialogOffset
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -30
-            duration: 250
-            easing.type: Easing.InCubic
+            to: -Theme.motion.dialogOffset
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -65,7 +63,7 @@ Popup {
     }
 
     background: Rectangle {
-        radius: 10
+        radius: Theme.radius.popup
         color: Theme.color.neutral1
         border.color: Theme.color.neutral3
         SurfaceGradientBorder {
@@ -78,7 +76,7 @@ Popup {
     onClosed: { if (editingCoins) editingCoins.cancelSelection(); editingCoins = null }
     onWalletChanged: if (opened) close()
     contentItem: ColumnLayout {
-        spacing: 20
+        spacing: Theme.space.xl
         RowLayout {
             Layout.fillWidth: true
             ColumnLayout {
@@ -100,7 +98,7 @@ Popup {
                 text: root.editingCoins ? (root.editingCoins.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.editingCoins.selectedCoinsCount)) : ""
             }
             //: Discard changes to the input selection.
-            NeutralButton { objectName: "coinSelectionCancelButton"; text: qsTr("Cancel"); implicitHeight: 46; onClicked: root.close() }
+            NeutralButton { objectName: "coinSelectionCancelButton"; text: qsTr("Cancel"); implicitHeight: Theme.size.controlLarge; onClicked: root.close() }
             ContinueButton {
                 objectName: "coinSelectionDoneButton"
                 //: Apply these selected coins to the transaction.

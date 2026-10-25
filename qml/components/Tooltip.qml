@@ -16,16 +16,16 @@ Item {
     property string textObjectName: ""
     property url iconSource: ""
     property color iconColor: Theme.color.neutral9
-    property int iconSize: 14
+    property int iconSize: Theme.size.icon.s
     property color textColor: Theme.color.neutral9
     property color backgroundColor: Theme.color.neutral1
     property color borderColor: Theme.color.neutral2
     property bool shown: true
-    property bool motionEnabled: true
-    property int horizontalPadding: 12
-    property int verticalPadding: 8
-    property int windowMargin: 8
-    property int contentSpacing: 6
+    property bool motionEnabled: Theme.motion.animated
+    property int horizontalPadding: Theme.space.ml
+    property int verticalPadding: Theme.space.m
+    property int windowMargin: Theme.space.m
+    property int contentSpacing: Theme.space.s
     property var textStyle: Theme.text.description
     property bool _revealed: false
     property bool _ready: false
@@ -44,7 +44,7 @@ Item {
     implicitHeight: tooltipBg.height
     visible: _revealed || opacity > 0
     opacity: _revealed ? 1 : 0
-    scale: _revealed ? 1 : 0.98
+    scale: _revealed || Theme.motion.reduced ? 1 : 0.98
     transformOrigin: Item.Top
     transform: Translate { x: root._horizontalOffset }
 
@@ -72,23 +72,23 @@ Item {
 
     Timer {
         id: showTimer
-        interval: 80
+        interval: Theme.motion.tooltipDelay
         onTriggered: root._revealed = root.shown
     }
 
     Behavior on opacity {
         enabled: root.motionEnabled && root._ready
         NumberAnimation {
-            duration: root._revealed ? 150 : 50
-            easing.type: Easing.OutCubic
+            duration: root._revealed ? Theme.motion.normal : Theme.motion.fast
+            easing.type: root._revealed ? Theme.motion.easing.enter : Theme.motion.easing.exit
         }
     }
 
     Behavior on scale {
         enabled: root.motionEnabled && root._ready
         NumberAnimation {
-            duration: root._revealed ? 150 : 50
-            easing.type: Easing.OutCubic
+            duration: root._revealed ? Theme.motion.normal : Theme.motion.fast
+            easing.type: root._revealed ? Theme.motion.easing.enter : Theme.motion.easing.exit
         }
     }
 
@@ -96,7 +96,7 @@ Item {
         id: tooltipBg
         color: root.backgroundColor
         border.color: root.borderColor
-        radius: 8
+        radius: Theme.radius.m
         border.width: 1
         width: Math.min(contentRow.implicitWidth + 2 * root.horizontalPadding, root._maximumWidth)
         height: contentRow.implicitHeight + 2 * root.verticalPadding

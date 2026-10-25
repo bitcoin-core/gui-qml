@@ -28,8 +28,8 @@ Control {
     property bool navigationEnabled: true
     property url searchIconSource: "image://images/search"
     property url cancelIconSource: "qrc:/icons/cross-circle-filled"
-    property int searchIconSize: 14
-    property int cancelButtonSize: 14
+    property int searchIconSize: Theme.size.icon.s
+    property int cancelButtonSize: Theme.size.icon.s
     property color cancelIconColor: Theme.color.neutral6
     property color cancelIconHoverColor: Theme.color.neutral5
     property color cancelIconPressedColor: Theme.color.neutral4
@@ -65,11 +65,11 @@ Control {
     background: Rectangle {
         visible: root.showNavigationButtons
         color: Theme.color.neutral1
-        radius: 8
+        radius: Theme.radius.m
     }
 
     contentItem: RowLayout {
-        spacing: 2
+        spacing: Theme.space.xxs
 
         TextField {
             id: searchField
@@ -109,7 +109,7 @@ Control {
 
             background: Rectangle {
                 color: Theme.color.neutral2
-                radius: 10
+                radius: Theme.radius.field
                 border.width: 0
 
                 FieldBorderRings {
@@ -122,7 +122,7 @@ Control {
             Icon {
                 objectName: root.searchIconObjectName
                 anchors.left: parent.left
-                anchors.leftMargin: 9
+                anchors.leftMargin: Theme.space.m
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.showsSearchIcon
                 source: root.searchIconSource
@@ -136,7 +136,7 @@ Control {
 
                 objectName: root.clearButtonObjectName
                 anchors.right: parent.right
-                anchors.rightMargin: 7
+                anchors.rightMargin: Theme.space.m
                 anchors.verticalCenter: parent.verticalCenter
                 width: root.cancelButtonSize
                 height: root.cancelButtonSize
@@ -200,7 +200,7 @@ Control {
             background: null
 
             contentItem: RowLayout {
-                spacing: 2
+                spacing: Theme.space.xxs
 
                 SearchNavigationButton {
                     id: previousButton
@@ -247,11 +247,11 @@ Control {
         Accessible.role: Accessible.Button
         Accessible.name: accessibleName
 
-        background: Rectangle {
-            color: navigationButton.hovered || navigationButton.pressed
+        background: StateBackground {
+            stateColor: navigationButton.hovered || navigationButton.pressed
                 ? Theme.color.neutral2
                 : "transparent"
-            radius: 5
+            radius: Theme.radius.s
         }
 
         contentItem: Item {

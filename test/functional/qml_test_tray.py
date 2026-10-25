@@ -32,6 +32,7 @@ import time
 
 from qml_test_harness import (
     GUI_STARTUP_TIMEOUT,
+    TEST_MOTION_ARGS,
     find_gui_binary,
     complete_onboarding,
     dump_qml_tree,
@@ -73,7 +74,7 @@ def run_tests():
             gui_binary,
             f"-datadir={datadir}",
             f"-test-automation={socket_path}",
-        ] + settings_args + [
+        ] + TEST_MOTION_ARGS + settings_args + [
             "-disablewallet",
             "-qml_onboarded=1",
             "-logtimemicros",

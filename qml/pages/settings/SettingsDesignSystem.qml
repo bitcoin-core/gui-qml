@@ -12,11 +12,30 @@ SettingsPage {
     id: root
     title: qsTr("Design system")
 
+    readonly property var motionModes: ["full", "reduced", "off"]
+    readonly property var devices: ["Desktop", "Mobile"]
+    readonly property var previewWidths: [
+        { text: "Window", value: 0 },
+        { text: "390", value: 390 },
+        { text: "720", value: 720 },
+        { text: "1000", value: 1000 }
+    ]
+    // Lays the content out as on a page this wide (0: the real width).
+    property real previewWidth: 0
+    readonly property real layoutWidth: previewWidth > 0 ? Math.min(previewWidth, width) : width
+
+    contentHorizontalPadding: Theme.space.pagePadding(layoutWidth) + (width - layoutWidth) / 2
+
+    // The motion mode is switched for this page only. Settings keeps the page
+    // alive when you move to another section, so reset it on hide as well.
+    onVisibleChanged: if (!visible) Theme.motion.resetMode()
+    Component.onDestruction: Theme.motion.resetMode()
+
     FormSection {
         objectName: "designSystemPageControlsSection"
         Layout.fillWidth: true
         title: "Page controls"
-        description: "Interacting with the samples below never changes a setting or wallet state; only the palette picker does."
+        description: "Interacting with the samples below never changes a setting or wallet state; only the palette picker does. The motion mode resets when you leave this page."
 
         FormRow {
             objectName: "designSystemThemeRow"
@@ -46,6 +65,59 @@ SettingsPage {
                 }
             }
         }
+
+        FormRow {
+            objectName: "designSystemMotionModeRow"
+            Layout.fillWidth: true
+            title: "Motion"
+            description: "Starts from the platform and Display settings; off is for tests and makes everything instant."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemMotionModePicker"
+                implicitWidth: 260
+                model: root.motionModes
+                currentIndex: Math.max(0, root.motionModes.indexOf(Theme.motion.mode))
+                onSelected: function(index, option) {
+                    Theme.motion.mode = option
+                }
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemDeviceRow"
+            Layout.fillWidth: true
+            title: "Device"
+            description: "Mobile lowers the window's minimum width to 360 so you can narrow it and check compact layouts, such as the settings split view. It stays on until you switch back."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemDevicePicker"
+                implicitWidth: 260
+                model: root.devices
+                currentIndex: SizeClass.mobilePreview ? 1 : 0
+                onSelected: function(index, option) {
+                    SizeClass.mobilePreview = index === 1
+                }
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemPageWidthRow"
+            Layout.fillWidth: true
+            title: "Page width"
+            description: "Lay this page out as on a window this wide, to check compact and regular layouts."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemPageWidthPicker"
+                implicitWidth: 260
+                model: root.previewWidths
+                currentIndex: Math.max(0, root.previewWidths.findIndex(function(option) {
+                    return option.value === root.previewWidth
+                }))
+                onSelected: function(index, option) {
+                    root.previewWidth = option.value
+                }
+            }
+        }
     }
 
     PageHeading {
@@ -63,6 +135,17 @@ SettingsPage {
     DesignSystemTypography {
         objectName: "designSystemTypographySection"
         Layout.fillWidth: true
+    }
+
+    DesignSystemMotion {
+        objectName: "designSystemMotionSection"
+        Layout.fillWidth: true
+    }
+
+    DesignSystemLayout {
+        objectName: "designSystemLayoutSection"
+        Layout.fillWidth: true
+        layoutWidth: root.layoutWidth
     }
 
     PageHeading {

@@ -104,7 +104,7 @@ Item {
         id: actionsColumn
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 20
+        spacing: Theme.space.xl
 
         CoreText {
             objectName: root.statusObjectName

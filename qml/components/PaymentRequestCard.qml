@@ -49,7 +49,7 @@ Pane {
     implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
     background: Rectangle {
         visible: root.modalView
-        radius: 16
+        radius: Theme.radius.sheet
         color: Theme.color.neutral1
         border.width: 1
         border.color: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
@@ -302,11 +302,11 @@ Pane {
     }
 
     contentItem: ColumnLayout {
-        spacing: 16
+        spacing: Theme.space.l
         RowLayout {
             visible: root.modalView
             Layout.fillWidth: true
-            Layout.bottomMargin: 8
+            Layout.bottomMargin: Theme.space.m
             spacing: 10
             CoreText {
                 objectName: "requestPaymentTitle"
@@ -321,7 +321,7 @@ Pane {
                 objectName: "paymentRequestMoreButton"
                 circular: true
                 size: 30
-                iconSize: 24
+                iconSize: Theme.size.icon.xl
                 iconColor: Theme.color.neutral7
                 activeIconColor: Theme.color.neutral8
                 surfaceLevel: 1
@@ -373,13 +373,13 @@ Pane {
             visible: root.modalView
             Layout.fillWidth: true
             Layout.maximumWidth: Infinity
-            spacing: 8
+            spacing: Theme.space.m
             TransactionSummary {
                 objectName: "requestPaymentReceivedSummary"
                 visible: root.paymentReceived
                 Layout.fillWidth: true
                 Layout.maximumWidth: Infinity
-                Layout.bottomMargin: 4
+                Layout.bottomMargin: Theme.space.xs
                 amount: receivedAmount.displayWithUnit
                 iconComponent: ActivityIcon {
                     objectName: "requestPaymentReceivedIcon"
@@ -401,13 +401,13 @@ Pane {
                     id: qrImage
                     objectName: "requestPaymentQRImage"
                     anchors.fill: parent
-                    anchors.margins: 16
+                    anchors.margins: Theme.space.l
                     visible: root.sharing
                     opacity: root.sharing ? 1 : 0
                     code: root.sharing && root.request ? root.request.qrPayload : ""
                     backgroundColor: "white"
                     foregroundColor: "black"
-                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
                 }
                 MouseArea {
                     objectName: "requestPaymentQRContextArea"
@@ -453,7 +453,7 @@ Pane {
                 Layout.alignment: Qt.AlignHCenter
                 implicitWidth: statusLabel.implicitWidth + 24
                 implicitHeight: 30
-                radius: 15
+                radius: height / 2
                 color: Qt.rgba(statusLabel.color.r, statusLabel.color.g, statusLabel.color.b, 0.14)
                 CoreText {
                     id: statusLabel
@@ -467,7 +467,7 @@ Pane {
             AddressLabel {
                 objectName: "requestPaymentAddressText"
                 Layout.fillWidth: true
-                Layout.topMargin: 8
+                Layout.topMargin: Theme.space.m
                 address: root.request ? root.request.address : ""
                 textStyle: Theme.text.monoDescription
                 interactive: !root.saved || root.sharing
@@ -478,7 +478,7 @@ Pane {
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.m
             FormSection {
                 objectName: "requestPaymentFieldsSection"
                 Layout.fillWidth: true
@@ -577,9 +577,9 @@ Pane {
                 objectName: "requestPaymentDetailsFooter"
                 visible: !root.modalView && root.hasPublicFields
                 Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                spacing: 6
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                spacing: Theme.space.s
                 Icon {
                     Layout.preferredWidth: 13
                     Layout.preferredHeight: 13
@@ -605,13 +605,13 @@ Pane {
             visible: !root.modalView
             Layout.fillWidth: true
             Layout.preferredHeight: 1
-            Layout.topMargin: 8
-            Layout.bottomMargin: 8
+            Layout.topMargin: Theme.space.m
+            Layout.bottomMargin: Theme.space.m
             color: Theme.color.neutral2
         }
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 8
+            spacing: Theme.space.m
 
             FormSection {
                 objectName: "requestPaymentNoteSection"
@@ -638,9 +638,9 @@ Pane {
                 objectName: "requestPaymentNoteFooter"
                 visible: !root.modalView
                 Layout.fillWidth: true
-                Layout.leftMargin: 4
-                Layout.rightMargin: 4
-                spacing: 6
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                spacing: Theme.space.s
 
                 Icon {
                     Layout.preferredWidth: 13

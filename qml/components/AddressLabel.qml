@@ -93,10 +93,10 @@ AbstractButton {
     hoverEnabled: interactive && AppMode.isDesktop
     enabled: interactive && address !== ""
     focusPolicy: interactive ? Qt.StrongFocus : Qt.NoFocus
-    leftPadding: 8
-    rightPadding: 8
-    topPadding: 4
-    bottomPadding: 4
+    leftPadding: Theme.space.m
+    rightPadding: Theme.space.m
+    topPadding: Theme.space.xs
+    bottomPadding: Theme.space.xs
     implicitHeight: content.implicitHeight + topPadding + bottomPadding
     Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
     Accessible.name: address
@@ -112,7 +112,7 @@ AbstractButton {
     FocusBorder {
         objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
         visible: root.visualFocus
-        targetRadius: 5
+        targetRadius: Theme.radius.s
         z: 1
     }
 
@@ -140,7 +140,8 @@ AbstractButton {
             Accessible.ignored: true
 
             Behavior on opacity {
-                NumberAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                NumberAnimation { duration: Theme.motion.fade(Theme.motion.normal) }
             }
         }
 
@@ -148,18 +149,20 @@ AbstractButton {
             id: copiedRow
             objectName: root.objectName + "CopiedStatus"
             anchors.centerIn: parent
-            spacing: 6
+            spacing: Theme.space.s
             opacity: root.showCopiedStatus ? 1 : 0
-            scale: root.showCopiedStatus ? 1 : 0.8
+            scale: root.showCopiedStatus || Theme.motion.reduced ? 1 : 0.8
 
             Behavior on opacity {
-                NumberAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                NumberAnimation { duration: Theme.motion.fade(Theme.motion.normal) }
             }
 
             Behavior on scale {
+                enabled: Theme.motion.animated
                 NumberAnimation {
-                    duration: 150
-                    easing.type: Easing.InOutCubic
+                    duration: Theme.motion.normal
+                    easing.type: Theme.motion.easing.move
                 }
             }
 
@@ -167,7 +170,7 @@ AbstractButton {
                 Layout.alignment: Qt.AlignVCenter
                 source: "qrc:/icons/copy"
                 color: Theme.color.neutral9
-                size: 20
+                size: Theme.size.icon.l
             }
 
             CoreText {
@@ -199,12 +202,13 @@ AbstractButton {
 
     background: Rectangle {
         objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
-        radius: 5
+        radius: Theme.radius.s
         color: Theme.color.surface(Math.min(root.surfaceLevel + 1, 3))
         opacity: root.interactive && (root.hovered || root.down) ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            NumberAnimation { duration: Theme.motion.normal }
         }
     }
 

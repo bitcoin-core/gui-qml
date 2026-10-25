@@ -149,32 +149,30 @@ SettingsPage {
                 property: "opacity"
                 from: 0
                 to: 1
-                duration: 300
-                easing.type: Easing.OutCubic
+                duration: Theme.motion.fade(Theme.motion.slow)
+                easing.type: Theme.motion.easing.enter
             }
             NumberAnimation {
                 property: "verticalOffset"
-                from: -30
+                from: -Theme.motion.dialogOffset
                 to: 0
-                duration: 300
-                easing.type: Easing.OutCubic
+                duration: Theme.motion.travel(Theme.motion.slow)
+                easing.type: Theme.motion.easing.enter
             }
         }
 
         exit: Transition {
             NumberAnimation {
                 property: "opacity"
-                from: 1
                 to: 0
-                duration: 250
-                easing.type: Easing.InCubic
+                duration: Theme.motion.fade(Theme.motion.exit)
+                easing.type: Theme.motion.easing.exit
             }
             NumberAnimation {
                 property: "verticalOffset"
-                from: 0
-                to: -30
-                duration: 250
-                easing.type: Easing.InCubic
+                to: -Theme.motion.dialogOffset
+                duration: Theme.motion.travel(Theme.motion.exit)
+                easing.type: Theme.motion.easing.exit
             }
         }
 
@@ -185,7 +183,7 @@ SettingsPage {
         background: Rectangle {
             color: Theme.color.neutral1
             border.color: Theme.color.neutral3
-            radius: 10
+            radius: Theme.radius.popup
             SurfaceGradientBorder {
                 anchors.fill: parent
                 surfaceColor: parent.color
@@ -231,7 +229,6 @@ SettingsPage {
         Layout.fillWidth: true
         Layout.maximumWidth: 360
         Layout.alignment: Qt.AlignHCenter
-        implicitHeight: 36
         model: addressModel.categoryOptions
         currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
         onSelected: (index, option) => {

@@ -31,7 +31,7 @@ Popup {
     Overlay.modal: Rectangle { color: Qt.rgba(0, 0, 0, 0.6) }
     background: Rectangle {
         color: Theme.color.neutral1
-        radius: 16
+        radius: Theme.radius.popup
         SurfaceGradientBorder {
             anchors.fill: parent
             surfaceColor: parent.color
@@ -83,7 +83,7 @@ Popup {
         GridLayout {
             Layout.fillWidth: true
             Layout.topMargin: 32
-            columns: width < 340 ? 1 : 2
+            columns: width < SizeClass.stackColumnsMax ? 1 : 2
             columnSpacing: 12
             rowSpacing: 12
 

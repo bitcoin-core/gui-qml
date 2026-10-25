@@ -35,9 +35,9 @@ NeutralButton {
 
     implicitHeight: Math.max(30, caretSize + topPadding + bottomPadding)
     leftPadding: 10
-    rightPadding: 4
-    topPadding: 2
-    bottomPadding: 2
+    rightPadding: Theme.space.xs
+    topPadding: Theme.space.xxs
+    bottomPadding: Theme.space.xxs
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
 
@@ -95,7 +95,8 @@ NeutralButton {
                 rotation: root.opened ? 180 : 0
 
                 Behavior on rotation {
-                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                    enabled: Theme.motion.animated
+                    NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
                 }
             }
         }

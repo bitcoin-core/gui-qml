@@ -51,7 +51,7 @@ Controls.RangeSlider {
         y: root.topPadding + (root.availableHeight - height) / 2
         width: Math.max(0, root.availableWidth - root.first.handle.width)
         height: 6
-        radius: 3
+        radius: Theme.radius.xs
         color: root.trackColor
 
         Rectangle {
@@ -82,7 +82,7 @@ Controls.RangeSlider {
         }
         implicitWidth: 28
         implicitHeight: 20
-        radius: 10
+        radius: height / 2
         color: root.thumbColor
         border.width: 1
         border.color: "#E6E6E6"

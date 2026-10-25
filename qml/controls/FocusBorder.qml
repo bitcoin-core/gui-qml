@@ -9,10 +9,10 @@ import "../controls"
 
  Rectangle {
     id: root
-    property int topMargin: -4
-    property int bottomMargin: -4
-    property int leftMargin: -4
-    property int rightMargin: -4
+    property int topMargin: -Theme.focusRing.offset
+    property int bottomMargin: -Theme.focusRing.offset
+    property int leftMargin: -Theme.focusRing.offset
+    property int rightMargin: -Theme.focusRing.offset
     property int borderRadius: 9
     // Corner radius of the surrounded item; the ring then follows it at its offset.
     property real targetRadius: -1
@@ -22,12 +22,13 @@ import "../controls"
     anchors.bottomMargin: root.bottomMargin
     anchors.leftMargin: root.leftMargin
     anchors.rightMargin: root.rightMargin
-    border.width: 2
+    border.width: Theme.focusRing.width
     border.color: Theme.color.purple
     radius: root.targetRadius >= 0 ? Math.max(0, root.targetRadius - root.leftMargin) : root.borderRadius
     color: "transparent"
 
     Behavior on border.color {
-        ColorAnimation { duration: 150 }
+        enabled: Theme.motion.animated
+        ColorAnimation { duration: Theme.motion.normal }
     }
 }

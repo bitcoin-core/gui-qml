@@ -13,7 +13,7 @@ AbstractButton {
     property string iconSource: ""
 
     implicitHeight: Math.max(72, content.implicitHeight + topPadding + bottomPadding)
-    padding: 16
+    padding: Theme.space.l
     opacity: enabled ? 1 : 0.4
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -21,12 +21,13 @@ AbstractButton {
     Accessible.description: description
 
     background: Rectangle {
-        radius: 12
+        radius: Theme.radius.cardInset
         color: root.down || root.hovered ? Theme.color.neutral3 : Theme.color.neutral2
         border.width: 0
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         FocusBorder {
@@ -37,17 +38,17 @@ AbstractButton {
 
     contentItem: RowLayout {
         id: content
-        spacing: 16
+        spacing: Theme.space.l
 
         Icon {
             source: root.iconSource
             color: Theme.color.neutral9
-            size: 24
+            size: Theme.size.icon.xl
             Layout.alignment: Qt.AlignVCenter
         }
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 2
+            spacing: Theme.space.xxs
             CoreText {
                 Layout.fillWidth: true
                 text: root.title

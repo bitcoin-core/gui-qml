@@ -17,7 +17,7 @@ Page {
     signal peerDisconnected(int nodeId)
 
     property PeerDetailsModel details
-    property bool compact: width <= SizeClass.compactWidthMax
+    property bool compact: SizeClass.isCompact(width)
     property Item popupParent: null
     property int sectionIndex: 0
     property var pendingBanTarget: null
@@ -25,7 +25,7 @@ Page {
     property int pendingBanDuration: 3600
     property string pendingBanLabel: qsTr("1 hour")
     property real maximumContentWidth: 840
-    property real contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
+    property real contentHorizontalPadding: Theme.space.pagePadding(width)
 
     readonly property var informationRows: [
         { label: qsTr("Address"), value: available(details ? details.address : ""), mono: true },
@@ -348,7 +348,7 @@ Page {
             property var rows: parent.rows
             implicitHeight: tableColumn.implicitHeight
             color: Theme.color.neutral1
-            radius: 12
+            radius: Theme.radius.card
             border.width: 0
             clip: true
             // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.

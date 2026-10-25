@@ -17,8 +17,10 @@ Item {
     property bool showGradientBorder: true
     property int surfaceLevel: 0
     property int rowSpacing: 0
-    property int sectionSpacing: 8
-    property int cornerRadius: 16
+    property int sectionSpacing: Theme.space.m
+    property int cornerRadius: Theme.radius.card
+    // Inset for custom layouts placed in the card, matching FormRow's padding.
+    readonly property int contentInset: Theme.space.cardInset
     property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
     property var titleTextStyle: Theme.text.subheading
     property var descriptionTextStyle: Theme.text.caption
@@ -36,14 +38,14 @@ Item {
             id: sectionHeader
             visible: root.title.length > 0 || root.description.length > 0 || headerLoader.active
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
-            spacing: 2
+            Layout.leftMargin: Theme.space.xs
+            Layout.rightMargin: Theme.space.xs
+            spacing: Theme.space.xxs
 
             RowLayout {
                 visible: root.title.length > 0 || headerLoader.active
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: Theme.space.m
 
                 CoreText {
                     Layout.fillWidth: true
@@ -97,7 +99,8 @@ Item {
             }
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
 
             ColumnLayout {
@@ -113,8 +116,8 @@ Item {
             objectName: root.objectName.length > 0 ? root.objectName + "Footer" : ""
             visible: root.footerText.length > 0
             Layout.fillWidth: true
-            Layout.leftMargin: 4
-            Layout.rightMargin: 4
+            Layout.leftMargin: Theme.space.xs
+            Layout.rightMargin: Theme.space.xs
             text: root.footerText
             color: Theme.color.neutral7
             font: root.footerTextStyle.font

@@ -24,14 +24,15 @@ Button {
     hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     padding: 0
-    scale: enabled && down ? 0.95 : 1.0
+    scale: enabled && down ? Theme.motion.pressScale : 1
     Accessible.name: qsTr("Close")
     Accessible.role: Accessible.Button
 
     Behavior on scale {
+        enabled: Theme.motion.animated
         NumberAnimation {
-            duration: 100
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fast
+            easing.type: Theme.motion.easing.enter
         }
     }
 
@@ -59,7 +60,8 @@ Button {
                 : root.backgroundColor
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         SurfaceGradientBorder {

@@ -9,7 +9,7 @@ Item {
     id: root
 
     property int thickness: 1
-    property int verticalMargin: 6
+    property int verticalMargin: Theme.space.s
     property int horizontalInset: 10
 
     Layout.fillWidth: true

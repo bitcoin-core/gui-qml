@@ -15,6 +15,17 @@ TestCase {
     width: 200
     height: 100
 
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Component {
         id: tooltipComponent
         Tooltip {
@@ -61,7 +72,7 @@ TestCase {
 
         tooltip.shown = true
         tooltip.shown = false
-        wait(100)
+        wait(Theme.motion.tooltipDelay + 50)
         compare(tooltip.visible, false)
     }
 

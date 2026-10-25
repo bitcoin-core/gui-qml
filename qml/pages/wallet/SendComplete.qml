@@ -29,6 +29,12 @@ Page {
         badgeEntrance.start()
         textEntrance.start()
         buttonsEntrance.start()
+        // Under reduced motion everything appears at once, without the staged entrance.
+        if (Theme.motion.reduced) {
+            badgeEntrance.complete()
+            textEntrance.complete()
+            buttonsEntrance.complete()
+        }
     }
 
     ColumnLayout {
@@ -125,7 +131,7 @@ Page {
             id: actions
             Layout.fillWidth: true
             Layout.topMargin: 32
-            columns: width < 340 ? 1 : 2
+            columns: width < SizeClass.stackColumnsMax ? 1 : 2
             columnSpacing: 12
             rowSpacing: 12
             opacity: 0

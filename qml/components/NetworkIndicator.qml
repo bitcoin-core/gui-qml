@@ -19,10 +19,10 @@ Control {
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
     property int textSize: 15
-    topPadding: 2
-    bottomPadding: 2
-    leftPadding: 7
-    rightPadding: 7
+    topPadding: Theme.space.xxs
+    bottomPadding: Theme.space.xxs
+    leftPadding: Theme.space.m
+    rightPadding: Theme.space.m
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
@@ -44,7 +44,8 @@ Control {
         radius: 2
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
     states: [

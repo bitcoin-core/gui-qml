@@ -18,6 +18,18 @@ TestCase {
     height: 480
     visible: true
 
+    property string motionMode: ""
+
+    // Tests the digit roll and copy feedback, so motion stays on.
+    function init() {
+        motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Item {
         id: host
         width: parent.width
@@ -141,17 +153,28 @@ TestCase {
         }
     }
 
-    function test_summary_animates_both_directions() {
+    function test_summary_shows_new_unit_without_rolling() {
         optionsModel.displayUnit = BitcoinAmount.SAT
         const summary = createTemporaryObject(animatedSummaryComponent, host)
         verify(waitForItemPolished(summary))
         const label = findObject(summary, "transactionSummaryAmount")
         for (const unit of [BitcoinAmount.BTC, BitcoinAmount.SAT]) {
             optionsModel.displayUnit = unit
-            tryCompare(label, "animating", true)
-            tryCompare(label, "animating", false)
-            verify(waitForItemPolished(summary))
+            tryCompare(label, "displayText", unit === BitcoinAmount.BTC ? "0.00012300" : "12,300")
+            compare(label.animating, false)
         }
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_does_not_roll_under_reduced_motion() {
+        Theme.motion.mode = "reduced"
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        compare(label.rollsUnitChanges, false)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "displayText", "12345678 sats")
+        compare(label.animating, false)
+        optionsModel.displayUnit = BitcoinAmount.BTC
     }
 
     function test_amountDisplayLabel_animates_unit_switch_only() {
@@ -363,10 +386,7 @@ TestCase {
         compare(label.surfaceLevel, 1)
         compare(label.textAlignment, Text.AlignLeft)
         const valueText = findObject(label, "referenceAddressLabelValue")
-        const copiedStatusText = findObject(label, "referenceAddressLabelCopiedStatusText")
         verify(valueText !== null)
-        verify(copiedStatusText !== null)
-        compare(copiedStatusText.font.pixelSize, label.textStyle.font.pixelSize)
         label.address = "bc1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv"
         tryVerify(function() { return valueText.paintedHeight > label.textStyle.lineHeight })
         compare(valueText.wrapMode, Text.WordWrap)
@@ -417,6 +437,15 @@ TestCase {
         mouseClick(label, label.width / 2, label.height / 2)
         compare(copiedText, label.address)
         compare(label.showCopiedStatus, true)
+        // The address fades out and "Copied" takes its place for a moment.
+        const copiedRow = findObject(label, "referenceAddressLabelCopiedStatus")
+        const valueText = findObject(label, "referenceAddressLabelValue")
+        verify(copiedRow !== null)
+        tryCompare(copiedRow, "opacity", 1)
+        tryCompare(valueText, "opacity", 0)
+        tryCompare(label, "showCopiedStatus", false, 3000)
+        tryCompare(copiedRow, "opacity", 0)
+        tryCompare(valueText, "opacity", 1)
     }
 
     function test_row_uses_display_amount_and_emits_actions() {
