@@ -59,7 +59,7 @@ TestCase {
         verify(modal !== null)
         modal.open()
         tryCompare(modal, "opened", true)
-        compare(modal.width, 768)
+        compare(modal.width, 760)
         compare(modal.height, 625)
         mouseClick(findChild(modal, "walletTypeRegular"))
         tryCompare(modal.flow.currentItem, "objectName", "createWalletFormPage")

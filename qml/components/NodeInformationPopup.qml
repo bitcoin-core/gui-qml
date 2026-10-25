@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "nodeInformationPopup"
 
@@ -17,52 +17,26 @@ Popup {
     readonly property string firstInformationValue: rows.length > 0 ? rows[0].value : ""
     readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueLineCount : 0
     readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
-    readonly property int contentMargin: 28
 
     onAboutToShow: rows = nodeModel.nodeInformationRows()
 
-    modal: true
-    padding: 0
-    anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 760) : 760
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 560)
-    implicitHeight: Math.min(columnLayout.implicitHeight, 560)
+    title: qsTr("Node information")
+    implicitWidth: 760
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: Theme.radius.popup
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
-    }
+    contentItem: ColumnLayout {
+        spacing: Theme.space.xl
 
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
-        spacing: 0
-
-        CoreText {
+        DialogHeader {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            text: qsTr("Node information")
-            bold: true
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            title: root.title
+            closeButtonObjectName: "nodeInformationCloseButton"
+            onCloseRequested: root.close()
         }
-
-        Separator { Layout.fillWidth: true }
 
         ScrollView {
             id: informationScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.contentMargin
             contentWidth: availableWidth
             clip: true
 
@@ -115,16 +89,6 @@ Popup {
                     }
                 }
             }
-        }
-
-        ContinueButton {
-            objectName: "nodeInformationCloseButton"
-            Layout.fillWidth: true
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            Layout.bottomMargin: root.contentMargin
-            text: qsTr("OK")
-            onClicked: root.close()
         }
     }
 }

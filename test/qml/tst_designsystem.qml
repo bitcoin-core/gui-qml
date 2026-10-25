@@ -55,7 +55,7 @@ TestCase {
         "designSystemInfoBanner", "designSystemSettingsRestartNotice", "designSystemToastBanner",
         "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemConfirmationPill", "designSystemTooltip",
         "designSystemSkeleton", "designSystemSpinningIndicator",
-        "designSystemContextMenu", "designSystemAlertPopup",
+        "designSystemContextMenu", "designSystemAlertPopup", "designSystemDialogPopup",
         "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemQRImage"
     ]
 
@@ -249,7 +249,12 @@ TestCase {
         const alerts = [
             ["designSystemNeutralAlertButton", "designSystemNeutralAlert"],
             ["designSystemDestructiveAlertButton", "designSystemDestructiveAlert"],
-            ["designSystemLongAlertButton", "designSystemLongAlert"]
+            ["designSystemLongAlertButton", "designSystemLongAlert"],
+            ["designSystemSuccessAlertButton", "designSystemSuccessAlert"],
+            ["designSystemErrorAlertButton", "designSystemErrorAlert"],
+            ["designSystemInputAlertButton", "designSystemInputAlert"],
+            ["designSystemFeatureModalButton", "designSystemFeatureModal"],
+            ["designSystemSheetButton", "designSystemSheet"]
         ]
         for (const [buttonName, alertName] of alerts) {
             const alert = findChild(page, alertName)
@@ -259,6 +264,14 @@ TestCase {
             alert.close()
             tryCompare(alert, "visible", false)
         }
+
+        const longAlert = findChild(page, "designSystemLongAlert")
+        findChild(page, "designSystemLongAlertButton").clicked()
+        tryCompare(longAlert, "opened", true)
+        verify(longAlert.height <= longAlert.maximumHeight)
+        verify(findChild(longAlert.contentItem, "alertMessageArea").interactive)
+        longAlert.close()
+        tryCompare(longAlert, "visible", false)
     }
 
     function isFocusIndicator(item) {

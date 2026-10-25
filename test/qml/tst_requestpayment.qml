@@ -899,8 +899,7 @@ TestCase {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "1").editingFinished()
         const card = createRequest(page)
-        testWalletModel.removeReceiveRequestResult = false
-        verify(!card.deleteRequest())
+        card.actionErrorText = "The QR code could not be saved. Please try again."
         const error = card.errorText
         verify(error.length > 0)
         editField(card, "requestPaymentAmountInput", "1.5").editingFinished()
@@ -936,6 +935,10 @@ TestCase {
         verify(findChild(card, "requestPaymentCopyQRMenuButton").visible)
         verify(findChild(card, "requestPaymentSaveQRMenuButton").visible)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        verify(page.requestModal.opened)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
         tryCompare(page.requestModal, "visible", false)
         compare(testWalletModel.lastRemovedRequestId, requestId)
         compare(card.request.id, "")
@@ -951,10 +954,13 @@ TestCase {
         findChild(card, "paymentRequestMoreButton").clicked()
         tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
         findChild(card, "requestPaymentDeleteMenuButton").clicked()
+        const confirmation = findChild(card, "requestPaymentDeleteConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(findChild(card, "requestPaymentDeleteConfirmationError"), "opened", true)
         verify(page.requestModal.opened)
         compare(card.request.id, requestId)
         compare(testWalletModel.lastRemovedRequestId, "")
-        verify(card.errorText.length > 0)
     }
 
     function test_history_button_requests_navigation() {

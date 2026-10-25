@@ -114,7 +114,6 @@ Item {
             NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
         }
         buttonSize: root.closeButtonSize
-        backgroundColor: root.surfaceLevel > 0 ? Theme.color.surface(root.surfaceLevel + 1) : Theme.color.background
         onClicked: root.closeClicked()
     }
 }

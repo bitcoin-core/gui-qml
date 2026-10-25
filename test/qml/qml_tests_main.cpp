@@ -2671,6 +2671,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString runtimeDialogIcon MEMBER m_runtime_dialog_icon NOTIFY runtimeDialogChanged)
     Q_PROPERTY(unsigned int runtimeDialogButtons MEMBER m_runtime_dialog_buttons NOTIFY runtimeDialogChanged)
     Q_PROPERTY(bool runtimeDialogQuestion MEMBER m_runtime_dialog_question NOTIFY runtimeDialogChanged)
+    Q_PROPERTY(unsigned int lastRuntimeDialogAnswer MEMBER m_last_runtime_dialog_answer NOTIFY runtimeDialogChanged)
     Q_PROPERTY(int blockTipHeight MEMBER m_block_tip_height NOTIFY blockTipHeightChanged)
     Q_PROPERTY(int mempoolTransactionCount MEMBER m_mempool_transaction_count NOTIFY mempoolInfoChanged)
     Q_PROPERTY(double mempoolUsageMB MEMBER m_mempool_usage_mb NOTIFY mempoolInfoChanged)
@@ -2710,6 +2711,7 @@ public:
     QString m_runtime_dialog_icon{QStringLiteral("image://images/info-filled")};
     unsigned int m_runtime_dialog_buttons{0};
     bool m_runtime_dialog_question{false};
+    unsigned int m_last_runtime_dialog_answer{0};
     int m_block_tip_height{0};
     int m_mempool_transaction_count{0};
     double m_mempool_usage_mb{0.0};
@@ -2735,7 +2737,7 @@ public:
     Q_INVOKABLE void requestShutdown() { Q_EMIT requestedShutdown(); }
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button)
     {
-        Q_UNUSED(button);
+        m_last_runtime_dialog_answer = button;
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }

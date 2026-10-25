@@ -132,7 +132,6 @@ Item {
         width: parent.width
         surfaceLevel: root.modalView ? 1 : 0
         buttonSidePadding: SizeClass.isCompact(width) ? 16 : 24
-        closeButtonSize: CloseButton.Large
         visible: root.currentItem && root.currentItem.usesSharedNavigation === true
         height: visible ? implicitHeight : 0
         title: visible ? root.currentItem.title : ""

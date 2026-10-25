@@ -45,6 +45,12 @@ Page {
     signal back()
     signal transactionSent(string txid)
 
+    // The review is a full-window sheet: Escape goes back like its close button.
+    Keys.onEscapePressed: function(event) {
+        if (!root.sending) root.back()
+        event.accepted = true
+    }
+
     function focusInitialControl() {
         reviewCloseButton.forceActiveFocus(Qt.TabFocusReason)
     }
@@ -126,8 +132,6 @@ Page {
         rightItem: CloseButton {
             id: reviewCloseButton
             objectName: "sendTransactionReviewCloseButton"
-            size: 45
-            iconSize: 15
             onClicked: root.back()
         }
     }
@@ -375,7 +379,6 @@ Page {
     WalletPassphrasePopup {
         id: sendPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to send this transaction.")
         confirmText: qsTr("Unlock and send")

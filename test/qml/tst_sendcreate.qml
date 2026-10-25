@@ -185,8 +185,8 @@ TestCase {
         verify(reviewTitle !== null)
         verify(closeButton !== null)
         compare(reviewTitle.text, "Review Transaction")
-        compare(closeButton.size, 45)
-        compare(closeButton.iconSize, 15)
+        compare(closeButton.size, 30)
+        compare(closeButton.iconSize, 10)
         const summary = findChild(popup.contentItem, "sendTransactionReviewSummary")
         compare(summary.amount, testWalletTransaction.total)
         const icon = findChild(summary, "sendTransactionReviewIcon")
@@ -565,6 +565,24 @@ TestCase {
         compare(testSendRecipient.label, "")
         compare(sendPage.paymentRequestStatus, "Payment request imported from clipboard")
         compare(sendPage.paymentRequestIsError, false)
+    }
+
+    function test_send_uri_import_dialog_focuses_field_and_applies_on_return() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+        sendPage.openPaymentRequestImport()
+        const popup = findChild(sendPage, "sendUriImportPopup")
+        tryCompare(popup, "opened", true)
+        const field = findChild(popup.contentItem, "sendUriImportInput")
+        tryCompare(field, "activeFocus", true)
+        compare(findChild(popup.contentItem, "sendUriImportApplyButton").enabled, false)
+
+        field.text = "bitcoin:bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9?amount=0.01000000"
+        keyClick(Qt.Key_Return)
+        tryCompare(popup, "opened", false)
+        compare(testSendRecipient.amount.display, "0.01000000")
+        compare(sendPage.paymentRequestStatus, "Payment request imported from manual entry")
     }
 
     function test_send_payment_uri_paste_applies_from_each_recipient_field_data() {
@@ -1001,6 +1019,10 @@ TestCase {
         keyClick(Qt.Key_A, Qt.ControlModifier)
         keyClick("x")
         compare(addressInput.text, originalAddress)
+
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "opened", false)
+        tryCompare(reviewButton, "activeFocus", true)
     }
 
     function test_locked_coin_confirmation_uses_identity_after_refresh() {

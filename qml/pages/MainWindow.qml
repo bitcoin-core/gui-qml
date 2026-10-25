@@ -210,11 +210,11 @@ ApplicationWindow {
         onActivityRequested: appWindow.routeToShell("openActivity")
         onSendRequested: appWindow.routeToShell("openSend")
         onReceiveRequested: appWindow.routeToShell("openReceive")
-        onInformationRequested: menuInformationPopup.open()
+        onInformationRequested: appWindow.openNodeInformation()
         onConsoleRequested: appWindow.routeToShell("openConsole")
         onNetworkTrafficRequested: appWindow.routeToShell("openNetworkTraffic")
         onPeersRequested: appWindow.routeToShell("openPeers")
-        onRpcDocumentationRequested: Qt.openUrlExternally("https://bitcoincore.org/en/doc/")
+        onRpcDocumentationRequested: rpcDocumentationLinkPopup.openLink("https://bitcoincore.org/en/doc/")
         onAboutRequested: appWindow.openSettings("about")
     }
 
@@ -323,9 +323,30 @@ ApplicationWindow {
         parent: Overlay.overlay
     }
 
+    // One of each for the whole window: the menu bar and every
+    // NodeStatusActions open these.
     NodeInformationPopup {
-        id: menuInformationPopup
+        id: nodeInformationPopup
         parent: Overlay.overlay
+    }
+
+    NodeWarningsPopup {
+        id: nodeWarningsPopup
+        parent: Overlay.overlay
+    }
+
+    ExternalPopup {
+        id: rpcDocumentationLinkPopup
+        objectName: "rpcDocumentationLinkPopup"
+        parent: Overlay.overlay
+    }
+
+    function openNodeInformation() {
+        nodeInformationPopup.open()
+    }
+
+    function openNodeWarnings() {
+        nodeWarningsPopup.open()
     }
 
     Connections {
@@ -357,6 +378,7 @@ ApplicationWindow {
 
     WalletCreationModal {
         id: walletCreationModal
+        parent: Overlay.overlay
         onFinished: function(openActivity) {
             if (openActivity) appWindow.routeToShell("openActivity")
         }

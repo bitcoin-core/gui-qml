@@ -203,6 +203,28 @@ bool InitErrorMessageBox(
     return false;
 }
 
+// Shows a startup error as an alert inside a window that is already open (the
+// onboarding window) and waits until it is dismissed.
+bool StartupErrorInWindow(
+    QQuickWindow& window,
+    const bilingual_str& message,
+    QmlQuitHandler& quit_handler)
+{
+    qCritical().noquote() << QString::fromStdString(message.original);
+    QQuickItem* content{window.contentItem()};
+    const bool content_enabled{content->isEnabled()};
+    content->setEnabled(true);
+    QEventLoop dialog_loop;
+    QObject::connect(&window, SIGNAL(startupErrorAcknowledged()), &dialog_loop, SLOT(quit()));
+    QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
+    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
+    QMetaObject::invokeMethod(&window, "showStartupError",
+                              Q_ARG(QVariant, QString::fromStdString(message.translated)));
+    if (!quit_handler.isQuitRequested()) dialog_loop.exec();
+    content->setEnabled(content_enabled);
+    return false;
+}
+
 void RecordStartupWarning(QStringList& startup_warnings, const bilingual_str& message)
 {
     const QString warning{QString::fromStdString(message.translated).trimmed()};
@@ -500,6 +522,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
     QStringList startup_warnings;
     bool startup_canceled{false};
+    // Set while the onboarding window is open, so errors show inside it.
+    QPointer<QQuickWindow> startup_error_window;
     btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
         [&](const bilingual_str& message, unsigned int style) {
             bool result{false};
@@ -507,8 +531,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 if (style & CClientUIInterface::ICON_WARNING) {
                     RecordStartupWarning(startup_warnings, message);
                 } else if (!startup_canceled && !quit_handler.isQuitRequested()) {
-                    result = InitErrorMessageBox(message, quit_handler,
-                                                 [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
+                    result = startup_error_window
+                        ? StartupErrorInWindow(*startup_error_window, message, quit_handler)
+                        : InitErrorMessageBox(message, quit_handler,
+                                              [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
                 }
             };
             if (QThread::currentThread() == app.thread()) {
@@ -669,6 +695,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         // The onboarding window stays visible until MainWindow is ready.
         // Its model owns the settings write, node preparation and worker cleanup.
         auto& context = pre_init_onboarding_context;
+        startup_error_window = context.window;
         QEventLoop preparation_loop;
         bool preparation_finished{false};
         QObject::connect(context.window, &QWindow::visibleChanged, &preparation_loop,
@@ -682,6 +709,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         });
         context.onboarding_options_model->prepareNode(gArgs, prepare_node);
         while (!preparation_finished) preparation_loop.exec();
+        startup_error_window.clear();
         if (startup_canceled || quit_handler.isQuitRequested()) return EXIT_SUCCESS;
     } else {
         // No window is visible, so retain the original synchronous startup path.

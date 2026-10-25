@@ -184,17 +184,21 @@ Pane {
                 root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
         })
     }
+    // Asks first; the request is deleted once the user confirms.
     function deleteRequest() {
         if (!wallet || !saved) return false
-        const requestId = request.id
-        if (!wallet.removeReceiveRequest(requestId)) {
-            actionErrorText = qsTr("The payment request could not be deleted. Please try again.")
-            return false
-        }
-        // Discard local edits so closing the modal cannot try to save a deleted request.
-        resetFields()
-        deleted(requestId)
+        deleteConfirmation.confirmDelete(wallet, request.id)
         return true
+    }
+
+    PaymentRequestDeleteConfirmation {
+        id: deleteConfirmation
+        objectName: "requestPaymentDeleteConfirmation"
+        onDeleted: function(requestId) {
+            // Discard local edits so closing the modal cannot try to save a deleted request.
+            root.resetFields()
+            root.deleted(requestId)
+        }
     }
 
     BitcoinAmount {
@@ -348,7 +352,6 @@ Pane {
             }
             CloseButton {
                 objectName: "paymentRequestModalClose"
-                iconColor: Theme.color.neutral7
                 Accessible.name: qsTr("Close payment request")
                 onClicked: root.closeRequested()
             }

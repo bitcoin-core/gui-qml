@@ -726,8 +726,8 @@ TestCase {
         const closeButtonBackground = findObject(details, "addressDetailsCloseButtonBackground")
         verify(closeButton !== null)
         verify(closeButtonBackground !== null)
-        compare(closeButtonBackground.color, Theme.color.neutral2)
-        compare(closeButtonBackground.radius, closeButtonBackground.width / 2)
+        compare(closeButtonBackground.color, Theme.color.surface2)
+        compare(closeButtonBackground.radius, closeButton.size / 2)
         if (closeButton !== null) {
             closeButton.clicked()
             verify(closed)

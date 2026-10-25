@@ -423,7 +423,7 @@ ColumnLayout {
     }
     ContextMenu {
         id: clearFiltersMenu; parent: Overlay.overlay; objectName: "coinBrowserClearFiltersMenu"
-        ContextMenuButton { text: qsTr("Clear filters"); role: ContextMenuButton.Destructive; onTriggered: { root.clearFilters(); clearFiltersMenu.close() } }
+        ContextMenuButton { text: qsTr("Clear filters"); onTriggered: { root.clearFilters(); clearFiltersMenu.close() } }
     }
     ContextMenu {
         id: coinContextMenu
@@ -446,7 +446,7 @@ ColumnLayout {
         // cleared by the actions rather than onClosed.
         AlertAction {
             text: qsTr("Cancel")
-            role: AlertAction.Neutral
+            role: AlertAction.Cancel
             buttonObjectName: "lockedCoinSelectionCancelButton"
             onTriggered: root.pendingLockedCoinId = ""
         }

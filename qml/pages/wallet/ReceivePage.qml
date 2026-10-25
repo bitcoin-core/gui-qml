@@ -193,6 +193,7 @@ Page {
     }
     PaymentRequestModal {
         id: requestModal
+        parent: Overlay.overlay
         wallet: root.wallet
         onClosed: {
             if (root.presentedRequest && root.request === root.presentedRequest) root.request.clear()
@@ -212,7 +213,6 @@ Page {
     WalletPassphrasePopup {
         id: passphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, parent ? parent.width - 32 : 420)
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
         titleText: qsTr("Enter wallet password")
         //: Explains why the wallet password is needed to prepare a payment request.

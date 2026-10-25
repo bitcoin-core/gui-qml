@@ -42,21 +42,12 @@ ColumnLayout {
 
     spacing: 0
 
-    RowLayout {
+    DialogHeader {
         Layout.fillWidth: true
-        Layout.bottomMargin: 22
-
-        Header {
-            Layout.fillWidth: true
-            header: qsTr("Address details")
-            headerBold: true
-            center: false
-        }
-
-        CloseButton {
-            objectName: "addressDetailsCloseButton"
-            onClicked: root.closeRequested()
-        }
+        Layout.bottomMargin: Theme.space.xl
+        title: qsTr("Address details")
+        closeButtonObjectName: "addressDetailsCloseButton"
+        onCloseRequested: root.closeRequested()
     }
 
     FormSection {

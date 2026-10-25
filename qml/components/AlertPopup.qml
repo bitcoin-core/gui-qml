@@ -9,14 +9,41 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
 
-    property string title: ""
+    enum Tone {
+        Default,
+        Success,
+        Warning,
+        Error
+    }
+
+    property string titleObjectName: "alertTitle"
     property string message: ""
     property string messageObjectName: "alertMessage"
-    property real verticalOffset: 0
+    property int messageTextFormat: Text.AutoText
+    property int messageWrapMode: Text.WordWrap
+    property int messageAlignment: Text.AlignHCenter
+    property int tone: AlertPopup.Default
+    // Success shows a check on a filled badge; other tones tint the icon.
+    property url iconSource: tone === AlertPopup.Success ? "image://images/check" : ""
+    readonly property color toneColor: tone === AlertPopup.Success ? Theme.color.success
+        : tone === AlertPopup.Warning ? Theme.color.warning
+        : tone === AlertPopup.Error ? Theme.color.danger
+        : Theme.color.neutral9
+    property string errorText: ""
+    property string errorTextObjectName: "alertErrorText"
+    // Extra controls between the message and the actions, such as a field.
+    property alias content: contentColumn.data
     default property alias actions: actionStore.data
+    // Replaces the declared actions, for actions built from data.
+    property var actionList: null
+    // Answered by Escape; defaults to the first Cancel or Neutral action.
+    property AlertAction escapeAction: null
+    // Answered by Return outside a button; defaults to the only Normal action,
+    // so Return never confirms a destructive action.
+    property AlertAction returnAction: null
 
     property var visibleActions: [defaultAction]
     readonly property real minimumActionWidth: {
@@ -34,53 +61,14 @@ Popup {
         font: Theme.text.buttonStrong.font
     }
 
-    modal: true
-    dim: true
-    focus: true
+    // Escape runs cancel() instead, which answers with the cancel action.
     closePolicy: Popup.NoAutoClose
+    closesOnPressOutside: false
+    surfaceObjectName: "alertPopupSurface"
     padding: 0
+    horizontalPadding: 0
     implicitWidth: Math.max(360, horizontalActionsWidth + 40)
-    width: parent ? Math.min(parent.width - 40, implicitWidth) : implicitWidth
     implicitHeight: columnLayout.implicitHeight
-    x: parent ? Math.round((parent.width - width) / 2) : 0
-    y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-
-    Overlay.modal: Rectangle {
-        objectName: "alertPopupDimmer"
-        color: Qt.rgba(0, 0, 0, 0.5)
-    }
-
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Theme.motion.fade(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            from: -Theme.motion.dialogOffset
-            to: 0
-            duration: Theme.motion.travel(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-    }
-
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            to: 0
-            duration: Theme.motion.fade(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            to: -Theme.motion.dialogOffset
-            duration: Theme.motion.travel(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-    }
 
     property Item actionStoreItem: Item {
         id: actionStore
@@ -89,39 +77,69 @@ Popup {
     property AlertAction defaultAction: AlertAction { text: qsTr("OK") }
 
     function refreshActions() {
-        visibleActions = actionStore.data.length > 0 ? actionStore.data : [defaultAction]
+        if (actionList && actionList.length > 0) {
+            visibleActions = actionList
+        } else {
+            // Children that aren't actions (such as Connections) also land here.
+            const declared = []
+            for (let i = 0; i < actionStore.data.length; ++i) {
+                if (actionStore.data[i].closesPopup !== undefined) declared.push(actionStore.data[i])
+            }
+            visibleActions = declared.length > 0 ? declared : [defaultAction]
+        }
     }
 
-    function cancel() {
+    function trigger(action) {
+        if (!action.enabled) return
+        if (action.closesPopup) close()
+        action.triggered()
+    }
+
+    function cancelAction() {
+        if (escapeAction) return escapeAction
         for (let i = 0; i < visibleActions.length; ++i) {
             const action = visibleActions[i]
             if (action.role === AlertAction.Cancel || action.role === AlertAction.Neutral) {
-                close()
-                action.triggered()
-                return
+                return action
             }
         }
-        close()
+        return null
+    }
+
+    function acceptAction() {
+        if (returnAction) return returnAction
+        let found = null
+        for (let i = 0; i < visibleActions.length; ++i) {
+            if (visibleActions[i].role !== AlertAction.Normal) continue
+            if (found) return null
+            found = visibleActions[i]
+        }
+        return found
+    }
+
+    function accept() {
+        if (busy || !opened) return
+        const window = contentItem ? contentItem.Window.window : null
+        const focused = window ? window.activeFocusItem : null
+        // Check boxes and switches ignore Return; it shouldn't submit past them.
+        if (focused && focused.autoRepeat !== undefined && focused.checkable !== undefined) return
+        const action = acceptAction()
+        if (action) trigger(action)
+    }
+
+    function cancel() {
+        if (busy) return
+        const action = cancelAction()
+        if (action) {
+            trigger(action)
+        } else if (dismissible) {
+            close()
+        }
     }
 
     Component.onCompleted: refreshActions()
-    onOpened: {
-        refreshActions()
-        columnLayout.forceActiveFocus()
-    }
-
-    background: Rectangle {
-        objectName: "alertPopupSurface"
-        color: Theme.color.neutral1
-        radius: Theme.radius.popup
-        border.color: Theme.color.neutral2
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            cornerRadius: parent.radius
-        }
-    }
+    onAboutToShow: refreshActions()
+    onActionListChanged: refreshActions()
 
     contentItem: ColumnLayout {
         id: columnLayout
@@ -133,11 +151,41 @@ Popup {
             root.cancel()
             event.accepted = true
         }
+        Keys.onReturnPressed: function(event) {
+            if (!event.isAutoRepeat) root.accept()
+            event.accepted = true
+        }
+        Keys.onEnterPressed: function(event) {
+            if (!event.isAutoRepeat) root.accept()
+            event.accepted = true
+        }
+
+        Rectangle {
+            objectName: "alertIconBadge"
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: Theme.space.xl
+            Layout.preferredWidth: 56
+            Layout.preferredHeight: 56
+            visible: root.iconSource.toString().length > 0
+            radius: width / 2
+            color: root.tone === AlertPopup.Success ? root.toneColor : "transparent"
+
+            Icon {
+                objectName: "alertIcon"
+                anchors.centerIn: parent
+                source: root.iconSource
+                color: root.tone === AlertPopup.Success ? Theme.color.accentForeground : root.toneColor
+                size: root.tone === AlertPopup.Success ? 28 : 32
+            }
+        }
 
         CoreText {
-            objectName: "alertTitle"
+            objectName: root.titleObjectName
+            readonly property bool belowIcon: root.iconSource.toString().length > 0
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
+            Layout.topMargin: belowIcon ? Theme.space.ml : Theme.space.xl
+            Layout.leftMargin: Theme.space.xl
+            Layout.rightMargin: Theme.space.xl
             text: root.title
             font: Theme.text.subtitle.font
             lineHeight: Theme.text.subtitle.lineHeight
@@ -145,24 +193,74 @@ Popup {
             color: Theme.color.neutral9
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
+            wrapMode: Text.WordWrap
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.topMargin: Theme.space.ml
+            Layout.leftMargin: Theme.space.xl
+            Layout.rightMargin: Theme.space.xl
+            Layout.bottomMargin: Theme.space.xl
+            spacing: Theme.space.ml
+
+            // Long messages scroll; the title and actions stay in view.
+            Flickable {
+                id: messageArea
+                objectName: "alertMessageArea"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredHeight: messageText.implicitHeight
+                visible: root.message.length > 0
+                contentWidth: width
+                contentHeight: messageText.implicitHeight
+                clip: true
+                interactive: contentHeight > height
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {
+                    policy: messageArea.interactive ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                }
+
+                CoreText {
+                    id: messageText
+                    objectName: root.messageObjectName
+                    width: messageArea.width
+                    text: root.message
+                    textFormat: root.messageTextFormat
+                    color: Theme.color.neutral8
+                    font: Theme.text.description.font
+                    lineHeight: Theme.text.description.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    wrapMode: root.messageWrapMode
+                    horizontalAlignment: root.messageAlignment
+                }
+            }
+
+            ColumnLayout {
+                id: contentColumn
+                Layout.fillWidth: true
+                visible: children.length > 0
+                spacing: Theme.space.ml
+            }
+
+            CoreText {
+                objectName: root.errorTextObjectName
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: root.errorText
+                color: Theme.color.danger
+                font: Theme.text.description.font
+                lineHeight: Theme.text.description.lineHeight
+                lineHeightMode: Text.FixedHeight
+                wrapMode: Text.WordWrap
+                horizontalAlignment: root.messageAlignment
+            }
         }
 
         Separator {
             Layout.fillWidth: true
             color: Theme.color.neutral2
-        }
-
-        CoreText {
-            objectName: root.messageObjectName
-            Layout.fillWidth: true
-            Layout.margins: Theme.space.xl
-            text: root.message
-            color: Theme.color.neutral8
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
         }
 
         // The action buttons live in a Flow positioner, not a RowLayout, on
@@ -176,6 +274,7 @@ Popup {
         Flow {
             id: actionRow
             Layout.fillWidth: true
+            Layout.topMargin: Theme.space.xl
             Layout.leftMargin: Theme.space.xl
             Layout.rightMargin: Theme.space.xl
             Layout.bottomMargin: Theme.space.xl
@@ -200,10 +299,7 @@ Popup {
                     height: Theme.size.controlLarge
 
                     function triggerAction() {
-                        if (alertAction.closesPopup) {
-                            root.close()
-                        }
-                        alertAction.triggered()
+                        root.trigger(alertAction)
                     }
 
                     NeutralButton {
@@ -211,6 +307,7 @@ Popup {
                         visible: actionDelegate.neutralAction
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text
+                        enabled: actionDelegate.alertAction.enabled
                         buttonSize: NeutralButton.Large
                         backgroundColor: Theme.color.neutral2
                         hoverBackgroundColor: Theme.color.neutral3
@@ -223,6 +320,7 @@ Popup {
                         visible: !actionDelegate.neutralAction
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text
+                        enabled: actionDelegate.alertAction.enabled
                         backgroundColor: actionDelegate.alertAction.role === AlertAction.Destructive
                             ? Theme.color.red : Theme.color.orange
                         backgroundHoverColor: actionDelegate.alertAction.role === AlertAction.Destructive

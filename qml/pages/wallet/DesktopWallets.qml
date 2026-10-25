@@ -441,7 +441,6 @@ Page {
     WalletMigrationPopup {
         id: migrationRequiredPopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPopup"
         errorTextObjectName: "walletMigrationErrorText"
         cancelButtonObjectName: "walletMigrationCancelButton"
@@ -458,7 +457,6 @@ Page {
     WalletPassphrasePopup {
         id: migrationPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         popupObjectName: "walletMigrationPassphrasePopup"
         passphraseFieldObjectName: "walletMigrationPassphraseField"
         errorTextObjectName: "walletMigrationPassphraseErrorText"
@@ -478,7 +476,6 @@ Page {
         id: loadErrorPopup
         objectName: "walletLoadErrorPopup"
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         title: qsTr("Failed to open wallet")
         messageObjectName: "walletLoadErrorPopupText"
 
@@ -492,7 +489,6 @@ Page {
         id: closeConfirmationPopup
         objectName: "walletCloseConfirmationPopup"
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         title: qsTr("Close wallet")
 
         property string walletName: ""

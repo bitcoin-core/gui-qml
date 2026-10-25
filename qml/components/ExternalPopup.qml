@@ -4,82 +4,35 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
+
 import "../controls"
 
-Popup {
-    id: externalConfirmPopup
-    property string link: ""
-    modal: true
-    padding: 0
-    anchors.centerIn: parent
+// Confirms opening a website in the browser. Every external link goes through it.
+AlertPopup {
+    id: root
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: Theme.radius.popup
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
+    property string link: ""
+
+    function openLink(url) {
+        link = url
+        open()
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 0
+    title: qsTr("Open link?")
+    message: qsTr("This opens the following website in your browser:\n%1").arg(root.link)
+    messageObjectName: "externalLinkMessage"
+    messageTextFormat: Text.PlainText
+    messageWrapMode: Text.WrapAtWordBoundaryOrAnywhere
 
-        CoreText {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 55
-            text: qsTr("External Link")
-            bold: true
-            font.pixelSize: 24
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
+    AlertAction {
+        text: qsTr("Cancel")
+        role: AlertAction.Cancel
+        buttonObjectName: "externalLinkCancelButton"
+    }
 
-        Separator {
-            Layout.fillWidth: true
-        }
-
-        Header {
-            Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 20
-            header: qsTr("Do you want to open the following website in your browser?")
-            headerBold: false
-            headerSize: 16
-            description: ("\"" + externalConfirmPopup.link + "\"")
-            descriptionMargin: 8
-            descriptionTextFormat: Text.PlainText
-        }
-
-        GridLayout {
-            Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 0
-            columns: AppMode.isDesktop ? 2 : 1
-            columnSpacing: 15
-            rowSpacing: 10
-
-            OutlineButton {
-                text: qsTr("Cancel")
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: externalConfirmPopup.close()
-            }
-
-            ContinueButton {
-                text: qsTr("Ok")
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: {
-                    Qt.openUrlExternally(externalConfirmPopup.link)
-                    externalConfirmPopup.close()
-                }
-            }
-        }
+    AlertAction {
+        text: qsTr("OK")
+        buttonObjectName: "externalLinkOpenButton"
+        onTriggered: Qt.openUrlExternally(root.link)
     }
 }

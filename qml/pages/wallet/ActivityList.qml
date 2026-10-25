@@ -89,7 +89,7 @@ PageStack {
         when: stackView.wallet !== null
     }
 
-    PaymentRequestModal { id: paymentRequestModal; wallet: stackView.wallet }
+    PaymentRequestModal { id: paymentRequestModal; parent: Overlay.overlay; wallet: stackView.wallet }
 
     initialItem: ActivityListPage {
         wallet: stackView.wallet

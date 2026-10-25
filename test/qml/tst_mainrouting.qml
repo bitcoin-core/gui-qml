@@ -90,7 +90,7 @@ TestCase {
         const actions = findChild(window, "desktopMenuActions")
         compare(actions.settings.enabled, false)
         compare(actions.exit.enabled, true)
-        const button = findChild(popup, "nodeFatalShutdownButton")
+        const button = findChild(popup.contentItem, "nodeFatalShutdownButton")
         verify(button.enabled)
         verify(waitForRendering(button))
         shutdownSpy.clear()
@@ -118,6 +118,24 @@ TestCase {
         verify(menuActions !== null)
         compare(menuActions.createWallet.visible, false)
         compare(menuActions.settings.enabled, true)
+    }
+
+    function test_node_status_actions_open_the_window_popups() {
+        const window = createMain(false)
+        const runner = findChild(window, "nodeRunner")
+        verify(runner !== null)
+        const popup = findChild(window, "nodeInformationPopup")
+        verify(popup !== null)
+        findChild(runner, "nodeInformationButton").clicked()
+        tryCompare(popup, "opened", true)
+        compare(popup.parent, window.Overlay.overlay)
+        popup.close()
+        tryCompare(popup, "opened", false)
+
+        nodeModel.setWarningsForTest(["Clock skew warning"])
+        findChild(runner, "nodeWarningsButton").clicked()
+        tryCompare(findChild(window, "nodeWarningsPopup"), "opened", true)
+        nodeModel.setWarningsForTest([])
     }
 
     function test_add_wallet_menu_command_opens_wallet_wizard() {

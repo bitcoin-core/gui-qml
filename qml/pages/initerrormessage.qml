@@ -4,35 +4,40 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
+import "../components"
 import "../controls"
 
+// Shown for errors before any other window exists, so it hosts the alert in
+// its own window.
 ApplicationWindow {
     id: root
+    // The engine sets the `message` context property. AlertPopup has its own
+    // `message`, which would bind to itself.
+    readonly property string errorMessage: message
+
     visible: true
-    title: "Bitcoin Core App"
+    title: qsTr("Bitcoin Core App")
+    width: 500
+    height: Math.max(250, errorAlert.implicitHeight + 80)
     minimumWidth: 500
     minimumHeight: 250
     color: Theme.color.background
-    ColumnLayout {
-        spacing: 30
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: 340
 
-        Header {
-            Layout.topMargin: 30
-            Layout.fillWidth: true
-            headerBold: true
-            header: qsTr("There was an issue starting up.")
-            headerSize: 21
-            description: message
-            descriptionMargin: 3
-        }
-        OutlineButton {
-            Layout.alignment: Qt.AlignCenter
+    AlertPopup {
+        id: errorAlert
+        objectName: "initErrorPopup"
+        dim: false
+        title: qsTr("There was an issue starting up.")
+        message: root.errorMessage
+        messageObjectName: "initErrorMessage"
+        messageTextFormat: Text.PlainText
+
+        AlertAction {
             text: qsTr("Close")
-            onClicked: Qt.quit()
+            buttonObjectName: "initErrorCloseButton"
         }
+
+        onClosed: Qt.quit()
+        Component.onCompleted: open()
     }
 }

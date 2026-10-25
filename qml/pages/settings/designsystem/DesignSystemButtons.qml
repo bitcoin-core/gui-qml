@@ -172,6 +172,7 @@ DesignSystemSection {
         objectName: "designSystemCloseButton"
         Layout.fillWidth: true
         name: "CloseButton"
+        note: "Medium (28 target, 12 artwork) closes every modal and banner. Large (40/14) is only for a full-window flow's navigation bar."
 
         DesignSystemState {
             label: "Medium"

@@ -8,6 +8,8 @@
         <file>components/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
         <file>components/DebugLogItemRow.qml</file>
+        <file>components/DialogHeader.qml</file>
+        <file>components/DialogPopup.qml</file>
         <file>components/DebugLogTitlesHeader.qml</file>
         <file>components/DesktopMenuActions.qml</file>
         <file>components/DesktopNativeMenuBar.qml</file>
@@ -40,6 +42,7 @@
         <file>components/ToastBanner.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/PaymentRequestCard.qml</file>
+        <file>components/PaymentRequestDeleteConfirmation.qml</file>
         <file>components/PaymentRequestModal.qml</file>
         <file>components/OnboardingSettingsPopup.qml</file>
         <file>components/WalletCreationModal.qml</file>

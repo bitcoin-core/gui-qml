@@ -522,6 +522,8 @@ def run_test():
         gui.click("paymentRequestMoreButton")
         gui.wait_for_property("paymentRequestMoreMenu", "opened", True)
         gui.click("requestPaymentDeleteMenuButton")
+        gui.wait_for_property("requestPaymentDeleteConfirmation", "opened", True)
+        gui.click("deletePaymentRequestConfirmButton")
         gui.wait_for_property("paymentRequestModal", "visible", False)
         gui.wait_for_property("requestHistoryCount", "count", count - 1)
         gui.wait_for_property("activityTabButton", "checked", True)

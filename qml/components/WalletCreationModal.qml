@@ -7,7 +7,7 @@ import QtQuick.Controls 2.15
 import "../controls"
 import "../pages/wallet"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "walletCreationModal"
     signal finished(bool openActivity)
@@ -20,40 +20,18 @@ Popup {
 
     onClosed: onboardingEntry = false
 
-    parent: Overlay.overlay
-    width: Math.min(880, parent ? parent.width - 32 : 880)
-    height: Math.min(820, parent ? parent.height - 40 : 820)
-    x: parent ? (parent.width - width) / 2 : 0
-    y: parent ? (parent.height - height) / 2 : 0
+    title: qsTr("Add wallet")
+    sheet: true
+    implicitWidth: 880
+    implicitHeight: 820
     padding: 0
-    modal: true
-    dim: true
-    focus: true
+    horizontalPadding: 0
+    closesOnPressOutside: false
     readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
-    closePolicy: flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
+    busy: !!flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
             || flow.currentItem.objectName === "externalWalletCreatedPage")))
-        ? Popup.NoAutoClose : Popup.CloseOnEscape
-
-    background: Rectangle {
-        radius: Theme.radius.sheet
-        color: Theme.color.neutral1
-        border.width: 1
-        border.color: Theme.color.neutral3
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            cornerRadius: parent.radius
-        }
-    }
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.6)
-        Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
-    }
-    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.moderate); easing.type: Theme.motion.easing.enter } }
-    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.motion.normal; easing.type: Theme.motion.easing.exit } }
 
     contentItem: Loader {
         clip: true

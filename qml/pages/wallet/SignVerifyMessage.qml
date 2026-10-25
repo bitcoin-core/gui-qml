@@ -308,7 +308,6 @@ SettingsPage {
     WalletPassphrasePopup {
         id: signPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         popupObjectName: "signMessagePassphrasePopup"
         passphraseFieldObjectName: "signMessagePassphraseField"
         errorTextObjectName: "signMessagePassphraseErrorText"

@@ -92,7 +92,9 @@ Page {
                         required property var modelData
                         text: qsTr("Show in %1").arg(modelData.host)
                         iconSource: "image://images/export"
-                        onTriggered: Qt.openUrlExternally(modelData.url)
+                        objectName: "transactionExplorerLink_" + index
+                        required property int index
+                        onTriggered: explorerLinkPopup.openLink(modelData.url)
                     }
                 }
             }
@@ -103,7 +105,13 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
+    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; parent: Overlay.overlay; wallet: root.wallet }
+
+    // The explorer receives the transaction ID, so opening it is confirmed.
+    ExternalPopup {
+        id: explorerLinkPopup
+        objectName: "transactionExplorerLinkPopup"
+    }
 
     ScrollView {
         id: scroll
@@ -244,6 +252,7 @@ Page {
 
     SpeedUpOverlay {
         id: speedUpOverlay
+        parent: Overlay.overlay
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
         onBumpSucceeded: {
@@ -254,6 +263,7 @@ Page {
 
     SpeedUpComplete {
         id: speedUpComplete
+        parent: Overlay.overlay
         onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
         onDone: close()
         onViewNewTransaction: function(txid) {

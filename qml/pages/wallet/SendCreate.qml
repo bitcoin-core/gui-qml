@@ -377,6 +377,7 @@ PageStack {
         AlertPopup {
             id: unsupportedPsbtPopup
             objectName: "unsupportedPsbtPopup"
+            parent: Overlay.overlay
             title: qsTr("Not supported")
             messageObjectName: "unsupportedPsbtPopupMessage"
 
@@ -391,8 +392,9 @@ PageStack {
         AlertPopup {
             id: knownPsbtTxPopup
             objectName: "knownPsbtTxPopup"
+            parent: Overlay.overlay
             title: qsTr("Cannot import transaction")
-            message: qsTr("This transaction is already in your wallet spent history. View it in Activity")
+            message: qsTr("This transaction is already in your wallet spent history. View it in Activity.")
             messageObjectName: "knownPsbtTxPopupMessage"
 
             property string txid: ""
@@ -400,15 +402,15 @@ PageStack {
             onClosed: root.wallet.importedPsbt.clear()
 
             AlertAction {
-                text: qsTr("View transaction")
-                buttonObjectName: "knownPsbtTxViewButton"
-                onTriggered: root.viewTransactionInActivity(knownPsbtTxPopup.txid)
-            }
-
-            AlertAction {
                 text: qsTr("Close")
                 role: AlertAction.Cancel
                 buttonObjectName: "knownPsbtTxCloseButton"
+            }
+
+            AlertAction {
+                text: qsTr("View transaction")
+                buttonObjectName: "knownPsbtTxViewButton"
+                onTriggered: root.viewTransactionInActivity(knownPsbtTxPopup.txid)
             }
         }
 
@@ -683,76 +685,38 @@ PageStack {
         }
 
         // Manual URI entry popup
-        Popup {
+        AlertPopup {
             id: sendUriImportPopup
             objectName: "sendUriImportPopup"
-            anchors.centerIn: Overlay.overlay
-            width: Math.min(sendPage.width - 40, 420)
-            modal: true
-            dim: true
-            padding: 20
+            parent: Overlay.overlay
+            title: qsTr("Open payment request")
+            initialFocusItem: uriImportInput
+            implicitWidth: Math.max(420, horizontalActionsWidth + 40)
 
-            Overlay.modal: Rectangle {
-                color: Qt.rgba(0, 0, 0, 0.5)
+            content: CoreTextField {
+                id: uriImportInput
+                objectName: "sendUriImportInput"
+                Layout.fillWidth: true
+                placeholderText: qsTr("bitcoin:address?amount=…")
+                background: Rectangle {
+                    color: Theme.color.neutral2
+                    radius: Theme.radius.field
+                    border.width: 0
+                }
+                onAccepted: if (uriImportApply.enabled) sendUriImportPopup.trigger(uriImportApply)
             }
 
-            background: Rectangle {
-                color: Theme.color.neutral1
-                border.color: Theme.color.neutral2
-                radius: Theme.radius.popup
-                border.width: 1
-                SurfaceGradientBorder {
-                    anchors.fill: parent
-                    surfaceColor: parent.color
-                    cornerRadius: parent.radius
-                }
+            AlertAction {
+                text: qsTr("Cancel")
+                role: AlertAction.Cancel
             }
 
-            contentItem: ColumnLayout {
-                spacing: 12
-
-                CoreText {
-                    text: qsTr("Open payment request")
-                    font: Theme.text.subheading.font
-                    color: Theme.color.neutral9
-                    Layout.fillWidth: true
-                }
-
-                CoreTextField {
-                    id: uriImportInput
-                    objectName: "sendUriImportInput"
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("bitcoin:address?amount=…")
-                    background: Rectangle {
-                        color: Theme.color.neutral2
-                        radius: Theme.radius.field
-                        border.width: 0
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    OutlineButton {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 0
-                        text: qsTr("Cancel")
-                        onClicked: sendUriImportPopup.close()
-                    }
-
-                    ContinueButton {
-                        objectName: "sendUriImportApplyButton"
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 0
-                        text: qsTr("Apply")
-                        enabled: uriImportInput.text.trim().length > 0
-                        onClicked: {
-                            sendUriImportPopup.close()
-                            sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
-                        }
-                    }
-                }
+            AlertAction {
+                id: uriImportApply
+                text: qsTr("Apply")
+                buttonObjectName: "sendUriImportApplyButton"
+                enabled: uriImportInput.text.trim().length > 0
+                onTriggered: sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
             }
         }
 
@@ -1175,12 +1139,11 @@ PageStack {
         }
     }
 
-    SendCoinSelection { id: coinSelectionPopup; wallet: root.wallet }
+    SendCoinSelection { id: coinSelectionPopup; parent: Overlay.overlay; wallet: root.wallet }
 
     WalletPassphrasePopup {
         id: reviewPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(480, root.width - 40)
         popupObjectName: "reviewPassphrasePopup"
         passphraseFieldObjectName: "reviewPassphraseField"
         errorTextObjectName: "reviewPassphraseErrorText"

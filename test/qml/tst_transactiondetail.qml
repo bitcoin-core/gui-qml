@@ -227,7 +227,7 @@ TestCase {
         verify(overlay.readyToConfirm)
         compare(overlay.verticalOffset, 0)
         compare(overlay.background.color, Theme.color.neutral1)
-        compare(overlay.background.border.color, Theme.color.neutral3)
+        compare(overlay.background.border.color, Theme.color.surface2)
         compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.neutral2)
         compare(findChild(overlay.contentItem, "speedUpOriginalFeeRow").value, testBumpModel.oldFee)
         compare(findChild(overlay.contentItem, "speedUpNewFeeRow").value, testBumpModel.newFee)
@@ -280,6 +280,22 @@ TestCase {
         verify(waitForRendering(page))
         compare(findChild(page, "transactionOverviewGrid").columns, 2)
         compare(findChild(page, "transactionDetailsGrid").columns, 2)
+    }
+    function test_explorer_link_asks_before_opening() {
+        optionsModel.thirdPartyTransactionUrls = "https://example.com/tx/%s"
+        const page = createDetail()
+        mouseClick(findChild(page, "transactionDetailMoreButton"))
+        const menu = findChild(page, "transactionDetailMoreMenu")
+        tryCompare(menu, "opened", true)
+        const link = findChild(menu.contentItem, "transactionExplorerLink_0")
+        verify(link !== null)
+        link.clicked()
+        const popup = findChild(page, "transactionExplorerLinkPopup")
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://example.com/tx/" + page.txid)
+        verify(findChild(popup.contentItem, "externalLinkMessage").text.indexOf(popup.link) >= 0)
+        findChild(popup.contentItem, "externalLinkCancelButton").clicked()
+        tryCompare(popup, "opened", false)
     }
     function test_details_toggle_reveals_raw_transaction() {
         const raw = "02000000" + "abcdef0123456789".repeat(1000)
