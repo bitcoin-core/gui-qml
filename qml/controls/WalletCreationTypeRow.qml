@@ -5,7 +5,9 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
+// A choice tile: one card per choice, like OptionButton.
 AbstractButton {
     id: root
     property string title: ""
@@ -15,14 +17,20 @@ AbstractButton {
     implicitHeight: Math.max(72, content.implicitHeight + topPadding + bottomPadding)
     padding: Theme.space.l
     opacity: enabled ? 1 : 0.4
-    hoverEnabled: true
+    hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     Accessible.name: title
     Accessible.description: description
 
+    HoverHandler {
+        enabled: root.enabled && AppMode.isDesktop
+        cursorShape: Qt.PointingHandCursor
+    }
+
     background: Rectangle {
         radius: Theme.radius.cardInset
-        color: root.down || root.hovered ? Theme.color.surface3 : Theme.color.surface2
+        color: Qt.tint(Theme.color.surface2, root.down ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover : "transparent")
         border.width: 0
 
         Behavior on color {

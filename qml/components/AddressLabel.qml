@@ -97,6 +97,9 @@ AbstractButton {
     rightPadding: Theme.space.m
     topPadding: Theme.space.xs
     bottomPadding: Theme.space.xs
+    // The full width, unless always truncated; a narrower width wraps or,
+    // with truncateWhenNeeded, truncates.
+    implicitWidth: truncated ? displayWidth : naturalWidth
     implicitHeight: content.implicitHeight + topPadding + bottomPadding
     Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
     Accessible.name: address
@@ -176,9 +179,7 @@ AbstractButton {
                 Layout.alignment: Qt.AlignVCenter
                 text: qsTr("Copied")
                 color: Theme.color.neutral9
-                font: root.textStyle.font
-                lineHeight: root.textStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.textStyle
                 Accessible.ignored: true
             }
         }

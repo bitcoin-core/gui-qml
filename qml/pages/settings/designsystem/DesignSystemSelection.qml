@@ -80,7 +80,7 @@ DesignSystemSection {
         objectName: "designSystemSegmentedPicker"
         Layout.fillWidth: true
         name: "SegmentedPicker"
-        note: "Each segment is a ToggleButton, which has no other user."
+        note: "Each segment is an inline Segment component."
 
         DesignSystemState {
             label: "default"
@@ -194,8 +194,8 @@ DesignSystemSection {
                 currentValue: "receive"
                 iconRole: "icon"
                 model: [
-                    { text: "Send", value: "send", icon: "image://images/activity-send.svg" },
-                    { text: "Receive", value: "receive", icon: "image://images/activity-receive.svg" }
+                    { text: "Send", value: "send", icon: "qrc:/icons/activity-send.svg" },
+                    { text: "Receive", value: "receive", icon: "qrc:/icons/activity-receive.svg" }
                 ]
             }
         }
@@ -239,23 +239,18 @@ DesignSystemSection {
         objectName: "designSystemOptionButton"
         Layout.fillWidth: true
         name: "OptionButton"
-        note: "Choice tiles. The first pair is exclusive, as in the storage options."
-
-        ButtonGroup {
-            id: tileGroup
-        }
+        note: "Choice tiles. Bind selected to the model and update it in onClicked; the first pair is exclusive, as in the storage options."
 
         DesignSystemState {
             width: 380
-            label: "surfaceSelectionStyle, checked"
+            label: "surfaceSelectionStyle, selected"
             OptionButton {
                 Layout.fillWidth: true
-                ButtonGroup.group: tileGroup
                 surfaceSelectionStyle: true
                 text: "Reduce storage"
                 description: "Uses about 2GB. For regular wallet use."
                 recommended: true
-                checked: root.choiceTile === "reduce"
+                selected: root.choiceTile === "reduce"
                 onClicked: root.choiceTile = "reduce"
             }
         }
@@ -264,11 +259,10 @@ DesignSystemSection {
             label: "surfaceSelectionStyle"
             OptionButton {
                 Layout.fillWidth: true
-                ButtonGroup.group: tileGroup
                 surfaceSelectionStyle: true
                 text: "Store all data"
                 description: "Uses about 600GB. Support the network."
-                checked: root.choiceTile === "full"
+                selected: root.choiceTile === "full"
                 onClicked: root.choiceTile = "full"
             }
         }

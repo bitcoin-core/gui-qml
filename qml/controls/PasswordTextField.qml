@@ -14,6 +14,10 @@ LabeledTextField {
         : ""
 
     echoMode: passwordVisible ? TextInput.Normal : TextInput.Password
+    // Qt never exposes a name for a password field, so the label also goes
+    // into the description, which VoiceOver still reads.
+    accessibleDescription: [label, errorText.length > 0 ? errorText : supportingText]
+        .filter(function(part) { return part.length > 0 }).join(". ")
     inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
 
     trailingItem: IconButton {

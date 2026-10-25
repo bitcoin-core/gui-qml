@@ -292,10 +292,11 @@ TestCase {
         mouseClick(findChild(page, "transactionDetailMoreButton"))
         const menu = findChild(page, "transactionDetailMoreMenu")
         tryCompare(menu, "opened", true)
-        const link = findChild(menu.contentItem, "transactionThirdPartyLink_0")
+        const link = findChild(menu.contentItem, "transactionExplorerLink_0")
         verify(link !== null)
         compare(link.text, "Show in example.com")
 
+        verify(waitForRendering(link))
         mouseClick(link)
 
         tryCompare(menu, "visible", false)

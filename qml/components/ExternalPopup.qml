@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
 
-DialogPopup {
+AlertPopup {
     id: externalConfirmPopup
     objectName: "externalLinkPopup"
     property string link: ""
@@ -18,7 +18,22 @@ DialogPopup {
         open()
     }
 
-    title: openFailed ? qsTr("Couldn't open link") : qsTr("External Link")
+    title: {
+        if (openFailed) {
+            //: Title of the dialog shown when an external link could not be opened.
+            return qsTr("Couldn't open link")
+        }
+        //: Title of the dialog asking to confirm opening an external link.
+        return qsTr("Open link?")
+    }
+    message: {
+        if (openFailed) {
+            //: Shown when an external link could not be handed to any application, prompting the user to copy it instead.
+            return qsTr("This link could not be opened. Copy it and open it manually.")
+        }
+        //: Confirmation question shown before opening a website in the user's browser.
+        return qsTr("Do you want to open the following website in your browser?")
+    }
 
     // Set once an open attempt has failed. Switches the popup to its error and
     // copy-URL fallback layout instead of closing.
@@ -28,17 +43,14 @@ DialogPopup {
     property bool linkCopied: false
 
     // How long the copy button stays in its "Copied" state before returning to
-    // "Copy link". Kept close to the app's other copy confirmation
-    // (ToastPopup.visibleDurationMs) so copy feedback feels the same.
+    // "Copy link". Keep the feedback consistent with other copy confirmations.
     property int copiedFeedbackMs: 2000
 
-    modal: true
     // Without this the popup never enters the active focus chain, so Tab keeps
     // cycling the page behind it instead of the dialog's own buttons.
     focus: true
-    padding: 0
-
-    width: Math.min(420, (Overlay.overlay ? Overlay.overlay.width : 460) - 40)
+    implicitWidth: Math.max(420, horizontalActionsWidth + 40)
+    actionList: openFailed ? [closeLinkAction, copyLinkAction] : [cancelLinkAction, confirmLinkAction]
 
     // Always start from the confirmation layout when (re)opened so a previous
     // failure does not leak into the next link.
@@ -64,12 +76,14 @@ DialogPopup {
         copiedResetTimer.restart()
     }
 
+    function focusCopyAction() {
+        if (opened && openFailed && !linkCopied) focusAction(copyLinkAction)
+    }
+
     // Entering the error state replaces the button the user just activated, so
     // move focus onto its replacement: otherwise a keyboard user is left with
     // no focused control and no signal that anything changed.
-    onOpenFailedChanged: {
-        if (externalConfirmPopup.openFailed) copyButton.forceActiveFocus()
-    }
+    onOpenFailedChanged: if (openFailed) Qt.callLater(focusCopyAction)
 
     Timer {
         id: copiedResetTimer
@@ -78,154 +92,62 @@ DialogPopup {
             externalConfirmPopup.linkCopied = false
             // The button was disabled while confirming, which drops focus, so
             // hand it back rather than stranding the keyboard user.
-            if (externalConfirmPopup.opened && externalConfirmPopup.openFailed) {
-                copyButton.forceActiveFocus()
-            }
+            externalConfirmPopup.focusCopyAction()
         }
     }
 
-    contentItem: ColumnLayout {
-        spacing: 0
+    // Selectable so the destination can be copied and opened by hand
+    // whether or not the open works, not only from the failure fallback.
+    content: SelectableText {
+        objectName: "externalLinkUrl"
+        Layout.fillWidth: true
+        text: externalConfirmPopup.link
+        // A URL carries an unbreakable run (a txid is 64 characters), which
+        // WordWrap cannot split, so it would spill past the dialog edge.
+        wrapMode: TextEdit.Wrap
+        horizontalAlignment: TextEdit.AlignHCenter
+        color: Theme.color.neutral8
+        textStyle: Theme.text.description
+        Accessible.role: Accessible.StaticText
+        Accessible.name: text
+    }
 
-        CoreText {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 55
-            text: {
-                if (externalConfirmPopup.openFailed) {
-                    //: Title of the dialog shown when an external link could not be opened.
-                    return qsTr("Couldn't open link")
-                }
-                //: Title of the dialog asking to confirm opening an external link.
-                return qsTr("External Link")
+    // Confirmation buttons, shown before an open attempt.
+    property AlertAction cancelLinkAction: AlertAction {
+        //: Button that dismisses the dialog without opening the external link.
+        text: qsTr("Cancel")
+        role: AlertAction.Cancel
+        buttonObjectName: "externalLinkCancel"
+    }
+    property AlertAction confirmLinkAction: AlertAction {
+        //: Button that confirms opening the external link in the browser.
+        text: qsTr("OK")
+        buttonObjectName: "externalLinkConfirm"
+        closesPopup: false
+        onTriggered: externalConfirmPopup.attemptOpen()
+    }
+
+    // Copy-URL fallback buttons, shown after an open attempt failed.
+    property AlertAction closeLinkAction: AlertAction {
+        //: Button that dismisses the external-link error dialog.
+        text: qsTr("Close")
+        role: AlertAction.Neutral
+        buttonObjectName: "externalLinkClose"
+    }
+    property AlertAction copyLinkAction: AlertAction {
+        text: {
+            if (externalConfirmPopup.linkCopied) {
+                //: Button label confirming an external link was copied to the clipboard.
+                return qsTr("Copied")
             }
-            bold: true
-            font.pixelSize: 24
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            //: Button that copies an external link to the clipboard after it could not be opened.
+            return qsTr("Copy link")
         }
-
-        Separator {
-            Layout.fillWidth: true
-        }
-
-        Header {
-            Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 20
-            Layout.bottomMargin: 0
-            header: {
-                if (externalConfirmPopup.openFailed) {
-                    //: Shown when an external link could not be handed to any application, prompting the user to copy it instead.
-                    return qsTr("This link could not be opened. Copy it and open it manually.")
-                }
-                //: Confirmation question shown before opening a website in the user's browser.
-                return qsTr("Do you want to open the following website in your browser?")
-            }
-            headerBold: false
-            headerSize: 16
-        }
-
-        // Selectable so the destination can be copied and opened by hand
-        // whether or not the open works, not only from the failure fallback.
-        TextEdit {
-            objectName: "externalLinkUrl"
-            Layout.fillWidth: true
-            Layout.leftMargin: 20
-            Layout.rightMargin: 20
-            Layout.topMargin: 8
-            Layout.bottomMargin: 20
-            text: externalConfirmPopup.link
-            readOnly: true
-            selectByMouse: true
-            persistentSelection: false
-            textFormat: Text.PlainText
-            // A URL carries an unbreakable run (a txid is 64 characters), which
-            // WordWrap cannot split, so it would spill past the dialog edge.
-            wrapMode: Text.Wrap
-            horizontalAlignment: Text.AlignHCenter
-            color: Theme.color.neutral8
-            selectionColor: Theme.color.orange
-            selectedTextColor: Theme.color.white
-            font.family: "BitcoinCoreSans"
-            font.pixelSize: 18
-            Accessible.role: Accessible.StaticText
-            Accessible.name: text
-        }
-
-        // Confirmation buttons, shown before an open attempt.
-        GridLayout {
-            Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 0
-            visible: !externalConfirmPopup.openFailed
-            columns: AppMode.isDesktop ? 2 : 1
-            columnSpacing: 15
-            rowSpacing: 10
-
-            OutlineButton {
-                objectName: "externalLinkCancel"
-                //: Button that dismisses the dialog without opening the external link.
-                text: qsTr("Cancel")
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: externalConfirmPopup.close()
-            }
-
-            ContinueButton {
-                objectName: "externalLinkConfirm"
-                //: Button that confirms opening the external link in the browser.
-                text: qsTr("Ok")
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: externalConfirmPopup.attemptOpen()
-            }
-        }
-
-        // Copy-URL fallback buttons, shown after an open attempt failed.
-        GridLayout {
-            Layout.fillWidth: true
-            Layout.margins: 20
-            Layout.topMargin: 0
-            visible: externalConfirmPopup.openFailed
-            columns: AppMode.isDesktop ? 2 : 1
-            columnSpacing: 15
-            rowSpacing: 10
-
-            OutlineButton {
-                objectName: "externalLinkClose"
-                //: Button that dismisses the external-link error dialog.
-                text: qsTr("Close")
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: externalConfirmPopup.close()
-            }
-
-            ContinueButton {
-                id: copyButton
-                objectName: "externalLinkCopy"
-                text: {
-                    if (externalConfirmPopup.linkCopied) {
-                        //: Button label confirming an external link was copied to the clipboard.
-                        return qsTr("Copied")
-                    }
-                    //: Button that copies an external link to the clipboard after it could not be opened.
-                    return qsTr("Copy link")
-                }
-                // Disabled while confirming so the label always describes what
-                // the button will do, and a repeat copy is not silently a no-op.
-                enabled: !externalConfirmPopup.linkCopied
-                Accessible.role: Accessible.Button
-                Accessible.name: text
-                Layout.fillWidth: true
-                Layout.minimumWidth: 120
-                onClicked: externalConfirmPopup.copyLink()
-            }
-        }
+        // Disabled while confirming so the label always describes what
+        // the button will do, and a repeat copy is not silently a no-op.
+        enabled: !externalConfirmPopup.linkCopied
+        buttonObjectName: "externalLinkCopy"
+        closesPopup: false
+        onTriggered: externalConfirmPopup.copyLink()
     }
 }

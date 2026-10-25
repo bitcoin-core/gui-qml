@@ -64,7 +64,7 @@ ColumnLayout {
 
             trailingItem: AddressLabel {
                 objectName: "addressDetailsAddressLabel"
-                width: Math.min(380, Math.max(200, root.width * 0.68))
+                Layout.preferredWidth: Math.min(380, Math.max(200, root.width * 0.68))
                 address: root.address
                 surfaceLevel: 2
                 textStyle: Theme.text.monoCaption

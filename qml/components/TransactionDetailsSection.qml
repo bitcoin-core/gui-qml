@@ -110,21 +110,14 @@ ColumnLayout {
                 Layout.preferredHeight: Math.min(180, Math.max(24, rawText.contentHeight))
                 clip: true
                 ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                TextArea {
+                SelectableText {
                     id: rawText
                     objectName: "transactionRawText"
                     width: rawScroll.availableWidth
                     text: root.visible ? root.details.rawTransaction || "" : ""
                     placeholderText: root.unavailable
-                    readOnly: true
-                    selectByMouse: true
-                    textFormat: TextEdit.PlainText
                     wrapMode: TextEdit.WrapAnywhere
-                    font: Theme.text.monoCaption.font
-                    color: Theme.color.neutral9
-                    placeholderTextColor: Theme.color.placeholder
-                    padding: 0
-                    background: null
+                    textStyle: Theme.text.monoCaption
                     Accessible.name: qsTr("Raw transaction")
                 }
             }

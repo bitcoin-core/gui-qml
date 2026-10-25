@@ -84,7 +84,9 @@ OnboardingView {
             onClicked: root.importSelected()
         }
 
-        BusyIndicator {
+        SpinningIndicator {
+            size: 32
+            color: Theme.color.neutral7
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 16
             visible: root.importingWallet

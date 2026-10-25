@@ -190,16 +190,13 @@ Page {
                     }
                 }
 
-                IconButton {
+                OverflowMenuButton {
                     id: actionButton
                     objectName: "peerActionsButton"
                     Layout.alignment: Qt.AlignTop
-                    size: 40
-                    iconSize: 20
-                    iconSource: "image://images/ellipsis"
-                    iconColor: Theme.color.neutral8
-                    accessibleName: qsTr("Peer actions")
-                    onClicked: actionMenu.open()
+                    Accessible.name: qsTr("Peer actions")
+                    checked: actionMenu.opened
+                    onClicked: actionMenu.opened ? actionMenu.close() : actionMenu.open()
                     PeerActionsMenu {
                         id: actionMenu
                         objectName: "peerActionsMenu"
@@ -243,13 +240,13 @@ Page {
                         visible: root.sectionIndex === 1
                         spacing: 16
 
-                        PeerSection {
+                        PeerTable {
                             objectName: "peerBlocksSection"
                             width: parent.width
                             title: qsTr("Blocks")
                             rows: root.blockRelayRows
                         }
-                        PeerSection {
+                        PeerTable {
                             objectName: "peerAddressesSection"
                             width: parent.width
                             title: qsTr("Addresses")
@@ -319,105 +316,61 @@ Page {
         AlertAction { text: qsTr("OK"); buttonObjectName: "actionErrorCloseButton" }
     }
 
-    component SelectablePeerText: TextInput {
-        readOnly: true
-        selectByMouse: true
-        activeFocusOnTab: true
-        clip: true
-        verticalAlignment: TextInput.AlignVCenter
-        selectionColor: Theme.color.selection
-        selectedTextColor: Theme.color.selectedText
-
-        HoverHandler { cursorShape: Qt.IBeamCursor }
-    }
-
     // Keep the delegate outside inline components to avoid a Qt 6.2 compiler crash.
     component PeerTable: Loader {
+        property string title: ""
         required property var rows
         sourceComponent: peerTableComponent
     }
 
     Component {
         id: peerTableComponent
-        Rectangle {
+        FormSection {
             id: table
             property var rows: parent.rows
-            implicitHeight: tableColumn.implicitHeight
-            color: Theme.color.surface1
-            radius: Theme.radius.card
-            border.width: 0
-            clip: true
+            title: parent ? parent.title : "" // qmllint disable missing-property
             // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
             Column {
                 id: tableColumn
-                width: parent.width
+                Layout.fillWidth: true
                 spacing: 0
                 Repeater {
                     // Updating values must not recreate selectable text fields.
                     model: table.rows.length
                     delegate: Component {
-                        ColumnLayout {
+                        FormRow {
                             id: rowDelegate
                             required property int index
                             readonly property var rowData: table.rows[index]
                             width: tableColumn.width
-                            spacing: 0
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: root.compact ? 14 : 20
-                                Layout.rightMargin: root.compact ? 14 : 20
-                                Layout.minimumHeight: root.compact ? 50 : 48
-                                spacing: 16
-                                SelectablePeerText {
+                            implicitWidth: 0
+                            showDivider: rowDelegate.index < table.rows.length - 1
+                            contentItem: RowLayout {
+                                spacing: Theme.space.l
+                                SelectableText {
                                     objectName: "peerDetailKey_" + rowDelegate.index
                                     Layout.preferredWidth: root.compact ? 112 : 150
+                                    Layout.alignment: Qt.AlignVCenter
+                                    activeFocusOnTab: true
                                     text: rowDelegate.rowData.label
-                                    font: Theme.text.description.font
-                                    Layout.preferredHeight: Theme.text.description.lineHeight
-                                    color: Theme.color.neutral6
-                                    horizontalAlignment: Text.AlignLeft
+                                    textStyle: Theme.text.description
+                                    color: Theme.color.neutral7
                                 }
-                                SelectablePeerText {
+                                SelectableText {
                                     objectName: "peerDetailValue_" + rowDelegate.index
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: 0
+                                    Layout.alignment: Qt.AlignVCenter
+                                    activeFocusOnTab: true
                                     text: rowDelegate.rowData.value
-                                    font: rowDelegate.rowData.mono ? Theme.text.monoDescription.font : Theme.text.description.font
-                                    Layout.preferredHeight: rowDelegate.rowData.mono ? Theme.text.monoDescription.lineHeight : Theme.text.description.lineHeight
-                                    color: Theme.color.neutral8
-                                    horizontalAlignment: Text.AlignLeft
+                                    textStyle: rowDelegate.rowData.mono ? Theme.text.monoDescription : Theme.text.description
+                                    wrapMode: TextEdit.WrapAnywhere
                                 }
-                            }
-                            Separator {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: root.compact ? 14 : 20
-                                Layout.rightMargin: root.compact ? 14 : 20
-                                visible: rowDelegate.index < table.rows.length - 1
                             }
                         }
                     }
                 }
             }
-        }
-    }
-
-    component PeerSection: Column {
-        required property string title
-        required property var rows
-        spacing: 8
-
-        CoreText {
-            objectName: parent.objectName + "Title"
-            width: parent.width
-            leftPadding: root.compact ? 4 : 8
-            text: parent.title
-            textStyle: Theme.text.subheading
-            color: Theme.color.neutral8
-            horizontalAlignment: Text.AlignLeft
-        }
-        PeerTable {
-            width: parent.width
-            rows: parent.rows
         }
     }
 }

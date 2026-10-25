@@ -32,13 +32,11 @@ Control {
             color: parent.color
         }
 
-        Rectangle {
+        Separator {
             objectName: "debugLogTitlesHeaderDivider"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.color.surfaceDivider
         }
     }
 

@@ -3,53 +3,22 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 import "../controls"
 
-FormRow {
+// A payment request detail: shows the saved value until edited.
+TextFieldRow {
     id: root
     property alias label: root.title
-    property string value: ""
-    property bool modified: false
     property bool editable: true
-    property string fieldObjectName: ""
-    property alias text: input.text
-    property alias placeholderText: input.placeholderText
-    property alias validator: input.validator
-    property alias maximumLength: input.maximumLength
-    property alias inputMethodHints: input.inputMethodHints
-    property var fieldTextStyle: Theme.text.description
-    property Component unitControl
-    signal editingFinished()
-    function reset() { modified = false; input.text = value }
+    property alias unitControl: root.trailingAccessory
+
+    tracksValue: true
     enabled: editable
     showDivider: false
     minimumRowHeight: 56
     titleColor: editable ? Theme.color.neutral7 : Theme.color.disabledContent
-    onValueChanged: if (!modified) input.text = value
+    fieldHeight: Theme.size.control
+    fieldWidth: Math.max(80, Math.min(260, width * 0.53
+        - (trailingAccessoryWidth > 0 ? trailingAccessoryWidth + Theme.space.xs : 0)))
     onEditableChanged: if (!editable) reset()
-    Component.onCompleted: reset()
-    trailingItem: RowLayout {
-        spacing: Theme.space.xs
-        TextField {
-            id: input
-            objectName: root.fieldObjectName
-            implicitWidth: Math.max(80, Math.min(260, root.width * 0.53 - (unitLoader.active ? unitLoader.width : 0)))
-            implicitHeight: Theme.size.control
-            enabled: root.editable
-            font: root.fieldTextStyle.font
-            color: root.editable ? Theme.color.neutral9 : Theme.color.disabledContent
-            placeholderTextColor: Theme.color.placeholder
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: TextInput.AlignVCenter
-            selectByMouse: true
-            padding: Theme.space.xs
-            Accessible.name: root.label
-            background: FieldBorderRings { visible: input.activeFocus; cornerRadius: 4 }
-            onTextEdited: root.modified = text !== root.value
-            onEditingFinished: root.editingFinished()
-        }
-        Loader { id: unitLoader; sourceComponent: root.unitControl; active: sourceComponent !== null }
-    }
 }

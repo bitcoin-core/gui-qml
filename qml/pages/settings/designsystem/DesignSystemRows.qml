@@ -160,27 +160,31 @@ DesignSystemSection {
         objectName: "designSystemSwitchRowSection"
         Layout.fillWidth: true
         title: "Switch rows"
-        description: "Settings that apply immediately use a FormRow with a trailing OptionSwitch or SegmentedPicker."
+        description: "Settings that apply immediately use a SwitchRow (the whole row flips the switch, which is the one focus stop) or a FormRow with a SegmentedPicker. Consent in a form is a CheckBox."
 
-        FormRow {
+        SwitchRow {
             objectName: "designSystemStartupRow"
             Layout.fillWidth: true
             title: "Open at login"
             description: "Start the app after signing in."
-            trailingItem: OptionSwitch {
-                objectName: "designSystemStartupSwitch"
-                checked: root.exampleStartupEnabled
-                onToggled: root.exampleStartupEnabled = checked
-            }
+            switchObjectName: "designSystemStartupSwitch"
+            checked: root.exampleStartupEnabled
+            onToggled: root.exampleStartupEnabled = checked
         }
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: "Notifications"
-            trailingItem: OptionSwitch {
-                checked: root.exampleNotificationsEnabled
-                onToggled: root.exampleNotificationsEnabled = checked
-            }
+            checked: root.exampleNotificationsEnabled
+            onToggled: root.exampleNotificationsEnabled = checked
+        }
+
+        SwitchRow {
+            Layout.fillWidth: true
+            title: "Disabled"
+            description: "enabled: false"
+            enabled: false
+            checked: true
         }
 
         FormRow {
@@ -202,19 +206,13 @@ DesignSystemSection {
             }
         }
 
-        ListRow {
+        CheckBox {
             objectName: "designSystemAcknowledgementRow"
             Layout.fillWidth: true
-            description: "Acknowledgements are a ListRow that toggles its trailing switch; the row is the only focus stop."
-            showDivider: false
-            accessibleRole: Accessible.CheckBox
-            trailingItem: OptionSwitch {
-                checked: root.exampleAcknowledged
-                focusPolicy: Qt.NoFocus
-                Accessible.ignored: true
-                onToggled: root.exampleAcknowledged = checked
-            }
-            onClicked: root.exampleAcknowledged = !root.exampleAcknowledged
+            Layout.margins: Theme.space.cardInset
+            text: "I understand that if I lose this password I might lose access to my bitcoin."
+            checked: root.exampleAcknowledged
+            onToggled: root.exampleAcknowledged = checked
         }
     }
 
@@ -313,56 +311,19 @@ DesignSystemSection {
         }
 
         ValueRow {
+            objectName: "designSystemWrappingValueRow"
+            Layout.fillWidth: true
+            title: "Wrapping value"
+            value: "/Users/satoshi/Library/Application Support/Bitcoin/wallets/savings"
+            valueWrap: true
+        }
+
+        ValueRow {
             Layout.fillWidth: true
             title: "Disabled"
             value: "v31.99.0-unk"
             enabled: false
             showDivider: false
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemKeyValueRow"
-        Layout.fillWidth: true
-        name: "KeyValueRow"
-
-        DesignSystemState {
-            width: 380
-            label: "key, value"
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 6
-
-                KeyValueRow {
-                    Layout.fillWidth: true
-                    key: CoreText {
-                        text: "Fee rate"
-                        color: Theme.color.neutral7
-                        textStyle: Theme.text.description
-                        horizontalAlignment: Text.AlignLeft
-                    }
-                    value: CoreText {
-                        text: "12 sat/vB"
-                        textStyle: Theme.text.monoDescription
-                        horizontalAlignment: Text.AlignLeft
-                    }
-                }
-
-                KeyValueRow {
-                    Layout.fillWidth: true
-                    key: CoreText {
-                        text: "Size"
-                        color: Theme.color.neutral7
-                        textStyle: Theme.text.description
-                        horizontalAlignment: Text.AlignLeft
-                    }
-                    value: CoreText {
-                        text: "141 vB"
-                        textStyle: Theme.text.monoDescription
-                        horizontalAlignment: Text.AlignLeft
-                    }
-                }
-            }
         }
     }
 }

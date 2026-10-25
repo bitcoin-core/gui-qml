@@ -58,17 +58,15 @@ DesignSystemSection {
                 primaryButtonText: "Back up"
             }
         }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemSettingsRestartNotice"
-        Layout.fillWidth: true
-        name: "SettingsRestartNotice"
-
         DesignSystemState {
-            width: 460
-            label: "rest"
-            SettingsRestartNotice {}
+            width: parent.width
+            label: "title, message, primaryButtonText"
+            InfoBanner {
+                Layout.fillWidth: true
+                title: "Speed up transaction"
+                message: "Pay a higher fee so the transaction confirms sooner."
+                primaryButtonText: "Speed up"
+            }
         }
     }
 
@@ -79,44 +77,51 @@ DesignSystemSection {
 
         DesignSystemState {
             width: 380
-            label: "tintColor: success"
+            label: "tone: Success"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.success
-                iconSource: "image://images/check"
+                tone: ToastBanner.Success
                 text: "Signature verified."
             }
         }
         DesignSystemState {
             width: 380
-            label: "tintColor: danger"
+            label: "tone: Error"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.danger
-                iconSource: "image://images/alert-filled"
+                tone: ToastBanner.Error
                 text: "The message could not be verified."
             }
         }
         DesignSystemState {
             width: 380
-            label: "tintColor: info (default)"
+            label: "tone: Warning"
             ToastBanner {
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                iconSource: "image://images/info-filled"
+                tone: ToastBanner.Warning
+                text: "The node is still syncing."
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "tone: Info (default)"
+            ToastBanner {
+                Layout.fillWidth: true
+                shown: root.toastBannersShown
                 text: "Commands run against the live node."
             }
         }
         DesignSystemState {
             width: 380
-            label: "actionText, showsCloseButton"
+            label: "Error, actionText, showsCloseButton"
             ToastBanner {
+                objectName: "designSystemToastBannerWithAction"
                 Layout.fillWidth: true
                 shown: root.toastBannersShown
-                tintColor: Theme.color.danger
-                iconSource: "image://images/alert-filled"
+                tone: ToastBanner.Error
                 text: "Connection lost."
                 actionText: "Retry"
                 showsCloseButton: true
@@ -155,6 +160,18 @@ DesignSystemSection {
             label: "showDot: false"
             StatusPill { text: "Watch only"; accentColor: Theme.color.info; showDot: false }
         }
+        DesignSystemState {
+            label: "warning (1-5 confirmations)"
+            StatusPill { text: "2 confirmations"; accentColor: Theme.color.warning }
+        }
+        DesignSystemState {
+            label: "success (6+ confirmations)"
+            StatusPill { text: "6 confirmations"; accentColor: Theme.color.success }
+        }
+        DesignSystemState {
+            label: "neutral, surface2 fill"
+            StatusPill { text: "Unconfirmed"; accentColor: Theme.color.neutral7; backgroundColor: Theme.color.surface2 }
+        }
     }
 
     DesignSystemSpecimen {
@@ -181,32 +198,6 @@ DesignSystemSection {
                 textStyle: Theme.text.caption
                 shorten: true
                 chainModelRef: QtObject { readonly property string networkName: "REGTEST" }
-            }
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemConfirmationPill"
-        Layout.fillWidth: true
-        name: "ConfirmationPill"
-
-        DesignSystemState {
-            label: "statusKnown: false"
-            ConfirmationPill { statusKnown: false }
-        }
-        DesignSystemState {
-            label: "inactive: true"
-            ConfirmationPill { inactive: true; confirmations: 0 }
-        }
-        // Positioners keep changing Repeater delegates out of the Qt 6.4 layout engine.
-        Repeater {
-            model: [0, 1, 2, 5, 6, 100]
-
-            delegate: DesignSystemState {
-                id: confirmationSample
-                required property int modelData
-                label: "confirmations: " + modelData
-                ConfirmationPill { confirmations: confirmationSample.modelData }
             }
         }
     }

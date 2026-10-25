@@ -22,7 +22,6 @@ ColumnLayout {
     property alias unitLabelObjectName: unitToggle.labelObjectName
     property alias errorTextObjectName: errorTextLabel.objectName
     readonly property alias field: amountInput
-    property bool enabled: true
     property string placeholderText: root.amount ? root.amountInputPlaceholder(root.amount.unit) : "0.00000000"
     property bool interceptPaste: false
     property bool showLabel: true
