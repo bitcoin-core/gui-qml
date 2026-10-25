@@ -30,8 +30,7 @@ DesignSystemSection {
         ["Theme.space.pagePadding(width)", Theme.space.pagePadding(root.layoutWidth)]
     ]
 
-    title: "Layout"
-    description: "Theme.space, Theme.radius, Theme.size and Theme.focusRing drawn at their real size, and the SizeClass breakpoints. Set Page width under Page controls to lay this page out as on a narrower window."
+    description: "Theme.space, Theme.radius, Theme.size and Theme.focusRing drawn at their real size, and the SizeClass breakpoints. Set Page width on the Design system page to lay this page out as on a narrower window."
 
     DesignSystemSpecimen {
         objectName: "designSystemSpaceScale"
@@ -132,6 +131,7 @@ DesignSystemSection {
 
     DesignSystemSpecimen {
         objectName: "designSystemIconSizes"
+        shows: ["CaretRightIcon"]
         Layout.fillWidth: true
         name: "Icon artwork"
         note: "Theme.size.icon steps, and the caret sizes for disclosure and back carets."
@@ -173,6 +173,7 @@ DesignSystemSection {
 
     DesignSystemSpecimen {
         objectName: "designSystemFocusRing"
+        shows: ["FocusBorder"]
         Layout.fillWidth: true
         name: "Focus ring"
         note: "FocusBorder draws Theme.focusRing.width at offset around buttons and rows, or offsetDense where space is tight."
@@ -228,6 +229,7 @@ DesignSystemSection {
 
     DesignSystemSpecimen {
         objectName: "designSystemBreakpoints"
+        shows: ["NavigationSplitView"]
         Layout.fillWidth: true
         name: "Size classes"
         note: "The split view below is a NavigationSplitView as wide as this page's content: two columns when regular, one when compact."

@@ -364,6 +364,11 @@ ColumnLayout {
         // days, PageUp/PageDown step a month (with Ctrl, a year), Enter or Space
         // picks the day.
         activeFocusOnTab: true
+        Accessible.role: Accessible.Table
+        //: Screen reader name of the day grid in the Activity custom date range calendar.
+        Accessible.name: qsTr("Calendar")
+        Accessible.description: root.calendarFocusDate
+            ? root.calendarFocusDate.toLocaleDateString(Qt.locale(), Locale.LongFormat) : ""
         onActiveFocusChanged: {
             if (activeFocus) {
                 root.ensureCalendarFocusDate()

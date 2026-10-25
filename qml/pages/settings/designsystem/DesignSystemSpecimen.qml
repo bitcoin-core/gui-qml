@@ -13,6 +13,8 @@ ColumnLayout {
     default property alias content: samples.data
     property string name: ""
     property string note: ""
+    // Shared types shown here besides the one the specimen is named after.
+    property var shows: []
     property alias sampleSpacing: samples.spacing
 
     spacing: 8

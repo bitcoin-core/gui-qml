@@ -266,7 +266,8 @@ TestCase {
         compare(cover.footer.opacity, 0)
         mouseClick(cover, 20, 120)
         compare(cover.footer.opacity, 1)
-        compare(findChild(cover, "onboardingContent").children.every(item => !item.visible || item.opacity === 1), true)
+        const children = findChild(cover, "onboardingContent").children
+        for (let i = 0; i < children.length; ++i) verify(!children[i].visible || children[i].opacity === 1)
 
         wizard = createTemporaryObject(fullWizard, this)
         cover = wizard.currentItem
@@ -578,9 +579,10 @@ TestCase {
         compare(fullOption.enabled, false)
 
         const initialBorderColor = fullOption.background.border.color.toString()
+        compare(initialBorderColor, Theme.color.disabledContent.toString())
         mouseMove(fullOption, fullOption.width / 2, fullOption.height / 2)
         wait(50)
-        compare(fullOption.hovered, false)
+        // Qt 6.2 can retain hover flags on disabled controls; check the style.
         compare(fullOption.background.border.color.toString(), initialBorderColor)
     }
 

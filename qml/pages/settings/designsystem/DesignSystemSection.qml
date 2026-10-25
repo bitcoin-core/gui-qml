@@ -11,42 +11,27 @@ ColumnLayout {
     id: root
 
     default property alias content: contentColumn.data
-    property string title: ""
     property string description: ""
+    property alias contentSpacing: contentColumn.spacing
 
-    spacing: 8
+    spacing: Theme.space.page
 
-    ColumnLayout {
+    CoreText {
+        visible: root.description.length > 0
         Layout.fillWidth: true
-        Layout.leftMargin: 4
-        Layout.rightMargin: 4
-        spacing: Theme.space.xs
-
-        CoreText {
-            Layout.fillWidth: true
-            text: root.title
-            color: Theme.color.neutral9
-            textStyle: Theme.text.title
-            horizontalAlignment: Text.AlignLeft
-            wrap: false
-            elide: Text.ElideRight
-        }
-
-        CoreText {
-            visible: root.description.length > 0
-            Layout.fillWidth: true
-            text: root.description
-            color: Theme.color.neutral7
-            textStyle: Theme.text.description
-            horizontalAlignment: Text.AlignLeft
-            wrap: true
-        }
+        Layout.leftMargin: Theme.space.xs
+        Layout.rightMargin: Theme.space.xs
+        Layout.maximumWidth: 620
+        text: root.description
+        color: Theme.color.neutral7
+        textStyle: Theme.text.body
+        horizontalAlignment: Text.AlignLeft
+        wrap: true
     }
 
     ColumnLayout {
         id: contentColumn
         Layout.fillWidth: true
-        Layout.topMargin: 8
         spacing: 24
     }
 }

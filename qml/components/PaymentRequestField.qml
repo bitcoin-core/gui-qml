@@ -20,5 +20,8 @@ TextFieldRow {
     fieldHeight: Theme.size.control
     fieldWidth: Math.max(80, Math.min(260, width * 0.53
         - (trailingAccessoryWidth > 0 ? trailingAccessoryWidth + Theme.space.xs : 0)))
+    // FormRow's minimum; deriving it from the width-based field width is a
+    // binding loop until a layout sets the width.
+    implicitWidth: 320
     onEditableChanged: if (!editable) reset()
 }

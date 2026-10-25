@@ -19,6 +19,7 @@ DesignSystemSection {
     property string exampleProxyAddress: "127.0.0.1:9050"
 
     property BitcoinAddress sampleAddress: BitcoinAddress {}
+    property BitcoinAddress labeledFieldAddress: BitcoinAddress {}
     // Set from script: Qt 6.5 and older reject a literal for a qint64 property.
     property BitcoinAmount sampleAmount: BitcoinAmount {}
 
@@ -27,7 +28,6 @@ DesignSystemSection {
         sampleAmount.satoshi = 150000
     }
 
-    title: "Fields"
     description: "Text entry controls with placeholder, value, error and disabled states where the control has them."
 
     DesignSystemSpecimen {
@@ -274,6 +274,62 @@ DesignSystemSection {
             width: 400
             label: "enabled: false"
             BitcoinAddressInputField { Layout.fillWidth: true; address: root.sampleAddress; enabled: false }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemLabeledBitcoinAddressField"
+        Layout.fillWidth: true
+        name: "LabeledBitcoinAddressField"
+        note: "A BitcoinAddressInputField under a field label, as on the sign and verify message pages."
+
+        DesignSystemState {
+            width: 400
+            label: "placeholderText"
+            LabeledBitcoinAddressField {
+                Layout.fillWidth: true
+                label: "Bitcoin address"
+                placeholderText: "Enter a legacy P2PKH address"
+                address: root.labeledFieldAddress
+            }
+        }
+        DesignSystemState {
+            width: 400
+            label: "readOnly, showCopyButton"
+            LabeledBitcoinAddressField {
+                Layout.fillWidth: true
+                label: "Signed with"
+                address: root.sampleAddress
+                readOnly: true
+                showCopyButton: true
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemPaymentRequestField"
+        Layout.fillWidth: true
+        name: "PaymentRequestField"
+        note: "A payment request detail: shows the saved value until edited."
+
+        DesignSystemState {
+            width: 400
+            label: "value"
+            PaymentRequestField {
+                Layout.fillWidth: true
+                label: "Message"
+                value: "Lunch split"
+            }
+        }
+        DesignSystemState {
+            width: 400
+            label: "editable: false"
+            PaymentRequestField {
+                Layout.fillWidth: true
+                label: "Recipient name"
+                value: "Satoshi"
+                editable: false
+            }
         }
     }
 

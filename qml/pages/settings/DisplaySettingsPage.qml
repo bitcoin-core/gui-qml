@@ -27,10 +27,22 @@ SettingsPage {
             trailingItem: SegmentedPicker {
                 objectName: "displayThemePicker"
                 implicitWidth: 190
-                model: [qsTr("Light"), qsTr("Dark")]
-                currentIndex: Theme.dark ? 1 : 0
+                model: {
+                    const names = []
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        names.push(Theme.palettes[i].displayName)
+                    }
+                    return names
+                }
+                // The active palette, not paletteId: an unknown stored id shows its fallback.
+                currentIndex: {
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        if (Theme.palettes[i] === Theme.color) return i
+                    }
+                    return 0
+                }
                 onSelected: function(index, option) {
-                    Theme.paletteId = index === 1 ? "core-dark" : "core-light"
+                    Theme.paletteId = Theme.palettes[index].paletteId
                 }
             }
         }
