@@ -50,9 +50,9 @@ Pane {
     background: Rectangle {
         visible: root.modalView
         radius: Theme.radius.sheet
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         border.width: 1
-        border.color: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+        border.color: Theme.color.surfaceDivider
         SurfaceGradientBorder {
             anchors.fill: parent
             surfaceColor: parent.color
@@ -397,7 +397,7 @@ Pane {
                 Layout.preferredHeight: 184
                 Layout.alignment: Qt.AlignHCenter
                 radius: 10
-                color: "white"
+                color: Theme.color.qrBackground
                 QRImage {
                     id: qrImage
                     objectName: "requestPaymentQRImage"
@@ -406,8 +406,8 @@ Pane {
                     visible: root.sharing
                     opacity: root.sharing ? 1 : 0
                     code: root.sharing && root.request ? root.request.qrPayload : ""
-                    backgroundColor: "white"
-                    foregroundColor: "black"
+                    backgroundColor: Theme.color.qrBackground
+                    foregroundColor: Theme.color.qrForeground
                     Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
                 }
                 MouseArea {
@@ -449,21 +449,13 @@ Pane {
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }
-            Rectangle {
+            StatusPill {
+                objectName: "paymentRequestStatus"
                 visible: root.saved
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: statusLabel.implicitWidth + 24
-                implicitHeight: 30
-                radius: height / 2
-                color: Qt.rgba(statusLabel.color.r, statusLabel.color.g, statusLabel.color.b, 0.14)
-                CoreText {
-                    id: statusLabel
-                    objectName: "paymentRequestStatus"
-                    anchors.centerIn: parent
-                    text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
-                    color: root.paymentReceived ? Theme.color.green : Theme.color.lavender
-                    textStyle: Theme.text.captionStrong
-                }
+                showDot: false
+                text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
+                accentColor: root.paymentReceived ? Theme.color.success : Theme.color.paymentRequest
             }
             AddressLabel {
                 objectName: "requestPaymentAddressText"
@@ -497,12 +489,12 @@ Pane {
                         Layout.fillWidth: true
                         title: qsTr("Address type")
                         titleTextStyle: Theme.text.description
-                        titleColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral7
-                        valueColor: root.paymentReceived ? Theme.color.neutral4 : Theme.color.neutral9
+                        titleColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral7
+                        valueColor: root.paymentReceived ? Theme.color.disabledContent : Theme.color.neutral9
                         minimumRowHeight: 56
                         value: root.request ? root.wallet.receiveAddressTypeLabel(root.request.addressType.toLowerCase()) : ""
                         showDivider: true
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                     }
                     PaymentRequestField {
                         id: amountInput
@@ -516,7 +508,7 @@ Pane {
                         fieldObjectName: "requestPaymentAmountInput"
                         editable: !root.paymentReceived
                         showDivider: labelInput.visible || messageInput.visible
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                         fieldTextStyle: Theme.text.monoDescription
                         inputMethodHints: Qt.ImhFormattedNumbersOnly
                         maximumLength: 32
@@ -538,7 +530,7 @@ Pane {
                         Layout.fillWidth: true
                         label: qsTr("Pay to")
                         showDivider: messageInput.visible
-                        dividerColor: root.modalView ? Theme.color.neutral3 : Theme.color.neutral2
+                        dividerColor: Theme.color.surfaceDivider
                         value: root.request ? root.request.label : ""
                         placeholderText: qsTr("Your name or business")
                         fieldObjectName: "requestPaymentYourNameInput"
@@ -606,7 +598,6 @@ Pane {
             Layout.preferredHeight: 1
             Layout.topMargin: Theme.space.m
             Layout.bottomMargin: Theme.space.m
-            color: Theme.color.neutral2
         }
         ColumnLayout {
             Layout.fillWidth: true
@@ -663,7 +654,7 @@ Pane {
             visible: root.errorText.length > 0
             Layout.fillWidth: true
             text: root.errorText
-            color: Theme.color.red
+            color: Theme.color.dangerText
             textStyle: Theme.text.caption
             horizontalAlignment: Text.AlignLeft
             wrap: true

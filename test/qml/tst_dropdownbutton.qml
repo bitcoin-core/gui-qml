@@ -142,7 +142,7 @@ TestCase {
         button.enabled = false
         mouseClick(button, button.width / 2, button.height / 2)
         compare(count, 0)
-        compare(caretItem.color, Theme.color.neutral4)
+        compare(caretItem.color, Theme.color.disabledContent)
     }
 
     function test_keyboard_focus_has_visible_state() {

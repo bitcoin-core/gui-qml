@@ -35,7 +35,7 @@ Rectangle {
     property int textRightMargin: 0
     property var titleTextStyle: Theme.text.subheading
     property var messageTextStyle: Theme.text.description
-    property color backgroundColor: Qt.rgba(Theme.color.blue.r, Theme.color.blue.g, Theme.color.blue.b, 0.2)
+    property color backgroundColor: Theme.color.infoTint
     property color iconColor: Theme.color.neutral7
     property color titleColor: Theme.color.neutral9
     property color messageColor: Theme.color.neutral7

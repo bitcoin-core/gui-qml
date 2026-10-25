@@ -85,14 +85,14 @@ TestCase {
     function test_colors_and_blocks_survive_clock_transition() {
         const motion = createTemporaryObject(stillMotion, this)
         motion.toNetwork()
-        compare(findChild(motion, "onboardingMotionDot27").color, Theme.color.orange)
+        compare(findChild(motion, "onboardingMotionDot27").color, Theme.color.accent)
         compare(findChild(motion, "onboardingMotionDot1").color, Theme.color.neutral9)
         compare(findChild(motion, "onboardingMotionSignal0").color, motion.signalColor)
         motion.toBlocks()
         const first = findChild(motion, "onboardingMotionBlock0")
         const last = findChild(motion, "onboardingMotionBlock9")
         compare(first.blockColor, motion.signalColor)
-        compare(last.blockColor, Theme.color.orange)
+        compare(last.blockColor, Theme.color.accent)
         for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
             motion.clockProgress = progress
             compare(first.opacity, 1)
@@ -105,7 +105,7 @@ TestCase {
         motion.toClock()
         compare(first.opacity, 1)
         compare(last.opacity, 1)
-        compare(last.blockColor, Theme.color.orange)
+        compare(last.blockColor, Theme.color.accent)
         const tip = motion.blockPoint(9)
         compare(tip[0], motion.clockPoint(9)[0])
         compare(tip[1], motion.clockPoint(9)[1])
@@ -127,7 +127,7 @@ TestCase {
         compare(elapsed, 12 * 60)
         for (let i = 0; i < 24; ++i) {
             compare(motion.clockSegmentColor(i), i === 23 ? motion.latestBlockColor
-                : i >= 20 ? Theme.color.orange : motion.signalColor)
+                : i >= 20 ? Theme.color.accent : motion.signalColor)
         }
         verify(lengths.size > 1)
         motion.toClock()

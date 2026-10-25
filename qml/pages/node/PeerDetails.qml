@@ -68,7 +68,7 @@ Page {
         { label: qsTr("Time offset"), value: available(details ? details.timeOffset : ""), mono: false }
     ]
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
 
     function unavailable(value) {
         return value === undefined || value === null || String(value).length === 0
@@ -325,8 +325,8 @@ Page {
         activeFocusOnTab: true
         clip: true
         verticalAlignment: TextInput.AlignVCenter
-        selectionColor: Theme.color.orange
-        selectedTextColor: Theme.color.white
+        selectionColor: Theme.color.selection
+        selectedTextColor: Theme.color.selectedText
 
         HoverHandler { cursorShape: Qt.IBeamCursor }
     }
@@ -343,7 +343,7 @@ Page {
             id: table
             property var rows: parent.rows
             implicitHeight: tableColumn.implicitHeight
-            color: Theme.color.neutral1
+            color: Theme.color.surface1
             radius: Theme.radius.card
             border.width: 0
             clip: true
@@ -393,7 +393,6 @@ Page {
                                 Layout.leftMargin: root.compact ? 14 : 20
                                 Layout.rightMargin: root.compact ? 14 : 20
                                 visible: rowDelegate.index < table.rows.length - 1
-                                color: Theme.color.neutral2
                             }
                         }
                     }

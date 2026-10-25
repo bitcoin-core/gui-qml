@@ -23,7 +23,6 @@ LabeledTextField {
         iconSize: 22
         iconSource: root.passwordVisible ? "qrc:/icons/hidden" : "qrc:/icons/visible"
         iconColor: Theme.color.neutral7
-        hoverColor: Theme.color.neutral9
         activeColor: Theme.color.neutral9
         enabled: root.enabled
         // Clicking keeps focus in the field; Tab still reaches the toggle.

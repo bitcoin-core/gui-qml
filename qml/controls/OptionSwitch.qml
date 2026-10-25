@@ -22,7 +22,7 @@ Switch {
     layer.enabled: !enabled
     background: Rectangle {
         radius: Math.floor(height / 2)
-        color: root.checked ? Theme.color.orange : Theme.color.neutral4
+        color: root.checked ? Theme.color.accent : Theme.color.controlBorder
 
         Behavior on color {
             enabled: Theme.motion.animated
@@ -36,7 +36,7 @@ Switch {
         radius: height / 2
         width: 20
         height: 20
-        color: Theme.color.white
+        color: Theme.color.accentForeground
         Behavior on x {
             SmoothedAnimation {
             }

@@ -82,7 +82,7 @@ ColumnLayout {
                 title: qsTr("Pay to")
                 value: root.recipient ? root.recipient.paymentRequestLabel : ""
                 showDivider: root.recipient && root.recipient.message.length > 0
-                dividerColor: Theme.color.neutral3
+                dividerColor: Theme.color.surfaceDivider
             }
             ValueRow {
                 visible: root.recipient && root.recipient.message.length > 0

@@ -263,7 +263,6 @@ DialogPopup {
 
         Separator {
             Layout.fillWidth: true
-            color: Theme.color.neutral2
         }
 
         // The action buttons live in a Flow positioner, not a RowLayout, on
@@ -315,8 +314,6 @@ DialogPopup {
                         text: actionDelegate.alertAction.text
                         enabled: actionDelegate.alertAction.enabled
                         buttonSize: NeutralButton.Large
-                        backgroundColor: Theme.color.neutral2
-                        hoverBackgroundColor: Theme.color.neutral3
                         onClicked: actionDelegate.triggerAction()
                     }
 
@@ -328,12 +325,7 @@ DialogPopup {
                         objectName: visible ? actionDelegate.alertAction.buttonObjectName : ""
                         text: actionDelegate.alertAction.text
                         enabled: actionDelegate.alertAction.enabled
-                        backgroundColor: actionDelegate.alertAction.role === AlertAction.Destructive
-                            ? Theme.color.red : Theme.color.orange
-                        backgroundHoverColor: actionDelegate.alertAction.role === AlertAction.Destructive
-                            ? Qt.lighter(Theme.color.red, 1.1) : Theme.color.orangeLight1
-                        backgroundPressedColor: actionDelegate.alertAction.role === AlertAction.Destructive
-                            ? Qt.darker(Theme.color.red, 1.1) : Theme.color.orangeLight2
+                        destructive: actionDelegate.alertAction.role === AlertAction.Destructive
                         onClicked: actionDelegate.triggerAction()
                     }
                 }

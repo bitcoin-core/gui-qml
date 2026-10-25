@@ -122,7 +122,7 @@ ColumnLayout {
                     wrapMode: TextEdit.WrapAnywhere
                     font: Theme.text.monoCaption.font
                     color: Theme.color.neutral9
-                    placeholderTextColor: Theme.color.neutral6
+                    placeholderTextColor: Theme.color.placeholder
                     padding: 0
                     background: null
                     Accessible.name: qsTr("Raw transaction")

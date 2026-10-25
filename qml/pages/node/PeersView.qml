@@ -18,7 +18,7 @@ Page {
     property int selectedNodeId: -1
     property PeerDetailsModel selectedDetails
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
 
     header: NavigationBar2 {
         visible: root.showHeader
@@ -67,7 +67,7 @@ Page {
         primaryMaximumWidth: 498
         primaryWidthRatio: 0.38
         detailMinimumWidth: 280
-        separatorColor: Theme.color.neutral2
+        separatorColor: Theme.color.surfaceDivider
 
         onIsCompactChanged: {
             if (!isCompact) Qt.callLater(root.reconcileSelection)

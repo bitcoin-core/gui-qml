@@ -19,7 +19,7 @@ DesignSystemSection {
         const names = []
         for (const name in palette) {
             const type = typeof palette[name]
-            if (name === "objectName" || type === "function" || type === "string" || type === "boolean") continue
+            if (name === "objectName" || type === "function" || type === "string" || type === "boolean" || type === "number") continue
             names.push(name)
         }
         return names
@@ -27,25 +27,15 @@ DesignSystemSection {
 
     readonly property var baseRoles: [
         "neutral0", "neutral1", "neutral2", "neutral3", "neutral4",
-        "neutral5", "neutral6", "neutral7", "neutral8", "neutral9",
-        "orange", "red", "green", "blue", "amber", "purple", "lavender"
+        "neutral5", "neutral6", "neutral7", "neutral8", "neutral9"
     ]
-    // Names from before the semantic roles, and the role each one reads.
-    readonly property var legacyRoles: ({
-        white: "accentForeground",
-        orangeLight1: "accentHover",
-        orangeLight2: "accentPressed",
-        neutral1SurfaceBorderGradient: "surface1BorderGradient",
-        neutral2SurfaceBorderGradient: "surface2BorderGradient",
-        primaryButtonBorderGradient: "accentBorderGradient",
-        destructiveButtonBorderGradient: "dangerBorderGradient"
-    })
 
     readonly property var allRoles: roleNames(Theme.color)
     readonly property var semanticRoles: allRoles.filter(name => !isColorList(Theme.color[name])
-        && baseRoles.indexOf(name) < 0 && legacyRoles[name] === undefined)
-    readonly property var colorListRoles: allRoles.filter(name => isColorList(Theme.color[name])
-        && legacyRoles[name] === undefined)
+        && baseRoles.indexOf(name) < 0)
+    readonly property var colorListRoles: allRoles.filter(name => isColorList(Theme.color[name]))
+    // Each hue role with its tint and the text role drawn on that tint.
+    readonly property var tintRoles: ["accent", "danger", "success", "info", "warning", "paymentRequest"]
 
     title: "Colors"
     description: "Every Theme.color role of the active palette (" + Theme.color.paletteId
@@ -67,7 +57,7 @@ DesignSystemSection {
             radius: 4
             color: swatch.isList ? "transparent" : swatch.value
             gradient: swatch.isList ? listGradient : null
-            border.color: Theme.color.neutral4
+            border.color: Theme.color.controlBorder
             border.width: 1
 
             Gradient {
@@ -113,7 +103,7 @@ DesignSystemSection {
         implicitHeight: boxColumn.implicitHeight + 24
         radius: level === 0 ? 16 : 12
         color: Theme.color.surface(level)
-        border.color: level === 0 ? Theme.color.neutral4 : "transparent"
+        border.color: level === 0 ? Theme.color.controlBorder : "transparent"
         border.width: level === 0 ? 1 : 0
 
         ColumnLayout {
@@ -180,8 +170,8 @@ DesignSystemSection {
     DesignSystemSpecimen {
         objectName: "designSystemColorBase"
         Layout.fillWidth: true
-        name: "Base scale and hues"
-        note: "Every palette defines these; the roles below default to them."
+        name: "Base scale"
+        note: "Every palette defines these; surfaces, text and most roles below default to them."
         sampleSpacing: 12
 
         Repeater {
@@ -269,7 +259,7 @@ DesignSystemSection {
                         Layout.preferredWidth: 32
                         Layout.preferredHeight: 32
                         radius: 4
-                        border.color: Theme.color.neutral4
+                        border.color: Theme.color.controlBorder
                         border.width: 1
                         gradient: Gradient {
                             GradientStop { position: 0; color: listSample.colors[0] }
@@ -294,7 +284,7 @@ DesignSystemSection {
                                     height: 16
                                     radius: 3
                                     color: stopSample.modelData
-                                    border.color: Theme.color.neutral4
+                                    border.color: Theme.color.controlBorder
                                     border.width: 1
                                 }
 
@@ -314,19 +304,30 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
-        objectName: "designSystemColorAliases"
+        objectName: "designSystemColorTints"
         Layout.fillWidth: true
-        name: "Old names"
-        note: "Kept until their call sites move to the semantic role they read."
+        name: "Tints"
+        note: "Each hue at tintAlpha (" + Theme.color.tintAlpha + "), with its *Text role on top, as in StatusPill and ToastBanner."
         sampleSpacing: 12
 
         Repeater {
-            model: Object.keys(root.legacyRoles)
-            delegate: ColorSwatch {
+            model: root.tintRoles
+            delegate: Rectangle {
+                id: tintSample
                 required property string modelData
-                width: 300
-                role: modelData
-                detail: "= " + root.legacyRoles[modelData]
+                objectName: "designSystemColorTint_" + modelData
+                width: 150
+                height: 30
+                radius: height / 2
+                color: Theme.color[modelData + "Tint"]
+
+                CoreText {
+                    anchors.centerIn: parent
+                    text: tintSample.modelData + "Text"
+                    color: Theme.color[tintSample.modelData + "Text"]
+                    textStyle: Theme.text.captionStrong
+                    wrap: false
+                }
             }
         }
     }

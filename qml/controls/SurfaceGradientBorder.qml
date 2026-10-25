@@ -7,10 +7,10 @@ import QtQuick 2.15
 Item {
     id: root
 
-    property color surfaceColor: Theme.color.neutral1
+    property color surfaceColor: Theme.color.surface1
     property color referenceColor: surfaceColor
-    property var colors: Qt.colorEqual(referenceColor, Theme.color.neutral2)
-        ? Theme.color.neutral2SurfaceBorderGradient : Theme.color.neutral1SurfaceBorderGradient
+    property var colors: Qt.colorEqual(referenceColor, Theme.color.surface2)
+        ? Theme.color.surface2BorderGradient : Theme.color.surface1BorderGradient
     property color topColor: colors[0]
     property color bottomColor: colors[1]
     property real cornerRadius: 10

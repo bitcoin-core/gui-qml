@@ -93,7 +93,7 @@ TestCase {
         compare(page.maximumContentWidth, 640)
         verify(intro.text.indexOf("password encrypts the wallet") !== -1)
         compare(formCard.radius, 16)
-        compare(newPassword.background.color, Theme.color.neutral2)
+        compare(newPassword.background.color, Theme.color.surface2)
         compare(currentPassword.focus, false)
         compare(newPassword.focus, true)
         compare(newPassword.echoMode, TextInput.Password)
@@ -146,7 +146,7 @@ TestCase {
         tryCompare(banner, "visible", true)
         compare(resultText.text, "The current password is incorrect.")
         compare(banner.iconSource.toString(), "image://images/info-filled")
-        compare(banner.textColor, Theme.color.red)
+        compare(banner.textColor, Theme.color.dangerText)
 
         page.clearResult()
         page.handleSaveResult(true)
@@ -155,6 +155,6 @@ TestCase {
         tryCompare(banner, "visible", true)
         compare(resultText.text, "Password updated successfully.")
         compare(banner.iconSource.toString(), "image://images/check")
-        compare(banner.textColor, Theme.color.green)
+        compare(banner.textColor, Theme.color.successText)
     }
 }

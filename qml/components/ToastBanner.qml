@@ -12,18 +12,13 @@ Rectangle {
     id: root
 
     property url iconSource: ""
-    property color tintColor: Theme.color.blue
-    property real backgroundOpacity: 0.25
+    property color tintColor: Theme.color.info
     property color iconColor: tintColor
     property string text: ""
     property string textObjectName: ""
-    property color textColor: tintColor
+    property color textColor: Theme.color.textFor(tintColor)
     property var messageTextStyle: Theme.text.description
-    property color backgroundColor: Qt.rgba(
-        tintColor.r,
-        tintColor.g,
-        tintColor.b,
-        backgroundOpacity)
+    property color backgroundColor: Theme.color.tint(tintColor)
     property bool showsCloseButton: false
     property string actionText: ""
     // When > 0, auto-emits dismissed() after this many seconds while visible.

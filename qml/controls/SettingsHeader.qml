@@ -50,10 +50,9 @@ Pane {
 
                 onClicked: root.back()
 
-                background: Rectangle {
+                background: StateBackground {
                     id: backBg
                     radius: 10
-                    color: "transparent"
 
                     FocusBorder {
                         visible: compactButton.visualFocus
@@ -83,12 +82,12 @@ Pane {
                     State {
                         name: "HOVER"
                         when: compactButton.hovered && !compactButton.pressed
-                        PropertyChanges { target: backBg; color: Theme.color.neutral2 }
+                        PropertyChanges { target: backBg; stateColor: Theme.color.surfaceHover }
                     },
                     State {
                         name: "PRESSED"
                         when: compactButton.pressed
-                        PropertyChanges { target: backBg; color: Theme.color.neutral3 }
+                        PropertyChanges { target: backBg; stateColor: Theme.color.surfacePressed }
                     }
                 ]
             }

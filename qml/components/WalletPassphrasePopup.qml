@@ -54,9 +54,9 @@ AlertPopup {
         hideText: true
         placeholderText: qsTr("Enter password…")
         background: Rectangle {
-            color: Theme.color.neutral2
+            color: Theme.color.surface2
             radius: Theme.radius.s
-            border.color: Theme.color.neutral2
+            border.color: Theme.color.surface2
             border.width: 1
         }
         onAccepted: {

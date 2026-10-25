@@ -105,8 +105,8 @@ DesignSystemSection {
                 Layout.preferredWidth: 160
                 Layout.preferredHeight: 160
                 code: "bitcoin:" + root.exampleAddress
-                backgroundColor: "white"
-                foregroundColor: "black"
+                backgroundColor: Theme.color.qrBackground
+                foregroundColor: Theme.color.qrForeground
             }
         }
     }

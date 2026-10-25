@@ -14,7 +14,7 @@ Control {
     id: root
     property string text: ""
     property color bgColor
-    property color textColor: Theme.color.white
+    property color textColor: Theme.color.accentForeground
     property bool shorten: false
     property bool show: true
     property var chainModelRef: typeof chainModel !== "undefined" ? chainModel : null
@@ -62,7 +62,7 @@ Control {
                 target: root
                 visible: true
                 text: shorten ? qsTr("Testnet") : qsTr("Test network")
-                bgColor: Theme.color.green
+                bgColor: Theme.color.success
             }
         },
         State {
@@ -71,7 +71,7 @@ Control {
                 target: root
                 visible: true
                 text: shorten ? qsTr("Testnet4") : qsTr("Test network (v4)")
-                bgColor: Theme.color.green
+                bgColor: Theme.color.success
             }
         },
         State {
@@ -80,8 +80,8 @@ Control {
                 target: root
                 visible: true
                 text: shorten ? qsTr("Signet") : qsTr("Signet network")
-                bgColor: Theme.color.amber
-                textColor: Theme.color.neutral0
+                bgColor: Theme.color.warning
+                textColor: Theme.color.warningForeground
             }
         },
         State {
@@ -90,7 +90,7 @@ Control {
                 target: root
                 visible: true
                 text: shorten ? qsTr("Regtest") : qsTr("Regtest mode")
-                bgColor: Theme.color.blue
+                bgColor: Theme.color.info
             }
         }
     ]

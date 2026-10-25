@@ -41,8 +41,8 @@ SettingsPage {
         Accessible.name: accessibleName
 
         background: StateBackground {
-            stateColor: fontSizeButton.hovered || fontSizeButton.pressed
-                ? Theme.color.neutral2
+            stateColor: fontSizeButton.pressed ? Theme.color.surfacePressed
+                : fontSizeButton.hovered ? Theme.color.surfaceHover
                 : "transparent"
             radius: 8
         }
@@ -57,7 +57,7 @@ SettingsPage {
         contentItem: CoreText {
             objectName: fontSizeButton.objectName + "Label"
             text: "A"
-            color: fontSizeButton.enabled ? Theme.color.neutral9 : Theme.color.neutral4
+            color: fontSizeButton.enabled ? Theme.color.neutral9 : Theme.color.disabledContent
             font.family: Theme.text.family
             font.pixelSize: fontSizeButton.labelPixelSize
             horizontalAlignment: Text.AlignHCenter
@@ -82,12 +82,8 @@ SettingsPage {
         Layout.fillWidth: true
         shown: root.warningVisible
         iconSource: "image://images/alert-filled"
-        iconColor: Theme.color.red
+        tintColor: Theme.color.danger
         textColor: Theme.color.neutral9
-        backgroundColor: Qt.rgba(Theme.color.red.r,
-                                 Theme.color.red.g,
-                                 Theme.color.red.b,
-                                 0.12)
         showsCloseButton: true
         text: qsTr("Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")
         onDismissed: root.warningVisible = false
@@ -135,7 +131,7 @@ SettingsPage {
             Accessible.description: qsTr("%1 pixels").arg(rpcConsole.outputFontPixelSize)
 
             background: Rectangle {
-                color: Theme.color.neutral1
+                color: Theme.color.surface1
                 radius: Theme.radius.card
             }
 

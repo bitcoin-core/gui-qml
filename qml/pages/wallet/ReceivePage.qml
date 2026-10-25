@@ -25,7 +25,7 @@ Page {
     readonly property alias draftCard: card
     signal addressHistoryRequested()
     signal paymentRequestCreated()
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
 
     function ensureReceivingAddress(next, type) {

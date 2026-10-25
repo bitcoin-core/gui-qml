@@ -22,7 +22,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: Theme.radius.cardInset
-        color: root.down || root.hovered ? Theme.color.neutral3 : Theme.color.neutral2
+        color: root.down || root.hovered ? Theme.color.surface3 : Theme.color.surface2
         border.width: 0
 
         Behavior on color {

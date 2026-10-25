@@ -41,7 +41,7 @@ DialogPopup {
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(360, Math.max(72, bannedPeersList.contentHeight))
-            color: Theme.color.neutral2
+            color: Theme.color.surface2
             radius: Theme.radius.cardInset
             clip: true
 
@@ -70,8 +70,8 @@ DialogPopup {
                             anchors.fill: parent
                             anchors.margins: Theme.space.xs
                             radius: Theme.radius.sidebarRow
-                            stateColor: bannedPeerRow.down || bannedPeerRow.hovered
-                                ? Theme.color.neutral3 : "transparent"
+                            stateColor: bannedPeerRow.down ? Theme.color.surfacePressed
+                                : bannedPeerRow.hovered ? Theme.color.surfaceHover : "transparent"
                         }
                         Separator {
                             anchors.left: parent.left
@@ -80,7 +80,6 @@ DialogPopup {
                             anchors.leftMargin: Theme.space.l
                             anchors.rightMargin: Theme.space.l
                             visible: bannedPeerRow.index < bannedPeersList.count - 1
-                            color: Theme.color.neutral3
                         }
                     }
                     contentItem: RowLayout {

@@ -37,7 +37,7 @@ SettingsPage {
             objectName: "listenSettingRow"
             Layout.fillWidth: true
             title: qsTr("Enable listening")
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             description: qsTr("Allow incoming peer connections.")
             supportingText: root.listenSetting.infoText
             enabled: root.listenSetting.canEdit
@@ -51,7 +51,7 @@ SettingsPage {
         FormRow {
             Layout.fillWidth: true
             title: qsTr("Map port using NAT-PMP")
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             supportingText: root.natpmpSetting.infoText
             enabled: root.natpmpSetting.canEdit
             trailingItem: OptionSwitch {

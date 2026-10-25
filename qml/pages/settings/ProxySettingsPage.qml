@@ -124,7 +124,7 @@ SettingsPage {
 
         FormRow {
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("Enable")
             supportingText: root.proxySetting.infoText
             enabled: root.proxySetting.canEdit
@@ -167,7 +167,7 @@ SettingsPage {
 
         FormRow {
             Layout.fillWidth: true
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             title: qsTr("Enable")
             supportingText: root.onionSetting.infoText
             enabled: root.onionSetting.canEdit

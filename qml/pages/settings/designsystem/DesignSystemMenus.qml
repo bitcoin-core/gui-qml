@@ -219,7 +219,7 @@ DesignSystemSection {
                 Layout.fillWidth: true
                 placeholderText: "bitcoin:address?amount=…"
                 background: Rectangle {
-                    color: Theme.color.neutral2
+                    color: Theme.color.surface2
                     radius: Theme.radius.field
                 }
             }
@@ -292,7 +292,7 @@ DesignSystemSection {
 
                 FormSection {
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral2
+                    backgroundColor: Theme.color.surface2
                     ValueRow {
                         Layout.fillWidth: true
                         title: "Address"

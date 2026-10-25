@@ -6,8 +6,8 @@ import QtQuick 2.15
 
 Rectangle {
     id: root
-    property color baseColor: Theme.color.neutral1
-    property color highlightColor: Theme.color.neutral2
+    property color baseColor: Theme.color.surface1
+    property color highlightColor: Theme.color.surface2
     property int shimmerDuration: 2500
     property bool loading: true
 

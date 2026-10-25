@@ -183,8 +183,8 @@ SettingsPage {
     ToastBanner {
         objectName: "debugLogOpenErrorBanner"
         Layout.fillWidth: true
-        visible: debugLogModel.openError.length > 0
-        tintColor: debugLogModel.fileLoggingEnabled ? Theme.color.red : Theme.color.blue
+        shown: debugLogModel.openError.length > 0
+        tone: debugLogModel.fileLoggingEnabled ? ToastBanner.Error : ToastBanner.Info
         iconSource: "image://images/info-filled"
         text: debugLogModel.openError
         textObjectName: "debugLogOpenErrorText"
@@ -205,7 +205,7 @@ SettingsPage {
         objectName: "debugLogTableSection"
         Layout.fillWidth: true
         rowSpacing: 0
-        backgroundColor: Theme.color.neutral1
+        backgroundColor: Theme.color.surface1
 
         DebugLogTitlesHeader {
             id: titlesHeader
@@ -282,7 +282,7 @@ SettingsPage {
             objectName: "debugLogTableFooter"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
-            color: Theme.color.neutral1
+            color: Theme.color.surface1
             radius: Theme.radius.card
 
             Rectangle {
@@ -300,7 +300,7 @@ SettingsPage {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 height: 1
-                color: Theme.color.neutral2
+                color: Theme.color.surfaceDivider
             }
 
             NeutralButton {

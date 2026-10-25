@@ -16,9 +16,8 @@ RowLayout {
         objectName: "nodeWarningsButton"
         visible: nodeModel.hasWarnings
         iconSource: "image://images/alert-filled"
-        iconColor: Theme.color.orange
-        hoverColor: Theme.color.orangeLight1
-        activeColor: Theme.color.orange
+        iconColor: Theme.color.warning
+        hoverColor: Theme.color.warning
         size: 34
         accessibleName: qsTr("Node warnings")
         onClicked: root.openWindowPopup("openNodeWarnings")
@@ -28,8 +27,6 @@ RowLayout {
         objectName: "nodeInformationButton"
         iconSource: "image://images/info"
         iconColor: Theme.color.neutral7
-        hoverColor: Theme.color.neutral9
-        activeColor: Theme.color.orange
         size: 34
         accessibleName: qsTr("Node information")
         onClicked: root.openWindowPopup("openNodeInformation")

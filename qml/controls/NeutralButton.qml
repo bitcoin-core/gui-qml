@@ -18,7 +18,7 @@ AbstractButton {
     property int iconSize: large ? 20 : 15
     property int contentSpacing: large ? 4 : 8
     property var textStyle: large ? Theme.text.buttonStrong : Theme.text.captionStrong
-    property color textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral5
+    property color textColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     property int surfaceLevel: 1
     property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
     property color hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
@@ -28,10 +28,10 @@ AbstractButton {
     property string focusBorderObjectName: ""
     readonly property color currentBackgroundColor: forceHoverBackground || hovered || down
         ? hoverBackgroundColor : backgroundColor
-    readonly property bool useNeutral1BorderGradient: Qt.colorEqual(backgroundColor, Theme.color.neutral1)
-    readonly property color borderReferenceColor: useNeutral1BorderGradient ? Theme.color.neutral1 : Theme.color.neutral2
-    readonly property var borderGradientReference: useNeutral1BorderGradient
-        ? Theme.color.neutral1SurfaceBorderGradient : Theme.color.neutral2SurfaceBorderGradient
+    readonly property bool useSurface1BorderGradient: Qt.colorEqual(backgroundColor, Theme.color.surface1)
+    readonly property color borderReferenceColor: useSurface1BorderGradient ? Theme.color.surface1 : Theme.color.surface2
+    readonly property var borderGradientReference: useSurface1BorderGradient
+        ? Theme.color.surface1BorderGradient : Theme.color.surface2BorderGradient
     readonly property color borderTopReferenceColor: borderGradientReference[0]
     readonly property color borderBottomReferenceColor: borderGradientReference[1]
     readonly property color borderTopColor: shiftedBorderColor(currentBackgroundColor, borderTopReferenceColor)

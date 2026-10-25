@@ -193,7 +193,7 @@ Item {
                                 anchors.centerIn: parent
                                 visible: _row.selected
                                 source: root.selectionIconSource
-                                color: Theme.color.orange
+                                color: Theme.color.neutral9
                                 size: Theme.size.icon.l
                             }
                         }

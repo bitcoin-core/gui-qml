@@ -14,8 +14,8 @@ Button {
     implicitHeight: root.height
     implicitWidth: root.width
     property color iconColor: Theme.color.neutral5
-    property color hoverColor: activeColor
-    property color activeColor: Theme.color.orange
+    property color hoverColor: Theme.color.neutral9
+    property color activeColor: Theme.color.accent
     property int size: 35
     property int iconSize: size
     property int backgroundRadius: Theme.radius.s
@@ -33,16 +33,13 @@ Button {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: Rectangle {
+    background: StateBackground {
         id: bg
         anchors.fill: parent
         radius: root.backgroundRadius
-        color: root.hovered || root.pressed ? Theme.color.neutral2 : Theme.color.background
-
-        Behavior on color {
-            enabled: Theme.motion.animated
-            ColorAnimation { duration: Theme.motion.normal }
-        }
+        stateColor: root.pressed ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover
+            : "transparent"
     }
 
     FocusBorder {
@@ -77,11 +74,11 @@ Button {
         },
         State {
             name: "PRESSED"; when: root.pressed
-            PropertyChanges { target: icon; color: root.activeColor }
+            PropertyChanges { target: icon; color: root.hoverColor }
         },
         State {
             name: "DISABLED"; when: !root.enabled
-            PropertyChanges { target: icon; color: Theme.color.neutral4 }
+            PropertyChanges { target: icon; color: Theme.color.disabledContent }
         }
     ]
 }

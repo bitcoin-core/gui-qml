@@ -90,7 +90,7 @@ DesignSystemSection {
         FormRow {
             Layout.fillWidth: true
             title: "Supporting text"
-            supportingText: "Supporting text in blue."
+            supportingText: "Supporting text."
         }
 
         FormRow {
@@ -231,7 +231,7 @@ DesignSystemSection {
             description: "selected: true"
             selected: true
             showsDisclosureIndicator: true
-            disclosureIndicatorColor: Theme.color.orange
+            disclosureIndicatorColor: Theme.color.accent
         }
 
         ListRow {

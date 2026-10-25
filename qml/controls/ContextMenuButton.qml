@@ -21,12 +21,12 @@ AbstractButton {
     property bool selected: false
     property color textColor: Theme.color.neutral8
     property color hoverTextColor: Theme.color.neutral9
-    property color hoverBackgroundColor: Theme.color.neutral3
+    property color hoverBackgroundColor: Theme.color.surfacePressed
 
     readonly property bool _destructive: role === ContextMenuButton.Destructive
     readonly property bool _highlighted: enabled && (selected || hovered || down || visualFocus)
-    readonly property color _idleColor: _destructive ? Theme.color.red : root.textColor
-    readonly property color _hoverColor: _destructive ? Theme.color.red : root.hoverTextColor
+    readonly property color _idleColor: _destructive ? Theme.color.dangerText : root.textColor
+    readonly property color _hoverColor: _destructive ? Theme.color.dangerText : root.hoverTextColor
 
     signal triggered()
 

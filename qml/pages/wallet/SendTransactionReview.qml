@@ -60,7 +60,7 @@ Page {
         StatusPill {
             objectName: "sendTransactionReviewReadyPill"
             text: root.showBroadcast ? qsTr("Ready to broadcast") : qsTr("Ready to send")
-            accentColor: Theme.color.orange
+            accentColor: Theme.color.accent
         }
     }
 
@@ -212,7 +212,7 @@ Page {
                 objectName: "sendTransactionReviewWarning"
                 visible: root.showWarning
                 Layout.fillWidth: true
-                backgroundColor: Theme.color.neutral1
+                backgroundColor: Theme.color.surface1
                 contentMargin: 20
                 message: root.reviewMessage.length ? root.reviewMessage
                     : qsTr("This wallet does not have the keys to sign this transaction.")
@@ -245,7 +245,7 @@ Page {
                             leadingItem: ActivityRequestBadge {
                                 objectName: "sendTransactionReviewRecipient" + index + "RequestBadge"
                                 inactive: true
-                                surfaceColor: Theme.color.neutral1
+                                surfaceColor: Theme.color.surface1
                                 statusText: qsTr("Payment request recipient")
                             }
                             trailingItem: BitcoinAmountDisplayLabel {
@@ -293,7 +293,7 @@ Page {
                     Layout.fillWidth: true
                     title: qsTr("Total fees")
                     value: root.transaction ? root.transaction.fee : ""
-                    dividerColor: Theme.color.neutral2
+                    dividerColor: Theme.color.surfaceDivider
                 }
                 ValueRow {
                     objectName: "sendTransactionReviewTotal"
@@ -356,7 +356,7 @@ Page {
             ToastBanner {
                 shown: root.saveStatus.length > 0
                 Layout.fillWidth: true
-                tintColor: root.saveError ? Theme.color.red : Theme.color.green
+                tintColor: root.saveError ? Theme.color.danger : Theme.color.success
                 iconSource: root.saveError ? "image://images/info-filled" : "image://images/check"
                 text: root.saveStatus
                 dismissAfter: 3
@@ -367,7 +367,7 @@ Page {
                 visible: text.length > 0
                 Layout.fillWidth: true
                 text: root.wallet ? root.wallet.transactionError : ""
-                color: Theme.color.red
+                color: Theme.color.dangerText
                 textStyle: Theme.text.description
                 wrap: true
             }

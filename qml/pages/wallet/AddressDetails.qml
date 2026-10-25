@@ -53,14 +53,14 @@ ColumnLayout {
     FormSection {
         objectName: "addressDetailsSection"
         Layout.fillWidth: true
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
 
         ValueRow {
             objectName: "addressDetailsAddressRow"
             Layout.fillWidth: true
             title: qsTr("Address")
             minimumRowHeight: 76
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
 
             trailingItem: AddressLabel {
                 objectName: "addressDetailsAddressLabel"
@@ -82,8 +82,8 @@ ColumnLayout {
             Layout.fillWidth: true
             title: qsTr("Amount")
             value: root.amount
-            valueColor: root.hasAmount ? Theme.color.green : Theme.color.neutral6
-            dividerColor: Theme.color.neutral3
+            valueColor: root.hasAmount ? Theme.color.txIncoming : Theme.color.neutral6
+            dividerColor: Theme.color.surfaceDivider
         }
 
         TextFieldRow {
@@ -101,7 +101,7 @@ ColumnLayout {
             enabled: root.canEditLabel
             readOnly: !root.canEditLabel
             errorText: root.noteErrorText
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
             onEditingFinished: {
                 if (text !== root.label) {
                     root.editLabelRequested(root.address, text)
@@ -114,7 +114,7 @@ ColumnLayout {
             Layout.fillWidth: true
             title: qsTr("Type")
             value: root.category === "change" ? qsTr("Change") : qsTr("Receive")
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
         }
 
         ValueRow {
@@ -136,10 +136,6 @@ ColumnLayout {
             //: Starts a new payment request for this address
             : qsTr("Create payment request")
         visible: root.category === "single-use" && !root.used
-        backgroundColor: Theme.color.orange
-        backgroundHoverColor: Theme.color.orangeLight1
-        backgroundPressedColor: Theme.color.orangeLight2
-        textColor: Theme.color.white
         onClicked: root.createPaymentRequestRequested()
     }
 }
