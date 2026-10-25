@@ -305,7 +305,7 @@ DialogPopup {
                         onClicked: actionDelegate.triggerAction()
                     }
 
-                    ContinueButton {
+                    PrimaryButton {
                         anchors.fill: parent
                         horizontalPadding: Theme.space.xl
                         visible: !actionDelegate.neutralAction

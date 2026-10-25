@@ -127,7 +127,7 @@ SettingsPage {
                     }
                 }
 
-                ContinueButton {
+                PrimaryButton {
                     objectName: "externalSignerCheckDeviceButton"
                     Layout.preferredWidth: Math.max(140, implicitWidth)
                     Layout.preferredHeight: Math.max(40, implicitHeight)

@@ -142,7 +142,7 @@ Page {
                 onClicked: root.viewNewTransaction(root.txid)
             }
 
-            ContinueButton {
+            PrimaryButton {
                 objectName: "sendResultDoneButton"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46

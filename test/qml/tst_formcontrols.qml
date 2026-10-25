@@ -160,9 +160,9 @@ TestCase {
     }
 
     Component {
-        id: continueButtonComponent
+        id: primaryButtonComponent
 
-        ContinueButton {
+        PrimaryButton {
             text: "Continue"
             enabled: false
         }
@@ -548,9 +548,9 @@ TestCase {
         tryCompare(button, "scale", 1.0)
     }
 
-    function test_continueButtonKeepsPrimaryColorWhenDisabled() {
+    function test_primaryButtonKeepsAccentColorWhenDisabled() {
         Theme.motion.mode = "full"
-        const button = createTemporaryObject(continueButtonComponent, host)
+        const button = createTemporaryObject(primaryButtonComponent, host)
         verify(button !== null)
 
         compare(button.enabled, false)

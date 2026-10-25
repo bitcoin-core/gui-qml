@@ -172,7 +172,7 @@ SettingsPage {
                 textObjectName: "walletPasswordErrorText"
             }
 
-            ContinueButton {
+            PrimaryButton {
                 objectName: "walletPasswordSaveButton"
                 Layout.preferredWidth: Math.min(320, parent.width)
                 Layout.alignment: Qt.AlignHCenter

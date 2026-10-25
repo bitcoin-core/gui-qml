@@ -193,7 +193,7 @@ Rectangle {
 
     Component {
         id: filledPrimaryButton
-        ContinueButton {
+        PrimaryButton {
             objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
             text: root.primaryButtonText
             leftPadding: root.bannerLayout === InfoBanner.Layout.Vertical ? 30 : 20

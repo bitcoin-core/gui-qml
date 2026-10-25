@@ -168,7 +168,7 @@ SettingsPage {
                     Layout.fillWidth: true
                     spacing: 12
 
-                    ContinueButton {
+                    PrimaryButton {
                         objectName: "signMessageButton"
                         Layout.fillWidth: true
                         text: qsTr("Sign message")
@@ -269,7 +269,7 @@ SettingsPage {
                     Layout.fillWidth: true
                     spacing: 12
 
-                    ContinueButton {
+                    PrimaryButton {
                         objectName: "verifyMessageButton"
                         Layout.fillWidth: true
                         text: qsTr("Verify message")

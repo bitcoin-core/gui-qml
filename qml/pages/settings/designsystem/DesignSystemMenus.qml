@@ -325,7 +325,7 @@ DesignSystemSection {
 
                 Item { Layout.fillHeight: true }
 
-                ContinueButton {
+                PrimaryButton {
                     Layout.alignment: Qt.AlignRight
                     text: "Continue"
                 }

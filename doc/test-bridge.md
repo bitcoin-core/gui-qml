@@ -173,7 +173,7 @@ Useful for debugging and discovering available targets.
 → {"cmd": "list_objects"}
 ← {"objects": [
      {"objectName": "main", "className": "PageStack"},
-     {"objectName": "importButton", "className": "ContinueButton_QMLTYPE_42"},
+     {"objectName": "importButton", "className": "PrimaryButton_QMLTYPE_42"},
      ...
    ]}
 ```
@@ -261,7 +261,7 @@ interactive element that tests need to access **must** have an `objectName`
 set:
 
 ```qml
-ContinueButton {
+PrimaryButton {
     objectName: "importWalletButton"
     text: qsTr("Import wallet")
     onClicked: root.push(importWallet)

@@ -44,7 +44,7 @@ TestCase {
         "designSystemMotionHelpers",
         "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
         "designSystemFocusRing", "designSystemBreakpoints",
-        "designSystemContinueButton", "designSystemNeutralButton",
+        "designSystemPrimaryButton", "designSystemNeutralButton",
         "designSystemLinkButton", "designSystemIconButton", "designSystemCloseButton",
         "designSystemCopyButton", "designSystemOverflowMenuButton", "designSystemFilterButton",
         "designSystemDropdownButton", "designSystemAmountUnitButton", "designSystemNavButton",
