@@ -115,9 +115,9 @@ ColumnLayout {
             iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/checklist.svg"
             text: ""
-            backgroundColor: root.walletSelectionActive ? Theme.color.orange : Theme.color.neutral2
-            hoverBackgroundColor: root.walletSelectionActive ? Theme.color.orangeLight1 : Theme.color.neutral3
-            textColor: root.walletSelectionActive ? Theme.color.white : Theme.color.neutral9
+            backgroundColor: root.walletSelectionActive ? Theme.color.activeFill : Theme.color.surface2
+            hoverBackgroundColor: root.walletSelectionActive ? Theme.color.activeFill : Theme.color.surface3
+            textColor: root.walletSelectionActive ? Theme.color.activeForeground : Theme.color.neutral9
             Accessible.name: qsTr("Select coins")
             Accessible.checkable: true
             Accessible.checked: root.walletSelectionActive
@@ -253,7 +253,7 @@ ColumnLayout {
                     anchors.leftMargin: 50
                     anchors.rightMargin: Theme.space.ml
                     height: 1
-                    color: Theme.color.neutral3
+                    color: Theme.color.surfaceDivider
                 }
                 FocusBorder {
                     visible: coinRow.visualFocus
@@ -347,9 +347,9 @@ ColumnLayout {
         surfaceLevel: root.selectionMode ? 1 : 0
         showGradientBorder: false
         rowSpacing: 0
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.neutral3 }
+        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
         ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
         ValueRow { Layout.fillWidth: true; amountValue: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
     }
@@ -361,7 +361,7 @@ ColumnLayout {
         NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
         NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
     }
-    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.red; horizontalAlignment: Text.AlignLeft }
+    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; horizontalAlignment: Text.AlignLeft }
 
     ContextMenu {
         id: sortMenu; parent: Overlay.overlay; objectName: "coinBrowserSortMenu"

@@ -181,7 +181,7 @@ ColumnLayout {
             enabled: root.enabled
             font: Theme.text.body.font
             color: Theme.color.neutral9
-            placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+            placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
             verticalAlignment: TextInput.AlignVCenter
             background: Item {}
             placeholderText: root.placeholderText
@@ -284,14 +284,14 @@ ColumnLayout {
         Icon {
             source: "image://images/alert-filled"
             size: 22
-            color: Theme.color.red
+            color: Theme.color.danger
         }
 
         CoreText {
             id: errorTextLabel
             text: root.errorText
             textStyle: Theme.text.description
-            color: Theme.color.red
+            color: Theme.color.dangerText
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true
         }

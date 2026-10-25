@@ -31,8 +31,8 @@ Item {
         return qsTr("Approve on external signer to broadcast this transaction.")
     }
     readonly property color statusColor: {
-        if (reviewState === "signed") return Theme.color.green
-        if (reviewState === "error") return Theme.color.red
+        if (reviewState === "signed") return Theme.color.successText
+        if (reviewState === "error") return Theme.color.dangerText
         return Theme.color.neutral7
     }
     readonly property string buttonText: {

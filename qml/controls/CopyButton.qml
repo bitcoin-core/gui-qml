@@ -27,11 +27,11 @@ AbstractButton {
     readonly property bool _showsIcon: displayMode !== CopyButton.TextOnly
     readonly property bool _showsText: displayMode !== CopyButton.IconOnly
     readonly property color _iconColor: !enabled
-        ? Theme.color.neutral4
-        : hovered || down ? Theme.color.orange : Theme.color.neutral7
+        ? Theme.color.disabledContent
+        : hovered || down ? Theme.color.neutral9 : Theme.color.neutral7
     readonly property color _textColor: !enabled
-        ? Theme.color.neutral4
-        : hovered || down ? Theme.color.orange : Theme.color.neutral8
+        ? Theme.color.disabledContent
+        : hovered || down ? Theme.color.neutral9 : Theme.color.neutral8
     // The copied swap fades, and also scales unless motion is reduced.
     readonly property real _swapScale: Theme.motion.reduced ? 1 : 0.9
 
@@ -149,14 +149,10 @@ AbstractButton {
         }
     }
 
-    background: Rectangle {
-        color: root.hovered || root.down ? Theme.color.neutral3 : "transparent"
+    background: StateBackground {
+        stateColor: root.down ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover : "transparent"
         radius: Theme.radius.m
-
-        Behavior on color {
-            enabled: Theme.motion.animated
-            ColorAnimation { duration: Theme.motion.normal }
-        }
 
         FocusBorder {
             visible: root.visualFocus

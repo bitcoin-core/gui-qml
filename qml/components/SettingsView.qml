@@ -200,7 +200,7 @@ Page {
         text: typeof optionsModel === "undefined" ? ""
             : optionsModel.settingsError || (optionsModel.settingsReady === false ? qsTr("Loading settings…")
             : optionsModel.settingsPending ? qsTr("Saving settings…") : "")
-        color: optionsModel.settingsError ? Theme.color.red : Theme.color.neutral7
+        color: optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
     }
 
     contentItem: NavigationSplitView {
@@ -219,7 +219,7 @@ Page {
         primaryComponent: Rectangle {
             objectName: "settingsSidebarSurface"
             readonly property alias sidebar: sidebar
-            color: Theme.color.neutral1
+            color: Theme.color.surface1
 
             Behavior on color {
                 enabled: Theme.motion.animated

@@ -13,7 +13,7 @@ ListRow {
     property url linkIconSource: "image://images/export"
     property int linkIconSize: 18
     property int valueMaximumWidth: 300
-    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
+    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     property color linkIconColor: valueColor
     property var valueTextStyle: Theme.text.description
 

@@ -13,7 +13,10 @@ AbstractButton {
     property url iconSource: ""
     property int iconSize: Theme.size.icon.s
     property var textStyle: Theme.text.captionStrong
-    property color textColor: enabled ? Theme.color.orange : Theme.color.neutral5
+    property color textColor: !enabled ? Theme.color.disabledContent
+        : down ? Theme.color.accentPressed
+        : hovered ? Theme.color.accentHover
+        : Theme.color.accentText
 
     implicitHeight: Theme.size.controlSmall
     implicitWidth: contentItem.implicitWidth + leftPadding + rightPadding
@@ -47,6 +50,4 @@ AbstractButton {
         borderRadius: 6
     }
 
-    opacity: down ? 0.7 : hovered ? 0.85 : 1
-    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fast } }
 }

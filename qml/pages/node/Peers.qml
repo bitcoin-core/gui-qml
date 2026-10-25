@@ -53,7 +53,7 @@ Page {
         { text: qsTr("Received"), value: "received" }
     ]
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
 
     header: NavigationBar2 {
         visible: root.showHeader
@@ -287,8 +287,8 @@ Page {
                     Accessible.name: qsTr("Sort peers")
                     background: StateBackground {
                         radius: 8
-                        stateColor: sortButton.down ? Theme.color.neutral3
-                            : sortButton.hovered ? Theme.color.neutral2 : Theme.color.neutral1
+                        stateColor: sortButton.down ? Theme.color.surface3
+                            : sortButton.hovered ? Theme.color.surface2 : Theme.color.surface1
                         border.width: 0
                         FocusBorder {
                             objectName: "peerSortButtonFocusBorder"
@@ -357,7 +357,7 @@ Page {
                     text: qsTr("Direction")
                     active: peerListModelProxy.directionFilters.length > 0
                     opened: directionFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: connectionTypeFilterButton
                     KeyNavigation.backtab: filterButton.visible ? filterButton : sortButton
                     onClicked: directionFilterMenu.opened ? directionFilterMenu.close() : directionFilterMenu.open()
@@ -368,7 +368,7 @@ Page {
                     text: qsTr("Connection")
                     active: peerListModelProxy.connectionTypeFilters.length > 0
                     opened: connectionTypeFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: networkFilterButton
                     KeyNavigation.backtab: directionFilterButton
                     onClicked: connectionTypeFilterMenu.opened ? connectionTypeFilterMenu.close() : connectionTypeFilterMenu.open()
@@ -379,7 +379,7 @@ Page {
                     text: qsTr("Network")
                     active: peerListModelProxy.networkFilters.length > 0
                     opened: networkFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.tab: transportFilterButton
                     KeyNavigation.backtab: connectionTypeFilterButton
                     onClicked: networkFilterMenu.opened ? networkFilterMenu.close() : networkFilterMenu.open()
@@ -390,7 +390,7 @@ Page {
                     text: qsTr("Transport")
                     active: peerListModelProxy.transportFilters.length > 0
                     opened: transportFilterMenu.visible
-                    defaultBgColor: Theme.color.neutral1
+                    defaultBgColor: Theme.color.surface1
                     KeyNavigation.backtab: networkFilterButton
                     // Resolve the first row on each press: itemAtIndex() is null while
                     // that row is scrolled out and does not notify when it returns.
@@ -416,7 +416,7 @@ Page {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 120
-                color: Theme.color.neutral1
+                color: Theme.color.surface1
                 radius: Theme.radius.card
                 border.width: 0
                 clip: true
@@ -467,16 +467,16 @@ Page {
                                 anchors.fill: parent
                                 anchors.margins: 4
                                 radius: Theme.radius.listRow
-                                stateColor: delegate.down ? Theme.color.neutral3
-                                    : ((!root.compact && root.selectedNodeId === delegate.nodeId) || delegate.hovered)
-                                        ? Theme.color.neutral2 : "transparent"
+                                stateColor: delegate.down ? Theme.color.surfacePressed
+                                    : !root.compact && root.selectedNodeId === delegate.nodeId ? Theme.color.surfaceSelected
+                                    : delegate.hovered ? Theme.color.surfaceHover : "transparent"
                             }
                             Rectangle {
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                 anchors.leftMargin: 12; anchors.rightMargin: 12
                                 height: 1
                                 visible: delegate.index < peerListModelProxy.count - 1
-                                color: Theme.color.neutral2
+                                color: Theme.color.surfaceDivider
                             }
                             FocusBorder {
                                 objectName: delegate.objectName + "FocusBorder"
@@ -495,7 +495,7 @@ Page {
                                 Layout.preferredWidth: Math.max(42, idText.implicitWidth + 16)
                                 Layout.preferredHeight: 32
                                 radius: 8
-                                color: Theme.color.neutral2
+                                color: Theme.color.surface2
                                 CoreText {
                                     id: idText
                                     anchors.centerIn: parent
@@ -546,14 +546,14 @@ Page {
                                         objectName: delegate.objectName + "Sent"
                                         text: "↑ " + delegate.sent
                                         textStyle: Theme.text.monoCaption
-                                        color: Theme.color.purple
+                                        color: Theme.color.trafficSent
                                         wrap: false
                                     }
                                     CoreText {
                                         objectName: delegate.objectName + "Received"
                                         text: "↓ " + delegate.received
                                         textStyle: Theme.text.monoCaption
-                                        color: Theme.color.blue
+                                        color: Theme.color.trafficReceived
                                         wrap: false
                                     }
                                     Item {

@@ -13,7 +13,7 @@ Popup {
     property int minMenuWidth: 240
     property int itemSpacing: 0
     property int menuPadding: Theme.space.s
-    property color backgroundColor: Theme.color.neutral1
+    property color backgroundColor: Theme.color.surface1
     readonly property alias titleItem: _title
 
     default property alias menuItems: _column.data

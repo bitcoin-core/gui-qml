@@ -19,8 +19,8 @@ Control {
     property int groupSpacing: Theme.space.l
     property int groupTitleHeight: 25
     property int cornerRadius: Theme.radius.sidebarRow
-    property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-    property color hoverBackgroundColor: Theme.color.neutral2
+    property color selectedBackgroundColor: Theme.color.surfaceSelected
+    property color hoverBackgroundColor: Theme.color.surfaceHover
     readonly property var visibleSections: root.filteredSections()
     readonly property alias listView: sectionList
 
@@ -120,9 +120,9 @@ Control {
 
                 onClicked: root.sectionActivated(delegate.modelData.id)
 
-                background: Rectangle {
+                background: StateBackground {
                     radius: root.cornerRadius
-                    color: delegate.modelData.id === root.currentSectionId
+                    stateColor: delegate.modelData.id === root.currentSectionId
                         ? root.selectedBackgroundColor
                         : button.hovered
                             ? root.hoverBackgroundColor
@@ -140,18 +140,11 @@ Control {
 
                 contentItem: CoreText {
                     text: delegate.modelData.label
-                    color: delegate.modelData.id === root.currentSectionId
-                        ? Theme.color.orange
-                        : Theme.color.neutral9
+                    color: Theme.color.neutral9
                     textStyle: Theme.text.description
                     horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
-
-                    Behavior on color {
-                        enabled: Theme.motion.animated
-                        ColorAnimation { duration: Theme.motion.normal }
-                    }
                 }
 
                 HoverHandler {

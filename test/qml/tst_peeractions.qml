@@ -443,8 +443,8 @@ TestCase {
 
         compare(sent.text, "↑ 1 kB")
         compare(received.text, "↓ 2 kB")
-        compare(sent.color, Theme.color.purple)
-        compare(received.color, Theme.color.blue)
+        compare(sent.color, Theme.color.trafficSent)
+        compare(received.color, Theme.color.trafficReceived)
         compare(Math.round(sent.y), Math.round(received.y))
         verify(received.x > sent.x + sent.width)
     }

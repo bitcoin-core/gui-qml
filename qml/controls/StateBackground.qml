@@ -11,7 +11,7 @@ Rectangle {
     property color stateColor: "transparent"
     // Fading to or from "transparent" keeps the last visible hue, so the
     // fade does not pass through translucent black.
-    property color fadeHue: Theme.color.neutral2
+    property color fadeHue: Theme.color.surfaceHover
 
     color: stateColor.a > 0 ? stateColor : Qt.rgba(fadeHue.r, fadeHue.g, fadeHue.b, 0)
     onStateColorChanged: if (stateColor.a > 0) fadeHue = stateColor

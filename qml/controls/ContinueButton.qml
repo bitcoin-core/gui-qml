@@ -21,12 +21,14 @@ Button {
         }
     }
 
-    property color textColor: Theme.color.white
+    // Fills with danger instead of accent, for actions that destroy or cannot be undone.
+    property bool destructive: false
+    property color textColor: Theme.color.accentForeground
     property color textHoverColor: textColor
     property color textPressedColor: textColor
-    property color backgroundColor: Theme.color.orange
-    property color backgroundHoverColor: Theme.color.orangeLight1
-    property color backgroundPressedColor: Theme.color.orangeLight2
+    property color backgroundColor: destructive ? Theme.color.danger : Theme.color.accent
+    property color backgroundHoverColor: destructive ? Theme.color.dangerHover : Theme.color.accentHover
+    property color backgroundPressedColor: destructive ? Theme.color.dangerPressed : Theme.color.accentPressed
     property color borderColor: "transparent"
     property color borderHoverColor: "transparent"
     property color borderPressedColor: "transparent"
@@ -102,15 +104,15 @@ Button {
 
         SurfaceGradientBorder {
             anchors.fill: parent
-            visible: (Qt.colorEqual(root.backgroundColor, Theme.color.orange)
-                || Qt.colorEqual(root.backgroundColor, Theme.color.red))
+            visible: (Qt.colorEqual(root.backgroundColor, Theme.color.accent)
+                || Qt.colorEqual(root.backgroundColor, Theme.color.danger))
                 && Qt.colorEqual(bg.border.color, "transparent")
             surfaceColor: bg.color
-            referenceColor: Qt.colorEqual(root.backgroundColor, Theme.color.red)
-                ? Theme.color.red : Theme.color.orange
-            colors: Qt.colorEqual(root.backgroundColor, Theme.color.red)
-                ? Theme.color.destructiveButtonBorderGradient
-                : Theme.color.primaryButtonBorderGradient
+            referenceColor: Qt.colorEqual(root.backgroundColor, Theme.color.danger)
+                ? Theme.color.danger : Theme.color.accent
+            colors: Qt.colorEqual(root.backgroundColor, Theme.color.danger)
+                ? Theme.color.dangerBorderGradient
+                : Theme.color.accentBorderGradient
             cornerRadius: bg.radius
         }
 

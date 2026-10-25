@@ -192,7 +192,7 @@ SettingsPage {
         Layout.fillWidth: true
         visible: root.errorText.length > 0
         text: root.errorText
-        color: Theme.color.red
+        color: Theme.color.dangerText
         textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }

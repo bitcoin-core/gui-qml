@@ -90,7 +90,7 @@ AbstractButton {
                     //: Placeholder shown when an address has no label yet.
                     ? qsTr("Add label…")
                     : qsTr("Change address")
-                placeholderTextColor: Theme.color.neutral6
+                placeholderTextColor: Theme.color.placeholder
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
                 font: Theme.text.description.font
                 readOnly: !root.canEditLabel
@@ -105,7 +105,7 @@ AbstractButton {
 
                 background: Rectangle {
                     radius: Theme.radius.field
-                    color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
+                    color: noteField.activeFocus ? Theme.color.surface2 : "transparent"
 
                     FieldBorderRings {
                         objectName: "addressRowNoteFocusBorder"
@@ -174,7 +174,7 @@ AbstractButton {
                     objectName: "addressRowAmountText"
                     Layout.fillWidth: true
                     text: root.displayAmount
-                    color: root.hasAmount ? Theme.color.green : Theme.color.neutral7
+                    color: root.hasAmount ? Theme.color.txIncoming : Theme.color.neutral7
                     textStyle: Theme.text.amountDescription
                     horizontalAlignment: Text.AlignRight
                     elide: Text.ElideRight
@@ -206,7 +206,6 @@ AbstractButton {
             anchors.bottom: parent.bottom
             anchors.leftMargin: 16
             anchors.rightMargin: 16
-            color: Theme.color.neutral3
         }
     }
 

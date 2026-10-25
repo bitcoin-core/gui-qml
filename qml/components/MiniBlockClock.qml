@@ -15,7 +15,7 @@ Item {
 
     property real iconSize: 18
     property bool pageSelected: false
-    property color selectedColor: Theme.color.orange
+    property color selectedColor: Theme.color.accentText
     property bool renderingActive: true
     property var nodeModelRef: typeof nodeModel !== "undefined" ? nodeModel : null
     readonly property bool connected: root.nodeModelRef !== null && root.nodeModelRef.numPeers > 0
@@ -70,7 +70,7 @@ Item {
         showTimeTicks: false
         showBlockSegments: false
         useGradientArcWhenSynced: !root.pageSelected
-        backgroundColor: Theme.color.neutral3
+        backgroundColor: Theme.color.surface3
         timeTickColor: "transparent"
         confirmationColors: root.pageSelected
             ? [root.selectedColor, root.selectedColor, root.selectedColor,
@@ -121,7 +121,7 @@ Item {
         visible: root.showOfflineState
         anchors.centerIn: parent
         source: "image://images/network-light"
-        color: root.pageSelected ? root.selectedColor : Theme.color.red
+        color: root.pageSelected ? root.selectedColor : Theme.color.danger
         size: root.width
     }
 
@@ -180,7 +180,7 @@ Item {
             radius: width / 2
             color: "transparent"
             border.width: root.strokeWidth
-            border.color: Theme.color.red
+            border.color: Theme.color.danger
         }
 
         Rectangle {
@@ -189,7 +189,7 @@ Item {
             width: Math.max(root.strokeWidth, parent.width * 0.12)
             height: parent.height * 0.34
             radius: width / 2
-            color: Theme.color.red
+            color: Theme.color.danger
         }
 
         Rectangle {
@@ -198,7 +198,7 @@ Item {
             width: Math.max(root.strokeWidth, parent.width * 0.12)
             height: width
             radius: width / 2
-            color: Theme.color.red
+            color: Theme.color.danger
         }
     }
 }

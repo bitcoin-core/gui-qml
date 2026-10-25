@@ -64,7 +64,7 @@ SettingsPage {
         FormRow {
             Layout.fillWidth: true
             title: qsTr("Store recent blocks only")
-            dividerColor: root.onboarding ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             supportingText: root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
             trailingItem: OptionSwitch {

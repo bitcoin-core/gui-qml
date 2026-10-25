@@ -21,15 +21,6 @@ QtObject {
     required property color neutral8
     required property color neutral9
 
-    // Base hues
-    required property color orange
-    required property color red
-    required property color green
-    required property color blue
-    required property color amber
-    required property color purple
-    required property color lavender
-
     // Surfaces, numbered by nesting depth
     property color background: neutral0
     property color surface1: neutral1
@@ -46,32 +37,86 @@ QtObject {
         return Qt.rgba(neutral9.r, neutral9.g, neutral9.b, alpha)
     }
 
-    property color surfaceHover: foreground(isDark ? 0.0675 : 0.0325)
+    // Dark alphas are strong enough to show on background (black) as well as on cards.
+    property color surfaceHover: foreground(isDark ? 0.1 : 0.045)
     property color surfacePressed: foreground(isDark ? 0.16 : 0.0813)
-    property color surfaceSelected: surfaceHover
-    property color surfaceDivider: foreground(isDark ? 0.0675 : 0.0813)
+    // Between hover and pressed, so a hovered row still differs from the selected one.
+    property color surfaceSelected: foreground(isDark ? 0.13 : 0.065)
+    property color surfaceDivider: foreground(isDark ? 0.1 : 0.0813)
     property color menuBorder: neutral2
     property color menuDivider: menuBorder
     property color modalOverlay: Qt.rgba(0, 0, 0, 0.5)
 
-    // Semantic roles
-    property color accent: orange
+    // Semantic roles. Each palette sets the required ones; the rest derive from them.
+    // Text and icons use the neutral ramp directly: neutral9 primary,
+    // neutral8 menu items and labels, neutral7 secondary, neutral6 tertiary.
+    required property color accent
     property color accentHover: Qt.lighter(accent, 1.1)
     property color accentPressed: Qt.darker(accent, 1.1)
+    // Orange text and links; may be darker than accent to stay readable.
     property color accentText: accent
+    // Content on accent, danger and success fills.
     property color accentForeground: "#FFFFFF"
-    property color focus: purple
-    property color danger: red
-    property color success: green
-    property color info: blue
-    property color warning: amber
-    property color txSent: purple
-    property color txReceived: blue
+    required property color focus
+    required property color danger
+    property color dangerHover: Qt.lighter(danger, 1.1)
+    property color dangerPressed: Qt.darker(danger, 1.1)
+    property color dangerText: danger
+    required property color success
+    property color successText: success
+    required property color info
+    property color infoText: info
+    required property color warning
+    property color warningText: warning
+    property color warningForeground: neutral0
+    // Network traffic and peer byte counts.
+    required property color trafficSent
+    required property color trafficReceived
+    // Wallet activity: money in and out, transfers within the wallet, payment requests.
+    property color txIncoming: successText
+    property color txOutgoing: accent
+    required property color txInternal
+    required property color paymentRequest
+    property color paymentRequestText: paymentRequest
+    // A control that is switched on, such as an applied filter. Neutral; accent fills are for primary actions.
+    property color activeFill: neutral9
+    property color activeForeground: background
     property color placeholder: neutral6
     property color disabledContent: neutral4
-    property color selection: accent
-    property color selectedText: accentForeground
+    // Checkbox and field borders, slider thumb rims, the off track of a switch.
+    property color controlBorder: neutral5
+    property color sliderTrack: controlBorder
+    property color selection: Qt.tint(background, Qt.rgba(accent.r, accent.g, accent.b, 0.35))
+    property color selectedText: neutral9
     property color syntaxKey: success
+    // QR codes stay dark on light in every palette, so scanners read them.
+    property color qrBackground: "#FFFFFF"
+    property color qrForeground: "#000000"
+    // Onboarding illustration: the signal pulse and the newest block.
+    property color illustrationSignal: "#F9D63C"
+    property color illustrationLatestBlock: confirmationColors[1]
+
+    // Tints: a role at one alpha, for pills, banners and icon discs.
+    // Text on a tint uses the matching *Text role.
+    property real tintAlpha: 0.16
+    function tint(color) {
+        return Qt.rgba(color.r, color.g, color.b, tintAlpha)
+    }
+    // The text role for a hue role, for components that take a tint color.
+    function textFor(color) {
+        const pairs = [[accent, accentText], [danger, dangerText], [success, successText],
+                       [info, infoText], [warning, warningText], [paymentRequest, paymentRequestText]]
+        for (const pair of pairs) {
+            if (Qt.colorEqual(color, pair[0])) return pair[1]
+        }
+        return color
+    }
+    property color accentTint: tint(accent)
+    property color dangerTint: tint(danger)
+    property color successTint: tint(success)
+    property color infoTint: tint(info)
+    property color warningTint: tint(warning)
+    property color paymentRequestTint: tint(paymentRequest)
 
     // Border gradients, top to bottom
     property var surface1BorderGradient: [Qt.tint(surface1, foreground(isDark ? 0.09 : 0.004)),
@@ -89,13 +134,4 @@ QtObject {
         "#F0BB49",
         "#F1D54A", // yellow
     ]
-
-    // Names from before the semantic roles; call sites move to the roles above.
-    readonly property color white: accentForeground
-    readonly property color orangeLight1: accentHover
-    readonly property color orangeLight2: accentPressed
-    readonly property var neutral1SurfaceBorderGradient: surface1BorderGradient
-    readonly property var neutral2SurfaceBorderGradient: surface2BorderGradient
-    readonly property var primaryButtonBorderGradient: accentBorderGradient
-    readonly property var destructiveButtonBorderGradient: dangerBorderGradient
 }

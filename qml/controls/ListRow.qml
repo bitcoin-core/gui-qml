@@ -25,9 +25,10 @@ AbstractButton {
     property bool selected: false
     property int accessibleRole: Accessible.ListItem
     property int cornerRadius: Theme.radius.listRow
-    property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-    property color hoverBackgroundColor: Theme.color.neutral2
-    property color selectedTextColor: Theme.color.orange
+    property color selectedBackgroundColor: Theme.color.surfaceSelected
+    property color hoverBackgroundColor: Theme.color.surfaceHover
+    property color pressedBackgroundColor: Theme.color.surfacePressed
+    property color selectedTextColor: Theme.color.neutral9
 
     // A trailing switch only mirrors the row, which is the control and
     // reports the switch's state.
@@ -49,13 +50,12 @@ AbstractButton {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: Rectangle {
+    background: StateBackground {
         radius: root.cornerRadius
-        color: root.selected
-            ? root.selectedBackgroundColor
-            : root.down || root.hovered
-                ? root.hoverBackgroundColor
-                : "transparent"
+        stateColor: root.down ? root.pressedBackgroundColor
+            : root.selected ? root.selectedBackgroundColor
+            : root.hovered ? root.hoverBackgroundColor
+            : "transparent"
 
         // Inset, so the clipped FormSection card does not cut the ring off.
         FocusBorder {
@@ -73,6 +73,6 @@ AbstractButton {
         id: row
         enabled: root.enabled
         width: root.availableWidth
-        titleColor: root.selected && root.enabled ? root.selectedTextColor : (root.enabled ? Theme.color.neutral9 : Theme.color.neutral4)
+        titleColor: !root.enabled ? Theme.color.disabledContent : root.selected ? root.selectedTextColor : Theme.color.neutral9
     }
 }

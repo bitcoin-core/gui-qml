@@ -57,7 +57,7 @@ Item {
     readonly property real amountWidth: compact ? 0 : Math.min(210, width * 0.32)
     readonly property color amountColor: isInactive ? Theme.color.neutral6
         : isPendingRequest ? Theme.color.neutral7
-        : netAmountSat > 0 ? Theme.color.green : Theme.color.neutral9
+        : netAmountSat > 0 ? Theme.color.txIncoming : Theme.color.neutral9
     readonly property string metadata: {
         const parts = [dateTimeLabel]
         if (isPendingRequest) {
@@ -95,7 +95,7 @@ Item {
         id: rowSurface
         objectName: "activityRowBackground"
         anchors.fill: parent
-        stateColor: rowHover.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
+        stateColor: rowHover.hovered || parentButton.down ? Theme.color.surface2 : Theme.color.surface1
         radius: Theme.radius.listRow
         Rectangle {
             anchors.top: parent.top
@@ -287,8 +287,8 @@ Item {
                             readonly property bool internal: childRow.modelData.direction === TransactionActivityModel.InternalAction
                             readonly property bool incoming: childRow.modelData.direction === TransactionActivityModel.ReceiveAction
                             source: incoming || internal ? "qrc:/icons/activity-receive.svg" : "qrc:/icons/activity-send.svg"
-                            color: root.isInactive ? Theme.color.neutral6 : internal ? Theme.color.purple
-                                : incoming ? Theme.color.green : Theme.color.orange
+                            color: root.isInactive ? Theme.color.neutral6 : internal ? Theme.color.txInternal
+                                : incoming ? Theme.color.txIncoming : Theme.color.txOutgoing
                             rotation: internal ? -90 : 0
                             size: 24
                             // Offset the asset's transparent padding to align the glyph with the child inset.
@@ -382,7 +382,6 @@ Item {
         visible: !root.lastInSection
         anchors.bottom: parent.bottom
         width: parent.width
-        color: Theme.color.neutral2
     }
 
     component ActivityAddress: AddressLabel {

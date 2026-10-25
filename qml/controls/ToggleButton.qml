@@ -8,12 +8,12 @@ import org.bitcoincore.qt 1.0
 
 Button {
     property int bgRadius: Theme.radius.s
-    property color bgDefaultColor: Theme.color.neutral2
-    property color bgHoverColor: Theme.color.neutral2
-    property color bgActiveColor: Theme.color.neutral5
+    property color bgDefaultColor: Theme.color.surface2
+    property color bgHoverColor: Theme.color.surface2
+    property color bgActiveColor: Theme.color.activeFill
     property color textColor: Theme.color.neutral7
-    property color textHoverColor: Theme.color.orangeLight1
-    property color textActiveColor: Theme.color.neutral9
+    property color textHoverColor: Theme.color.neutral9
+    property color textActiveColor: Theme.color.activeForeground
     property bool textBold: false
     property bool textActiveBold: textBold
 

@@ -14,7 +14,7 @@ ShapePath {
     property color targetColor: "transparent"
     strokeWidth: ribbon.proportional || ribbon.inferredWidth ? -1 : (ribbon.thickness || 0)
     strokeColor: ribbon.proportional || ribbon.inferredWidth ? "transparent"
-        : ribbon.targetKind === "data" ? Theme.color.neutral2 : Theme.color.neutral3
+        : ribbon.targetKind === "data" ? Theme.color.surface2 : Theme.color.surface3
     strokeStyle: ShapePath.SolidLine
     capStyle: ShapePath.RoundCap
     // The geometry renderer culls transparent fills even with a gradient.

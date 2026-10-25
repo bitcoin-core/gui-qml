@@ -124,7 +124,7 @@ SettingsPage {
                 fieldObjectName: "walletPasswordCurrentField"
                 visibilityToggleObjectName: "walletPasswordCurrentVisibilityToggle"
                 placeholderText: qsTr("Enter current password…")
-                fieldBackgroundColor: Theme.color.neutral2
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
                 onAccepted: newPassword.field.forceActiveFocus()
             }
@@ -138,7 +138,7 @@ SettingsPage {
                 fieldObjectName: "walletPasswordNewField"
                 visibilityToggleObjectName: "walletPasswordNewVisibilityToggle"
                 placeholderText: root.updating ? qsTr("Enter new password…") : qsTr("Enter password…")
-                fieldBackgroundColor: Theme.color.neutral2
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
                 onAccepted: confirmPassword.field.forceActiveFocus()
             }
@@ -152,7 +152,7 @@ SettingsPage {
                 fieldObjectName: "walletPasswordConfirmField"
                 visibilityToggleObjectName: "walletPasswordConfirmVisibilityToggle"
                 placeholderText: root.updating ? qsTr("Enter new password again…") : qsTr("Enter password again…")
-                fieldBackgroundColor: Theme.color.neutral2
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
             }
 
@@ -175,13 +175,10 @@ SettingsPage {
                 objectName: "walletPasswordResultBanner"
                 shown: root.resultText.length > 0
                 Layout.fillWidth: true
-                readonly property color resultColor: root.resultSuccess ? Theme.color.green : Theme.color.red
-                backgroundColor: Qt.rgba(resultColor.r, resultColor.g, resultColor.b, 0.25)
+                tintColor: root.resultSuccess ? Theme.color.success : Theme.color.danger
                 iconSource: root.resultSuccess ? "image://images/check" : "image://images/info-filled"
-                iconColor: resultColor
                 text: root.resultText
                 textObjectName: "walletPasswordErrorText"
-                textColor: resultColor
             }
 
             ContinueButton {

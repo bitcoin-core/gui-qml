@@ -64,7 +64,7 @@ Control {
 
     background: Rectangle {
         visible: root.showNavigationButtons
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         radius: Theme.radius.m
     }
 
@@ -82,7 +82,7 @@ Control {
             rightPadding: clearButton.visible ? root.cancelButtonSize + 14 : 10
             topPadding: 0
             bottomPadding: 0
-            placeholderTextColor: Theme.color.neutral7
+            placeholderTextColor: Theme.color.placeholder
             color: Theme.color.neutral9
             font: Theme.text.caption.font
             verticalAlignment: TextInput.AlignVCenter
@@ -108,7 +108,7 @@ Control {
             onTextEdited: root.queryEdited(text)
 
             background: Rectangle {
-                color: Theme.color.neutral2
+                color: Theme.color.surface2
                 radius: Theme.radius.field
                 border.width: 0
 
@@ -248,8 +248,8 @@ Control {
         Accessible.name: accessibleName
 
         background: StateBackground {
-            stateColor: navigationButton.hovered || navigationButton.pressed
-                ? Theme.color.neutral2
+            stateColor: navigationButton.pressed ? Theme.color.surfacePressed
+                : navigationButton.hovered ? Theme.color.surfaceHover
                 : "transparent"
             radius: Theme.radius.s
         }
@@ -264,7 +264,7 @@ Control {
                 height: 14
                 strokeColor: navigationButton.enabled
                     ? Theme.color.neutral8
-                    : Theme.color.neutral4
+                    : Theme.color.disabledContent
                 rotation: navigationButton.rotationAngle
             }
         }

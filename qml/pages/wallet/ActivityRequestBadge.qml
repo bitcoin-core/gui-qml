@@ -9,7 +9,7 @@ import "../../components"
 Item {
     id: root
     property bool inactive: false
-    property color surfaceColor: Theme.color.neutral1
+    property color surfaceColor: Theme.color.surface1
     property string statusText: inactive ? qsTr("Associated payment request") : qsTr("Payment request fulfilled")
     implicitWidth: 18
     implicitHeight: 18
@@ -33,7 +33,7 @@ Item {
         Icon {
             anchors.centerIn: parent
             source: "qrc:/icons/check.svg"
-            color: Theme.color.green
+            color: Theme.color.success
             size: 10
         }
     }

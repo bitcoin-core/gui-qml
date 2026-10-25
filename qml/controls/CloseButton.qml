@@ -17,7 +17,7 @@ Button {
     property int size: buttonSize === CloseButton.Large ? Theme.size.iconButton : 30
     property int iconSize: buttonSize === CloseButton.Large ? Theme.size.icon.s : 10
     property int backgroundRadius: size / 2
-    property color iconColor: Theme.color.neutral6
+    property color iconColor: Theme.color.neutral7
     property color backgroundColor: Theme.color.surface2
     property color backgroundHoverColor: Theme.color.surface3
     property color backgroundPressedColor: Theme.color.surface3

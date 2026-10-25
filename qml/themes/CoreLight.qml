@@ -20,16 +20,30 @@ Palette {
     neutral8: "#404040"
     neutral9: "#000000"
 
-    orange: "#F7931A"
-    red: "#EB5757"
-    green: "#27AE60"
-    blue: "#2D9CDB"
-    amber: "#726700"
-    purple: "#B763D7"
-    lavender: "#6877FD"
+    accent: "#F7931A"
+    focus: "#B763D7"
+    danger: "#EB5757"
+    success: "#27AE60"
+    info: "#2D9CDB"
+    warning: "#726700"
+    trafficSent: "#B763D7"
+    trafficReceived: "#2D9CDB"
+    txInternal: "#B763D7"
+    paymentRequest: "#6877FD"
 
     accentHover: "#FFAD4A"
-    accentPressed: "#FFBF72"
+    accentPressed: "#DE8417"
+    // Darker variants for text: 4.5:1 on background and surface1, and on
+    // their tint over both (accentText only over background).
+    accentText: "#A15B06"
+    dangerText: "#C51717"
+    successText: "#1A7440"
+    infoText: "#1A6B99"
+    warningText: "#6D6200"
+    paymentRequestText: "#364AFC"
+    // neutral6 is under 3:1 on surface2 in light.
+    placeholder: neutral7
+    controlBorder: neutral7
     // neutral2 is barely distinguishable from the neutral1 menu surface in light.
     menuBorder: neutral3
     syntaxKey: "#3A7D2C"

@@ -41,7 +41,7 @@ Control {
     Accessible.description: rowDescription
 
     background: Rectangle {
-        color: Theme.color.neutral2
+        color: Theme.color.surface2
         radius: Theme.radius.m
 
         Behavior on color {
@@ -73,12 +73,12 @@ Control {
                 text: root.optionText(modelData)
                 bgRadius: Theme.radius.s
                 textColor: Theme.color.neutral9
-                textHoverColor: checked ? Theme.color.white : Theme.color.neutral9
-                textActiveColor: Theme.color.white
+                textHoverColor: checked ? Theme.color.accentForeground : Theme.color.neutral9
+                textActiveColor: Theme.color.accentForeground
                 textActiveBold: true
-                bgHoverColor: checked ? Theme.color.orange : Theme.color.neutral4
-                bgActiveColor: Theme.color.orange
-                bgDefaultColor: Theme.color.neutral2
+                bgHoverColor: checked ? Theme.color.accent : Theme.color.surface3
+                bgActiveColor: Theme.color.accent
+                bgDefaultColor: Theme.color.surface2
                 Accessible.role: Accessible.PageTab
                 Keys.onLeftPressed: root.moveSelection(index - 1)
                 Keys.onRightPressed: root.moveSelection(index + 1)

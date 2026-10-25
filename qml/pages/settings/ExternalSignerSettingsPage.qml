@@ -117,7 +117,7 @@ SettingsPage {
                         implicitHeight: 37
                         text: optionsModel.externalSignerPath
                         placeholderText: qsTr("Enter external signer path")
-                        placeholderTextColor: Theme.color.neutral7
+                        placeholderTextColor: Theme.color.placeholder
                         color: Theme.color.neutral9
                         font: Theme.text.monoDescription.font
                         selectByMouse: true
@@ -127,7 +127,7 @@ SettingsPage {
                         bottomPadding: 0
                         verticalAlignment: TextInput.AlignVCenter
                         background: Rectangle {
-                            color: Theme.color.neutral2
+                            color: Theme.color.surface2
                             radius: Theme.radius.field
 
                             FieldBorderRings {
@@ -154,7 +154,7 @@ SettingsPage {
                             Layout.topMargin: 4
                             radius: width / 2
                             color: root.signerPathPending || root.signerInputChanged ? Theme.color.neutral7
-                                : root.signerConnected ? Theme.color.green : Theme.color.red
+                                : root.signerConnected ? Theme.color.success : Theme.color.danger
 
                             Behavior on color {
                                 enabled: Theme.motion.animated

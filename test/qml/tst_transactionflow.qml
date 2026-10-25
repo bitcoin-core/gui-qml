@@ -247,7 +247,7 @@ TestCase {
         compare(fee.strokeWidth, 2)
         for (const line of [fee]) {
             compare(line.strokeStyle, ShapePath.SolidLine)
-            compare(line.strokeColor, Theme.color.neutral3)
+            compare(line.strokeColor, Theme.color.surface3)
             compare(line.fillGradient, null)
         }
         verify(output.ribbon.proportional)
@@ -403,10 +403,10 @@ TestCase {
         const line = flow.ribbonObjects.find(function(r) { return r.ribbon.id === "out:output:0" })
         verify(line !== undefined)
         compare(line.strokeWidth, 1)
-        compare(line.strokeColor, Theme.color.neutral2)
+        compare(line.strokeColor, Theme.color.surface2)
         compare(line.strokeStyle, ShapePath.SolidLine)
         compare(line.fillGradient, null)
-        compare(pill.color, Theme.color.neutral3)
+        compare(pill.color, Theme.color.surface3)
         verify(pill.visible)
         verify(content.visible)
         compare(content.text, data.expected)

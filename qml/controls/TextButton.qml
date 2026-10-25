@@ -10,8 +10,8 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
     property var textStyle: Theme.text.buttonStrong
-    property color textColor: Theme.color.orange
-    property color bgColor: Theme.color.background
+    property color textColor: enabled ? Theme.color.accentText : Theme.color.disabledContent
+    property color bgColor: "transparent"
     property bool rightalign: false
     padding: Theme.space.l
     hoverEnabled: AppMode.isDesktop
@@ -25,14 +25,10 @@ Button {
             ColorAnimation { duration: Theme.motion.normal }
         }
     }
-    background: Rectangle {
+    background: StateBackground {
         id: bg
-        color: root.bgColor
+        stateColor: root.bgColor
         radius: Theme.radius.s
-        Behavior on color {
-            enabled: Theme.motion.animated
-            ColorAnimation { duration: Theme.motion.normal }
-        }
 
         FocusBorder {
             visible: root.visualFocus
@@ -43,16 +39,16 @@ Button {
             name: "PRESSED"; when: root.pressed
             PropertyChanges {
                 target: root
-                textColor: Theme.color.orangeLight2
-                bgColor: Theme.color.neutral3
+                textColor: Theme.color.accentPressed
+                bgColor: Theme.color.surfacePressed
             }
         },
         State {
             name: "HOVER"; when: root.hovered
             PropertyChanges {
                 target: root
-                textColor: Theme.color.orangeLight1
-                bgColor: Theme.color.neutral2
+                textColor: Theme.color.accentHover
+                bgColor: Theme.color.surfaceHover
             }
         }
     ]
