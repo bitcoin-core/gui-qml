@@ -8,10 +8,17 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../controls"
 
-Popup {
+DialogPopup {
     id: externalConfirmPopup
     objectName: "externalLinkPopup"
     property string link: ""
+
+    function openLink(url) {
+        link = url
+        open()
+    }
+
+    title: openFailed ? qsTr("Couldn't open link") : qsTr("External Link")
 
     // Set once an open attempt has failed. Switches the popup to its error and
     // copy-URL fallback layout instead of closing.
@@ -31,7 +38,6 @@ Popup {
     focus: true
     padding: 0
 
-    anchors.centerIn: Overlay.overlay
     width: Math.min(420, (Overlay.overlay ? Overlay.overlay.width : 460) - 40)
 
     // Always start from the confirmation layout when (re)opened so a previous
@@ -78,19 +84,7 @@ Popup {
         }
     }
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: Theme.radius.popup
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
-    }
-
-    ColumnLayout {
-        anchors.fill: parent
+    contentItem: ColumnLayout {
         spacing: 0
 
         CoreText {

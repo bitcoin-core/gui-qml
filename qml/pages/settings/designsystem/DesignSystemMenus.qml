@@ -14,10 +14,9 @@ DesignSystemSection {
 
     property string menuGrouping: "month"
     property bool menuShowFees: true
-    readonly property string longMessage: "This alert carries a long message to show how the popup grows with its text. "
-        + "Alerts do not scroll, so very long messages push the actions down and can reach the edge of a small window. "
-        + "Keep alert messages to a sentence or two, and move longer explanations onto a page or a feature modal. "
-        + "This paragraph repeats the point so the message wraps over many lines at the default width."
+    readonly property string longMessage: Array(9).join("This alert carries a long message to show how the popup handles it. "
+        + "The popup stops 20 px from the window edges and the message scrolls, so the title and actions stay in view. "
+        + "Keep alert messages to a sentence or two where you can; node errors are the exception. ")
 
     function openMenu(anchor) {
         const position = anchor.mapToItem(Overlay.overlay, 0, anchor.height + 2)
@@ -27,7 +26,7 @@ DesignSystemSection {
     }
 
     title: "Menus and popups"
-    description: "Buttons that open the shared menu and alert popups. Menu and alert actions do nothing."
+    description: "Buttons that open the shared menu, alert and dialog popups. Menu, alert and dialog actions do nothing."
 
     DesignSystemSpecimen {
         objectName: "designSystemContextMenu"
@@ -120,11 +119,35 @@ DesignSystemSection {
             }
         }
         DesignSystemState {
-            label: "long message, Cancel, Normal"
+            label: "long message scrolls, Cancel, Normal"
             NeutralButton {
                 objectName: "designSystemLongAlertButton"
                 text: "Long message"
                 onClicked: longAlert.open()
+            }
+        }
+        DesignSystemState {
+            label: "tone: Success, Neutral, Normal"
+            NeutralButton {
+                objectName: "designSystemSuccessAlertButton"
+                text: "Success"
+                onClicked: successAlert.open()
+            }
+        }
+        DesignSystemState {
+            label: "tone: Error with icon"
+            NeutralButton {
+                objectName: "designSystemErrorAlertButton"
+                text: "Error"
+                onClicked: errorAlert.open()
+            }
+        }
+        DesignSystemState {
+            label: "content field, errorText, disabled action"
+            NeutralButton {
+                objectName: "designSystemInputAlertButton"
+                text: "With a field"
+                onClicked: inputAlert.open()
             }
         }
 
@@ -154,6 +177,64 @@ DesignSystemSection {
         }
 
         AlertPopup {
+            id: successAlert
+            objectName: "designSystemSuccessAlert"
+            parent: Overlay.overlay
+            tone: AlertPopup.Success
+            title: "Transaction updated"
+            message: "Your replacement transaction was broadcast."
+
+            AlertAction {
+                text: "View transaction"
+                role: AlertAction.Neutral
+            }
+            AlertAction {
+                text: "Done"
+            }
+        }
+
+        AlertPopup {
+            id: errorAlert
+            objectName: "designSystemErrorAlert"
+            parent: Overlay.overlay
+            tone: AlertPopup.Error
+            iconSource: "image://images/error"
+            title: "Error"
+            message: "Unable to start HTTP server. See debug log for details."
+            messageAlignment: Text.AlignLeft
+        }
+
+        AlertPopup {
+            id: inputAlert
+            objectName: "designSystemInputAlert"
+            parent: Overlay.overlay
+            title: "Open payment request"
+            errorText: inputAlertField.text.length > 0 && inputAlertField.text.indexOf("bitcoin:") !== 0
+                ? "Enter a bitcoin: URI." : ""
+            initialFocusItem: inputAlertField
+            implicitWidth: 420
+
+            content: CoreTextField {
+                id: inputAlertField
+                Layout.fillWidth: true
+                placeholderText: "bitcoin:address?amount=…"
+                background: Rectangle {
+                    color: Theme.color.neutral2
+                    radius: Theme.radius.field
+                }
+            }
+
+            AlertAction {
+                text: "Cancel"
+                role: AlertAction.Cancel
+            }
+            AlertAction {
+                text: "Apply"
+                enabled: inputAlertField.text.indexOf("bitcoin:") === 0
+            }
+        }
+
+        AlertPopup {
             id: longAlert
             objectName: "designSystemLongAlert"
             parent: Overlay.overlay
@@ -166,6 +247,92 @@ DesignSystemSection {
             }
             AlertAction {
                 text: "Paste"
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemDialogPopup"
+        Layout.fillWidth: true
+        name: "DialogPopup"
+        note: "The shell of every modal: centering, overlay, surface, transitions, height cap, focus in and out. Feature modals close on Escape and outside presses; sheets host multi-step flows."
+
+        DesignSystemState {
+            label: "feature modal, DialogHeader"
+            NeutralButton {
+                objectName: "designSystemFeatureModalButton"
+                text: "Feature modal"
+                onClicked: featureModal.open()
+            }
+        }
+        DesignSystemState {
+            label: "sheet: true"
+            NeutralButton {
+                objectName: "designSystemSheetButton"
+                text: "Sheet"
+                onClicked: sheetModal.open()
+            }
+        }
+
+        DialogPopup {
+            id: featureModal
+            objectName: "designSystemFeatureModal"
+            title: "Banned peers"
+            implicitWidth: 560
+
+            contentItem: ColumnLayout {
+                spacing: Theme.space.xl
+
+                DialogHeader {
+                    Layout.fillWidth: true
+                    title: featureModal.title
+                    description: "A feature modal: a title row with the close button, then its content."
+                    onCloseRequested: featureModal.close()
+                }
+
+                FormSection {
+                    Layout.fillWidth: true
+                    backgroundColor: Theme.color.neutral2
+                    ValueRow {
+                        Layout.fillWidth: true
+                        title: "Address"
+                        value: "203.0.113.7:8333"
+                    }
+                    ValueRow {
+                        Layout.fillWidth: true
+                        title: "Banned until"
+                        value: "Tomorrow"
+                        showDivider: false
+                    }
+                }
+            }
+        }
+
+        DialogPopup {
+            id: sheetModal
+            objectName: "designSystemSheet"
+            title: "Add wallet"
+            sheet: true
+            closesOnPressOutside: false
+            implicitWidth: 560
+            implicitHeight: 420
+
+            contentItem: ColumnLayout {
+                spacing: Theme.space.xl
+
+                DialogHeader {
+                    Layout.fillWidth: true
+                    title: sheetModal.title
+                    description: "A sheet uses radius sheet and hosts a flow. It closes on Escape and the close button only."
+                    onCloseRequested: sheetModal.close()
+                }
+
+                Item { Layout.fillHeight: true }
+
+                ContinueButton {
+                    Layout.alignment: Qt.AlignRight
+                    text: "Continue"
+                }
             }
         }
     }

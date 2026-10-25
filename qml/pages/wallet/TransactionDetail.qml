@@ -105,7 +105,7 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
+    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; parent: Overlay.overlay; wallet: root.wallet }
 
     function openExternalLink(link) {
         externalLinkPopup.link = link
@@ -257,6 +257,7 @@ Page {
 
     SpeedUpOverlay {
         id: speedUpOverlay
+        parent: Overlay.overlay
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
         onBumpSucceeded: {
@@ -267,6 +268,7 @@ Page {
 
     SpeedUpComplete {
         id: speedUpComplete
+        parent: Overlay.overlay
         onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
         onDone: close()
         onViewNewTransaction: function(txid) {

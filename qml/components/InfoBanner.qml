@@ -58,7 +58,7 @@ Rectangle {
             ? verticalContent : horizontalContent
     }
 
-    IconButton {
+    CloseButton {
         id: closeButton
         objectName: root.objectName !== "" ? root.objectName + "CloseButton" : ""
         visible: root.showsCloseButton
@@ -66,9 +66,11 @@ Rectangle {
         anchors.right: parent.right
         anchors.topMargin: Theme.space.m
         anchors.rightMargin: Theme.space.m
-        size: 24
-        iconSource: "image://images/cross"
-        accessibleName: qsTr("Dismiss")
+        // Banners are tinted, so the button only shows a state fill.
+        backgroundColor: "transparent"
+        backgroundHoverColor: Theme.color.surfaceHover
+        backgroundPressedColor: Theme.color.surfacePressed
+        Accessible.name: qsTr("Dismiss")
         onClicked: root.dismissClicked()
     }
 

@@ -27,7 +27,7 @@ Popup {
 
     // Keep the trigger clickable while dimming the rest of the window.
     Overlay.modeless: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.5)
+        color: Theme.color.modalOverlay
         Behavior on opacity {
             enabled: Theme.motion.animated
             NumberAnimation { duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.enter }

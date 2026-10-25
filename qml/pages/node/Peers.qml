@@ -800,7 +800,6 @@ Page {
         ContextMenuButton {
             objectName: "peerClearFiltersAction"
             text: qsTr("Clear filters")
-            role: ContextMenuButton.Destructive
             onTriggered: root.clearFilters()
         }
     }

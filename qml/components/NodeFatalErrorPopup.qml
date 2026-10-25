@@ -4,14 +4,12 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+AlertPopup {
     id: root
     objectName: "nodeFatalErrorPopup"
-    readonly property int contentMargin: 28
 
     function syncOpenState() {
         if (nodeModel.startupError.length > 0 && !opened) {
@@ -28,73 +26,20 @@ Popup {
 
     Component.onCompleted: syncOpenState()
 
-    modal: true
-    focus: true
     z: 100
-    closePolicy: Popup.NoAutoClose
-    padding: 0
-    anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 640) : 640
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 520)
-    implicitHeight: columnLayout.implicitHeight
+    dismissible: false
+    title: qsTr("Fatal node error")
+    message: nodeModel.startupError
+    messageObjectName: "nodeFatalErrorText"
+    messageAlignment: Text.AlignLeft
+    tone: AlertPopup.Error
+    iconSource: "image://images/error"
+    implicitWidth: Math.max(480, horizontalActionsWidth + 40)
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: Theme.radius.popup
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
-    }
-
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
-        spacing: 0
-
-        CoreText {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            text: qsTr("Fatal node error")
-            bold: true
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-
-        Separator { Layout.fillWidth: true }
-
-        ScrollView {
-            id: fatalErrorScroll
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.margins: root.contentMargin
-            contentWidth: availableWidth
-            clip: true
-
-            CoreText {
-                objectName: "nodeFatalErrorText"
-                width: fatalErrorScroll.availableWidth
-                text: nodeModel.startupError
-                color: Theme.color.neutral8
-                font.pixelSize: 15
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignLeft
-            }
-        }
-
-        ContinueButton {
-            objectName: "nodeFatalShutdownButton"
-            Layout.fillWidth: true
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            Layout.bottomMargin: root.contentMargin
-            text: qsTr("Shut down")
-            onClicked: nodeModel.requestShutdown()
-        }
+    AlertAction {
+        text: qsTr("Shut down")
+        buttonObjectName: "nodeFatalShutdownButton"
+        closesPopup: false
+        onTriggered: nodeModel.requestShutdown()
     }
 }

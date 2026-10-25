@@ -227,7 +227,7 @@ TestCase {
         verify(overlay.readyToConfirm)
         compare(overlay.verticalOffset, 0)
         compare(overlay.background.color, Theme.color.neutral1)
-        compare(overlay.background.border.color, Theme.color.neutral3)
+        compare(overlay.background.border.color, Theme.color.surface2)
         compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.neutral2)
         compare(findChild(overlay.contentItem, "speedUpOriginalFeeRow").value, testBumpModel.oldFee)
         compare(findChild(overlay.contentItem, "speedUpNewFeeRow").value, testBumpModel.newFee)

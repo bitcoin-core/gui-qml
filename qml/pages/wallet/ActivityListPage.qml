@@ -478,8 +478,6 @@ Page {
         property string txid: ""
         property string requestId: ""
         property bool isRequest: false
-        property string deleteError: ""
-        onAboutToShow: deleteError = ""
         ContextMenuButton {
             objectName: "activityCopyTransactionId"
             visible: !activityRowMenu.isRequest
@@ -514,29 +512,17 @@ Page {
             visible: activityRowMenu.isRequest
             text: qsTr("Delete payment request")
             role: ContextMenuButton.Destructive
-            autoClose: false
-            onTriggered: {
-                const requestId = activityRowMenu.requestId
-                if (!root.wallet || !root.wallet.removeReceiveRequest(requestId)) {
-                    activityRowMenu.deleteError = qsTr("The payment request could not be deleted. Please try again.")
-                    return
-                }
-                for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
-                    if (request && request.id === requestId) request.clear()
-                }
-                activityRowMenu.close()
-            }
+            onTriggered: deleteRequestConfirmation.confirmDelete(root.wallet, activityRowMenu.requestId)
         }
-        CoreText {
-            objectName: "activityDeletePaymentRequestError"
-            visible: activityRowMenu.isRequest && activityRowMenu.deleteError.length > 0
-            Layout.fillWidth: true
-            Layout.maximumWidth: 240
-            Layout.margins: 10
-            text: activityRowMenu.deleteError
-            color: Theme.color.red
-            font: Theme.text.caption.font
-            horizontalAlignment: Text.AlignLeft
+    }
+
+    PaymentRequestDeleteConfirmation {
+        id: deleteRequestConfirmation
+        objectName: "activityDeletePaymentRequestConfirmation"
+        onDeleted: function(requestId) {
+            for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
+                if (request && request.id === requestId) request.clear()
+            }
         }
     }
 
@@ -593,88 +579,20 @@ Page {
         }
     }
 
-    Popup {
+    AlertPopup {
         id: exportResultPopup
         objectName: "activityExportResultPopup"
-        modal: true
-        anchors.centerIn: parent
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        padding: 20
-        width: Math.min(420, root.width - 40)
-        height: exportResultLayout.implicitHeight + 40
+        parent: Overlay.overlay
+        tone: root.exportSucceeded ? AlertPopup.Success : AlertPopup.Error
+        iconSource: root.exportSucceeded ? "image://images/check" : "image://images/cross"
+        title: root.exportResultTitle()
+        titleObjectName: "activityExportResultTitle"
+        message: root.exportResultDescription()
+        messageObjectName: "activityExportResultDescription"
 
-        background: Rectangle {
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
-            border.width: 1
-            radius: Theme.radius.popup
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                surfaceColor: parent.color
-                referenceColor: Theme.color.neutral1
-                cornerRadius: parent.radius
-            }
-        }
-
-        contentItem: ColumnLayout {
-            id: exportResultLayout
-            spacing: 20
-
-            Item {
-                Layout.alignment: Qt.AlignHCenter
-                width: 60
-                height: 60
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: height / 2
-                    color: root.exportSucceeded ? Theme.color.green : Theme.color.red
-                    opacity: 0.2
-                }
-
-                Icon {
-                    anchors.centerIn: parent
-                    source: root.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
-                    color: root.exportSucceeded ? Theme.color.green : Theme.color.red
-                    size: 30
-                }
-            }
-
-            CoreText {
-                objectName: "activityExportResultTitle"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                text: root.exportResultTitle()
-                font.pixelSize: 28
-                bold: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            CoreText {
-                objectName: "activityExportResultDescription"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                color: Theme.color.neutral7
-                text: root.exportResultDescription()
-                font.pixelSize: 18
-                wrap: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            ContinueButton {
-                objectName: "activityExportResultCloseButton"
-                Layout.preferredWidth: Math.min(200, parent.width - 40)
-                Layout.alignment: Qt.AlignCenter
-                text: qsTr("Close window")
-                borderColor: Theme.color.neutral6
-                borderHoverColor: Theme.color.neutral9
-                borderPressedColor: Theme.color.neutral9
-                textColor: Theme.color.neutral9
-                backgroundColor: "transparent"
-                backgroundHoverColor: "transparent"
-                backgroundPressedColor: "transparent"
-                onClicked: exportResultPopup.close()
-            }
+        AlertAction {
+            text: qsTr("Close")
+            buttonObjectName: "activityExportResultCloseButton"
         }
     }
 
@@ -937,7 +855,6 @@ Page {
         ContextMenuButton {
             objectName: "activityClearFiltersAction"
             text: qsTr("Clear filters")
-            role: ContextMenuButton.Destructive
             onTriggered: root.clearFilters()
         }
     }

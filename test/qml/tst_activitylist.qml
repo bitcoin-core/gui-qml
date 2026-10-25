@@ -217,13 +217,20 @@ TestCase {
         const button = findChild(menu.contentItem, "activityDeletePaymentRequest")
         compare(button.role, ContextMenuButton.Destructive)
         mouseClick(button)
+        tryCompare(menu, "visible", false)
+        // Nothing is deleted until the user confirms.
+        compare(testWalletModel.lastRemovedRequestId, "")
+        const confirmation = findChild(page, "activityDeletePaymentRequestConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        const error = findChild(page, "activityDeletePaymentRequestConfirmationError")
         if (data.succeeds) {
-            tryCompare(menu, "visible", false)
             compare(testWalletModel.lastRemovedRequestId, "invoice")
+            compare(error.opened, false)
         } else {
-            verify(menu.opened)
             compare(testWalletModel.lastRemovedRequestId, "")
-            verify(findChild(menu.contentItem, "activityDeletePaymentRequestError").visible)
+            tryCompare(error, "opened", true)
         }
         compare(page.depth, 1)
     }
@@ -799,7 +806,7 @@ TestCase {
         const clearMenu = findChild(page, "activityClearFiltersMenu")
         tryCompare(clearMenu, "opened", true)
         const clear = findChild(clearMenu.contentItem, "activityClearFiltersAction")
-        compare(clear.role, ContextMenuButton.Destructive)
+        compare(clear.role, ContextMenuButton.Normal)
         mouseClick(clear)
         tryCompare(badge, "visible", false)
         compare(proxy.typeFilters.length, 0)

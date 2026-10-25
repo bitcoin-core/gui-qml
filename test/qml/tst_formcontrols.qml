@@ -461,19 +461,19 @@ TestCase {
         compare(button.height, 30)
         compare(button.scale, 1.0)
         compare(background.radius, 15)
-        tryCompare(background, "color", Theme.color.neutral2)
+        tryCompare(background, "color", Theme.color.surface2)
         compare(icon.size, 10)
         compare(icon.color, Theme.color.neutral6)
-        compare(button.backgroundHoverColor, Theme.color.neutral3)
-        compare(button.backgroundPressedColor, Theme.color.neutral3)
+        compare(button.backgroundHoverColor, Theme.color.surface3)
+        compare(button.backgroundPressedColor, Theme.color.surface3)
 
         button.down = true
-        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(background, "color", Theme.color.surface3)
         tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button, "scale", 1.0)
-        tryCompare(background, "color", Theme.color.neutral2)
+        tryCompare(background, "color", Theme.color.surface2)
     }
 
     function test_settingsPageOwnsNavigationAndConstrainedScrollableContent() {
