@@ -127,89 +127,40 @@ SettingsPage {
         }
     }
 
-    Popup {
+    DialogPopup {
         id: detailsPopup
         objectName: "addressDetailsPopup"
-        readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
-        property real verticalOffset: 0
         parent: Overlay.overlay
-        x: parent ? Math.round((parent.width - width) / 2) : 0
-        y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-        width: Math.min(640, root.width - 40)
-        modal: true
-        focus: true
-        leftPadding: 40
-        rightPadding: 40
-        topPadding: 30
-        bottomPadding: 30
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        title: qsTr("Address details")
+        implicitWidth: 640
+        contentItem: ScrollView {
+            id: detailsScroll
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: Theme.motion.fade(Theme.motion.slow)
-                easing.type: Theme.motion.easing.enter
-            }
-            NumberAnimation {
-                property: "verticalOffset"
-                from: -Theme.motion.dialogOffset
-                to: 0
-                duration: Theme.motion.travel(Theme.motion.slow)
-                easing.type: Theme.motion.easing.enter
-            }
-        }
-
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                to: 0
-                duration: Theme.motion.fade(Theme.motion.exit)
-                easing.type: Theme.motion.easing.exit
-            }
-            NumberAnimation {
-                property: "verticalOffset"
-                to: -Theme.motion.dialogOffset
-                duration: Theme.motion.travel(Theme.motion.exit)
-                easing.type: Theme.motion.easing.exit
-            }
-        }
-
-        Overlay.modal: Rectangle {
-            color: detailsPopup.modalOverlayColor
-            opacity: detailsPopup.opacity
-        }
-        background: Rectangle {
-            color: Theme.color.neutral1
-            border.color: Theme.color.neutral3
-            radius: Theme.radius.popup
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                surfaceColor: parent.color
-                cornerRadius: parent.radius
-            }
-        }
-        contentItem: AddressDetails {
-            id: addressDetails
-            address: root.selectedAddress
-            label: root.selectedLabel
-            amount: root.selectedAmount
-            hasAmount: root.selectedHasAmount
-            category: root.selectedCategory
-            scriptType: root.selectedScriptType
-            used: root.selectedUsed
-            hasPaymentRequest: root.selectedHasPaymentRequest
-            onCloseRequested: detailsPopup.close()
-            onCreatePaymentRequestRequested: {
-                root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
-            }
-            onEditLabelRequested: (address, label) => {
-                if (root.updateAddressLabel(address, label)) {
-                    root.selectedLabel = label;
-                    noteErrorText = "";
-                } else {
-                    noteErrorText = qsTr("This address is no longer available.");
+            AddressDetails {
+                id: addressDetails
+                width: detailsScroll.availableWidth
+                address: root.selectedAddress
+                label: root.selectedLabel
+                amount: root.selectedAmount
+                hasAmount: root.selectedHasAmount
+                category: root.selectedCategory
+                scriptType: root.selectedScriptType
+                used: root.selectedUsed
+                hasPaymentRequest: root.selectedHasPaymentRequest
+                onCloseRequested: detailsPopup.close()
+                onCreatePaymentRequestRequested: {
+                    root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
+                }
+                onEditLabelRequested: (address, label) => {
+                    if (root.updateAddressLabel(address, label)) {
+                        root.selectedLabel = label;
+                        noteErrorText = "";
+                    } else {
+                        noteErrorText = qsTr("This address is no longer available.");
+                    }
                 }
             }
         }

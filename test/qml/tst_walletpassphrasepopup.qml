@@ -80,6 +80,8 @@ TestCase {
         field.text = passphrase
         verify(button.enabled)
 
+        // An instant open leaves the first press to the next frame.
+        waitForRendering(button, 1000)
         mouseClick(button, button.width / 2, button.height / 2)
 
         compare(submittedCount, 1)

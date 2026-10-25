@@ -6,86 +6,18 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     property Component initialPage: null
     property string closeButtonObjectName: "onboardingSettingsCloseButton"
-    property real verticalOffset: 0
     readonly property alias pageStack: pages
 
-    parent: Overlay.overlay
-    width: Math.min(532, parent ? parent.width - 32 : 532)
-    height: Math.min(504, parent ? parent.height - 40 : 504)
-    x: parent ? (parent.width - width) / 2 : 0
-    y: (parent ? (parent.height - height) / 2 : 0) + verticalOffset
+    sheet: true
+    implicitWidth: 532
+    implicitHeight: 504
     padding: 0
-    transformOrigin: Popup.Center
-    modal: true
-    dim: true
-    focus: true
-    closePolicy: Popup.CloseOnEscape
-
-    background: Rectangle {
-        radius: Theme.radius.sheet
-        color: Theme.color.neutral1
-        border.width: 1
-        border.color: Theme.color.neutral3
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            cornerRadius: parent.radius
-        }
-    }
-
-    Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.6)
-        opacity: root.opacity
-    }
-
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Theme.motion.fade(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            from: -Theme.motion.dialogOffset
-            to: 0
-            duration: Theme.motion.travel(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-        NumberAnimation {
-            property: "scale"
-            from: Theme.motion.popoverScale
-            to: 1
-            duration: Theme.motion.travel(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-    }
-
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            to: 0
-            duration: Theme.motion.fade(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            to: -Theme.motion.dialogOffset
-            duration: Theme.motion.travel(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-        NumberAnimation {
-            property: "scale"
-            to: Theme.motion.popoverScale
-            duration: Theme.motion.travel(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-    }
+    horizontalPadding: 0
+    closesOnPressOutside: false
 
     contentItem: Item {
         clip: true
@@ -102,8 +34,6 @@ Popup {
             anchors.right: parent.right
             anchors.margins: Theme.space.l
             z: 2
-            buttonSize: CloseButton.Medium
-            backgroundColor: Theme.color.neutral2
             onClicked: root.close()
         }
     }

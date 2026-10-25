@@ -78,16 +78,13 @@ SettingsPage {
     }
 
     function openExternalLink(link) {
-        externalLinkPopup.link = link
-        externalLinkPopup.open()
+        externalLinkPopup.openLink(link)
     }
 
     ExternalPopup {
         id: externalLinkPopup
         objectName: "aboutExternalLinkPopup"
         parent: Overlay.overlay
-        anchors.centerIn: parent
-        width: Math.min(450, Math.max(0, parent ? parent.width - 40 : 0))
     }
 
     Component {

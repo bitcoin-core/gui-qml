@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
+import "../components"
 import "../controls"
 import "./onboarding"
 
@@ -21,6 +22,14 @@ ApplicationWindow {
     property bool completed: false
     property bool starting: false
     signal finished()
+    signal startupErrorAcknowledged()
+
+    // Startup errors while this window is open show here instead of in a
+    // second window.
+    function showStartupError(text) {
+        startupErrorAlert.message = text
+        startupErrorAlert.open()
+    }
 
     OnboardingWizard {
         anchors.fill: parent
@@ -85,5 +94,20 @@ ApplicationWindow {
         Keys.onPressed: (event) => {
             event.accepted = true
         }
+    }
+
+    AlertPopup {
+        id: startupErrorAlert
+        objectName: "preInitStartupErrorPopup"
+        title: qsTr("There was an issue starting up.")
+        messageObjectName: "preInitStartupErrorMessage"
+        messageTextFormat: Text.PlainText
+
+        AlertAction {
+            text: qsTr("Close")
+            buttonObjectName: "preInitStartupErrorCloseButton"
+        }
+
+        onClosed: appWindow.startupErrorAcknowledged()
     }
 }

@@ -9,14 +9,11 @@ import org.bitcoincore.qt 1.0
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "bannedPeersPopup"
 
     property var model: banListModel
-    readonly property bool compact: parent ? SizeClass.isCompact(parent.width) : false
-    readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
-    property real verticalOffset: 0
 
     function unbanPeer(row) {
         if (!root.model.unbanAt(row)) {
@@ -25,109 +22,20 @@ Popup {
         }
     }
 
-    x: parent ? Math.round((parent.width - width) / 2) : 0
-    y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-    width: Math.min(640, parent ? parent.width - 40 : 640)
-    height: Math.min(implicitHeight, parent ? parent.height - 40 : implicitHeight)
-    modal: true
-    focus: true
-    leftPadding: root.compact ? 24 : 40
-    rightPadding: root.compact ? 24 : 40
-    topPadding: Theme.space.xxxl
-    bottomPadding: Theme.space.xxxl
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: Theme.motion.fade(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            from: -Theme.motion.dialogOffset
-            to: 0
-            duration: Theme.motion.travel(Theme.motion.slow)
-            easing.type: Theme.motion.easing.enter
-        }
-    }
-
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            to: 0
-            duration: Theme.motion.fade(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            to: -Theme.motion.dialogOffset
-            duration: Theme.motion.travel(Theme.motion.exit)
-            easing.type: Theme.motion.easing.exit
-        }
-    }
-
-    Overlay.modal: Rectangle {
-        color: root.modalOverlayColor
-        opacity: root.opacity
-    }
-
-    background: Rectangle {
-        objectName: "bannedPeersPopupSurface"
-        color: Theme.color.neutral1
-        border.color: Theme.color.neutral2
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            cornerRadius: parent.radius
-        }
-        radius: Theme.radius.popup
-    }
+    title: qsTr("Banned peers")
+    surfaceObjectName: "bannedPeersPopupSurface"
+    implicitWidth: 640
 
     contentItem: ColumnLayout {
         spacing: 0
 
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.bottomMargin: Theme.space.ml
-
-            Header {
-                Layout.fillWidth: true
-                header: qsTr("Banned peers")
-                headerBold: true
-                center: false
-            }
-
-            IconButton {
-                id: closeButton
-                objectName: "bannedPeersCloseButton"
-                size: 28
-                iconSize: Theme.size.icon.xs
-                iconSource: "image://images/cross"
-                iconColor: Theme.color.neutral8
-                accessibleName: qsTr("Close")
-                background: StateBackground {
-                    radius: closeButton.backgroundRadius
-                    stateColor: closeButton.down || closeButton.hovered
-                        ? Theme.color.neutral2 : Theme.color.neutral1
-                }
-                onClicked: root.close()
-            }
-        }
-
-        CoreText {
+        DialogHeader {
             Layout.fillWidth: true
             Layout.bottomMargin: Theme.space.xl
-            text: qsTr("These peers are blocked from connecting to your node.")
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
-            color: Theme.color.neutral6
-            horizontalAlignment: Text.AlignLeft
-            wrapMode: Text.WordWrap
+            title: root.title
+            description: qsTr("These peers are blocked from connecting to your node.")
+            closeButtonObjectName: "bannedPeersCloseButton"
+            onCloseRequested: root.close()
         }
 
         Rectangle {
