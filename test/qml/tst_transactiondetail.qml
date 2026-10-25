@@ -65,6 +65,7 @@ TestCase {
         tryCompare(overlay, "opened", true)
         const updateButton = findChild(overlay, "updateTransactionButton")
         tryCompare(updateButton, "enabled", true)
+        verify(waitForRendering(overlay.contentItem))
         mouseClick(updateButton)
         const popup = findChild(overlay, "speedUpPassphrasePopup")
         tryCompare(popup, "opened", true)
@@ -239,6 +240,7 @@ TestCase {
         findChild(page, "speedUpBanner").primaryClicked()
         const overlay = findChild(page, "speedUpOverlay")
         tryCompare(overlay, "opened", true)
+        verify(waitForRendering(overlay.contentItem))
         mouseClick(findChild(overlay.contentItem, "updateTransactionButton"))
 
         const complete = findChild(page, "speedUpCompletePopup")

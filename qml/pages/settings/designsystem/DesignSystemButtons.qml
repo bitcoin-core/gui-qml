@@ -15,7 +15,6 @@ DesignSystemSection {
     property bool filterActive: false
     property int amountUnit: BitcoinAmount.BTC
 
-    title: "Buttons"
     description: "Each button in the states its properties support. Hover, press and Tab to see the interactive states."
 
     DesignSystemSpecimen {
@@ -119,6 +118,7 @@ DesignSystemSection {
 
     DesignSystemSpecimen {
         objectName: "designSystemIconButton"
+        shows: ["Icon"]
         Layout.fillWidth: true
         name: "IconButton"
         note: "iconSize is an icon token (24 bare, 20 toolbar), independent of the target size."

@@ -22,14 +22,11 @@ DesignSystemSection {
         exampleMenu.openBelow(anchor)
     }
 
-    // The sample menus copy nothing.
-    readonly property var sampleClipboard: ({ setText: function(text) {} })
-
-    title: "Menus and popups"
     description: "Buttons that open the shared menu, alert and dialog popups. Menu, alert and dialog actions do nothing."
 
     DesignSystemSpecimen {
         objectName: "designSystemContextMenu"
+        shows: ["ContextMenuButton", "ContextMenuDivider", "ContextMenuToggle"]
         Layout.fillWidth: true
         name: "ContextMenu"
         note: "With a title, a picker, a toggle, a divider, an icon item, a disabled item and a destructive item. Modal without a dim; openBelow(trigger) places it, Up/Down/Home/End move between items."
@@ -94,57 +91,6 @@ DesignSystemSection {
                 text: "Delete"
                 role: ContextMenuButton.Destructive
             }
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemTransactionActionsMenu"
-        Layout.fillWidth: true
-        name: "TransactionActionsMenu"
-        note: "Shared by an activity row and the transaction details page. Copy actions show \"Copied\" at the trigger."
-
-        DesignSystemState {
-            label: "OverflowMenuButton opener"
-            OverflowMenuButton {
-                id: transactionMenuButton
-                objectName: "designSystemTransactionMenuButton"
-                checked: transactionMenu.opened
-                onClicked: transactionMenu.openBelow(transactionMenuButton)
-            }
-        }
-
-        TransactionActionsMenu {
-            id: transactionMenu
-            objectName: "designSystemTransactionMenu"
-            parent: Overlay.overlay
-            txid: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
-            rawTransaction: function(txid) { return "0200000001" }
-            clipboard: root.sampleClipboard
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemPaymentRequestActionsMenu"
-        Layout.fillWidth: true
-        name: "PaymentRequestActionsMenu"
-        note: "Shared by an activity row (copy, delete) and the payment request card (QR code, request again, delete)."
-
-        DesignSystemState {
-            label: "card actions"
-            OverflowMenuButton {
-                id: requestMenuButton
-                objectName: "designSystemPaymentRequestMenuButton"
-                checked: requestMenu.opened
-                onClicked: requestMenu.openBelow(requestMenuButton)
-            }
-        }
-
-        PaymentRequestActionsMenu {
-            id: requestMenu
-            objectName: "designSystemPaymentRequestMenu"
-            parent: Overlay.overlay
-            showsQrActions: true
-            showsRequestAgain: true
         }
     }
 
@@ -302,6 +248,7 @@ DesignSystemSection {
 
     DesignSystemSpecimen {
         objectName: "designSystemDialogPopup"
+        shows: ["DialogHeader"]
         Layout.fillWidth: true
         name: "DialogPopup"
         note: "The shell of every modal: centering, overlay, surface, transitions, height cap, focus in and out. Feature modals close on Escape and outside presses; sheets host multi-step flows."

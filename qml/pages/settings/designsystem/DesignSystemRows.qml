@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
 import "../../../controls"
+import "../../../components"
 
 DesignSystemSection {
     id: root
@@ -17,7 +18,6 @@ DesignSystemSection {
     property bool exampleAcknowledged: false
     property url lastExampleLink: ""
 
-    title: "Rows and sections"
     description: "FormSection cards and the rows settings pages are built from. Rows host controls without owning their state."
 
     DesignSystemSpecimen {
@@ -263,6 +263,7 @@ DesignSystemSection {
 
     FormSection {
         objectName: "designSystemValueSection"
+        property var shows: ["ValueRow", "LinkRow"]
         Layout.fillWidth: true
         title: "ValueRow and LinkRow"
         description: "Value rows show read-only data; link rows hand their link to the caller."
@@ -324,6 +325,112 @@ DesignSystemSection {
             value: "v31.99.0-unk"
             enabled: false
             showDivider: false
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemGroupedRowBackground"
+        Layout.fillWidth: true
+        name: "GroupedRowBackground"
+        note: "Rows of a virtualised grouped list (activity, coins): the first and last rows round their outer corners, the rows in between are square and divided."
+
+        DesignSystemState {
+            width: 360
+            label: "firstInGroup, middle (hovered), lastInGroup (selected)"
+            Column {
+                Layout.fillWidth: true
+
+                Repeater {
+                    model: [
+                        { text: "First", first: true, last: false, hovered: false, selected: false },
+                        { text: "Middle, hovered", first: false, last: false, hovered: true, selected: false },
+                        { text: "Last, selected", first: false, last: true, hovered: false, selected: true }
+                    ]
+
+                    Item {
+                        id: groupedRow
+                        required property var modelData
+                        width: parent ? parent.width : 0
+                        height: Theme.size.row
+
+                        GroupedRowBackground {
+                            anchors.fill: parent
+                            firstInGroup: groupedRow.modelData.first
+                            lastInGroup: groupedRow.modelData.last
+                            hovered: groupedRow.modelData.hovered
+                            selected: groupedRow.modelData.selected
+                        }
+                        CoreText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: Theme.space.cardInset
+                            text: groupedRow.modelData.text
+                            textStyle: Theme.text.body
+                            color: Theme.color.neutral9
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemStateBackground"
+        Layout.fillWidth: true
+        name: "StateBackground"
+        note: "Fades between rest, hover, pressed and selected tints; set stateColor, not color."
+
+        Repeater {
+            model: [
+                { label: "rest", color: "transparent" },
+                { label: "surfaceHover", color: Theme.color.surfaceHover },
+                { label: "surfacePressed", color: Theme.color.surfacePressed },
+                { label: "surfaceSelected", color: Theme.color.surfaceSelected }
+            ]
+
+            DesignSystemState {
+                id: stateSample
+                required property var modelData
+                width: 120
+                label: modelData.label
+
+                Rectangle {
+                    Layout.preferredWidth: 104
+                    Layout.preferredHeight: Theme.size.control
+                    radius: Theme.radius.s
+                    color: Theme.color.surface1
+
+                    StateBackground {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        stateColor: stateSample.modelData.color
+                    }
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemSeparator"
+        Layout.fillWidth: true
+        name: "Separator"
+        note: "A 1 px surfaceDivider line between rows and sections."
+
+        DesignSystemState {
+            width: 360
+            label: "on surface1"
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 33
+                color: Theme.color.surface1
+                radius: Theme.radius.s
+
+                Separator {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.space.m
+                }
+            }
         }
     }
 }

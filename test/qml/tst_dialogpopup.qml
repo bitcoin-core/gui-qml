@@ -13,6 +13,7 @@ TestCase {
     id: testCase
     name: "DialogPopup"
     when: windowShown
+    visible: true
     width: 640
     height: 480
 
@@ -83,6 +84,7 @@ TestCase {
         verify(popup !== null)
         popup.open()
         tryCompare(popup, "opened", true)
+        verify(waitForRendering(popup.contentItem))
         return popup
     }
 
@@ -236,7 +238,8 @@ TestCase {
         verify(area.height < area.contentHeight)
         verify(area.interactive)
         const remove = findChild(popup.contentItem, "alertRemoveButton")
-        verify(remove.mapToItem(testCase, 0, remove.height).y <= testCase.height)
+        // Older Qt settles the layout a polish pass later.
+        tryVerify(function() { return remove.mapToItem(testCase, 0, remove.height).y <= testCase.height })
     }
 
     function test_alert_content_slot_error_and_disabled_action() {

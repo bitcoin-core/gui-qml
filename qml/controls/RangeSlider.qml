@@ -33,6 +33,7 @@ Controls.RangeSlider {
 
     first.handle: Thumb {
         node: root.first
+        range: root
         objectName: "rangeSliderLowerHandle"
         x: root.leftPadding + root.first.visualPosition * (root.availableWidth - width)
         y: root.topPadding + (root.availableHeight - height) / 2
@@ -40,6 +41,7 @@ Controls.RangeSlider {
     }
     second.handle: Thumb {
         node: root.second
+        range: root
         objectName: "rangeSliderUpperHandle"
         x: root.leftPadding + root.second.visualPosition * (root.availableWidth - width)
         y: root.topPadding + (root.availableHeight - height) / 2
@@ -64,11 +66,13 @@ Controls.RangeSlider {
     }
 
     component Thumb: Rectangle {
+        id: thumb
         required property var node
+        required property var range
         // Read by the accessibility value interface of each handle.
         readonly property real value: node.value
-        readonly property real minimumValue: root.from
-        readonly property real maximumValue: root.to
+        readonly property real minimumValue: thumb.range.from
+        readonly property real maximumValue: thumb.range.to
 
         Accessible.role: Accessible.Slider
         // Step as the arrow keys do, which also report the move.
@@ -83,9 +87,20 @@ Controls.RangeSlider {
         implicitWidth: 28
         implicitHeight: 20
         radius: height / 2
-        color: root.thumbColor
+        color: thumb.range.thumbColor
         border.width: 1
         border.color: Theme.color.controlBorder
-        FocusBorder { visible: root.visualFocus && parent.activeFocus; borderRadius: 14 }
+        // Qt 6.5 and older report OtherFocusReason when Tab reaches a handle,
+        // so visualFocus stays false there; hide the ring only after a press.
+        property bool pointerFocus: false
+        MouseArea {
+            anchors.fill: parent
+            onPressed: function(mouse) {
+                thumb.pointerFocus = true
+                mouse.accepted = false
+            }
+        }
+        onActiveFocusChanged: if (!activeFocus) pointerFocus = false
+        FocusBorder { visible: thumb.activeFocus && (thumb.range.visualFocus || !thumb.pointerFocus); borderRadius: 14 }
     }
 }

@@ -160,10 +160,17 @@ Pane {
         clipboard.setText(request.qrPayload)
     }
 
+    // A menu action that fails reports in an alert; the card's
+    // inline error is for its own fields and buttons.
+    function showActionFailure(title, message) {
+        actionFailurePopup.title = title
+        actionFailurePopup.message = message
+        actionFailurePopup.open()
+    }
     function captureQR(callback) {
         if (!sharing || !request.qrPayload) return false
         if (qrImage.status !== Image.Ready) {
-            actionErrorText = qsTr("The QR code is not ready. Please try again.")
+            showActionFailure(qsTr("QR code not ready"), qsTr("The QR code is not ready. Please try again."))
             return false
         }
         const requestId = request.id
@@ -175,13 +182,15 @@ Pane {
     }
     function copyQR() {
         return captureQR(function(result) {
-            if (!root.clipboard.setImage(result.image)) root.actionErrorText = qsTr("The QR code could not be copied. Please try again.")
+            if (!root.clipboard.setImage(result.image)) {
+                root.showActionFailure(qsTr("QR code not copied"), qsTr("The QR code could not be copied. Please try again."))
+            }
         })
     }
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
             if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
-                root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
+                root.showActionFailure(qsTr("QR code not saved"), qsTr("The QR code could not be saved. Please try again."))
         })
     }
     // Asks first; the request is deleted once the user confirms.
@@ -189,6 +198,17 @@ Pane {
         if (!wallet || !saved) return false
         deleteConfirmation.confirmDelete(wallet, request.id)
         return true
+    }
+
+    AlertPopup {
+        id: actionFailurePopup
+        objectName: "requestPaymentActionFailurePopup"
+        messageObjectName: "requestPaymentActionFailureMessage"
+
+        AlertAction {
+            text: qsTr("OK")
+            buttonObjectName: "requestPaymentActionFailureCloseButton"
+        }
     }
 
     PaymentRequestDeleteConfirmation {

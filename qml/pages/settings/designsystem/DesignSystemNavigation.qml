@@ -11,7 +11,6 @@ import "../../../controls"
 DesignSystemSection {
     id: root
 
-    title: "Navigation"
     description: "Top bars, page headings and tabs. Back buttons here do nothing."
 
     DesignSystemSpecimen {
@@ -56,6 +55,22 @@ DesignSystemSection {
                     text: "Skip"
                 }
             }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemOnboardingBackButton"
+        Layout.fillWidth: true
+        name: "OnboardingBackButton"
+        note: "The bordered back pill of the onboarding flow."
+
+        DesignSystemState {
+            label: "rest"
+            OnboardingBackButton {}
+        }
+        DesignSystemState {
+            label: "enabled: false"
+            OnboardingBackButton { enabled: false }
         }
     }
 

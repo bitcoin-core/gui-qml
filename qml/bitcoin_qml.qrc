@@ -159,12 +159,16 @@
         <file>pages/settings/designsystem/DesignSystemDataDisplay.qml</file>
         <file>pages/settings/designsystem/DesignSystemFeedback.qml</file>
         <file>pages/settings/designsystem/DesignSystemFields.qml</file>
+        <file>pages/settings/designsystem/DesignSystemGroup.qml</file>
         <file>pages/settings/designsystem/DesignSystemLayout.qml</file>
         <file>pages/settings/designsystem/DesignSystemMenus.qml</file>
         <file>pages/settings/designsystem/DesignSystemMotion.qml</file>
         <file>pages/settings/designsystem/DesignSystemNavigation.qml</file>
+        <file>pages/settings/designsystem/DesignSystemPage.qml</file>
+        <file>pages/settings/designsystem/DesignSystemPageList.qml</file>
         <file>pages/settings/designsystem/DesignSystemRows.qml</file>
         <file>pages/settings/designsystem/DesignSystemSection.qml</file>
+        <file>pages/settings/designsystem/DesignSystemSectionPage.qml</file>
         <file>pages/settings/designsystem/DesignSystemSelection.qml</file>
         <file>pages/settings/designsystem/DesignSystemSpecimen.qml</file>
         <file>pages/settings/designsystem/DesignSystemState.qml</file>

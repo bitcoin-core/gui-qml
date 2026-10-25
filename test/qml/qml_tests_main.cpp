@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFont>
@@ -25,6 +26,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -4144,7 +4146,14 @@ class TestAccessibility : public QObject
     Q_OBJECT
 
 public:
-    Q_INVOKABLE void activate() { QAccessible::setActive(true); }
+    // Returns whether accessibility is now active. Qt 6.5 and older only
+    // notify observers here; without a platform bridge isActive() stays
+    // false and controls never fill in their automatic names and states.
+    Q_INVOKABLE bool activate()
+    {
+        QAccessible::setActive(true);
+        return QAccessible::isActive();
+    }
     Q_INVOKABLE void deactivate() { QAccessible::setActive(false); }
     Q_INVOKABLE QVariantMap info(QObject* object) const
     {
@@ -4175,6 +4184,24 @@ public:
     }
 };
 
+// QML can't list a resource folder; the design system test needs the
+// shared controls and components to check that each has a showcase entry.
+class TestResources : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE QStringList qmlTypes(const QString& folder) const
+    {
+        QStringList names;
+        const QDir dir(QStringLiteral(":/qml/") + folder);
+        for (const QFileInfo& info : dir.entryInfoList({QStringLiteral("*.qml")}, QDir::Files, QDir::Name)) {
+            names << info.completeBaseName();
+        }
+        return names;
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4185,6 +4212,11 @@ public Q_SLOTS:
         static ButtonKeyActivation button_key_activation;
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinCoreQmlTests"));
+        QCoreApplication::setOrganizationDomain(QStringLiteral("qmltests.bitcoincore.org"));
+        QCoreApplication::setApplicationName(QStringLiteral("bitcoinqml_qmltests"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings_dir.path());
     }
 
     void processDeferredDeletes()
@@ -4210,6 +4242,7 @@ public Q_SLOTS:
         static MockAppMode app_mode;
         static TestAccessibility test_accessibility;
         static TestImage test_image;
+        static TestResources test_resources;
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
@@ -4317,9 +4350,13 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
         engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
+        engine->rootContext()->setContextProperty(QStringLiteral("testResources"), &test_resources);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
+
+private:
+    const QTemporaryDir m_settings_dir;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)
