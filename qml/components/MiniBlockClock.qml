@@ -66,7 +66,7 @@ Item {
         connected: root.pageSelected || root.connected
         synced: root.pageSelected || root.synced
         paused: false
-        animateDial: root.showConnectingState && !root.pageSelected
+        animateDial: root.showConnectingState && !root.pageSelected && Theme.motion.decorativeLoops
         showTimeTicks: false
         showBlockSegments: false
         useGradientArcWhenSynced: !root.pageSelected

@@ -117,6 +117,7 @@
         <file>controls/SettingsPage.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
+        <file>controls/StateBackground.qml</file>
         <file>controls/TextButton.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
@@ -157,7 +158,9 @@
         <file>pages/settings/designsystem/DesignSystemDataDisplay.qml</file>
         <file>pages/settings/designsystem/DesignSystemFeedback.qml</file>
         <file>pages/settings/designsystem/DesignSystemFields.qml</file>
+        <file>pages/settings/designsystem/DesignSystemLayout.qml</file>
         <file>pages/settings/designsystem/DesignSystemMenus.qml</file>
+        <file>pages/settings/designsystem/DesignSystemMotion.qml</file>
         <file>pages/settings/designsystem/DesignSystemNavigation.qml</file>
         <file>pages/settings/designsystem/DesignSystemRows.qml</file>
         <file>pages/settings/designsystem/DesignSystemSection.qml</file>

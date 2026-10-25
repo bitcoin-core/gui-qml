@@ -39,5 +39,6 @@ Item {
     }
     HoverHandler { id: hover }
     ToolTip.visible: hover.hovered
+    ToolTip.delay: Theme.motion.tooltipDelay
     ToolTip.text: Accessible.name
 }

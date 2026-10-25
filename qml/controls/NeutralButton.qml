@@ -25,7 +25,7 @@ AbstractButton {
     property color hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
     property bool forceHoverBackground: false
     property bool showBorder: surfaceLevel > 0
-    property int backgroundRadius: 5
+    property int backgroundRadius: Theme.radius.s
     property string focusBorderObjectName: ""
     readonly property color currentBackgroundColor: forceHoverBackground || hovered || down
         ? hoverBackgroundColor : backgroundColor
@@ -52,11 +52,12 @@ AbstractButton {
     horizontalPadding: large ? 20 : 13
     hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
-    scale: enabled && down ? 0.98 : 1
+    scale: enabled && down ? Theme.motion.pressScale : 1
     Accessible.name: text
 
     Behavior on scale {
-        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+        enabled: Theme.motion.animated
+        NumberAnimation { duration: Theme.motion.fast; easing.type: Theme.motion.easing.enter }
     }
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -103,12 +104,12 @@ AbstractButton {
             GradientStop {
                 position: 0
                 color: root.showBorder ? root.borderTopColor : root.currentBackgroundColor
-                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
             }
             GradientStop {
                 position: 1
                 color: root.showBorder ? root.borderBottomColor : root.currentBackgroundColor
-                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
             }
         }
 
@@ -118,7 +119,7 @@ AbstractButton {
             anchors.margins: 1
             radius: Math.max(0, parent.radius - 1)
             color: root.currentBackgroundColor
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
         }
 
         FocusBorder {

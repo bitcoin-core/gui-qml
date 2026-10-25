@@ -12,7 +12,7 @@ Item {
     width: 224
     height: 224
 
-    property bool reducedMotion: false
+    property bool reducedMotion: Theme.motion.reduced
     property real driftProgress: 0
     property real assembly: 0
     property real networkProgress: 0

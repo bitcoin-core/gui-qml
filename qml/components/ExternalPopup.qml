@@ -80,7 +80,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.color.background
-        radius: 10
+        radius: Theme.radius.popup
         SurfaceGradientBorder {
             anchors.fill: parent
             surfaceColor: parent.color

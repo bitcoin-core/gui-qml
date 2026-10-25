@@ -19,6 +19,8 @@ TestCase {
         "designSystemPageControlsSection",
         "designSystemColorsSection",
         "designSystemTypographySection",
+        "designSystemMotionSection",
+        "designSystemLayoutSection",
         "designSystemButtonsSection",
         "designSystemSelectionSection",
         "designSystemFieldsSection",
@@ -32,6 +34,10 @@ TestCase {
     readonly property var specimenNames: [
         "designSystemColorBase", "designSystemColorRoles", "designSystemSurfaces", "designSystemColorLists",
         "designSystemColorAliases", "designSystemTextRoles",
+        "designSystemMotionDurations", "designSystemMotionEasing", "designSystemMotionTransitions",
+        "designSystemMotionHelpers",
+        "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
+        "designSystemFocusRing", "designSystemBreakpoints",
         "designSystemContinueButton", "designSystemNeutralButton", "designSystemOutlineButton",
         "designSystemTextButton", "designSystemLinkButton", "designSystemIconButton", "designSystemCloseButton",
         "designSystemCopyButton", "designSystemOverflowMenuButton", "designSystemFilterButton",
@@ -110,6 +116,79 @@ TestCase {
         verify(findChild(page, "designSystemColor_lavender") !== null)
         verify(findChild(page, "designSystemColor_confirmationColors") !== null)
         verify(findChild(page, "designSystemText_captionStrong") !== null)
+    }
+
+    function test_motionSectionListsTokensAndSwitchesModeForThePage() {
+        const startMode = Theme.motion.mode
+        const page = createPage()
+        for (const name of ["fast", "normal", "moderate", "exit", "slow", "navigation", "tooltipDelay"]) {
+            verify(findChild(page, "designSystemMotion_" + name) !== null, name)
+        }
+        for (const name of ["enter", "exit", "move", "loop"]) {
+            verify(findChild(page, "designSystemMotionEasing_" + name) !== null, name)
+        }
+        const picker = findChild(page, "designSystemMotionModePicker")
+        compare(picker.currentText, startMode)
+        picker.selected(1, "reduced")
+        compare(Theme.motion.mode, "reduced")
+        compare(picker.currentText, "reduced")
+        findChild(page, "designSystemMotionReplayButton").clicked()
+        // Settings keeps the page alive when another section is shown.
+        page.visible = false
+        compare(Theme.motion.mode, startMode)
+        page.visible = true
+        picker.selected(1, "reduced")
+        page.destroy()
+        wait(0)
+        compare(Theme.motion.mode, startMode)
+    }
+
+    function test_layoutSectionListsTokensAndPreviewsWidths() {
+        const page = createPage()
+        for (const name of roleNames(Theme.space)) verify(findChild(page, "designSystemSpace_" + name) !== null, name)
+        for (const name of roleNames(Theme.radius)) verify(findChild(page, "designSystemRadius_" + name) !== null, name)
+        for (const name of roleNames(Theme.size)) {
+            if (name === "icon") continue
+            verify(findChild(page, "designSystemSize_" + name) !== null, name)
+        }
+        for (const name of roleNames(Theme.size.icon)) {
+            verify(findChild(page, "designSystemIconSize_" + name) !== null, name)
+        }
+        for (const name of roleNames(Theme.focusRing)) {
+            if (name === "width") continue
+            verify(findChild(page, "designSystemFocusRing_" + name) !== null, name)
+        }
+
+        const split = findChild(page, "designSystemLayoutSplitView")
+        const picker = findChild(page, "designSystemPageWidthPicker")
+        verify(split !== null)
+        verify(picker !== null)
+        compare(picker.currentText, "Window")
+        compare(page.contentHorizontalPadding, Theme.space.pagePadding(page.width))
+        compare(split.isCompact, false)
+
+        picker.selected(1, picker.model[1])
+        compare(page.previewWidth, 390)
+        compare(picker.currentText, "390")
+        compare(page.contentHorizontalPadding, Theme.space.pageCompact + (page.width - 390) / 2)
+        tryCompare(split, "isCompact", true)
+        compare(page.contentLayout.width, 390 - Theme.space.pageCompact * 2)
+
+        picker.selected(0, picker.model[0])
+        tryCompare(split, "isCompact", false)
+
+        const devicePicker = findChild(page, "designSystemDevicePicker")
+        verify(devicePicker !== null)
+        compare(devicePicker.currentText, "Desktop")
+        try {
+            devicePicker.selected(1, "Mobile")
+            compare(SizeClass.windowMinimumWidth, 360)
+            verify(SizeClass.isCompact(SizeClass.windowMinimumWidth))
+            compare(devicePicker.currentText, "Mobile")
+        } finally {
+            devicePicker.selected(0, "Desktop")
+        }
+        compare(SizeClass.windowMinimumWidth, 800)
     }
 
     function test_palettePickerFollowsEveryPalette() {

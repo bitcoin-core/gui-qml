@@ -16,7 +16,7 @@ ColumnLayout {
     property string scriptThreadsError: ""
     readonly property var coreStatuses: optionsModel.coreSettingStatuses
 
-    spacing: 24
+    spacing: Theme.space.xxl
 
     SettingsRestartNotice {
         visible: root.showRestartNotice

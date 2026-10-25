@@ -119,12 +119,13 @@ SettingsPage {
         currentIndex: root.selectedMode
 
         FormSection {
+            id: signSection
             objectName: "signMessageFormSection"
             Layout.fillWidth: true
 
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.margins: 20
+                Layout.margins: signSection.contentInset
                 spacing: 20
 
                 PageHeading {
@@ -218,12 +219,13 @@ SettingsPage {
         }
 
         FormSection {
+            id: verifySection
             objectName: "verifyMessageFormSection"
             Layout.fillWidth: true
 
             ColumnLayout {
                 Layout.fillWidth: true
-                Layout.margins: 20
+                Layout.margins: verifySection.contentInset
                 spacing: 20
 
                 PageHeading {
@@ -290,7 +292,7 @@ SettingsPage {
 
                 ToastBanner {
                     objectName: "verifyMessageResultBanner"
-                    visible: root.verifyResultText.length > 0
+                    shown: root.verifyResultText.length > 0
                     Layout.fillWidth: true
                     tintColor: root.verifyResultSuccess ? Theme.color.green : Theme.color.red
                     iconSource: root.verifyResultSuccess

@@ -11,12 +11,13 @@ Button {
     id: root
     hoverEnabled: enabled && AppMode.isDesktop
     opacity: enabled ? 1.0 : 0.4
-    scale: enabled && down ? 0.98 : 1.0
+    scale: enabled && down ? Theme.motion.pressScale : 1
 
     Behavior on scale {
+        enabled: Theme.motion.animated
         NumberAnimation {
-            duration: 100
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fast
+            easing.type: Theme.motion.easing.enter
         }
     }
 
@@ -31,7 +32,7 @@ Button {
     property color borderPressedColor: "transparent"
     property bool bold: true
     property bool busy: false
-    property int backgroundRadius: 5
+    property int backgroundRadius: Theme.radius.s
     property url iconSource: ""
     property var textStyle: bold ? Theme.text.buttonStrong : Theme.text.button
     property int textFontPixelSize: textStyle.pixelSize
@@ -45,7 +46,7 @@ Button {
             id: contentRow
             anchors.centerIn: parent
             width: Math.min(implicitWidth, parent.width)
-            spacing: 4
+            spacing: Theme.space.xs
 
             SpinningIndicator {
                 Layout.alignment: Qt.AlignVCenter
@@ -59,7 +60,7 @@ Button {
                 visible: !root.busy && root.iconSource.toString() !== ""
                 source: root.iconSource
                 color: root.textColor
-                size: 24
+                size: Theme.size.icon.xl
             }
 
             CoreText {
@@ -78,7 +79,7 @@ Button {
     }
     background: Rectangle {
         id: bg
-        implicitHeight: 46
+        implicitHeight: Theme.size.controlLarge
         color: backgroundColor
         border.color: borderColor
         radius: root.backgroundRadius
@@ -99,7 +100,8 @@ Button {
         ]
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         SurfaceGradientBorder {

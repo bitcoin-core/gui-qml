@@ -71,8 +71,18 @@ Item {
         }
     }
 
+    // Under reduced motion the badge appears complete, without the staged entrance.
+    Component.onCompleted: {
+        if (Theme.motion.reduced) {
+            opacity = 1
+            checkCanvas.progress = 1
+        } else {
+            entrance.start()
+        }
+    }
+
     SequentialAnimation {
-        running: true
+        id: entrance
         NumberAnimation { target: root; property: "opacity"; from: 0; to: 1; duration: 280; easing.type: Easing.OutCubic }
         NumberAnimation { target: checkCanvas; property: "progress"; from: 0; to: 1; duration: 400; easing.type: Easing.OutCubic }
     }

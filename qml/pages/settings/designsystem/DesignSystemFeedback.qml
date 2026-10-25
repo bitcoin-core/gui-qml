@@ -82,7 +82,7 @@ DesignSystemSection {
             label: "tintColor: green"
             ToastBanner {
                 Layout.fillWidth: true
-                visible: root.toastBannersShown
+                shown: root.toastBannersShown
                 tintColor: Theme.color.green
                 iconSource: "image://images/check"
                 text: "Signature verified."
@@ -93,7 +93,7 @@ DesignSystemSection {
             label: "tintColor: red"
             ToastBanner {
                 Layout.fillWidth: true
-                visible: root.toastBannersShown
+                shown: root.toastBannersShown
                 tintColor: Theme.color.red
                 iconSource: "image://images/alert-filled"
                 text: "The message could not be verified."
@@ -104,7 +104,7 @@ DesignSystemSection {
             label: "tintColor: blue (default)"
             ToastBanner {
                 Layout.fillWidth: true
-                visible: root.toastBannersShown
+                shown: root.toastBannersShown
                 iconSource: "image://images/info-filled"
                 text: "Commands run against the live node."
             }
@@ -114,7 +114,7 @@ DesignSystemSection {
             label: "actionText, showsCloseButton"
             ToastBanner {
                 Layout.fillWidth: true
-                visible: root.toastBannersShown
+                shown: root.toastBannersShown
                 tintColor: Theme.color.red
                 iconSource: "image://images/alert-filled"
                 text: "Connection lost."

@@ -37,7 +37,7 @@ Popup {
         ? Popup.NoAutoClose : Popup.CloseOnEscape
 
     background: Rectangle {
-        radius: 16
+        radius: Theme.radius.sheet
         color: Theme.color.neutral1
         border.width: 1
         border.color: Theme.color.neutral3
@@ -50,10 +50,10 @@ Popup {
 
     Overlay.modal: Rectangle {
         color: Qt.rgba(0, 0, 0, 0.6)
-        Behavior on opacity { NumberAnimation { duration: 180 } }
+        Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.fade(Theme.motion.moderate) } }
     }
-    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180 } }
-    exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: 150 } }
+    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.moderate); easing.type: Theme.motion.easing.enter } }
+    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.motion.normal; easing.type: Theme.motion.easing.exit } }
 
     contentItem: Loader {
         clip: true

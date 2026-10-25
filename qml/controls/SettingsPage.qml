@@ -16,9 +16,9 @@ Page {
     property string backButtonText: ""
     property alias rightItem: settingsHeader.rightItem
     property real maximumContentWidth: 840
-    property real contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
-    property real contentSpacing: 24
-    property real contentTopPadding: 20
+    property real contentHorizontalPadding: Theme.space.pagePadding(width)
+    property real contentSpacing: Theme.space.xxl
+    property real contentTopPadding: Theme.space.xl
     property real contentBottomPadding: 40
 
     readonly property alias pageHeader: settingsHeader

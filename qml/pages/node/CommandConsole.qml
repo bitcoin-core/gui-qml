@@ -15,7 +15,7 @@ Page {
     signal back()
     background: Rectangle {
         color: Theme.color.neutral1
-        radius: 16
+        radius: Theme.radius.card
     }
     clip: true
 
@@ -238,7 +238,7 @@ Page {
         }
         height: 64
         color: Theme.color.neutral1
-        radius: 16
+        radius: Theme.radius.card
 
         Rectangle {
             id: inputDivider
@@ -291,7 +291,7 @@ Page {
                 verticalAlignment: TextInput.AlignVCenter
                 background: Rectangle {
                     color: Theme.color.neutral2
-                    radius: 8
+                    radius: Theme.radius.field
                     border.width: inputField.activeFocus ? 2 : 0
                     border.color: Theme.color.orange
                 }

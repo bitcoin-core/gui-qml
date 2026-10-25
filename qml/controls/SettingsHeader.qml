@@ -19,7 +19,7 @@ Pane {
     signal back()
 
     background: null
-    padding: 4
+    padding: Theme.space.xs
 
     contentItem: Item {
         implicitHeight: root.backButtonText.length > 0 ? 46 : 40
@@ -41,8 +41,8 @@ Pane {
             AbstractButton {
                 id: compactButton
                 objectName: root.backButtonObjectName
-                implicitWidth: 40
-                implicitHeight: 40
+                implicitWidth: Theme.size.iconButton
+                implicitHeight: Theme.size.iconButton
                 hoverEnabled: AppMode.isDesktop
                 focusPolicy: Qt.TabFocus
                 Accessible.name: qsTr("Back")
@@ -58,10 +58,10 @@ Pane {
                     FocusBorder {
                         visible: compactButton.visualFocus
                         borderRadius: 12
-                        topMargin: -2
-                        bottomMargin: -2
-                        leftMargin: -2
-                        rightMargin: -2
+                        topMargin: -Theme.focusRing.offsetDense
+                        bottomMargin: -Theme.focusRing.offsetDense
+                        leftMargin: -Theme.focusRing.offsetDense
+                        rightMargin: -Theme.focusRing.offsetDense
                     }
                 }
 
@@ -71,7 +71,7 @@ Pane {
                         anchors.centerIn: parent
                         source: "image://images/caret-left"
                         color: Theme.color.neutral9
-                        size: 24
+                        size: Theme.size.icon.xl
                     }
                 }
 
@@ -120,7 +120,8 @@ Pane {
             color: Theme.color.neutral9
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
 

@@ -18,7 +18,7 @@ ColumnLayout {
     readonly property string amountValue: unitSeparator < 0 ? amount : amount.substring(0, unitSeparator)
     readonly property string amountUnit: unitSeparator < 0 ? "" : amount.substring(unitSeparator + 1)
 
-    spacing: 12
+    spacing: Theme.space.ml
     Loader {
         visible: !!root.iconComponent
         sourceComponent: root.iconComponent
@@ -35,7 +35,7 @@ ColumnLayout {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(parent.width, amountText.implicitWidth
                 + (amountUnit.visible ? spacing + amountUnit.implicitWidth : 0))
-            spacing: 12
+            spacing: Theme.space.ml
 
             BitcoinAmountDisplayLabel {
                 id: amountText
@@ -43,8 +43,8 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignBaseline
-                animationAvailableWidth: Math.max(0, amountRow.parent.width
-                    - (amountUnit.visible ? amountRow.spacing + amountUnit.implicitWidth : 0))
+                // Amounts being reviewed or confirmed never roll through other digits.
+                animateUnitChanges: false
                 text: root.amountValue
                 color: root.amountColor
                 font.family: Theme.text.monoLead.font.family
@@ -59,6 +59,7 @@ ColumnLayout {
                 id: amountUnit
                 objectName: "transactionSummaryUnit"
                 visible: root.amountUnit.length > 0
+                animateUnitChanges: false
                 Layout.alignment: Qt.AlignBaseline
                 text: root.amountUnit
                 color: Theme.color.neutral7

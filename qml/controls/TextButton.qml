@@ -14,7 +14,7 @@ Button {
     property color bgColor: Theme.color.background
     property bool bold: true
     property bool rightalign: false
-    padding: 15
+    padding: Theme.space.l
     hoverEnabled: AppMode.isDesktop
     contentItem: CoreText {
         text: root.text
@@ -23,15 +23,17 @@ Button {
         color: root.textColor
         horizontalAlignment: rightalign ? Text.AlignRight : Text.AlignHCenter
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
     background: Rectangle {
         id: bg
         color: root.bgColor
-        radius: 5
+        radius: Theme.radius.s
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         FocusBorder {

@@ -27,11 +27,11 @@ Rectangle {
     property string dismissButtonText: ""
     property bool showsCloseButton: false
     property int bannerLayout: InfoBanner.Layout.Horizontal
-    property int contentMargin: 30
+    property int contentMargin: Theme.space.xxxl
     property int horizontalContentMargin: contentMargin
     property int verticalContentMargin: contentMargin
-    property int contentSpacing: 15
-    property int iconSize: 24
+    property int contentSpacing: Theme.space.l
+    property int iconSize: Theme.size.icon.xl
     property int textRightMargin: 0
     property int messageFontPixelSize: 13
     property int messageLineHeight: 0
@@ -43,7 +43,7 @@ Rectangle {
     signal primaryClicked()
     signal dismissClicked()
 
-    radius: 10
+    radius: Theme.radius.card
     color: backgroundColor
     implicitHeight: contentLoader.implicitHeight + 2 * verticalContentMargin
 
@@ -64,8 +64,8 @@ Rectangle {
         visible: root.showsCloseButton
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 8
-        anchors.rightMargin: 8
+        anchors.topMargin: Theme.space.m
+        anchors.rightMargin: Theme.space.m
         size: 24
         iconSource: "image://images/cross"
         accessibleName: qsTr("Dismiss")
@@ -89,7 +89,7 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.rightMargin: root.textRightMargin
-                spacing: 4
+                spacing: Theme.space.xs
 
                 CoreText {
                     objectName: root.titleObjectName
@@ -120,8 +120,8 @@ Rectangle {
                 objectName: root.objectName !== "" ? root.objectName + "DismissButton" : ""
                 visible: root.dismissButtonText !== ""
                 text: root.dismissButtonText
-                leftPadding: 20
-                rightPadding: 20
+                leftPadding: Theme.space.xl
+                rightPadding: Theme.space.xl
                 onClicked: root.dismissClicked()
             }
 
@@ -174,7 +174,7 @@ Rectangle {
 
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 15
+                spacing: Theme.space.l
 
                 OutlineButton {
                     objectName: root.objectName !== "" ? root.objectName + "DismissButton" : ""

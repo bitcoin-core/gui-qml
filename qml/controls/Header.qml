@@ -44,7 +44,8 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }
@@ -64,7 +65,8 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }
@@ -83,7 +85,8 @@ ColumnLayout {
             wrapMode: wrap ? Text.WordWrap : Text.NoWrap
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }

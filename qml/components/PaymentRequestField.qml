@@ -31,12 +31,12 @@ FormRow {
     onEditableChanged: if (!editable) reset()
     Component.onCompleted: reset()
     trailingItem: RowLayout {
-        spacing: 4
+        spacing: Theme.space.xs
         TextField {
             id: input
             objectName: root.fieldObjectName
             implicitWidth: Math.max(80, Math.min(260, root.width * 0.53 - (unitLoader.active ? unitLoader.width : 0)))
-            implicitHeight: 36
+            implicitHeight: Theme.size.control
             enabled: root.editable
             font: root.fieldTextStyle.font
             color: root.editable ? Theme.color.neutral9 : Theme.color.neutral4
@@ -44,7 +44,7 @@ FormRow {
             horizontalAlignment: Text.AlignRight
             verticalAlignment: TextInput.AlignVCenter
             selectByMouse: true
-            padding: 4
+            padding: Theme.space.xs
             Accessible.name: root.label
             background: FieldBorderRings { visible: input.activeFocus; cornerRadius: 4 }
             onTextEdited: root.modified = text !== root.value

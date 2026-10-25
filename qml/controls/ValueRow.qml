@@ -17,9 +17,10 @@ FormRow {
     property var valueTextStyle: Theme.text.description
     property bool amountValue: false
     property string valueUnit: ""
+    property bool animateUnitChanges: true
 
     trailingItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
 
         CoreText {
             objectName: !root.amountValue && root.objectName.length > 0 ? root.objectName + "Value" : ""
@@ -41,6 +42,7 @@ FormRow {
             Layout.maximumWidth: root.valueMaximumWidth
             amount: root.value
             unit: root.value === "—" ? "" : root.valueUnit
+            animateUnitChanges: root.animateUnitChanges
             color: root.valueColor
             font: root.valueTextStyle.font
             lineHeight: root.valueTextStyle.lineHeight

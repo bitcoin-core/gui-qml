@@ -23,8 +23,8 @@ Control {
     property string actionObjectName: ""
     property string supportingText: ""
     property string errorText: ""
-    property int labelSpacing: 6
-    property int messageSpacing: 6
+    property int labelSpacing: Theme.space.s
+    property int messageSpacing: Theme.space.s
     property color labelColor: enabled ? Theme.color.neutral8 : Theme.color.neutral4
     property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
     property color errorTextColor: Theme.color.red
@@ -37,7 +37,7 @@ Control {
     property color errorBorderColor: Theme.color.red
     readonly property color activeBorderColor: errorText.length > 0 ? errorBorderColor : focusBorderColor
     readonly property bool showFieldBorder: fieldSurface && (errorText.length > 0 || fieldFocused)
-    property int fieldCornerRadius: 10
+    property int fieldCornerRadius: Theme.radius.field
     property int fieldHorizontalPadding: 14
 
     signal copyRequested()
@@ -57,7 +57,7 @@ Control {
             visible: root.label.length > 0 || root.showCopyButton || root.actionText.length > 0
             Layout.fillWidth: true
             Layout.bottomMargin: visible ? root.labelSpacing : 0
-            spacing: 8
+            spacing: Theme.space.m
 
             CoreText {
                 objectName: root.labelObjectName.length > 0

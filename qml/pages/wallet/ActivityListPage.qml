@@ -20,7 +20,7 @@ Page {
     readonly property bool dateFilterActive: activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
     readonly property bool amountFilterActive: activityFilterProxy.minAmount >= 0 || activityFilterProxy.maxAmount >= 0
     readonly property int activeFilterCount: Number(typeFilterActive) + Number(dateFilterActive) + Number(amountFilterActive)
-    readonly property real pageSidePadding: width < 640 ? 16 : 40
+    readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real activityContentWidth: Math.max(0, Math.min(1100, width - pageSidePadding * 2))
     readonly property real activitySideInset: (width - activityContentWidth) / 2
 
@@ -217,7 +217,7 @@ Page {
                     horizontalAlignment: Text.AlignLeft
                 }
                 CoreText {
-                    visible: root.width < 640
+                    visible: SizeClass.isCompact(root.width)
                     Layout.fillWidth: true
                     text: root.countText()
                     font: Theme.text.caption.font
@@ -227,7 +227,7 @@ Page {
             }
             CoreText {
                 objectName: "activityCount"
-                visible: root.width >= 640
+                visible: !SizeClass.isCompact(root.width)
                 Layout.alignment: Qt.AlignVCenter
                 text: root.countText()
                 font: Theme.text.caption.font
@@ -285,7 +285,8 @@ Page {
                 width: Math.max(0, (activeFiltersButton.implicitWidth + filters.spacing) * reveal - filters.spacing)
                 height: activeFiltersButton.height
                 Behavior on reveal {
-                    NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                    enabled: !Theme.motion.reduced
+                    NumberAnimation { duration: Theme.motion.moderate; easing.type: Theme.motion.easing.move }
                 }
                 FilterButton {
                     id: activeFiltersButton
@@ -606,7 +607,7 @@ Page {
             color: Theme.color.neutral0
             border.color: Theme.color.neutral4
             border.width: 1
-            radius: 5
+            radius: Theme.radius.popup
             SurfaceGradientBorder {
                 anchors.fill: parent
                 surfaceColor: parent.color
@@ -626,7 +627,7 @@ Page {
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 30
+                    radius: height / 2
                     color: root.exportSucceeded ? Theme.color.green : Theme.color.red
                     opacity: 0.2
                 }

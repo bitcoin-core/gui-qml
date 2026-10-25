@@ -26,7 +26,7 @@ Popup {
     closePolicy: Popup.CloseOnEscape
 
     background: Rectangle {
-        radius: 16
+        radius: Theme.radius.sheet
         color: Theme.color.neutral1
         border.width: 1
         border.color: Theme.color.neutral3
@@ -47,46 +47,43 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -30
+            from: -Theme.motion.dialogOffset
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "scale"
-            from: 0.96
+            from: Theme.motion.popoverScale
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -30
-            duration: 250
-            easing.type: Easing.InCubic
+            to: -Theme.motion.dialogOffset
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "scale"
-            from: 1
-            to: 0.96
-            duration: 250
-            easing.type: Easing.InCubic
+            to: Theme.motion.popoverScale
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -103,7 +100,7 @@ Popup {
             objectName: root.closeButtonObjectName
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.margins: 16
+            anchors.margins: Theme.space.l
             z: 2
             buttonSize: CloseButton.Medium
             backgroundColor: Theme.color.neutral2

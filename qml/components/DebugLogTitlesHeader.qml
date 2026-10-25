@@ -13,7 +13,7 @@ Control {
 
     property int typeColumnWidth: 32
     property int timeColumnWidth: 80
-    property int cornerRadius: 16
+    property int cornerRadius: Theme.radius.card
 
     implicitHeight: 44
     padding: 0

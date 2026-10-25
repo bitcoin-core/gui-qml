@@ -42,7 +42,9 @@ Item {
         from: 0
         to: 360
         duration: 800
+        easing.type: Theme.motion.easing.loop
         loops: Animation.Infinite
-        running: root.running
+        // Spinners keep turning under reduced motion; only tests turn them off.
+        running: root.running && Theme.motion.animated
     }
 }

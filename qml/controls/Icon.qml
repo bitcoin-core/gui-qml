@@ -24,8 +24,9 @@ Button {
     Accessible.ignored: true
 
     Behavior on icon.color {
+        enabled: Theme.motion.animated
         ColorAnimation {
-            duration: 150
+            duration: Theme.motion.normal
         }
     }
 }

@@ -20,8 +20,8 @@ LabeledField {
     property alias trailingItem: trailingLoader.sourceComponent
     readonly property alias field: input
     readonly property alias loadedTrailingItem: trailingLoader.item
-    property int fieldHeight: 52
-    property int fieldCornerRadius: 10
+    property int fieldHeight: Theme.size.field
+    property int fieldCornerRadius: Theme.radius.field
     property int fieldHorizontalPadding: fieldSurface ? 14 : 16
     property color fieldBackgroundColor: Theme.color.neutral1
     property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4

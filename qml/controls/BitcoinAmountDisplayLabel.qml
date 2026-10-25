@@ -66,7 +66,7 @@ BitcoinAmountDisplayLabelBase {
         initialized = true
     }
     onDisplayUnitChanged: {
-        if (initialized && animateUnitChanges && supportsAnimation) queueUnitAnimation()
+        if (initialized && rollsUnitChanges && supportsAnimation) queueUnitAnimation()
     }
     onTextChanged: {
         if (!initialized) return
@@ -74,8 +74,8 @@ BitcoinAmountDisplayLabelBase {
         // Formatting and display-unit bindings can fire in either order.
         updateStaticTextTimer.restart()
     }
-    onAnimateUnitChangesChanged: {
-        if (initialized && !animateUnitChanges) finishAnimation()
+    onRollsUnitChangesChanged: {
+        if (initialized && !rollsUnitChanges) finishAnimation()
     }
     onVisibleChanged: {
         if (initialized && !visible) finishAnimation()
@@ -158,7 +158,7 @@ BitcoinAmountDisplayLabelBase {
         const availableWidth = animationAvailableWidth >= 0 ? animationAvailableWidth : width
         displayText = text
         displayParts = formattedParts
-        if (!animateUnitChanges || !supportsAnimation || !visible || wrap
+        if (!rollsUnitChanges || !supportsAnimation || !visible || wrap
                 || !before.cells.length || !after.cells.length || before.text === text
                 || pendingClipped || (availableWidth > 0 && after.width > availableWidth + 1)) {
             finishAnimation()

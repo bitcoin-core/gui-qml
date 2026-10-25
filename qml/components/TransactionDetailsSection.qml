@@ -46,7 +46,7 @@ ColumnLayout {
         objectName: "transactionOverviewSection"
         Layout.fillWidth: true
         title: qsTr("Overview")
-        sectionSpacing: 12
+        sectionSpacing: Theme.space.ml
 
         FormRow {
             id: idRow
@@ -82,7 +82,7 @@ ColumnLayout {
         objectName: "transactionTechnicalDetailsSection"
         Layout.fillWidth: true
         title: qsTr("Details")
-        sectionSpacing: 12
+        sectionSpacing: Theme.space.ml
         TransactionDetailsGrid {
             objectName: "transactionDetailsGrid"
             fields: root.detailFields

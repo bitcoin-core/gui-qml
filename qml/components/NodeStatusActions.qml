@@ -10,7 +10,7 @@ import "../controls"
 
 RowLayout {
     id: root
-    spacing: 4
+    spacing: Theme.space.xs
 
     IconButton {
         objectName: "nodeWarningsButton"

@@ -16,7 +16,7 @@ Page {
     signal back
     signal peerSelected(PeerDetailsModel peerDetails)
 
-    property bool compact: width <= SizeClass.compactWidthMax
+    property bool compact: SizeClass.isCompact(width)
     property bool showHeader: false
     property bool showBackButton: true
     property Item popupParent: null
@@ -219,8 +219,8 @@ Page {
     Item {
         objectName: "peersContentFrame"
         anchors.fill: parent
-        anchors.leftMargin: root.compact ? 14 : 24
-        anchors.rightMargin: root.compact ? 14 : 24
+        anchors.leftMargin: root.compact ? Theme.space.pageCompact : Theme.space.xxl
+        anchors.rightMargin: root.compact ? Theme.space.pageCompact : Theme.space.xxl
         anchors.topMargin: root.compact ? 16 : 28
         anchors.bottomMargin: root.compact ? 16 : 24
 
@@ -293,9 +293,9 @@ Page {
                     KeyNavigation.backtab: searchField.inputField
                     KeyNavigation.priority: KeyNavigation.BeforeItem
                     Accessible.name: qsTr("Sort peers")
-                    background: Rectangle {
+                    background: StateBackground {
                         radius: 8
-                        color: sortButton.down ? Theme.color.neutral3
+                        stateColor: sortButton.down ? Theme.color.neutral3
                             : sortButton.hovered ? Theme.color.neutral2 : Theme.color.neutral1
                         border.width: 0
                         FocusBorder {
@@ -414,8 +414,8 @@ Page {
                     onClicked: transportFilterMenu.opened ? transportFilterMenu.close() : transportFilterMenu.open()
                 }
                 add: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 160 }
-                    NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: 160 }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
+                    NumberAnimation { property: "scale"; from: Theme.motion.reduced ? 1 : 0.8; to: 1; duration: Theme.motion.travel(Theme.motion.normal); easing.type: Theme.motion.easing.enter }
                 }
             }
 
@@ -425,7 +425,7 @@ Page {
                 Layout.fillHeight: true
                 Layout.minimumHeight: 120
                 color: Theme.color.neutral1
-                radius: 12
+                radius: Theme.radius.card
                 border.width: 0
                 clip: true
 
@@ -471,11 +471,11 @@ Page {
                                 Qt.point(mouse.x, mouse.y))
                         }
                         background: Item {
-                            Rectangle {
+                            StateBackground {
                                 anchors.fill: parent
                                 anchors.margins: 4
-                                radius: 16
-                                color: delegate.down ? Theme.color.neutral3
+                                radius: Theme.radius.listRow
+                                stateColor: delegate.down ? Theme.color.neutral3
                                     : ((!root.compact && root.selectedNodeId === delegate.nodeId) || delegate.hovered)
                                         ? Theme.color.neutral2 : "transparent"
                             }

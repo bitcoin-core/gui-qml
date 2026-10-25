@@ -274,7 +274,7 @@ TestCase {
         page.submitVerify()
         compare(page.verifyResultSuccess, true)
         compare(resultText.text, "Message verified successfully.")
-        compare(resultBanner.radius, 15)
+        compare(resultBanner.radius, Theme.radius.card)
         compare(resultBanner.implicitHeight, 40)
         compare(resultIcon.width, 24)
         compare(resultIcon.height, 24)

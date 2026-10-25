@@ -30,7 +30,7 @@ Popup {
 
     background: Rectangle {
         color: Theme.color.background
-        radius: 8
+        radius: Theme.radius.popup
         border.color: Theme.color.neutral4
         border.width: 1
         SurfaceGradientBorder {
