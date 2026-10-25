@@ -16,7 +16,6 @@ DesignSystemSection {
 
     Component.onCompleted: toastBannersShown = true
 
-    title: "Feedback"
     description: "Banners, pills, tooltips, toasts and loading indicators."
 
     DesignSystemSpecimen {
@@ -242,6 +241,26 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
+        objectName: "designSystemHoverToolTip"
+        Layout.fillWidth: true
+        name: "HoverToolTip"
+        note: "The Tooltip in a popup, for hints inside clipped rows. Shown after Theme.motion.tooltipDelay."
+
+        DesignSystemState {
+            label: "visible: hovered"
+            NeutralButton {
+                id: hoverToolTipButton
+                text: "Hover me"
+
+                HoverToolTip {
+                    visible: hoverToolTipButton.hovered
+                    text: "Locked coins are not spent"
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
         objectName: "designSystemSkeleton"
         Layout.fillWidth: true
         name: "Skeleton"
@@ -257,6 +276,44 @@ DesignSystemSection {
         DesignSystemState {
             label: "loading: false"
             Skeleton { Layout.preferredWidth: 220; Layout.preferredHeight: 18; loading: false }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemPeersIndicator"
+        Layout.fillWidth: true
+        name: "PeersIndicator"
+        note: "The block clock's outbound peer dots."
+
+        DesignSystemState {
+            label: "4 of 8, active"
+            PeersIndicator {
+                numOutboundPeers: 4
+                maxNumOutboundPeers: 8
+                paused: false
+                active: true
+            }
+        }
+        DesignSystemState {
+            label: "no peers: the first dot pulses"
+            PeersIndicator {
+                numOutboundPeers: 0
+                maxNumOutboundPeers: 8
+                paused: false
+                active: true
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemWalletSuccessBadge"
+        Layout.fillWidth: true
+        name: "WalletSuccessBadge"
+        note: "Draws its check once when created; complete at once under reduced motion."
+
+        DesignSystemState {
+            label: "created"
+            WalletSuccessBadge {}
         }
     }
 

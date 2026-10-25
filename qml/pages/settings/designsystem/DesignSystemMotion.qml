@@ -27,8 +27,7 @@ DesignSystemSection {
 
     signal replayRequested()
 
-    title: "Motion"
-    description: "Theme.motion tokens in the current mode. Switch the mode under Page controls; Replay runs every sample again."
+    description: "Theme.motion tokens in the current mode. Switch the mode on the Design system page; Replay runs every sample again."
 
     NeutralButton {
         objectName: "designSystemMotionReplayButton"

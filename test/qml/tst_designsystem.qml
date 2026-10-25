@@ -3,9 +3,11 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 import QtTest 1.2
 import "../../qml/controls"
 import "../../qml/pages/settings"
+import "../../qml/pages/settings/designsystem"
 
 TestCase {
     id: testCase
@@ -17,6 +19,8 @@ TestCase {
 
     readonly property var sectionNames: [
         "designSystemPageControlsSection",
+        "designSystemFoundationsSection",
+        "designSystemComponentsSection",
         "designSystemColorsSection",
         "designSystemTypographySection",
         "designSystemMotionSection",
@@ -32,8 +36,10 @@ TestCase {
     ]
 
     readonly property var specimenNames: [
-        "designSystemColorBase", "designSystemColorRoles", "designSystemSurfaces", "designSystemColorLists",
-        "designSystemColorTints", "designSystemTypeSet", "designSystemTextRoles",
+        "designSystemColorBase", "designSystemColorSurfaces", "designSystemColorStates", "designSystemColorText",
+        "designSystemColorStatus", "designSystemColorActivity", "designSystemColorUtility",
+        "designSystemTypeSet", "designSystemTextHeadings", "designSystemTextReading", "designSystemTextInterface",
+        "designSystemTextMono", "designSystemTextAmounts",
         "designSystemMotionDurations", "designSystemMotionEasing", "designSystemMotionTransitions",
         "designSystemMotionHelpers",
         "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
@@ -55,11 +61,43 @@ TestCase {
         "designSystemInfoBanner", "designSystemToastBanner",
         "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemTooltip",
         "designSystemSkeleton", "designSystemSpinningIndicator",
-        "designSystemContextMenu", "designSystemTransactionActionsMenu", "designSystemPaymentRequestActionsMenu",
+        "designSystemContextMenu",
         "designSystemAlertPopup", "designSystemDialogPopup",
         "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemSelectableText",
         "designSystemQRImage"
     ]
+
+    // Shared types without a showcase entry, and why. Everything else in
+    // qml/controls and qml/components needs an item named "designSystem<Type>"
+    // (or "designSystem<Type>Section") on the page, or a specimen whose
+    // `shows` list names it.
+    readonly property var showcaseExemptions: {
+        const reasons = {
+            "singleton": ["Theme", "SizeClass"],
+            "not drawn by itself": ["AlertAction", "AppSettings", "MenuCommand", "AppFolderDialog",
+                "DesktopMenuActions", "DesktopNativeMenuBar"],
+            "base type or part of a shown control": ["BitcoinAmountDigit", "BitcoinAmountDigitBase",
+                "BitcoinAmountDisplayLabelBase", "LabeledField", "FieldBorderRings", "SurfaceGradientBorder",
+                "TransactionFlowRibbon"],
+            "acts for real (opens the browser)": ["ExternalPopup"],
+            "feature-specific menu": ["TransactionActionsMenu", "PaymentRequestActionsMenu", "PeerActionsMenu",
+                "SendCreateOptionsPopup"],
+            "page-level container": ["PageStack", "SettingsPage", "SettingsPageContainer", "SettingsSidebar",
+                "SettingsView", "OnboardingView", "OnboardingFooter", "OnboardingNavigationBar", "DeveloperOptions",
+                "StorageLocations", "StorageOptions", "TransactionDetailsSection"],
+            "needs a live wallet or node model": ["BlockClock", "MiniBlockClock", "CoinsList", "NetworkTrafficGraph",
+                "NodeStatusActions", "PaymentRequestCard", "PaymentRequestModal", "PaymentRequestDeleteConfirmation",
+                "SendCoinSelection", "SendFeeSelection", "SendRecipientEditor", "ExternalSignerReviewActions",
+                "TransactionFlow", "WalletCreationModal", "WalletMigrationPopup", "WalletPassphrasePopup",
+                "BannedPeersPopup", "NodeFatalErrorPopup", "NodeInformationPopup", "NodeRuntimeDialog",
+                "NodeWarningsPopup", "OnboardingSettingsPopup"]
+        }
+        const exemptions = {}
+        for (const reason in reasons) {
+            for (const type of reasons[reason]) exemptions[type] = reason
+        }
+        return exemptions
+    }
 
     // Roles a screen reader treats as plain containers, and the roles a
     // clickable control may have.
@@ -69,10 +107,40 @@ TestCase {
         Accessible.PageTab, Accessible.ListItem, Accessible.MenuItem, Accessible.Link, Accessible.ButtonMenu,
         Accessible.ButtonDropDown, Accessible.ComboBox]
 
+    // The landing page in a StackView, as Settings shows it.
     Component {
-        id: designSystemPageComponent
+        id: stackComponent
 
-        SettingsDesignSystem {
+        StackView {
+            width: testCase.width
+            height: testCase.height
+            initialItem: SettingsDesignSystem {}
+        }
+    }
+
+    // The landing page and every subpage side by side, for checks that
+    // cover the whole showcase.
+    Component {
+        id: allPagesComponent
+
+        Item {
+            readonly property alias landing: landing
+            property var sectionPages: []
+
+            width: testCase.width
+            height: testCase.height
+
+            SettingsDesignSystem {
+                id: landing
+                anchors.fill: parent
+            }
+        }
+    }
+
+    Component {
+        id: sectionPageComponent
+
+        DesignSystemSectionPage {
             width: testCase.width
             height: testCase.height
         }
@@ -86,23 +154,97 @@ TestCase {
         return names
     }
 
-    function createPage() {
-        // failOnWarning() exists from Qt 6.3; older Qt only loads the page.
+    function failOnQmlWarnings() {
+        // failOnWarning() exists from Qt 6.3; older Qt only loads the pages.
         if (typeof failOnWarning === "function") failOnWarning(/qrc:\/qml\//)
-        const page = createTemporaryObject(designSystemPageComponent, testCase)
-        verify(page !== null)
+    }
+
+    function createStack() {
+        failOnQmlWarnings()
+        const view = createTemporaryObject(stackComponent, testCase)
+        verify(view !== null)
+        waitForRendering(view)
+        return view
+    }
+
+    function openPage(view, id) {
+        const landing = view.get(0)
+        findChild(landing, "designSystemOpen" + id).clicked()
+        tryCompare(view, "busy", false)
+        const page = view.currentItem
+        compare(page.objectName, "designSystem" + id + "Page")
+        verify(page.sectionItem !== null)
         waitForRendering(page)
         return page
     }
 
+    function closePage(view) {
+        view.currentItem.back()
+        tryCompare(view, "busy", false)
+        compare(view.depth, 1)
+    }
+
+    function createAllPages() {
+        failOnQmlWarnings()
+        const host = createTemporaryObject(allPagesComponent, testCase)
+        verify(host !== null)
+        const pages = []
+        for (const page of host.landing.pages) {
+            pages.push(sectionPageComponent.createObject(host, {
+                objectName: "designSystem" + page.id + "Page",
+                title: page.name,
+                section: page.section
+            }))
+        }
+        host.sectionPages = pages
+        waitForRendering(host)
+        return host
+    }
+
     function test_everySectionAndSpecimenLoads() {
-        const page = createPage()
+        const page = createAllPages()
         for (const name of sectionNames) verify(findChild(page, name) !== null, name)
         for (const name of specimenNames) verify(findChild(page, name) !== null, name)
     }
 
+    function test_everyListRowOpensItsPage() {
+        const view = createStack()
+        const landing = view.get(0)
+        compare(landing.pages.length, 12)
+        for (const entry of landing.pages) {
+            const page = openPage(view, entry.id)
+            compare(page.title, entry.name)
+            compare(page.pageHeader.title, entry.name)
+            closePage(view)
+        }
+    }
+
+    function test_everySharedTypeHasAShowcaseEntry() {
+        const page = createAllPages()
+        const types = testResources.qmlTypes("controls").concat(testResources.qmlTypes("components"))
+        verify(types.length > 0)
+        const shown = {}
+        const collectShown = function(item) {
+            if (item.shows !== undefined) {
+                for (const type of item.shows) shown[type] = true
+            }
+            for (let i = 0; i < item.children.length; ++i) collectShown(item.children[i])
+        }
+        collectShown(page)
+        const missing = []
+        for (const type of types) {
+            if (showcaseExemptions[type] !== undefined || shown[type]) continue
+            if (findChild(page, "designSystem" + type) === null && findChild(page, "designSystem" + type + "Section") === null) {
+                missing.push(type)
+            }
+        }
+        compare(missing.join(", "), "")
+        // Keeps the exemptions in step with the files.
+        for (const type in showcaseExemptions) verify(types.indexOf(type) >= 0, type)
+    }
+
     function test_foundationsListEveryThemeRole() {
-        const page = createPage()
+        const page = createAllPages()
         for (const name of roleNames(Theme.color)) {
             const type = typeof Theme.color[name]
             if (type === "string" || type === "boolean" || type === "number") continue
@@ -123,31 +265,51 @@ TestCase {
 
     function test_motionSectionListsTokensAndSwitchesModeForThePage() {
         const startMode = Theme.motion.mode
-        const page = createPage()
+        const view = createStack()
+        const picker = findChild(view.get(0), "designSystemMotionModePicker")
+        compare(picker.currentText, startMode)
+        picker.selected(1, "reduced")
+        compare(Theme.motion.mode, "reduced")
+        compare(picker.currentText, "reduced")
+
+        // Opening a subpage and coming back keeps the mode.
+        const page = openPage(view, "Motion")
+        compare(Theme.motion.mode, "reduced")
         for (const name of ["fast", "normal", "moderate", "exit", "slow", "navigation", "tooltipDelay"]) {
             verify(findChild(page, "designSystemMotion_" + name) !== null, name)
         }
         for (const name of ["enter", "exit", "move", "loop"]) {
             verify(findChild(page, "designSystemMotionEasing_" + name) !== null, name)
         }
-        const picker = findChild(page, "designSystemMotionModePicker")
-        compare(picker.currentText, startMode)
-        picker.selected(1, "reduced")
-        compare(Theme.motion.mode, "reduced")
-        compare(picker.currentText, "reduced")
         findChild(page, "designSystemMotionReplayButton").clicked()
-        // Settings keeps the page alive when another section is shown.
-        page.visible = false
+        closePage(view)
+        compare(Theme.motion.mode, "reduced")
+
+        // Settings keeps the stack alive when another section is shown.
+        view.visible = false
         compare(Theme.motion.mode, startMode)
-        page.visible = true
+        view.visible = true
         picker.selected(1, "reduced")
-        page.destroy()
+        openPage(view, "Motion")
+        view.visible = false
+        compare(Theme.motion.mode, startMode)
+        view.visible = true
+        closePage(view)
+
+        picker.selected(1, "reduced")
+        view.destroy()
         wait(0)
         compare(Theme.motion.mode, startMode)
     }
 
     function test_layoutSectionListsTokensAndPreviewsWidths() {
-        const page = createPage()
+        const view = createStack()
+        const landing = view.get(0)
+        const picker = findChild(landing, "designSystemPageWidthPicker")
+        verify(picker !== null)
+        compare(picker.currentText, "Window")
+
+        let page = openPage(view, "Layout")
         for (const name of roleNames(Theme.space)) verify(findChild(page, "designSystemSpace_" + name) !== null, name)
         for (const name of roleNames(Theme.radius)) verify(findChild(page, "designSystemRadius_" + name) !== null, name)
         for (const name of roleNames(Theme.size)) {
@@ -162,25 +324,31 @@ TestCase {
             verify(findChild(page, "designSystemFocusRing_" + name) !== null, name)
         }
 
-        const split = findChild(page, "designSystemLayoutSplitView")
-        const picker = findChild(page, "designSystemPageWidthPicker")
+        let split = findChild(page, "designSystemLayoutSplitView")
         verify(split !== null)
-        verify(picker !== null)
-        compare(picker.currentText, "Window")
         compare(page.contentHorizontalPadding, Theme.space.pagePadding(page.width))
         compare(split.isCompact, false)
+        closePage(view)
 
+        // The landing page and the pages it opens lay out at the picked width.
         picker.selected(1, picker.model[1])
-        compare(page.previewWidth, 390)
+        compare(landing.previewWidth, 390)
         compare(picker.currentText, "390")
+        compare(landing.contentHorizontalPadding, Theme.space.pageCompact + (landing.width - 390) / 2)
+        page = openPage(view, "Layout")
+        compare(page.previewWidth, 390)
         compare(page.contentHorizontalPadding, Theme.space.pageCompact + (page.width - 390) / 2)
+        split = findChild(page, "designSystemLayoutSplitView")
         tryCompare(split, "isCompact", true)
         compare(page.contentLayout.width, 390 - Theme.space.pageCompact * 2)
+        closePage(view)
 
         picker.selected(0, picker.model[0])
-        tryCompare(split, "isCompact", false)
+        page = openPage(view, "Layout")
+        tryCompare(findChild(page, "designSystemLayoutSplitView"), "isCompact", false)
+        closePage(view)
 
-        const devicePicker = findChild(page, "designSystemDevicePicker")
+        const devicePicker = findChild(landing, "designSystemDevicePicker")
         verify(devicePicker !== null)
         compare(devicePicker.currentText, "Desktop")
         try {
@@ -197,7 +365,7 @@ TestCase {
     function test_palettePickerFollowsEveryPalette() {
         const originalPaletteId = Theme.paletteId
         try {
-            const page = createPage()
+            const page = createAllPages()
             const picker = findChild(page, "designSystemPalettePicker")
             verify(picker !== null)
             compare(picker.model.length, Theme.palettes.length)
@@ -209,28 +377,18 @@ TestCase {
                 compare(picker.currentText, palette.displayName)
                 const neutral0 = findChild(page, "designSystemColor_neutral0")
                 verify(Qt.colorEqual(neutral0.value, palette.neutral0), palette.paletteId)
-                verify(findChild(page, "designSystemColor_surfaceHover") !== null)
-                verify(findChild(page, "designSystemColor_accentForeground") !== null)
-                verify(findChild(page, "designSystemColorTint_success") !== null)
-
-                let parentBox = null
                 for (let level = 0; level < levels.length; ++level) {
-                    const box = findChild(page, "designSystemSurface_" + levels[level])
-                    verify(box !== null, levels[level])
-                    verify(Qt.colorEqual(box.color, palette.surface(level)), palette.paletteId + " " + levels[level])
-                    if (parentBox !== null) {
-                        let ancestor = box.parent
-                        while (ancestor !== null && ancestor !== parentBox) ancestor = ancestor.parent
-                        verify(ancestor === parentBox, levels[level] + " is not nested in " + levels[level - 1])
+                    const swatch = findChild(page, "designSystemColor_" + levels[level])
+                    verify(swatch !== null, levels[level])
+                    verify(Qt.colorEqual(swatch.value, palette.surface(level)), palette.paletteId + " " + levels[level])
+                }
+                for (const role of ["surfaceHover", "surfacePressed", "surfaceSelected", "surfaceDivider",
+                                    "accentForeground", "successTint", "confirmationColors"]) {
+                    const sample = findChild(page, "designSystemColor_" + role)
+                    verify(sample !== null, role)
+                    if (role !== "confirmationColors") {
+                        verify(Qt.colorEqual(sample.value, palette[role]), palette.paletteId + " " + role)
                     }
-                    for (const role of ["surfaceHover", "surfacePressed", "surfaceSelected"]) {
-                        const state = findChild(box, "designSystemSurfaceState_" + levels[level] + "_" + role)
-                        verify(state !== null, levels[level] + " " + role)
-                        verify(Qt.colorEqual(state.color, palette[role]), palette.paletteId + " " + levels[level] + " " + role)
-                    }
-                    const divider = findChild(box, "designSystemSurfaceDivider_" + levels[level])
-                    verify(Qt.colorEqual(divider.color, palette.surfaceDivider))
-                    parentBox = box
                 }
             }
         } finally {
@@ -239,7 +397,7 @@ TestCase {
     }
 
     function test_menuAndAlertsOpen() {
-        const page = createPage()
+        const page = createAllPages()
 
         const menuButton = findChild(page, "designSystemContextMenuButton")
         const menu = findChild(page, "designSystemExampleMenu")
@@ -339,7 +497,21 @@ TestCase {
     }
 
     function test_tabWalksTheShowcaseWithVisibleFocus() {
-        const page = createPage()
+        const host = createAllPages()
+        const pages = [host.landing].concat(host.sectionPages)
+        let total = 0
+        for (const page of pages) {
+            // Hidden pages leave the focus chain, so Tab walks one page at a time.
+            for (const other of pages) other.visible = other === page
+            waitForRendering(page)
+            const visited = tabWalk(page)
+            verify(visited.length > 0, page.objectName)
+            total += visited.length
+        }
+        verify(total > 50, "only " + total + " tab stops")
+    }
+
+    function tabWalk(page) {
         const first = page.nextItemInFocusChain(true)
         verify(first !== null)
         first.forceActiveFocus(Qt.TabFocusReason)
@@ -370,11 +542,13 @@ TestCase {
 
             keyClick(Qt.Key_Tab)
             const next = page.Window.activeFocusItem
+            // Token pages have nothing to focus but the back button.
+            if (next === current && visited.length === 1) return visited
             verify(next !== current, "Tab stays on " + describe(current))
             current = next
         }
         compare(current, visited[0], "Tab cycles back to " + describe(current) + " before reaching the first stop")
-        verify(visited.length > 50, "only " + visited.length + " tab stops")
+        return visited
     }
 
     function isType(item, typeName) {
@@ -423,9 +597,19 @@ TestCase {
         return problems
     }
 
+    // Controls only fill in their automatic accessible names and states
+    // while accessibility is active. Qt 6.5 and older can't activate it
+    // without a platform bridge, and then reset explicit roles, so these
+    // checks only hold where activation works.
+    function activateAccessibility() {
+        if (testAccessibility.activate()) return
+        testAccessibility.deactivate()
+        skip("accessibility can't be activated on this Qt version and platform")
+    }
+
     function test_controlsExposeNameRoleAndState() {
-        const page = createPage()
-        testAccessibility.activate()
+        const page = createAllPages()
+        activateAccessibility()
         try {
             const problems = accessibilityProblems(page, [])
             compare(problems.join("\n"), "")
@@ -442,8 +626,8 @@ TestCase {
     }
 
     function test_tabsBadgesAndIndicatorsUseTheirRoles() {
-        const page = createPage()
-        testAccessibility.activate()
+        const page = createAllPages()
+        activateAccessibility()
         try {
 
             const tabs = itemsOfType(page, "NavigationTab", [])
@@ -488,7 +672,7 @@ TestCase {
     }
 
     function test_segmentedPickerArrowKeysMoveSelection() {
-        const page = createPage()
+        const page = createAllPages()
         const picker = itemsOfType(findChild(page, "designSystemSegmentedPicker"), "SegmentedPicker", [])[0]
         const segments = itemsOfType(picker, "Segment", [])
         compare(picker.currentIndex, 0)
@@ -496,6 +680,7 @@ TestCase {
         keyClick(Qt.Key_Right)
         compare(picker.currentIndex, 1)
         verify(segments[1].activeFocus)
+        for (let i = 0; i < segments.length; ++i) compare(segments[i].activeFocusOnTab, i === 1)
         keyClick(Qt.Key_Left)
         compare(picker.currentIndex, 0)
         verify(segments[0].activeFocus)
@@ -504,8 +689,8 @@ TestCase {
     }
 
     function test_addressesAndAmountsReadAsOneValue() {
-        const page = createPage()
-        testAccessibility.activate()
+        const page = createAllPages()
+        activateAccessibility()
         try {
             const addresses = itemsOfType(findChild(page, "designSystemAddressLabel"), "AddressLabel", [])
             verify(addresses.length > 0)
@@ -536,8 +721,8 @@ TestCase {
     }
 
     function test_rowsNameTheirControls() {
-        const page = createPage()
-        testAccessibility.activate()
+        const page = createAllPages()
+        activateAccessibility()
         try {
             const startup = testAccessibility.info(findChild(page, "designSystemStartupSwitch"))
             compare(startup.name, "Open at login")
@@ -561,7 +746,7 @@ TestCase {
     }
 
     function test_existingFormExamplesStayAvailable() {
-        const page = createPage()
+        const page = createAllPages()
         verify(findChild(page, "settingsPageContentLayout") !== null)
         verify(findChild(page, "designSystemThemeRow") !== null)
         verify(findChild(page, "designSystemLanguagePicker") !== null)

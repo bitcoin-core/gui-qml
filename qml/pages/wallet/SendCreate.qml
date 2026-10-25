@@ -295,8 +295,19 @@ PageStack {
 
             property WalletQmlModel reviewWallet: null
             property bool importedReview: false
+            // Qt 6.5 and older do not give focus back when a popup closes.
+            property Item returnFocusItem: null
 
+            onAboutToShow: {
+                const window = contentItem ? contentItem.Window.window : null
+                returnFocusItem = window ? window.activeFocusItem : null
+            }
             onClosed: {
+                const focusTarget = returnFocusItem
+                returnFocusItem = null
+                if (focusTarget && focusTarget.visible && focusTarget.enabled) {
+                    focusTarget.forceActiveFocus(Qt.OtherFocusReason)
+                }
                 const wallet = reviewWallet
                 const wasImported = importedReview
                 reviewStack.pop(null, StackView.Immediate)

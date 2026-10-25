@@ -474,6 +474,18 @@ TestCase {
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)
     }
 
+    function test_failed_qr_menu_action_shows_an_alert() {
+        const page = createPage()
+        const card = createRequest(page)
+        card.clipboard = { setText: function(text) {}, setImage: function(image) { return false } }
+        const popup = findChild(card, "requestPaymentActionFailurePopup")
+        tryVerify(function() { return card.copyQR(null) })
+        tryCompare(popup, "opened", true)
+        compare(popup.title, "QR code not copied")
+        compare(card.errorText, "")
+        verify(!findChild(card, "requestPaymentError").visible)
+    }
+
     function test_primary_action_returns_to_copy_after_update() {
         const page = createPage()
         const card = createRequest(page)
@@ -899,7 +911,7 @@ TestCase {
         const page = createPage()
         editField(page.draftCard, "requestPaymentAmountInput", "1").editingFinished()
         const card = createRequest(page)
-        card.actionErrorText = "The QR code could not be saved. Please try again."
+        card.actionErrorText = "The changes could not be saved. Please try again."
         const error = card.errorText
         verify(error.length > 0)
         editField(card, "requestPaymentAmountInput", "1.5").editingFinished()

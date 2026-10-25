@@ -145,8 +145,8 @@ Item {
                         Item {
                             visible: _row.rowIconSource.toString() !== ""
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: visible ? root.iconSize : 0
-                            Layout.preferredHeight: visible ? root.iconSize : 0
+                            Layout.preferredWidth: visible && root ? root.iconSize : 0
+                            Layout.preferredHeight: visible && root ? root.iconSize : 0
 
                             Icon {
                                 anchors.centerIn: parent

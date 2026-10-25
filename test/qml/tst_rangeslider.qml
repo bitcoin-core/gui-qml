@@ -40,9 +40,11 @@ TestCase {
         slider.first.handle.forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Right)
         verify(slider.lowerValue > 20)
+        compare(slider.first.handle.pointerFocus, false)
         slider.second.handle.forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Left)
         verify(slider.upperValue < 80)
+        compare(slider.second.handle.pointerFocus, false)
         slider.maxValue = 30
         verify(slider.upperValue <= 30)
         verify(slider.lowerValue <= slider.upperValue)

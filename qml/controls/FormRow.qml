@@ -28,6 +28,9 @@ Control {
     property int contentSpacing: Theme.space.ml
     property int bodySpacing: Theme.space.m
     property bool showsDisclosureIndicator: false
+    // Puts the trailing item under the text at full width, for controls too
+    // wide to sit beside it on a narrow page.
+    property bool stacksTrailingItem: false
     property string disclosureIndicatorObjectName: root.objectName.length > 0
         ? root.objectName + "DisclosureIndicator"
         : ""
@@ -72,18 +75,18 @@ Control {
         }
     }
 
-    Binding {
-        target: root.trailingItemNamedByRow ? root.loadedTrailingItem : null
-        property: "rowTitle"
-        value: root.title
+    // Assigned rather than bound: on Qt 6.5 and older a Binding whose target
+    // tests `"rowTitle" in item` re-evaluates when it writes rowTitle and
+    // reports a binding loop.
+    function nameTrailingItem() {
+        if (!trailingItemNamedByRow) return
+        loadedTrailingItem.rowTitle = title
+        if ("rowDescription" in loadedTrailingItem) loadedTrailingItem.rowDescription = description
     }
-
-    Binding {
-        target: root.trailingItemNamedByRow && "rowDescription" in root.loadedTrailingItem
-            ? root.loadedTrailingItem : null
-        property: "rowDescription"
-        value: root.description
-    }
+    onTitleChanged: nameTrailingItem()
+    onDescriptionChanged: nameTrailingItem()
+    onLoadedTrailingItemChanged: nameTrailingItem()
+    Component.onCompleted: nameTrailingItem()
 
     contentItem: Item {
         implicitHeight: contentLayout.height
@@ -102,19 +105,24 @@ Control {
         width: parent.width
         spacing: root.bodySpacing
 
-        RowLayout {
+        GridLayout {
             Layout.fillWidth: true
-            spacing: root.contentSpacing
+            columnSpacing: root.contentSpacing
+            rowSpacing: root.bodySpacing
 
             RowLayout {
                 id: leadingContainer
                 visible: root.showLeadingItem && children.length > 0
                 enabled: root.enabled
+                Layout.row: 0
+                Layout.column: 0
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 0
             }
 
             ColumnLayout {
+                Layout.row: 0
+                Layout.column: 1
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignVCenter
@@ -161,6 +169,8 @@ Control {
                 id: trailingContainer
                 visible: children.length > 0
                 enabled: root.enabled
+                Layout.row: root.stacksTrailingItem ? 1 : 0
+                Layout.column: root.stacksTrailingItem ? 1 : 2
                 Layout.alignment: Qt.AlignVCenter
                 spacing: 0
             }
@@ -168,6 +178,8 @@ Control {
             CaretRightIcon {
                 id: disclosureIcon
                 objectName: root.disclosureIndicatorObjectName
+                Layout.row: 0
+                Layout.column: 3
                 visible: root.showsDisclosureIndicator
                 Layout.preferredWidth: visible ? disclosureIcon.size : 0
                 Layout.preferredHeight: visible ? disclosureIcon.size : 0

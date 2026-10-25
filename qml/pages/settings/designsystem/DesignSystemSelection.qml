@@ -27,7 +27,6 @@ DesignSystemSection {
         return values.indexOf(value) >= 0 ? values.filter(v => v !== value) : values.concat([value])
     }
 
-    title: "Selection"
     description: "Controls that pick a value. Every sample keeps its value locally."
 
     DesignSystemSpecimen {
@@ -314,6 +313,21 @@ DesignSystemSection {
                 title: "View only"
                 description: "Watch an extended public key."
                 iconSource: "image://images/visible"
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemActivityCalendar"
+        Layout.fillWidth: true
+        name: "ActivityCalendar"
+        note: "The custom date range picker of the activity filter: pick a start day, then an end day. Arrow keys move between days."
+
+        DesignSystemState {
+            width: 320
+            label: "no range"
+            ActivityCalendar {
+                Layout.fillWidth: true
             }
         }
     }

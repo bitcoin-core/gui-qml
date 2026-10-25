@@ -153,41 +153,48 @@ Rectangle {
             horizontalAlignment: Text.AlignLeft
             wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
-        Repeater {
-            model: root.requests
-            delegate: AbstractButton {
-                id: requestButton
-                required property var modelData
-                objectName: "transactionFlowRequest_" + modelData.requestId
-                Layout.fillWidth: true
-                implicitHeight: Theme.size.control
-                enabled: root.interactive
-                Accessible.name: qsTr("View associated payment request")
-                onClicked: root.paymentRequestRequested(String(modelData.requestId || ""))
-                background: Rectangle {
-                    color: Theme.color.paymentRequestTint
-                    radius: 6
+        // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
+        Column {
+            Layout.fillWidth: true
+            visible: root.requests.length > 0
+            spacing: Theme.space.s
 
-                    FocusBorder {
-                        visible: requestButton.visualFocus
-                        targetRadius: parent.radius
+            Repeater {
+                model: root.requests
+                delegate: AbstractButton {
+                    id: requestButton
+                    required property var modelData
+                    objectName: "transactionFlowRequest_" + modelData.requestId
+                    width: parent ? parent.width : 0
+                    implicitHeight: Theme.size.control
+                    enabled: root.interactive
+                    Accessible.name: qsTr("View associated payment request")
+                    onClicked: root.paymentRequestRequested(String(modelData.requestId || ""))
+                    background: Rectangle {
+                        color: Theme.color.paymentRequestTint
+                        radius: 6
+
+                        FocusBorder {
+                            visible: requestButton.visualFocus
+                            targetRadius: parent.radius
+                        }
                     }
-                }
-                contentItem: RowLayout {
-                    spacing: Theme.space.s
-                    Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.paymentRequest; size: 16 }
-                    CoreText {
-                        Layout.fillWidth: true
-                        text: qsTr("Payment request #%1").arg(modelData.requestId || "")
-                        color: Theme.color.paymentRequestText
-                        textStyle: Theme.text.caption
-                        horizontalAlignment: Text.AlignLeft
-                        elide: Text.ElideRight
+                    contentItem: RowLayout {
+                        spacing: Theme.space.s
+                        Icon { source: "qrc:/icons/activity-payment-request.svg"; color: Theme.color.paymentRequest; size: 16 }
+                        CoreText {
+                            Layout.fillWidth: true
+                            text: qsTr("Payment request #%1").arg(modelData.requestId || "")
+                            color: Theme.color.paymentRequestText
+                            textStyle: Theme.text.caption
+                            horizontalAlignment: Text.AlignLeft
+                            elide: Text.ElideRight
+                        }
+                        CoreText { text: "→"; color: Theme.color.paymentRequestText; textStyle: Theme.text.caption }
                     }
-                    CoreText { text: "→"; color: Theme.color.paymentRequestText; textStyle: Theme.text.caption }
+                    leftPadding: Theme.space.m
+                    rightPadding: Theme.space.m
                 }
-                leftPadding: Theme.space.m
-                rightPadding: Theme.space.m
             }
         }
     }
