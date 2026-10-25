@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../controls"
@@ -43,15 +44,33 @@ ContextMenu {
     ContextMenuDivider {
         visible: root.explorerLinks.length > 0
     }
-    Repeater {
-        model: root.explorerLinks
-        delegate: ContextMenuButton {
-            required property var modelData
-            required property int index
-            objectName: "transactionExplorerLink_" + index
-            text: qsTr("Show in %1").arg(modelData.host)
-            iconSource: "image://images/export"
-            onTriggered: root.explorerLinkRequested(modelData.url)
+    // A positioner keeps Repeater delegates out of the Qt 6.4 layout engine.
+    // The preferred width stands in for its implicit width, which a Column
+    // derives from the (parent-bound) widths of its delegates.
+    Column {
+        Layout.fillWidth: true
+        Layout.preferredWidth: {
+            let widest = 0
+            for (let i = 0; i < explorerLinkRepeater.count; ++i) {
+                const item = explorerLinkRepeater.itemAt(i)
+                if (item) widest = Math.max(widest, item.implicitWidth)
+            }
+            return widest
+        }
+        visible: root.explorerLinks.length > 0
+
+        Repeater {
+            id: explorerLinkRepeater
+            model: root.explorerLinks
+            delegate: ContextMenuButton {
+                required property var modelData
+                required property int index
+                objectName: "transactionExplorerLink_" + index
+                width: parent ? parent.width : 0
+                text: qsTr("Show in %1").arg(modelData.host)
+                iconSource: "image://images/export"
+                onTriggered: root.explorerLinkRequested(modelData.url)
+            }
         }
     }
 }

@@ -37,7 +37,12 @@ Popup {
     property real enterOffset: -Theme.motion.dialogOffset
     property real exitOffset: -Theme.motion.dialogOffset
     readonly property real edgeMargin: Theme.space.xl
-    readonly property real maximumHeight: parent ? parent.height - 2 * edgeMargin : implicitHeight
+    // Only an open popup fits itself to its parent. Before Overlay.overlay
+    // exists the parent can be a temporary item, and on Qt 6.5 and older
+    // fitting a closed popup to it loops on the height binding, since the
+    // content layout is not polished while the popup is closed.
+    readonly property bool fitsParent: visible && parent !== null
+    readonly property real maximumHeight: fitsParent ? parent.height - 2 * edgeMargin : implicitHeight
     readonly property bool compact: parent ? SizeClass.isCompact(parent.width) : false
 
     parent: Overlay.overlay
@@ -49,7 +54,7 @@ Popup {
         : closesOnPressOutside ? Popup.CloseOnEscape | Popup.CloseOnPressOutside : Popup.CloseOnEscape
     padding: Theme.space.xxxl
     horizontalPadding: compact ? Theme.space.xxl : Theme.space.page
-    width: parent ? Math.min(implicitWidth, parent.width - 2 * edgeMargin) : implicitWidth
+    width: fitsParent ? Math.min(implicitWidth, parent.width - 2 * edgeMargin) : implicitWidth
     height: Math.min(implicitHeight, maximumHeight)
     x: parent ? Math.round((parent.width - width) / 2) : 0
     y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset

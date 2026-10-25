@@ -13,9 +13,10 @@ Control {
     property real blockclocksize: (5 / 12)
     // The Display setting. Reduces motion even when the platform doesn't ask to.
     property bool reduceMotion: false
+    // Pickers list palettes in this order.
     readonly property list<Palette> palettes: [
-        CoreDark { id: coreDark },
-        CoreLight { id: coreLight }
+        CoreLight { id: coreLight },
+        CoreDark { id: coreDark }
     ]
     readonly property Palette color: activePalette
     readonly property ImageSet image: dark ? darkImageSet : lightImageSet
