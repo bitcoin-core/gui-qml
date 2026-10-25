@@ -59,19 +59,16 @@ SettingsPage {
         Layout.fillWidth: true
         title: qsTr("Block storage")
         surfaceLevel: root.onboarding ? 1 : 0
-        showGradientBorder: false
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Store recent blocks only")
             dividerColor: Theme.color.surfaceDivider
             supportingText: root.pruneSetting.infoText
             enabled: root.pruneSetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "pruneSwitch"
-                checked: root.pruneSetting.enabled
-                onToggled: root.pruneSetting.enabled = checked
-            }
+            switchObjectName: "pruneSwitch"
+            checked: root.pruneSetting.enabled
+            onToggled: root.pruneSetting.enabled = checked
         }
 
         TextFieldRow {
@@ -106,7 +103,6 @@ SettingsPage {
         Layout.fillWidth: true
         title: qsTr("Data directory")
         surfaceLevel: root.onboarding ? 1 : 0
-        showGradientBorder: false
         description: qsTr("Selected before startup. The data directory cannot be changed while the node is running.")
 
         FormRow {
@@ -125,10 +121,11 @@ SettingsPage {
         }
     }
 
-    SettingsRestartNotice {
+    ToastBanner {
         objectName: "storageRestartNotice"
-        visible: !root.onboarding && root.settingsModel.storageSettingsDirty
+        shown: !root.onboarding && root.settingsModel.storageSettingsDirty
         Layout.fillWidth: true
         Layout.maximumWidth: root.contentLayout.width
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 }

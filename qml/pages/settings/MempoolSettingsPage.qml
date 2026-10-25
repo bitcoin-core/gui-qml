@@ -35,10 +35,11 @@ SettingsPage {
         return ""
     }
 
-    SettingsRestartNotice {
+    ToastBanner {
         objectName: "mempoolRestartNotice"
-        visible: optionsModel.mempoolSettingsDirty
+        shown: optionsModel.mempoolSettingsDirty
         Layout.fillWidth: true
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 
     FormSection {

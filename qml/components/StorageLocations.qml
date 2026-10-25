@@ -46,18 +46,14 @@ ColumnLayout {
         }
     }
 
-    ButtonGroup {
-        id: group
-    }
     spacing: 10
     OptionButton {
         id: defaultDirOption
         objectName: "storageDefaultLocationOption"
         Layout.fillWidth: true
-        ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Default")
-        checked: root.settingsModel.dataDir === root.settingsModel.getDefaultDataDirString
+        selected: root.settingsModel.dataDir === root.settingsModel.getDefaultDataDirString
         description: root.locationDescription(qsTr("Your application directory."), checked)
         errorText: checked ? root.selectedLocationStorageError : ""
         showErrorText: checked && root.selectedLocationStorageError.length > 0
@@ -70,12 +66,11 @@ ColumnLayout {
         id: customDirOption
         objectName: "storageCustomLocationOption"
         Layout.fillWidth: true
-        ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Custom")
         description: root.locationDescription(qsTr("Choose the directory and storage device."), checked)
         customDir: checked && root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString ? root.settingsModel.dataDir : ""
-        checked: root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString
+        selected: root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString
         errorText: checked ? root.selectedLocationStorageError : ""
         showErrorText: checked && root.selectedLocationStorageError.length > 0
         onClicked: folderDialog.open()

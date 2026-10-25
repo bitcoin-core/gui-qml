@@ -38,8 +38,8 @@ TestCase {
         "designSystemMotionHelpers",
         "designSystemSpaceScale", "designSystemRadii", "designSystemSizes", "designSystemIconSizes",
         "designSystemFocusRing", "designSystemBreakpoints",
-        "designSystemContinueButton", "designSystemNeutralButton", "designSystemOutlineButton",
-        "designSystemTextButton", "designSystemLinkButton", "designSystemIconButton", "designSystemCloseButton",
+        "designSystemContinueButton", "designSystemNeutralButton",
+        "designSystemLinkButton", "designSystemIconButton", "designSystemCloseButton",
         "designSystemCopyButton", "designSystemOverflowMenuButton", "designSystemFilterButton",
         "designSystemDropdownButton", "designSystemAmountUnitButton", "designSystemNavButton",
         "designSystemCheckBox", "designSystemOptionSwitch", "designSystemSegmentedPicker", "designSystemPopupPicker",
@@ -49,14 +49,16 @@ TestCase {
         "designSystemLabeledTextView", "designSystemSearchBar", "designSystemTextFieldRowSection",
         "designSystemBitcoinAddressInputField", "designSystemBitcoinAmountInputField",
         "designSystemFormSection", "designSystemFormRowSection", "designSystemSwitchRowSection",
-        "designSystemListRowSection", "designSystemValueSection", "designSystemKeyValueRow",
+        "designSystemListRowSection", "designSystemValueSection",
         "designSystemNavigationBar2", "designSystemSettingsHeader", "designSystemPageHeading",
         "designSystemNavigationTab",
-        "designSystemInfoBanner", "designSystemSettingsRestartNotice", "designSystemToastBanner",
-        "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemConfirmationPill", "designSystemTooltip",
+        "designSystemInfoBanner", "designSystemToastBanner",
+        "designSystemStatusPill", "designSystemNetworkIndicator", "designSystemTooltip",
         "designSystemSkeleton", "designSystemSpinningIndicator",
-        "designSystemContextMenu", "designSystemAlertPopup", "designSystemDialogPopup",
-        "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemQRImage"
+        "designSystemContextMenu", "designSystemTransactionActionsMenu", "designSystemPaymentRequestActionsMenu",
+        "designSystemAlertPopup", "designSystemDialogPopup",
+        "designSystemBitcoinAmountDisplayLabel", "designSystemAddressLabel", "designSystemSelectableText",
+        "designSystemQRImage"
     ]
 
     // Roles a screen reader treats as plain containers, and the roles a
@@ -457,7 +459,7 @@ TestCase {
             verify(pickers.length > 0)
             for (const picker of pickers) {
                 compare(testAccessibility.info(picker).role, Accessible.PageTabList, describe(picker))
-                const segments = itemsOfType(picker, "ToggleButton", [])
+                const segments = itemsOfType(picker, "Segment", [])
                 compare(segments.length, picker.model.length, describe(picker))
                 for (const segment of segments)
                     compare(testAccessibility.info(segment).role, Accessible.PageTab, describe(segment))
@@ -488,7 +490,7 @@ TestCase {
     function test_segmentedPickerArrowKeysMoveSelection() {
         const page = createPage()
         const picker = itemsOfType(findChild(page, "designSystemSegmentedPicker"), "SegmentedPicker", [])[0]
-        const segments = itemsOfType(picker, "ToggleButton", [])
+        const segments = itemsOfType(picker, "Segment", [])
         compare(picker.currentIndex, 0)
         segments[0].forceActiveFocus(Qt.TabFocusReason)
         keyClick(Qt.Key_Right)
@@ -546,22 +548,13 @@ TestCase {
             const acknowledgement = findChild(page, "designSystemAcknowledgementRow")
             let info = testAccessibility.info(acknowledgement)
             compare(info.role, Accessible.CheckBox)
-            compare(info.name, acknowledgement.description)
+            compare(info.name, acknowledgement.text)
             compare(info.checkable, true)
             compare(info.checked, false)
-            acknowledgement.clicked()
+            acknowledgement.toggle()
             testAccessibility.activate()
             compare(testAccessibility.info(acknowledgement).checked, true)
-            const toggle = acknowledgement.loadedTrailingItem
-            acknowledgement.forceActiveFocus(Qt.TabFocusReason)
-            for (let i = 0; i < 3; ++i) {
-                keyClick(Qt.Key_Space)
-                compare(acknowledgement.checked, toggle.checked)
-            }
-            compare(toggle.checked, false)
-            toggle.toggle()
-            compare(acknowledgement.checked, true)
-            verify(acknowledgement.loadedTrailingItem.Accessible.ignored)
+            acknowledgement.toggle()
         } finally {
             testAccessibility.deactivate()
         }

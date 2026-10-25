@@ -55,6 +55,9 @@ QtObject {
     property color accentPressed: Qt.darker(accent, 1.1)
     // Orange text and links; may be darker than accent to stay readable.
     property color accentText: accent
+    // Text actions darken on hover and press, whatever the theme.
+    property color accentTextHover: Qt.darker(accentText, 1.15)
+    property color accentTextPressed: Qt.darker(accentText, 1.3)
     // Content on accent, danger and success fills.
     property color accentForeground: "#FFFFFF"
     required property color focus

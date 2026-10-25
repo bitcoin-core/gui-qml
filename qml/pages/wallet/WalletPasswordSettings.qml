@@ -53,9 +53,7 @@ SettingsPage {
             if (root.updating) {
                 root.successText = qsTr("Password updated successfully.")
             } else {
-                if (acknowledgement.loadedTrailingItem) {
-                    acknowledgement.loadedTrailingItem.checked = false
-                }
+                acknowledgement.checked = false
                 root.saved()
             }
         } else {
@@ -156,27 +154,20 @@ SettingsPage {
                 onTextEdited: root.clearResult()
             }
 
-            ListRow {
+            // Consent in a form is a checkbox.
+            CheckBox {
                 id: acknowledgement
                 objectName: "walletPasswordConfirmToggle"
                 visible: !root.updating
                 Layout.fillWidth: true
-                description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-                showDivider: false
-                accessibleRole: Accessible.CheckBox
-                trailingItem: OptionSwitch {
-                    focusPolicy: Qt.NoFocus
-                    Accessible.ignored: true
-                }
-                onClicked: loadedTrailingItem.toggle()
+                text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
             }
 
             ToastBanner {
                 objectName: "walletPasswordResultBanner"
                 shown: root.resultText.length > 0
                 Layout.fillWidth: true
-                tintColor: root.resultSuccess ? Theme.color.success : Theme.color.danger
-                iconSource: root.resultSuccess ? "image://images/check" : "image://images/info-filled"
+                tone: root.resultSuccess ? ToastBanner.Success : ToastBanner.Error
                 text: root.resultText
                 textObjectName: "walletPasswordErrorText"
             }
@@ -192,7 +183,7 @@ SettingsPage {
                     && newPassword.text === confirmPassword.text
                     && (root.updating
                         ? currentPassword.text !== ""
-                        : acknowledgement.loadedTrailingItem && acknowledgement.loadedTrailingItem.checked)
+                        : acknowledgement.checked)
                 onClicked: {
                     root.clearResult()
                     const ok = root.updating

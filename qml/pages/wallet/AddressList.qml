@@ -34,13 +34,6 @@ SettingsPage {
     signal paymentRequestRequested(string requestId)
     signal receiveRequested
 
-    function openMenuAt(menu, item) {
-        const pos = item.mapToItem(Overlay.overlay, item.width, item.height);
-        menu.x = Math.max(12, Math.min(pos.x - menu.width, Overlay.overlay.width - menu.width - 12));
-        menu.y = Math.max(12, Math.min(pos.y, Overlay.overlay.height - menu.height - 12));
-        menu.open();
-    }
-
     function createPaymentRequestFromSelected(closeAction) {
         root.errorText = "";
         const requests = wallet && wallet.receiveRequests
@@ -99,14 +92,11 @@ SettingsPage {
         return false
     }
 
-    rightItem: IconButton {
+    rightItem: OverflowMenuButton {
         objectName: "addressesMenuButton"
-        iconSource: "image://images/ellipsis"
-        iconColor: Theme.color.neutral9
-        size: 28
-        accessibleName: qsTr("More options")
+        checked: pageMenu.opened
         onClicked: {
-            root.openMenuAt(pageMenu, this);
+            pageMenu.openBelow(this, 0);
         }
     }
 

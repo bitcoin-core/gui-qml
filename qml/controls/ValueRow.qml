@@ -18,24 +18,31 @@ FormRow {
     property var valueTextStyle: amountValue ? Theme.text.amountDescription : Theme.text.description
     property string valueUnit: ""
     property bool animateUnitChanges: true
+    // Long values (paths, warnings) wrap inside valueMaximumWidth instead of eliding.
+    property bool valueWrap: false
+    property string valueObjectName: root.objectName.length > 0 ? root.objectName + "Value" : ""
+    readonly property alias valueText: valueLabel.text
+    readonly property alias valueLineCount: valueLabel.lineCount
+    readonly property alias valueWrapMode: valueLabel.wrapMode
 
     trailingItem: RowLayout {
         spacing: Theme.space.s
 
         CoreText {
-            objectName: !root.amountValue && root.objectName.length > 0 ? root.objectName + "Value" : ""
+            id: valueLabel
+            objectName: !root.amountValue ? root.valueObjectName : ""
             visible: !root.amountValue
             Layout.maximumWidth: root.valueMaximumWidth
             text: root.value
             color: root.valueColor
             textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
-            wrap: false
-            elide: Text.ElideMiddle
+            wrap: root.valueWrap
+            elide: root.valueWrap ? Text.ElideNone : Text.ElideMiddle
         }
 
         BitcoinAmountDisplayLabel {
-            objectName: root.amountValue && root.objectName.length > 0 ? root.objectName + "Value" : ""
+            objectName: root.amountValue ? root.valueObjectName : ""
             visible: root.amountValue
             Layout.maximumWidth: root.valueMaximumWidth
             amount: root.value

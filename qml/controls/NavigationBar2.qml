@@ -6,6 +6,8 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+// The one top bar: an optional back button and left item, a centered
+// title (or centerItem), then a right item and an optional close button.
 Pane {
     id: root
     // Shown in the center as a heading unless a centerItem replaces it.
@@ -17,9 +19,18 @@ Pane {
     property var navigationStack: null
     property bool showBackButton: navigationStack ? navigationStack.canGoBack : false
     property string backButtonObjectName: ""
+    // Empty for an icon-only back button.
     property string backButtonText: qsTr("Back")
+    property string backButtonAccessibleName: backButtonText.length > 0 ? backButtonText : qsTr("Back")
+    property string backButtonIconObjectName: ""
+    property bool showCloseButton: false
+    property string closeButtonObjectName: ""
+    property int closeButtonSize: CloseButton.Medium
+    property string rightSectionObjectName: ""
+    readonly property alias closeButton: closeButtonItem
 
     signal backClicked
+    signal closeClicked
 
     background: null
     padding: Theme.space.xs
@@ -32,7 +43,9 @@ Pane {
                     objectName: root.backButtonObjectName
                     visible: root.showBackButton
                     iconSource: "image://images/caret-left"
+                    iconObjectName: root.backButtonIconObjectName
                     text: root.backButtonText
+                    Accessible.name: root.backButtonAccessibleName
                     onClicked: {
                         if (root.navigationStack) {
                             root.navigationStack.goBack()
@@ -68,6 +81,15 @@ Pane {
                 }
                 Section {
                     id: right_section
+                    objectName: root.rightSectionObjectName
+                }
+                CloseButton {
+                    id: closeButtonItem
+                    objectName: root.closeButtonObjectName
+                    visible: root.showCloseButton
+                    buttonSize: root.closeButtonSize
+                    Layout.alignment: Qt.AlignVCenter
+                    onClicked: root.closeClicked()
                 }
             }
         }

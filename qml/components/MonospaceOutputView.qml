@@ -329,12 +329,11 @@ Item {
                     }
 
                     // Main content column: TextEdit for per-row select + copy.
-                    TextEdit {
+                    SelectableText {
                         id: contentTextEditor
                         objectName: root.objectName.length > 0 ? root.objectName + "_content_" + rowRoot.index : ""
                         text: rowRoot.rowContent
-                        readOnly: true
-                        selectByMouse: true
+                        textStyle: null
                         persistentSelection: root.searchText.length > 0
                         textFormat: root.contentTextFormat
                         wrapMode: Text.WrapAnywhere
@@ -344,7 +343,6 @@ Item {
                         color: rowRoot.effectiveContentColor
                         selectionColor: root.selectionColor
                         selectedTextColor: root.selectedTextColor
-                        activeFocusOnPress: true
 
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop

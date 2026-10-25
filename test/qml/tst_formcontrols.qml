@@ -116,10 +116,43 @@ TestCase {
     }
 
     Component {
-        id: outlineButtonComponent
+        id: switchRowComponent
 
-        OutlineButton {
-            objectName: "exampleOutlineButton"
+        SwitchRow {
+            objectName: "exampleSwitchRow"
+            width: 400
+            title: "Open at login"
+        }
+    }
+
+    Component {
+        id: segmentedPickerComponent
+
+        SegmentedPicker {
+            objectName: "exampleSegments"
+            width: 260
+            model: ["Light", "Dark"]
+            onSelected: function(index, option) { currentIndex = index }
+        }
+    }
+
+    Component {
+        id: optionButtonComponent
+
+        OptionButton {
+            property string model: "a"
+            width: 300
+            text: "Option B"
+            selected: model === "b"
+        }
+    }
+
+    Component {
+        id: largeNeutralButtonComponent
+
+        NeutralButton {
+            objectName: "exampleLargeNeutralButton"
+            buttonSize: NeutralButton.Large
             width: 140
             height: 46
             text: "Cancel"
@@ -401,11 +434,105 @@ TestCase {
         compare(picker.currentValue, "dark")
     }
 
-    function test_outlineButtonUsesLargeNeutralAppearance() {
+    function test_segmentedPickerPaintsSelection_data() {
+        const cases = []
+        for (const palette of ["core-light", "core-dark"]) {
+            for (const mode of ["full", "reduced", "off"]) {
+                for (const scale of [0.85, 1.3]) {
+                    cases.push({tag: palette + "-" + mode + "-" + scale, palette: palette, mode: mode, scale: scale})
+                }
+            }
+        }
+        return cases
+    }
+
+    function test_segmentedPickerPaintsSelection(data) {
+        const palette = Theme.paletteId
+        const scale = Theme.textScale
+        try {
+            Theme.paletteId = data.palette
+            Theme.textScale = data.scale
+            Theme.motion.mode = data.mode
+            const picker = createTemporaryObject(segmentedPickerComponent, host)
+            verify(picker !== null)
+            tryCompare(picker, "count", 2)
+            for (const index of [0, 1, 0]) {
+                const segment = picker.itemAt(index)
+                verify(segment.width > 0 && segment.height > 0)
+                mouseClick(segment)
+                tryCompare(picker, "currentIndex", index)
+                compare(picker.currentText, picker.model[index])
+                tryCompare(segment.background, "color", Theme.color.accent)
+                verify(waitForRendering(picker))
+                const point = segment.mapToItem(picker, segment.width / 2, 2)
+                let captured = false
+                let color
+                verify(picker.grabToImage(function(result) {
+                    color = testImage.pixelAt(result.image, point, picker.width)
+                    captured = true
+                }))
+                tryVerify(function() { return captured })
+                compare(color, Theme.color.accent)
+            }
+        } finally {
+            Theme.paletteId = palette
+            Theme.textScale = scale
+        }
+    }
+
+    function test_switchRowFlipsOnceFromRowOrSwitch() {
+        const row = createTemporaryObject(switchRowComponent, host)
+        verify(row !== null)
+        const toggle = findChild(row, "exampleSwitchRowSwitch")
+        verify(toggle !== null)
+        verify(waitForRendering(row))
+        let toggles = 0
+        row.toggled.connect(function() { toggles += 1 })
+
+        mouseClick(row, Theme.space.cardInset + 4, row.height / 2)
+        compare(row.checked, true)
+        compare(toggles, 1)
+        mouseClick(toggle)
+        compare(row.checked, false)
+        compare(toggles, 2)
+        toggle.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        compare(row.checked, true)
+        compare(toggles, 3)
+
+        row.enabled = false
+        mouseClick(row, Theme.space.cardInset + 4, row.height / 2)
+        compare(row.checked, true)
+        compare(toggles, 3)
+    }
+
+    function test_optionButtonSelectionStaysBoundToTheModel() {
+        const option = createTemporaryObject(optionButtonComponent, host)
+        verify(option !== null)
+        compare(option.checked, false)
+        compare(option.Accessible.role, Accessible.RadioButton)
+
+        // A click the caller ignores leaves the tile unselected...
+        mouseClick(option)
+        compare(option.checked, false)
+        option.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        compare(option.checked, false)
+
+        // ...and the binding still follows the model afterwards.
+        option.model = "b"
+        compare(option.checked, true)
+        mouseClick(option)
+        compare(option.checked, true)
+        option.model = "a"
+        compare(option.checked, false)
+    }
+
+    function test_largeNeutralButtonAppearance() {
         Theme.motion.mode = "full"
-        const button = createTemporaryObject(outlineButtonComponent, host)
+        const button = createTemporaryObject(largeNeutralButtonComponent, host)
         verify(button !== null)
-        const background = findChild(button, "exampleOutlineButtonBackground")
+        const background = findChild(button, "exampleLargeNeutralButtonBackground")
         verify(background !== null)
 
         compare(button.buttonSize, NeutralButton.Large)
@@ -536,13 +663,15 @@ TestCase {
         compare(value.text, "v32.0")
     }
 
-    function test_pageHeadingCentersProminentDescription() {
+    function test_pageHeadingAlignsDescriptionWithTitle() {
         const heading = createTemporaryObject(pageHeadingComponent, host)
         verify(heading !== null)
         const description = findChild(heading, "exampleHeadingDescription")
         verify(description !== null)
         compare(heading.descriptionTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(description.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(description.horizontalAlignment, Text.AlignLeft)
+        heading.titleAlignment = Text.AlignHCenter
         compare(description.horizontalAlignment, Text.AlignHCenter)
     }
 
@@ -563,12 +692,13 @@ TestCase {
         verify(row !== null)
         verify(row.field !== null)
         compare(row.field.objectName, "exampleTextField")
-        compare(row.field, row.loadedTrailingItem)
+        compare(row.loadedTrailingAccessory, null)
         compare(row.loadedBodyItem, null)
         compare(row.text, "127.0.0.1:9050")
         compare(row.field.horizontalAlignment, Text.AlignRight)
         compare(row.focusBorderColor, Theme.color.neutral6)
-        compare(row.field.background.ringColor, Theme.color.neutral6)
+        compare(row.fieldFocusRing.ringColor, Theme.color.neutral6)
+        compare(row.field.background.color, Qt.rgba(0, 0, 0, 0))
 
         row.text = "127.0.0.1:9150"
         compare(row.field.text, "127.0.0.1:9150")

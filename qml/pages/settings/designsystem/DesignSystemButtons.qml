@@ -90,48 +90,10 @@ DesignSystemSection {
     }
 
     DesignSystemSpecimen {
-        objectName: "designSystemOutlineButton"
-        Layout.fillWidth: true
-        name: "OutlineButton"
-        note: "Compatibility wrapper for NeutralButton Large."
-
-        DesignSystemState {
-            label: "rest"
-            OutlineButton { text: "Close" }
-        }
-        DesignSystemState {
-            label: "bold: false"
-            OutlineButton { text: "Close"; bold: false }
-        }
-        DesignSystemState {
-            label: "enabled: false"
-            OutlineButton { text: "Close"; enabled: false }
-        }
-    }
-
-    DesignSystemSpecimen {
-        objectName: "designSystemTextButton"
-        Layout.fillWidth: true
-        name: "TextButton"
-
-        DesignSystemState {
-            label: "rest"
-            TextButton { text: "Disconnect" }
-        }
-        DesignSystemState {
-            label: "textStyle: button"
-            TextButton { text: "Disconnect"; textStyle: Theme.text.button }
-        }
-        DesignSystemState {
-            label: "enabled: false"
-            TextButton { text: "Disconnect"; enabled: false }
-        }
-    }
-
-    DesignSystemSpecimen {
         objectName: "designSystemLinkButton"
         Layout.fillWidth: true
         name: "LinkButton"
+        note: "The one text action. Darkens on hover and press (accentTextHover, accentTextPressed)."
 
         DesignSystemState {
             label: "rest"
@@ -140,6 +102,14 @@ DesignSystemSection {
         DesignSystemState {
             label: "iconSource"
             LinkButton { text: "Open in browser"; iconSource: "image://images/export" }
+        }
+        DesignSystemState {
+            label: "textStyle: menuItemStrong"
+            LinkButton { text: "Apply"; textStyle: Theme.text.menuItemStrong }
+        }
+        DesignSystemState {
+            label: "textStyle: buttonStrong"
+            LinkButton { text: "Try again"; textStyle: Theme.text.buttonStrong }
         }
         DesignSystemState {
             label: "enabled: false"
@@ -151,18 +121,35 @@ DesignSystemSection {
         objectName: "designSystemIconButton"
         Layout.fillWidth: true
         name: "IconButton"
+        note: "iconSize is an icon token (24 bare, 20 toolbar), independent of the target size."
 
         DesignSystemState {
             label: "rest"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; accessibleName: "Settings" }
+            IconButton { iconSource: "image://images/gear"; accessibleName: "Settings" }
         }
         DesignSystemState {
             label: "checked: true"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; checkable: true; checked: true; accessibleName: "Settings" }
+            IconButton { iconSource: "image://images/gear"; checkable: true; checked: true; accessibleName: "Settings" }
         }
         DesignSystemState {
             label: "enabled: false"
-            IconButton { iconSource: "image://images/gear"; iconSize: 24; enabled: false; accessibleName: "Settings" }
+            IconButton { iconSource: "image://images/gear"; enabled: false; accessibleName: "Settings" }
+        }
+        DesignSystemState {
+            label: "toolbar: true"
+            IconButton { objectName: "designSystemToolbarIconButton"; toolbar: true; iconSource: "image://images/flip-vertical"; accessibleName: "Sort" }
+        }
+        DesignSystemState {
+            label: "toolbar, surfaceLevel: 1"
+            IconButton { toolbar: true; surfaceLevel: 1; iconSource: "qrc:/icons/group-by.svg"; accessibleName: "Group" }
+        }
+        DesignSystemState {
+            label: "toolbar, checked: true"
+            IconButton { toolbar: true; checkable: true; checked: true; iconSource: "qrc:/icons/checklist.svg"; accessibleName: "Select" }
+        }
+        DesignSystemState {
+            label: "toolbar, enabled: false"
+            IconButton { toolbar: true; enabled: false; iconSource: "image://images/flip-vertical"; accessibleName: "Sort" }
         }
     }
 
@@ -234,6 +221,10 @@ DesignSystemSection {
         DesignSystemState {
             label: "enabled: false"
             OverflowMenuButton { enabled: false }
+        }
+        DesignSystemState {
+            label: "size: controlSmall"
+            OverflowMenuButton { size: Theme.size.controlSmall }
         }
     }
 

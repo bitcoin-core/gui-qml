@@ -58,40 +58,32 @@ ColumnLayout {
         }
     }
 
-    ColumnLayout {
+    FormSection {
         objectName: "sendPaymentRequestSection"
         visible: root.recipient && root.recipient.hasPaymentRequest
             && (root.recipient.paymentRequestLabel.length > 0 || root.recipient.message.length > 0)
         Layout.fillWidth: true
-        spacing: Theme.space.m
-        CoreText {
+        // Titled like the field labels around it.
+        title: qsTr("Payment request")
+        titleTextStyle: Theme.text.description
+        sectionSpacing: Theme.space.s
+        surfaceLevel: 1
+        ValueRow {
+            visible: root.recipient && root.recipient.paymentRequestLabel.length > 0
+            objectName: "sendPaymentRequestPayTo"
             Layout.fillWidth: true
-            text: qsTr("Payment request")
-            textStyle: Theme.text.description
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
+            title: qsTr("Pay to")
+            value: root.recipient ? root.recipient.paymentRequestLabel : ""
+            showDivider: root.recipient && root.recipient.message.length > 0
+            dividerColor: Theme.color.surfaceDivider
         }
-        FormSection {
+        ValueRow {
+            visible: root.recipient && root.recipient.message.length > 0
+            objectName: "sendPaymentRequestMessageText"
             Layout.fillWidth: true
-            surfaceLevel: 1
-            showGradientBorder: false
-            ValueRow {
-                visible: root.recipient && root.recipient.paymentRequestLabel.length > 0
-                objectName: "sendPaymentRequestPayTo"
-                Layout.fillWidth: true
-                title: qsTr("Pay to")
-                value: root.recipient ? root.recipient.paymentRequestLabel : ""
-                showDivider: root.recipient && root.recipient.message.length > 0
-                dividerColor: Theme.color.surfaceDivider
-            }
-            ValueRow {
-                visible: root.recipient && root.recipient.message.length > 0
-                objectName: "sendPaymentRequestMessageText"
-                Layout.fillWidth: true
-                title: qsTr("Message")
-                value: root.recipient ? root.recipient.message : ""
-                showDivider: false
-            }
+            title: qsTr("Message")
+            value: root.recipient ? root.recipient.message : ""
+            showDivider: false
         }
     }
 

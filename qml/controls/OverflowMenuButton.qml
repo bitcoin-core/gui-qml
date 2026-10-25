@@ -8,6 +8,15 @@ import org.bitcoincore.qt 1.0
 
 NeutralButton {
     id: root
+    property bool keyboardActivation: false
+    Keys.onPressed: function(event) {
+        keyboardActivation = event.key === Qt.Key_Space || event.key === Qt.Key_Down
+        if (event.key === Qt.Key_Down) {
+            root.clicked()
+            event.accepted = true
+        }
+    }
+    TapHandler { onPressedChanged: if (pressed) root.keyboardActivation = false }
 
     surfaceLevel: 0
     property color iconColor: Theme.color.neutral7
@@ -17,7 +26,8 @@ NeutralButton {
     readonly property alias iconItem: ellipsisIcon
 
     iconSource: "image://images/ellipsis"
-    iconSize: 40
+    // Ellipsis artwork is drawn on a 24-unit grid; 20 suits every target size.
+    iconSize: Theme.size.icon.l
     backgroundColor: Theme.color.surface(surfaceLevel + 1)
     hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
     showBorder: surfaceLevel > 0

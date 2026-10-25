@@ -107,9 +107,10 @@ DialogPopup {
                                 wrap: false
                             }
                         }
-                        OutlineButton {
+                        NeutralButton {
                             objectName: "unbanButton_" + bannedPeerRow.index
-                            bold: false
+                            buttonSize: NeutralButton.Large
+                            textStyle: Theme.text.button
                             horizontalPadding: Theme.space.l
                             text: qsTr("Unban")
                             onClicked: root.unbanPeer(bannedPeerRow.index)

@@ -13,10 +13,13 @@ Controls.CheckBox {
     property color borderColor: Theme.color.controlBorder
     property color checkColor: Theme.color.accentForeground
     property bool animationsEnabled: Theme.motion.animated
+    // Secondary line under the label, such as "Recommended".
+    property string description: ""
 
     padding: 0
     spacing: 10
-    implicitHeight: Theme.size.controlSmall
+    implicitHeight: Math.max(Theme.size.controlSmall, implicitContentHeight + topPadding + bottomPadding)
+    Accessible.description: description
     focusPolicy: Qt.StrongFocus
     hoverEnabled: AppMode.isDesktop
 
@@ -110,13 +113,42 @@ Controls.CheckBox {
         }
     }
 
-    contentItem: CoreText {
-        text: root.text
-        leftPadding: root.indicator.width + root.spacing
-        verticalAlignment: Text.AlignVCenter
-        horizontalAlignment: Text.AlignLeft
-        textStyle: Theme.text.description
-        color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
-        wrapMode: Text.WordWrap
+    // Positioned by hand, not in a ColumnLayout: Qt 6.4 layouts report a
+    // wrapped label's single-line height, so the row overlapped what follows.
+    contentItem: Item {
+        readonly property real textX: root.indicator.width + root.spacing
+        readonly property real textHeight: label.height
+            + (descriptionLabel.visible ? Theme.space.xxs + descriptionLabel.height : 0)
+        implicitWidth: textX + Math.max(label.implicitWidth,
+            descriptionLabel.visible ? descriptionLabel.implicitWidth : 0)
+        implicitHeight: textHeight
+
+        CoreText {
+            id: label
+            x: parent.textX
+            y: Math.max(0, (parent.height - parent.textHeight) / 2)
+            width: Math.max(0, parent.width - x)
+            text: root.text
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.description
+            color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+            wrapMode: Text.WordWrap
+            Accessible.ignored: true
+        }
+
+        CoreText {
+            id: descriptionLabel
+            visible: root.description.length > 0
+            x: parent.textX
+            y: label.y + label.height + Theme.space.xxs
+            width: Math.max(0, parent.width - x)
+            text: root.description
+            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.caption
+            color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+            wrapMode: Text.WordWrap
+            Accessible.ignored: true
+        }
     }
 }

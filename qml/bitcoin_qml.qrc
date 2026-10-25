@@ -33,13 +33,13 @@
         <file>components/NodeWarningsPopup.qml</file>
         <file>components/PeersIndicator.qml</file>
         <file>components/SettingsPageContainer.qml</file>
-        <file>components/SettingsRestartNotice.qml</file>
         <file>components/SettingsSidebar.qml</file>
         <file>components/SettingsView.qml</file>
         <file>components/StorageLocations.qml</file>
         <file>components/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
         <file>components/ToastBanner.qml</file>
+        <file>components/PaymentRequestActionsMenu.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/PaymentRequestCard.qml</file>
         <file>components/PaymentRequestDeleteConfirmation.qml</file>
@@ -52,10 +52,10 @@
         <file>components/HoverToolTip.qml</file>
         <file>components/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
-        <file>components/ConfirmationPill.qml</file>
         <file>components/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
+        <file>components/TransactionActionsMenu.qml</file>
         <file>components/TransactionDetailsGrid.qml</file>
         <file>components/TransactionFlowNode.qml</file>
         <file>components/TransactionFlowRibbon.qml</file>
@@ -81,7 +81,6 @@
         <file>controls/BitcoinAmountDisplayLabel.qml</file>
         <file>controls/BitcoinAmountDigitBase.qml</file>
         <file>controls/AmountDisplayLayout.js</file>
-        <file>controls/CoreTextField.qml</file>
         <file>controls/FilterButton.qml</file>
         <file>controls/RangeSlider.qml</file>
         <file>controls/Slider.qml</file>
@@ -89,10 +88,11 @@
         <file>controls/FieldBorderRings.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
+        <file>controls/GroupedRowBackground.qml</file>
         <file>controls/SurfaceGradientBorder.qml</file>
+        <file>controls/SwitchRow.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
-        <file>controls/KeyValueRow.qml</file>
         <file>controls/LinkRow.qml</file>
         <file>controls/ListRow.qml</file>
         <file>controls/LabeledField.qml</file>
@@ -105,7 +105,6 @@
         <file>controls/NavigationSplitView.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
-        <file>controls/OutlineButton.qml</file>
         <file>controls/OverflowMenuButton.qml</file>
         <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
@@ -115,13 +114,13 @@
         <file>controls/qmldir</file>
         <file>controls/SendCreateOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>
+        <file>controls/SelectableText.qml</file>
         <file>controls/SizeClass.qml</file>
         <file>controls/SettingsHeader.qml</file>
         <file>controls/SettingsPage.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/StateBackground.qml</file>
-        <file>controls/TextButton.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
         <file>controls/OnboardingFooter.qml</file>
@@ -131,7 +130,6 @@
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
-        <file>controls/ToggleButton.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueRow.qml</file>
         <file>controls/WalletCreationTypeRow.qml</file>
@@ -250,20 +248,20 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check-bold">res/icons/check-bold.png</file>
-        <file alias="check.svg">res/src/check.svg</file>
         <file alias="check">res/icons/check.png</file>
         <file alias="copy">res/icons/copy.png</file>
+        <file alias="check.svg">res/src/check.svg</file>
         <file alias="coinbase.svg">res/src/coinbase.svg</file>
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
-        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="cross-circle-filled">res/icons/cross-circle-filled.png</file>
         <file alias="devices-filled">res/icons/devices-filled.png</file>
         <file alias="edit">res/icons/edit.png</file>
         <file alias="ellipsis">res/icons/ellipsis.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
+        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="file.svg">res/src/file.svg</file>
         <file alias="file">res/icons/file.png</file>
         <file alias="flip-vertical">res/icons/flip-vertical.png</file>

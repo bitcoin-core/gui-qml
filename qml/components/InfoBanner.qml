@@ -27,7 +27,7 @@ Rectangle {
     property string dismissButtonText: ""
     property bool showsCloseButton: false
     property int bannerLayout: InfoBanner.Layout.Horizontal
-    property int contentMargin: Theme.space.xxxl
+    property int contentMargin: Theme.space.xl
     property int horizontalContentMargin: contentMargin
     property int verticalContentMargin: contentMargin
     property int contentSpacing: Theme.space.l
@@ -35,7 +35,7 @@ Rectangle {
     property int textRightMargin: 0
     property var titleTextStyle: Theme.text.subheading
     property var messageTextStyle: Theme.text.description
-    property color backgroundColor: Theme.color.infoTint
+    property color backgroundColor: Theme.color.surface1
     property color iconColor: Theme.color.neutral7
     property color titleColor: Theme.color.neutral9
     property color messageColor: Theme.color.neutral7
@@ -115,8 +115,9 @@ Rectangle {
                 }
             }
 
-            OutlineButton {
+            NeutralButton {
                 objectName: root.objectName !== "" ? root.objectName + "DismissButton" : ""
+                buttonSize: NeutralButton.Large
                 visible: root.dismissButtonText !== ""
                 text: root.dismissButtonText
                 leftPadding: Theme.space.xl
@@ -172,8 +173,9 @@ Rectangle {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: Theme.space.l
 
-                OutlineButton {
+                NeutralButton {
                     objectName: root.objectName !== "" ? root.objectName + "DismissButton" : ""
+                    buttonSize: NeutralButton.Large
                     visible: root.dismissButtonText !== ""
                     text: root.dismissButtonText
                     Layout.maximumWidth: 200
@@ -202,8 +204,9 @@ Rectangle {
 
     Component {
         id: outlinedPrimaryButton
-        OutlineButton {
+        NeutralButton {
             objectName: root.objectName !== "" ? root.objectName + "PrimaryButton" : ""
+            buttonSize: NeutralButton.Large
             text: root.primaryButtonText
             onClicked: root.primaryClicked()
         }

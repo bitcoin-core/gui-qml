@@ -81,8 +81,7 @@ SettingsPage {
         objectName: "rpcConsoleWarningBanner"
         Layout.fillWidth: true
         shown: root.warningVisible
-        iconSource: "image://images/alert-filled"
-        tintColor: Theme.color.danger
+        tone: ToastBanner.Error
         textColor: Theme.color.neutral9
         showsCloseButton: true
         text: qsTr("Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")

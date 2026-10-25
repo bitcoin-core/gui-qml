@@ -18,16 +18,16 @@ ColumnLayout {
 
     spacing: Theme.space.xxl
 
-    SettingsRestartNotice {
-        visible: root.showRestartNotice
+    ToastBanner {
+        shown: root.showRestartNotice
         Layout.fillWidth: true
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 
     FormSection {
         objectName: "developerSettingsSection"
         Layout.fillWidth: true
         surfaceLevel: root.surfaceLevel
-        showGradientBorder: false
 
         TextFieldRow {
             id: dbcacheRow

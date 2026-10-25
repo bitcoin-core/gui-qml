@@ -40,50 +40,35 @@ DialogPopup {
             contentWidth: availableWidth
             clip: true
 
-            // A Column positioner, never a Quick Layout: a Repeater inside one
-            // crashes on Qt 6.4.0 to 6.5.0 (QTBUG-111792). See AlertPopup.qml.
-            Column {
-                id: informationColumn
+            // The popup is surface1, so the rows sit on a surface2 card.
+            FormSection {
+                objectName: "nodeInformationSection"
                 width: informationScroll.availableWidth
-                spacing: 0
+                surfaceLevel: 1
 
-                Repeater {
-                    id: informationRepeater
-                    model: root.rows
-                    delegate: ColumnLayout {
-                        readonly property int valueLineCount: informationValue.lineCount
-                        readonly property int valueWrapMode: informationValue.wrapMode
+                // A Column positioner, never a Quick Layout: a Repeater inside one
+                // crashes on Qt 6.4.0 to 6.5.0 (QTBUG-111792). See AlertPopup.qml.
+                Column {
+                    id: informationColumn
+                    Layout.fillWidth: true
+                    spacing: 0
 
-                        width: informationColumn.width
-                        spacing: 0
+                    Repeater {
+                        id: informationRepeater
+                        model: root.rows
+                        delegate: ValueRow {
+                            required property var modelData
+                            required property int index
 
-                        KeyValueRow {
-                            Layout.fillWidth: true
-                            keyWidth: 150
-                            key: CoreText {
-                                text: modelData.label
-                                color: Theme.color.neutral7
-                                textStyle: Theme.text.caption
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                            }
-                            value: CoreText {
-                                id: informationValue
-                                objectName: "nodeInformationValue_" + index
-                                text: modelData.value
-                                color: Theme.color.neutral9
-                                textStyle: modelData.mono ? Theme.text.monoCaption : Theme.text.caption
-                                wrapMode: Text.WordWrap
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                            }
-                        }
-
-                        Separator {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 10
-                            Layout.bottomMargin: 10
-                            visible: index < root.rows.length - 1
+                            width: informationColumn.width
+                            title: modelData.label
+                            titleColor: Theme.color.neutral7
+                            valueObjectName: "nodeInformationValue_" + index
+                            value: modelData.value
+                            valueTextStyle: modelData.mono ? Theme.text.monoDescription : Theme.text.description
+                            valueMaximumWidth: Math.round(informationColumn.width * 0.65)
+                            valueWrap: true
+                            showDivider: index < root.rows.length - 1
                         }
                     }
                 }

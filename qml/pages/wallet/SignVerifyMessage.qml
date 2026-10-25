@@ -292,10 +292,7 @@ SettingsPage {
                     objectName: "verifyMessageResultBanner"
                     shown: root.verifyResultText.length > 0
                     Layout.fillWidth: true
-                    tintColor: root.verifyResultSuccess ? Theme.color.success : Theme.color.danger
-                    iconSource: root.verifyResultSuccess
-                        ? "image://images/check"
-                        : "image://images/info-filled"
+                    tone: root.verifyResultSuccess ? ToastBanner.Success : ToastBanner.Error
                     text: root.verifyResultText
                     textObjectName: "verifyMessageResultText"
                 }

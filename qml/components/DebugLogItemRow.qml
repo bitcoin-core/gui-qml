@@ -74,20 +74,12 @@ Control {
             Layout.topMargin: 14
         }
 
-        TextEdit {
+        SelectableText {
             id: messageText
             objectName: root.objectName.length > 0 ? root.objectName + "Message" : ""
             text: root.message
-            readOnly: true
-            selectByMouse: true
-            persistentSelection: false
-            textFormat: Text.PlainText
             wrapMode: Text.WrapAnywhere
-            color: Theme.color.neutral9
-            selectionColor: Theme.color.selection
-            selectedTextColor: Theme.color.selectedText
-            font: Theme.text.monoCaption.font
-            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.monoCaption
             Layout.fillWidth: true
             Layout.minimumWidth: 0
             Layout.alignment: Qt.AlignTop

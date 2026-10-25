@@ -19,11 +19,11 @@ DesignSystemSection {
         + "Keep alert messages to a sentence or two where you can; node errors are the exception. ")
 
     function openMenu(anchor) {
-        const position = anchor.mapToItem(Overlay.overlay, 0, anchor.height + 2)
-        exampleMenu.x = position.x
-        exampleMenu.y = position.y
-        exampleMenu.open()
+        exampleMenu.openBelow(anchor)
     }
+
+    // The sample menus copy nothing.
+    readonly property var sampleClipboard: ({ setText: function(text) {} })
 
     title: "Menus and popups"
     description: "Buttons that open the shared menu, alert and dialog popups. Menu, alert and dialog actions do nothing."
@@ -32,7 +32,7 @@ DesignSystemSection {
         objectName: "designSystemContextMenu"
         Layout.fillWidth: true
         name: "ContextMenu"
-        note: "With a title, a picker, a toggle, a divider, an icon item, a disabled item and a destructive item."
+        note: "With a title, a picker, a toggle, a divider, an icon item, a disabled item and a destructive item. Modal without a dim; openBelow(trigger) places it, Up/Down/Home/End move between items."
 
         DesignSystemState {
             label: "NeutralButton opener"
@@ -94,6 +94,57 @@ DesignSystemSection {
                 text: "Delete"
                 role: ContextMenuButton.Destructive
             }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemTransactionActionsMenu"
+        Layout.fillWidth: true
+        name: "TransactionActionsMenu"
+        note: "Shared by an activity row and the transaction details page. Copy actions show \"Copied\" at the trigger."
+
+        DesignSystemState {
+            label: "OverflowMenuButton opener"
+            OverflowMenuButton {
+                id: transactionMenuButton
+                objectName: "designSystemTransactionMenuButton"
+                checked: transactionMenu.opened
+                onClicked: transactionMenu.openBelow(transactionMenuButton)
+            }
+        }
+
+        TransactionActionsMenu {
+            id: transactionMenu
+            objectName: "designSystemTransactionMenu"
+            parent: Overlay.overlay
+            txid: "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"
+            rawTransaction: function(txid) { return "0200000001" }
+            clipboard: root.sampleClipboard
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemPaymentRequestActionsMenu"
+        Layout.fillWidth: true
+        name: "PaymentRequestActionsMenu"
+        note: "Shared by an activity row (copy, delete) and the payment request card (QR code, request again, delete)."
+
+        DesignSystemState {
+            label: "card actions"
+            OverflowMenuButton {
+                id: requestMenuButton
+                objectName: "designSystemPaymentRequestMenuButton"
+                checked: requestMenu.opened
+                onClicked: requestMenu.openBelow(requestMenuButton)
+            }
+        }
+
+        PaymentRequestActionsMenu {
+            id: requestMenu
+            objectName: "designSystemPaymentRequestMenu"
+            parent: Overlay.overlay
+            showsQrActions: true
+            showsRequestAgain: true
         }
     }
 
@@ -211,17 +262,15 @@ DesignSystemSection {
             title: "Open payment request"
             errorText: inputAlertField.text.length > 0 && inputAlertField.text.indexOf("bitcoin:") !== 0
                 ? "Enter a bitcoin: URI." : ""
-            initialFocusItem: inputAlertField
+            initialFocusItem: inputAlertField.field
             implicitWidth: 420
 
-            content: CoreTextField {
+            content: LabeledTextField {
                 id: inputAlertField
                 Layout.fillWidth: true
+                label: "Payment request"
                 placeholderText: "bitcoin:address?amount=…"
-                background: Rectangle {
-                    color: Theme.color.surface2
-                    radius: Theme.radius.field
-                }
+                fieldBackgroundColor: Theme.color.surface2
             }
 
             AlertAction {

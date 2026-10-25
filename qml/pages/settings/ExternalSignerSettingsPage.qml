@@ -82,35 +82,18 @@ SettingsPage {
                     Layout.minimumWidth: 0
                     spacing: 12
 
-                    TextField {
+                    LabeledTextField {
                         id: signerPathInput
-                        objectName: "externalSignerPathInput"
                         Layout.fillWidth: true
-                        implicitHeight: 37
+                        // The section title is the visible label.
+                        accessibleName: qsTr("Signer path")
+                        fieldObjectName: "externalSignerPathInput"
+                        fieldHeight: Theme.size.control
+                        fieldBackgroundColor: Theme.color.surface2
+                        fieldTextStyle: Theme.text.monoDescription
                         text: optionsModel.externalSignerPath
                         placeholderText: qsTr("Enter external signer path")
-                        placeholderTextColor: Theme.color.placeholder
-                        color: Theme.color.neutral9
-                        font: Theme.text.monoDescription.font
-                        selectByMouse: true
-                        leftPadding: 15
-                        rightPadding: 10
-                        topPadding: 0
-                        bottomPadding: 0
-                        verticalAlignment: TextInput.AlignVCenter
-                        background: Rectangle {
-                            color: Theme.color.surface2
-                            radius: Theme.radius.field
-
-                            FieldBorderRings {
-                                objectName: "externalSignerPathFocusBorder"
-                                anchors.fill: parent
-                                visible: signerPathInput.activeFocus
-                                cornerRadius: parent.radius
-                            }
-                        }
                         onEditingFinished: root.checkDevice()
-                        onAccepted: focus = false
                     }
 
                     RowLayout {

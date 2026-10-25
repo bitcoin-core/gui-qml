@@ -14,8 +14,8 @@ AbstractButton {
     property int iconSize: Theme.size.icon.s
     property var textStyle: Theme.text.captionStrong
     property color textColor: !enabled ? Theme.color.disabledContent
-        : down ? Theme.color.accentPressed
-        : hovered ? Theme.color.accentHover
+        : down ? Theme.color.accentTextPressed
+        : hovered ? Theme.color.accentTextHover
         : Theme.color.accentText
 
     implicitHeight: Theme.size.controlSmall

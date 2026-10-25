@@ -25,7 +25,7 @@ AbstractButton {
     property bool forceHoverBackground: false
     property bool showBorder: surfaceLevel > 0
     property int backgroundRadius: Theme.radius.s
-    property string focusBorderObjectName: ""
+    property string focusBorderObjectName: objectName.length > 0 ? objectName + "FocusBorder" : ""
     readonly property color currentBackgroundColor: forceHoverBackground || hovered || down
         ? hoverBackgroundColor : backgroundColor
     readonly property bool useSurface1BorderGradient: Qt.colorEqual(backgroundColor, Theme.color.surface1)

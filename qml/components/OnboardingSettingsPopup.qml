@@ -12,6 +12,8 @@ DialogPopup {
     property string closeButtonObjectName: "onboardingSettingsCloseButton"
     readonly property alias pageStack: pages
 
+    // Named after the hosted settings page.
+    title: pages.currentItem && pages.currentItem.title ? pages.currentItem.title : "" // qmllint disable missing-property
     sheet: true
     implicitWidth: 532
     implicitHeight: 504

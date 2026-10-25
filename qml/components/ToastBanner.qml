@@ -11,8 +11,18 @@ import "../controls"
 Rectangle {
     id: root
 
-    property url iconSource: ""
-    property color tintColor: Theme.color.info
+    // The tone picks the icon and colors; set iconSource or tintColor only
+    // to depart from it.
+    enum Tone { Info, Success, Warning, Error }
+
+    property int tone: ToastBanner.Info
+    property url iconSource: tone === ToastBanner.Success ? "image://images/check"
+        : tone === ToastBanner.Info ? "image://images/info-filled"
+        : "image://images/alert-filled"
+    property color tintColor: tone === ToastBanner.Success ? Theme.color.success
+        : tone === ToastBanner.Warning ? Theme.color.warning
+        : tone === ToastBanner.Error ? Theme.color.danger
+        : Theme.color.info
     property color iconColor: tintColor
     property string text: ""
     property string textObjectName: ""
@@ -149,34 +159,15 @@ Rectangle {
             wrapMode: Text.WordWrap
         }
 
-        Button {
+        LinkButton {
             id: actionButton
+            objectName: root.objectName !== "" ? root.objectName + "ActionButton" : ""
             visible: root.actionText !== ""
             text: root.actionText
-            padding: Theme.space.s
-            focusPolicy: Qt.StrongFocus
-            background: Item {
-                FocusBorder {
-                    visible: actionButton.visualFocus
-                    topMargin: 0
-                    bottomMargin: 0
-                    leftMargin: 0
-                    rightMargin: 0
-                    borderRadius: 6
-                }
-            }
-            contentItem: CoreText {
-                text: actionButton.text
-                color: root.textColor
-                textStyle: Theme.text.description
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                opacity: actionButton.hovered ? 0.75 : 1.0
-            }
+            textStyle: Theme.text.menuItemStrong
+            textColor: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b,
+                actionButton.down ? 0.6 : actionButton.hovered ? 0.75 : 1)
             onClicked: root.actionTriggered()
-            HoverHandler {
-                cursorShape: Qt.PointingHandCursor
-            }
         }
 
         Rectangle {

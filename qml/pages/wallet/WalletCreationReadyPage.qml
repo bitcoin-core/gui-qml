@@ -45,17 +45,6 @@ OnboardingView {
         ColumnLayout {
             spacing: 20
 
-            Separator {
-                Layout.fillWidth: true
-            }
-            CoreText {
-                Layout.fillWidth: true
-                text: qsTr("BACKUP")
-                color: Theme.color.neutral6
-                textStyle: Theme.text.captionStrong
-                horizontalAlignment: Text.AlignLeft
-            }
-
             FormSection {
                 objectName: "walletCreationBackupSection"
                 Layout.fillWidth: true

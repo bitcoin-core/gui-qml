@@ -12,9 +12,10 @@ Item {
     property string title: ""
     property string description: ""
     property string footerText: ""
+    property string titleObjectName: objectName.length > 0 ? objectName + "Title" : ""
+    property string descriptionObjectName: objectName.length > 0 ? objectName + "Description" : ""
     property Component headerTrailingItem
     property bool showBackground: true
-    property bool showGradientBorder: true
     property int surfaceLevel: 0
     property int rowSpacing: 0
     property int sectionSpacing: Theme.space.m
@@ -48,6 +49,7 @@ Item {
                 spacing: Theme.space.m
 
                 CoreText {
+                    objectName: root.titleObjectName
                     Layout.fillWidth: true
                     text: root.title
                     color: Theme.color.neutral9
@@ -67,6 +69,7 @@ Item {
             }
 
             CoreText {
+                objectName: root.descriptionObjectName
                 visible: root.description.length > 0
                 Layout.fillWidth: true
                 text: root.description
@@ -84,15 +87,8 @@ Item {
             implicitHeight: contentColumn.height
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
-            clip: true
-
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                visible: root.showBackground && root.showGradientBorder
-                    && Qt.colorEqual(root.backgroundColor, Theme.color.surface2)
-                surfaceColor: card.color
-                cornerRadius: card.radius
-            }
+            // Without a card, focus rings and field halos may extend past the edge.
+            clip: root.showBackground
 
             Behavior on color {
                 enabled: Theme.motion.animated

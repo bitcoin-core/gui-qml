@@ -11,14 +11,13 @@ import org.bitcoincore.qt 1.0
 import "../controls"
 import "TransactionFlowLayout.js" as FlowLayout
 
-ColumnLayout {
+FormSection {
     id: root
     // Plain snapshot data: no wallet, history, navigation or broadcast dependency.
     property var flow: ({})
     property string transactionId: ""
     property int displayUnit: BitcoinAmount.BTC
     property bool outputsExpanded: false
-    property string title: qsTr("Transaction flow")
     property string walletName: qsTr("Your wallet")
     property string selectedEntryId: ""
     property bool interactive: true
@@ -77,44 +76,22 @@ ColumnLayout {
             : ownership === "fee" ? feeColor : unknownColor
     }
 
-    spacing: Theme.space.ml
-    GridLayout {
-        visible: root.title.length > 0 || root.canCollapseOutputs
-        Layout.fillWidth: true
-        columns: SizeClass.isCompact(root.width) ? 1 : 3
-        columnSpacing: Theme.space.ml
-        rowSpacing: Theme.space.xs
-        CoreText {
-            visible: root.title.length > 0
-            Layout.fillWidth: true
-            text: root.title
-            textStyle: Theme.text.subheading
-            horizontalAlignment: Text.AlignLeft
-        }
-        CoreText {
-            objectName: "transactionFlowCounts"
-            readonly property int inputCount: root.flow.inputCount || root.inputEntries.length
-            readonly property int outputCount: root.flow.outputCount || (root.flow.outputs || []).length
-            text: (inputCount === 1 ? qsTr("1 input") : qsTr("%1 inputs").arg(inputCount)) + " · "
-                + (outputCount === 1 ? qsTr("1 output") : qsTr("%1 outputs").arg(outputCount))
-            color: Theme.color.neutral7
-            textStyle: Theme.text.caption
-        }
-        TextButton {
-            objectName: "transactionFlowOutputsToggle"
-            visible: root.canCollapseOutputs
-            Layout.alignment: Qt.AlignLeft
-            text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
-            textStyle: Theme.text.caption
-            padding: Theme.space.m
-            onClicked: root.outputsExpanded = !root.outputsExpanded
-        }
+    title: qsTr("Transaction flow")
+    description: (inputCount === 1 ? qsTr("1 input") : qsTr("%1 inputs").arg(inputCount)) + " · "
+        + (outputCount === 1 ? qsTr("1 output") : qsTr("%1 outputs").arg(outputCount))
+    descriptionObjectName: "transactionFlowCounts"
+    readonly property int inputCount: flow.inputCount || inputEntries.length
+    readonly property int outputCount: flow.outputCount || (flow.outputs || []).length
+    headerTrailingItem: LinkButton {
+        objectName: "transactionFlowOutputsToggle"
+        visible: root.canCollapseOutputs
+        text: root.outputsExpanded ? qsTr("Collapse non-wallet outputs") : qsTr("Show all outputs")
+        onClicked: root.outputsExpanded = !root.outputsExpanded
     }
-    Rectangle {
+
+    Item {
         Layout.fillWidth: true
         implicitHeight: contents.height + 48
-        color: Theme.color.surface1
-        radius: Theme.radius.card
         ColumnLayout {
             id: contents
             x: 24

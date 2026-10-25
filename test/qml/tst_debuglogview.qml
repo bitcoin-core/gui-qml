@@ -98,9 +98,9 @@ TestCase {
         compare(inactiveFilterIcon.opacity, 1)
         compare(activeFilterIcon.opacity, 0)
         compare(optionsButton.iconSource.toString(), "image://images/ellipsis")
-        compare(optionsButton.iconSize, 40)
-        compare(optionsButton.iconItem.width, 40)
-        compare(optionsButton.iconItem.height, 40)
+        compare(optionsButton.iconSize, Theme.size.icon.l)
+        compare(optionsButton.iconItem.width, Theme.size.icon.l)
+        compare(optionsButton.iconItem.height, Theme.size.icon.l)
         compare(optionsButton.background.color, Theme.color.surface1)
         compare(filterPicker.currentValue, "all")
         mouseClick(filterButton)
@@ -178,8 +178,8 @@ TestCase {
 
         compare(filterIcon.width, 24)
         compare(filterIcon.height, 24)
-        compare(optionsIcon.width, 40)
-        compare(optionsIcon.height, 40)
+        compare(optionsIcon.width, Theme.size.icon.l)
+        compare(optionsIcon.height, Theme.size.icon.l)
 
         mouseMove(filterButton, filterButton.width / 2, filterButton.height / 2)
         tryCompare(filterButton, "hovered", true)
@@ -190,8 +190,8 @@ TestCase {
         mouseMove(optionsButton, optionsButton.width / 2, optionsButton.height / 2)
         tryCompare(optionsButton, "hovered", true)
         tryCompare(optionsIcon, "color", Theme.color.neutral9)
-        compare(optionsIcon.width, 40)
-        compare(optionsIcon.height, 40)
+        compare(optionsIcon.width, Theme.size.icon.l)
+        compare(optionsIcon.height, Theme.size.icon.l)
     }
 
     function test_find_shortcut_focuses_search() {

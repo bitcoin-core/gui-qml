@@ -91,26 +91,18 @@ Item {
     implicitHeight: parentContent.height + childrenColumn.height + (showChildren ? 12 : 0)
     height: implicitHeight
 
-    StateBackground {
+    GroupedRowBackground {
         id: rowSurface
         objectName: "activityRowBackground"
         anchors.fill: parent
-        stateColor: rowHover.hovered || parentButton.down ? Theme.color.surface2 : Theme.color.surface1
-        radius: Theme.radius.listRow
-        Rectangle {
-            anchors.top: parent.top
-            width: parent.width
-            height: 16
-            color: parent.color
-            visible: !root.firstInSection
-        }
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 16
-            color: parent.color
-            visible: !root.lastInSection
-        }
+        firstInGroup: root.firstInSection
+        lastInGroup: root.lastInSection
+        hovered: rowHover.hovered
+        pressed: parentButton.down
+        showFocus: parentButton.visualFocus
+        dividerLeftInset: root.rowPadding
+        dividerRightInset: root.rowPadding
+        focusBorderObjectName: "activityRowFocusBorder"
     }
 
     AbstractButton {
@@ -133,16 +125,7 @@ Item {
             enabled: AppMode.isDesktop
             cursorShape: Qt.PointingHandCursor
         }
-        background: Item {
-            FocusBorder {
-                visible: parentButton.visualFocus
-                targetRadius: rowSurface.radius
-                topMargin: 2
-                bottomMargin: 2
-                leftMargin: 2
-                rightMargin: 2
-            }
-        }
+        background: null
     }
 
     Item {
@@ -377,13 +360,6 @@ Item {
             }
         }
     }
-    Separator {
-        objectName: "activityTransactionDivider"
-        visible: !root.lastInSection
-        anchors.bottom: parent.bottom
-        width: parent.width
-    }
-
     component ActivityAddress: AddressLabel {
         property bool compact: false
         interactive: false

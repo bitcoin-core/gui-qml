@@ -52,7 +52,7 @@ Page {
     }
 
     function focusInitialControl() {
-        reviewCloseButton.forceActiveFocus(Qt.TabFocusReason)
+        reviewHeader.closeButton.forceActiveFocus(Qt.TabFocusReason)
     }
 
     Component {
@@ -118,6 +118,7 @@ Page {
     }
 
     header: NavigationBar2 {
+        id: reviewHeader
         implicitWidth: 0
         leftPadding: (root.width - root.reviewContentWidth) / 2
         rightPadding: leftPadding
@@ -125,11 +126,10 @@ Page {
         bottomPadding: 12
         title: root.title
         titleObjectName: "sendTransactionReviewTitle"
-        rightItem: CloseButton {
-            id: reviewCloseButton
-            objectName: "sendTransactionReviewCloseButton"
-            onClicked: root.back()
-        }
+        showCloseButton: true
+        closeButtonObjectName: "sendTransactionReviewCloseButton"
+        closeButtonSize: CloseButton.Large
+        onCloseClicked: root.back()
     }
 
     AppFileDialog {
@@ -184,8 +184,6 @@ Page {
                 objectName: "sendTransactionReviewWarning"
                 visible: root.showWarning
                 Layout.fillWidth: true
-                backgroundColor: Theme.color.surface1
-                contentMargin: 20
                 message: root.reviewMessage.length ? root.reviewMessage
                     : qsTr("This wallet does not have the keys to sign this transaction.")
             }
@@ -328,20 +326,18 @@ Page {
             ToastBanner {
                 shown: root.saveStatus.length > 0
                 Layout.fillWidth: true
-                tintColor: root.saveError ? Theme.color.danger : Theme.color.success
-                iconSource: root.saveError ? "image://images/info-filled" : "image://images/check"
+                tone: root.saveError ? ToastBanner.Error : ToastBanner.Success
                 text: root.saveStatus
                 dismissAfter: 3
                 onDismissed: root.saveStatus = ""
             }
 
-            CoreText {
-                visible: text.length > 0
+            ToastBanner {
+                objectName: "sendTransactionErrorBanner"
+                shown: text.length > 0
                 Layout.fillWidth: true
+                tone: ToastBanner.Error
                 text: root.wallet ? root.wallet.transactionError : ""
-                color: Theme.color.dangerText
-                textStyle: Theme.text.description
-                wrap: true
             }
 
             Item { Layout.preferredHeight: 24 }

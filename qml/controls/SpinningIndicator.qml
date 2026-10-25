@@ -10,10 +10,12 @@ Item {
 
     property color color: Theme.color.neutral9
     property bool running: false
-    property int strokeWidth: 2
+    // 18 inside buttons and rows; 32 for a page or section that is loading.
+    property int size: 18
+    property int strokeWidth: size >= 28 ? 3 : 2
 
-    implicitWidth: 18
-    implicitHeight: 18
+    implicitWidth: size
+    implicitHeight: size
     Accessible.role: Accessible.ProgressBar
     Accessible.name: qsTr("Loading")
     Accessible.ignored: !running || !visible
@@ -34,6 +36,7 @@ Item {
         Connections {
             target: root
             function onColorChanged() { arc.requestPaint() }
+            function onStrokeWidthChanged() { arc.requestPaint() }
         }
     }
 

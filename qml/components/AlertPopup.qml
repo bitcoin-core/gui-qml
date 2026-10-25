@@ -27,7 +27,7 @@ DialogPopup {
     property int messageAlignment: Text.AlignHCenter
     property int tone: AlertPopup.Default
     // Success shows a check on a filled badge; other tones tint the icon.
-    property url iconSource: tone === AlertPopup.Success ? "image://images/check" : ""
+    property url iconSource: tone === AlertPopup.Success ? "qrc:/icons/check.svg" : ""
     readonly property color toneColor: tone === AlertPopup.Success ? Theme.color.success
         : tone === AlertPopup.Warning ? Theme.color.warning
         : tone === AlertPopup.Error ? Theme.color.danger

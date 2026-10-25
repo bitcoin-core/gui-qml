@@ -57,13 +57,9 @@ Page {
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "peersBackButton"
-            visible: root.showBackButton
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
+        showBackButton: root.showBackButton
+        backButtonObjectName: "peersBackButton"
+        onBackClicked: root.back()
         title: qsTr("Peers")
     }
 
@@ -274,33 +270,17 @@ Page {
                     onTextChanged: peerListModelProxy.searchText = text
                 }
 
-                Button {
+                IconButton {
                     id: sortButton
                     objectName: "peerSortButton"
-                    Layout.preferredWidth: 40
-                    Layout.preferredHeight: 40
-                    hoverEnabled: AppMode.isDesktop
-                    focusPolicy: Qt.StrongFocus
+                    toolbar: true
+                    iconSource: "image://images/flip-vertical"
+                    accessibleName: qsTr("Sort peers")
+                    Layout.preferredWidth: size
+                    Layout.preferredHeight: size
                     KeyNavigation.tab: filterButton.visible ? filterButton : directionFilterButton
                     KeyNavigation.backtab: searchField.inputField
                     KeyNavigation.priority: KeyNavigation.BeforeItem
-                    Accessible.name: qsTr("Sort peers")
-                    background: StateBackground {
-                        radius: 8
-                        stateColor: sortButton.down ? Theme.color.surface3
-                            : sortButton.hovered ? Theme.color.surface2 : Theme.color.surface1
-                        border.width: 0
-                        FocusBorder {
-                            objectName: "peerSortButtonFocusBorder"
-                            visible: sortButton.visualFocus
-                            borderRadius: 12
-                        }
-                    }
-                    contentItem: Icon {
-                        source: "image://images/flip-vertical"
-                        color: Theme.color.neutral9
-                        size: 20
-                    }
                     onClicked: sortMenu.open()
                     ContextMenu {
                         id: sortMenu
@@ -471,12 +451,10 @@ Page {
                                     : !root.compact && root.selectedNodeId === delegate.nodeId ? Theme.color.surfaceSelected
                                     : delegate.hovered ? Theme.color.surfaceHover : "transparent"
                             }
-                            Rectangle {
+                            Separator {
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
                                 anchors.leftMargin: 12; anchors.rightMargin: 12
-                                height: 1
                                 visible: delegate.index < peerListModelProxy.count - 1
-                                color: Theme.color.surfaceDivider
                             }
                             FocusBorder {
                                 objectName: delegate.objectName + "FocusBorder"
@@ -592,13 +570,12 @@ Page {
                     color: Theme.color.neutral6
                 }
 
-                TextButton {
+                LinkButton {
                     objectName: "viewBannedPeersButton"
                     anchors.horizontalCenter: parent.horizontalCenter
                     visible: banListModel.count > 0
                     text: banListModel.count === 1 ? qsTr("View 1 banned peer…")
                         : qsTr("View %1 banned peers…").arg(banListModel.count.toLocaleString(Qt.locale(), "f", 0))
-                    textStyle: Theme.text.caption
                     onClicked: bannedPeersPopup.open()
                 }
             }

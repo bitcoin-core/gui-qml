@@ -22,13 +22,9 @@ Page {
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "peersBackButton"
-            visible: root.showBackButton
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
+        showBackButton: root.showBackButton
+        backButtonObjectName: "peersBackButton"
+        onBackClicked: root.back()
         title: qsTr("Peers")
     }
 

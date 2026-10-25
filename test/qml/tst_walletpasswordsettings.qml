@@ -101,6 +101,41 @@ TestCase {
         compare(newPassword.text, "newsecret")
     }
 
+    // Reports the sizes behind a check box's height, so a failure on another
+    // Qt version shows where the wrapped label's height was lost.
+    function sizes(checkBox) {
+        const content = checkBox.contentItem
+        const label = content.children[0]
+        const column = checkBox.parent
+        return "box " + checkBox.width + "x" + checkBox.height
+            + " implicit " + checkBox.implicitHeight + " content implicit " + checkBox.implicitContentHeight
+            + "; contentItem " + content.width + "x" + content.height + " implicit " + content.implicitHeight
+            + "; label " + label.width + "x" + label.height + " implicit " + label.implicitHeight
+            + " lines " + label.lineCount
+            + "; column " + column.width + "x" + column.height + " implicit " + column.implicitHeight
+    }
+
+    function test_wrapped_acknowledgement_keeps_clear_of_the_save_button() {
+        const originalScale = Theme.textScale
+        try {
+            for (const scale of [1, 1.3]) {
+                Theme.textScale = scale
+                const page = createWalletPasswordSettingsPage(setPasswordComponent)
+                const acknowledgement = findChild(page, "walletPasswordConfirmToggle")
+                const saveButton = findChild(page, "walletPasswordSaveButton")
+                const fits = function() { return acknowledgement.height >= acknowledgement.contentItem.implicitHeight }
+                for (let i = 0; i < 50 && !fits(); ++i) wait(20)
+                verify(fits(), "scale " + scale + ": " + sizes(acknowledgement))
+                verify(acknowledgement.contentItem.implicitHeight > Theme.size.controlSmall, "scale " + scale)
+                const bottom = acknowledgement.mapToItem(page, 0, acknowledgement.height).y
+                tryVerify(function() { return saveButton.mapToItem(page, 0, 0).y >= bottom }, 1000, "scale " + scale)
+                pageLoader.sourceComponent = undefined
+            }
+        } finally {
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_update_password_focuses_current_password_field() {
         const page = createWalletPasswordSettingsPage(updatePasswordComponent)
         const currentPassword = findChild(page, "walletPasswordCurrentField")
@@ -143,7 +178,7 @@ TestCase {
         page.errorText = "The current password is incorrect."
         tryCompare(banner, "visible", true)
         compare(resultText.text, "The current password is incorrect.")
-        compare(banner.iconSource.toString(), "image://images/info-filled")
+        compare(banner.iconSource.toString(), "image://images/alert-filled")
         compare(banner.textColor, Theme.color.dangerText)
 
         page.clearResult()

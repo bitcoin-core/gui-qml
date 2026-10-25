@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 
 Page {
     id: root
@@ -24,6 +25,36 @@ Page {
     readonly property alias pageHeader: settingsHeader
     readonly property alias scrollView: scrollView
     readonly property alias contentLayout: contentLayout
+    readonly property Flickable scrollArea: scrollView.contentItem
+
+    function ensureFocusedItemVisible() {
+        const window = root.Window.window
+        const item = window ? window.activeFocusItem : null
+        let ancestor = item
+        while (ancestor && ancestor !== contentFrame) ancestor = ancestor.parent
+        if (!ancestor) return
+        const flickable = root.scrollArea
+        const position = item.mapToItem(contentFrame, 0, 0)
+        const margin = Theme.space.m
+        let y = flickable.contentY
+        if (position.y - margin < y) y = position.y - margin
+        else if (position.y + item.height + margin > y + flickable.height)
+            y = position.y + item.height + margin - flickable.height
+        flickable.contentY = Math.max(0, Math.min(y, flickable.contentHeight - flickable.height))
+    }
+
+    // A timer instead of Qt.callLater: it's destroyed with the page, so it
+    // never runs on a page that's gone, which Qt 6.2 would.
+    Timer {
+        id: focusScrollTimer
+        interval: 0
+        onTriggered: root.ensureFocusedItemVisible()
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() { focusScrollTimer.restart() }
+    }
 
     signal back
 

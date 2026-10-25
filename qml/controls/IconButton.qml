@@ -13,12 +13,18 @@ Button {
 
     implicitHeight: root.height
     implicitWidth: root.width
-    property color iconColor: Theme.color.neutral5
+    // A toolbar button rests on a surface1 fill next to search and filter
+    // controls; the default is a bare icon with a hover tint.
+    property bool toolbar: false
+    property int surfaceLevel: 0
+    property color iconColor: toolbar ? Theme.color.neutral9 : Theme.color.neutral5
     property color hoverColor: Theme.color.neutral9
-    property color activeColor: Theme.color.accent
-    property int size: 35
-    property int iconSize: size
-    property int backgroundRadius: Theme.radius.s
+    // A checked toolbar button is an applied toggle: inverted neutral.
+    property color activeColor: toolbar ? Theme.color.activeForeground : Theme.color.accent
+    property int size: toolbar ? Theme.size.iconButton : 35
+    // Artwork size is a token of its own, not the target size.
+    property int iconSize: toolbar ? Theme.size.icon.l : Theme.size.icon.xl
+    property int backgroundRadius: toolbar ? Theme.radius.m : Theme.radius.s
     property alias iconSource: icon.source
     required property string accessibleName
 
@@ -37,7 +43,12 @@ Button {
         id: bg
         anchors.fill: parent
         radius: root.backgroundRadius
-        stateColor: root.pressed ? Theme.color.surfacePressed
+        stateColor: root.toolbar
+            ? (root.checked ? Theme.color.activeFill
+                : root.pressed ? Theme.color.surface(root.surfaceLevel + 3)
+                : root.hovered ? Theme.color.surface(root.surfaceLevel + 2)
+                : Theme.color.surface(root.surfaceLevel + 1))
+            : root.pressed ? Theme.color.surfacePressed
             : root.hovered ? Theme.color.surfaceHover
             : "transparent"
     }
@@ -63,10 +74,11 @@ Button {
         }
     }
 
+    // The first state whose condition holds wins.
     states: [
         State {
-            name: "HOVER"; when: root.hovered
-            PropertyChanges { target: icon; color: root.hoverColor }
+            name: "DISABLED"; when: !root.enabled
+            PropertyChanges { target: icon; color: Theme.color.disabledContent }
         },
         State {
             name: "CHECKED"; when: root.checked
@@ -77,8 +89,8 @@ Button {
             PropertyChanges { target: icon; color: root.hoverColor }
         },
         State {
-            name: "DISABLED"; when: !root.enabled
-            PropertyChanges { target: icon; color: Theme.color.disabledContent }
+            name: "HOVER"; when: root.hovered
+            PropertyChanges { target: icon; color: root.hoverColor }
         }
     ]
 }

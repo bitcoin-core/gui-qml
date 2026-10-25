@@ -16,7 +16,6 @@ ColumnLayout {
     property string errorText: ""
     property bool showErrorMessage: true
     property string labelText: qsTr("Send to")
-    property bool enabled: true
     property bool embedded: false
     property int surfaceLevel: 0
     property color surfaceColor: Theme.color.surface1

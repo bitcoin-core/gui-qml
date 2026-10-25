@@ -9,6 +9,15 @@ import org.bitcoincore.qt 1.0
 
 NeutralButton {
     id: root
+    property bool keyboardActivation: false
+    Keys.onPressed: function(event) {
+        keyboardActivation = event.key === Qt.Key_Space || event.key === Qt.Key_Down
+        if (event.key === Qt.Key_Down) {
+            if (root.opened === undefined || !root.opened) root.clicked()
+            event.accepted = true
+        }
+    }
+    TapHandler { onPressedChanged: if (pressed) root.keyboardActivation = false }
 
     property string subtitle: ""
     property bool opened: false
