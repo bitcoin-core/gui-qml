@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import "../../controls"
+import "../../components"
 
 OnboardingView {
     id: root

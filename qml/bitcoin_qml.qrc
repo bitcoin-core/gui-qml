@@ -1,15 +1,15 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
-        <file>components/AddressLabel.qml</file>
-        <file>components/AlertAction.qml</file>
-        <file>components/AlertPopup.qml</file>
+        <file>controls/AddressLabel.qml</file>
+        <file>controls/AlertAction.qml</file>
+        <file>controls/AlertPopup.qml</file>
         <file>components/BannedPeersPopup.qml</file>
-        <file>components/BitcoinAddressInputField.qml</file>
-        <file>components/BitcoinAmountInputField.qml</file>
+        <file>controls/BitcoinAddressInputField.qml</file>
+        <file>controls/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
         <file>components/DebugLogItemRow.qml</file>
-        <file>components/DialogHeader.qml</file>
-        <file>components/DialogPopup.qml</file>
+        <file>controls/DialogHeader.qml</file>
+        <file>controls/DialogPopup.qml</file>
         <file>components/DebugLogTitlesHeader.qml</file>
         <file>components/DesktopMenuActions.qml</file>
         <file>components/DesktopNativeMenuBar.qml</file>
@@ -22,8 +22,8 @@
         <file>components/SendCoinSelection.qml</file>
         <file>components/SendFeeSelection.qml</file>
         <file>components/MiniBlockClock.qml</file>
-        <file>components/MonospaceOutputView.qml</file>
-        <file>components/InfoBanner.qml</file>
+        <file>controls/MonospaceOutputView.qml</file>
+        <file>controls/InfoBanner.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NetworkIndicator.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
@@ -36,9 +36,9 @@
         <file>components/SettingsSidebar.qml</file>
         <file>components/SettingsView.qml</file>
         <file>components/StorageLocations.qml</file>
-        <file>components/Separator.qml</file>
+        <file>controls/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
-        <file>components/ToastBanner.qml</file>
+        <file>controls/ToastBanner.qml</file>
         <file>components/PaymentRequestActionsMenu.qml</file>
         <file>components/PeerActionsMenu.qml</file>
         <file>components/PaymentRequestCard.qml</file>
@@ -48,11 +48,11 @@
         <file>components/WalletCreationModal.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
         <file>components/PaymentRequestField.qml</file>
-        <file>components/SearchBar.qml</file>
-        <file>components/HoverToolTip.qml</file>
-        <file>components/Tooltip.qml</file>
+        <file>controls/SearchBar.qml</file>
+        <file>controls/HoverToolTip.qml</file>
+        <file>controls/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
-        <file>components/StatusPill.qml</file>
+        <file>controls/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
         <file>components/TransactionActionsMenu.qml</file>
@@ -60,7 +60,7 @@
         <file>components/TransactionFlowNode.qml</file>
         <file>components/TransactionFlowRibbon.qml</file>
         <file>components/TransactionFlowLayout.js</file>
-        <file>components/LabeledBitcoinAddressField.qml</file>
+        <file>controls/LabeledBitcoinAddressField.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
         <file>controls/AppFolderDialog.qml</file>
@@ -112,27 +112,27 @@
         <file>controls/PopupPicker.qml</file>
         <file>controls/QRImage.qml</file>
         <file>controls/qmldir</file>
-        <file>controls/SendCreateOptionsPopup.qml</file>
+        <file>components/SendCreateOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>
         <file>controls/SelectableText.qml</file>
         <file>controls/SizeClass.qml</file>
-        <file>controls/SettingsHeader.qml</file>
-        <file>controls/SettingsPage.qml</file>
+        <file>components/SettingsHeader.qml</file>
+        <file>components/SettingsPage.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
         <file>controls/StateBackground.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
-        <file>controls/OnboardingFooter.qml</file>
-        <file>controls/OnboardingBackButton.qml</file>
-        <file>controls/OnboardingNavigationBar.qml</file>
-        <file>controls/OnboardingView.qml</file>
+        <file>components/OnboardingFooter.qml</file>
+        <file>components/OnboardingBackButton.qml</file>
+        <file>components/OnboardingNavigationBar.qml</file>
+        <file>components/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/utils.js</file>
         <file>controls/ValueRow.qml</file>
-        <file>controls/WalletCreationTypeRow.qml</file>
+        <file>components/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>

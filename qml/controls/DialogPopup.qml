@@ -6,8 +6,6 @@ import QtQml 2.15
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-import "../controls"
-
 // Shared shell for modal dialogs: alerts (AlertPopup), feature modals and
 // sheets. It centers on the window unless the caller passes a container as
 // `parent`.
