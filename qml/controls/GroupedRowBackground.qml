@@ -3,7 +3,6 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import "../components"
 
 // Background of a row in a virtualised grouped list (a ListView section),
 // which cannot be wrapped in a FormSection card: the first and last rows of

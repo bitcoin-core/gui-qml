@@ -8,8 +8,6 @@ import QtQuick.Controls.impl 2.15 as ControlsImpl
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
-import "../controls"
-
 Control {
     id: root
 

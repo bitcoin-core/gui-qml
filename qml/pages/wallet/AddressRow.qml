@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
-import "../../components"
 
 AbstractButton {
     id: root

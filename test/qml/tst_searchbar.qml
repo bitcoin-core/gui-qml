@@ -7,7 +7,6 @@ import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
 
-import "../../qml/components"
 import "../../qml/controls"
 
 TestCase {

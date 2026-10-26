@@ -4,6 +4,8 @@
 
 import QtQuick 2.15
 
+import "../controls"
+
 NeutralButton {
     id: root
 

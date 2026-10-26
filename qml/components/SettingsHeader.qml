@@ -4,6 +4,8 @@
 
 import QtQuick 2.15
 
+import "../controls"
+
 // The settings configuration of the top bar: an icon-only back button
 // unless backButtonText is set.
 NavigationBar2 {

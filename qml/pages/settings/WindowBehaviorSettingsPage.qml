@@ -5,6 +5,7 @@
 import QtQuick.Layouts 1.15
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
