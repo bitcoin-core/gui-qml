@@ -119,6 +119,22 @@ Item {
         if (root.focusFallback) root.focusFallback.forceActiveFocus()
     }
 
+    // Focus can also arrive in a hidden page later: a popup that closes with
+    // its page hands focus back to the item it was opened from. Take it away
+    // whenever it lands in a hidden page, whatever moved it there.
+    function releaseFocusFromHiddenPages() {
+        for (const page of [activityPage, sendPage, receivePage, settingsStack]) {
+            if (!page.visible) root.releaseFocusFrom(page)
+        }
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() {
+            root.releaseFocusFromHiddenPages()
+        }
+    }
+
     function closeOwnedPopups() {
         root.hiddenCount++
         root.closePopupsIn(root)

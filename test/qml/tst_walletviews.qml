@@ -143,6 +143,30 @@ TestCase {
         compare(note.text, "")
     }
 
+    function test_closed_popup_does_not_return_focus_to_hidden_view() {
+        const page = createShell()
+        const first = page.viewForWallet(testWalletModel)
+        findChild(page, "sendTabButton").checked = true
+        testRecipientsModel.allValid = true
+        const reviewButton = findChild(first.sendPage, "sendReviewButton")
+        const reviewPopup = findChild(first.sendPage, "transactionReviewPopup")
+        reviewButton.forceActiveFocus()
+        verify(reviewButton.activeFocus)
+        reviewPopup.open()
+        tryCompare(reviewPopup, "opened", true)
+        verify(!reviewButton.activeFocus)
+
+        // The popup closes with the view and would hand focus back to the
+        // button it was opened from, which is now hidden.
+        walletController.setSelectedWalletObject(testSecondWalletModel)
+        tryCompare(reviewPopup, "visible", false)
+        wait(50)
+        verify(!reviewButton.activeFocus)
+        keyClick(Qt.Key_Space)
+        wait(50)
+        compare(reviewPopup.visible, false)
+    }
+
     function test_switching_wallet_hides_view_and_closes_its_popups() {
         const page = createShell()
         const first = page.viewForWallet(testWalletModel)
