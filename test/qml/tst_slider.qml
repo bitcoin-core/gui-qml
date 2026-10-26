@@ -29,6 +29,21 @@ TestCase {
         compare(slider.snapMode, Controls.Slider.NoSnap)
     }
 
+    function test_keyboard_bounds_and_accessible_range() {
+        slider.discrete = true
+        slider.forceActiveFocus(Qt.TabFocusReason)
+        compare(slider.minimumValue, 0)
+        compare(slider.maximumValue, 5)
+        keyClick(Qt.Key_End)
+        compare(slider.value, 5)
+        keyClick(Qt.Key_Home)
+        compare(slider.value, 0)
+        keyClick(Qt.Key_PageUp)
+        compare(slider.value, 1)
+        keyClick(Qt.Key_PageDown)
+        compare(slider.value, 0)
+    }
+
     function test_discrete_mode() {
         slider.discrete = true
         compare(slider.stepSize, 1)

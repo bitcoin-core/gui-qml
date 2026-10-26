@@ -214,6 +214,15 @@ DesignSystemSection {
             Slider { from: 1; to: 8; value: 3; discrete: true; Accessible.name: "Example slider" }
         }
         DesignSystemState {
+            label: "showsTickMarks, tickLabels"
+            Slider {
+                objectName: "designSystemTickSlider"
+                from: 0; to: 6; value: 3; discrete: true; showsTickMarks: true
+                tickLabels: [{ value: 3, text: "Default" }]
+                Accessible.name: "Example slider"
+            }
+        }
+        DesignSystemState {
             label: "enabled: false"
             Slider { value: 40; enabled: false; Accessible.name: "Example slider" }
         }

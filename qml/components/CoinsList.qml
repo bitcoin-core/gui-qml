@@ -192,9 +192,10 @@ ColumnLayout {
             objectName: "coinSelectionItem_" + index
             readonly property bool marked: root.selectionMode ? selected : root.markedIds.indexOf(coinId) >= 0
             width: list.width
-            height: root.coins && root.coins.groupBy === "address"
-                ? (label.length > 0 ? 72 : 52)
-                : (label.length > 0 ? 92 : 72)
+            implicitHeight: Math.max(implicitContentHeight + 2 * Theme.space.ml,
+                root.coins && root.coins.groupBy === "address"
+                    ? (label.length > 0 ? 72 : 52) : (label.length > 0 ? 92 : 72))
+            height: implicitHeight
             leftPadding: Theme.space.cardInset; rightPadding: Theme.space.cardInset
             onClicked: {
                 if (suppressNextRowClick) {
@@ -328,7 +329,7 @@ ColumnLayout {
         NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
         NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
     }
-    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; horizontalAlignment: Text.AlignLeft }
+    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; textStyle: Theme.text.caption; horizontalAlignment: Text.AlignLeft }
 
     ContextMenu {
         id: sortMenu; parent: Overlay.overlay; objectName: "coinBrowserSortMenu"

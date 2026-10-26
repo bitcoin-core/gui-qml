@@ -172,6 +172,7 @@ TestCase {
         verify(view !== null)
         const status = findChild(view, "settingsOperationStatus")
         verify(status !== null)
+        compare(status.textStyle, Theme.text.caption)
         optionsModel.settingsPending = true
         tryCompare(view.pageContainer.currentItem, "enabled", false)
         compare(status.text, "Saving settings…")
@@ -920,6 +921,25 @@ TestCase {
         tryCompare(rpcConsole, "tabActive", false)
     }
 
+    function test_settings_scroll_to_keyboard_focus() {
+        const originalHeight = settingsWindow.height
+        settingsWindow.height = 420
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(waitForRendering(view))
+            const row = findChild(view, "displayTransactionUrlsRow")
+            const page = view.pageContainer.currentItem
+            const viewport = page.scrollView.contentItem
+            row.forceActiveFocus(Qt.TabFocusReason)
+            tryVerify(function() {
+                const y = row.mapToItem(viewport, 0, 0).y
+                return y >= 0 && y + row.height <= viewport.height + 1
+            })
+        } finally {
+            settingsWindow.height = originalHeight
+        }
+    }
+
     function test_displayPageUsesInlineGenericPickers() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
@@ -1007,6 +1027,11 @@ TestCase {
             compare(displayUnitPicker.currentText, unit.text)
         }
 
+        const sizeSlider = findChild(view, "displayTextSizeSlider")
+        compare(sizeSlider.minimumValue, 0)
+        compare(sizeSlider.maximumValue, Theme.textScales.length - 1)
+        compare(sizeSlider.Accessible.description, findChild(view, "displayTextSizePercentage").text)
+
         const reduceMotionRow = findChild(view, "displayReduceMotionRow")
         verify(reduceMotionRow !== null)
         compare(reduceMotionRow.checked, Theme.reduceMotion)
@@ -1015,6 +1040,22 @@ TestCase {
         reduceMotionRow.switchItem.toggled()
         compare(Theme.reduceMotion, !reduceMotion)
         Theme.reduceMotion = reduceMotion
+
+        const textSizeSlider = findChild(view, "displayTextSizeSlider")
+        verify(textSizeSlider !== null)
+        const textScale = Theme.textScale
+        try {
+            Theme.textScale = 1
+            compare(textSizeSlider.value, 3)
+            compare(textSizeSlider.stepCount, 6)
+            textSizeSlider.value = 5
+            textSizeSlider.moved()
+            compare(Theme.textScale, Theme.textScales[5])
+            Theme.textScale = Theme.textScales[0]
+            compare(textSizeSlider.value, 0)
+        } finally {
+            Theme.textScale = textScale
+        }
 
         designSystemRow.clicked()
         tryCompare(view.pageContainer, "depth", 2)
