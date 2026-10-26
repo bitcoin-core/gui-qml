@@ -201,6 +201,10 @@ std::optional<CAmount> ParseCustomFeeRatePerKvB(const QString& custom_fee_rate, 
         return std::nullopt;
     }
 
+    if (whole_part > (std::numeric_limits<CAmount>::max() - fractional_value) / FEE_RATE_BASIS_VBYTES) {
+        return std::nullopt;
+    }
+
     const CAmount fee_rate_per_kvb = (whole_part * FEE_RATE_BASIS_VBYTES) + fractional_value;
     if (fee_rate_per_kvb < minimum_fee_rate_per_kvb) {
         return std::nullopt;
