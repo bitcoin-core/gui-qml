@@ -1179,6 +1179,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
     Q_PROPERTY(double minimumCustomFeeRate MEMBER m_minimum_custom_fee_rate NOTIFY customFeeRateValidChanged)
     Q_PROPERTY(bool feeEstimatePending MEMBER m_fee_estimate_pending NOTIFY feeEstimatePendingChanged)
+    Q_PROPERTY(bool feeEstimationUnavailable MEMBER m_fee_estimation_unavailable NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(int feeEstimateRevision MEMBER m_fee_estimate_revision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(bool sendAmountExhaustsBalance READ sendAmountExhaustsBalance WRITE setSendAmountExhaustsBalance NOTIFY sendAmountExhaustsBalanceChanged)
     Q_PROPERTY(bool prepareTransactionResult MEMBER m_prepare_transaction_result NOTIFY prepareTransactionResultChanged)
@@ -1324,7 +1325,7 @@ public:
         };
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
-    qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
+    qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_fee_estimation_unavailable ? -1 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
     int estimatedInputCount() const { return 1; }
     qint64 sendTotalSatoshi() const { const auto* r = qobject_cast<MockRecipientsModel*>(m_recipients); return r ? r->totalAmountSatoshi() + estimatedFeeSatoshi() : 0; }
@@ -1722,6 +1723,7 @@ private:
     QString m_custom_fee_rate;
     QString m_custom_fee_estimate;
     bool m_fee_estimate_pending{false};
+    bool m_fee_estimation_unavailable{false};
     bool m_send_amount_exhausts_balance{false};
     bool m_send_transaction_result{true};
     bool m_is_encrypted{false};

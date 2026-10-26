@@ -219,6 +219,34 @@ PageStack {
         }
     }
 
+    // New blocks can make fee estimation available without any form edit.
+    // Deferred, so blocks while syncing do not keep restarting the request.
+    property bool feeRetryAfterPendingEstimate: false
+
+    function retryUnavailableFeeEstimate() {
+        if (root.wallet && root.wallet.feeEstimationUnavailable && !root.wallet.customFeeEnabled) {
+            root.wallet.scheduleFeeEstimates()
+        }
+    }
+
+    Connections {
+        target: nodeModel
+        function onBlockTipHeightChanged() {
+            if (!root.wallet) return
+            if (root.wallet.feeEstimatePending) root.feeRetryAfterPendingEstimate = true
+            else root.retryUnavailableFeeEstimate()
+        }
+    }
+
+    Connections {
+        target: root.wallet
+        function onFeeEstimatePendingChanged() {
+            if (root.wallet.feeEstimatePending || !root.feeRetryAfterPendingEstimate) return
+            root.feeRetryAfterPendingEstimate = false
+            root.retryUnavailableFeeEstimate()
+        }
+    }
+
     Connections {
         target: root.wallet ? root.wallet.coinsListModel : null
         function onSelectedCoinsCountChanged() {
@@ -1046,6 +1074,8 @@ PageStack {
                                 Layout.fillWidth: true
                                 title: qsTr("Network fee")
                                 footerText: !root.wallet ? ""
+                                    : root.wallet.feeEstimationUnavailable && !root.wallet.customFeeEnabled
+                                        ? qsTr("Your node can't estimate fees yet. Choose Custom and enter a fee rate to continue.")
                                     : root.wallet.feeEstimatePending ? qsTr("Estimating…")
                                     : root.wallet.estimatedFeeSatoshi >= 0 ? ""
                                     : root.wallet.recipients.allValid ? qsTr("Fee estimate unavailable")
@@ -1124,7 +1154,8 @@ PageStack {
                                 Layout.fillWidth: true
                                 text: qsTr("Review Transaction")
                                 enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
-                                    && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
+                                    && !root.wallet.sendAmountExhaustsBalance
+                                    && (root.wallet.customFeeEnabled ? root.wallet.customFeeRateValid : !root.wallet.feeEstimationUnavailable)
                                 onClicked: root.confirmTransactionReview()
                             }
                         }

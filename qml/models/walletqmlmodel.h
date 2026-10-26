@@ -113,6 +113,7 @@ private:
     Q_PROPERTY(bool customFeeRateValid READ customFeeRateValid NOTIFY customFeeRateValidChanged)
     Q_PROPERTY(double minimumCustomFeeRate READ minimumCustomFeeRate CONSTANT)
     Q_PROPERTY(bool feeEstimatePending READ feeEstimatePending NOTIFY feeEstimatePendingChanged)
+    Q_PROPERTY(bool feeEstimationUnavailable READ feeEstimationUnavailable NOTIFY estimatedFeeChanged)
     Q_PROPERTY(int feeEstimateRevision READ feeEstimateRevision NOTIFY feeEstimateRevisionChanged)
     Q_PROPERTY(BumpTransactionModel* bumpModel READ bumpModel CONSTANT)
     Q_PROPERTY(bool isWalletLoaded READ isWalletLoaded NOTIFY walletIsLoadedChanged)
@@ -189,6 +190,7 @@ public:
     bool customFeeRateValid() const;
     double minimumCustomFeeRate() const;
     bool feeEstimatePending() const { return m_fee_estimate_pending; }
+    bool feeEstimationUnavailable() const;
     int feeEstimateRevision() const { return m_fee_estimate_revision; }
     Q_INVOKABLE bool prepareTransaction();
     Q_INVOKABLE void approveExternalSignerTransaction();
@@ -335,6 +337,7 @@ private:
     void updateMaximumAmount();
     void requestFeeEstimatesNow();
     void applyFeeEstimates(const QHash<unsigned int, SendFeePreview>& estimates,
+                           const QSet<unsigned int>& unavailable_targets,
                            const std::optional<SendFeePreview>& custom_estimate,
                            quint64 request_id);
     std::optional<CAmount> selectedFeeEstimate() const;
@@ -408,6 +411,7 @@ private:
     QString m_current_transaction_review_message;
     QTimer* m_fee_estimation_timer{nullptr};
     QHash<unsigned int, SendFeePreview> m_fee_estimates;
+    QSet<unsigned int> m_unavailable_fee_targets;
     std::optional<SendFeePreview> m_custom_fee_estimate;
     QString m_custom_fee_rate;
     quint64 m_fee_estimate_request_id{0};

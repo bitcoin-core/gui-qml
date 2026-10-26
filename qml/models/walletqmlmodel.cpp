@@ -128,17 +128,6 @@ std::map<QString, CAmount> ScanReceiveRequestTransaction(const interfaces::Walle
     return received;
 }
 
-int FallbackFeeMultiplier(const unsigned int target)
-{
-    for (size_t i = 0; i < STANDARD_FEE_TARGETS.size(); ++i) {
-        if (STANDARD_FEE_TARGETS[i] == target) {
-            return static_cast<int>(STANDARD_FEE_TARGETS.size() - i);
-        }
-    }
-
-    return 1;
-}
-
 QString FormatFeeEstimate(CAmount amount)
 {
     BitcoinAmount bitcoin_amount;
@@ -424,45 +413,36 @@ std::optional<SendFeePreview> TryPreviewFee(interfaces::Wallet& wallet,
         result->tx && !result->change_pos && TransactionSweepsAvailableFunds(wallet, *result->tx, coin_control)};
 }
 
-std::optional<SendFeePreview> EstimatePreviewFee(interfaces::Wallet& wallet,
-                                          const std::vector<wallet::CRecipient>& recipients,
-                                          const wallet::CCoinControl& base_coin_control,
-                                          const OutputType preview_change_type,
-                                          const unsigned int target, int remainder_index = -1)
+wallet::CCoinControl NetworkTargetCoinControl(const wallet::CCoinControl& base_coin_control, const unsigned int target)
 {
     wallet::CCoinControl coin_control{base_coin_control};
-    ApplySelectedInputsPolicy(coin_control);
     coin_control.m_feerate.reset();
     coin_control.m_confirm_target = target;
-    ApplyPreviewChangeDestination(coin_control, preview_change_type);
     ApplyRegtestStaticFeeOverride(coin_control);
+    return coin_control;
+}
 
-    if (const auto fee = TryPreviewFee(wallet, recipients, coin_control, remainder_index)) {
-        return fee;
-    }
+std::optional<SendFeePreview> EstimatePreviewFee(interfaces::Wallet& wallet,
+                                          const std::vector<wallet::CRecipient>& recipients,
+                                          const wallet::CCoinControl& target_coin_control,
+                                          const OutputType preview_change_type,
+                                          int remainder_index = -1)
+{
+    wallet::CCoinControl coin_control{target_coin_control};
+    ApplySelectedInputsPolicy(coin_control);
+    ApplyPreviewChangeDestination(coin_control, preview_change_type);
 
-    // A maximum amount must use the same fee policy as final construction.
-    // Do not fill an amount using a made-up rate if sendall cannot be estimated.
-    if (remainder_index >= 0 || Params().GetChainType() == ChainType::REGTEST) {
-        return std::nullopt;
-    }
+    return TryPreviewFee(wallet, recipients, coin_control, remainder_index);
+}
 
-    const CAmount required_fee_per_k = wallet.getRequiredFee(FEE_RATE_BASIS_VBYTES);
-    if (required_fee_per_k <= 0) {
-        return std::nullopt;
-    }
+bool NetworkFeeEstimateUnavailable(interfaces::Wallet& wallet, const wallet::CCoinControl& target_coin_control)
+{
+    if (target_coin_control.m_feerate) return false;
 
-    wallet::CCoinControl fallback_coin_control{coin_control};
-    fallback_coin_control.m_confirm_target.reset();
-    // Keep fallback previews distinct across presets even when the backend can
-    // only provide a minimum required feerate.
-    fallback_coin_control.m_feerate = CFeeRate{required_fee_per_k * FallbackFeeMultiplier(target)};
-
-    if (const auto fee = TryPreviewFee(wallet, recipients, fallback_coin_control, remainder_index)) {
-        return fee;
-    }
-
-    return std::nullopt;
+    FeeReason reason{FeeReason::FEE_RATE_ESTIMATOR};
+    wallet.getMinimumFee(FEE_RATE_BASIS_VBYTES, target_coin_control, nullptr, &reason);
+    const auto* raw_wallet = wallet.wallet();
+    return reason == FeeReason::FALLBACK && raw_wallet && !raw_wallet->m_allow_fallback_fee;
 }
 
 std::optional<SendFeePreview> EstimateCustomPreviewFee(interfaces::Wallet& wallet,
@@ -841,8 +821,8 @@ void WalletQmlModel::setCustomFeeTarget(unsigned int target)
     const CAmount rate = control.m_feerate ? control.m_feerate->GetFeePerK()
         : m_wallet->getMinimumFee(FEE_RATE_BASIS_VBYTES, control, nullptr, nullptr);
     setCustomFeeEnabled(true);
-    // Leave an unavailable estimate blank instead of suggesting a zero fee.
-    setCustomFeeRate(rate > 0 ? QString::number(rate / 1000.0, 'f', 3) : QString{});
+    // Without an estimate, keep the entered rate instead of suggesting a zero fee.
+    if (rate > 0) setCustomFeeRate(QString::number(rate / 1000.0, 'f', 3));
     // Explicit slider selection takes precedence over an inferred target when
     // several targets currently have the same estimated fee rate.
     setFeeTargetBlocks(target);
@@ -874,6 +854,11 @@ bool WalletQmlModel::sendAmountExhaustsBalance() const
     // Without an estimate, a fixed-amount send cannot safely spend the full
     // balance because prepareTransaction() will still need to add a fee.
     return total_amount >= balance;
+}
+
+bool WalletQmlModel::feeEstimationUnavailable() const
+{
+    return m_unavailable_fee_targets.contains(feeTargetBlocks());
 }
 
 bool WalletQmlModel::customFeeRateValid() const
@@ -2182,14 +2167,20 @@ void WalletQmlModel::requestFeeEstimatesNow()
 
     m_backend_executor->submit(this, [remainder_index, recipients = *recipients, base_coin_control, preview_change_type, custom_fee_enabled, custom_fee_rate_per_kvb, wallet]() {
         QHash<unsigned int, SendFeePreview> estimates;
+        QSet<unsigned int> unavailable_targets;
         std::optional<SendFeePreview> custom_estimate;
 
         for (const unsigned int target : STANDARD_FEE_TARGETS) {
+            const wallet::CCoinControl target_coin_control{NetworkTargetCoinControl(base_coin_control, target)};
+            if (NetworkFeeEstimateUnavailable(*wallet, target_coin_control)) {
+                unavailable_targets.insert(target);
+                continue;
+            }
             if (const auto estimate = EstimatePreviewFee(*wallet,
                                                          recipients,
-                                                         base_coin_control,
+                                                         target_coin_control,
                                                          preview_change_type,
-                                                         target, remainder_index)) {
+                                                         remainder_index)) {
                 estimates.insert(target, *estimate);
             }
         }
@@ -2204,15 +2195,16 @@ void WalletQmlModel::requestFeeEstimatesNow()
             }
         }
 
-        return std::pair{std::move(estimates), std::move(custom_estimate)};
+        return std::tuple{std::move(estimates), std::move(unavailable_targets), std::move(custom_estimate)};
     }, [this, request_id](const auto& result) {
-        applyFeeEstimates(result.first, result.second, request_id);
+        applyFeeEstimates(std::get<0>(result), std::get<1>(result), std::get<2>(result), request_id);
     }, [this, request_id](std::exception_ptr) {
-        applyFeeEstimates({}, {}, request_id);
+        applyFeeEstimates({}, {}, {}, request_id);
     });
 }
 
 void WalletQmlModel::applyFeeEstimates(const QHash<unsigned int, SendFeePreview>& estimates,
+                                       const QSet<unsigned int>& unavailable_targets,
                                        const std::optional<SendFeePreview>& custom_estimate,
                                        const quint64 request_id)
 {
@@ -2220,7 +2212,8 @@ void WalletQmlModel::applyFeeEstimates(const QHash<unsigned int, SendFeePreview>
         return;
     }
 
-    bool estimates_changed{m_fee_estimates != estimates};
+    bool estimates_changed{m_fee_estimates != estimates || m_unavailable_fee_targets != unavailable_targets};
+    m_unavailable_fee_targets = unavailable_targets;
     bool custom_estimate_changed{m_custom_fee_estimate != custom_estimate};
     if (estimates_changed) {
         m_fee_estimates = estimates;
@@ -2250,10 +2243,11 @@ void WalletQmlModel::clearFeeEstimates()
 {
     ++m_fee_estimate_request_id;
 
-    bool estimates_changed{!m_fee_estimates.isEmpty()};
+    bool estimates_changed{!m_fee_estimates.isEmpty() || !m_unavailable_fee_targets.isEmpty()};
     bool custom_estimate_changed{m_custom_fee_estimate.has_value()};
     if (estimates_changed) {
         m_fee_estimates.clear();
+        m_unavailable_fee_targets.clear();
     }
     if (custom_estimate_changed) {
         m_custom_fee_estimate.reset();
@@ -3126,6 +3120,7 @@ void WalletQmlModel::setFeeTargetBlocks(unsigned int target_blocks)
         Q_EMIT feeTargetBlocksChanged();
         Q_EMIT estimatedFeeChanged();
         Q_EMIT sendAmountExhaustsBalanceChanged();
+        if (m_unavailable_fee_targets.contains(target_blocks)) scheduleFeeEstimates();
     }
 }
 

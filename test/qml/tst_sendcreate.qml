@@ -36,6 +36,7 @@ TestCase {
         testWalletModel.sendTransactionResult = true
         testWalletModel.transactionNeedsUnlock = false
         testWalletModel.feeEstimatePending = false
+        testWalletModel.feeEstimationUnavailable = false
         testWalletModel.customFeeEnabled = false
         testWalletModel.customFeeRate = ""
         testWalletModel.targetBlocks = 6
@@ -419,6 +420,58 @@ TestCase {
         tryCompare(continueButton, "enabled", false)
         tryCompare(page, "formErrorText", "Selected inputs do not cover the amount plus fee")
         compare(prepareErrorText.text, "Selected inputs do not cover the amount plus fee")
+    }
+
+    function test_send_requires_custom_fee_when_estimation_unavailable() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+
+        const continueButton = findChild(page, "sendReviewButton")
+        const feeSection = findChild(page, "sendNetworkFeeSection")
+        verify(continueButton !== null)
+        verify(feeSection !== null)
+        tryCompare(continueButton, "enabled", true)
+
+        testWalletModel.feeEstimationUnavailable = true
+
+        tryCompare(continueButton, "enabled", false)
+        tryCompare(feeSection, "footerText", "Your node can't estimate fees yet. Choose Custom and enter a fee rate to continue.")
+
+        testWalletModel.customFeeEnabled = true
+        testWalletModel.customFeeRate = "2"
+
+        tryCompare(continueButton, "enabled", true)
+        tryCompare(feeSection, "footerText", "")
+    }
+
+    function test_new_block_retries_unavailable_fee_estimate() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+
+        testWalletModel.feeEstimationUnavailable = true
+        const unavailableCalls = testWalletModel.scheduleFeeEstimatesCalls
+        nodeModel.blockTipHeight += 1
+        tryVerify(function() { return testWalletModel.scheduleFeeEstimatesCalls > unavailableCalls })
+
+        testWalletModel.feeEstimatePending = true
+        const pendingCalls = testWalletModel.scheduleFeeEstimatesCalls
+        nodeModel.blockTipHeight += 1
+        wait(50)
+        compare(testWalletModel.scheduleFeeEstimatesCalls, pendingCalls)
+        compare(findChild(page, "sendNetworkFeeSection").footerText,
+                "Your node can't estimate fees yet. Choose Custom and enter a fee rate to continue.")
+        testWalletModel.feeEstimatePending = false
+        tryCompare(testWalletModel, "scheduleFeeEstimatesCalls", pendingCalls + 1)
+        testWalletModel.feeEstimatePending = true
+        testWalletModel.feeEstimatePending = false
+        wait(50)
+        compare(testWalletModel.scheduleFeeEstimatesCalls, pendingCalls + 1)
+
+        testWalletModel.feeEstimationUnavailable = false
+        const availableCalls = testWalletModel.scheduleFeeEstimatesCalls
+        nodeModel.blockTipHeight += 1
+        wait(50)
+        compare(testWalletModel.scheduleFeeEstimatesCalls, availableCalls)
     }
 
     function test_send_shows_recipient_validation_error() {
