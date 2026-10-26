@@ -16,7 +16,7 @@ AbstractButton {
     property string description
     property color descriptionColor: Theme.color.neutral7
     property int descriptionSize: 15
-    property int descriptionTextFormat: Text.AutoText
+    property int descriptionTextFormat: Text.PlainText
     property string errorText: ""
     property bool showErrorText: false
     property string infoText: ""
