@@ -13,6 +13,9 @@ Control {
     property real blockclocksize: (5 / 12)
     // The Display setting. Reduces motion even when the platform doesn't ask to.
     property bool reduceMotion: false
+    // The Display text size, one of textScales; 1 is the default in the middle.
+    readonly property var textScales: [0.85, 0.9, 0.95, 1, 1.1, 1.2, 1.3]
+    property real textScale: 1
     // Pickers list palettes in this order.
     readonly property list<Palette> palettes: [
         CoreLight { id: coreLight },
@@ -32,6 +35,7 @@ Control {
         typeSet: root.typeSet
         moneyFamily: root.moneyFont ? root.moneyFont.family : root.typeSet.monoFamily
         moneyWeight: root.moneyFont ? root.moneyFont.weight : root.typeSet.monoWeight
+        scale: root.textScale
     }
     readonly property MotionSet motion: MotionSet { reduceRequested: root.reduceMotion }
     readonly property SpaceSet space: SpaceSet {}
@@ -78,12 +82,23 @@ Control {
     }
 
     onReduceMotionChanged: if (settingsLoaded) GlobalSettings.setValue("reduceMotion", reduceMotion)
+    onTextScaleChanged: if (settingsLoaded) GlobalSettings.setValue("textScale", textScale)
+
+    // The closest of textScales, so a stored value from another build still lands on a step.
+    function nearestTextScale(value) {
+        let nearest = 1
+        for (const scale of textScales) {
+            if (Math.abs(scale - value) < Math.abs(nearest - value)) nearest = scale
+        }
+        return nearest
+    }
 
     // The palette is shared by every chain; `dark` stays per chain, where older builds read it.
     Component.onCompleted: {
         paletteId = migratedPaletteId(String(GlobalSettings.value("palette", "")), settings.dark)
         activePalette = paletteFor(paletteId, settings.dark)
         reduceMotion = String(GlobalSettings.value("reduceMotion", false)) === "true"
+        textScale = nearestTextScale(Number(GlobalSettings.value("textScale", 1)) || 1)
         settingsLoaded = true
         GlobalSettings.setValue("palette", paletteId)
         settings.dark = Qt.binding(function() { return root.dark })
@@ -264,6 +279,8 @@ Control {
         required property TypeSet typeSet
         required property string moneyFamily
         required property int moneyWeight
+        // The Display text size; every role's size and line height follow it.
+        property real scale: 1
         readonly property string family: typeSet.family
         readonly property string monoFamily: typeSet.monoFamily
         readonly property int regularWeight: typeSet.regularWeight
@@ -274,156 +291,156 @@ Control {
         readonly property TextStyle display: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 36
-            lineHeight: 44
+            pixelSize: Math.round(36 * textSetRoot.scale)
+            lineHeight: Math.round(44 * textSetRoot.scale)
         }
         readonly property TextStyle headline: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 28
-            lineHeight: 34
+            pixelSize: Math.round(28 * textSetRoot.scale)
+            lineHeight: Math.round(34 * textSetRoot.scale)
         }
         readonly property TextStyle title: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 24
-            lineHeight: 28
+            pixelSize: Math.round(24 * textSetRoot.scale)
+            lineHeight: Math.round(28 * textSetRoot.scale)
         }
         readonly property TextStyle subtitle: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 21
-            lineHeight: 25
+            pixelSize: Math.round(21 * textSetRoot.scale)
+            lineHeight: Math.round(25 * textSetRoot.scale)
         }
         readonly property TextStyle heading: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 18
-            lineHeight: 21
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(21 * textSetRoot.scale)
         }
         readonly property TextStyle subheading: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 15
-            lineHeight: 18
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(18 * textSetRoot.scale)
         }
 
         // Body — Regular
         readonly property TextStyle lead: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 24
-            lineHeight: 36
+            pixelSize: Math.round(24 * textSetRoot.scale)
+            lineHeight: Math.round(36 * textSetRoot.scale)
         }
         readonly property TextStyle bodyLarge: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 21
-            lineHeight: 31
+            pixelSize: Math.round(21 * textSetRoot.scale)
+            lineHeight: Math.round(31 * textSetRoot.scale)
         }
         readonly property TextStyle body: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 18
-            lineHeight: 27
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(27 * textSetRoot.scale)
         }
         readonly property TextStyle description: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 15
-            lineHeight: 22
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
         readonly property TextStyle caption: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 13
-            lineHeight: 19
+            pixelSize: Math.round(13 * textSetRoot.scale)
+            lineHeight: Math.round(19 * textSetRoot.scale)
         }
         readonly property TextStyle captionStrong: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 13
-            lineHeight: 19
+            pixelSize: Math.round(13 * textSetRoot.scale)
+            lineHeight: Math.round(19 * textSetRoot.scale)
         }
 
         // Controls
         readonly property TextStyle button: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 18
-            lineHeight: 22
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
         readonly property TextStyle buttonStrong: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 18
-            lineHeight: 22
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
 
         // Menu
         readonly property TextStyle menuItem: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.regularWeight
-            pixelSize: 15
-            lineHeight: 22
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
         readonly property TextStyle menuItemStrong: TextStyle {
             family: textSetRoot.family
             weight: textSetRoot.strongWeight
-            pixelSize: 15
-            lineHeight: 22
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
 
         // Mono: technical values (addresses, txids, paths, sizes)
         readonly property TextStyle monoLead: TextStyle {
             family: textSetRoot.monoFamily
             weight: textSetRoot.monoWeight
-            pixelSize: 24
-            lineHeight: 36
+            pixelSize: Math.round(24 * textSetRoot.scale)
+            lineHeight: Math.round(36 * textSetRoot.scale)
         }
         readonly property TextStyle monoBody: TextStyle {
             family: textSetRoot.monoFamily
             weight: textSetRoot.monoWeight
-            pixelSize: 18
-            lineHeight: 27
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(27 * textSetRoot.scale)
         }
         readonly property TextStyle monoDescription: TextStyle {
             family: textSetRoot.monoFamily
             weight: textSetRoot.monoWeight
-            pixelSize: 15
-            lineHeight: 22
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
         readonly property TextStyle monoCaption: TextStyle {
             family: textSetRoot.monoFamily
             weight: textSetRoot.monoWeight
-            pixelSize: 13
-            lineHeight: 19
+            pixelSize: Math.round(13 * textSetRoot.scale)
+            lineHeight: Math.round(19 * textSetRoot.scale)
         }
 
         // Amounts: the Display setting's money font
         readonly property TextStyle amountLead: TextStyle {
             family: textSetRoot.moneyFamily
             weight: textSetRoot.moneyWeight
-            pixelSize: 24
-            lineHeight: 36
+            pixelSize: Math.round(24 * textSetRoot.scale)
+            lineHeight: Math.round(36 * textSetRoot.scale)
         }
         readonly property TextStyle amountBody: TextStyle {
             family: textSetRoot.moneyFamily
             weight: textSetRoot.moneyWeight
-            pixelSize: 18
-            lineHeight: 27
+            pixelSize: Math.round(18 * textSetRoot.scale)
+            lineHeight: Math.round(27 * textSetRoot.scale)
         }
         readonly property TextStyle amountDescription: TextStyle {
             family: textSetRoot.moneyFamily
             weight: textSetRoot.moneyWeight
-            pixelSize: 15
-            lineHeight: 22
+            pixelSize: Math.round(15 * textSetRoot.scale)
+            lineHeight: Math.round(22 * textSetRoot.scale)
         }
         readonly property TextStyle amountCaption: TextStyle {
             family: textSetRoot.moneyFamily
             weight: textSetRoot.moneyWeight
-            pixelSize: 13
-            lineHeight: 19
+            pixelSize: Math.round(13 * textSetRoot.scale)
+            lineHeight: Math.round(19 * textSetRoot.scale)
         }
     }
 }

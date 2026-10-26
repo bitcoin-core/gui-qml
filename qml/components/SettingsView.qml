@@ -201,6 +201,7 @@ Page {
             : optionsModel.settingsError || (optionsModel.settingsReady === false ? qsTr("Loading settings…")
             : optionsModel.settingsPending ? qsTr("Saving settings…") : "")
         color: optionsModel.settingsError ? Theme.color.dangerText : Theme.color.neutral7
+        textStyle: Theme.text.caption
     }
 
     contentItem: NavigationSplitView {
