@@ -13,6 +13,7 @@ import "../../controls"
 SettingsPage {
     id: root
     objectName: "displaySettingsPage"
+    readonly property bool systemReducesMotion: MotionPreference.mode === "reduced"
     title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
 
@@ -83,6 +84,7 @@ SettingsPage {
             objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
+            showDivider: false
             trailingItem: PopupPicker {
                 objectName: "displayMoneyFontPicker"
                 surfaceLevel: 1
@@ -106,13 +108,67 @@ SettingsPage {
                 }
             }
         }
+    }
+
+    FormSection {
+        objectName: "displayAccessibilitySection"
+        Layout.fillWidth: true
+        title: qsTr("Accessibility")
+
+        FormRow {
+            objectName: "displayTextSizeRow"
+            Layout.fillWidth: true
+            title: qsTr("Text size")
+            bodyItem: RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space.l
+
+                CoreText {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: textSizeSlider.trackCenterY - height / 2
+                    text: "A"
+                    textStyle: Theme.text.captionStrong
+                    color: Theme.color.neutral7
+                    Accessible.ignored: true
+                }
+
+                Slider {
+                    id: textSizeSlider
+                    objectName: "displayTextSizeSlider"
+                    Layout.fillWidth: true
+                    discrete: true
+                    showsTickMarks: true
+                    from: 0
+                    to: Theme.textScales.length - 1
+                    // Not a plain binding: dragging writes value, which would break it.
+                    Binding on value { value: Math.max(0, Theme.textScales.indexOf(Theme.textScale)) }
+                    //: The standard 100% text size, without accessibility scaling.
+                    tickLabels: [{ value: Theme.textScales.indexOf(1), text: qsTr("Default") }]
+                    Accessible.name: qsTr("Text size")
+                    Accessible.description: qsTr("%1%").arg(Math.round(Theme.textScale * 100))
+                    onMoved: Theme.textScale = Theme.textScales[Math.round(value)]
+                }
+
+                CoreText {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: textSizeSlider.trackCenterY - height / 2
+                    objectName: "displayTextSizePercentage"
+                    text: qsTr("%1%").arg(Math.round(Theme.textScale * 100))
+                    textStyle: Theme.text.captionStrong
+                    color: Theme.color.neutral7
+                    Accessible.ignored: true
+                }
+            }
+        }
 
         SwitchRow {
             objectName: "displayReduceMotionRow"
             Layout.fillWidth: true
             title: qsTr("Reduce motion")
             showDivider: false
-            checked: Theme.reduceMotion
+            description: root.systemReducesMotion ? qsTr("Following your system setting.") : ""
+            checked: root.systemReducesMotion || Theme.reduceMotion
+            enabled: !root.systemReducesMotion
             onToggled: Theme.reduceMotion = checked
         }
     }

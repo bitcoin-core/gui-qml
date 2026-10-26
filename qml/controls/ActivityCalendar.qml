@@ -15,6 +15,13 @@ import org.bitcoincore.qt 1.0
 // applying or clearing the filter is left to the caller.
 ColumnLayout {
     id: root
+    readonly property real calendarCellWidth: {
+        let width = 36
+        for (let day = 1; day <= 7; ++day)
+            width = Math.max(width, weekdayMetrics.advanceWidth(Qt.locale().dayName(day, Locale.ShortFormat)) + Theme.space.m)
+        return Math.ceil(width)
+    }
+    property FontMetrics weekdayMetrics: FontMetrics { font: Theme.text.caption.font }
     spacing: Theme.space.m
 
     // Public interface ------------------------------------------------------
@@ -339,8 +346,8 @@ ColumnLayout {
             delegate: CoreText {
                 required property int index
                 readonly property int jsDay: (root.weekStart + index) % 7
-                width: 36
-                height: 22
+                width: root.calendarCellWidth
+                height: Math.max(22, implicitHeight)
                 text: Qt.locale().dayName(jsDay === 0 ? 7 : jsDay, Locale.ShortFormat)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -409,8 +416,8 @@ ColumnLayout {
             delegate: ItemDelegate {
                 id: dayCell
                 required property var modelData
-                width: 36
-                height: 32
+                width: root.calendarCellWidth
+                height: Math.max(32, implicitContentHeight + Theme.space.s)
                 padding: 0
                 enabled: modelData !== null
                 objectName: modelData ? "calendarDay_" + root.isoDate(modelData) : ""
