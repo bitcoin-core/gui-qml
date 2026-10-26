@@ -5,8 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-import "../controls"
-
 // The app's Tooltip in a ToolTip popup, so hover hints inside clipped rows
 // still draw above them, in the theme's font and colors.
 ToolTip {

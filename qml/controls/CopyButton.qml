@@ -18,9 +18,9 @@ AbstractButton {
     property int displayMode: CopyButton.IconAndText
     property string copyText: qsTr("Copy")
     property string copiedText: qsTr("Copied")
-    property url copyIconSource: "qrc:/icons/copy"
+    property url copyIconSource: "qrc:/icons/copy.svg"
     property url copiedIconSource: "qrc:/icons/check"
-    property int iconSize: Theme.size.icon.m
+    property int iconSize: Theme.size.icon.xs
     property int resetInterval: 1000
     readonly property bool copied: copiedResetTimer.running
 
@@ -73,10 +73,11 @@ AbstractButton {
             id: copyContent
             objectName: root.objectName.length > 0 ? root.objectName + "Content" : ""
             anchors.centerIn: parent
-            spacing: 0
+            spacing: Theme.space.xs
 
             Item {
                 id: iconContainer
+                anchors.verticalCenter: parent.verticalCenter
                 objectName: root.objectName.length > 0 ? root.objectName + "IconContainer" : ""
                 visible: root._showsIcon
                 width: visible ? root.iconSize + 2 : 0
@@ -113,6 +114,7 @@ AbstractButton {
 
             Item {
                 id: textContainer
+                anchors.verticalCenter: parent.verticalCenter
                 objectName: root.objectName.length > 0 ? root.objectName + "TextContainer" : ""
                 visible: root._showsText
                 width: visible ? Math.max(copyLabel.implicitWidth, copiedLabel.implicitWidth) : 0
@@ -121,7 +123,8 @@ AbstractButton {
                 CoreText {
                     id: copyLabel
                     objectName: root.objectName.length > 0 ? root.objectName + "CopyText" : ""
-                    anchors.centerIn: parent
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
                     text: root.copyText
                     color: root._textColor
                     textStyle: Theme.text.caption
@@ -135,7 +138,8 @@ AbstractButton {
                 CoreText {
                     id: copiedLabel
                     objectName: root.objectName.length > 0 ? root.objectName + "CopiedText" : ""
-                    anchors.centerIn: parent
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
                     text: root.copiedText
                     color: root._textColor
                     textStyle: Theme.text.caption

@@ -68,7 +68,7 @@ DesignSystemSection {
         }
         DesignSystemState {
             label: "Medium, iconSource"
-            NeutralButton { text: "Copy"; iconSource: "image://images/copy" }
+            NeutralButton { text: "Copy"; iconSource: "qrc:/icons/copy.svg" }
         }
         DesignSystemState {
             label: "Medium, enabled: false"

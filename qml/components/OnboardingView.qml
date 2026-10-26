@@ -7,6 +7,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 
+import "../controls"
+
 Page {
     id: root
 
@@ -93,6 +95,10 @@ Page {
     background: null
 
     Component.onCompleted: {
+        // Page may create its footer before its content item. Append it after
+        // the content so the native Tab chain reaches fields before actions.
+        footerBar.parent = null
+        footerBar.parent = root
         if (animateContent) contentEntrance.start()
     }
 
