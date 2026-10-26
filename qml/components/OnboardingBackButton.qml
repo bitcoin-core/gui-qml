@@ -4,12 +4,15 @@
 
 import QtQuick 2.15
 
+import "../controls"
+
 NeutralButton {
     id: root
 
     buttonSize: NeutralButton.Medium
     leftPadding: Theme.space.xxs
     text: qsTr("Back")
+    textStyle: Theme.text.caption
 
     contentItem: Item {
         implicitWidth: backChevron.width - 3 + backLabel.implicitWidth
@@ -17,7 +20,7 @@ NeutralButton {
 
         Icon {
             id: backChevron
-            source: "image://images/caret-left"
+            source: "qrc:/icons/caret-left.svg"
             size: 18
             color: root.textColor
             anchors.verticalCenter: parent.verticalCenter
@@ -27,7 +30,7 @@ NeutralButton {
             x: backChevron.width - 3
             anchors.verticalCenter: parent.verticalCenter
             text: root.text
-            textStyle: Theme.text.captionStrong
+            textStyle: root.textStyle
             color: root.textColor
             wrap: false
         }

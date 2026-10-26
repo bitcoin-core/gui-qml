@@ -4,7 +4,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import "../components"
 import "../controls"
 
 // Shown for errors before any other window exists, so it hosts the alert in

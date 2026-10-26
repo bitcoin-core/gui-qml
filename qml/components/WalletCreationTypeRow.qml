@@ -7,6 +7,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
+import "../controls"
+
 // A choice tile: one card per choice, like OptionButton.
 AbstractButton {
     id: root

@@ -3,7 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
-import "../components"
+
+import "../controls"
 
 Item {
     id: root

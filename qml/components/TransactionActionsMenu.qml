@@ -27,14 +27,14 @@ ContextMenu {
     ContextMenuButton {
         objectName: root.itemObjectNamePrefix + "CopyTransactionId"
         text: qsTr("Copy transaction ID")
-        iconSource: "image://images/copy"
+        iconSource: "qrc:/icons/copy.svg"
         onTriggered: root.clipboard.setText(root.txid)
     }
     ContextMenuButton {
         objectName: root.itemObjectNamePrefix + "CopyRawTransaction"
         visible: typeof root.rawTransaction === "function"
         text: qsTr("Copy raw transaction hex")
-        iconSource: "image://images/copy"
+        iconSource: "qrc:/icons/copy.svg"
         onTriggered: {
             const hex = root.rawTransaction(root.txid)
             if (hex.length === 0) return

@@ -156,6 +156,59 @@ TestCase {
         compare(finished, true)
     }
 
+    function test_wallet_form_tab_order_data() {
+        return [
+            { tag: "encrypted", encrypted: true },
+            { tag: "unencrypted", encrypted: false }
+        ]
+    }
+
+    function test_wallet_form_tab_order(data) {
+        const modal = createTemporaryObject(modalComponent, this)
+        modal.open()
+        tryCompare(modal, "opened", true)
+        findChild(modal, "walletTypeRegular").clicked()
+        tryCompare(modal.flow.currentItem, "objectName", "createWalletFormPage")
+        tryCompare(modal.flow, "busy", false)
+        const form = modal.flow.currentItem
+        const name = findChild(form, "createWalletNameInput")
+        name.text = "Keyboard wallet"
+        findChild(form, "createWalletEncryptCheckBox").checked = data.encrypted
+        if (data.encrypted) {
+            findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
+            findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
+            findChild(form, "createWalletPasswordConfirmToggle").checked = true
+        } else {
+            findChild(form, "createWalletUnencryptedConfirmToggle").checked = true
+        }
+        verify(form.primaryButton.enabled)
+        const back = findChild(modal.flow.navigationBar, "onboardingBackButton")
+        const order = []
+        let item = back
+        do {
+            order.push(item)
+            item = item.nextItemInFocusChain(true)
+        } while (item !== back && order.length < 100)
+        const expected = [back, findChild(modal.flow.navigationBar, "onboardingCloseButton"),
+                          name, findChild(form, "createWalletEncryptCheckBox")]
+        if (data.encrypted) {
+            expected.push(findChild(form, "createWalletPasswordInput"),
+                          findChild(form, "createWalletPasswordRepeatInput"),
+                          findChild(form, "createWalletPasswordConfirmToggle"))
+        } else {
+            expected.push(findChild(form, "createWalletUnencryptedConfirmToggle"))
+        }
+        expected.push(form.primaryButton)
+        let previous = -1
+        for (const control of expected) {
+            const position = order.indexOf(control)
+            verify(position > previous, control.objectName + " must follow the previous control")
+            previous = position
+        }
+        modal.close()
+        tryCompare(modal, "visible", false)
+    }
+
     function test_regular_requires_acknowledgement_and_warns_for_unencrypted_creation() {
         const flow = createFlow()
         findChild(flow, "walletTypeRegular").clicked()
@@ -277,7 +330,7 @@ TestCase {
         findChild(form, "createWalletNameInput").text = "Created wallet"
         findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
         findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
-        findChild(form, "createWalletPasswordConfirmToggle").clicked()
+        findChild(form, "createWalletPasswordConfirmToggle").toggle()
         findChild(form, "createWalletFormCreateButton").clicked()
         tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
         return findChild(flow, "walletCreationReadyPage")

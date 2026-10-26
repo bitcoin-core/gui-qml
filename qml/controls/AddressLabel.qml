@@ -7,8 +7,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
-import "../controls"
-
 AbstractButton {
     id: root
 
@@ -169,7 +167,7 @@ AbstractButton {
 
             Icon {
                 Layout.alignment: Qt.AlignVCenter
-                source: "qrc:/icons/copy"
+                source: "qrc:/icons/copy.svg"
                 color: Theme.color.neutral9
                 size: Theme.size.icon.l
             }

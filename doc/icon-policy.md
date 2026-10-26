@@ -1,22 +1,24 @@
 # Icon policy
 This document provides guidelines for contributing icons to Bitcoin Core.
 
-## Preparing Icons
-Both an icon source file, in Scalable Vector Graphics (SVG) format,
-and an optimized production file, in Portable Network Graphics (PNG) format,
-are required for each icon.
+## Preparing icons
 
-#### SVG Source File
-SVGs are used as source files because they can scale while retaining image quality.
-They are not used in production due to limited application support.
-If different-sized production (PNG) icons are required,
-they can be generated from the associated SVG source file in any vector-based tool.
+Prefer Scalable Vector Graphics (SVG) for new icons. Use the SVG directly as
+the production asset so it stays sharp at every display scale. A PNG copy
+is not required.
 
-#### PNG Production File
-PNGs are used in production due to wide application support, transparency support,
-and better image quality compared to competing file types such as JPEG.
+Store SVGs in `qml/res/src/`, register them with a `.svg` alias in
+`qml/bitcoin_qml.qrc`, and load them through `qrc:/icons/<name>.svg`.
 
-#### Optimizing Production Files (PNG)
+## Legacy PNG icons
+
+Existing icons loaded through the image provider may still use Portable
+Network Graphics (PNG) production assets. Keep their SVG sources in
+`qml/res/src/` and their PNGs in `qml/res/icons/` until they are migrated to
+SVG. When a PNG needs updating, generate it from its SVG source in a
+vector-based tool.
+
+### Optimizing PNG files
 Production (PNG) files must be processed by the [optimize-pngs.py](https://github.com/bitcoin-core/bitcoin-maintainer-tools/blob/master/optimize-pngs.py) script before their inclusion in Bitcoin Core.
 PNG optimization removes various unnecessary color profiles, ancillary data,
 and text chunks, resulting in a lossless file size reduction.
@@ -30,9 +32,6 @@ with the request.
 
 Icons are not to be added to Bitcoin Core prior to a production use case.
 If an icon is not being used, it should be removed.
-
-SVGs are to be included under the `src/qml/res/src` directory.
-Optimized PNGs are to be included under the `src/qml/res/icons` directory.
 
 ## Attribution
 Icon additions must include appropriate attribution to the author, license information, and any comments relevant to the icon documented under the
