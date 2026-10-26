@@ -180,7 +180,6 @@ Page {
         id: navBar
         leftItem: WalletBadge {
             objectName: "walletBadge"
-            implicitHeight: 48
             checked: walletSelect.visible
             walletType: walletController.selectedWallet.keyScheme
             text: walletController.selectedWallet.displayName

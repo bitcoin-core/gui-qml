@@ -18,7 +18,8 @@ Control {
     property bool alternate: false
 
     property int typeColumnWidth: 48
-    property int timeColumnWidth: 80
+    property int timeColumnWidth: Math.max(80, Math.ceil(timeMetrics.advanceWidth("00:00:00")) + Theme.space.m)
+    property FontMetrics timeMetrics: FontMetrics { font: Theme.text.monoCaption.font }
 
     readonly property color indicatorColor: isError
         ? Theme.color.danger

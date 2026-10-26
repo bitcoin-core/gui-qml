@@ -21,7 +21,7 @@ Button {
     property string walletType: ""
 
     implicitWidth: 240
-    implicitHeight: 48
+    implicitHeight: Math.max(48, implicitContentHeight + topPadding + bottomPadding)
     leftPadding: 10
     rightPadding: 10
     topPadding: 5

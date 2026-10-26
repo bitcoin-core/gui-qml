@@ -121,6 +121,25 @@ DesignSystemPage {
         }
 
         FormRow {
+            objectName: "designSystemTextSizeRow"
+            Layout.fillWidth: true
+            stacksTrailingItem: root.stacksControls
+            title: "Text size"
+            description: "The Display text size setting, to check every role and control at each size."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                objectName: "designSystemTextSizePicker"
+                Layout.fillWidth: true
+                implicitWidth: 360
+                model: Theme.textScales.map(function(scale) { return Math.round(scale * 100) + "%" })
+                currentIndex: Math.max(0, Theme.textScales.indexOf(Theme.textScale))
+                onSelected: function(index, option) {
+                    Theme.textScale = Theme.textScales[index]
+                }
+            }
+        }
+
+        FormRow {
             objectName: "designSystemDeviceRow"
             Layout.fillWidth: true
             stacksTrailingItem: root.stacksControls

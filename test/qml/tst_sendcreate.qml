@@ -970,6 +970,29 @@ TestCase {
         compare(status.visible, false)
     }
 
+    function test_coin_selection_body_fits_small_window_with_large_text() {
+        const window = testCase.Window.window
+        const originalHeight = window.height
+        const originalScale = Theme.textScale
+        window.height = 720
+        Theme.textScale = 1.3
+        try {
+            const page = createTemporaryObject(sendComponent, window.contentItem, {width: 1000, height: 720})
+            const popup = findChild(page, "coinSelectionPopup")
+            popup.open()
+            tryCompare(popup, "opened", true)
+            verify(waitForRendering(popup.contentItem))
+            const body = findChild(popup.contentItem, "coinSelectionBodyScroll")
+            const footer = findChild(popup.contentItem, "coinSelectionDoneButton")
+            verify(body.y + body.height <= footer.mapToItem(popup.contentItem, 0, 0).y)
+            verify(findChild(body, "sendCoinsList").height >= body.availableHeight)
+            popup.close()
+        } finally {
+            window.height = originalHeight
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_coin_selection_cancel_and_apply() {
         testSendRecipient.amount.satoshi = 0
         testWalletModel.feeEstimatePending = true

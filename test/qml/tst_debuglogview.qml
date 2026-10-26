@@ -223,7 +223,8 @@ TestCase {
         compare(row.typeColumnWidth, titles.typeColumnWidth)
         compare(row.timeColumnWidth, titles.timeColumnWidth)
         compare(titles.typeColumnWidth, 48)
-        compare(titles.timeColumnWidth, 80)
+        verify(titles.timeColumnWidth >= 80)
+        verify(findChild(row, "debugLogItemRow_0Time").implicitWidth <= titles.timeColumnWidth)
         tryVerify(function() {
             return findChild(row, "debugLogItemRow_0Message").width > 0
         })

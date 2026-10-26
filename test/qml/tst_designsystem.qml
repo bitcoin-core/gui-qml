@@ -362,6 +362,43 @@ TestCase {
         compare(SizeClass.windowMinimumWidth, 800)
     }
 
+    function test_textSizeScalesEveryTextRole() {
+        const originalScale = Theme.textScale
+        try {
+            Theme.textScale = 1
+            const page = createAllPages()
+            const picker = findChild(page, "designSystemTextSizePicker")
+            verify(picker !== null)
+            compare(Theme.textScales.length, 7)
+            compare(Theme.textScales[3], 1)
+            compare(picker.currentText, "100%")
+
+            const base = {}
+            for (const name of roleNames(Theme.text)) {
+                if (Theme.text[name].pixelSize === undefined) continue
+                base[name] = { pixelSize: Theme.text[name].pixelSize, lineHeight: Theme.text[name].lineHeight }
+            }
+            verify(Object.keys(base).length > 0)
+
+            for (let index = 0; index < Theme.textScales.length; ++index) {
+                const scale = Theme.textScales[index]
+                picker.selected(index, picker.model[index])
+                compare(Theme.textScale, scale)
+                for (const name in base) {
+                    compare(Theme.text[name].pixelSize, Math.round(base[name].pixelSize * scale), name + " at " + scale)
+                    compare(Theme.text[name].lineHeight, Math.round(base[name].lineHeight * scale), name + " at " + scale)
+                    compare(Theme.text[name].font.pixelSize, Theme.text[name].pixelSize, name + " font at " + scale)
+                }
+            }
+
+            compare(Theme.nearestTextScale(1.04), 1)
+            compare(Theme.nearestTextScale(3), 1.3)
+            compare(Theme.nearestTextScale(0.5), 0.85)
+        } finally {
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_palettePickerFollowsEveryPalette() {
         const originalPaletteId = Theme.paletteId
         try {

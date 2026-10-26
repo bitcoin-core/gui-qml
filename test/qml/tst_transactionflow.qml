@@ -43,6 +43,25 @@ TestCase {
         return data
     }
 
+    function test_amount_and_title_do_not_overlap() {
+        const originalScale = Theme.textScale
+        try {
+            for (const scale of [0.85, 1, 1.3]) {
+                Theme.textScale = scale
+                const flow = createTemporaryObject(flowComponent, this, {flow: snapshot()})
+                verify(waitForRendering(flow))
+                const node = findChild(flow, "transactionFlowOutput_0")
+                const amount = findChild(node, "transactionFlowAmountWide")
+                const title = findChild(node, "transactionFlowTitle")
+                verify(amount.visible)
+                verify(amount.x >= title.x + title.width)
+                verify(amount.x + amount.width <= amount.parent.width + 1)
+            }
+        } finally {
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_amount_labels_survive_unit_changes() {
         const flow = createTemporaryObject(flowComponent, this, {flow: snapshot(), displayUnit: BitcoinAmount.SAT})
         verify(waitForRendering(flow))

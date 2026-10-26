@@ -129,8 +129,8 @@ SettingsPage {
 
                 ContinueButton {
                     objectName: "externalSignerCheckDeviceButton"
-                    Layout.preferredWidth: 140
-                    Layout.preferredHeight: 40
+                    Layout.preferredWidth: Math.max(140, implicitWidth)
+                    Layout.preferredHeight: Math.max(40, implicitHeight)
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("Check device")
                     textStyle: Theme.text.subheading
