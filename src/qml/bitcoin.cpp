@@ -212,7 +212,12 @@ int QmlGuiMain(int argc, char* argv[])
     Q_INIT_RESOURCE(bitcoin_compat);
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    BitcoinQmlApplication app{argc, argv};
+    // Leave the process command line for Core to validate. Qt must not consume
+    // options injected through a desktop URI handler before Core rejects them.
+    int qt_argc{1};
+    char qt_name[]{"bitcoin-qt"};
+    char* qt_argv[]{qt_name, nullptr};
+    BitcoinQmlApplication app{qt_argc, qt_argv};
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
     app.setOrganizationName(QAPP_ORG_NAME);
     app.setOrganizationDomain(QAPP_ORG_DOMAIN);

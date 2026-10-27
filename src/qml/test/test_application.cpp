@@ -7,6 +7,7 @@
 #include <interfaces/node.h>
 #include <qml/bitcoinqmlapplication.h>
 #include <qml/models/nodemodel.h>
+#include <qml/models/rpcconsolemodel.h>
 #include <qml/test/integration_test_registry.h>
 #include <test/util/setup_common.h>
 #include <univalue.h>
@@ -66,6 +67,45 @@ private:
     BitcoinQmlApplication& m_app;
 };
 
+// The final fixture owns teardown. Keep shutdown-specific regressions separate
+// from the independent feature cases sharing the running Core context.
+class ApplicationShutdownTests : public QObject
+{
+    Q_OBJECT
+public:
+    explicit ApplicationShutdownTests(BitcoinQmlApplication& app) : m_app(app) {}
+
+private Q_SLOTS:
+    void interruptAnExecutingConsoleRpc()
+    {
+        auto* console = qobject_cast<RpcConsoleModel*>(m_app.engine().rootContext()
+            ->contextProperty(QStringLiteral("rpcConsoleModel")).value<QObject*>());
+        QVERIFY(console);
+        QVERIFY(console->submitCommand(QStringLiteral("waitfornewblock 0")));
+        const auto command_is_running = [this] {
+            const auto info = m_app.node().executeRpc("getrpcinfo", UniValue{UniValue::VARR}, "");
+            for (const auto& command : info.find_value("active_commands").getValues()) {
+                if (command.find_value("method").get_str() == "waitfornewblock") return true;
+            }
+            return false;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(command_is_running(), 5'000);
+        m_app.requestShutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(m_app.nodeModel().state(), NodeModel::STOPPED, NODE_LIFECYCLE_TIMEOUT_MS);
+        QVERIFY(!console->executing());
+        QVERIFY(!console->submitCommand(QStringLiteral("getblockchaininfo")));
+    }
+
+    void cleanupTestCase()
+    {
+        m_app.requestShutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(m_app.nodeModel().state(), NodeModel::STOPPED, NODE_LIFECYCLE_TIMEOUT_MS);
+    }
+
+private:
+    BitcoinQmlApplication& m_app;
+};
+
 int RunApplicationTests(int argc, char* argv[])
 {
     Q_INIT_RESOURCE(bitcoin_qml);
@@ -111,10 +151,8 @@ int RunApplicationTests(int argc, char* argv[])
     int status = QTest::qExec(&tests, argc, argv);
     for (const auto& entry : qmlintegration::SortedEntries()) status |= entry.run(app, argc, argv);
 
-    QSignalSpy shutdown_complete{&app.nodeModel(), &NodeModel::shutdownComplete};
-    app.requestShutdown();
-    if (shutdown_complete.isEmpty() && !shutdown_complete.wait(NODE_LIFECYCLE_TIMEOUT_MS)) return EXIT_FAILURE;
-    if (app.nodeModel().state() != NodeModel::STOPPED) return EXIT_FAILURE;
+    ApplicationShutdownTests shutdown_tests{app};
+    status |= QTest::qExec(&shutdown_tests, argc, argv);
     return status;
 }
 

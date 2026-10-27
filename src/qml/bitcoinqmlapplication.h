@@ -11,18 +11,24 @@
 #include <QRect>
 #include <QStringList>
 
+class BanListModel;
 class AppMode;
 class BuildInfo;
 class ChainModel;
 class Clipboard;
 class DesktopTrayIconController;
 class DesktopWindowBehaviorModel;
+class DebugLogModel;
 class NetworkStatusModel;
 class NetworkStyle;
+class NetworkTrafficTower;
 class NodeLifecycleModel;
 class OptionsQmlModel;
+class PeerListModel;
+class PeerListSortProxy;
 class QmlInitExecutor;
 class QQmlApplicationEngine;
+class RpcConsoleModel;
 class QString;
 class TestBridge;
 class ApplicationRouter;
@@ -32,6 +38,8 @@ class LanguageSettingsModel;
 class ChainSyncModel;
 class NodeNetworkModel;
 class RuntimeDialogModel;
+class MempoolModel;
+class NodeInformationModel;
 namespace interfaces {
 class Chain;
 class Init;
@@ -71,11 +79,17 @@ private:
     std::unique_ptr<Clipboard> m_clipboard;
     std::unique_ptr<NodeLifecycleModel> m_node_model;
     std::unique_ptr<QmlInitExecutor> m_init_executor;
+    std::unique_ptr<NetworkTrafficTower> m_network_traffic_tower;
     std::unique_ptr<NetworkStatusModel> m_network_status_model;
     std::unique_ptr<ChainModel> m_chain_model;
     std::unique_ptr<DesktopWindowBehaviorModel> m_desktop_window_behavior_model;
     std::unique_ptr<DesktopTrayIconController> m_desktop_tray_icon_controller;
     std::unique_ptr<OptionsQmlModel> m_options_model;
+    std::unique_ptr<PeerListModel> m_peer_model;
+    std::unique_ptr<PeerListSortProxy> m_peer_model_sort_proxy;
+    std::unique_ptr<BanListModel> m_ban_list_model;
+    std::unique_ptr<DebugLogModel> m_debug_log_model;
+    std::unique_ptr<RpcConsoleModel> m_rpc_console_model;
     std::unique_ptr<const NetworkStyle> m_network_style;
     std::unique_ptr<QQmlApplicationEngine> m_engine;
     std::unique_ptr<TestBridge> m_test_bridge;
@@ -86,6 +100,8 @@ private:
     std::unique_ptr<ChainSyncModel> m_chain_sync_model;
     std::unique_ptr<NodeNetworkModel> m_node_network_model;
     std::unique_ptr<RuntimeDialogModel> m_runtime_dialog_model;
+    std::unique_ptr<MempoolModel> m_mempool_model;
+    std::unique_ptr<NodeInformationModel> m_node_information_model;
     QStringList m_startup_warnings;
     QRect m_initial_window_geometry;
     bool m_base_initialized{false};
