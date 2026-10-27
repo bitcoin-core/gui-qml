@@ -271,6 +271,69 @@ TestCase {
         compare(finished, true)
     }
 
+    function createEncryptedWallet(flow) {
+        findChild(flow, "walletTypeRegular").clicked()
+        tryVerify(function() { return findChild(flow, "createWalletFormPage") !== null })
+        const form = findChild(flow, "createWalletFormPage")
+        findChild(form, "createWalletNameInput").text = "Created wallet"
+        findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
+        findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
+        findChild(form, "createWalletPasswordConfirmToggle").clicked()
+        findChild(form, "createWalletFormCreateButton").clicked()
+        tryVerify(function() { return findChild(flow, "walletCreationReadyPage") !== null })
+        return findChild(flow, "walletCreationReadyPage")
+    }
+
+    // The completion page acts on the wallet it announces, not on whichever
+    // wallet another action selected meanwhile.
+    function test_completion_acts_on_the_created_wallet() {
+        walletController.setOpenWallets([testWalletModel, testSecondWalletModel])
+        walletController.setSelectedWalletObject(testWalletModel)
+        walletController.openedWallet = testSecondWalletModel
+        try {
+            const flow = createFlow()
+            const ready = createEncryptedWallet(flow)
+            compare(flow.completedWallet, testSecondWalletModel)
+            compare(ready.wallet, testSecondWalletModel)
+
+            findChild(ready, "createWalletBackupViewFileButton").clicked()
+            compare(walletController.lastLocationWallet, testSecondWalletModel)
+
+            let finishedWallet = null
+            flow.finished.connect(function(openActivity, wallet) { if (openActivity) finishedWallet = wallet })
+            findChild(ready, "createWalletReadyDoneButton").clicked()
+            compare(finishedWallet, testSecondWalletModel)
+        } finally {
+            walletController.setOpenWallets([testWalletModel])
+        }
+    }
+
+    function test_completion_closes_when_its_wallet_closes() {
+        walletController.setOpenWallets([testWalletModel, testSecondWalletModel])
+        walletController.openedWallet = testSecondWalletModel
+        try {
+            let flow = createFlow()
+            createEncryptedWallet(flow)
+            let closed = false
+            flow.finished.connect(function(openActivity, wallet) { closed = !openActivity && wallet === null })
+            walletController.setOpenWallets([testWalletModel])
+            verify(closed)
+
+            walletController.setOpenWallets([testWalletModel, testSecondWalletModel])
+            flow = createFlow()
+            flow.importingWallet = true
+            walletController.importWallet("/tmp/imported.bak")
+            tryVerify(function() { return findChild(flow, "importWalletSuccessPage") !== null })
+            closed = false
+            flow.finished.connect(function(openActivity, wallet) { closed = !openActivity && wallet === null })
+            testSecondWalletModel.available = false
+            verify(closed)
+        } finally {
+            testSecondWalletModel.available = true
+            walletController.setOpenWallets([testWalletModel])
+        }
+    }
+
     function test_import_choice_uses_selected_file() {
         const flow = createFlow()
         findChild(flow, "importWalletPathField").text = "/tmp/test-wallet.bak"

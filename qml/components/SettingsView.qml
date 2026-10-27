@@ -18,10 +18,20 @@ Page {
 
     signal doneClicked()
     signal selectWalletRequested()
-    signal receiveRequested()
-    signal paymentRequestRequested(string requestId)
+    // The hosted wallet settings stack belongs to the shell, so it resets
+    // that stack when the wallet section is re-selected.
+    signal walletSettingsResetRequested()
 
     property bool showDoneButton: true
+    // The active wallet's settings stack is shown in walletSettingsHost when
+    // the shell provides one; otherwise the wallet section shows the
+    // settings of `wallet`, or its empty state.
+    property bool walletSettingsProvided: false
+    readonly property Item walletSettingsHost: internal.walletSettingsHost
+    property string activeWalletName: ""
+    // Without the desktop wallet shell (the node pages used on Android),
+    // the wallet section shows its own settings stack for this wallet.
+    property var wallet: null
     property string selectedSectionId: ""
     property int sidebarWidth: 286
     readonly property alias sidebar: sidebar
@@ -151,34 +161,6 @@ Page {
         root.selectSection("wallet")
     }
 
-    function openWalletAddressHistory() {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        walletController.selectedWallet.addressListModel.refresh()
-        root.selectSection("wallet", true)
-        pageContainer.push(addressListPage)
-    }
-
-    function openWalletPassword(updating) {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        pageContainer.push(walletPasswordPage, { "updating": updating })
-    }
-
-    function openSignVerifyMessage(initialTab) {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        pageContainer.push(signVerifyPage, { "initialTab": initialTab })
-    }
-
-    function startWalletBackup() {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        const walletSettingsPage = pageContainer.currentItem
-        if (walletSettingsPage && typeof walletSettingsPage.startBackup === "function") {
-            walletSettingsPage.startBackup()
-        }
-    }
-
     background: null
     padding: 0
 
@@ -190,16 +172,9 @@ Page {
     Component.onCompleted: root.selectSection(
         root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
 
-    Connections {
-        target: typeof walletController !== "undefined" ? walletController : null
-
-        function onSelectedWalletChanged() {
-            pageContainer.resetSection("wallet")
-        }
-
-        function onIsWalletLoadedChanged() {
-            if (!walletController.isWalletLoaded) pageContainer.resetSection("wallet")
-        }
+    QtObject {
+        id: internal
+        property Item walletSettingsHost: null
     }
 
     contentItem: RowLayout {
@@ -254,6 +229,7 @@ Page {
                         // address list otherwise survive tab round trips.
                         if (sectionId === root.selectedSectionId) {
                             pageContainer.resetSection(sectionId)
+                            if (sectionId === "wallet") root.walletSettingsResetRequested()
                         }
                         root.selectSection(sectionId)
                     }
@@ -282,53 +258,36 @@ Page {
     Component {
         id: walletPage
 
-        SettingsPages.WalletSectionPage {
-            onSelectWalletRequested: root.selectWalletRequested()
-            onPasswordRequested: pageContainer.push(walletPasswordPage, {
-                "updating": walletController.selectedWallet.isEncrypted
-            })
-            onSignVerifyMessageRequested: pageContainer.push(signVerifyPage)
-            onCoinsRequested: pageContainer.push(coinsPage)
-            onAddressesRequested: {
-                if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-                walletController.selectedWallet.addressListModel.refresh()
-                pageContainer.push(addressListPage)
+        Item {
+            id: walletSettingsHost
+            objectName: "walletSettingsHost"
+
+            Component.onCompleted: internal.walletSettingsHost = walletSettingsHost
+
+            SettingsPages.WalletSectionPage {
+                anchors.fill: parent
+                visible: !root.walletSettingsProvided && !ownWalletSettings.active
+                onSelectWalletRequested: root.selectWalletRequested()
             }
-        }
-    }
 
-    Component {
-        id: coinsPage
-        WalletPages.WalletCoins { onBack: pageContainer.pop() }
-    }
+            Loader {
+                id: ownWalletSettings
+                anchors.fill: parent
+                active: !root.walletSettingsProvided && root.wallet !== null
+                sourceComponent: WalletPages.WalletSettingsStack {
+                    wallet: root.wallet
+                    // Sub-pages belong to the wallet they were opened for.
+                    onWalletChanged: resetToRoot()
+                    onSelectWalletRequested: root.selectWalletRequested()
+                }
+            }
 
-    Component {
-        id: walletPasswordPage
-
-        WalletPages.WalletPasswordSettings {
-            onBack: pageContainer.pop()
-            onSaved: pageContainer.pop()
-        }
-    }
-
-    Component {
-        id: signVerifyPage
-
-        WalletPages.SignVerifyMessage {
-            onBack: pageContainer.pop()
-        }
-    }
-
-    Component {
-        id: addressListPage
-
-        WalletPages.AddressList {
-            onBack: pageContainer.pop()
-            // Keep the Addresses page on the stack: leaving for the request
-            // view and returning to settings should land back here, not on
-            // the settings root.
-            onReceiveRequested: root.receiveRequested()
-            onPaymentRequestRequested: function(requestId) { root.paymentRequestRequested(requestId) }
+            Connections {
+                target: root
+                function onWalletSettingsResetRequested() {
+                    if (ownWalletSettings.item) ownWalletSettings.item.resetToRoot()
+                }
+            }
         }
     }
 
@@ -372,10 +331,7 @@ Page {
         id: rpcConsolePage
 
         SettingsPages.SettingsRpcConsoleView {
-            walletName: typeof walletController !== "undefined"
-                && walletController.isWalletLoaded && walletController.selectedWallet
-                ? walletController.selectedWallet.name
-                : ""
+            walletName: root.activeWalletName
         }
     }
 

@@ -15,8 +15,7 @@ Popup {
     objectName: "speedUpOverlay"
 
     property string txid: ""
-    property var bumpModel: walletController.selectedWallet
-        ? walletController.selectedWallet.bumpModel : null
+    property var bumpModel: null
     property int bumpState: root.bumpModel ? root.bumpModel.state : BumpTransactionModel.Idle
     property string bumpErrorText: root.bumpModel ? root.bumpModel.errorText : ""
     property bool readyToConfirm: root.bumpModel

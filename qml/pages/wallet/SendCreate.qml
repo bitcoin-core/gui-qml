@@ -15,8 +15,8 @@ PageStack {
     objectName: "sendPage"
     vertical: true
 
-    property WalletQmlModel wallet: walletController.selectedWallet
-    property SendRecipient recipient: wallet.recipients.current
+    property WalletQmlModel wallet: null
+    property SendRecipient recipient: wallet ? wallet.recipients.current : null
     property string prepareTransactionErrorText: ""
     property bool manualCoinSelection: false
     readonly property bool externalSignerWallet: wallet !== null && wallet.hasExternalSigner
@@ -44,7 +44,10 @@ PageStack {
 
     function confirmTransactionReview() {
         if (!root.wallet) return
-        if (root.wallet.sendDraftSweepsWallet) reviewSweepAlert.open()
+        if (root.wallet.sendDraftSweepsWallet) {
+            reviewSweepAlert.draftRevision = root.draftRevision
+            reviewSweepAlert.open()
+        }
         else root.prepareTransactionForReview()
     }
 
@@ -73,12 +76,33 @@ PageStack {
 
     function openPaymentRequestImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPaymentRequestImport)
+        root.openWhileShown(sendPage.openPaymentRequestImport)
     }
 
     function openPsbtFileImport() {
         root.returnToSendForm()
-        Qt.callLater(sendPage.openPsbtFileImport)
+        root.openWhileShown(sendPage.openPsbtFileImport)
+    }
+
+    // Counts edits to the payment draft. A confirmation applies only to the
+    // draft it was shown for, so any edit closes it, including one from
+    // outside the form such as File > Open URI.
+    property int draftRevision: 0
+
+    function draftChanged() {
+        root.draftRevision++
+        reviewSweepAlert.close()
+    }
+
+    // Counts how often this page was hidden. A deferred open is dropped if
+    // the page was hidden in between, even if it is shown again by then.
+    property int hiddenCount: 0
+
+    function openWhileShown(open) {
+        const hiddenCount = root.hiddenCount
+        Qt.callLater(function() {
+            if (root.visible && hiddenCount === root.hiddenCount) open()
+        })
     }
 
     function clearPrepareTransactionError() {
@@ -126,36 +150,37 @@ PageStack {
     // Re-check the clipboard whenever the Send tab becomes visible so the
     // banner appears even if the URI was copied before navigating here.
     onVisibleChanged: {
-        if (visible) sendPage.checkClipboard()
-        else reviewSweepAlert.close()
-    }
-    onWalletChanged: reviewSweepAlert.close()
-
-    Connections {
-        target: walletController
-        function onSelectedWalletChanged() {
-            if (transactionReviewPopup.opened) {
-                transactionReviewPopup.close()
-            }
-            root.pop()
-            // Clear URI import state so stale results from the previous wallet
-            // are not shown when the user switches wallets and returns to Send.
-            sendPage.paymentRequestStatus = ""
-            sendPage.paymentRequestIsError = false
-            sendPage.paymentRequestMessage = ""
-            sendPage.showClipboardUriBanner = false
-            sendPage.m_pendingClipboardUri = ""
-            sendPage.m_filledUri = ""
-            sendPage.m_dismissedUri = ""
-            sendPage.m_applyingUri = false
-            sendPage.clearPendingPaymentUriPaste()
-            paymentUriOverwritePopup.close()
+        if (visible) {
+            sendPage.checkClipboard()
+        } else {
+            root.hiddenCount++
+            reviewSweepAlert.close()
         }
+    }
+    onWalletChanged: {
+        reviewSweepAlert.close()
+        if (transactionReviewPopup.opened) {
+            transactionReviewPopup.close()
+        }
+        root.pop()
+        // Clear URI import state so stale results from the previous wallet
+        // are not shown when this page is pointed at another wallet.
+        sendPage.paymentRequestStatus = ""
+        sendPage.paymentRequestIsError = false
+        sendPage.paymentRequestMessage = ""
+        sendPage.showClipboardUriBanner = false
+        sendPage.m_pendingClipboardUri = ""
+        sendPage.m_filledUri = ""
+        sendPage.m_dismissedUri = ""
+        sendPage.m_applyingUri = false
+        sendPage.clearPendingPaymentUriPaste()
+        paymentUriOverwritePopup.close()
     }
 
     Connections {
         target: root.wallet ? root.wallet.recipients : null
         function onListCleared() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             sendPage.expandedRecipient = 0
             if (root.wallet) {
@@ -163,10 +188,18 @@ PageStack {
             }
         }
         function onCountChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
         }
+        function onTotalAmountChanged() {
+            // With Use maximum the amount follows fee estimates; only a
+            // fixed amount changing is an edit. Replacing the maximum
+            // amount clears the maximum recipient, handled below.
+            if (root.wallet && !root.wallet.maximumRecipient) root.draftChanged()
+        }
         function onCurrentRecipientChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
             sendPage.paymentRequestStatus = ""
@@ -180,8 +213,16 @@ PageStack {
     }
 
     Connections {
+        target: root.recipient ? root.recipient.address : null
+        function onFormattedAddressChanged() {
+            root.draftChanged()
+        }
+    }
+
+    Connections {
         target: root.wallet ? root.wallet.coinsListModel : null
         function onSelectedCoinsCountChanged() {
+            root.draftChanged()
             root.clearPrepareTransactionError()
             root.scheduleFeeEstimates()
         }
@@ -190,6 +231,7 @@ PageStack {
     Connections {
         target: root.wallet
         function onCurrentTransactionChanged() { reviewSweepAlert.close() }
+        function onMaximumRecipientChanged() { root.draftChanged() }
         function onCustomFeeEnabledChanged() {
             root.clearPrepareTransactionError()
         }
@@ -243,6 +285,7 @@ PageStack {
 
         function openPsbtFileImport() {
             sendOptionsPopup.close()
+            psbtOpenDialog.targetWallet = root.wallet
             psbtOpenDialog.open()
         }
 
@@ -348,10 +391,19 @@ PageStack {
 
         AppFileDialog {
             id: psbtOpenDialog
+            objectName: "sendPsbtOpenDialog"
             title: qsTr("Import PSBT")
             fileMode: AppFileDialog.OpenFile
             nameFilters: [qsTr("Partially Signed Bitcoin Transactions (*.psbt)"), qsTr("All files (*)")]
-            onAccepted: sendPage.handlePsbtImportResult(root.wallet.importPsbtFromFile(selectedFile.toString()))
+            property WalletQmlModel targetWallet: null
+            onAccepted: {
+                const wallet = targetWallet
+                targetWallet = null
+                if (wallet && wallet === root.wallet) {
+                    sendPage.handlePsbtImportResult(wallet.importPsbtFromFile(selectedFile.toString()))
+                }
+            }
+            onRejected: targetWallet = null
         }
 
         // Kept hidden so functional tests can inject a PSBT path until the
@@ -1134,6 +1186,7 @@ PageStack {
         id: reviewSweepAlert
         objectName: "sendReviewSweepAlert"
         parent: Overlay.overlay
+        property int draftRevision: -1
         //: Confirmation before reviewing a transaction that sends the wallet's entire available balance.
         title: qsTr("Use all available funds?")
         //: %1 is the total recipient amount with its unit, excluding the transaction fee.
@@ -1148,7 +1201,9 @@ PageStack {
             //: Confirm using all available funds before unlocking the wallet and reviewing; this does not send it.
             text: qsTr("Use maximum")
             buttonObjectName: "sendReviewSweepConfirmButton"
-            onTriggered: root.prepareTransactionForReview()
+            onTriggered: {
+                if (reviewSweepAlert.draftRevision === root.draftRevision) root.prepareTransactionForReview()
+            }
         }
     }
 

@@ -10,7 +10,7 @@ import "../pages/wallet"
 Popup {
     id: root
     objectName: "walletCreationModal"
-    signal finished(bool openActivity)
+    signal finished(bool openActivity, var wallet)
     property bool onboardingEntry: false
 
     function openForOnboarding() {
@@ -61,9 +61,9 @@ Popup {
         sourceComponent: WalletCreationFlow {
             modalView: true
             onboardingEntry: root.onboardingEntry
-            onFinished: function(openActivity) {
+            onFinished: function(openActivity, wallet) {
                 root.close()
-                root.finished(openActivity)
+                root.finished(openActivity, wallet)
             }
         }
     }

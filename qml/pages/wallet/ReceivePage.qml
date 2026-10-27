@@ -12,7 +12,7 @@ import "../../components"
 Page {
     id: root
     objectName: "requestPaymentPage"
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
     property var request: wallet ? wallet.currentPaymentRequest : null
     property var clipboard: Clipboard
     property var presentedRequest: null
@@ -229,19 +229,20 @@ Page {
     }
     Connections {
         target: walletController
-        function onOpenReceiveRequested() {
+        function onOpenReceiveRequested(wallet) {
+            if (wallet !== root.wallet) return
             Qt.callLater(function() {
                 card.resetFields()
                 if (root.visible) root.prepareReceivingAddress()
             })
         }
-        function onSelectedWalletChanged() {
-            root.addressErrorText = ""
-            passphrasePopup.close()
-            requestModal.close()
-            if (root.request) root.request.clear()
-            card.resetFields()
-            Qt.callLater(function() { if (root.visible) root.ensureReceivingAddress(false, "") })
-        }
+    }
+    onWalletChanged: {
+        root.addressErrorText = ""
+        passphrasePopup.close()
+        requestModal.close()
+        if (root.request) root.request.clear()
+        card.resetFields()
+        Qt.callLater(function() { if (root.visible) root.ensureReceivingAddress(false, "") })
     }
 }

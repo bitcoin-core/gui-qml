@@ -165,8 +165,7 @@ void AppendValue(QString& out, const UniValue& v, int depth, const QString& key_
     case UniValue::VNULL:
         out.append(QStringLiteral("null"));
         break;
-    default: break;
-    }
+    } // no default case, so the compiler can warn about missing cases
 }
 
 // Format an RPC reply body into HTML suitable for RichText rendering.

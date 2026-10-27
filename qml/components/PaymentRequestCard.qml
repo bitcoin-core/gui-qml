@@ -178,6 +178,21 @@ Pane {
             if (!root.clipboard.setImage(result.image)) root.actionErrorText = qsTr("The QR code could not be copied. Please try again.")
         })
     }
+    // What the QR save dialog would export right now. The dialog is tied to
+    // the target it was opened for: it closes as soon as that changes, for
+    // example when the payment arrives or another request is shown.
+    readonly property string saveQRTarget: sharing && request.qrPayload
+        ? request.id + "\n" + request.qrPayload : ""
+    onSaveQRTargetChanged: {
+        if (saveDialog.visible && saveQRTarget !== saveDialog.target) saveDialog.close()
+    }
+
+    function openSaveQRDialog() {
+        if (!root.saveQRTarget) return
+        saveDialog.target = root.saveQRTarget
+        saveDialog.open()
+    }
+
     function saveQRToFile(fileUrl) {
         return captureQR(function(result) {
             if (!result.saveToFile(decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))))
@@ -329,7 +344,7 @@ Pane {
                         visible: !root.paymentReceived
                         enabled: root.sharing
                         text: qsTr("Save QR code")
-                        onTriggered: if (root.sharing) saveDialog.open()
+                        onTriggered: root.openSaveQRDialog()
                     }
                     ContextMenuDivider { visible: !root.paymentReceived }
                     ContextMenuButton {
@@ -418,7 +433,7 @@ Pane {
                         objectName: "requestPaymentQRContextSave"
                         text: qsTr("Save QR code")
                         enabled: root.sharing
-                        onTriggered: if (root.sharing) saveDialog.open()
+                        onTriggered: root.openSaveQRDialog()
                     }
                 }
             }
@@ -700,6 +715,17 @@ Pane {
         fileMode: AppFileDialog.SaveFile
         nameFilters: [qsTr("PNG files (*.png)")]
         defaultSuffix: "png"
-        onAccepted: root.saveQRToFile(selectedFile)
+        property string target: ""
+        onAccepted: {
+            const target = saveDialog.target
+            saveDialog.target = ""
+            if (!target || target !== root.saveQRTarget) {
+                //: Shown when a payment request changed, for example was paid, while its QR code save dialog was open.
+                root.actionErrorText = qsTr("The payment request changed before the QR code was saved.")
+            } else if (!root.saveQRToFile(selectedFile) && !root.actionErrorText) {
+                root.actionErrorText = qsTr("The QR code could not be saved. Please try again.")
+            }
+        }
+        onRejected: target = ""
     }
 }

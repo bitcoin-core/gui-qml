@@ -11,7 +11,7 @@ import "../../components"
 PageStack {
     id: stackView
     objectName: "activityStack"
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
 
     replaceEnter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 250; easing.type: Easing.OutCubic }
@@ -73,10 +73,13 @@ PageStack {
         })
     }
 
+    onWalletChanged: { paymentRequestModal.close(); stackView.pop(null) }
+
     Connections {
         target: walletController
-        function onSelectedWalletChanged() { paymentRequestModal.close(); stackView.pop(null) }
-        function onClosePaymentRequestDetailRequested() { paymentRequestModal.close() }
+        function onClosePaymentRequestDetailRequested(wallet) {
+            if (wallet === stackView.wallet) paymentRequestModal.close()
+        }
     }
     Connections {
         target: stackView.wallet ? stackView.wallet.transactionActivityModel : null

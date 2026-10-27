@@ -10,6 +10,7 @@ import org.bitcoincore.qt 1.0
 
 import "../../qml/components"
 import "../../qml/controls"
+import "../../qml/pages/wallet" as WalletPages
 
 TestCase {
     id: testCase
@@ -74,6 +75,16 @@ TestCase {
             width: 900
             height: 700
             selectedSectionId: "display"
+        }
+    }
+
+    Component {
+        id: walletSettingsStackComponent
+
+        WalletPages.WalletSettingsStack {
+            width: 614
+            height: 700
+            wallet: testWalletModel
         }
     }
 
@@ -327,79 +338,84 @@ TestCase {
         tryCompare(testNetworkTrafficTower, "active", false)
     }
 
-    function test_settingsViewPreservesAddressStackWhileHidden() {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
+    function test_walletSettingsStackPreservesAddressStackWhileHidden() {
+        const stack = createTemporaryObject(walletSettingsStackComponent, settingsWindow.contentItem)
+        verify(stack !== null)
 
-        view.openWalletAddressHistory()
-        tryCompare(view.pageContainer, "depth", 2)
-        const addressPage = view.pageContainer.currentItem
+        stack.openAddressHistory()
+        tryCompare(stack, "depth", 2)
+        const addressPage = stack.currentItem
         compare(addressPage.objectName, "addressListPage")
+        compare(addressPage.wallet, testWalletModel)
 
-        view.visible = false
-        compare(view.pageContainer.depth, 2)
-        compare(view.pageContainer.currentItem, addressPage)
+        stack.visible = false
+        compare(stack.depth, 2)
+        compare(stack.currentItem, addressPage)
 
-        view.visible = true
-        compare(view.pageContainer.depth, 2)
-        compare(view.pageContainer.currentItem, addressPage)
+        stack.visible = true
+        compare(stack.depth, 2)
+        compare(stack.currentItem, addressPage)
     }
 
-    function test_walletStackResetsWhenSelectedWalletChangesWhileHidden() {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
+    function test_walletSettingsStackPasswordPageFollowsEncryption() {
+        const stack = createTemporaryObject(walletSettingsStackComponent, settingsWindow.contentItem)
+        verify(stack !== null)
 
-        view.selectSection("wallet")
-        const setPasswordRow = findChild(view, "walletPasswordRow")
-        verify(setPasswordRow !== null)
-        compare(setPasswordRow.title, "Set password")
-        setPasswordRow.clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-        const setPasswordPage = view.pageContainer.currentItem
-        verify(setPasswordPage !== null)
-        compare(setPasswordPage.objectName, "walletPasswordSettingsPage")
-        compare(setPasswordPage.updating, false)
-
-        view.selectSection("display")
-        compare(view.selectedSectionId, "display")
-        walletController.selectedWallet.isEncrypted = true
-        walletController.setSelectedWallet("encrypted-wallet")
-        compare(view.selectedSectionId, "display")
-        compare(view.pageContainer.sectionDepth("wallet"), 1)
-
-        view.selectSection("wallet")
-        tryCompare(view.pageContainer, "depth", 1)
-        const updatePasswordRow = findChild(view, "walletPasswordRow")
-        verify(updatePasswordRow !== null)
-        compare(updatePasswordRow.title, "Update password")
-        updatePasswordRow.clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-        const updatePasswordPage = view.pageContainer.currentItem
-        verify(updatePasswordPage !== null)
-        compare(updatePasswordPage.objectName, "walletPasswordSettingsPage")
-        compare(updatePasswordPage.updating, true)
-    }
-
-    function test_walletStackResetsWhenWalletUnloadsWhileHidden() {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
-        verify(view !== null)
-
-        view.selectSection("wallet")
-        const passwordRow = findChild(view, "walletPasswordRow")
+        const passwordRow = findChild(stack, "walletPasswordRow")
         verify(passwordRow !== null)
+        compare(passwordRow.title, "Set password")
         passwordRow.clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-        verify(findChild(view, "walletPasswordSettingsPage") !== null)
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.objectName, "walletPasswordSettingsPage")
+        compare(stack.currentItem.updating, false)
+        compare(stack.currentItem.wallet, testWalletModel)
 
-        view.selectSection("display")
-        compare(view.selectedSectionId, "display")
-        walletController.setWalletLoaded(false)
-        compare(view.selectedSectionId, "display")
-        compare(view.pageContainer.sectionDepth("wallet"), 1)
+        stack.resetToRoot()
+        compare(stack.depth, 1)
+        testWalletModel.isEncrypted = true
+        compare(passwordRow.title, "Update password")
+        passwordRow.clicked()
+        tryCompare(stack, "depth", 2)
+        compare(stack.currentItem.updating, true)
+    }
+
+    function test_settingsViewHostsProvidedWalletSettings() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        compare(view.walletSettingsHost, null)
 
         view.selectSection("wallet")
-        tryCompare(view.pageContainer, "depth", 1)
-        compare(view.pageContainer.currentItem.objectName, "walletSettingsPage")
+        verify(view.walletSettingsHost !== null)
+        compare(view.walletSettingsHost.objectName, "walletSettingsHost")
+        const emptyHeading = findChild(view, "walletSettingsEmptyHeading")
+        verify(emptyHeading !== null)
+        compare(emptyHeading.visible, true)
+
+        view.walletSettingsProvided = true
+        compare(emptyHeading.visible, false)
+    }
+
+    // The node pages (used on Android) have no wallet shell, so the settings
+    // view shows the given wallet's settings itself.
+    function test_settingsViewShowsGivenWalletWithoutShell() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+            { "wallet": testWalletModel })
+        verify(view !== null)
+        view.selectSection("wallet")
+        const stack = findChild(view, "walletSettingsStack")
+        verify(stack !== null)
+        compare(stack.wallet, testWalletModel)
+        compare(stack.currentItem.objectName, "walletSettingsPage")
+        compare(stack.currentItem.walletLoaded, true)
+
+        stack.openAddressHistory()
+        tryCompare(stack, "depth", 2)
+        findChild(view, "settingsSidebar_wallet").clicked()
+        compare(stack.depth, 1)
+
+        view.wallet = null
+        tryVerify(function() { return findChild(view, "walletSettingsStack") === null })
+        compare(findChild(view, "walletSettingsEmptyHeading").visible, true)
     }
 
     function test_walletSettingsEmptyStateMatchesWalletAvailability() {

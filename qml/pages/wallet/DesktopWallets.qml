@@ -18,21 +18,91 @@ Page {
     background: null
 
     property string pendingMigrationPath: ""
+    // The wallet shown in the window. Wallet pages never look this up
+    // themselves; each WalletView gets its wallet when it is created.
+    readonly property var activeWallet: walletController.isWalletLoaded ? walletController.selectedWallet : null
+    readonly property WalletView activeView: {
+        walletViews.count
+        return root.viewForWallet(root.activeWallet)
+    }
+    readonly property bool walletTabSelected: navigationTabs.checkedButton !== null
+        && navigationTabs.checkedButton.index <= 2
+    readonly property Item walletSettingsHost: settingsLoader.item ? settingsLoader.item.walletSettingsHost : null
+    readonly property alias walletViews: walletViews
 
     ButtonGroup { id: navigationTabs }
 
     signal addWallet()
 
+    function viewForWallet(wallet) {
+        if (!wallet) return null
+        for (let index = 0; index < walletViews.count; ++index) {
+            const view = walletViews.itemAt(index)
+            if (view && view.wallet === wallet) return view
+        }
+        return null
+    }
+
+    // Mirror walletController.openWallets in a ListModel so the Repeater
+    // creates or destroys only the views of wallets that opened or closed.
+    // A wallet that is unloading loses its view at once, before the
+    // controller drops it from the list.
+    function syncOpenWallets() {
+        const wallets = walletController.openWallets.filter(function(wallet) {
+            return wallet.available !== false
+        })
+        for (let index = openWalletsModel.count - 1; index >= 0; --index) {
+            if (wallets.indexOf(openWalletsModel.get(index).wallet) < 0) openWalletsModel.remove(index)
+        }
+        for (let index = 0; index < wallets.length; ++index) {
+            let known = false
+            for (let row = 0; row < openWalletsModel.count; ++row) {
+                if (openWalletsModel.get(row).wallet === wallets[index]) {
+                    known = true
+                    break
+                }
+            }
+            if (!known) openWalletsModel.append({ "wallet": wallets[index] })
+        }
+    }
+
+    function walletTabButton(tab) {
+        if (tab === WalletView.Send) return sendTabButton
+        if (tab === WalletView.Receive) return receiveTabButton
+        return activityTabButton
+    }
+
+    function showWalletTab(tab) {
+        root.walletTabButton(tab).checked = true
+    }
+
+    function showActiveViewTab() {
+        if (!root.walletTabSelected) return
+        if (root.activeView) {
+            root.showWalletTab(root.activeView.currentTab)
+        } else if (walletViews.count === 0) {
+            // Leave the wallet tabs only when no wallet is left to show. While
+            // the selected wallet unloads, another open wallet is selected next.
+            blockClockTabButton.checked = true
+        }
+    }
+
+    function walletTabChecked(tab, checked) {
+        if (checked && root.activeView) root.activeView.currentTab = tab
+    }
+
+    onActiveViewChanged: root.showActiveViewTab()
+    Component.onCompleted: root.syncOpenWallets()
+
     function navigateToTransaction(txid, outputIndex) {
-        activityTabButton.checked = true
-        activityPage.navigateToTransaction(txid, outputIndex)
+        if (root.activeView) root.activeView.navigateToTransaction(txid, outputIndex)
     }
 
     function requestCloseWallet() {
-        if (!walletController.isWalletLoaded || !walletController.selectedWallet) {
+        if (!root.activeWallet) {
             return
         }
-        closeConfirmationPopup.walletName = walletController.selectedWallet.name
+        closeConfirmationPopup.walletName = root.activeWallet.name
         closeConfirmationPopup.open()
     }
 
@@ -53,13 +123,11 @@ Page {
     }
 
     function openUriImporter() {
-        sendTabButton.checked = true
-        sendPage.openPaymentRequestImport()
+        if (root.activeView) root.activeView.openUriImporter()
     }
 
     function openPsbtImporter() {
-        sendTabButton.checked = true
-        sendPage.openPsbtFileImport()
+        if (root.activeView) root.activeView.openPsbtImporter()
     }
 
     function openConsole() {
@@ -78,16 +146,23 @@ Page {
         blockClockTabButton.checked = true
     }
 
+    // Show a wallet's Activity, as long as that wallet is still open.
+    function openWallet(wallet) {
+        if (!wallet || wallet.available === false || walletController.openWallets.indexOf(wallet) < 0) return
+        if (walletController.selectedWallet !== wallet) walletController.setSelectedWallet(wallet.name)
+        if (root.activeWallet === wallet) root.showWalletTab(WalletView.Activity)
+    }
+
     function openActivity() {
-        activityTabButton.checked = true
+        if (root.activeView) root.showWalletTab(WalletView.Activity)
     }
 
     function openSend() {
-        sendTabButton.checked = true
+        if (root.activeView) root.showWalletTab(WalletView.Send)
     }
 
     function openReceive() {
-        receiveTabButton.checked = true
+        if (root.activeView) root.showWalletTab(WalletView.Receive)
     }
 
     function toggleWalletSelection() {
@@ -118,20 +193,29 @@ Page {
         }
     }
 
+    // Wallet routes go to the active wallet's view, which shows its own
+    // settings stack in the wallet section of the shared settings page.
     function openSettingsRoute(route, argument) {
-        settingsLoader.pendingRoute = route
-        settingsLoader.pendingArgument = argument
+        const walletRoutes = ["wallet", "addresses", "backup", "password", "sign-verify-message"]
+        if (walletRoutes.indexOf(route) >= 0 && route !== "wallet" && root.activeView) {
+            root.activeView.openSettingsRoute(route, argument)
+            return
+        }
+        root.showSettingsSection(walletRoutes.indexOf(route) >= 0 ? "wallet" : route)
+    }
+
+    function showSettingsSection(section) {
+        settingsLoader.pendingRoute = section
         settingsTabButton.checked = true
         Qt.callLater(settingsLoader.applyPendingRoute)
     }
 
+    ListModel { id: openWalletsModel }
+
     Connections {
         target: walletController
-        function onOpenWalletSettingsRequested() {
-            root.openSettingsRoute("wallet")
-        }
-        function onOpenReceiveRequested() {
-            receiveTabButton.checked = true
+        function onOpenWalletsChanged() {
+            root.syncOpenWallets()
         }
         function onWalletLoadStateChanged(name, state, error) {
             if (state === WalletListModel.LoadError) {
@@ -224,6 +308,7 @@ Page {
                 text: qsTr("Activity")
                 property int index: 0
                 ButtonGroup.group: navigationTabs
+                onCheckedChanged: root.walletTabChecked(WalletView.Activity, checked)
             }
             NavigationTab {
                 id: sendTabButton
@@ -231,6 +316,7 @@ Page {
                 text: qsTr("Send")
                 property int index: 1
                 ButtonGroup.group: navigationTabs
+                onCheckedChanged: root.walletTabChecked(WalletView.Send, checked)
             }
             NavigationTab {
                 id: receiveTabButton
@@ -238,6 +324,7 @@ Page {
                 text: qsTr("Receive")
                 property int index: 2
                 ButtonGroup.group: navigationTabs
+                onCheckedChanged: root.walletTabChecked(WalletView.Receive, checked)
             }
         }
         rightItem: RowLayout {
@@ -345,88 +432,101 @@ Page {
         }
     }
 
-    contentItem: StackLayout {
-        currentIndex: navigationTabs.checkedButton.index
+    contentItem: Item {
         clip: true
-        ActivityList {
-            id: activityPage
-        }
-        SendCreate {
-            id: sendPage
-            onViewTransactionInActivity: (txid) => {
-                root.navigateToTransaction(txid)
-            }
-        }
-        ReceivePage {
-            onPaymentRequestCreated: {
-                activityPage.pop(null)
-                root.openActivity()
-            }
-            onAddressHistoryRequested: {
-                root.openSettingsRoute("addresses")
-            }
-        }
-        Item {
-            id: blockClockTab
-            NodeStatusActions {
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.topMargin: 16
-                anchors.rightMargin: 16
-                z: 2
-            }
-            BlockClock {
-                parentWidth: blockClockTab.width - 40
-                parentHeight: blockClockTab.height
-                anchors.centerIn: blockClockTab
-                showNetworkIndicator: false
-                renderingActive: root.visible && blockClockTabButton.checked
-            }
-        }
-        PeersView {
-            showHeader: false
-            showBackButton: false
-        }
-        Item {
-            Loader {
-                id: settingsLoader
-                objectName: "settingsLoader"
-                anchors.fill: parent
-                property bool retainItem: false
-                property string pendingRoute: ""
-                property var pendingArgument: null
 
-                function applyPendingRoute() {
-                    if (!item || pendingRoute.length === 0) return
-                    if (pendingRoute === "addresses") {
-                        item.openWalletAddressHistory()
-                    } else if (pendingRoute === "backup") {
-                        item.startWalletBackup()
-                    } else if (pendingRoute === "password") {
-                        item.openWalletPassword(pendingArgument)
-                    } else if (pendingRoute === "sign-verify-message") {
-                        item.openSignVerifyMessage(pendingArgument)
-                    } else {
-                        item.selectSection(pendingRoute)
+        Item {
+            id: walletViewsHost
+            objectName: "walletViewsHost"
+            anchors.fill: parent
+            visible: root.walletTabSelected
+
+            Repeater {
+                id: walletViews
+                model: openWalletsModel
+                onCountChanged: root.showActiveViewTab()
+
+                WalletView {
+                    anchors.fill: parent
+                    active: wallet === root.activeWallet
+                    visible: active
+                    settingsHost: root.walletSettingsHost
+                    focusFallback: root
+                    onTabRequested: function(tab) {
+                        if (active) root.showWalletTab(tab)
                     }
-                    pendingRoute = ""
-                    pendingArgument = null
-                }
+                    onSettingsRequested: {
+                        if (active) root.showSettingsSection("wallet")
+                    }
+                    onWalletSelectionRequested: root.openWalletSelection()
 
-                // Create Settings on first use, then retain its navigation
-                // stacks while the parent tab item is hidden.
-                active: settingsTabButton.checked || retainItem
-                onLoaded: {
-                    retainItem = true
-                    Qt.callLater(applyPendingRoute)
+                    Connections {
+                        target: wallet
+                        ignoreUnknownSignals: true
+                        function onAvailableChanged() {
+                            Qt.callLater(root.syncOpenWallets)
+                        }
+                    }
                 }
-                sourceComponent: SettingsView {
-                    showDoneButton: false
-                    onSelectWalletRequested: root.openWalletSelection()
-                    onReceiveRequested: receiveTabButton.checked = true
-                    onPaymentRequestRequested: function(requestId) {
-                        root.openActivity()
-                        activityPage.openPaymentRequest(requestId)
+            }
+        }
+
+        // Node pages are shared by all wallets.
+        StackLayout {
+            anchors.fill: parent
+            visible: !root.walletTabSelected
+            currentIndex: navigationTabs.checkedButton ? Math.max(0, navigationTabs.checkedButton.index - 3) : 0
+
+            Item {
+                id: blockClockTab
+                NodeStatusActions {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.topMargin: 16
+                    anchors.rightMargin: 16
+                    z: 2
+                }
+                BlockClock {
+                    parentWidth: blockClockTab.width - 40
+                    parentHeight: blockClockTab.height
+                    anchors.centerIn: blockClockTab
+                    showNetworkIndicator: false
+                    renderingActive: root.visible && blockClockTabButton.checked
+                }
+            }
+            PeersView {
+                showHeader: false
+                showBackButton: false
+            }
+            Item {
+                Loader {
+                    id: settingsLoader
+                    objectName: "settingsLoader"
+                    anchors.fill: parent
+                    property bool retainItem: false
+                    property string pendingRoute: ""
+
+                    function applyPendingRoute() {
+                        if (!item || pendingRoute.length === 0) return
+                        item.selectSection(pendingRoute)
+                        pendingRoute = ""
+                    }
+
+                    // Create Settings on first use, then retain its navigation
+                    // stacks while the parent tab item is hidden.
+                    active: settingsTabButton.checked || retainItem
+                    onLoaded: {
+                        retainItem = true
+                        Qt.callLater(applyPendingRoute)
+                    }
+                    sourceComponent: SettingsView {
+                        showDoneButton: false
+                        walletSettingsProvided: root.activeView !== null
+                        activeWalletName: root.activeWallet ? root.activeWallet.name : ""
+                        onSelectWalletRequested: root.openWalletSelection()
+                        onWalletSettingsResetRequested: {
+                            if (root.activeView) root.activeView.settingsStack.resetToRoot()
+                        }
                     }
                 }
             }
