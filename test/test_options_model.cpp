@@ -30,6 +30,7 @@
 #include <common/args.h>
 #include <common/settings.h>
 #include <util/translation.h>
+#include <util/string.h>
 
 #include <atomic>
 #include <stdexcept>
@@ -51,7 +52,23 @@ public:
     };
     Q_ENUM(LegacyDisplayUnit)
 
+private:
+    QString m_original_organization;
+    QString m_original_application;
 private Q_SLOTS:
+    void initTestCase()
+    {
+        SelectParams(ChainType::REGTEST);
+        m_original_organization = QCoreApplication::organizationName();
+        m_original_application = QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinQmlTests"));
+        QCoreApplication::setApplicationName(QStringLiteral("OptionsModel"));
+    }
+    void cleanupTestCase()
+    {
+        QCoreApplication::setOrganizationName(m_original_organization);
+        QCoreApplication::setApplicationName(m_original_application);
+    }
     void proxyDisabledRemovesKey();
     void torDisabledRemovesKey();
     void proxyEnabledWritesAddress();
@@ -179,21 +196,6 @@ static common::SettingsValue MakeAddress(const std::string& addr)
 static common::SettingsValue MakeInt(int value)
 {
     return common::SettingsValue{value};
-}
-
-static int SettingWriteCount(const MockNode& node, const std::string& name)
-{
-    return std::count_if(node.update_rw_setting_arguments.begin(), node.update_rw_setting_arguments.end(), [&](const auto& write) {
-        return write.first == name;
-    });
-}
-
-static const common::SettingsValue* FindSettingWrite(const MockNode& node, const std::string& name)
-{
-    const auto it{std::find_if(node.update_rw_setting_arguments.rbegin(), node.update_rw_setting_arguments.rend(), [&](const auto& write) {
-        return write.first == name;
-    })};
-    return it == node.update_rw_setting_arguments.rend() ? nullptr : &it->second;
 }
 
 static void InstallPersistentSettings(MockNode& node, ArgsManager& args)
@@ -382,24 +384,53 @@ static void PrepareArgsForDataDir(ArgsManager& args, const QString& data_dir)
     args.SelectConfigNetwork(args.GetChainTypeString());
 }
 
+static common::SettingsValue ReadRwSetting(ArgsManager& args, const std::string& name)
+{
+    common::SettingsValue value;
+    args.LockSettings([&](common::Settings& settings) {
+        const auto it = settings.rw_settings.find(name);
+        if (it != settings.rw_settings.end()) value = it->second;
+    });
+    return value;
+}
+
+static void PrepareRuntimePersistence(MockNode& node, ArgsManager& args, const QTemporaryDir& directory)
+{
+    args.ForceSetArg("-settings", directory.filePath(QStringLiteral("runtime-settings.json")).toStdString());
+    QStringList names = QmlCoreSettings::CoreSettingNames();
+    names << QStringLiteral("prune-prev") << QStringLiteral("proxy-prev") << QStringLiteral("onion-prev");
+    for (const auto& name : names) {
+        const auto value = node.getPersistentSetting(name.toStdString());
+        if (!value.isNull() && args.GetPersistentSetting(name.toStdString()).isNull()) {
+            QmlCoreSettings::SetRwSetting(args, name, value);
+        }
+    }
+    InstallPersistentSettings(node, args);
+}
+
 void OptionsModelTests::proxyDisabledRemovesKey()
 {
     MockNode node;
     // Simulate a previously-saved proxy address so that m_proxy_enabled=true on construction.
     node.SetPersistentSetting("proxy", MakeAddress("127.0.0.1:9050"));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxyEnabled());
 
-    // When proxy is disabled, updateRwSetting must be called with a null (not
-    // empty-string) SettingsValue so that the key is erased from settings.json.
+    // Disabling a proxy removes the override instead of storing an empty string.
     model.setProxyEnabled(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    QCOMPARE(SettingWriteCount(node, "proxy-prev"), 1);
-    const auto* proxy_write{FindSettingWrite(node, "proxy")};
-    QVERIFY(proxy_write != nullptr);
-    QVERIFY(proxy_write->isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    QVERIFY(!model.settingsPending());
+    const auto proxy_write = ReadRwSetting(model_args, "proxy");
+    QVERIFY(proxy_write.isNull());
 }
 
 void OptionsModelTests::torDisabledRemovesKey()
@@ -407,16 +438,22 @@ void OptionsModelTests::torDisabledRemovesKey()
     MockNode node;
     node.SetPersistentSetting("onion", MakeAddress("127.0.0.1:9150"));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.torEnabled());
 
     model.setTorEnabled(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.torEnabled());
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    QCOMPARE(SettingWriteCount(node, "onion-prev"), 1);
-    const auto* onion_write{FindSettingWrite(node, "onion")};
-    QVERIFY(onion_write != nullptr);
-    QVERIFY(onion_write->isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    QVERIFY(!model.settingsPending());
+    const auto onion_write = ReadRwSetting(model_args, "onion");
+    QVERIFY(onion_write.isNull());
 }
 
 void OptionsModelTests::proxyEnabledWritesAddress()
@@ -424,34 +461,47 @@ void OptionsModelTests::proxyEnabledWritesAddress()
     MockNode node;
 
     // Construct with no saved proxy — m_proxy_enabled=false, m_proxy_address="".
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
 
     // Pre-load an address into the model (as QML does before toggling the switch).
     model.setProxyAddress("10.0.0.1:9050");
-    node.update_rw_setting_arguments.clear();
+    QTRY_VERIFY(!model.settingsPending());
+
 
     // Enabling proxy must write the address string to settings.
     model.setProxyEnabled(true);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxyEnabled());
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    const auto* proxy_write{FindSettingWrite(node, "proxy")};
-    QVERIFY(proxy_write != nullptr);
-    QVERIFY(proxy_write->isStr());
-    QCOMPARE(proxy_write->get_str(), std::string{"10.0.0.1:9050"});
-    const auto* previous_write{FindSettingWrite(node, "proxy-prev")};
-    QVERIFY(previous_write != nullptr);
-    QVERIFY(previous_write->isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto proxy_write = ReadRwSetting(model_args, "proxy");
+    QVERIFY(proxy_write.isStr());
+    QCOMPARE(proxy_write.get_str(), std::string{"10.0.0.1:9050"});
+    const auto previous_write = ReadRwSetting(model_args, "proxy-prev");
+    QVERIFY(previous_write.isNull());
 }
 
 void OptionsModelTests::proxyDirtySetAtRuntime()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
 
     model.setProxyEnabled(true);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxySettingsDirty());
 }
 
@@ -460,22 +510,31 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
     MockNode node;
 
     // Start onboarded with proxy disabled (no saved proxy).
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
 
     // Simulate what ProxySettings.qml does: set address before enabling.
     model.setProxyAddress("127.0.0.1:9050");
+    QTRY_VERIFY(!model.settingsPending());
     // Address changed but proxy is still disabled — should NOT be dirty since
     // the address is irrelevant when proxy is off.
     QVERIFY(!model.proxySettingsDirty());
 
     // Enable proxy — now dirty (enabled differs from initial disabled).
     model.setProxyEnabled(true);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.proxySettingsDirty());
 
     // Revert enable state — dirty should clear even though address is populated,
     // because the address is ignored when proxy is disabled.
     model.setProxyEnabled(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxySettingsDirty());
 }
 
@@ -484,7 +543,13 @@ void OptionsModelTests::mempoolSizeLoadedFromSettings()
     MockNode node;
     node.SetPersistentSetting("maxmempool", MakeInt(456));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
 }
 
@@ -492,15 +557,21 @@ void OptionsModelTests::mempoolSizeWritesSetting()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
 
     model.setMaxMempoolSizeMB(456);
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
-    const auto* mempool_write{FindSettingWrite(node, "maxmempool")};
-    QVERIFY(mempool_write != nullptr);
-    QVERIFY(mempool_write->isNum());
-    QCOMPARE(mempool_write->getInt<int64_t>(), int64_t{456});
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto mempool_write = ReadRwSetting(model_args, "maxmempool");
+    QVERIFY(mempool_write.isNum());
+    QCOMPARE(mempool_write.getInt<int64_t>(), int64_t{456});
 }
 
 void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
@@ -508,106 +579,163 @@ void OptionsModelTests::mempoolSizeDoesNotRewriteUnchangedSetting()
     MockNode node;
     node.SetPersistentSetting("maxmempool", MakeInt(456));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
 
     model.setMaxMempoolSizeMB(456);
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
-    QCOMPARE(SettingWriteCount(node, "maxmempool"), 0);
+    QVERIFY(!model.settingsPending());
+    QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::legacyNumericSettingsWriteStrings()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
 
     model.setDbcacheSizeMiB(600);
+    QTRY_VERIFY(!model.settingsPending());
     model.setScriptThreads(12);
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    const auto* dbcache_write{FindSettingWrite(node, "dbcache")};
-    const auto* par_write{FindSettingWrite(node, "par")};
-    QVERIFY(dbcache_write != nullptr && dbcache_write->isStr());
-    QVERIFY(par_write != nullptr && par_write->isStr());
-    QCOMPARE(dbcache_write->get_str(), std::string{"600"});
-    QCOMPARE(par_write->get_str(), std::string{"12"});
+    QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto dbcache_write = ReadRwSetting(model_args, "dbcache");
+    const auto par_write = ReadRwSetting(model_args, "par");
+    QVERIFY(dbcache_write.isStr());
+    QVERIFY(par_write.isStr());
+    QCOMPARE(dbcache_write.get_str(), std::string{"600"});
+    QCOMPARE(par_write.get_str(), std::string{"12"});
 }
 
 void OptionsModelTests::externalSignerPathWritesSigner()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
 
-    model.setExternalSignerPath("/usr/local/bin/hwi");
-    QCOMPARE(model.externalSignerPath(), QString("/usr/local/bin/hwi"));
-    const auto* signer_write{FindSettingWrite(node, "signer")};
-    QVERIFY(signer_write != nullptr && signer_write->isStr());
-    QCOMPARE(signer_write->get_str(), std::string{"/usr/local/bin/hwi"});
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
+    model.setExternalSignerPath("hwi");
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.externalSignerPath(), QString("hwi"));
+    const auto signer_write = ReadRwSetting(model_args, "signer");
+    QVERIFY(signer_write.isStr());
+    QCOMPARE(signer_write.get_str(), std::string{"hwi"});
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::externalSignerPathClearedRemovesKey()
 {
     MockNode node;
-    node.SetPersistentSetting("signer", MakeAddress("/usr/local/bin/hwi"));
+    node.SetPersistentSetting("signer", MakeAddress("hwi"));
 
-    OptionsQmlModel model(node);
-    QCOMPARE(model.externalSignerPath(), QString("/usr/local/bin/hwi"));
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.externalSignerPath(), QString("hwi"));
 
     model.setExternalSignerPath("");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.externalSignerPath().isEmpty());
-    const auto* signer_write{FindSettingWrite(node, "signer")};
-    QVERIFY(signer_write != nullptr);
-    QVERIFY(signer_write->isNull());
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
+    const auto signer_write = ReadRwSetting(model_args, "signer");
+    QVERIFY(signer_write.isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::walletSettingsDirtyTracksExternalSignerPath()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("/usr/local/bin/hwi");
+    model.setExternalSignerPath("hwi");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
 
     model.setExternalSignerPath("");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 }
 
 void OptionsModelTests::signerPathLoadedFromSettings()
 {
     MockNode node;
-    node.SetPersistentSetting("signer", MakeAddress("/opt/hwi/ledger.py"));
+    node.SetPersistentSetting("signer", MakeAddress("ledger-signer"));
 
-    OptionsQmlModel model(node);
-    QCOMPARE(model.externalSignerPath(), QString("/opt/hwi/ledger.py"));
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.externalSignerPath(), QString("ledger-signer"));
 }
 
 void OptionsModelTests::signerPathWritesSetting()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.externalSignerPath().isEmpty());
 
-    model.setExternalSignerPath("/opt/hwi/ledger.py");
-    QCOMPARE(model.externalSignerPath(), QString("/opt/hwi/ledger.py"));
-    const auto* signer_write{FindSettingWrite(node, "signer")};
-    QVERIFY(signer_write != nullptr && signer_write->isStr());
-    QCOMPARE(signer_write->get_str(), std::string{"/opt/hwi/ledger.py"});
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
+    model.setExternalSignerPath("ledger-signer");
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.externalSignerPath(), QString("ledger-signer"));
+    const auto signer_write = ReadRwSetting(model_args, "signer");
+    QVERIFY(signer_write.isStr());
+    QCOMPARE(signer_write.get_str(), std::string{"ledger-signer"});
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::signerDirtySetAtRuntime()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("/opt/hwi/ledger.py");
+    model.setExternalSignerPath("ledger-signer");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
 }
 
@@ -615,13 +743,21 @@ void OptionsModelTests::signerDirtyResetWhenReverted()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 
-    model.setExternalSignerPath("/opt/hwi/ledger.py");
+    model.setExternalSignerPath("ledger-signer");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.walletSettingsDirty());
 
     model.setExternalSignerPath("");
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.walletSettingsDirty());
 }
 
@@ -629,7 +765,15 @@ void OptionsModelTests::externalSignerPathValidationRejectsMissingPath()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    model.requestExternalSignerPathValidation("/definitely/not/a/real/signer");
+    QTRY_VERIFY(!model.signerPathValidationPending());
     QCOMPARE(model.externalSignerPathValidationError("/definitely/not/a/real/signer"),
         QString("The configured signer path does not exist."));
 }
@@ -648,7 +792,15 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
     script.close();
     QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    model.requestExternalSignerPathValidation(script_path);
+    QTRY_VERIFY(!model.signerPathValidationPending());
     QVERIFY(model.externalSignerPathValidationError(script_path).isEmpty());
 }
 
@@ -657,15 +809,23 @@ void OptionsModelTests::connectionDirtyTracksRestartSettings()
     MockNode node;
     node.SetPersistentSetting("listen", common::SettingsValue{true});
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.connectionSettingsDirty());
     QVERIFY(!model.restartRequired());
 
     model.setListen(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.connectionSettingsDirty());
     QVERIFY(model.restartRequired());
 
     model.setListen(true);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.connectionSettingsDirty());
     QVERIFY(!model.restartRequired());
 }
@@ -673,49 +833,50 @@ void OptionsModelTests::connectionDirtyTracksRestartSettings()
 void OptionsModelTests::natpmpAppliesLiveWithoutRestartDirty()
 {
     MockNode node;
-
-    OptionsQmlModel model(node);
-    QVERIFY(model.natpmp());
-    std::vector<QString> events;
-    node.update_rw_setting_fn = [&](const std::string& name, const common::SettingsValue& value) {
-        if (name == "natpmp") {
-            const auto parsed{SettingToBool(value)};
-            events.push_back(value.isNull() ? QStringLiteral("write:null") : parsed && *parsed ? QStringLiteral("write:true") :
-                                                                                                 QStringLiteral("write:false"));
-        }
-    };
+    ArgsManager args;
+    QTemporaryDir directory;
+    PrepareRuntimePersistence(node, args, directory);
+    OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    const bool initial = model.natpmp();
+    std::vector<bool> applied;
+    std::atomic<bool> saved_before_apply{true};
     node.map_port_fn = [&](bool enabled) {
-        events.push_back(enabled ? QStringLiteral("map:true") : QStringLiteral("map:false"));
+        if (SettingToBool(args.GetSetting("-natpmp")).value_or(initial) != enabled) saved_before_apply = false;
+        applied.push_back(enabled);
     };
-
-    model.setNatpmp(false);
-    QVERIFY(!model.natpmp());
+    model.setNatpmp(!initial);
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.natpmp(), !initial);
     QVERIFY(!model.connectionSettingsDirty());
     QVERIFY(!model.restartRequired());
-    QTest::qWait(300);
-
-    model.setNatpmp(true);
-    QVERIFY(model.natpmp());
+    model.setNatpmp(initial);
+    QTRY_VERIFY(!model.settingsPending());
+    QCOMPARE(model.natpmp(), initial);
     QVERIFY(!model.connectionSettingsDirty());
     QVERIFY(!model.restartRequired());
-    QTest::qWait(300);
-    QCOMPARE(events.size(), 4U);
-    QCOMPARE(events.at(0), QStringLiteral("write:false"));
-    QCOMPARE(events.at(1), QStringLiteral("map:false"));
-    QVERIFY(events.at(2) == QStringLiteral("write:null") || events.at(2) == QStringLiteral("write:true"));
-    QCOMPARE(events.at(3), QStringLiteral("map:true"));
+    QCOMPARE(applied.size(), 2U);
+    QVERIFY(saved_before_apply.load());
 }
 
 void OptionsModelTests::storageDirtyIgnoresDisabledPruneSize()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.prune());
     model.setPruneSizeGB(10);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.storageSettingsDirty());
 
     model.setPrune(true);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.storageSettingsDirty());
     QVERIFY(model.restartRequired());
 }
@@ -725,34 +886,48 @@ void OptionsModelTests::pruneDisabledPreservesPreviousValue()
     MockNode node;
     node.SetPersistentSetting("prune", MakeInt(QmlCoreSettings::PruneGBToMiB(10)));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.prune());
     QCOMPARE(model.pruneSizeGB(), 10);
 
     model.setPrune(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.prune());
     QCOMPARE(model.pruneSizeGB(), 10);
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    const auto* previous_write{FindSettingWrite(node, "prune-prev")};
-    QVERIFY(previous_write != nullptr && previous_write->isStr());
-    QCOMPARE(previous_write->get_str(), std::to_string(QmlCoreSettings::PruneGBToMiB(10)));
-    const auto* prune_write{FindSettingWrite(node, "prune")};
-    QVERIFY(prune_write != nullptr);
-    QVERIFY(prune_write->isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto previous_write = ReadRwSetting(model_args, "prune-prev");
+    QVERIFY(previous_write.isStr());
+    QCOMPARE(previous_write.get_str(), util::ToString(QmlCoreSettings::PruneGBToMiB(10)));
+    const auto prune_write = ReadRwSetting(model_args, "prune");
+    QVERIFY(prune_write.isNull());
 }
 
 void OptionsModelTests::developerDirtyTracksRestartSettings()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
 
     model.setScriptThreads(model.scriptThreads() + 1);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.developerSettingsDirty());
     QVERIFY(model.restartRequired());
 
     model.setScriptThreads(model.scriptThreads() - 1);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
     QVERIFY(!model.restartRequired());
 }
@@ -761,17 +936,25 @@ void OptionsModelTests::mempoolDirtyTracksRestartSettings()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
     QVERIFY(!model.mempoolSettingsDirty());
     QVERIFY(!model.restartRequired());
 
     model.setMaxMempoolSizeMB(model.maxMempoolSizeMB() + 1);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
     QVERIFY(model.mempoolSettingsDirty());
     QVERIFY(model.restartRequired());
 
     model.setMaxMempoolSizeMB(model.maxMempoolSizeMB() - 1);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.developerSettingsDirty());
     QVERIFY(!model.mempoolSettingsDirty());
     QVERIFY(!model.restartRequired());
@@ -781,7 +964,13 @@ void OptionsModelTests::proxyValidationAndCommit()
 {
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateProxyLocation("127.0.0.1:9050").isEmpty());
     QVERIFY(model.validateProxyLocation("[::1]:9050").isEmpty());
     QVERIFY(model.validateProxyLocation("127.0.0.1").isEmpty());
@@ -803,6 +992,7 @@ void OptionsModelTests::proxyValidationAndCommit()
     QVERIFY(model.proxyAddress().isEmpty());
 
     QVERIFY(model.commitProxyLocation("proxy.example"));
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.proxyAddress(), QString("proxy.example"));
 }
 
@@ -811,16 +1001,22 @@ void OptionsModelTests::proxyDisabledPreservesPreviousValue()
     MockNode node;
     node.SetPersistentSetting("proxy", MakeAddress("127.0.0.1:9050"));
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     model.setProxyEnabled(false);
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.proxyEnabled());
-    QCOMPARE(node.update_rw_setting_arguments.size(), 2U);
-    const auto* previous_write{FindSettingWrite(node, "proxy-prev")};
-    QVERIFY(previous_write != nullptr && previous_write->isStr());
-    QCOMPARE(previous_write->get_str(), std::string{"127.0.0.1:9050"});
-    const auto* proxy_write{FindSettingWrite(node, "proxy")};
-    QVERIFY(proxy_write != nullptr);
-    QVERIFY(proxy_write->isNull());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto previous_write = ReadRwSetting(model_args, "proxy-prev");
+    QVERIFY(previous_write.isStr());
+    QCOMPARE(previous_write.get_str(), std::string{"127.0.0.1:9050"});
+    const auto proxy_write = ReadRwSetting(model_args, "proxy");
+    QVERIFY(proxy_write.isNull());
 }
 
 void OptionsModelTests::customDataDirValidationRejectsFile()
@@ -835,9 +1031,17 @@ void OptionsModelTests::customDataDirValidationRejectsFile()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(model.selectCustomDataDir(file_path));
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(!model.validateCustomDataDir(file_path).isEmpty());
-    QVERIFY(!model.selectCustomDataDir(file_path));
+    QVERIFY(!model.settingsError().isEmpty());
 }
 
 void OptionsModelTests::customDataDirSelectionCreatesDirectoryAndPersists()
@@ -855,9 +1059,16 @@ void OptionsModelTests::customDataDirSelectionCreatesDirectoryAndPersists()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
     QVERIFY(model.selectCustomDataDir(data_dir));
+    QTRY_VERIFY(!model.validationPending());
 
     QVERIFY(QFileInfo(data_dir).isDir());
     QVERIFY(QFileInfo(QDir(data_dir).filePath("wallets")).isDir());
@@ -883,9 +1094,16 @@ void OptionsModelTests::customDataDirSelectionPreservesExistingWalletDiscovery()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.validateCustomDataDir(data_dir).isEmpty());
     QVERIFY(model.selectCustomDataDir(data_dir));
+    QTRY_VERIFY(!model.validationPending());
 
     QVERIFY(QFileInfo(data_dir).isDir());
     QVERIFY(!QFileInfo::exists(wallets_dir));
@@ -1005,7 +1223,12 @@ void OptionsModelTests::runtimeDataDirUsesExplicitDatadirOverSavedGuiSetting()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.dataDir(), explicit_data_dir.path());
     QCOMPARE(model.getCustomDataDirString(), explicit_data_dir.path());
     QCOMPARE(settings.value(SettingsKeys::DATA_DIR).toString(), saved_data_dir.path());
@@ -1151,6 +1374,7 @@ void OptionsModelTests::resetGuiSettingsStartsOnboardingFromDefaultDataDir()
     QVERIFY2(QmlDataDir::ResetGuiSettings(args, &reset_error), qPrintable(reset_error));
 
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.dataDir(), QmlDataDir::DefaultDataDirString());
     QVERIFY(model.getCustomDataDirString().isEmpty());
 }
@@ -1271,7 +1495,9 @@ void OptionsModelTests::resetGuiSettingsApplyClearsSelectedCustomDataDirSettings
     std::vector<std::string> argv = TestArgv();
     argv.emplace_back("-resetguisettings");
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(data_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.previewError(), QString{});
     QVERIFY(model.listen());
     QVERIFY(model.natpmp());
@@ -1653,6 +1879,7 @@ void OptionsModelTests::explicitDatadirApplyDoesNotPersistGuiDataDir()
 
     const std::vector<std::string> argv{TestArgvWithDataDir(data_dir.path())};
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.dataDir(), data_dir.path());
 
     ArgsManager args;
@@ -2105,7 +2332,9 @@ void OptionsModelTests::fullOnboardingApplyWritesQmlOnboardedMarker()
 
     const std::vector<std::string> argv = TestArgv();
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(data_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
 
     ArgsManager args;
     std::string parse_error;
@@ -2176,7 +2405,13 @@ void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     model.setThirdPartyTransactionUrls(
         "https://example.com/tx/%s|"
         "http://example.net/tx/%s|"
@@ -2186,7 +2421,7 @@ void OptionsModelTests::thirdPartyTransactionLinksParseValidUrls()
         "https://example.org/tx|"
         "not-a-url|"
         "https:///tx/%s");
-
+    QTRY_VERIFY(!model.settingsPending());
     const QVariantList links = model.thirdPartyTransactionLinks("abc");
     QCOMPARE(links.size(), 2);
     const QVariantMap https_link = links.at(0).toMap();
@@ -2213,9 +2448,16 @@ void OptionsModelTests::moneyFontChoicePersists()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.moneyFontChoice(), QString("embedded"));
     model.setMoneyFontChoice("best_system");
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.moneyFontChoice(), QString("best_system"));
     QCOMPARE(settings.value(SettingsKeys::MONEY_FONT_CHOICE).toString(), QString("best_system"));
 
@@ -2236,25 +2478,34 @@ void OptionsModelTests::displayUnitUsesQtCompatibleSettingsKey()
 
     MockNode node;
 
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(QString::fromUtf8(SettingsKeys::DISPLAY_UNIT), QStringLiteral("DisplayBitcoinUnit"));
     QCOMPARE(model.displayUnit(), 3);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("sat"));
     QCOMPARE(model.displayUnitLabelForAmount(2), QStringLiteral("sats"));
 
     model.setDisplayUnit(1);
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 1);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("mBTC"));
     QCOMPARE(model.displayUnitLabelForAmount(2), QStringLiteral("mBTC"));
     QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), 1);
 
     model.setDisplayUnit(2);
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 2);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("bits"));
     QCOMPARE(model.displayUnitLabelForAmount(2), QStringLiteral("bits"));
     QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), 2);
 
     model.setDisplayUnit(9);
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 0);
     QCOMPARE(settings.value(SettingsKeys::DISPLAY_UNIT).toInt(), 0);
 
@@ -2291,7 +2542,12 @@ DisplayBitcoinUnit=@Variant(\0\0\0\x7f\0\0\0\fBitcoinUnit\0\x3)
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 3);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("sat"));
     QCOMPARE(model.displayUnitLabelForAmount(2), QStringLiteral("sats"));
@@ -2315,7 +2571,12 @@ void OptionsModelTests::displayUnitPrefersQmlSettingOverLegacyQtFallback()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.displayUnit(), 1);
     QCOMPARE(model.displayUnitLabel(), QStringLiteral("mBTC"));
 }
@@ -2438,7 +2699,12 @@ void OptionsModelTests::coreSettingsModelEntryMutatesRuntimeModel()
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     auto* core_settings = qobject_cast<CoreSettingsModel*>(model.coreSettings());
     QVERIFY(core_settings);
     auto* listen_entry = qobject_cast<CoreSettingEntryModel*>(core_settings->entry(QStringLiteral("listen")));
@@ -2448,6 +2714,7 @@ void OptionsModelTests::coreSettingsModelEntryMutatesRuntimeModel()
     QVERIFY(!model.connectionSettingsDirty());
 
     listen_entry->setValue(false);
+    QTRY_VERIFY(!model.settingsPending());
 
     QVERIFY(!model.listen());
     QVERIFY(model.connectionSettingsDirty());
@@ -2686,7 +2953,12 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         MockNode node;
         InstallPersistentSettings(node, args);
 
+        QTemporaryDir model_settings_dir;
+        QVERIFY(model_settings_dir.isValid());
+        PrepareRuntimePersistence(node, args, model_settings_dir);
         OptionsQmlModel model(node, args);
+        QTRY_VERIFY(model.settingsReady());
+        QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
         QCOMPARE(status.value("source").toString(), QString("bitcoin_conf"));
         QCOMPARE(status.value("canEdit").toBool(), true);
@@ -2705,7 +2977,12 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         MockNode node;
         InstallPersistentSettings(node, args);
 
+        QTemporaryDir model_settings_dir;
+        QVERIFY(model_settings_dir.isValid());
+        PrepareRuntimePersistence(node, args, model_settings_dir);
         OptionsQmlModel model(node, args);
+        QTRY_VERIFY(model.settingsReady());
+        QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
         QCOMPARE(status.value("source").toString(), QString("settings_json"));
         QCOMPARE(status.value("createsGuiOverride").toBool(), false);
@@ -2723,7 +3000,12 @@ void OptionsModelTests::coreSettingStatusTracksSourcePrecedence()
         MockNode node;
         InstallPersistentSettings(node, args);
 
+        QTemporaryDir model_settings_dir;
+        QVERIFY(model_settings_dir.isValid());
+        PrepareRuntimePersistence(node, args, model_settings_dir);
         OptionsQmlModel model(node, args);
+        QTRY_VERIFY(model.settingsReady());
+        QTRY_VERIFY(!model.settingsPending());
         const QVariantMap status = model.coreSettingStatus(QStringLiteral("listen"));
         QCOMPARE(status.value("source").toString(), QString("command_line"));
         QCOMPARE(status.value("canEdit").toBool(), false);
@@ -2742,13 +3024,18 @@ void OptionsModelTests::runtimeCoreSettingStatusesRefreshAfterWrite()
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.coreSettingStatus(QStringLiteral("maxmempool")).value("source").toString(), QString("default"));
 
     QSignalSpy status_spy(&model, &OptionsQmlModel::coreSettingStatusesChanged);
     model.setMaxMempoolSizeMB(456);
-
-    QCOMPARE(status_spy.count(), 1);
+    QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(status_spy.count() > 0);
     QCOMPARE(model.coreSettingStatus(QStringLiteral("maxmempool")).value("source").toString(), QString("settings_json"));
     QCOMPARE(model.coreSettingStatuses().value(QStringLiteral("maxmempool")).toMap().value("source").toString(), QString("settings_json"));
 }
@@ -2766,16 +3053,21 @@ void OptionsModelTests::commandLineOverriddenSettingDoesNotWrite()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
     QCOMPARE(model.coreSettingStatus(QStringLiteral("listen")).value("source").toString(), QString("command_line"));
     QCOMPARE(model.coreSettingStatus(QStringLiteral("listen")).value("canEdit").toBool(), false);
 
-    node.update_rw_setting_arguments.clear();
     model.setListen(true);
-
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
-    QCOMPARE(SettingWriteCount(node, "listen"), 0);
+    QVERIFY(!model.settingsPending());
+    QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
@@ -2805,7 +3097,12 @@ void OptionsModelTests::runtimeCommandLineOverridesDisplayEffectiveValues()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(model.server());
     QVERIFY(model.prune());
     QCOMPARE(model.pruneSizeGB(), 10);
@@ -2842,7 +3139,12 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     InstallPersistentSettings(proxy_node, proxy_args);
     InstallRwSettingsWriter(proxy_node, proxy_args);
 
+    QTemporaryDir proxy_model_settings_dir;
+    QVERIFY(proxy_model_settings_dir.isValid());
+    PrepareRuntimePersistence(proxy_node, proxy_args, proxy_model_settings_dir);
     OptionsQmlModel proxy_model(proxy_node, proxy_args);
+    QTRY_VERIFY(proxy_model.settingsReady());
+    QTRY_VERIFY(!proxy_model.settingsPending());
     QVERIFY(!proxy_model.listen());
     QVERIFY(proxy_model.proxyEnabled());
     QCOMPARE(proxy_model.proxyAddress(), QStringLiteral("127.0.0.1:9050"));
@@ -2860,25 +3162,24 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     QCOMPARE(listen_entry->status().value("hasRwSetting").toBool(), false);
     QSignalSpy listen_entry_status_spy(listen_entry, &CoreSettingEntryModel::statusChanged);
 
-    proxy_node.update_rw_setting_arguments.clear();
     proxy_model.setListen(true);
+    QTRY_VERIFY(!proxy_model.settingsPending());
     QVERIFY(proxy_model.listen());
     QCOMPARE(SettingToBool(proxy_args.GetPersistentSetting("listen")), true);
     QCOMPARE(proxy_model.coreSettingStatus(QStringLiteral("listen")).value("hasRwSetting").toBool(), true);
     QCOMPARE(listen_entry->status().value("hasRwSetting").toBool(), true);
     QVERIFY(listen_entry_status_spy.count() >= 1);
-    QCOMPARE(proxy_node.update_rw_setting_arguments.size(), 1U);
-    const auto* enabled_write{FindSettingWrite(proxy_node, "listen")};
-    QVERIFY(enabled_write != nullptr && enabled_write->isBool());
-    QVERIFY(enabled_write->get_bool());
+    QVERIFY(QFile::exists(proxy_model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto enabled_write = ReadRwSetting(proxy_args, "listen");
+    QVERIFY(enabled_write.isBool());
+    QVERIFY(enabled_write.get_bool());
 
-    proxy_node.update_rw_setting_arguments.clear();
     proxy_model.setListen(false);
+    QTRY_VERIFY(!proxy_model.settingsPending());
     QVERIFY(!proxy_model.listen());
-    QCOMPARE(proxy_node.update_rw_setting_arguments.size(), 1U);
-    const auto* disabled_write{FindSettingWrite(proxy_node, "listen")};
-    QVERIFY(disabled_write != nullptr);
-    QVERIFY(disabled_write->isNull());
+    QVERIFY(QFile::exists(proxy_model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto disabled_write = ReadRwSetting(proxy_args, "listen");
+    QVERIFY(disabled_write.isNull());
 
     bool has_listen_override{true};
     proxy_args.LockSettings([&](common::Settings& settings) {
@@ -2898,7 +3199,12 @@ void OptionsModelTests::runtimeParameterInteractionsDisplayEffectiveValues()
     MockNode blocksonly_node;
     InstallPersistentSettings(blocksonly_node, blocksonly_args);
 
+    QTemporaryDir blocksonly_model_settings_dir;
+    QVERIFY(blocksonly_model_settings_dir.isValid());
+    PrepareRuntimePersistence(blocksonly_node, blocksonly_args, blocksonly_model_settings_dir);
     OptionsQmlModel blocksonly_model(blocksonly_node, blocksonly_args);
+    QTRY_VERIFY(blocksonly_model.settingsReady());
+    QTRY_VERIFY(!blocksonly_model.settingsPending());
     QCOMPARE(blocksonly_model.maxMempoolSizeMB(), static_cast<int>(DEFAULT_BLOCKSONLY_MAX_MEMPOOL_SIZE_MB));
 
     QVariantMap mempool_status = blocksonly_model.coreSettingStatus(QStringLiteral("maxmempool"));
@@ -2932,18 +3238,29 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
-    node.update_rw_setting_arguments.clear();
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
+
     node.force_setting_arguments.clear();
 
     model.setServer(false);
+    QTRY_VERIFY(!model.settingsPending());
     model.setPrune(false);
+    QTRY_VERIFY(!model.settingsPending());
     model.setProxyEnabled(false);
+    QTRY_VERIFY(!model.settingsPending());
     model.setDbcacheSizeMiB(700);
+    QTRY_VERIFY(!model.settingsPending());
     model.setScriptThreads(8);
+    QTRY_VERIFY(!model.settingsPending());
     model.setMaxMempoolSizeMB(700);
+    QTRY_VERIFY(!model.settingsPending());
     model.setExternalSignerPath(QStringLiteral("changed-signer"));
-
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(SettingToBool(args.GetPersistentSetting("server")), false);
     QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("prune"), -1), 0);
     QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("proxy"), "")), QString("127.0.0.1:9050"));
@@ -2951,8 +3268,9 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("par"), -1), 1);
     QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("maxmempool"), -1), 300);
     QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("signer"), "")), QString("saved-signer"));
-    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(!model.settingsPending());
     QVERIFY(node.force_setting_arguments.empty());
+    QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
 }
 
 void OptionsModelTests::revertingToConfigValueDeletesRwOverride()
@@ -2969,15 +3287,19 @@ void OptionsModelTests::revertingToConfigValueDeletesRwOverride()
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QVERIFY(!model.listen());
 
-    node.update_rw_setting_arguments.clear();
     model.setListen(true);
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
-    const auto* listen_write{FindSettingWrite(node, "listen")};
-    QVERIFY(listen_write != nullptr);
-    QVERIFY(listen_write->isNull());
+    QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto listen_write = ReadRwSetting(args, "listen");
+    QVERIFY(listen_write.isNull());
 }
 
 void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
@@ -2993,15 +3315,19 @@ void OptionsModelTests::revertingToDefaultValueDeletesRwOverride()
     InstallPersistentSettings(node, args);
     InstallRwSettingsWriter(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.maxMempoolSizeMB(), 456);
 
-    node.update_rw_setting_arguments.clear();
     model.setMaxMempoolSizeMB(DEFAULT_MAX_MEMPOOL_SIZE_MB);
-    QCOMPARE(node.update_rw_setting_arguments.size(), 1U);
-    const auto* mempool_write{FindSettingWrite(node, "maxmempool")};
-    QVERIFY(mempool_write != nullptr);
-    QVERIFY(mempool_write->isNull());
+    QTRY_VERIFY(!model.settingsPending());
+    QVERIFY(QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
+    const auto mempool_write = ReadRwSetting(args, "maxmempool");
+    QVERIFY(mempool_write.isNull());
 }
 
 void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
@@ -3021,11 +3347,17 @@ void OptionsModelTests::languageCommandLineOverrideDoesNotPersist()
     MockNode node;
     InstallPersistentSettings(node, args);
 
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QString("fr"));
     QCOMPARE(model.coreSettingStatus(QStringLiteral("lang")).value("canEdit").toBool(), false);
 
     model.setLanguage(QStringLiteral("es"));
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QString("fr"));
     QCOMPARE(settings.value(SettingsKeys::LANGUAGE).toString(), QString("de"));
 
@@ -3121,7 +3453,12 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
 
     MockNode node;
     InstallPersistentSettings(node, args);
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, args, model_settings_dir);
     OptionsQmlModel model(node, args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.language(), QStringLiteral("de"));
 }
 
@@ -3226,7 +3563,9 @@ void OptionsModelTests::onboardingApplyMigratesLegacySettingsBeforeTouchedOverri
 
     const std::vector<std::string> argv = TestArgv();
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(data_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(!model.listen());
     QVERIFY(model.server());
 
@@ -3281,7 +3620,9 @@ void OptionsModelTests::onboardingPreviewReadsSelectedDatadirConfig()
     conf.close();
 
     OnboardingOptionsModel model(TestArgv(), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(data_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.previewError(), QString{});
     QCOMPARE(model.coreSettingStatuses().value(QStringLiteral("listen")).toMap().value(QStringLiteral("source")).toString(), QStringLiteral("bitcoin_conf"));
     QVERIFY(!model.listen());
@@ -3300,7 +3641,9 @@ void OptionsModelTests::onboardingApplyDoesNotCopyUntouchedConfig()
 
     const std::vector<std::string> argv = TestArgv();
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(data_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(!model.listen());
 
     ArgsManager args;
