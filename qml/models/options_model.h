@@ -217,7 +217,7 @@ private:
 
     // Properties that are exposed to QML.
     int m_dbcache_size_mib;
-    const int m_min_dbcache_size_mib{MIN_DB_CACHE >> 20};
+    const int m_min_dbcache_size_mib{MIN_DBCACHE_BYTES / 1_MiB};
     const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE >> 20};
     int m_max_mempool_size_mb;
     const int m_min_max_mempool_size_mb{

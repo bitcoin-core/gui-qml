@@ -118,13 +118,13 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
     m_core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(m_args, QmlCoreSettings::CoreSettingNames());
     m_core_settings.setStatuses(CoreSettingStatusesForNames(m_core_setting_statuses, QmlCoreSettings::OnboardingCoreSettingNames()));
 
-    m_dbcache_size_mib = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("dbcache")), DEFAULT_DB_CACHE >> 20);
+    m_dbcache_size_mib = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("dbcache"))).value_or(DEFAULT_KERNEL_CACHE / 1_MiB);
 
-    m_max_mempool_size_mb = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("maxmempool")), DEFAULT_MAX_MEMPOOL_SIZE_MB);
+    m_max_mempool_size_mb = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("maxmempool"))).value_or(DEFAULT_MAX_MEMPOOL_SIZE_MB);
 
-    m_script_threads = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("par")), DEFAULT_SCRIPTCHECK_THREADS);
+    m_script_threads = SettingTo<int64_t>(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("par"))).value_or(DEFAULT_SCRIPTCHECK_THREADS);
 
-    m_external_signer_path = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("signer")), ""));
+    m_external_signer_path = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("signer"))).value_or(""));
 
     resetDirtySnapshots();
 
@@ -140,7 +140,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
         m_custom_datadir_string = m_dataDir;
     }
     QSettings settings;
-    m_language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("lang")), ""));
+    m_language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("lang"))).value_or(""));
     if (m_language.isEmpty() && !QmlCoreSettings::IsCommandLineOverridden(m_args, QStringLiteral("lang"))) {
         m_language = settings.value(SettingsKeys::LANGUAGE, "").toString();
     }

@@ -282,7 +282,7 @@ void PsbtQmlModel::broadcast()
 
     const CTransactionRef tx{MakeTransactionRef(std::move(mutable_tx))};
     std::string error_string;
-    const node::TransactionError error{m_node->broadcastTransaction(tx, node::DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), error_string)};
+    const node::TransactionError error{m_node->broadcastTransaction(tx, node::DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), node::DEFAULT_MAX_RAW_TX_FEE_RATE, error_string)};
     if (error == node::TransactionError::OK) {
         refreshState(tr("Transaction broadcast successfully. Transaction ID: %1").arg(QString::fromStdString(tx->GetHash().ToString())));
     } else {

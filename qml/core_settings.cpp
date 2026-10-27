@@ -68,7 +68,7 @@ bool IsOptionalStringCoreSetting(const QString& name)
 
 QString ProxyAddressFromSetting(const common::SettingsValue& setting)
 {
-    QString proxy_setting = QString::fromStdString(SettingToString(setting, ""));
+    QString proxy_setting = QString::fromStdString(SettingToString(setting).value_or(""));
     if (proxy_setting == QStringLiteral("0")) proxy_setting.clear();
     return proxy_setting;
 }
@@ -206,12 +206,12 @@ int64_t PruneGBToMiB(int gb)
 
 bool PruneEnabled(const common::SettingsValue& setting)
 {
-    return SettingTo<int64_t>(setting, 0) > 1;
+    return SettingTo<int64_t>(setting).value_or(0) > 1;
 }
 
 int PruneSizeGBFromSetting(const common::SettingsValue& setting)
 {
-    const int64_t value = SettingTo<int64_t>(setting, 0);
+    const int64_t value = SettingTo<int64_t>(setting).value_or(0);
     return value > 1 ? PruneMiBToGB(value) : DEFAULT_PRUNE_TARGET_GB;
 }
 
@@ -271,9 +271,9 @@ common::SettingsValue ProxySetting(bool enabled, const QString& address)
 Values LoadPersistentValues(interfaces::Node& node)
 {
     Values values;
-    values.listen = SettingToBool(node.getPersistentSetting("listen"), DEFAULT_LISTEN);
-    values.natpmp = SettingToBool(node.getPersistentSetting("natpmp"), DEFAULT_NATPMP);
-    values.server = SettingToBool(node.getPersistentSetting("server"), false);
+    values.listen = SettingToBool(node.getPersistentSetting("listen")).value_or(DEFAULT_LISTEN);
+    values.natpmp = SettingToBool(node.getPersistentSetting("natpmp")).value_or(DEFAULT_NATPMP);
+    values.server = SettingToBool(node.getPersistentSetting("server")).value_or(false);
 
     const common::SettingsValue prune_setting = node.getPersistentSetting("prune");
     values.prune = PruneEnabled(prune_setting);
@@ -285,13 +285,13 @@ Values LoadPersistentValues(interfaces::Node& node)
     values.proxy_enabled = !proxy_setting.isEmpty();
     values.proxy_address = values.proxy_enabled
         ? proxy_setting
-        : QString::fromStdString(SettingToString(node.getPersistentSetting("proxy-prev"), ""));
+        : QString::fromStdString(SettingToString(node.getPersistentSetting("proxy-prev")).value_or(""));
 
     const QString onion_setting = ProxyAddressFromSetting(node.getPersistentSetting("onion"));
     values.tor_enabled = !onion_setting.isEmpty();
     values.tor_address = values.tor_enabled
         ? onion_setting
-        : QString::fromStdString(SettingToString(node.getPersistentSetting("onion-prev"), ""));
+        : QString::fromStdString(SettingToString(node.getPersistentSetting("onion-prev")).value_or(""));
 
     return values;
 }
@@ -299,9 +299,9 @@ Values LoadPersistentValues(interfaces::Node& node)
 Values LoadEffectiveValues(ArgsManager& args)
 {
     Values values;
-    values.listen = SettingToBool(args.GetSetting("-listen"), DEFAULT_LISTEN);
-    values.natpmp = SettingToBool(args.GetSetting("-natpmp"), DEFAULT_NATPMP);
-    values.server = SettingToBool(args.GetSetting("-server"), false);
+    values.listen = SettingToBool(args.GetSetting("-listen")).value_or(DEFAULT_LISTEN);
+    values.natpmp = SettingToBool(args.GetSetting("-natpmp")).value_or(DEFAULT_NATPMP);
+    values.server = SettingToBool(args.GetSetting("-server")).value_or(false);
 
     const common::SettingsValue prune_setting = args.GetSetting("-prune");
     values.prune = PruneEnabled(prune_setting);
@@ -313,14 +313,14 @@ Values LoadEffectiveValues(ArgsManager& args)
     values.proxy_enabled = !proxy_setting.isEmpty();
     values.proxy_address = values.proxy_enabled
         ? proxy_setting
-        : QString::fromStdString(SettingToString(args.GetPersistentSetting("proxy-prev"), ""));
+        : QString::fromStdString(SettingToString(args.GetPersistentSetting("proxy-prev")).value_or(""));
     if (values.proxy_address.isEmpty()) values.proxy_address = DefaultProxyAddress();
 
     const QString onion_setting = ProxyAddressFromSetting(args.GetSetting("-onion"));
     values.tor_enabled = !onion_setting.isEmpty();
     values.tor_address = values.tor_enabled
         ? onion_setting
-        : QString::fromStdString(SettingToString(args.GetPersistentSetting("onion-prev"), ""));
+        : QString::fromStdString(SettingToString(args.GetPersistentSetting("onion-prev")).value_or(""));
     if (values.tor_address.isEmpty()) values.tor_address = DefaultProxyAddress();
 
     return values;
@@ -442,7 +442,7 @@ common::SettingsValue DefaultCoreSettingValue(const QString& name)
     if (name == QStringLiteral("natpmp")) return DEFAULT_NATPMP;
     if (name == QStringLiteral("server")) return false;
     if (name == QStringLiteral("prune")) return 0;
-    if (name == QStringLiteral("dbcache")) return DEFAULT_DB_CACHE >> 20;
+    if (name == QStringLiteral("dbcache")) return DEFAULT_KERNEL_CACHE / 1_MiB;
     if (name == QStringLiteral("par")) return DEFAULT_SCRIPTCHECK_THREADS;
     if (name == QStringLiteral("maxmempool")) return DEFAULT_MAX_MEMPOOL_SIZE_MB;
     return {};

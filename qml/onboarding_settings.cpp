@@ -370,7 +370,7 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     }
 
     status.qml_onboarded = CommandLineBoolArg(preview_args, QML_ONBOARDED_KEY)
-        .value_or(SettingToBool(preview_args.GetPersistentSetting(QML_ONBOARDED_KEY), false));
+        .value_or(SettingToBool(preview_args.GetPersistentSetting(QML_ONBOARDED_KEY)).value_or(false));
     status.should_show_onboarding = !status.qml_onboarded;
     status.ok = true;
     return status;
