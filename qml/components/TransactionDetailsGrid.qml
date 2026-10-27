@@ -30,15 +30,28 @@ Grid {
             title: modelData.title
             titleColor: Theme.color.neutral7
             titleTextStyle: Theme.text.caption
-            bodyItem: CoreText {
-                objectName: fieldRow.objectName + "Value"
-                Layout.fillWidth: true
-                text: fieldRow.value
-                textStyle: fieldRow.modelData.mono ? Theme.text.monoDescription : Theme.text.description
-                horizontalAlignment: Text.AlignLeft
-                textFormat: Text.PlainText
-                wrap: true
-            }
+            bodyItem: [
+                CoreText {
+                    visible: !fieldRow.modelData.amountValue
+                    objectName: visible ? fieldRow.objectName + "Value" : ""
+                    Layout.fillWidth: true
+                    text: fieldRow.value
+                    textStyle: fieldRow.modelData.mono ? Theme.text.monoDescription : Theme.text.description
+                    horizontalAlignment: Text.AlignLeft
+                    textFormat: Text.PlainText
+                    wrap: true
+                },
+                BitcoinAmountDisplayLabelBase {
+                    visible: fieldRow.modelData.amountValue === true
+                    objectName: visible ? fieldRow.objectName + "Value" : ""
+                    Layout.fillWidth: true
+                    text: fieldRow.value
+                    hidesAmount: fieldRow.modelData.hidesAmount === true
+                    textStyle: fieldRow.modelData.mono ? Theme.text.monoDescription : Theme.text.amountDescription
+                    horizontalAlignment: Text.AlignLeft
+                    wrap: true
+                }
+            ]
             showDivider: fieldsGrid.lastRowDivider || index < fieldsGrid.fields.length - fieldsGrid.columns
         }
     }

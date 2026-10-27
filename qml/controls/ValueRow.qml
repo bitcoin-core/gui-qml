@@ -18,6 +18,7 @@ FormRow {
     property var valueTextStyle: amountValue ? Theme.text.amountDescription : Theme.text.description
     property string valueUnit: ""
     property bool animateUnitChanges: true
+    property bool hidesAmount: false
     // Long values (paths, warnings) wrap inside valueMaximumWidth instead of eliding.
     property bool valueWrap: false
     property string valueObjectName: root.objectName.length > 0 ? root.objectName + "Value" : ""
@@ -48,6 +49,7 @@ FormRow {
             amount: root.value
             unit: root.value === "—" ? "" : root.valueUnit
             animateUnitChanges: root.animateUnitChanges
+            hidesAmount: root.hidesAmount
             color: root.valueColor
             textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight

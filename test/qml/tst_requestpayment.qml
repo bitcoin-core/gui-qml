@@ -37,6 +37,25 @@ TestCase {
         }
     }
 
+    function test_saved_amount_is_concealed_until_edited() {
+        optionsModel.hideAmounts = true
+        try {
+            const field = createTemporaryObject(paymentFieldComponent, this, {hidesAmount: true, value: "0.125"})
+            verify(waitForRendering(field))
+            compare(field.field.echoMode, TextInput.NoEcho)
+            compare(field.field.Accessible.description, "Hidden amount")
+            compare(field.value, "0.125")
+            field.field.forceActiveFocus(Qt.TabFocusReason)
+            compare(field.field.echoMode, TextInput.Normal)
+            compare(field.field.text, "0.125")
+            field.field.focus = false
+            compare(field.field.echoMode, TextInput.NoEcho)
+            compare(field.value, "0.125")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
     function test_paymentFieldImplicitWidthDoesNotDependOnAssignedWidth() {
         const field = createTemporaryObject(paymentFieldComponent, this)
         verify(field !== null)

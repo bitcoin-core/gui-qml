@@ -183,6 +183,7 @@ ApplicationWindow {
         shuttingDown: appWindow.shutdownInProgress || nodeModel.fatalException
         fatalException: nodeModel.fatalException
         isMacOs: Qt.platform.os === "osx"
+        amountsHidden: optionsModel.hideAmounts
 
         onCreateWalletRequested: appWindow.openWalletCreation()
         onCloseWalletRequested: appWindow.routeToShell("requestCloseWallet")
@@ -199,6 +200,7 @@ ApplicationWindow {
         onPasteRequested: appWindow.invokeEditCommand("paste")
         onToggleDisplayUnitRequested: optionsModel.displayUnit = optionsModel.displayUnit === BitcoinAmount.SAT
             ? BitcoinAmount.BTC : BitcoinAmount.SAT
+        onToggleHideAmountsRequested: optionsModel.hideAmounts = !optionsModel.hideAmounts
         onMinimizeRequested: appWindow.showMinimized()
         onZoomRequested: {
             if (appWindow.visibility === Window.Maximized) {

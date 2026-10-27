@@ -19,6 +19,7 @@ QtObject {
     property bool shuttingDown: false
     property bool fatalException: false
     property bool isMacOs: false
+    property bool amountsHidden: false
 
     readonly property bool commandEnabled: !shuttingDown
     readonly property bool routeEnabled: commandEnabled && navigationEnabled
@@ -45,6 +46,7 @@ QtObject {
     signal copyRequested()
     signal pasteRequested()
     signal toggleDisplayUnitRequested()
+    signal toggleHideAmountsRequested()
     signal minimizeRequested()
     signal zoomRequested()
     signal mainWindowRequested()
@@ -143,6 +145,12 @@ QtObject {
         shortcut: qsTr("Ctrl+B")
         enabled: root.commandEnabled
         onTriggered: root.toggleDisplayUnitRequested()
+    }
+    readonly property MenuCommand toggleHideAmounts: MenuCommand {
+        text: root.amountsHidden ? qsTr("Show Amounts") : qsTr("Hide Amounts")
+        shortcut: qsTr("Ctrl+Shift+M")
+        enabled: root.commandEnabled
+        onTriggered: root.toggleHideAmountsRequested()
     }
     readonly property MenuCommand minimize: MenuCommand {
         text: qsTr("&Minimize")

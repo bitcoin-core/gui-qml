@@ -272,6 +272,45 @@ TestCase {
         compare(incomingIcon.accent, Theme.color.txIncoming)
     }
 
+    function test_amounts_follow_privacy_setting_data() {
+        return [
+            {tag: "regular", width: 1180, hidden: false},
+            {tag: "compact", width: 390, hidden: false},
+            {tag: "initially_hidden", width: 1180, hidden: true},
+            {tag: "compact_initially_hidden", width: 390, hidden: true}
+        ]
+    }
+
+    function test_amounts_follow_privacy_setting(data) {
+        const original = optionsModel.hideAmounts
+        testAccessibility.activate()
+        try {
+            optionsModel.hideAmounts = data.hidden
+            const fixture = [rows()[0], rows()[3], rows()[6]]
+            testTransactionActivityModel.setRows(fixture)
+            const page = createPage({width: data.width})
+            for (const hidden of [data.hidden, !data.hidden, data.hidden]) {
+                optionsModel.hideAmounts = hidden
+                for (const entry of fixture) {
+                    const item = findRow(page, entry.txid)
+                    const parent = testAccessibility.info(findChild(item, "activityRowOpenButton"))
+                    verify(parent.description.includes(hidden ? "Hidden amount" : entry.amount))
+                    if (hidden) verify(!parent.description.includes(entry.amount))
+                    for (const action of entry.actions) {
+                        const child = findChild(item, "activityAction_" + action.actionId)
+                        verify(child !== null)
+                        const info = testAccessibility.info(child)
+                        compare(info.name, action.label || action.address || "Wallet contribution")
+                        compare(info.description, action.address + ". " + (hidden ? "Hidden amount" : action.amount))
+                    }
+                }
+            }
+        } finally {
+            optionsModel.hideAmounts = original
+            testAccessibility.deactivate()
+        }
+    }
+
     function test_whole_row_highlights_and_opens_transaction_data() {
         return [
             {tag: "note", txid: "single", target: "activityRowLabel"},
@@ -401,6 +440,13 @@ TestCase {
         verify(total !== null)
         compare(proxy.pendingBalanceSat, 10000)
         compare(total.text, "+10000 sats")
+        optionsModel.hideAmounts = true
+        try {
+            compare(total.shownText, total.maskText)
+            compare(total.Accessible.name, "Hidden amount")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
         compare(total.color, Theme.color.txIncoming)
         verify(waitForRendering(page))
         fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset - Theme.space.xs, 0.1)
@@ -864,6 +910,14 @@ TestCase {
         const menu = findChild(page, "activityAmountFilterPopup")
         tryCompare(menu, "opened", true)
         const slider = findChild(page, "activityAmountRangeSlider")
+        optionsModel.hideAmounts = true
+        try {
+            compare(findChild(page, "activityAmountRangeLabel").Accessible.name, "Hidden amount")
+            compare(slider.first.handle.value, undefined)
+            compare(slider.second.handle.maximumValue, undefined)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
         const handle = slider.second.handle
         const start = handle.mapToItem(slider, handle.width / 2, handle.height / 2)
         mousePress(slider, start.x, start.y)

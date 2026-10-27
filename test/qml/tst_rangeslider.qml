@@ -34,6 +34,22 @@ TestCase {
         compare(slider.upperValue, 80)
     }
 
+    function test_hidden_values_stay_out_of_accessibility() {
+        const slider = createTemporaryObject(sliderComponent, this)
+        slider.setValues(20, 80)
+        compare(slider.first.handle.value, 20)
+        slider.valuesHidden = true
+        for (const handle of [slider.first.handle, slider.second.handle]) {
+            compare(handle.value, undefined)
+            compare(handle.minimumValue, undefined)
+            compare(handle.maximumValue, undefined)
+            compare(handle.Accessible.description, "Hidden value")
+        }
+        slider.valuesHidden = false
+        compare(slider.first.handle.value, 20)
+        compare(slider.second.handle.value, 80)
+    }
+
     function test_keyboard_and_changing_bounds() {
         const slider = createTemporaryObject(sliderComponent, this)
         slider.setValues(20, 80)

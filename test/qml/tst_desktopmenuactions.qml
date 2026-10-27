@@ -36,6 +36,12 @@ TestCase {
     }
 
     SignalSpy {
+        id: toggleHideAmountsSpy
+        target: testCase.actionsUnderTest
+        signalName: "toggleHideAmountsRequested"
+    }
+
+    SignalSpy {
         id: rpcDocumentationSpy
         target: testCase.actionsUnderTest
         signalName: "rpcDocumentationRequested"
@@ -54,6 +60,7 @@ TestCase {
         exitSpy.clear()
         undoSpy.clear()
         toggleDisplayUnitSpy.clear()
+        toggleHideAmountsSpy.clear()
         rpcDocumentationSpy.clear()
     }
 
@@ -145,6 +152,20 @@ TestCase {
         compare(actionsUnderTest.toggleDisplayUnit.enabled, false)
         actionsUnderTest.toggleDisplayUnit.trigger()
         compare(toggleDisplayUnitSpy.count, 1)
+    }
+
+    function test_hide_amounts_command_names_the_next_state() {
+        compare(actionsUnderTest.toggleHideAmounts.text, "Hide Amounts")
+        compare(actionsUnderTest.toggleHideAmounts.shortcut, "Ctrl+Shift+M")
+        actionsUnderTest.toggleHideAmounts.trigger()
+        compare(toggleHideAmountsSpy.count, 1)
+        actionsUnderTest.amountsHidden = true
+        compare(actionsUnderTest.toggleHideAmounts.text, "Show Amounts")
+
+        actionsUnderTest.shuttingDown = true
+        compare(actionsUnderTest.toggleHideAmounts.enabled, false)
+        actionsUnderTest.toggleHideAmounts.trigger()
+        compare(toggleHideAmountsSpy.count, 1)
     }
 
     function test_shutdown_disables_commands_and_blocks_trigger() {

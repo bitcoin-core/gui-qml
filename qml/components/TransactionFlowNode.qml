@@ -17,6 +17,7 @@ Rectangle {
     property bool input: false
     property bool interactive: true
     property bool selected: false
+    property bool hidesAmount: false
     readonly property bool compact: width < 340
     readonly property var requests: entry.paymentRequests || []
     readonly property bool hasData: entry.kind === "data" && entry.dataType === "OP_RETURN"
@@ -47,7 +48,7 @@ Rectangle {
     implicitHeight: Math.max(80, content.height + 24)
     height: implicitHeight
     Accessible.role: Accessible.Grouping
-    Accessible.name: title + ", " + amountText
+    Accessible.name: title + ", " + (hidesAmount && optionsModel.hideAmounts ? qsTr("Hidden amount") : amountText)
 
     ColumnLayout {
         id: content
@@ -80,6 +81,7 @@ Rectangle {
                 visible: !root.compact
                 // Amounts being reviewed or confirmed never roll through other digits.
                 animateUnitChanges: false
+                hidesAmount: root.hidesAmount
                 text: root.amountText
                 textStyle: Theme.text.amountCaption
             }
@@ -89,6 +91,7 @@ Rectangle {
             displayUnit: root.displayUnit
             visible: root.compact
             animateUnitChanges: false
+            hidesAmount: root.hidesAmount
             Layout.fillWidth: true
             text: root.amountText
             textStyle: Theme.text.amountCaption

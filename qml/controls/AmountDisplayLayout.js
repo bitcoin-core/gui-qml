@@ -44,6 +44,16 @@ function cells(text, decimalPoint, numerals) {
     return result
 }
 
+// A mask has no digits; each glyph gets its own cell so it can arrive and
+// leave like a digit does.
+function maskCells(text) {
+    const result = []
+    for (let i = 0; i < text.length; ++i) {
+        result.push({key: "mask" + i, start: i, end: i + 1, glyph: text.charAt(i), digit: -1})
+    }
+    return result
+}
+
 function magnitude(cells) {
     let value = ""
     for (const cell of cells) {

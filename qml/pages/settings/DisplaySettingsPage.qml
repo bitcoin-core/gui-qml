@@ -17,6 +17,8 @@ SettingsPage {
     title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
 
+    Shortcut { id: hideAmountsShortcut; sequence: qsTr("Ctrl+Shift+M"); enabled: false }
+
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Appearance")
@@ -84,7 +86,6 @@ SettingsPage {
             objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
-            showDivider: false
             trailingItem: PopupPicker {
                 objectName: "displayMoneyFontPicker"
                 surfaceLevel: 1
@@ -107,6 +108,16 @@ SettingsPage {
                     optionsModel.moneyFontChoice = value
                 }
             }
+        }
+
+        SwitchRow {
+            objectName: "displayHideAmountsRow"
+            Layout.fillWidth: true
+            title: qsTr("Hide amounts")
+            description: qsTr("Mask your balance and activity amounts. Shortcut: %1").arg(hideAmountsShortcut.nativeText)
+            showDivider: false
+            checked: optionsModel.hideAmounts
+            onToggled: optionsModel.hideAmounts = checked
         }
     }
 

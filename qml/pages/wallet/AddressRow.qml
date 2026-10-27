@@ -174,6 +174,7 @@ AbstractButton {
                     objectName: "addressRowAmountText"
                     Layout.fillWidth: true
                     text: root.displayAmount
+                    hidesAmount: true
                     color: root.hasAmount ? Theme.color.txIncoming : Theme.color.neutral7
                     textStyle: Theme.text.amountDescription
                     horizontalAlignment: Text.AlignRight
@@ -195,7 +196,7 @@ AbstractButton {
         TextMetrics {
             id: amountMetrics
             font: amountText.font
-            text: root.displayAmount
+            text: amountText.shownText
         }
 
         Separator {

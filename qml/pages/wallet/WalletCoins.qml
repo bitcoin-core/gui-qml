@@ -28,7 +28,7 @@ Page {
         anchors.horizontalCenter: parent.horizontalCenter
         width: Math.max(0, Math.min(parent.width - root.contentHorizontalPadding * 2,
                                     root.maximumContentWidth))
-        wallet: root.wallet; selectionMode: false
+        wallet: root.wallet; selectionMode: false; hidesAmounts: true
         Component.onCompleted: if (coins) coins.update()
     }
 }

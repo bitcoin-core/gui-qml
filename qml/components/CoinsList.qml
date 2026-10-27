@@ -12,6 +12,9 @@ ColumnLayout {
     property var wallet
     property var coins: wallet ? wallet.coinsListModel : null
     property bool selectionMode: true
+    // Masks coin amounts and totals while Hide amounts is on; off while
+    // picking coins to send.
+    property bool hidesAmounts: false
     property bool walletSelectionActive: false
     property var markedIds: []
     property string errorText: ""
@@ -218,7 +221,8 @@ ColumnLayout {
                     coinContextMenu.open()
                 }
             }
-            Accessible.name: (label.length ? label + " " : "") + address + " " + rowAmount.displayWithUnit
+            Accessible.name: (label.length ? label + " " : "") + address + " "
+                + (root.hidesAmounts && optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
             Accessible.checkable: root.selectionMode || root.walletSelectionActive
             Accessible.checked: marked
             background: GroupedRowBackground {
@@ -296,6 +300,7 @@ ColumnLayout {
                     BitcoinAmountDisplayLabel {
                         Layout.preferredWidth: Math.min(190, implicitWidth); Layout.alignment: Qt.AlignVCenter
                         amount: rowAmount.localizedDisplay; unit: rowAmount.unitLabel; horizontalAlignment: Text.AlignRight
+                        hidesAmount: root.hidesAmounts
                         textStyle: Theme.text.amountDescription; wrap: false
                     }
                 }
@@ -315,11 +320,11 @@ ColumnLayout {
         Layout.fillWidth: true
         surfaceLevel: root.selectionMode ? 1 : 0
         rowSpacing: 0
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: Theme.color.surfaceDivider }
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
     }
 
     RowLayout {
@@ -377,9 +382,10 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: Theme.space.ml
             spacing: Theme.space.m
-            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
+            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); hidesAmount: root.hidesAmounts; textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
+                valuesHidden: root.hidesAmounts && optionsModel.hideAmounts
                 minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0
                 maxValue: root.coins && root.coins.availableMaxAmount !== undefined ? root.coins.availableMaxAmount : 0
                 Accessible.name: qsTr("Coin amount range")
