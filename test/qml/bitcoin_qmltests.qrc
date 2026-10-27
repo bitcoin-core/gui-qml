@@ -22,6 +22,7 @@
         <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolinformationrows.qml</file>
+        <file>tst_integer_settings.qml</file>
         <file>tst_monospaceoutputview.qml</file>
         <file>tst_navbutton.qml</file>
         <file>tst_navigationsplitview.qml</file>

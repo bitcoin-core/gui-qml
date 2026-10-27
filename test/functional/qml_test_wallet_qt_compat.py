@@ -40,14 +40,16 @@ def find_compat_bitcoin_qt():
     return None
 
 
-def process_output(process):
-    if not process or process.poll() is None:
-        return ""
-    stdout = process.stdout.read().decode("utf-8", errors="replace") if process.stdout else ""
-    stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
-    if stdout and stderr:
-        return f"stdout:\n{stdout}\n\nstderr:\n{stderr}"
-    return stdout or stderr
+def process_output(harness):
+    output = []
+    for stream in ("stdout", "stderr"):
+        path = os.path.join(harness.tmpdir, f"bitcoin-qt.{stream}")
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf8", errors="replace") as log_file:
+                contents = log_file.read()
+            if contents:
+                output.append(f"{stream}:\n{contents}")
+    return "\n\n".join(output)
 
 
 def debug_log_tail(datadir, lines=200):
@@ -58,17 +60,17 @@ def debug_log_tail(datadir, lines=200):
         return "".join(log_file.readlines()[-lines:])
 
 
-def wait_for_rpc_or_process_exit(process, port, timeout=45):
+def wait_for_rpc_or_process_exit(process, harness, timeout=45):
     deadline = time.time() + timeout
     last_error = None
     while time.time() < deadline:
         if process.poll() is not None:
             raise AssertionError(
                 f"bitcoin-qt exited before RPC became ready with code {process.returncode}.\n"
-                f"{process_output(process)}"
+                f"{process_output(harness)}"
             )
         try:
-            rpc_call(port, "getblockcount")
+            rpc_call(harness.gui_rpc_port, "getblockcount")
             return
         except Exception as err:  # noqa: BLE001 - startup should tolerate transient RPC errors
             last_error = err
@@ -136,7 +138,11 @@ def launch_bitcoin_qt(bitcoin_qt, harness):
         "-printtoconsole=1",
     ]
     print(f"[qml_wallet_qt_compat] starting bitcoin-qt: {' '.join(command)}")
-    return subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Verbose logging can fill an unread pipe and block RPC handling or shutdown.
+    # Files also keep diagnostics available while the process is still running.
+    with open(os.path.join(harness.tmpdir, "bitcoin-qt.stdout"), "wb") as stdout, \
+            open(os.path.join(harness.tmpdir, "bitcoin-qt.stderr"), "wb") as stderr:
+        return subprocess.Popen(command, env=env, stdout=stdout, stderr=stderr)
 
 
 def create_unencrypted_wallet(gui, wallet_name):
@@ -200,7 +206,7 @@ def run_test():
         print("[qml_wallet_qt_compat] bitcoin-core-app stopped")
 
         qt_process = launch_bitcoin_qt(bitcoin_qt, harness)
-        wait_for_rpc_or_process_exit(qt_process, harness.gui_rpc_port)
+        wait_for_rpc_or_process_exit(qt_process, harness)
         loaded_wallets = rpc_call(harness.gui_rpc_port, "listwallets")
         assert WALLET_NAME in loaded_wallets, f"Expected {WALLET_NAME} to load, got {loaded_wallets}"
         wallet_info = rpc_call(harness.gui_rpc_port, "getwalletinfo", wallet=WALLET_NAME)
@@ -210,7 +216,7 @@ def run_test():
         if qt_process.poll() is not None:
             raise AssertionError(
                 f"bitcoin-qt exited after loading wallet with code {qt_process.returncode}.\n"
-                f"{process_output(qt_process)}"
+                f"{process_output(harness)}"
             )
 
         print("[qml_wallet_qt_compat] bitcoin-qt stayed alive after loading QML-created request metadata")
@@ -221,7 +227,7 @@ def run_test():
         traceback.print_exc()
         if harness.driver is not None:
             dump_qml_tree(harness.driver)
-        qt_output = process_output(qt_process)
+        qt_output = process_output(harness)
         if qt_output:
             print("\n--- bitcoin-qt process output ---", file=sys.stderr)
             print(qt_output, file=sys.stderr)

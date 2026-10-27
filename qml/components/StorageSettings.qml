@@ -15,24 +15,6 @@ ColumnLayout {
     property int customStorageAmount
     property bool showRestartNotice: false
     readonly property var pruneSetting: coreSettingsModel.entry("prune")
-    readonly property bool hasStorageResult: root.settingsModel && root.settingsModel["storageAvailableText"] !== undefined && root.settingsModel.storageAvailableText.length > 0 && !root.settingsModel.storageCheckPending
-    readonly property int availableStorageGB: root.hasStorageResult ? root.settingsModel.storageAvailableGB : 0
-    readonly property int assumedChainstateSizeGB: root.settingsModel && root.settingsModel["assumedChainstateSize"] !== undefined ? root.settingsModel.assumedChainstateSize : 0
-    readonly property int maxPruneSizeGB: root.hasStorageResult ? Math.max(0, root.availableStorageGB - root.assumedChainstateSizeGB) : 0
-
-    function pruneTargetError(value) {
-        if (isNaN(value) || value < 1) {
-            return qsTr("This is not a valid prune target. Please choose a value that is equal to or larger than 1GB.")
-        }
-        if (root.hasStorageResult && value > root.maxPruneSizeGB) {
-            if (root.maxPruneSizeGB < 1) {
-                return qsTr("There is not enough available storage for reduced storage with the selected data directory.")
-            }
-            return qsTr("This is not a valid prune target. Please choose a value between 1GB and %1GB for the selected data directory.").arg(root.maxPruneSizeGB)
-        }
-        return ""
-    }
-
     spacing: 4
     SettingsRestartNotice {
         visible: root.showRestartNotice
@@ -75,15 +57,14 @@ ColumnLayout {
                 pruneTargetSetting.showErrorText = false
             }
             onEditingFinished: {
-                const parsed = parseInt(text)
-                const error = root.pruneTargetError(parsed)
+                const error = root.settingsModel.commitPruneSizeGB(text, validator.locale)
                 if (error.length > 0) {
                     pruneTargetSetting.errorText = error
                     pruneTargetSetting.showErrorText = true
                 } else {
-                    root.customStorage = parsed !== 2
-                    root.customStorageAmount = parsed
-                    root.pruneSetting.value = parsed
+                    root.customStorage = root.pruneSetting.value !== 2
+                    root.customStorageAmount = root.pruneSetting.value
+                    text = String(root.pruneSetting.value)
                     pruneTargetSetting.forceActiveFocus()
                     pruneTargetSetting.showErrorText = false
                 }

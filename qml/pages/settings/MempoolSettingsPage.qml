@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import QtQuick 2.15
+import org.bitcoincore.qt 1.0
 import QtQuick.Layouts 1.15
 
 import "../../controls"
@@ -22,17 +23,6 @@ SettingsPage {
         const rounded = Math.round(valueMb)
         const decimals = Math.abs(valueMb - rounded) < 0.005 ? 0 : 2
         return Number(valueMb).toLocaleString(Qt.locale(), "f", decimals) + " MB"
-    }
-
-    function validateMempoolSize(valueMb) {
-        if (isNaN(valueMb)
-                || valueMb < optionsModel.minMaxMempoolSizeMB
-                || valueMb > optionsModel.maxMaxMempoolSizeMB) {
-            return qsTr("Choose a value between %1 MB and %2 MB.")
-                .arg(optionsModel.minMaxMempoolSizeMB)
-                .arg(optionsModel.maxMaxMempoolSizeMB)
-        }
-        return ""
     }
 
     SettingsRestartNotice {
@@ -70,9 +60,10 @@ SettingsPage {
             fieldObjectName: "mempoolSizeLimitInput"
             fieldWidth: 80
             text: root.mempoolSizeText
-            validator: IntValidator {
+            validator: IntegerInputValidator {
                 bottom: optionsModel.minMaxMempoolSizeMB
                 top: optionsModel.maxMaxMempoolSizeMB
+                onInputRejected: mempoolSizeRow.editingFinished()
             }
             inputMethodHints: Qt.ImhDigitsOnly
             errorText: root.mempoolSizeError
@@ -85,11 +76,10 @@ SettingsPage {
                 root.mempoolSizeError = ""
             }
             onEditingFinished: {
-                const parsed = parseInt(mempoolSizeRow.text, 10)
-                root.mempoolSizeError = root.validateMempoolSize(parsed)
+                root.mempoolSizeError = optionsModel.commitMaxMempoolSizeMB(
+                    mempoolSizeRow.text, mempoolSizeRow.validator.locale)
                 if (root.mempoolSizeError.length === 0) {
-                    optionsModel.maxMempoolSizeMB = parsed
-                    root.mempoolSizeText = String(parsed)
+                    root.mempoolSizeText = String(optionsModel.maxMempoolSizeMB)
                 }
             }
         }

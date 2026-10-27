@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/options_model.h>
+#include <qml/localeinteger.h>
 
 #include <common/args.h>
 #include <common/settings.h>
@@ -299,6 +300,7 @@ void OptionsQmlModel::refreshCoreSettingStatuses()
 void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
 {
     if (!canEditCoreSetting(QStringLiteral("dbcache"))) return;
+    if (new_dbcache_size_mib < minDbcacheSizeMiB() || new_dbcache_size_mib > maxDbcacheSizeMiB()) return;
     if (new_dbcache_size_mib != m_dbcache_size_mib) {
         const DirtySnapshot before = dirtySnapshot();
         m_dbcache_size_mib = new_dbcache_size_mib;
@@ -306,6 +308,15 @@ void OptionsQmlModel::setDbcacheSizeMiB(int new_dbcache_size_mib)
         Q_EMIT dbcacheSizeMiBChanged(new_dbcache_size_mib);
         emitDirtySignals(before);
     }
+}
+
+QString OptionsQmlModel::commitDbcacheSizeMiB(const QString& text, const QString& locale_name)
+{
+    if (!canEditCoreSetting(QStringLiteral("dbcache"))) return tr("This setting is set by the command line.");
+    const auto value = ParseLocalizedInteger(text, locale_name, minDbcacheSizeMiB(), maxDbcacheSizeMiB());
+    if (!value) return tr("Enter a whole number between %1 and %2 MiB.").arg(minDbcacheSizeMiB()).arg(maxDbcacheSizeMiB());
+    setDbcacheSizeMiB(*value);
+    return {};
 }
 
 void OptionsQmlModel::setListen(bool new_listen)
@@ -316,6 +327,7 @@ void OptionsQmlModel::setListen(bool new_listen)
 void OptionsQmlModel::setMaxMempoolSizeMB(int new_max_mempool_size_mb)
 {
     if (!canEditCoreSetting(QStringLiteral("maxmempool"))) return;
+    if (new_max_mempool_size_mb < minMaxMempoolSizeMB() || new_max_mempool_size_mb > maxMaxMempoolSizeMB()) return;
     if (new_max_mempool_size_mb != m_max_mempool_size_mb) {
         const DirtySnapshot before = dirtySnapshot();
         m_max_mempool_size_mb = new_max_mempool_size_mb;
@@ -323,6 +335,15 @@ void OptionsQmlModel::setMaxMempoolSizeMB(int new_max_mempool_size_mb)
         Q_EMIT maxMempoolSizeMBChanged(new_max_mempool_size_mb);
         emitDirtySignals(before);
     }
+}
+
+QString OptionsQmlModel::commitMaxMempoolSizeMB(const QString& text, const QString& locale_name)
+{
+    if (!canEditCoreSetting(QStringLiteral("maxmempool"))) return tr("This setting is set by the command line.");
+    const auto value = ParseLocalizedInteger(text, locale_name, minMaxMempoolSizeMB(), maxMaxMempoolSizeMB());
+    if (!value) return tr("Enter a whole number between %1 and %2 MB.").arg(minMaxMempoolSizeMB()).arg(maxMaxMempoolSizeMB());
+    setMaxMempoolSizeMB(*value);
+    return {};
 }
 
 void OptionsQmlModel::setNatpmp(bool new_natpmp)
@@ -340,9 +361,15 @@ void OptionsQmlModel::setPruneSizeGB(int new_prune_size_gb)
     m_core_settings.changePruneSizeGB(new_prune_size_gb);
 }
 
+QString OptionsQmlModel::commitPruneSizeGB(const QString& text, const QString& locale_name)
+{
+    return m_core_settings.commitPruneSizeGB(text, locale_name);
+}
+
 void OptionsQmlModel::setScriptThreads(int new_script_threads)
 {
     if (!canEditCoreSetting(QStringLiteral("par"))) return;
+    if (new_script_threads < minScriptThreads() || new_script_threads > maxScriptThreads()) return;
     if (new_script_threads != m_script_threads) {
         const DirtySnapshot before = dirtySnapshot();
         m_script_threads = new_script_threads;
@@ -350,6 +377,15 @@ void OptionsQmlModel::setScriptThreads(int new_script_threads)
         Q_EMIT scriptThreadsChanged(new_script_threads);
         emitDirtySignals(before);
     }
+}
+
+QString OptionsQmlModel::commitScriptThreads(const QString& text, const QString& locale_name)
+{
+    if (!canEditCoreSetting(QStringLiteral("par"))) return tr("This setting is set by the command line.");
+    const auto value = ParseLocalizedInteger(text, locale_name, minScriptThreads(), maxScriptThreads());
+    if (!value) return tr("Enter a whole number between %1 and %2 threads.").arg(minScriptThreads()).arg(maxScriptThreads());
+    setScriptThreads(*value);
+    return {};
 }
 
 void OptionsQmlModel::setServer(bool new_server)

@@ -31,10 +31,13 @@ OnboardingView {
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false
     maximumContentWidth: 640
+    childTopMargin: root.settingsModel.existingProfile ? 24 : 48
     heading: qsTr("Storage amount")
-    subheading: root.hasStorageResult
-        ? qsTr("Data retrieved from the Bitcoin network is stored on your device. You have %1GB of storage available.").arg(root.storageAvailableGB)
-        : qsTr("Data retrieved from the Bitcoin network is stored on your device.")
+    subheading: root.settingsModel.existingProfile
+        ? qsTr("Keep your current setting or choose a change.")
+        : root.hasStorageResult
+            ? qsTr("Data retrieved from the Bitcoin network is stored on your device. You have %1GB of storage available.").arg(root.storageAvailableGB)
+            : qsTr("Data retrieved from the Bitcoin network is stored on your device.")
     primaryButtonText: qsTr("Next")
     primaryButtonObjectName: "onboardingStorageAmountButton"
     primaryButtonEnabled: !root.storageCheckPending && root.storageErrorText.length === 0

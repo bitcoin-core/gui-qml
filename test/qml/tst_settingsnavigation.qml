@@ -889,6 +889,35 @@ TestCase {
         compare(proxySetting.address, "10.0.0.1:9050")
     }
 
+    function test_aboutKeepsDeveloperOptionsAvailable() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("about")
+        tryCompare(view.pageContainer, "depth", 1)
+
+        const aboutPage = findChild(view, "aboutSettingsPage")
+        const developerRow = findChild(aboutPage, "aboutDeveloperRow")
+        tryCompare(developerRow, "visible", true)
+        compare(findChild(aboutPage, "aboutVersionRow").showDivider, true)
+        developerRow.clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+
+        const developerPage = view.pageContainer.currentItem
+        compare(developerPage.objectName, "settingsDeveloper")
+        const dbcacheField = findChild(developerPage, "developerDbcacheField")
+        const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
+        compare(dbcacheField.text, String(optionsModel.dbcacheSizeMiB))
+        compare(dbcacheField.validator.bottom, optionsModel.minDbcacheSizeMiB)
+        compare(dbcacheField.validator.top, optionsModel.maxDbcacheSizeMiB)
+        compare(scriptThreadsField.text, String(optionsModel.scriptThreads))
+        compare(scriptThreadsField.validator.bottom, optionsModel.minScriptThreads)
+        compare(scriptThreadsField.validator.top, optionsModel.maxScriptThreads)
+
+        findChild(developerPage, "settingsDeveloperBack").clicked()
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(view.pageContainer.currentItem, aboutPage)
+    }
+
     function test_settingsViewCanInstantiateEveryVisibleTopLevelDestination() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
@@ -967,7 +996,6 @@ TestCase {
                 const versionValue = findChild(view, "aboutVersionRowValue")
                 verify(versionRow !== null)
                 verify(versionValue !== null)
-                compare(versionRow.value, BuildInfo.fullClientVersion)
                 compare(versionValue.text, BuildInfo.fullClientVersion)
                 verify(versionValue.text.length > 0)
             }

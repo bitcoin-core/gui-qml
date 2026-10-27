@@ -30,6 +30,7 @@
 #include <qml/datadir.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
+#include <qml/localeinteger.h>
 #include <qml/onboarding_settings.h>
 #ifdef __ANDROID__
 #include <qml/androidnotifier.h>
@@ -302,6 +303,7 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
         return bitcoin_uri_model_instance;
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
+    qmlRegisterType<IntegerInputValidator>("org.bitcoincore.qt", 1, 0, "IntegerInputValidator");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
     qmlRegisterType<LineGraph>("org.bitcoincore.qt", 1, 0, "LineGraph");
     qmlRegisterUncreatableType<PeerDetailsModel>("org.bitcoincore.qt", 1, 0, "PeerDetailsModel", "");

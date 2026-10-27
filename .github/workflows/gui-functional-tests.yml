@@ -158,6 +158,7 @@ jobs:
           python3 test/functional/qml_test_debug_log.py
           python3 test/functional/qml_test_node_runtime_dialogs.py
           python3 test/functional/qml_test_settings_display.py
+          python3 test/functional/qml_test_integer_settings.py
           python3 test/functional/qml_test_resetguisettings.py
           python3 test/functional/qml_test_receive.py
           python3 test/functional/qml_test_activity_filter_export.py

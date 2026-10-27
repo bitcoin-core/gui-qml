@@ -12,6 +12,7 @@ Button {
     property string errorText: ""
     property bool showErrorText: errorText.length > 0
     property bool recommended: false
+    property string badgeText: recommended ? qsTr("Recommended") : ""
     property string image: ""
     property string customDir: ""
     property bool surfaceSelectionStyle: false
@@ -31,6 +32,7 @@ Button {
             : "transparent"
 
         Behavior on color {
+            enabled: !button.surfaceSelectionStyle
             ColorAnimation { duration: 150 }
         }
         FocusBorder {
@@ -64,23 +66,47 @@ Button {
         ColumnLayout {
             spacing: 3
             Layout.fillWidth: true
-            Header {
+            ColumnLayout {
+                objectName: "optionButtonHeader"
                 Layout.fillWidth: true
-                Layout.preferredWidth: 0
-                center: false
-                header: button.text
-                headerSize: 18
-                headerMargin: 0
-                headerColor: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
-                description: button.description
-                descriptionSize: 15
-                descriptionMargin: 0
+                spacing: 0
+                Label {
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: button.text
+                    font.family: "BitcoinCoreSans"
+                    font.styleName: "Regular"
+                    font.pixelSize: 18
+                    color: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
+                    wrapMode: Text.WordWrap
+
+                    Behavior on color {
+                        enabled: !button.surfaceSelectionStyle
+                        ColorAnimation { duration: 150 }
+                    }
+                }
+                Label {
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: button.description
+                    font.family: "BitcoinCoreSans"
+                    font.styleName: "Regular"
+                    font.pixelSize: 15
+                    color: Theme.color.neutral8
+                    wrapMode: Text.WordWrap
+
+                    Behavior on color {
+                        enabled: !button.surfaceSelectionStyle
+                        ColorAnimation { duration: 150 }
+                    }
+                }
             }
             Loader {
                 Layout.topMargin: 2
-                active: button.recommended
+                active: button.badgeText.length > 0
                 visible: active
                 sourceComponent: Label {
+                    objectName: "optionBadge"
                     background: Rectangle {
                         color: Theme.color.neutral9
                         radius: 3
@@ -96,7 +122,7 @@ Button {
                     bottomPadding: 4
                     leftPadding: 7
                     color: Theme.color.neutral0
-                    text: qsTr("Recommended")
+                    text: button.badgeText
 
                     Behavior on color {
                         ColorAnimation { duration: 150 }

@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <QtQuickTest/quicktest.h>
+#include <qml/localeinteger.h>
 
 #include <QAbstractListModel>
 #include <QCoreApplication>
@@ -2323,6 +2324,8 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(int assumedBlockchainSize MEMBER m_assumed_blockchain_size NOTIFY assumedSizesChanged)
     Q_PROPERTY(int assumedChainstateSize MEMBER m_assumed_chainstate_size NOTIFY assumedSizesChanged)
     Q_PROPERTY(bool existingProfile READ existingProfile WRITE setExistingProfile NOTIFY storageStatusChanged)
+    Q_PROPERTY(qint64 currentPruneTargetMiB MEMBER m_current_prune_target_mib NOTIFY storageStatusChanged)
+    Q_PROPERTY(bool keepingCurrentStorage MEMBER m_keeping_current_storage NOTIFY storageStatusChanged)
     Q_PROPERTY(bool storageCheckPending MEMBER m_storage_check_pending NOTIFY storageStatusChanged)
     Q_PROPERTY(QString storageStatus READ storageStatus NOTIFY storageStatusChanged)
     Q_PROPERTY(int storageAvailableGB MEMBER m_storage_available_gb NOTIFY storageStatusChanged)
@@ -2347,7 +2350,7 @@ public:
     bool m_server{false};
     int m_dbcache_size_mib{450};
     int m_min_dbcache_size_mib{4};
-    int m_max_dbcache_size_mib{1024};
+    int m_max_dbcache_size_mib{std::numeric_limits<int>::max()};
     int m_script_threads{0};
     int m_min_script_threads{-8};
     int m_max_script_threads{15};
@@ -2369,6 +2372,9 @@ public:
     int m_assumed_blockchain_size{610};
     int m_assumed_chainstate_size{12};
     bool m_existing_profile{false};
+    qint64 m_current_prune_target_mib{0};
+    int m_current_prune_size_gb{2};
+    bool m_keeping_current_storage{false};
     bool m_storage_check_pending{false};
     int m_storage_available_gb{123};
     QString m_storage_path_message{QStringLiteral("Directory already exists.")};
@@ -2398,6 +2404,37 @@ public:
     bool server() const { return m_core_settings.server(); }
     void setServer(bool value) { m_core_settings.setServer(value); }
     int maxMempoolSizeMB() const { return m_max_mempool_size_mb; }
+    Q_INVOKABLE QString commitMaxMempoolSizeMB(const QString& text, const QString& locale_name)
+    {
+        const auto value = ParseLocalizedInteger(text, locale_name, m_min_max_mempool_size_mb, m_max_max_mempool_size_mb);
+        if (!value || !m_core_settings.canEdit(QStringLiteral("maxmempool"))) return QStringLiteral("Invalid mempool size.");
+        setMaxMempoolSizeMB(*value);
+        return {};
+    }
+    Q_INVOKABLE QString commitDbcacheSizeMiB(const QString& text, const QString& locale_name)
+    {
+        const auto value = ParseLocalizedInteger(text, locale_name, m_min_dbcache_size_mib, m_max_dbcache_size_mib);
+        if (!value || !m_core_settings.canEdit(QStringLiteral("dbcache"))) return QStringLiteral("Invalid cache size.");
+        m_dbcache_size_mib = *value;
+        Q_EMIT dbcacheSizeMiBChanged();
+        return {};
+    }
+    Q_INVOKABLE QString commitScriptThreads(const QString& text, const QString& locale_name)
+    {
+        const auto value = ParseLocalizedInteger(text, locale_name, m_min_script_threads, m_max_script_threads);
+        if (!value || !m_core_settings.canEdit(QStringLiteral("par"))) return QStringLiteral("Invalid thread count.");
+        m_script_threads = *value;
+        Q_EMIT scriptThreadsChanged();
+        return {};
+    }
+    Q_INVOKABLE QString commitPruneSizeGB(const QString& text, const QString& locale_name)
+    {
+        const int maximum = m_storage_check_pending ? std::numeric_limits<int>::max() : std::max(0, m_storage_available_gb - m_assumed_chainstate_size);
+        const auto value = ParseLocalizedInteger(text, locale_name, 1, maximum);
+        if (!value || !m_core_settings.canEdit(QStringLiteral("prune"))) return QStringLiteral("Choose a value between 1 GB and %1 GB.").arg(maximum);
+        setPruneSizeGB(*value);
+        return {};
+    }
     void setMaxMempoolSizeMB(int value)
     {
         if (value == m_max_mempool_size_mb) return;
@@ -2424,6 +2461,30 @@ public:
         m_existing_profile = value;
         Q_EMIT storageStatusChanged();
         Q_EMIT canFinishChanged();
+    }
+    Q_INVOKABLE void setCurrentStorageForTest(qint64 target_mib)
+    {
+        m_current_prune_target_mib = target_mib;
+        m_current_prune_size_gb = target_mib > 1 ? (target_mib * 1024 * 1024 + 999999999) / 1000000000 : 2;
+        setPrune(target_mib > 1);
+        setPruneSizeGB(m_current_prune_size_gb);
+        m_existing_profile = true;
+        m_keeping_current_storage = true;
+        Q_EMIT storageStatusChanged();
+    }
+    Q_INVOKABLE void keepCurrentStorage()
+    {
+        setPrune(m_current_prune_target_mib > 1);
+        setPruneSizeGB(m_current_prune_size_gb);
+        m_keeping_current_storage = true;
+        Q_EMIT storageStatusChanged();
+    }
+    Q_INVOKABLE void selectStorage(bool prune, int target_gb)
+    {
+        setPrune(prune);
+        if (prune) setPruneSizeGB(target_gb);
+        m_keeping_current_storage = false;
+        Q_EMIT storageStatusChanged();
     }
     int storageMinimumRequiredGB() const { return m_existing_profile ? 1 : m_assumed_chainstate_size + 2; }
     int fullStorageRequiredGB() const { return m_assumed_blockchain_size + m_assumed_chainstate_size; }
@@ -2566,11 +2627,13 @@ public:
             Q_EMIT serverChanged();
         }
         if (m_prune != m_core_settings.prune()) {
+            m_keeping_current_storage = false;
             m_prune = m_core_settings.prune();
             Q_EMIT pruneChanged();
             Q_EMIT storageStatusChanged();
         }
         if (m_prune_size_gb != m_core_settings.pruneSizeGB()) {
+            m_keeping_current_storage = false;
             m_prune_size_gb = m_core_settings.pruneSizeGB();
             Q_EMIT pruneSizeGBChanged();
             Q_EMIT storageStatusChanged();
@@ -4187,6 +4250,7 @@ public Q_SLOTS:
             "Test stub type"
         );
         qmlRegisterType<BitcoinAmount>("org.bitcoincore.qt", 1, 0, "BitcoinAmount");
+        qmlRegisterType<IntegerInputValidator>("org.bitcoincore.qt", 1, 0, "IntegerInputValidator");
         qmlRegisterType<MockBitcoinAddress>("org.bitcoincore.qt", 1, 0, "BitcoinAddress");
         qmlRegisterType<MockActivityFilterProxyModel>("org.bitcoincore.qt", 1, 0, "ActivityFilterProxyModel");
         qmlRegisterUncreatableType<MockTransactionActivityModel>("org.bitcoincore.qt", 1, 0, "TransactionActivityModel", "Test fixture");
