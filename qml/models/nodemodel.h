@@ -20,8 +20,8 @@
 #include <QString>
 #include <QVariantList>
 
-const char DEFAULT_PROXY_HOST[] = "127.0.0.1";
-constexpr uint16_t DEFAULT_PROXY_PORT = 9050;
+inline constexpr char DEFAULT_PROXY_HOST[]{"127.0.0.1"};
+inline constexpr uint16_t DEFAULT_PROXY_PORT{9050};
 
 QT_BEGIN_NAMESPACE
 class QThread;

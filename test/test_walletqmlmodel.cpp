@@ -278,7 +278,7 @@ public:
         return it == m_transaction_details.end() ? interfaces::WalletTx{} : it->second;
     }
     interfaces::WalletTx getWalletTxDetails(const Txid& txid, interfaces::WalletTxStatus& status,
-                                          interfaces::WalletOrderForm&, bool& in_mempool, int&) override
+                                            std::vector<std::string>&, std::vector<std::string>&, bool& in_mempool, int&) override
     {
         std::lock_guard lock{m_transaction_mutex};
         status = m_transaction_statuses[txid];
@@ -338,11 +338,11 @@ public:
             fee = 250;
             return MakeTransactionRef(CMutableTransaction{});
         };
-    std::function<bool(const SecureString&)> unlock_fn = [this](const SecureString& passphrase) {
+    std::function<util::Expected<void, wallet::WalletError>(const SecureString&)> unlock_fn = [this](const SecureString& passphrase) -> util::Expected<void, wallet::WalletError> {
         ++unlock_calls;
         unlock_passphrases.emplace_back(passphrase.begin(), passphrase.end());
         locked = false;
-        return true;
+        return {};
     };
     std::function<util::Result<CTxDestination>(OutputType, const std::string&)> get_new_destination_fn = [this](OutputType type, const std::string& label) -> util::Result<CTxDestination> {
         ++get_new_destination_calls;
@@ -392,19 +392,22 @@ public:
         locked = true;
         return true;
     }
-    bool unlock(const SecureString& wallet_passphrase) override { return unlock_fn(wallet_passphrase); }
+    util::Expected<void, wallet::WalletError> unlock(const SecureString& wallet_passphrase) override { return unlock_fn(wallet_passphrase); }
     bool isLocked() override { return locked; }
     util::Result<CTxDestination> getNewDestination(const OutputType type, const std::string& label) override
     {
         return get_new_destination_fn(type, label);
     }
-    bool changeWalletPassphrase(const SecureString& old_passphrase, const SecureString& new_passphrase) override
+    util::Expected<void, wallet::WalletError> changeWalletPassphrase(const SecureString& old_passphrase, const SecureString& new_passphrase) override
     {
         ++change_passphrase_calls;
         changed_passphrases.emplace_back(
             std::string(old_passphrase.begin(), old_passphrase.end()),
             std::string(new_passphrase.begin(), new_passphrase.end()));
-        return !old_passphrase.empty() && !new_passphrase.empty() && old_passphrase == SecureString{"secret"};
+        if (!old_passphrase.empty() && !new_passphrase.empty() && old_passphrase == SecureString{"secret"}) {
+            return {};
+        }
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("not implemented")}};
     }
     void abortRescan() override {}
     bool backupWallet(const std::string& path) override
@@ -493,9 +496,9 @@ public:
             transaction,
             fee,
             change_pos >= 0 ? std::optional<unsigned int>{static_cast<unsigned int>(change_pos)} : std::nullopt,
-            FeeCalculation{}};
+            FeeReason::FEE_RATE_ESTIMATOR};
     }
-    void commitTransaction(CTransactionRef, interfaces::WalletValueMap, interfaces::WalletOrderForm) override
+    void commitTransaction(CTransactionRef, const std::vector<std::string>&) override
     {
         ++commit_calls;
     }
@@ -544,7 +547,7 @@ public:
     CoinsList listCoins() override { return {}; }
     std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>&) override { return {}; }
     CAmount getRequiredFee(unsigned int) override { return 0; }
-    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, int*, FeeReason*) override { return 0; }
+    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, std::optional<int>*, FeeReason*) override { return 0; }
     unsigned int getConfirmTarget() override { return 6; }
     bool hdEnabled() override { return true; }
     bool canGetAddresses() override { return true; }
@@ -552,7 +555,7 @@ public:
     bool taprootEnabled() override { return taproot_enabled; }
     bool hasExternalSigner() override { return external_signer; }
     OutputType getDefaultAddressType() override { return default_address_type; }
-    CAmount getDefaultMaxTxFee() override { return COIN; }
+    CAmount getMaxTxFee() override { return COIN; }
     void remove() override {}
     std::unique_ptr<interfaces::Handler> handleUnload(UnloadFn) override { return MakeNoopHandler(); }
     std::unique_ptr<interfaces::Handler> handleShowProgress(ShowProgressFn) override { return MakeNoopHandler(); }
@@ -618,7 +621,7 @@ PartiallySignedTransaction MakeReviewPsbt()
     tx.vin.emplace_back(COutPoint{previous->GetHash(), 0});
     tx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
 
-    PartiallySignedTransaction psbt{tx};
+    PartiallySignedTransaction psbt{tx, /*version=*/2};
     psbt.inputs[0].non_witness_utxo = previous;
     return psbt;
 }
@@ -2059,7 +2062,7 @@ void WalletQmlModelTests::paymentRequestTracksActualReceivedAmount()
 
     // A sender-side replacement marker also excludes an unconfirmed original.
     wallet->setTransactionInMempool(first_payment.tx->GetHash(), true);
-    first_payment.value_map["replaced_by_txid"] = second_payment.tx->GetHash().ToString();
+    first_payment.replaced_by_txid.emplace(second_payment.tx->GetHash());
     wallet->setWalletTxsFn([first_payment, second_payment] {
         return std::set<interfaces::WalletTx>{first_payment, second_payment};
     });
@@ -2404,7 +2407,7 @@ void WalletQmlModelTests::commitPaymentRequestWithPassphraseWrongPasswordSurface
     wallet->unlock_fn = [wallet](const SecureString& passphrase) {
         ++wallet->unlock_calls;
         wallet->unlock_passphrases.emplace_back(passphrase.begin(), passphrase.end());
-        return false;
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("")}};
     };
 
     QVERIFY(!model->commitPaymentRequest());
@@ -2963,7 +2966,7 @@ void WalletQmlModelTests::importPsbtFromFile_opensOwnedUnsignedPsbtWithoutSignin
     CMutableTransaction mtx;
     mtx.vin.emplace_back(owned_outpoint);
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, CScript{}};
 
     QTemporaryDir temp_dir;
@@ -3016,7 +3019,7 @@ void WalletQmlModelTests::importPsbtFromFile_opensForeignUnsignedPsbtForReviewOn
     CMutableTransaction mtx;
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, CScript{}};
 
     QTemporaryDir temp_dir;
@@ -3357,7 +3360,7 @@ void WalletQmlModelTests::externalSignerApprovalKeepsIncompleteSignedPsbt()
     QCOMPARE(model->saveCurrentTransactionAsPsbt(saved_path), QString{});
 
     CMutableTransaction empty_tx;
-    PartiallySignedTransaction saved{empty_tx};
+    PartiallySignedTransaction saved{empty_tx, /*version=*/2};
     QCOMPARE(PsbtQmlModel::LoadPsbtFromFile(saved_path, saved), QString{});
     QVERIFY(saved.inputs[0].unknown.contains(signer_key));
     QCOMPARE(saved.inputs[0].unknown.at(signer_key), signer_value);
@@ -3390,7 +3393,7 @@ void WalletQmlModelTests::importPsbtFromFile_broadcastsCompleteForeignMultisigPs
     CMutableTransaction mtx;
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, GetScriptForDestination(WitnessV0ScriptHash(witness_script))};
     psbt.inputs[0].witness_script = witness_script;
     QVERIFY(PsbtQmlModel::IsMultisigPsbtInput(psbt, 0));
@@ -3401,7 +3404,7 @@ void WalletQmlModelTests::importPsbtFromFile_broadcastsCompleteForeignMultisigPs
     QVERIFY(provider.AddKey(key2));
     const auto txdata{PrecomputePSBTData(psbt)};
     QVERIFY(txdata.has_value());
-    QCOMPARE(SignPSBTInput(provider, psbt, 0, &*txdata, /*options=*/{}), PSBTError::OK);
+    QVERIFY(SignPSBTInput(provider, psbt, 0, &*txdata, /*options=*/{}).has_value());
     QVERIFY(FinalizePSBT(psbt));
 
     QTemporaryDir temp_dir;
@@ -3420,7 +3423,7 @@ void WalletQmlModelTests::importPsbtFromFile_broadcastsCompleteForeignMultisigPs
     QCOMPARE(wallet->commit_calls, 0);
 
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
-    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, std::string&) { return node::TransactionError::OK; };
+    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, CFeeRate, std::string&) { return node::TransactionError::OK; };
     node.ExpectExactly(node.calls.broadcastTransaction, 1);
     QVERIFY(model->broadcastCurrentTransaction());
     QCOMPARE(wallet->commit_calls, 0);
@@ -3456,7 +3459,7 @@ void WalletQmlModelTests::saveCompleteBroadcastableImportedPsbt_preservesOrigina
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
 
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, GetScriptForDestination(WitnessV0ScriptHash(witness_script))};
     psbt.inputs[0].witness_script = witness_script;
 
@@ -3467,9 +3470,7 @@ void WalletQmlModelTests::saveCompleteBroadcastableImportedPsbt_preservesOrigina
 
     const auto txdata{PrecomputePSBTData(psbt)};
     QVERIFY(txdata.has_value());
-    QCOMPARE(
-        SignPSBTInput(provider, psbt, 0, &*txdata, {.finalize = false}),
-        PSBTError::OK);
+    QVERIFY(SignPSBTInput(provider, psbt, 0, &*txdata, {.finalize = false}).has_value());
 
     QVERIFY(!psbt.inputs[0].partial_sigs.empty());
     QVERIFY(!psbt.inputs[0].witness_script.empty());
@@ -3494,7 +3495,7 @@ void WalletQmlModelTests::saveCompleteBroadcastableImportedPsbt_preservesOrigina
     QCOMPARE(model->saveCurrentTransactionAsPsbt(saved_path), QString{});
 
     CMutableTransaction empty_tx;
-    PartiallySignedTransaction saved{empty_tx};
+    PartiallySignedTransaction saved{empty_tx, /*version=*/2};
     QCOMPARE(PsbtQmlModel::LoadPsbtFromFile(saved_path, saved), QString{});
 
     QCOMPARE(saved.inputs[0].partial_sigs.size(), psbt.inputs[0].partial_sigs.size());
@@ -3523,7 +3524,7 @@ void WalletQmlModelTests::importPsbtFromFile_skipsZeroValueOpReturnOutputs()
     const PartiallySignedTransaction base_psbt{MakeReviewPsbt()};
     CMutableTransaction psbt_tx{UnsignedTx(base_psbt)};
     psbt_tx.vout.emplace_back(0, CScript{} << OP_RETURN << std::vector<unsigned char>{0x01, 0x02});
-    PartiallySignedTransaction psbt{psbt_tx};
+    PartiallySignedTransaction psbt{psbt_tx, /*version=*/2};
     psbt.inputs[0] = base_psbt.inputs[0];
     CompleteReviewPsbt(psbt);
     const QByteArray original{PsbtQmlModel::SerializePsbtRaw(psbt)};
@@ -3576,7 +3577,7 @@ void WalletQmlModelTests::importPsbtFromFile_opensUnsignedMultisigPsbtForReviewO
     CMutableTransaction mtx;
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, GetScriptForDestination(WitnessV0ScriptHash(witness_script))};
     psbt.inputs[0].witness_script = witness_script;
 
@@ -3606,7 +3607,7 @@ void WalletQmlModelTests::importPsbtFromFile_blocksBroadcastWhenFeeIsInvalid()
     CMutableTransaction mtx;
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(2'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, GetScriptForDestination(WitnessV0ScriptHash(witness_script))};
     psbt.inputs[0].witness_script = witness_script;
 
@@ -3616,7 +3617,7 @@ void WalletQmlModelTests::importPsbtFromFile_blocksBroadcastWhenFeeIsInvalid()
     QVERIFY(provider.AddKey(key2));
     const auto txdata{PrecomputePSBTData(psbt)};
     QVERIFY(txdata.has_value());
-    QCOMPARE(SignPSBTInput(provider, psbt, 0, &*txdata, /*options=*/{}), PSBTError::OK);
+    QVERIFY(SignPSBTInput(provider, psbt, 0, &*txdata, /*options=*/{}).has_value());
     QVERIFY(FinalizePSBT(psbt));
 
     QTemporaryDir temp_dir;
@@ -3644,7 +3645,7 @@ void WalletQmlModelTests::importPsbtFromFile_returnsTransactionAlreadyKnownWhenT
     CMutableTransaction mtx;
     mtx.vin.emplace_back(COutPoint{Txid::FromUint256(uint256::ONE), 0});
     mtx.vout.emplace_back(1'500, GetScriptForDestination(DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())));
-    PartiallySignedTransaction psbt{mtx};
+    PartiallySignedTransaction psbt{mtx, /*version=*/2};
     psbt.inputs[0].witness_utxo = CTxOut{2'000, CScript{}};
 
     const Txid psbt_txid{UnsignedTx(psbt).GetHash()};
@@ -3710,7 +3711,7 @@ void WalletQmlModelTests::bumpTransactionWithWrongPassphraseDoesNotSign()
     wallet->unlock_fn = [wallet](const SecureString& passphrase) {
         ++wallet->unlock_calls;
         wallet->unlock_passphrases.emplace_back(passphrase.begin(), passphrase.end());
-        return false;
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("")}};
     };
     auto* bump_model = model->bumpModel();
 
@@ -3824,7 +3825,7 @@ void WalletQmlModelTests::signVerifyMessageWrongPassphraseSurfacesErrorAndDoesNo
     wallet->unlock_fn = [wallet](const SecureString& passphrase) {
         ++wallet->unlock_calls;
         wallet->unlock_passphrases.emplace_back(passphrase.begin(), passphrase.end());
-        return false;
+        return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::PassphraseIncorrect, Untranslated("")}};
     };
     auto* sign_verify = model->signVerifyMessageModel();
 

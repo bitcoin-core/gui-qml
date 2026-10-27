@@ -265,9 +265,9 @@ private:
     QString m_signer_validation_error;
 
     // Properties that are exposed to QML.
-    int m_dbcache_size_mib{DEFAULT_DB_CACHE >> 20};
-    const int m_min_dbcache_size_mib{MIN_DB_CACHE >> 20};
-    const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE >> 20};
+    int m_dbcache_size_mib{DEFAULT_KERNEL_CACHE / 1_MiB};
+    const int m_min_dbcache_size_mib{MIN_DBCACHE_BYTES / 1_MiB};
+    const int m_max_dbcache_size_mib{MAX_COINS_DB_CACHE / 1_MiB};
     int m_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
     const int m_min_max_mempool_size_mb{
         static_cast<int>((DEFAULT_CLUSTER_SIZE_LIMIT_KVB * 1000 * 40 + 999999) / 1000000)
@@ -282,7 +282,7 @@ private:
     QString m_dataDir;
     QString m_external_signer_path;
     QmlCoreSettings::Values m_initial_core_values;
-    int m_initial_dbcache_size_mib{DEFAULT_DB_CACHE >> 20};
+    int m_initial_dbcache_size_mib{DEFAULT_KERNEL_CACHE / 1_MiB};
     int m_initial_max_mempool_size_mb{DEFAULT_MAX_MEMPOOL_SIZE_MB};
     int m_initial_script_threads{DEFAULT_SCRIPTCHECK_THREADS};
     QString m_initial_external_signer_path;

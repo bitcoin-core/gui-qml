@@ -110,7 +110,7 @@ public:
     std::function<bool()> is_initial_block_download_fn;
     std::function<bool()> get_network_active_fn;
     std::function<CFeeRate()> get_dust_relay_fee_fn;
-    std::function<node::TransactionError(CTransactionRef, CAmount, std::string&)> broadcast_transaction_fn;
+    std::function<node::TransactionError(CTransactionRef, CAmount, CFeeRate, std::string&)> broadcast_transaction_fn;
     std::function<interfaces::WalletLoader&()> wallet_loader_fn;
     std::function<std::unique_ptr<interfaces::Handler>(MessageBoxFn)> handle_message_box_fn;
     std::function<std::unique_ptr<interfaces::Handler>(QuestionFn)> handle_question_fn;
@@ -208,7 +208,7 @@ public:
     bool isInitialBlockDownload() override { return Invoke(calls.isInitialBlockDownload, is_initial_block_download_fn, false); }
     bool getNetworkActive() override { return Invoke(calls.getNetworkActive, get_network_active_fn, false); }
     CFeeRate getDustRelayFee() override { return Invoke(calls.getDustRelayFee, get_dust_relay_fee_fn, CFeeRate{}); }
-    node::TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, std::string& err_string) override { return Invoke(calls.broadcastTransaction, broadcast_transaction_fn, node::TransactionError{}, std::move(tx), max_tx_fee, err_string); }
+    node::TransactionError broadcastTransaction(CTransactionRef tx, CAmount max_tx_fee, CFeeRate max_tx_fee_rate, std::string& err_string) override { return Invoke(calls.broadcastTransaction, broadcast_transaction_fn, node::TransactionError{}, std::move(tx), max_tx_fee, max_tx_fee_rate, err_string); }
     interfaces::WalletLoader& walletLoader() override
     {
         ++calls.walletLoader;

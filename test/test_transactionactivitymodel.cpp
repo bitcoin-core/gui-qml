@@ -184,7 +184,7 @@ public:
         const wallet::CCoinControl&, bool, std::optional<unsigned int>) override
     {
         if (!send_draft) return util::Error{Untranslated("No send draft")};
-        return wallet::CreatedTransactionResult{send_draft->tx, 1'000, 3, FeeCalculation{}};
+        return wallet::CreatedTransactionResult{send_draft->tx, 1'000, 3, FeeReason::FEE_RATE_ESTIMATOR};
     }
     std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions& options, size_t*,
                                             PartiallySignedTransaction& psbt, bool& complete) override
@@ -196,7 +196,7 @@ public:
         }
         return std::nullopt;
     }
-    void commitTransaction(CTransactionRef tx, interfaces::WalletValueMap, interfaces::WalletOrderForm) override
+    void commitTransaction(CTransactionRef tx, const std::vector<std::string>&) override
     {
         ++commits;
         send_draft->tx = std::move(tx);
@@ -1018,8 +1018,8 @@ void TransactionActivityModelTests::movesReplacedBatchToHistoryAndKeepsReplaceme
     proxy.setSourceModel(source);
     QCOMPARE(Find(proxy, Id(original)).data(Proxy::SectionKeyRole).toString(), QString("pending"));
 
-    original.value_map["replaced_by_txid"] = Id(replacement).toStdString();
-    replacement.value_map["replaces_txid"] = Id(original).toStdString();
+    original.replaced_by_txid = Txid::FromHex(Id(replacement).toStdString());
+    replacement.replaces_txid = Txid::FromHex(Id(original).toStdString());
     f.state->put(original, 0);
     f.state->notify(original, CT_UPDATED);
     f.state->put(replacement, 0);
@@ -1180,12 +1180,12 @@ void TransactionActivityModelTests::restoresRequestsOnConflictAbandonmentReplace
     QCOMPARE(source->requestCount(), 0);
 
     auto replacement = MakeTx({{50'000, false}}, {{48'000, true}});
-    tx.value_map["replaced_by_txid"] = Id(replacement).toStdString();
+    tx.replaced_by_txid = Txid::FromHex(Id(replacement).toStdString());
     f.state->put(tx, 0);
     f.state->notify(tx, CT_UPDATED);
     QTRY_COMPARE(source->requestCount(), 1);
     QCOMPARE(Find(*source, Id(tx)).data(Model::ReplacedByTxidRole).toString(), Id(replacement));
-    replacement.value_map["replaces_txid"] = Id(tx).toStdString();
+    replacement.replaces_txid = Txid::FromHex(Id(tx).toStdString());
     f.state->put(replacement, 0);
     f.state->notify(replacement, CT_NEW);
     QTRY_COMPARE(source->transactionCount(), 2);
