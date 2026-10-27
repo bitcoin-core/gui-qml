@@ -186,7 +186,9 @@ Page {
             text: walletController.selectedWallet.displayName
             balance: walletController.selectedWallet.balance
             balanceSatoshi: walletController.selectedWallet.balanceSatoshi
-            loading: !walletController.initialized
+            loading: !walletController.initialized || (walletController.isWalletLoaded
+                && !walletController.selectedWallet.walletStateReady && !walletController.selectedWallet.walletStateError)
+            errorText: walletController.selectedWallet.walletStateError
             noWalletLoaded: !walletController.isWalletLoaded
             noWalletsFound: walletController.noWalletsFound
             keySchemeKind: walletController.selectedWallet.keySchemeKind

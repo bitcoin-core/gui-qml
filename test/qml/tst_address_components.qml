@@ -575,7 +575,7 @@ TestCase {
         page.selectedLabel = "Saved note"
         page.addressModel.setAddressLabelSucceeds = true
         verify(page.updateAddressLabel("bcrt1qdraftaddress", "Draft note"))
-        compare(page.selectedLabel, "Draft note")
+        tryCompare(page, "selectedLabel", "Draft note")
         compare(page.pendingNote("bcrt1qdraftaddress", "Saved note"), "Saved note")
         page.addressModel.setAddressLabelSucceeds = false
     }

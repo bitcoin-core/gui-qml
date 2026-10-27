@@ -6,6 +6,7 @@
 #define BITCOIN_QML_MODELS_ACTIVITYFILTERPROXYMODEL_H
 
 #include <consensus/amount.h>
+#include <qml/backendexecutor.h>
 
 #include <QByteArray>
 #include <QDate>
@@ -16,10 +17,14 @@
 #include <QString>
 
 #include <optional>
+#include <memory>
+#include <vector>
 
 class ActivityFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
+    Q_PROPERTY(bool exportPending READ exportPending NOTIFY exportPendingChanged)
+    Q_PROPERTY(QString exportError READ exportError NOTIFY exportErrorChanged)
     Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchTextChanged)
     Q_PROPERTY(DateFilter dateFilter READ dateFilter WRITE setDateFilter NOTIFY dateFilterChanged)
     Q_PROPERTY(TypeFilter typeFilter READ typeFilter WRITE setTypeFilter NOTIFY typeFilterChanged)
@@ -115,9 +120,14 @@ public:
     GroupBy groupBy() const { return m_group_by; }
     void setGroupBy(GroupBy group_by);
 
-    Q_INVOKABLE bool exportCsv(const QString& path) const;
+    Q_INVOKABLE bool exportCsv(const QString& path);
+    bool exportPending() const { return m_export_pending; }
+    QString exportError() const { return m_export_error; }
 
 Q_SIGNALS:
+    void exportPendingChanged();
+    void exportErrorChanged();
+    void exportFinished(bool success);
     void searchTextChanged();
     void dateFilterChanged();
     void typeFilterChanged();
@@ -136,6 +146,8 @@ protected:
     bool lessThan(const QModelIndex& left_index, const QModelIndex& right_index) const override;
 
 private:
+    void collectExportBatch();
+    void finishExport(bool success, QString error = {});
     bool typeMatches(const QModelIndex& source_index, TypeFilter type) const;
     void updateAvailableMaxAmount();
     void invalidatePendingBalance();
@@ -143,6 +155,15 @@ private:
     bool dateMatches(qint64 timestamp) const;
     QString normalizedExportPath(const QString& path) const;
 
+    std::shared_ptr<BackendExecutor> m_export_executor{std::make_shared<BackendExecutor>()};
+    std::vector<QHash<int, QVariant>> m_export_records;
+    QString m_export_path;
+    QString m_export_error;
+    quint64 m_model_revision{0};
+    quint64 m_export_revision{0};
+    int m_export_row{0};
+    int m_export_unit{0};
+    bool m_export_pending{false};
     QString m_search_text;
     DateFilter m_date_filter{DateAll};
     QList<int> m_type_filters;

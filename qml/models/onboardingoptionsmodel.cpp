@@ -21,13 +21,6 @@
 #include <exception>
 #include <utility>
 
-namespace {
-QmlOnboardingSettings::OnboardingStartupStatus InitialStartupStatus(const std::vector<std::string>& argv, bool can_listen_ipc)
-{
-    return QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc);
-}
-} // namespace
-
 OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bool can_listen_ipc, QObject* parent)
     : QObject{parent}
     , m_executor{std::make_unique<BackendExecutor>()}
@@ -36,10 +29,6 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
     , m_data_dir{QmlDataDir::DefaultDataDirString()}
 {
     m_executor->setObjectName(QStringLiteral("onboarding"));
-    const QmlOnboardingSettings::OnboardingStartupStatus status{InitialStartupStatus(m_argv, m_can_listen_ipc)};
-    m_data_dir = status.active_data_dir.isEmpty() ? QmlDataDir::ReadGuiDataDir() : status.active_data_dir;
-    m_data_dir_source = status.data_dir_source;
-
     m_core_settings.setAfterChangeHandler([this](const QmlCoreSettings::Change& change, CoreSettingsModel::ChangeOrigin origin) {
         QmlCoreSettings::EmitCoreSettingSignals(*this, change);
         if (origin == CoreSettingsModel::ChangeOrigin::User &&
@@ -49,10 +38,51 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
         }
     });
 
-    if (!QmlDataDir::IsDefaultDataDir(m_data_dir)) {
-        m_custom_datadir_string = m_data_dir;
-    }
-    refreshPreview();
+    m_preview_in_flight = true;
+    const auto request_id = ++m_preview_request_id;
+    m_executor->submit(this, [argv = m_argv, can_listen_ipc = m_can_listen_ipc] {
+        return QmlOnboardingSettings::ResolveOnboardingStartupStatus(argv, can_listen_ipc);
+    }, [this, request_id](const QmlOnboardingSettings::OnboardingStartupStatus& status) {
+        m_preview_in_flight = false;
+        if (request_id != m_preview_request_id) {
+            startPreview();
+            return;
+        }
+        if (!status.ok) {
+            setPreviewError(status.error);
+            setPreviewPending(false);
+            return;
+        }
+        m_data_dir = status.active_data_dir;
+        m_data_dir_source = status.data_dir_source;
+        m_custom_datadir_string = QmlDataDir::IsDefaultDataDir(m_data_dir) ? QString{} : m_data_dir;
+        Q_EMIT dataDirChanged(m_data_dir);
+        Q_EMIT customDataDirStringChanged(m_custom_datadir_string);
+        startPreview();
+    }, [this](std::exception_ptr) {
+        m_preview_in_flight = false;
+        setPreviewError(tr("The startup settings could not be read."));
+        setPreviewPending(false);
+    });
+}
+
+void OnboardingOptionsModel::beginShutdown()
+{
+    if (m_stopping) return;
+    m_stopping = true;
+    ++m_preview_request_id;
+    ++m_storage_request_id;
+    connect(m_executor.get(), &BackendExecutor::drained, this, &OnboardingOptionsModel::shutdownFinished);
+    m_executor->shutdown();
+    Q_EMIT canFinishChanged();
+}
+
+void OnboardingOptionsModel::setPreviewPending(bool pending)
+{
+    if (m_preview_pending == pending) return;
+    m_preview_pending = pending;
+    Q_EMIT validationPendingChanged();
+    Q_EMIT canFinishChanged();
 }
 
 OnboardingOptionsModel::~OnboardingOptionsModel() = default;
@@ -61,6 +91,9 @@ void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool()
 {
     if (m_preparing) return;
     m_preparing = true;
+    m_stopping = true;
+    ++m_preview_request_id;
+    ++m_storage_request_id;
     Q_EMIT canFinishChanged();
     m_executor->submit(this, [&args, request = applyRequest(), prepare_node = std::move(prepare_node)] {
         QString error;
@@ -112,27 +145,18 @@ QString OnboardingOptionsModel::getCustomDataDirString() const
 
 QString OnboardingOptionsModel::validateCustomDataDir(const QString& path) const
 {
-    return QmlDataDir::ValidateCustomDataDir(path);
+    return QmlDataDir::NormalizeLocalPath(path) == m_data_dir ? m_preview_error : tr("The directory has not been checked.");
 }
 
 bool OnboardingOptionsModel::selectCustomDataDir(const QString& path)
 {
     const QString local_path = QmlDataDir::NormalizeLocalPath(path);
-    const QString error = validateCustomDataDir(local_path);
-    if (!error.isEmpty()) {
-        setPreviewError(error);
-        return false;
-    }
+    if (m_stopping || local_path.isEmpty()) return false;
     if (local_path != m_custom_datadir_string) {
         m_custom_datadir_string = local_path;
         Q_EMIT customDataDirStringChanged(local_path);
     }
-    const bool source_changed = m_data_dir_source != QmlOnboardingSettings::DataDirSource::UserSelection;
     m_data_dir_source = QmlOnboardingSettings::DataDirSource::UserSelection;
-    if (source_changed && local_path == m_data_dir) {
-        refreshPreview();
-        return true;
-    }
     setDataDir(local_path);
     return true;
 }
@@ -144,12 +168,7 @@ void OnboardingOptionsModel::useDefaultDataDir()
         Q_EMIT customDataDirStringChanged({});
     }
     const QString default_data_dir = getDefaultDataDirString();
-    const bool source_changed = m_data_dir_source != QmlOnboardingSettings::DataDirSource::UserSelection;
     m_data_dir_source = QmlOnboardingSettings::DataDirSource::UserSelection;
-    if (source_changed && default_data_dir == m_data_dir) {
-        refreshPreview();
-        return;
-    }
     setDataDir(default_data_dir);
 }
 
@@ -157,9 +176,11 @@ void OnboardingOptionsModel::setDataDir(const QString& path)
 {
     const QString normalized = QmlDataDir::NormalizeLocalPath(path);
     const QString effective = normalized.isEmpty() ? getDefaultDataDirString() : normalized;
-    if (effective == m_data_dir) return;
-    m_data_dir = effective;
-    Q_EMIT dataDirChanged(m_data_dir);
+    if (effective != m_data_dir) {
+        m_data_dir = effective;
+        Q_EMIT dataDirChanged(m_data_dir);
+    }
+    // An explicit selection also retries a directory whose contents or permissions changed.
     refreshPreview();
 }
 
@@ -294,23 +315,20 @@ void OnboardingOptionsModel::requestStorageCheck()
 void OnboardingOptionsModel::startStorageCheck(uint64_t request_id, const QString& path)
 {
     m_storage_check_in_flight = true;
-    QPointer<OnboardingOptionsModel> self{this};
-    QThread* thread = QThread::create([self, request_id, path] {
-        const QmlDataDir::StorageSpaceResult result = QmlDataDir::CheckStorageSpace(path);
-        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, request_id, result] {
-            if (!self) return;
-            self->applyStorageCheckResult(request_id, result);
-        }, Qt::QueuedConnection);
-    });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
+    m_executor->submit(this, [path] { return QmlDataDir::CheckStorageSpace(path); },
+        [this, request_id](const QmlDataDir::StorageSpaceResult& result) { applyStorageCheckResult(request_id, result); },
+        [this, request_id](std::exception_ptr) {
+            QmlDataDir::StorageSpaceResult result;
+            result.message = tr("Available storage could not be checked.");
+            applyStorageCheckResult(request_id, result);
+        });
 }
 
 void OnboardingOptionsModel::applyStorageCheckResult(uint64_t request_id, const QmlDataDir::StorageSpaceResult& result)
 {
     m_storage_check_in_flight = false;
     if (request_id != m_storage_request_id) {
-        startStorageCheck(m_storage_request_id, m_storage_check_path);
+        if (!m_preview_pending && !m_stopping) startStorageCheck(m_storage_request_id, m_storage_check_path);
         return;
     }
 
@@ -386,10 +404,45 @@ void OnboardingOptionsModel::applyPreviewValues(const QmlCoreSettings::Values& v
 
 void OnboardingOptionsModel::refreshPreview()
 {
-    const QmlOnboardingSettings::PreviewResult preview = QmlOnboardingSettings::Preview(
-        m_argv,
-        m_can_listen_ipc,
-        QmlOnboardingSettings::DataDirSelection{m_data_dir, m_data_dir_source});
+    if (m_stopping) return;
+    ++m_preview_request_id;
+    ++m_storage_request_id;
+    setPreviewPending(true);
+    if (!m_preview_in_flight) startPreview();
+}
+
+void OnboardingOptionsModel::startPreview()
+{
+    if (m_stopping) return;
+    m_preview_in_flight = true;
+    const auto request_id = m_preview_request_id;
+    m_executor->submit(this, [argv = m_argv, ipc = m_can_listen_ipc,
+        selection = QmlOnboardingSettings::DataDirSelection{m_data_dir, m_data_dir_source}] {
+        return QmlOnboardingSettings::Preview(argv, ipc, selection);
+    }, [this, request_id](const QmlOnboardingSettings::PreviewResult& preview) {
+        m_preview_in_flight = false;
+        if (request_id != m_preview_request_id) {
+            startPreview();
+            return;
+        }
+        applyPreview(preview);
+        setPreviewPending(false);
+        Q_EMIT dataDirSelectionFinished(preview.ok, preview.error);
+    }, [this, request_id](std::exception_ptr) {
+        m_preview_in_flight = false;
+        if (request_id != m_preview_request_id) {
+            startPreview();
+            return;
+        }
+        const QString error = tr("The selected directory could not be checked.");
+        setPreviewError(error);
+        setPreviewPending(false);
+        Q_EMIT dataDirSelectionFinished(false, error);
+    });
+}
+
+void OnboardingOptionsModel::applyPreview(const QmlOnboardingSettings::PreviewResult& preview)
+{
     if (!preview.ok) {
         setPreviewError(preview.error);
         return;
