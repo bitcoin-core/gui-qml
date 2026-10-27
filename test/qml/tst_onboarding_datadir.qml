@@ -237,8 +237,8 @@ TestCase {
         compare(footer.enabled, false)
         wait(1800)
         compare(footer.opacity, 0)
-        tryCompare(footer, "opacity", 1, 2000)
-        compare(footer.enabled, true)
+        tryCompare(footer, "enabled", true, 2000)
+        compare(footer.opacity, 1)
     }
 
     function test_full_preinit_wizard_can_go_back_from_storage_amount() {
