@@ -34,11 +34,13 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
     , m_argv{std::move(argv)}
     , m_can_listen_ipc{can_listen_ipc}
     , m_data_dir{QmlDataDir::DefaultDataDirString()}
+    , m_resolved_data_dir{QmlDataDir::DefaultDataDirString()}
 {
     m_executor->setObjectName(QStringLiteral("onboarding"));
     const QmlOnboardingSettings::OnboardingStartupStatus status{InitialStartupStatus(m_argv, m_can_listen_ipc)};
-    m_data_dir = status.active_data_dir.isEmpty() ? QmlDataDir::ReadGuiDataDir() : status.active_data_dir;
-    m_data_dir_source = status.data_dir_source;
+    m_data_dir = status.selected_data_dir.isEmpty() ? QmlDataDir::ReadGuiDataDir() : status.selected_data_dir;
+    m_resolved_data_dir = status.resolved_data_dir.isEmpty() ? m_data_dir : status.resolved_data_dir;
+    m_data_dir_source = status.selected_data_dir_source;
 
     m_core_settings.setAfterChangeHandler([this](const QmlCoreSettings::Change& change, CoreSettingsModel::ChangeOrigin origin) {
         QmlCoreSettings::EmitCoreSettingSignals(*this, change);
@@ -57,18 +59,22 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
 
 OnboardingOptionsModel::~OnboardingOptionsModel() = default;
 
-void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool()> prepare_node)
+void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool(const QmlOnboardingSettings::PendingApply&)> prepare_node)
 {
     if (m_preparing) return;
     m_preparing = true;
     Q_EMIT canFinishChanged();
     m_executor->submit(this, [&args, request = applyRequest(), prepare_node = std::move(prepare_node)] {
         QString error;
-        if (!QmlOnboardingSettings::ApplyToArgs(args, request.data_dir, request.touched_settings, request.values, &error)) {
+        QmlOnboardingSettings::PendingApply pending;
+        if (!QmlOnboardingSettings::PrepareApplyToArgs(args, request.data_dir, request.resolved_data_dir, request.touched_settings, request.values, request.effective_reset, pending, &error)) {
             if (error.isEmpty()) error = tr("Onboarding settings could not be applied.");
             return std::pair{false, error};
         }
-        return std::pair{prepare_node(), QString{}};
+        pending.resolved_chain = request.resolved_chain;
+        pending.resolved_settings_path = request.resolved_settings_path;
+        pending.target_complete = true;
+        return std::pair{prepare_node(pending), QString{}};
     }, [this](const std::pair<bool, QString>& result) {
         finishNodePreparation(result.first, result.second);
     }, [this](std::exception_ptr failure) {
@@ -283,7 +289,7 @@ bool OnboardingOptionsModel::storageEnoughForFull() const
 void OnboardingOptionsModel::requestStorageCheck()
 {
     ++m_storage_request_id;
-    m_storage_check_path = m_data_dir;
+    m_storage_check_path = m_resolved_data_dir.isEmpty() ? m_data_dir : m_resolved_data_dir;
     m_storage_check_pending = true;
     emitStorageStatusChanged();
     if (!m_storage_check_in_flight) {
@@ -398,6 +404,10 @@ void OnboardingOptionsModel::refreshPreview()
     const int old_assumed_blockchain_size = m_assumed_blockchain_size;
     const int old_assumed_chainstate_size = m_assumed_chainstate_size;
     const bool old_existing_profile = m_profile.existing_profile;
+    m_resolved_data_dir = preview.resolved_data_dir.isEmpty() ? m_data_dir : preview.resolved_data_dir;
+    m_resolved_chain = preview.resolved_chain;
+    m_resolved_settings_path = preview.resolved_settings_path;
+    m_effective_reset = preview.effective_reset;
     m_assumed_blockchain_size = preview.assumed_blockchain_size;
     m_assumed_chainstate_size = preview.assumed_chainstate_size;
     m_profile = preview.profile;
@@ -418,17 +428,26 @@ void OnboardingOptionsModel::refreshPreview()
     requestStorageCheck();
 }
 
-bool OnboardingOptionsModel::applyToArgs(ArgsManager& args, QString* error) const
+bool OnboardingOptionsModel::prepareApplyToArgs(ArgsManager& args, QmlOnboardingSettings::PendingApply& pending, QString* error) const
 {
-    return QmlOnboardingSettings::ApplyToArgs(
+    const bool prepared{QmlOnboardingSettings::PrepareApplyToArgs(
         args,
         QmlOnboardingSettings::DataDirSelection{m_data_dir, m_data_dir_source},
+        m_resolved_data_dir,
         m_core_settings.touchedSettings(),
         coreValues(),
-        error);
+        m_effective_reset,
+        pending,
+        error)};
+    if (prepared) {
+        pending.resolved_chain = m_resolved_chain;
+        pending.resolved_settings_path = m_resolved_settings_path;
+        pending.target_complete = true;
+    }
+    return prepared;
 }
 
 QmlOnboardingSettings::ApplyRequest OnboardingOptionsModel::applyRequest() const
 {
-    return {{m_data_dir, m_data_dir_source}, m_core_settings.touchedSettings(), coreValues()};
+    return {{m_data_dir, m_data_dir_source}, m_resolved_data_dir, m_resolved_chain, m_resolved_settings_path, m_effective_reset, m_core_settings.touchedSettings(), coreValues()};
 }

@@ -49,11 +49,10 @@ StorageSpaceResult CheckStorageSpace(const QString& path);
 bool EnsureDataDir(const QString& path, QString* error = nullptr);
 bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr);
 void PersistDefaultDataDirSelection();
-bool ResetGuiSettings(ArgsManager& args, QString* error = nullptr);
 
 bool HasExplicitDataDirArg(const ArgsManager& args);
-// The caller handles explicit -datadir precedence before checking the resolved directory.
-bool ShouldShowDataDirChooser(const ArgsManager& args, const QString& data_dir);
+QString ValidateExplicitDataDir(const ArgsManager& args);
+bool IsDataDirChooserRequested(const ArgsManager& args);
 bool ApplyGuiDataDirSetting(ArgsManager& args);
 bool ApplyDataDirArg(ArgsManager& args, const QString& path);
 
