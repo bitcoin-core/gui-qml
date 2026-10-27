@@ -17,6 +17,7 @@ FormSection {
     property var flow: ({})
     property string transactionId: ""
     property int displayUnit: BitcoinAmount.BTC
+    property bool hidesAmounts: false
     property bool outputsExpanded: false
     property string walletName: qsTr("Your wallet")
     property string selectedEntryId: ""
@@ -160,6 +161,7 @@ FormSection {
                                 objectName: "transactionFlowInput_" + index
                                 entry: root.inputEntries[index] || ({})
                                 displayUnit: root.displayUnit
+                                hidesAmount: root.hidesAmounts
                                 input: true
                                 width: root.inputCardWidth
                                 onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
@@ -179,6 +181,7 @@ FormSection {
                                 objectName: "transactionFlowOutput_" + index
                                 entry: root.outputEntries[index] || ({})
                                 displayUnit: root.displayUnit
+                                hidesAmount: root.hidesAmounts
                                 width: root.outputCardWidth
                                 onImplicitHeightChanged: Qt.callLater(root.updateNodeMeasurements)
                                 x: root.geometry.outputX

@@ -14,25 +14,32 @@ ColumnLayout {
     property bool showTransactionId: true
     property bool showBlock: true
     property bool showRawTransaction: true
+    property bool hidesAmounts: false
+    readonly property bool amountsHidden: hidesAmounts && optionsModel.hideAmounts
     readonly property var flow: details.flow || ({})
     readonly property bool coinbase: !!flow.coinbase
     readonly property string unavailable: qsTr("Unavailable")
+    readonly property bool feeRateKnown: details.feeRateSatPerVb !== undefined && details.feeRateSatPerVb !== null
     readonly property var overviewFields: [
         {key: "Timestamp", title: qsTr("Timestamp"), value: details.timestamp !== undefined && details.timestamp !== null
             ? Qt.formatDateTime(new Date(Number(details.timestamp) * 1000), "yyyy-MM-dd hh:mm:ss") : unavailable},
         {key: "Fee", title: qsTr("Network fee"), value: coinbase ? qsTr("Not applicable")
-            : details.feeKnown ? qsTr("%1 sats").arg(Number(details.feeSat).toLocaleString(Qt.locale(), 'f', 0)) : unavailable},
+            : details.feeKnown ? qsTr("%1 sats").arg(Number(details.feeSat).toLocaleString(Qt.locale(), 'f', 0)) : unavailable,
+            amountValue: !coinbase && details.feeKnown, hidesAmount: root.hidesAmounts},
         {key: "FeeRate", mono: true, title: qsTr("Fee rate"), value: coinbase ? qsTr("Not applicable")
-            : details.feeRateSatPerVb !== undefined && details.feeRateSatPerVb !== null
-                ? qsTr("%1 sat/vB").arg(Number(details.feeRateSatPerVb).toLocaleString(Qt.locale(), 'f', 2)) : unavailable},
+            : feeRateKnown ? qsTr("%1 sat/vB").arg(Number(details.feeRateSatPerVb).toLocaleString(Qt.locale(), 'f', 2)) : unavailable,
+            amountValue: !coinbase && feeRateKnown, hidesAmount: root.hidesAmounts},
         {key: "Block", title: qsTr("Block"), value: details.statusKnown === false ? unavailable
             : details.blockHeight !== undefined && details.blockHeight !== null && details.depth > 0 ? String(details.blockHeight)
             : details.depth > 0 ? unavailable : qsTr("Not mined"), hidden: !root.showBlock}
     ].filter(function(field) { return !field.hidden })
     readonly property var detailFields: [
-        {key: "Size", mono: true, title: qsTr("Size"), value: details.size > 0 ? qsTr("%1 bytes").arg(details.size) : unavailable},
-        {key: "VirtualSize", mono: true, title: qsTr("Virtual size"), value: details.virtualSize > 0 ? qsTr("%1 vB").arg(details.virtualSize) : unavailable},
-        {key: "Weight", mono: true, title: qsTr("Weight units"), value: details.weight > 0 ? qsTr("%1 WU").arg(details.weight) : unavailable},
+        {key: "Size", mono: true, title: qsTr("Size"), value: details.size > 0 ? qsTr("%1 bytes").arg(details.size) : unavailable,
+            amountValue: details.size > 0, hidesAmount: root.hidesAmounts},
+        {key: "VirtualSize", mono: true, title: qsTr("Virtual size"), value: details.virtualSize > 0 ? qsTr("%1 vB").arg(details.virtualSize) : unavailable,
+            amountValue: details.virtualSize > 0, hidesAmount: root.hidesAmounts},
+        {key: "Weight", mono: true, title: qsTr("Weight units"), value: details.weight > 0 ? qsTr("%1 WU").arg(details.weight) : unavailable,
+            amountValue: details.weight > 0, hidesAmount: root.hidesAmounts},
         {key: "Version", mono: true, title: qsTr("Version"), value: details.version !== undefined && details.version !== null ? String(details.version) : unavailable},
         {key: "LockTime", mono: true, title: qsTr("Locktime"), value: details.lockTime !== undefined && details.lockTime !== null ? String(details.lockTime) : unavailable},
         {key: "Rbf", title: qsTr("Replace by fee"), value: coinbase ? qsTr("Not applicable")

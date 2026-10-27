@@ -150,6 +150,13 @@ Platform.MenuBar {
             shortcut: root.actions.toggleDisplayUnit.shortcut
             onTriggered: root.actions.toggleDisplayUnit.trigger()
         }
+        Platform.MenuItem {
+            objectName: "menuToggleHideAmounts"
+            text: root.actions.toggleHideAmounts.text
+            enabled: root.actions.toggleHideAmounts.enabled
+            shortcut: root.actions.toggleHideAmounts.shortcut
+            onTriggered: root.actions.toggleHideAmounts.trigger()
+        }
         Platform.MenuSeparator {}
         Platform.MenuItem {
             objectName: "menuNode"

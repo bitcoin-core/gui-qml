@@ -97,6 +97,7 @@ Button {
                 objectName: "walletBadgeBalanceText"
                 Layout.fillWidth: true
                 visible: !root.loading && !root.noWalletLoaded
+                hidesAmount: true
                 amount: root.balance
                 unit: optionsModel.displayUnit === BitcoinAmount.SAT
                     ? optionsModel.displayUnitLabelForAmount(root.balanceSatoshi) : optionsModel.displayUnitLabel
