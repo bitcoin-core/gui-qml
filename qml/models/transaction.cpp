@@ -144,15 +144,14 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
     CAmount nNet = nCredit - nDebit;
     uint256 hash = wtx.tx->GetHash().ToUint256();
     QString txidStr = QString::fromStdString(hash.GetHex());
-    std::map<std::string, std::string> mapValue = wtx.value_map;
 
     QString replacesTxid;
     QString replacedByTxid;
-    if (mapValue.count("replaces_txid")) {
-        replacesTxid = QString::fromStdString(mapValue["replaces_txid"]);
+    if (wtx.replaces_txid.has_value()) {
+        replacesTxid = QString::fromStdString(wtx.replaces_txid->ToString());
     }
-    if (mapValue.count("replaced_by_txid")) {
-        replacedByTxid = QString::fromStdString(mapValue["replaced_by_txid"]);
+    if (wtx.replaced_by_txid.has_value()) {
+        replacedByTxid = QString::fromStdString(wtx.replaced_by_txid->ToString());
     }
 
     bool involvesWatchAddress = false;
@@ -204,7 +203,7 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
                 {
                     // Sent to IP, or other non-address transaction like OP_EVAL
                     sub->type = Transaction::SendToOther;
-                    sub->address = QString::fromStdString(mapValue["to"]);
+                    sub->address = QString::fromStdString(wtx.comment_to.value_or(""));
                 }
 
                 CAmount nValue = txout.nValue;
@@ -244,7 +243,7 @@ QList<QSharedPointer<Transaction>> Transaction::fromWalletTx(const interfaces::W
                 {
                     // Received by IP connection (deprecated features), or a multisignature or other non-simple transaction
                     sub->type = Transaction::RecvFromOther;
-                    sub->address = QString::fromStdString(mapValue["from"]);
+                    sub->address = QString::fromStdString(wtx.from.value_or(""));
                 }
                 if (wtx.is_coinbase)
                 {
