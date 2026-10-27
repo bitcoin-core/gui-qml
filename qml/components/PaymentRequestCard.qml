@@ -366,6 +366,7 @@ Pane {
                 Layout.maximumWidth: Infinity
                 Layout.bottomMargin: Theme.space.xs
                 amount: receivedAmount.displayWithUnit
+                hidesAmount: true
                 iconComponent: ActivityIcon {
                     objectName: "requestPaymentReceivedIcon"
                     paymentRequest: true
@@ -482,6 +483,7 @@ Pane {
                     PaymentRequestField {
                         id: amountInput
                         objectName: "requestPaymentAmountField"
+                        hidesAmount: root.saved
                         visible: root.modalView || root.showAmount
                         Layout.fillWidth: true
                         Layout.minimumWidth: 0

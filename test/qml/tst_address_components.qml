@@ -106,6 +106,25 @@ TestCase {
         }
     }
 
+    function test_address_amount_mask_has_constant_width() {
+        optionsModel.hideAmounts = true
+        Theme.motion.mode = "off"
+        try {
+            const row = createTemporaryObject(rowComponent, host)
+            verify(waitForRendering(row))
+            const amount = findChild(row, "addressRowAmountText")
+            const details = findChild(row, "addressRowDetailsButton")
+            compare(amount.shownText, amount.maskText)
+            const width = details.width
+            row.displayAmount = "₿ 21000000.00000000"
+            wait(0)
+            compare(details.width, width)
+            compare(amount.Accessible.name, "Hidden amount")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
     function test_amountDisplayLabel_unit_keeps_alignment_data() {
         return [
             {tag: "left", alignment: Text.AlignLeft, intrinsic: false},
@@ -195,6 +214,57 @@ TestCase {
         tryCompare(label, "animating", false)
         compare(label.displayText, "12345678 sats")
         optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_hides_amounts_that_opt_in() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        optionsModel.hideAmounts = false
+        const label = createTemporaryObject(amountDisplayComponent, host, { hidesAmount: true })
+        const other = createTemporaryObject(amountDisplayComponent, host)
+        try {
+            optionsModel.hideAmounts = true
+            tryCompare(label, "animationText", "∗∗∗∗∗∗∗∗∗∗")
+            verify(label.animating)
+            tryCompare(label, "animating", false)
+            compare(label.displayText, "∗∗∗∗∗∗∗∗∗∗")
+            compare(label.Accessible.name, "Hidden amount")
+            compare(other.displayText, "1.2 BTC")
+            compare(other.Accessible.name, "1.2 BTC")
+
+            optionsModel.hideAmounts = false
+            tryCompare(label, "animationText", "1.2 BTC")
+            // Revealed digits roll into place rather than only fading in.
+            compare(findObject(label, "amountColumn_d0").steps, 3)
+            compare(findObject(label, "amountColumn_f1").steps, 3)
+            tryCompare(label, "animating", false)
+            compare(label.displayText, "1.2 BTC")
+
+            // Reduced motion swaps the mask in at once.
+            Theme.motion.mode = "reduced"
+            optionsModel.hideAmounts = true
+            tryCompare(label, "displayText", "∗∗∗∗∗∗∗∗∗∗")
+            compare(label.animating, false)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
+    function test_summary_rolls_to_the_mask_and_keeps_its_unit() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        optionsModel.hideAmounts = false
+        const summary = createTemporaryObject(animatedSummaryComponent, host, { hidesAmount: true })
+        verify(waitForItemPolished(summary))
+        const amount = findObject(summary, "transactionSummaryAmount")
+        const unit = findObject(summary, "transactionSummaryUnit")
+        try {
+            optionsModel.hideAmounts = true
+            tryCompare(amount, "animating", true)
+            tryCompare(amount, "animating", false)
+            compare(amount.displayText, "∗∗∗∗∗∗∗∗∗∗")
+            compare(unit.displayText, "BTC")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
     }
 
     function test_amountDisplayLabel_preserves_old_text_until_animation_start() {

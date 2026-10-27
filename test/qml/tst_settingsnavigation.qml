@@ -853,6 +853,23 @@ TestCase {
         compare(Theme.reduceMotion, !reduceMotion)
         Theme.reduceMotion = reduceMotion
 
+        // The View menu and its shortcut change the setting too, so the row follows it.
+        const hideAmountsRow = findChild(view, "displayHideAmountsRow")
+        verify(hideAmountsRow !== null)
+        try {
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            hideAmountsRow.switchItem.toggle()
+            hideAmountsRow.switchItem.toggled()
+            compare(optionsModel.hideAmounts, true)
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            optionsModel.hideAmounts = true
+            compare(hideAmountsRow.checked, true)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+
         const textSizeSlider = findChild(view, "displayTextSizeSlider")
         verify(textSizeSlider !== null)
         const textScale = Theme.textScale

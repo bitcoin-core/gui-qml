@@ -155,6 +155,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
     if (m_money_font_choice != MONEY_FONT_EMBEDDED && m_money_font_choice != MONEY_FONT_BEST_SYSTEM) {
         m_money_font_choice = MONEY_FONT_EMBEDDED;
     }
+    m_hide_amounts = settings.value(SettingsKeys::HIDE_AMOUNTS, false).toBool();
 
     buildAvailableLanguages();
 
@@ -617,6 +618,15 @@ void OptionsQmlModel::setMoneyFontChoice(const QString& choice)
     settings.setValue(SettingsKeys::MONEY_FONT_CHOICE, m_money_font_choice);
     Q_EMIT moneyFontChoiceChanged();
     Q_EMIT moneyFontChanged();
+}
+
+void OptionsQmlModel::setHideAmounts(bool hide)
+{
+    if (hide == m_hide_amounts) return;
+    m_hide_amounts = hide;
+    QSettings settings;
+    settings.setValue(SettingsKeys::HIDE_AMOUNTS, m_hide_amounts);
+    Q_EMIT hideAmountsChanged();
 }
 
 QFont OptionsQmlModel::moneyFont() const

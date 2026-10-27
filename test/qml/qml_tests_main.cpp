@@ -2348,6 +2348,7 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(bool storageEnoughForFull READ storageEnoughForFull NOTIFY storageStatusChanged)
     Q_PROPERTY(QString thirdPartyTransactionUrls MEMBER m_third_party_transaction_urls NOTIFY thirdPartyTransactionUrlsChanged)
     Q_PROPERTY(QString moneyFontChoice MEMBER m_money_font_choice NOTIFY moneyFontChoiceChanged)
+    Q_PROPERTY(bool hideAmounts MEMBER m_hide_amounts NOTIFY hideAmountsChanged)
     Q_PROPERTY(QString externalSignerPath MEMBER m_external_signer_path NOTIFY externalSignerPathChanged)
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
 
@@ -2386,6 +2387,7 @@ public:
     QString m_storage_error_text;
     QString m_third_party_transaction_urls;
     QString m_money_font_choice{QStringLiteral("embedded")};
+    bool m_hide_amounts{false};
     QString m_external_signer_path;
     QVariantMap m_core_setting_status_overrides;
     MockCoreSettingsModel m_core_settings;
@@ -2613,6 +2615,7 @@ Q_SIGNALS:
     void storageStatusChanged();
     void thirdPartyTransactionUrlsChanged();
     void moneyFontChoiceChanged();
+    void hideAmountsChanged();
     void externalSignerPathChanged();
     void moneyFontChanged();
 

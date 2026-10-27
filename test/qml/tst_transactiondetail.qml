@@ -332,6 +332,34 @@ TestCase {
         verify(!copy.enabled)
     }
 
+    function test_hidden_fee_uses_accessible_amount_presentation() {
+        optionsModel.hideAmounts = true
+        try {
+            const page = createDetail()
+            page.detailsExpanded = true
+            verify(waitForRendering(page))
+            const fee = findChild(page, "transactionFeeRowValue")
+            compare(fee.shownText, fee.maskText)
+            compare(fee.Accessible.name, "Hidden amount")
+            const revealing = {FeeRate: Number(800 / 141).toLocaleString(Qt.locale(), 'f', 2) + " sat/vB",
+                VirtualSize: "141 vB", Size: "222 bytes", Weight: "561 WU"}
+            for (const key in revealing) {
+                const value = findChild(page, "transaction" + key + "RowValue")
+                compare(value.shownText, value.maskText, key)
+                compare(value.Accessible.name, "Hidden amount", key)
+            }
+            optionsModel.hideAmounts = false
+            compare(fee.shownText, "800 sats")
+            for (const key in revealing) {
+                const value = findChild(page, "transaction" + key + "RowValue")
+                compare(value.shownText, revealing[key], key)
+                compare(value.Accessible.name, revealing[key], key)
+            }
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
     function test_overview_and_details_show_transaction_metadata() {
         const page = createDetail(transaction({timestamp: new Date(2026, 8, 15, 13, 46, 59).getTime() / 1000}))
         page.detailsExpanded = true

@@ -13,7 +13,14 @@ Item {
     // text remains available for models that already expose a formatted amount.
     property string text: !amount.length || !unit.length ? amount
         : unitPrefix ? unit + " " + amount : amount + " " + unit
-    property string displayText: text
+    // Shows a fixed mask instead while the Hide amounts setting is on. Off by
+    // default: amounts people must check, as on Send, stay visible.
+    property bool hidesAmount: false
+    readonly property bool amountHidden: hidesAmount && typeof optionsModel !== "undefined" && optionsModel
+        && optionsModel.hideAmounts === true
+    readonly property string maskText: "∗∗∗∗∗∗∗∗∗∗"
+    readonly property string shownText: amountHidden ? maskText : text
+    property string displayText: shownText
     property alias textStyle: label.textStyle
     property alias font: label.font
     property alias color: label.color
@@ -38,7 +45,7 @@ Item {
     implicitHeight: label.implicitHeight
     baselineOffset: label.baselineOffset
     Accessible.role: Accessible.StaticText
-    Accessible.name: text
+    Accessible.name: amountHidden ? qsTr("Hidden amount") : text
 
     CoreText {
         id: label
