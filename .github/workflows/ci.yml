@@ -10,6 +10,7 @@ jobs:
   linux:
     name: ${{ matrix.job_name }}
     runs-on: ${{ matrix.image }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -91,4 +92,18 @@ jobs:
 
       - name: Run tests
         if: env.BUILD_APP_TESTS == 'ON'
-        run: ${{ matrix.test_wrapper }} ctest --test-dir build --output-on-failure
+        run: |
+          mkdir -p build/test-reports
+          ${{ matrix.test_wrapper }} ctest --test-dir build --output-on-failure \
+            --output-junit "${PWD}/build/test-reports/ctest.xml"
+
+      - name: Upload test reports and failed profiles
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: app-test-results-${{ matrix.image }}
+          path: |
+            build/test-reports/
+            build/test-profiles/
+            build/Testing/Temporary/
+          if-no-files-found: ignore

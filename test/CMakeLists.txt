@@ -110,13 +110,19 @@ if(ENABLE_TEST_AUTOMATION AND UNIX)
     COMMAND ${CMAKE_COMMAND} -E env BITCOIN_CORE_APP=$<TARGET_FILE:bitcoin-core-app>
       ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_configured_datadir.py
   )
-  set_tests_properties(bitcoinqml_configured_datadir_tests PROPERTIES TIMEOUT 180)
+  set_tests_properties(bitcoinqml_configured_datadir_tests PROPERTIES
+    TIMEOUT 180
+    ENVIRONMENT "QML_TEST_QT_VERSION=${Qt6_VERSION}"
+  )
 
   add_test(NAME bitcoinqml_fatal_shutdown_tests
     COMMAND ${CMAKE_COMMAND} -E env BITCOIN_CORE_APP=$<TARGET_FILE:bitcoin-core-app>
       ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/qml_test_fatal_shutdown.py
   )
-  set_tests_properties(bitcoinqml_fatal_shutdown_tests PROPERTIES TIMEOUT 180)
+  set_tests_properties(bitcoinqml_fatal_shutdown_tests PROPERTIES
+    TIMEOUT 180
+    ENVIRONMENT "QML_TEST_QT_VERSION=${Qt6_VERSION}"
+  )
 endif()
 
 qt6_add_resources(QMLTESTS_QRC_CPP ${QML_QRC} qml/bitcoin_qmltests.qrc)
@@ -155,6 +161,13 @@ target_include_directories(bitcoinqml_qmltests
 
 add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
+set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
+set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests
+  bitcoinqml_process_checks PROPERTIES LABELS unit)
+set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)
+set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests PROPERTIES
+  ENVIRONMENT "${gui_test_environment}")
+
 get_target_property(qt_lib_type Qt6::Core TYPE)
 if(qt_lib_type STREQUAL "STATIC_LIBRARY")
   qt6_import_plugins(bitcoinqml_bootstrap_tests INCLUDE Qt6::QMinimalIntegrationPlugin)
@@ -172,3 +185,5 @@ if(qt_lib_type STREQUAL "STATIC_LIBRARY")
     target_link_libraries(bitcoinqml_qmltests PRIVATE Qt6::qmlsettingsplugin)
   endif()
 endif()
+
+add_subdirectory(integration)

@@ -7,6 +7,8 @@ import QtQuick.Controls 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
 import "../../qml/controls/utils.js" as Utils
+import "../../qml/controls"
+import "../../qml/components"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -20,6 +22,38 @@ TestCase {
         id: requestPaymentComponent
 
         ReceivePage {}
+    }
+
+    Component {
+        id: paymentFieldComponent
+
+        PaymentRequestField {
+            width: 480
+            label: "Requested amount"
+            fieldObjectName: "resizingPaymentInput"
+            unitControl: AmountUnitButton {
+                unit: BitcoinAmount.BTC
+            }
+        }
+    }
+
+    function test_paymentFieldImplicitWidthDoesNotDependOnAssignedWidth() {
+        const field = createTemporaryObject(paymentFieldComponent, this)
+        verify(field !== null)
+        const input = findChild(field, "resizingPaymentInput")
+        verify(input !== null)
+        wait(0)
+        const preferredWidth = field.implicitWidth
+
+        for (const width of [280, 480, 900]) {
+            field.width = width
+            tryVerify(function() {
+                return input.mapToItem(field, 0, 0).x >= field.leftPadding
+                    && input.mapToItem(field, input.width, 0).x <= field.width - field.rightPadding + 1
+            })
+            compare(field.implicitWidth, preferredWidth)
+            verify(input.width >= 80 && input.width <= 260)
+        }
     }
 
     function init() {
@@ -604,6 +638,7 @@ TestCase {
         tryCompare(findChild(card, "paymentRequestMoreMenu"), "opened", true)
         findChild(card, "requestPaymentAgainMenuButton").clicked()
         tryCompare(page.requestModal, "visible", false)
+        tryCompare(testWalletModel, "lastTemplateRequestId", requestId)
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
 
         compare(testPaymentRequest.id, "")

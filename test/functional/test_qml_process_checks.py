@@ -47,6 +47,23 @@ class GuiProcessChecksTest(unittest.TestCase):
                 with self.assertRaises(AssertionError):
                     check_gui_exit(0, message)
 
+    def test_singleton_context_diagnostic_is_limited_to_qt62(self):
+        message = "QQmlEngine::setContextForObject(): Object already has a QQmlContext"
+        for source in ("", " (qqmlengine.cpp:1209)"):
+            for final_newline in ("", "\n"):
+                stderr = ("\n  " + message + source + "  " + final_newline).strip()
+                with self.subTest(source=source, final_newline=final_newline):
+                    self.assertEqual(unexpected_gui_stderr(stderr, qt_version="6.2.4"), [])
+                    for version in ("", "6.4.2", "6.8.4", "6.10.2"):
+                        self.assertTrue(unexpected_gui_stderr(stderr, qt_version=version))
+                    for unexpected in (
+                        "QML Item: Binding loop detected for property height",
+                        "QQmlEngine::setContextForObject(): unexpected warning",
+                        "ERROR: AddressSanitizer: heap-use-after-free",
+                        "ERROR: LeakSanitizer: detected memory leaks",
+                    ):
+                        self.assertEqual(unexpected_gui_stderr(stderr + "\n" + unexpected, qt_version="6.2.4"), [unexpected])
+
     def test_bridge_messages_match_the_expected_socket(self):
         path = "/tmp/qml_test_123/test_bridge.sock"
         stderr = f"TestBridge: listening on {path}\nTestBridge: client connected\nTestBridge: client disconnected"

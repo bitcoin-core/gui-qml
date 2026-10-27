@@ -130,13 +130,135 @@ build/bin/bitcoin-core-app
 
 ### Run Tests
 
-- Enable tests at configure time and run them via CTest.
+Enable tests with `-DBUILD_APP_TESTS=ON`. The test directories separate the kinds of coverage:
 
-```
+- `test/test_*.cpp`: unit tests for models, controllers, and helpers. They do not start a full node.
+- `test/qml/`: QML component tests with mock models.
+- `test/integration/`: C++ tests that run the production application and a real regtest node, with their own CMake file.
+- `test/functional/`: Python tests that drive the application through the test bridge.
+
+Build and run the unit and QML component tests:
+
+```sh
 cmake -B build -DBUILD_APP_TESTS=ON
-cmake --build build -j$(nproc)
-ctest --test-dir build --output-on-failure
+cmake --build build --target bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests -j$(nproc)
+ctest --test-dir build --output-on-failure -L 'unit|qml'
 ```
+
+Build and run the application and node integration tests:
+
+```sh
+cmake -B build -DBUILD_APP_TESTS=ON
+cmake --build build --target bitcoinqml_integration -j$(nproc)
+ctest --test-dir build --output-on-failure -L integration
+```
+
+The integration target builds `bitcoinqml_integration_tests`, which CTest invokes
+directly. Python functional tests remain separate from the integration suite.
+The parent runs one Qt Test suite. Each test function, data row, and wallet mode
+has its own result, named `module.wallet.function[:row]`, in the combined output
+and reports. Qt Test also reports the parent's setup and cleanup results.
+The subprocess fixture starts a fresh application and regtest node for each result,
+including production startup and shutdown. The initial modules are `lifecycle`,
+`navigation`, and `node`, each run with wallets disabled and enabled.
+Each process has its own temporary data directory and GUI settings, so changes to
+wallets, the chain, settings, and UI state cannot affect the next test or data row.
+The fixture uses Core's subprocess helper and returns the child's test and process
+results to the parent. A startup error, assertion failure, QML warning, crash, or
+shutdown failure fails that row in the combined report. The child writes its
+Qt Test result to `qt-results.xml` and redirects stdout and stderr to separate
+`stdout.txt` and `stderr.txt` files before creating the application. These streams
+are unbuffered, so logs survive cancellation and cannot corrupt the XML result.
+The parent includes diagnostics in the combined output after each child exits.
+Successful profiles are removed; failed profiles, including these files, the
+node's `debug.log`, and GUI settings, are retained and their paths are included
+in the failure. Use `--profile-dir=PATH` to choose their parent directory (the
+system temporary directory by default). The child uses its profile as its working
+directory; use absolute paths for any external test resources.
+Select modules and modes with:
+
+```sh
+build/bin/bitcoinqml_integration_tests --list-modules
+build/bin/bitcoinqml_integration_tests -functions
+build/bin/bitcoinqml_integration_tests -datatags
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=navigation
+QT_QPA_PLATFORM=minimal QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 build/bin/bitcoinqml_integration_tests --module=node --wallet=enabled
+```
+
+Omitting `--module` selects all modules; omitting `--wallet` selects each module's
+supported modes. Add `--test=chainSyncFollowsRealCoreBlockNotifications` to the last
+command to select that function, or use
+`--test=networkActionsAndCoreNotificationsAgree:disable-network` to select one
+data row. Qt Test arguments apply to the parent suite;
+`run:node.enabled.chainSyncFollowsRealCoreBlockNotifications` selects that exact
+row using Qt Test's usual filtering syntax.
+
+For example, `-o reports/results.xml,junitxml -o -,txt` writes one
+`reports/results.xml` containing the selected tests and prints one text summary.
+The module, wallet mode, test function, and data tag distinguish each result.
+Use repeated `-o filename,format` options for multiple outputs. The older
+single-output `-o filename -junitxml` syntax also works. Mixing the two forms or
+writing multiple formats to the same filename is rejected before tests start.
+Report directories are created automatically and reports live outside the temporary
+profiles. Machine-readable stdout, such as `-o -,junitxml`, is also one document.
+The runner forwards `-silent`, `-v1`, `-v2`, `-vs`, `-nocrashhandler`, and Qt Test's
+`-eventdelay`, `-keydelay`, `-mousedelay`, and `-maxwarnings` options to children.
+Child Qt messages are replayed with their source locations after the child exits;
+they are not streamed live. Other Qt options affect the parent only.
+
+CTest writes integration reports to `build/test-reports/` and keeps failed profiles
+in `build/test-profiles/`. Both test workflows upload these directories and the
+CTest logs even after failures, with a separate artifact for each matrix job.
+The `ctest.xml` report records the overall CTest results; `integration.xml` provides
+the individual test results, including application startup and shutdown failures.
+The process exit status remains authoritative if the parent itself is interrupted
+before finishing its report.
+Each child has a two-minute watchdog covering discovery or application startup,
+test execution, and shutdown. On timeout it logs the test name and duration to
+stderr and exits immediately, without running destructors or exit handlers. The
+parent records a failure, retains the profile and diagnostics, and continues with
+the remaining tests, even if the child's XML report is missing or incomplete.
+Set `QML_TEST_TIMEOUT` to a positive number of milliseconds to override this limit.
+Keep Qt Test's `QTEST_FUNCTION_TIMEOUT` (five minutes by default) higher than this
+limit so the child can time out before the parent.
+CTest additionally limits the complete integration run to 25 minutes. An outer
+timeout is still needed for hangs before the child can start its watchdog.
+
+`TestApplication` extends the production `BitcoinQmlApplication` and provides
+profile isolation, node and wallet initialization waits, test scheduling, and
+shutdown cleanup for the test modules. Wallet-enabled runs start without loaded
+wallets; wallet test modules can create the wallets they need.
+Test cases live in separate modules and take a `BitcoinQmlApplication&`, giving
+them access to the same node, models, and QML engine as the application.
+`test/integration/runner/` contains the parent Qt Test suite, entry point, and module
+declarations. `test/integration/fixture/` owns the subprocess, application fixture,
+and shared test helpers. Test case modules live directly in `test/integration/`.
+Add a new module to `test/integration/CMakeLists.txt`, declare its factory in
+`runner/test_cases.h`, and add its name, supported wallet modes, and factory to
+`IntegrationTestModules()` in `runner/test_cases.cpp`. Use the factory signature
+`std::unique_ptr<QObject> CreateFeatureTests(BitcoinQmlApplication&, WalletMode)`.
+The constructor must only store references and other initial state. The parent
+uses Qt metadata to discover test functions, then runs Qt's `-datatags` in a
+separate discovery process using only `QCoreApplication`. Constructors and
+`_data()` functions must work without a GUI or node and only describe test inputs.
+Discovery failures appear as failed rows in the combined report, with the
+discovery profile retained. Per-function data rows are supported; global data
+(`initTestCase_data`) is rejected because Qt 6.2 cannot select those rows separately.
+
+Test functions and their data rows have separate processes and profiles. Qt Test's
+`initTestCase()`, `init()`, `cleanup()`, and `cleanupTestCase()` run in the child
+around the selected row. Pass, skip, and failure results remain separate for each
+row. Keep ordered checks that require shared application state in one test
+function. The fixture always requests shutdown and verifies UI teardown when
+the function ends.
+Every warning emitted by a QML engine fails the child process, even when all Qt
+Test assertions pass. Warning capture starts before loading QML and remains active
+through engine teardown. Diagnostics include the QML URL, line, and message.
+Functional stderr checks allow Qt 6.2's exact singleton-context diagnostic when
+CTest supplies that Qt version. QML engine warnings, including binding and layout
+errors, have no exceptions in the integration fixture.
+
+To run everything, build the default target and run CTest without a label filter.
 
 - If CMake reports "Target Qt6::Test not found", ensure Qt6 Test is available
   and discoverable by CMake:

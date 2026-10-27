@@ -4,6 +4,9 @@
 
 #include <qml/models/desktoptrayiconcontroller.h>
 
+#include <QAction>
+#include <QMenu>
+#include <QPointer>
 #include <QSignalSpy>
 #include <QWindow>
 #include <QtTest/QtTest>
@@ -14,7 +17,9 @@ class DesktopTrayIconControllerTests : public QObject
 
 private Q_SLOTS:
     void initiallyNotVisible();
+    void destroysMenuWithController();
     void setVisibleFalseWhenAlreadyHidden_noSignal();
+    void showWithoutSystemTrayStaysHidden();
     void setToolTipIsReadable();
     void showRestoresGeometryCapturedAtHide();
 };
@@ -25,12 +30,44 @@ void DesktopTrayIconControllerTests::initiallyNotVisible()
     QVERIFY(!controller.visible());
 }
 
+void DesktopTrayIconControllerTests::destroysMenuWithController()
+{
+    QPointer<QMenu> menu;
+    QPointer<QAction> action;
+    {
+        DesktopTrayIconController controller;
+        auto* tray = controller.findChild<QSystemTrayIcon*>();
+        QVERIFY(tray);
+        menu = tray->contextMenu();
+        QVERIFY(menu);
+        QVERIFY(!menu->actions().isEmpty());
+        action = menu->actions().constFirst();
+    }
+    QVERIFY(menu.isNull());
+    QVERIFY(action.isNull());
+}
+
 void DesktopTrayIconControllerTests::setVisibleFalseWhenAlreadyHidden_noSignal()
 {
     DesktopTrayIconController controller;
     QSignalSpy spy(&controller, &DesktopTrayIconController::visibleChanged);
     controller.setVisible(false);
     QCOMPARE(spy.count(), 0);
+}
+
+void DesktopTrayIconControllerTests::showWithoutSystemTrayStaysHidden()
+{
+    DesktopTrayIconController controller;
+    if (controller.supported()) QSKIP("Requires a platform without a system tray");
+    QSignalSpy visible_changed{&controller, &DesktopTrayIconController::visibleChanged};
+
+    controller.setVisible(true);
+    QVERIFY(!controller.visible());
+    QCOMPARE(visible_changed.count(), 0);
+
+    controller.setVisible(false);
+    QVERIFY(!controller.visible());
+    QCOMPARE(visible_changed.count(), 0);
 }
 
 // The system-tray tooltip (e.g. "Bitcoin Core client [regtest]") is set on the

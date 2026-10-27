@@ -25,7 +25,7 @@ Item {
     property var footerTextStyle: Theme.text.caption
 
     implicitWidth: 450
-    implicitHeight: sectionColumn.implicitHeight
+    implicitHeight: sectionColumn.height
 
     ColumnLayout {
         id: sectionColumn
@@ -83,7 +83,7 @@ Item {
             id: card
             objectName: root.objectName.length > 0 ? root.objectName + "Card" : ""
             Layout.fillWidth: true
-            implicitHeight: contentColumn.implicitHeight
+            implicitHeight: contentColumn.height
             radius: root.cornerRadius
             color: root.showBackground ? root.backgroundColor : "transparent"
             clip: true

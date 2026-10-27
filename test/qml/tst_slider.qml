@@ -11,7 +11,17 @@ TestCase {
     when: windowShown
     visible: true
 
-    Slider { id: slider; from: 0; to: 5 }
+    Component {
+        id: sliderComponent
+        Slider { from: 0; to: 5 }
+    }
+
+    property var slider
+
+    function init() {
+        slider = createTemporaryObject(sliderComponent, this)
+        verify(slider !== null)
+    }
 
     function test_continuous_by_default() {
         compare(slider.discrete, false)

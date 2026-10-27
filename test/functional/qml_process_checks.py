@@ -3,6 +3,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+import os
 import re
 import subprocess
 import sys
@@ -16,8 +17,14 @@ _EXPECTED_STDERR = (
 )
 
 
-def unexpected_gui_stderr(stderr, *, socket_path=None):
+def unexpected_gui_stderr(stderr, *, socket_path=None, qt_version=None):
     expected = list(_EXPECTED_STDERR)
+    if qt_version is None:
+        qt_version = os.getenv("QML_TEST_QT_VERSION", "")
+    if re.fullmatch(r"6\.2\.\d+", qt_version):
+        # Qt 6.2's QQmlEnginePrivate::singletonInstance sets a context even when
+        # the singleton has one. Qt 6.4 retains it without this diagnostic.
+        expected.append(r"QQmlEngine::setContextForObject\(\): Object already has a QQmlContext")
     if socket_path is not None:
         expected.extend((
             r"TestBridge: listening on " + re.escape(socket_path),
