@@ -12,13 +12,32 @@ Popup {
     objectName: "walletCreationModal"
     signal finished(bool openActivity)
     property bool onboardingEntry: false
+    property bool importErrorEntry: false
+    property bool importErrorPending: false
 
     function openForOnboarding() {
         onboardingEntry = true
         open()
     }
 
-    onClosed: onboardingEntry = false
+    function openForImportError() {
+        // Still visible during the exit transition.
+        if (visible) {
+            importErrorPending = true
+            return
+        }
+        importErrorEntry = true
+        open()
+    }
+
+    onClosed: {
+        onboardingEntry = false
+        importErrorEntry = false
+        if (importErrorPending) {
+            importErrorPending = false
+            Qt.callLater(openForImportError)
+        }
+    }
 
     parent: Overlay.overlay
     width: Math.min(880, parent ? parent.width - 32 : 880)
@@ -30,7 +49,7 @@ Popup {
     dim: true
     focus: true
     readonly property var flow: contentItem && contentItem.item ? contentItem.item : null
-    closePolicy: flow && (flow.creatingWallet || flow.importingWallet || flow.readyPending ||
+    closePolicy: flow && (flow.creatingWallet || flow.readyPending ||
         (flow.currentItem && flow.currentItem.creatingWallet) ||
         (flow.currentItem && (flow.currentItem.objectName === "walletCreationReadyPage"
             || flow.currentItem.objectName === "externalWalletCreatedPage")))
@@ -61,6 +80,7 @@ Popup {
         sourceComponent: WalletCreationFlow {
             modalView: true
             onboardingEntry: root.onboardingEntry
+            importErrorEntry: root.importErrorEntry
             onFinished: function(openActivity) {
                 root.close()
                 root.finished(openActivity)

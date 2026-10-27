@@ -85,6 +85,8 @@ private Q_SLOTS:
     void setWalletLoadStateRemovesOpenOnlyWalletOnUnload();
     void setWalletLoadStateLoadingExposesLoadingRoleAndClearsOnOpen();
     void setWalletLoadStateLoadErrorExposesErrorMessageRoleAndClearsOnClosed();
+    void setImportingWalletAddsLoadingRowUntilImportFails();
+    void setImportingWalletKeepsRowOnceImportedWalletOpens();
     void setWalletInfoUpdatesBalanceAndKeySchemeRolesForRowOnly();
     void listWalletDirPreservesBalanceAndKeySchemeAcrossRebuilds();
     void walletDirLoadedFlipsAfterFirstList();
@@ -377,6 +379,63 @@ void WalletListModelTests::setWalletLoadStateLoadingExposesLoadingRoleAndClearsO
 
     QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(),
              static_cast<int>(WalletListModel::LoadState::Open));
+}
+
+void WalletListModelTests::setImportingWalletAddsLoadingRowUntilImportFails()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    ConfigureExpectedWalletLoader(node, loader);
+
+    WalletListModel model{node, nullptr};
+    model.listWalletDir();
+
+    model.setImportingWallet("imported_wallet");
+
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::NameRole).toString(), QString{"imported_wallet"});
+    QCOMPARE(model.data(model.index(1, 0), WalletListModel::LoadStateRole).toInt(),
+             static_cast<int>(WalletListModel::LoadState::Loading));
+    QVERIFY(model.data(model.index(1, 0), WalletListModel::ImportingRole).toBool());
+    QVERIFY(!model.data(model.index(0, 0), WalletListModel::ImportingRole).toBool());
+
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}, {"imported_wallet", "sqlite"}};
+    model.listWalletDir();
+    QCOMPARE(model.rowCount(), 2);
+    QVERIFY(model.data(model.index(1, 0), WalletListModel::ImportingRole).toBool());
+
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    model.listWalletDir();
+    QCOMPARE(model.rowCount(), 2);
+
+    model.setImportingWallet(QString());
+
+    QCOMPARE(model.rowCount(), 1);
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"alpha_wallet"});
+}
+
+void WalletListModelTests::setImportingWalletKeepsRowOnceImportedWalletOpens()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    FakeWalletLoader loader;
+    loader.wallet_dir_entries = {{"alpha_wallet", "sqlite"}};
+    ConfigureExpectedWalletLoader(node, loader);
+
+    WalletListModel model{node, nullptr};
+    model.listWalletDir();
+    model.setImportingWallet("imported_wallet");
+
+    model.setWalletLoadState("imported_wallet", WalletListModel::LoadState::Open);
+    model.setImportingWallet(QString());
+
+    QCOMPARE(model.rowCount(), 2);
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::NameRole).toString(), QString{"imported_wallet"});
+    QCOMPARE(model.data(model.index(0, 0), WalletListModel::LoadStateRole).toInt(),
+             static_cast<int>(WalletListModel::LoadState::Open));
+    QVERIFY(!model.data(model.index(0, 0), WalletListModel::ImportingRole).toBool());
 }
 
 void WalletListModelTests::setWalletLoadStateLoadErrorExposesErrorMessageRoleAndClearsOnClosed()

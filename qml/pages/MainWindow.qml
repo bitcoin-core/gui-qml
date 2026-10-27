@@ -93,7 +93,8 @@ ApplicationWindow {
     }
 
     function openWalletCreation() {
-        if (!appWindow.menuNavigationEnabled) {
+        if (!appWindow.menuNavigationEnabled
+                || (appWindow.menuWalletController && appWindow.menuWalletController.walletImportInProgress)) {
             return
         }
         walletCreationModal.open()
@@ -161,6 +162,9 @@ ApplicationWindow {
             : false
         walletBusy: appWindow.menuWalletController
             ? appWindow.menuWalletController.walletLoadInProgress
+            : false
+        walletImportBusy: appWindow.menuWalletController
+            ? appWindow.menuWalletController.walletImportInProgress
             : false
         canUndo: appWindow.menuEditTarget
             && typeof appWindow.menuEditTarget.undo === "function"
@@ -348,9 +352,7 @@ ApplicationWindow {
         id: desktopWallets
         DesktopWallets {
             objectName: "desktopWalletsPage"
-            onAddWallet: {
-                walletCreationModal.open()
-            }
+            onAddWallet: appWindow.openWalletCreation()
         }
     }
 
@@ -359,6 +361,41 @@ ApplicationWindow {
         onFinished: function(openActivity) {
             if (openActivity) appWindow.routeToShell("openActivity")
         }
+    }
+
+    Connections {
+        target: appWindow.menuWalletController
+        function onWalletImportFailed() {
+            if (!walletCreationModal.opened) walletCreationModal.openForImportError()
+        }
+        function onWalletImportSucceeded() {
+            if (!walletCreationModal.opened)
+                walletImportToast.walletName = appWindow.menuWalletController.lastImportedWalletName
+        }
+    }
+
+    ToastBanner {
+        id: walletImportToast
+        objectName: "walletImportSucceededToast"
+        property string walletName: ""
+        visible: walletName.length > 0 && !appWindow.shutdownInProgress
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 24
+        width: Math.min(480, parent.width - 32)
+        tintColor: Theme.color.green
+        iconSource: "image://images/check"
+        text: qsTr("Wallet \"%1\" was imported.").arg(walletName)
+        textObjectName: "walletImportSucceededToastText"
+        actionText: qsTr("Open")
+        showsCloseButton: true
+        dismissAfter: 8
+        onActionTriggered: {
+            if (appWindow.menuWalletController)
+                appWindow.menuWalletController.setSelectedWallet(walletName, "")
+            walletName = ""
+        }
+        onDismissed: walletName = ""
     }
 
     Component {

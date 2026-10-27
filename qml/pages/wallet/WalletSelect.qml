@@ -156,6 +156,9 @@ Popup {
                 required property string balance;
                 required property var balanceSatoshi;
                 required property int keySchemeKind;
+                required property bool importing;
+                readonly property bool selectable: !walletController.walletLoadInProgress && !importing
+                    && (!walletController.walletImportInProgress || loadState === WalletListModel.Open)
 
                 readonly property string iconSource: {
                     if (loadState !== WalletListModel.Open) return "image://images/wallet"
@@ -171,7 +174,7 @@ Popup {
                 readonly property string statusText: {
                     switch (loadState) {
                     case WalletListModel.Loading:
-                        return qsTr("Loading…")
+                        return importing ? qsTr("Importing…") : qsTr("Loading…")
                     case WalletListModel.LoadError:
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
@@ -192,7 +195,7 @@ Popup {
                 width: listView.width
                 height: loadState === WalletListModel.Open ? 64 : 48
                 checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
-                enabled: !walletController.walletLoadInProgress
+                enabled: selectable
                 ButtonGroup.group: buttonGroup
                 leftPadding: 10
                 rightPadding: 10
@@ -395,7 +398,7 @@ Popup {
                 }
 
                 onClicked: {
-                    if (walletController.walletLoadInProgress) {
+                    if (!selectable) {
                         return
                     }
                     walletController.setSelectedWallet(name, format)
@@ -418,7 +421,7 @@ Popup {
             textColor: Theme.color.orange
             hoverTextColor: Theme.color.orange
             iconSource: "image://images/plus-filled"
-            enabled: !walletController.walletLoadInProgress
+            enabled: !walletController.walletLoadInProgress && !walletController.walletImportInProgress
             onTriggered: {
                 root.addWallet()
                 root.close()
