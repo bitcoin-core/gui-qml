@@ -53,6 +53,7 @@ def select_display_unit(gui, item_name, expected_text):
 
 
 def select_language(gui, search_text, item_name):
+    gui.wait_for_property("displayLanguageRow", "enabled", True, timeout_ms=5000)
     gui.click("displayLanguageRow")
     gui.wait_for_page("settingsLanguagePage", timeout_ms=5000)
     if search_text:

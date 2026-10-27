@@ -272,6 +272,36 @@ TestCase {
         compare(optionsModel.coreSettings.entry("proxy").address, "10.0.0.1:9050")
     }
 
+    function test_pendingSavePreservesEditorFocus_data() {
+        return [
+            { tag: "switch-tab", control: "displayHideAmountsRowSwitch", reason: Qt.TabFocusReason, moveFocus: false },
+            { tag: "picker-backtab", control: "displayMoneyFontPicker", reason: Qt.BacktabFocusReason, moveFocus: false },
+            { tag: "switch-mouse", control: "displayHideAmountsRowSwitch", reason: Qt.MouseFocusReason, moveFocus: false },
+            { tag: "focus-moved", control: "displayHideAmountsRowSwitch", reason: Qt.TabFocusReason, moveFocus: true }
+        ]
+    }
+
+    function test_pendingSavePreservesEditorFocus(data) {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        const editor = findChild(view, data.control)
+        editor.forceActiveFocus(data.reason)
+        tryCompare(editor, "activeFocus", true)
+        const visualFocus = editor.visualFocus
+        optionsModel.settingsPending = true
+        compare(editor.enabled, false)
+        const done = findChild(view, "settingsDoneButton")
+        if (data.moveFocus) done.forceActiveFocus(Qt.TabFocusReason)
+        optionsModel.settingsPending = false
+        if (data.moveFocus) {
+            tryCompare(done, "activeFocus", true)
+            verify(done.visualFocus)
+        } else {
+            tryCompare(editor, "activeFocus", true)
+            compare(editor.visualFocus, visualFocus)
+            compare(editor.focusReason, data.reason)
+        }
+    }
+
     function test_signerPendingDoesNotShowStaleConnectedDevice() {
         optionsModel.externalSignerPath = "old-hwi"
         walletController.canCreateExternalSignerWallet = true
@@ -1040,6 +1070,23 @@ TestCase {
         reduceMotionRow.switchItem.toggled()
         compare(Theme.reduceMotion, !reduceMotion)
         Theme.reduceMotion = reduceMotion
+
+        // The View menu and its shortcut change the setting too, so the row follows it.
+        const hideAmountsRow = findChild(view, "displayHideAmountsRow")
+        verify(hideAmountsRow !== null)
+        try {
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            hideAmountsRow.switchItem.toggle()
+            hideAmountsRow.switchItem.toggled()
+            compare(optionsModel.hideAmounts, true)
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            optionsModel.hideAmounts = true
+            compare(hideAmountsRow.checked, true)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
 
         const textSizeSlider = findChild(view, "displayTextSizeSlider")
         verify(textSizeSlider !== null)

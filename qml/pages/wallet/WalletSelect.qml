@@ -207,7 +207,8 @@ Popup {
                 bottomPadding: 0
                 Accessible.role: Accessible.ListItem
                 Accessible.name: delegate.displayName
-                Accessible.description: delegate.statusText
+                Accessible.description: delegate.loadState === WalletListModel.Open && optionsModel.hideAmounts
+                    ? qsTr("Hidden amount") : delegate.statusText
                 Accessible.selected: delegate.checked
 
                 Keys.onUpPressed: root.focusRow(delegate.index - 1)
@@ -285,6 +286,7 @@ Popup {
                             elide: Text.ElideRight
                             visible: text.length > 0
                             animateUnitChanges: delegate.loadState === WalletListModel.Open
+                            hidesAmount: delegate.loadState === WalletListModel.Open
                         }
                     }
 

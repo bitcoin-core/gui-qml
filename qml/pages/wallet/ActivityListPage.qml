@@ -391,8 +391,9 @@ Page {
                             textStyle: Theme.text.subheading
                             horizontalAlignment: Text.AlignLeft
                         }
-                        CoreText {
+                        BitcoinAmountDisplayLabel {
                             objectName: sectionHeader.isPending ? "activityPendingBalance" : ""
+                            hidesAmount: true
                             visible: sectionHeader.isPending && activityFilterProxy.pendingBalanceSat !== 0
                             text: visible ? activityFilterProxy.pendingBalance : ""
                             textStyle: Theme.text.amountDescription
@@ -833,7 +834,8 @@ Page {
             Layout.margins: 12
             spacing: 8
 
-            CoreText {
+            BitcoinAmountDisplayLabel {
+                hidesAmount: true
                 objectName: "activityAmountRangeLabel"
                 Layout.fillWidth: true
                 text: qsTr("%1 to %2").arg(lowerAmountFormatter.display).arg(upperAmountFormatter.displayWithUnit)
@@ -844,6 +846,7 @@ Page {
                 id: amountSlider
                 objectName: "activityAmountRangeSlider"
                 Layout.fillWidth: true
+                valuesHidden: optionsModel.hideAmounts
                 minValue: 0
                 maxValue: activityFilterProxy.availableMaxAmount
                 Accessible.name: qsTr("Activity amount range")

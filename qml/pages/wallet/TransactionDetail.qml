@@ -123,6 +123,7 @@ Page {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
                     amount: root.amount
+                    hidesAmount: true
                     amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.txIncoming : Theme.color.neutral9
                     subtitle: root.actionLabel + (root.transactionData.timestamp
                         ? " · " + new Date(root.transactionData.timestamp * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat) : "")
@@ -215,6 +216,7 @@ Page {
                     flow: root.flow
                     transactionId: root.txid
                     displayUnit: optionsModel.displayUnit
+                    hidesAmounts: true
                     walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                     selectedEntryId: root.outputIndex >= 0 ? "output:" + root.outputIndex : ""
                     onPaymentRequestRequested: function(requestId) { root.openPaymentRequestDetail(requestId) }
@@ -229,6 +231,7 @@ Page {
                 TransactionDetailsSection {
                     visible: root.detailsExpanded
                     Layout.fillWidth: true
+                    hidesAmounts: true
                     details: root.transactionData
                 }
             }

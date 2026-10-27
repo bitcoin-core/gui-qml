@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 
 import "../controls"
 
@@ -104,6 +105,34 @@ Page {
         root.sectionChanged("")
     }
 
+    function focusReasonFor(item) {
+        return item.focusReason === undefined ? Qt.OtherFocusReason : item.focusReason
+    }
+
+    function trackEditorFocus() {
+        if (!internal.currentStack || !internal.currentStack.enabled) return
+        const focused = root.Window.window ? root.Window.window.activeFocusItem : null
+        let item = focused
+        while (item && item !== internal.currentStack) item = item.parent
+        if (!item) {
+            internal.focusedEditor = null
+        } else if (focused !== internal.focusedEditor) {
+            internal.focusedEditor = focused
+            internal.editorFocusReason = root.focusReasonFor(focused)
+        }
+    }
+
+    function restoreEditorFocusReason() {
+        const item = internal.focusedEditor
+        if (!item || !item.visible || !item.enabled || !item.activeFocus
+            || root.focusReasonFor(item) === internal.editorFocusReason) return
+        // Disabling a focused editor for a save replaces its focus reason.
+        // Restore the ring only if focus has stayed on that same editor.
+        const reason = internal.editorFocusReason
+        item.focus = false
+        item.forceActiveFocus(reason)
+    }
+
     background: null
     clip: true
 
@@ -112,6 +141,23 @@ Page {
         property string currentSectionId: ""
         property var currentStack: null
         property var sectionStacks: ({})
+        property Item focusedEditor: null
+        property int editorFocusReason: Qt.OtherFocusReason
+    }
+
+    Connections {
+        target: root.Window.window
+        function onActiveFocusItemChanged() { root.trackEditorFocus() }
+    }
+
+    Connections {
+        target: internal.focusedEditor
+        ignoreUnknownSignals: true
+        function onFocusReasonChanged() {
+            if (internal.currentStack && internal.currentStack.enabled && internal.focusedEditor.enabled) {
+                internal.editorFocusReason = root.focusReasonFor(internal.focusedEditor)
+            }
+        }
     }
 
     Item {
@@ -125,6 +171,7 @@ Page {
         PageStack {
             required property string sectionId
             enabled: root.disabledSectionIds.indexOf(sectionId) < 0
+            onEnabledChanged: if (enabled) root.restoreEditorFocusReason()
             objectName: "settingsNavigationStack_" + sectionId
             anchors.fill: parent
             visible: false

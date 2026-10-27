@@ -12,6 +12,7 @@ ColumnLayout {
     property string amount: ""
     property string subtitle: ""
     property color amountColor: Theme.color.neutral9
+    property bool hidesAmount: false
     property Component iconComponent
     property Component statusComponent
     readonly property int unitSeparator: amount.lastIndexOf(" ")
@@ -45,6 +46,11 @@ ColumnLayout {
                 Layout.alignment: Qt.AlignBaseline
                 // Amounts being reviewed or confirmed never roll through other digits.
                 animateUnitChanges: false
+                hidesAmount: root.hidesAmount
+                // The row shrinks to the mask while amounts are hidden; give the
+                // reveal the room the digits will take.
+                animationAvailableWidth: Math.max(0, amountRow.parent.width
+                    - (amountUnit.visible ? amountRow.spacing + amountUnit.implicitWidth : 0))
                 text: root.amountValue
                 color: root.amountColor
                 textStyle: Theme.text.amountLead

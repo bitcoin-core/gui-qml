@@ -12,6 +12,7 @@ Controls.RangeSlider {
     property alias maxValue: root.to
     property alias lowerValue: root.first.value
     property alias upperValue: root.second.value
+    property bool valuesHidden: false
     property color trackColor: Theme.color.sliderTrack
     property color trackHighlightColor: Theme.color.accent
     property color thumbColor: Theme.color.accentForeground
@@ -70,9 +71,10 @@ Controls.RangeSlider {
         required property var node
         required property var range
         // Read by the accessibility value interface of each handle.
-        readonly property real value: node.value
-        readonly property real minimumValue: thumb.range.from
-        readonly property real maximumValue: thumb.range.to
+        readonly property var value: thumb.range.valuesHidden ? undefined : node.value
+        readonly property var minimumValue: thumb.range.valuesHidden ? undefined : thumb.range.from
+        readonly property var maximumValue: thumb.range.valuesHidden ? undefined : thumb.range.to
+        Accessible.description: thumb.range.valuesHidden ? qsTr("Hidden value") : ""
 
         Accessible.role: Accessible.Slider
         // Step as the arrow keys do, which also report the move.

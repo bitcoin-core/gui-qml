@@ -149,6 +149,7 @@ private Q_SLOTS:
     void storageSpaceCheckRejectsExistingFile();
     void thirdPartyTransactionLinksParseValidUrls();
     void moneyFontChoicePersists();
+    void hideAmountsPersists();
     void displayUnitUsesQtCompatibleSettingsKey();
     void displayUnitUsesLegacyQtFallback();
     void displayUnitPrefersQmlSettingOverLegacyQtFallback();
@@ -2505,6 +2506,44 @@ void OptionsModelTests::moneyFontChoicePersists()
         settings.setValue(SettingsKeys::MONEY_FONT_CHOICE, previous_font_setting);
     } else {
         settings.remove(SettingsKeys::MONEY_FONT_CHOICE);
+    }
+}
+
+void OptionsModelTests::hideAmountsPersists()
+{
+    QTemporaryDir settings_dir;
+    QVERIFY(settings_dir.isValid());
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_dir.path());
+    SavedSettingsFormat settings_format{QSettings::IniFormat};
+    QSettings settings;
+    const bool had_setting = settings.contains(SettingsKeys::HIDE_AMOUNTS);
+    const QVariant previous_setting = settings.value(SettingsKeys::HIDE_AMOUNTS);
+    settings.remove(SettingsKeys::HIDE_AMOUNTS);
+
+    MockNode node;
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    {
+        OptionsQmlModel model(node, model_args);
+        QTRY_VERIFY(model.settingsReady());
+        QCOMPARE(model.hideAmounts(), false);
+        QSignalSpy spy(&model, &OptionsQmlModel::hideAmountsChanged);
+        model.setHideAmounts(true);
+        model.setHideAmounts(true);
+        QCOMPARE(spy.count(), 1);
+        QTRY_VERIFY(!model.settingsPending());
+        QCOMPARE(settings.value(SettingsKeys::HIDE_AMOUNTS).toBool(), true);
+    }
+    OptionsQmlModel reloaded(node, model_args);
+    QTRY_VERIFY(reloaded.settingsReady());
+    QCOMPARE(reloaded.hideAmounts(), true);
+
+    if (had_setting) {
+        settings.setValue(SettingsKeys::HIDE_AMOUNTS, previous_setting);
+    } else {
+        settings.remove(SettingsKeys::HIDE_AMOUNTS);
     }
 }
 

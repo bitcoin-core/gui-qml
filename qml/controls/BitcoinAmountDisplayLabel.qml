@@ -23,8 +23,8 @@ BitcoinAmountDisplayLabelBase {
     // while a sibling changes. Parents with a known allocation can provide it.
     property real animationAvailableWidth: -1
     property string animationText: ""
-    readonly property var formattedParts: unit.length && amount.length
-        ? {amount: amount, unit: unit, prefix: unitPrefix} : AmountLayout.splitUnit(text)
+    readonly property var formattedParts: amountHidden ? {amount: maskText, unit: "", prefix: false}
+        : unit.length && amount.length ? {amount: amount, unit: unit, prefix: unitPrefix} : AmountLayout.splitUnit(text)
     property var displayParts: null
     property var transitionUnits: []
     property real unitProgress: 0
@@ -34,6 +34,9 @@ BitcoinAmountDisplayLabelBase {
     property var pendingLayout: null
     property bool pendingClipped: false
     property bool animationPending: false
+    // Set while the pending roll hides or shows the amount. That roll runs
+    // even where unit changes don't, since it never shows a wrong value.
+    property bool hidingTransition: false
     property bool initialized: false
     property real fromWidth: 0
     property real toWidth: 0
@@ -61,16 +64,22 @@ BitcoinAmountDisplayLabelBase {
     }
 
     Component.onCompleted: {
-        displayText = text
+        displayText = shownText
         displayParts = formattedParts
         initialized = true
     }
     onDisplayUnitChanged: {
         if (initialized && rollsUnitChanges && supportsAnimation) queueUnitAnimation()
     }
-    onTextChanged: {
+    // Hiding and showing amounts rolls the same way as a unit change.
+    onAmountHiddenChanged: {
+        if (!initialized || Theme.motion.reduced || !supportsAnimation) return
+        hidingTransition = true
+        queueUnitAnimation()
+    }
+    onShownTextChanged: {
         if (!initialized) return
-        if (animating && text !== animationText) queueUnitAnimation()
+        if (animating && shownText !== animationText) queueUnitAnimation()
         // Formatting and display-unit bindings can fire in either order.
         updateStaticTextTimer.restart()
     }
@@ -83,7 +92,7 @@ BitcoinAmountDisplayLabelBase {
 
     function updateStaticText() {
         if (!animationPending && !animating) {
-            displayText = text
+            displayText = shownText
             displayParts = formattedParts
         }
     }
@@ -91,7 +100,8 @@ BitcoinAmountDisplayLabelBase {
     function layout(value, parts = null) {
         parts = parts || AmountLayout.splitUnit(value)
         const number = parts.amount
-        const cells = AmountLayout.cells(number, numberLocale.decimalPoint, numerals)
+        const cells = number === maskText ? AmountLayout.maskCells(number)
+            : AmountLayout.cells(number, numberLocale.decimalPoint, numerals)
         const numberX = parts.unit.length && parts.prefix ? metrics.advanceWidth(parts.unit + " ") : 0
         for (const cell of cells) {
             cell.x = metrics.advanceWidth(number.substring(0, cell.start))
@@ -143,23 +153,24 @@ BitcoinAmountDisplayLabelBase {
     function finishAnimation() {
         motion.stop()
         animationPending = false
+        hidingTransition = false
         transitionCells = []
         transitionUnits = []
         pendingLayout = null
         animationText = ""
-        displayText = text
+        displayText = shownText
         displayParts = formattedParts
     }
 
     function startUnitAnimation() {
         if (!animationPending) return
         const before = pendingLayout
-        const after = layout(text, formattedParts)
+        const after = layout(shownText, formattedParts)
         const availableWidth = animationAvailableWidth >= 0 ? animationAvailableWidth : width
-        displayText = text
+        displayText = shownText
         displayParts = formattedParts
-        if (!rollsUnitChanges || !supportsAnimation || !visible || wrap
-                || !before.cells.length || !after.cells.length || before.text === text
+        if (!(rollsUnitChanges || hidingTransition) || !supportsAnimation || !visible || wrap
+                || !before.cells.length || !after.cells.length || before.text === shownText
                 || pendingClipped || (availableWidth > 0 && after.width > availableWidth + 1)) {
             finishAnimation()
             return
@@ -167,18 +178,24 @@ BitcoinAmountDisplayLabelBase {
         // Direction follows the displayed magnitude, as in the reference. Locale
         // signs do not affect the glyph mapping or the displayed amount itself.
         const sign = value => /[-\u2212]/.test(value) ? -1 : 1
-        direction = sign(text) * AmountLayout.magnitude(after.cells)
+        direction = sign(shownText) * AmountLayout.magnitude(after.cells)
             >= sign(before.text) * AmountLayout.magnitude(layout(before.text).cells) ? 1 : -1
         const previous = {}
         for (const cell of before.cells) previous[cell.key] = cell
         const plan = []
         let arriving = 0
+        // Digits revealed from the mask roll into place, mirroring how they
+        // roll out when hidden, instead of only fading in.
+        const revealing = before.cells.length > 0 && before.cells.every(cell => cell.key.startsWith("mask"))
+        const revealSteps = 3
         for (const cell of after.cells) {
             const old = previous[cell.key]
             delete previous[cell.key]
+            const rollsIn = !old && revealing && cell.digit >= 0
             plan.push({key: cell.key, glyph: cell.glyph, digit: cell.digit,
-                fromDigit: old ? old.digit : cell.digit,
-                steps: old && cell.digit >= 0 ? AmountLayout.steps(old.digit, cell.digit, direction) : 0,
+                fromDigit: old ? old.digit : rollsIn ? ((cell.digit - direction * revealSteps) % 10 + 10) % 10 : cell.digit,
+                steps: old && cell.digit >= 0 ? AmountLayout.steps(old.digit, cell.digit, direction)
+                    : rollsIn ? revealSteps : 0,
                 fromX: old ? old.x - alignmentFactor * before.width : cell.x - alignmentFactor * after.width,
                 toX: cell.x - alignmentFactor * after.width,
                 fromWidth: old ? old.width : cell.width, toWidth: cell.width,
@@ -219,9 +236,10 @@ BitcoinAmountDisplayLabelBase {
         exitProgress = 0
         elapsed = 0
         transitionCells = plan
-        animationText = text
+        animationText = shownText
         motion.start()
         animationPending = false
+        hidingTransition = false
     }
 
     // The mask stays still while the strip travels behind it. Its soft edge

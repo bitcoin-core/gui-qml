@@ -126,6 +126,7 @@ struct OptionsQmlModel::Snapshot {
     int display_unit;
     QString transaction_urls;
     QString money_font;
+    bool hide_amounts;
 };
 
 OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, ArgsManager& args)
@@ -173,6 +174,7 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
     result.transaction_urls = settings.value(SettingsKeys::THIRD_PARTY_TRANSACTION_URLS, "").toString();
     result.money_font = settings.value(SettingsKeys::MONEY_FONT_CHOICE, MONEY_FONT_EMBEDDED).toString();
     if (result.money_font != MONEY_FONT_EMBEDDED && result.money_font != MONEY_FONT_BEST_SYSTEM) result.money_font = MONEY_FONT_EMBEDDED;
+    result.hide_amounts = settings.value(SettingsKeys::HIDE_AMOUNTS, false).toBool();
     return result;
 }
 
@@ -240,6 +242,7 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot)
     const bool language_changed = m_language != snapshot.language;
     const bool display_unit_changed = m_display_unit != snapshot.display_unit;
     const bool transaction_urls_changed = m_third_party_transaction_urls != snapshot.transaction_urls;
+    const bool hide_amounts_changed = m_hide_amounts != snapshot.hide_amounts;
     const bool money_font_changed = m_money_font_choice != snapshot.money_font;
     m_core_setting_statuses = std::move(snapshot.statuses);
     m_applying_snapshot = true;
@@ -257,6 +260,7 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot)
     m_display_unit = snapshot.display_unit;
     m_third_party_transaction_urls = std::move(snapshot.transaction_urls);
     m_money_font_choice = std::move(snapshot.money_font);
+    m_hide_amounts = snapshot.hide_amounts;
     m_ready = true;
     if (initial) {
         resetDirtySnapshots();
@@ -274,6 +278,7 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot)
     if (language_changed) Q_EMIT languageChanged();
     if (display_unit_changed) Q_EMIT displayUnitChanged(m_display_unit);
     if (transaction_urls_changed) Q_EMIT thirdPartyTransactionUrlsChanged();
+    if (hide_amounts_changed) Q_EMIT hideAmountsChanged();
     if (money_font_changed) {
         Q_EMIT moneyFontChoiceChanged();
         Q_EMIT moneyFontChanged();
@@ -839,6 +844,14 @@ void OptionsQmlModel::setMoneyFontChoice(const QString& choice)
     Q_EMIT moneyFontChoiceChanged();
     Q_EMIT moneyFontChanged();
     persistGuiSetting(SettingsKeys::MONEY_FONT_CHOICE, normalized);
+}
+
+void OptionsQmlModel::setHideAmounts(bool hide)
+{
+    if (!m_ready || m_stopping || m_validation_pending || hide == m_hide_amounts) return;
+    m_hide_amounts = hide;
+    Q_EMIT hideAmountsChanged();
+    persistGuiSetting(SettingsKeys::HIDE_AMOUNTS, hide);
 }
 
 QFont OptionsQmlModel::moneyFont() const
