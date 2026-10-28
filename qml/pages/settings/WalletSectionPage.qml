@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
+import "../../components"
 import "../../controls"
 
 SettingsPage {
@@ -16,6 +17,9 @@ SettingsPage {
     showBackButton: false
 
     property var wallet: walletController.selectedWallet
+    property QtObject backupWallet: null
+    property string backupWalletName: ""
+    property string backupPath: ""
     property string errorText: ""
     readonly property bool walletLoaded: walletController.isWalletLoaded
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
@@ -27,24 +31,24 @@ SettingsPage {
     signal addressesRequested()
     signal coinsRequested()
 
-    function backupFileName() {
-        const walletName = root.wallet && root.wallet.name.length > 0
-            ? root.wallet.name.replace(/[\\/]/g, "_")
+    function backupFileName(walletName) {
+        const fileName = walletName && walletName.length > 0
+            ? walletName.replace(/[\\/]/g, "_")
             : "wallet"
-        return walletName + ".bak"
+        return fileName + ".bak"
     }
 
-    function backupDefaultFileUrl() {
-        return "file://" + walletController.homePath() + "/" + root.backupFileName()
+    function backupDefaultFileUrl(walletName) {
+        return "file://" + walletController.homePath() + "/" + root.backupFileName(walletName)
     }
 
-    function resolvedBackupPath(rawPath) {
+    function resolvedBackupPath(rawPath, walletName) {
         let normalized = walletController.normalizeWalletPath(rawPath)
         if (normalized.length === 0) return ""
 
         const hasKnownSuffix = /\.(bak|dat)$/i.test(normalized)
         if (walletController.walletPathExists(normalized) && !hasKnownSuffix) {
-            normalized += "/" + root.backupFileName()
+            normalized += "/" + root.backupFileName(walletName)
         } else if (!hasKnownSuffix) {
             normalized += ".bak"
         }
@@ -56,26 +60,123 @@ SettingsPage {
         root.errorText = ""
         root.wallet.clearSettingsError()
         if (backupAutomationPath.text.length > 0) {
-            const automatedPath = root.resolvedBackupPath(backupAutomationPath.text)
+            const automatedPath = root.resolvedBackupPath(backupAutomationPath.text, root.wallet.name)
             backupAutomationPath.text = ""
             if (!root.wallet.backupWallet(automatedPath)) root.errorText = root.wallet.settingsError
             return
         }
+        root.backupWallet = root.wallet
+        root.backupWalletName = root.wallet.name
         backupDialog.open()
+    }
+
+    function confirmBackupPath(rawPath) {
+        root.backupPath = rawPath.length > 0 ? root.resolvedBackupPath(rawPath, root.backupWalletName) : ""
+        if (root.backupPath.length === 0) {
+            root.clearBackupTarget()
+            return
+        }
+        backupConfirmation.open()
+    }
+
+    function finishBackup() {
+        const target = root.backupWallet
+        const path = root.backupPath
+        root.clearBackupTarget()
+        if (!target) return
+        if (!target.backupWallet(path)) root.errorText = target.settingsError
+        else root.errorText = ""
+    }
+
+    function clearBackupTarget() {
+        root.backupWallet = null
+        root.backupWalletName = ""
+        root.backupPath = ""
     }
 
     AppFileDialog {
         id: backupDialog
+        objectName: "walletSettingsBackupDialog"
+        title: qsTr("Back up wallet “%1”").arg(root.backupWalletName)
         fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
-        currentFile: root.backupDefaultFileUrl()
+        currentFile: root.backupDefaultFileUrl(root.backupWalletName)
         defaultSuffix: "bak"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
-        onAccepted: {
-            if (backupDialog.selectedFile.toString().length === 0) return
-            const normalized = root.resolvedBackupPath(backupDialog.selectedFile.toString())
-            if (!root.wallet.backupWallet(normalized)) root.errorText = root.wallet.settingsError
-            else root.errorText = ""
+        onAccepted: root.confirmBackupPath(backupDialog.selectedFile.toString())
+        onRejected: root.clearBackupTarget()
+    }
+
+    // The native save panel cannot show which wallet is being backed up on
+    // every platform, so the pinned wallet and destination are confirmed here.
+    AlertPopup {
+        id: backupConfirmation
+        objectName: "walletBackupConfirmationPopup"
+        parent: Overlay.overlay
+        implicitWidth: 520
+        title: qsTr("Confirm wallet backup")
+        details: [
+            BackupDetail {
+                label: qsTr("Wallet")
+                value: root.backupWalletName
+                valueObjectName: "walletBackupConfirmationWalletName"
+            },
+            BackupDetail {
+                label: qsTr("Save to")
+                value: root.backupPath
+                valueObjectName: "walletBackupConfirmationPath"
+            },
+            CoreText {
+                objectName: "walletBackupConfirmationError"
+                visible: root.backupWallet === null
+                Layout.fillWidth: true
+                text: qsTr("This wallet was closed. Open it again and restart the backup.")
+                color: Theme.color.red
+                font: Theme.text.description.font
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+            }
+        ]
+
+        AlertAction {
+            text: qsTr("Cancel")
+            role: AlertAction.Cancel
+            buttonObjectName: "walletBackupConfirmationCancelButton"
+            onTriggered: root.clearBackupTarget()
+        }
+
+        AlertAction {
+            text: qsTr("Back up")
+            enabled: root.backupWallet !== null
+            buttonObjectName: "walletBackupConfirmationBackupButton"
+            onTriggered: root.finishBackup()
+        }
+    }
+
+    component BackupDetail: ColumnLayout {
+        id: detail
+        property string label: ""
+        property string value: ""
+        property string valueObjectName: ""
+        Layout.fillWidth: true
+        spacing: 2
+
+        CoreText {
+            Layout.fillWidth: true
+            text: detail.label
+            color: Theme.color.neutral9
+            font: Theme.text.captionStrong.font
+            horizontalAlignment: Text.AlignLeft
+        }
+
+        CoreText {
+            objectName: detail.valueObjectName
+            Layout.fillWidth: true
+            text: detail.value
+            color: Theme.color.neutral8
+            font: Theme.text.description.font
+            horizontalAlignment: Text.AlignLeft
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
         }
     }
 

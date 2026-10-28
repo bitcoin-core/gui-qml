@@ -1898,6 +1898,18 @@ public:
         Q_EMIT walletMigrationSucceeded();
     }
     Q_INVOKABLE void requestOpenWalletSettings() { Q_EMIT openWalletSettingsRequested(); }
+    Q_INVOKABLE QObject* createTemporaryWalletModel(const QString& name)
+    {
+        auto* wallet = new MockWalletQmlModel;
+        wallet->setParent(this);
+        wallet->setProperty("name", name);
+        return wallet;
+    }
+    Q_INVOKABLE void destroyTemporaryWalletModel(QObject* wallet)
+    {
+        if (m_selected_wallet == wallet) setSelectedWalletObject(nullptr);
+        delete wallet;
+    }
     Q_INVOKABLE void setSelectedWalletObject(QObject* wallet)
     {
         if (m_selected_wallet == wallet) return;
@@ -4163,6 +4175,7 @@ public Q_SLOTS:
         static MockRecipientsModel recipients_model;
         static MockCoinsListModel coins_list_model;
         static MockWalletQmlModel wallet_model;
+        static MockWalletQmlModel other_wallet_model;
         static MockWalletController wallet_controller;
         static MockWalletListModel wallet_list_model;
         static MockTransactionActivityModel transaction_activity_model;
@@ -4229,6 +4242,7 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("walletController"), &wallet_controller);
         engine->rootContext()->setContextProperty(QStringLiteral("walletListModel"), &wallet_list_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletModel"), &wallet_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("otherTestWalletModel"), &other_wallet_model);
         engine->rootContext()->setContextProperty(QStringLiteral("testWalletTransaction"), &wallet_transaction);
         engine->rootContext()->setContextProperty(QStringLiteral("testPaymentRequest"), &payment_request);
         engine->rootContext()->setContextProperty(QStringLiteral("testTransactionActivityModel"), &transaction_activity_model);

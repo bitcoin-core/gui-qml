@@ -402,6 +402,92 @@ TestCase {
         compare(view.pageContainer.currentItem.objectName, "walletSettingsPage")
     }
 
+    function openWalletBackupConfirmation(wallet, path) {
+        testWalletModel.resetWalletSettingsTestState()
+        otherTestWalletModel.resetWalletSettingsTestState()
+        otherTestWalletModel.name = "otherwallet"
+        walletController.setWalletLoaded(true)
+        walletController.setSelectedWalletObject(wallet)
+
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        view.selectSection("wallet")
+        const dialog = findChild(view, "walletSettingsBackupDialog")
+        verify(dialog !== null)
+        findChild(view, "walletBackupRow").clicked()
+        compare(dialog.visible, true)
+        compare(dialog.title, "Back up wallet “" + wallet.name + "”")
+
+        walletController.setSelectedWalletObject(otherTestWalletModel)
+        dialog.selectAndAccept(path)
+        const popup = findChild(settingsWindow.contentItem, "walletBackupConfirmationPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        return popup
+    }
+
+    function test_walletBackupUsesWalletSelectedWhenDialogOpened() {
+        const popup = openWalletBackupConfirmation(testWalletModel, "file:///tmp/backups/testwallet.bak")
+        compare(findChild(popup.contentItem, "walletBackupConfirmationWalletName").text, "testwallet")
+        compare(findChild(popup.contentItem, "walletBackupConfirmationPath").text,
+            "file:///tmp/backups/testwallet.bak")
+        compare(findChild(popup.contentItem, "walletBackupConfirmationError").visible, false)
+        compare(testWalletModel.backupWalletCalls, 0)
+
+        findChild(popup.contentItem, "walletBackupConfirmationBackupButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(testWalletModel.backupWalletCalls, 1)
+        compare(testWalletModel.lastBackupPath, "file:///tmp/backups/testwallet.bak")
+        compare(otherTestWalletModel.backupWalletCalls, 0)
+
+        walletController.setSelectedWalletObject(testWalletModel)
+    }
+
+    function test_walletBackupConfirmationCancelSkipsBackup() {
+        const popup = openWalletBackupConfirmation(testWalletModel, "file:///tmp/backups/testwallet.bak")
+        findChild(popup.contentItem, "walletBackupConfirmationCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(testWalletModel.backupWalletCalls, 0)
+        compare(otherTestWalletModel.backupWalletCalls, 0)
+
+        walletController.setSelectedWalletObject(testWalletModel)
+    }
+
+    function test_walletBackupConfirmationDisablesBackupWhenWalletCloses() {
+        const closing = walletController.createTemporaryWalletModel("closingwallet")
+        const popup = openWalletBackupConfirmation(closing, "file:///tmp/backups/closingwallet.bak")
+        const backupButton = findChild(popup.contentItem, "walletBackupConfirmationBackupButton")
+        const error = findChild(popup.contentItem, "walletBackupConfirmationError")
+        compare(backupButton.enabled, true)
+        compare(error.visible, false)
+
+        walletController.destroyTemporaryWalletModel(closing)
+        tryCompare(backupButton, "enabled", false)
+        compare(error.visible, true)
+        compare(findChild(popup.contentItem, "walletBackupConfirmationWalletName").text, "closingwallet")
+
+        findChild(popup.contentItem, "walletBackupConfirmationCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+        compare(otherTestWalletModel.backupWalletCalls, 0)
+
+        walletController.setSelectedWalletObject(testWalletModel)
+    }
+
+    function test_walletBackupConfirmationWrapsLongWalletName() {
+        const longName = "treasury_" + "reserve_".repeat(29) + "A"
+        const wallet = walletController.createTemporaryWalletModel(longName)
+        const popup = openWalletBackupConfirmation(wallet, "file:///tmp/backups/long.bak")
+        const name = findChild(popup.contentItem, "walletBackupConfirmationWalletName")
+        compare(name.text, longName)
+        verify(name.lineCount > 1)
+        verify(popup.width <= popup.implicitWidth)
+
+        findChild(popup.contentItem, "walletBackupConfirmationCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+        walletController.setSelectedWalletObject(testWalletModel)
+        walletController.destroyTemporaryWalletModel(wallet)
+    }
+
     function test_walletSettingsEmptyStateMatchesWalletAvailability() {
         const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
         verify(view !== null)
