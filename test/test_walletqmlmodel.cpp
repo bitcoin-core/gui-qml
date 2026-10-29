@@ -2693,6 +2693,8 @@ void WalletQmlModelTests::prepareTransactionWithPrivateKeysDisabledDoesNotRequir
     QVERIFY(model->isLocked());
     QVERIFY(!model->transactionNeedsUnlock());
     QVERIFY(wallet->create_transaction_sign_args == std::vector<bool>{false});
+    QVERIFY(!model->currentTransactionCanSend());
+    QVERIFY(!model->currentTransactionCanBroadcast());
     QCOMPARE(wallet->unlock_calls, 0);
     QCOMPARE(wallet->lock_calls, 0);
 }
