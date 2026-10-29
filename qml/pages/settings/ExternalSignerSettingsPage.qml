@@ -25,7 +25,8 @@ SettingsPage {
         objectName: "externalSignerPathSection"
         Layout.fillWidth: true
         title: qsTr("Signer path")
-        footerText: qsTr("The add wallet flow can offer external wallets when exactly one supported signer is connected.")
+        //: Footer of the external signer path settings.
+        footerText: qsTr("Creating an external signer wallet needs exactly one connected device.")
     }
 
     Component.onCompleted: walletController.refreshExternalSignerStatus()

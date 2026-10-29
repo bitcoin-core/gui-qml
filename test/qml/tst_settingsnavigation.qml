@@ -1204,7 +1204,7 @@ TestCase {
                 compare(signerPathRow.topPadding, 16)
                 compare(signerPathRow.bottomPadding, 16)
                 compare(signerFooter.text,
-                    "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
+                    "Creating an external signer wallet needs exactly one connected device.")
                 compare(signerCommandRow.title, "Signer command")
                 compare(signerCommandRow.value, "Not set")
                 compare(signerDeviceRow.visible, false)

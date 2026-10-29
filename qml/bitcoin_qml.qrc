@@ -203,6 +203,7 @@
         <file>pages/wallet/WalletCreationTypePage.qml</file>
         <file>pages/wallet/WalletCreationReadyPage.qml</file>
         <file>pages/wallet/WalletCreationFlow.qml</file>
+        <file>pages/wallet/ExternalSignerSetupPage.qml</file>
         <file>pages/wallet/ExternalSignerWalletForm.qml</file>
         <file>pages/wallet/WalletCreationExternalReadyPage.qml</file>
         <file>pages/wallet/WalletImportErrorPage.qml</file>

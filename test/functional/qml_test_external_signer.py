@@ -264,14 +264,76 @@ def open_selected_wallet_settings(gui):
         gui.wait_for_page("walletSettingsPage", timeout_ms=10000)
 
 
-def configure_external_signer_via_gui(harness, checkpoints, signer_path):
+def write_mock_signer(directory, name, output):
+    path = os.path.join(directory, name)
+    with open(path, "w", encoding="utf8") as f:
+        f.write(f"#!{sys.executable}\nimport sys\nsys.stdout.write({output!r})\n")
+    os.chmod(path, 0o755)
+    return path
+
+
+def set_up_hwi_in_wallet_creation(harness, checkpoints, signer_path, no_signer_path):
+    """Choose External signer with no signer path and set it up inside the flow."""
+    gui = harness.driver
+    not_a_signer_path = write_mock_signer(harness.tmpdir, "not_a_signer.py", "hwi 3.1.0\n")
+    locked_signer_path = write_mock_signer(
+        harness.tmpdir,
+        "locked_signer.py",
+        json.dumps([{"type": "trezor", "model": "trezor_t", "error": "Device is locked", "code": -12}]),
+    )
+
+    open_add_wallet_flow(gui)
+    gui.click("walletTypeExternalSigner")
+    gui.wait_for_page("externalSignerSetupPage", timeout_ms=10000)
+    gui.wait_for_property("externalSignerSetupCommandRowValue", "text", "Not set", timeout_ms=10000)
+    checkpoints.checkpoint("hwi setup opened", gui)
+
+    def check(path):
+        gui.set_text("externalSignerSetupPathInput", path)
+        gui.click("externalSignerSetupContinueButton")
+
+    check(not_a_signer_path)
+    gui.wait_for_property("externalSignerSetupCommandRowValue", "text", "Not responding", timeout_ms=10000)
+    checkpoints.checkpoint("program that is not a signer reported", gui)
+
+    # Core reports a device error with the same exception type as a broken
+    # command; the GUI must still see that the command responded.
+    check(locked_signer_path)
+    gui.wait_for_property("externalSignerSetupCommandRowValue", "text", "Responding", timeout_ms=10000)
+    gui.wait_for_property("externalSignerSetupDeviceRowValue", "text", "Not ready", timeout_ms=10000)
+    gui.wait_for_property(
+        "externalSignerSetupDeviceRowSupportingText",
+        "text",
+        "The device reported an error: Device is locked",
+        timeout_ms=10000,
+    )
+    checkpoints.checkpoint("locked device reported", gui)
+
+    check(no_signer_path)
+    gui.wait_for_property("externalSignerSetupCommandRowValue", "text", "Responding", timeout_ms=10000)
+    gui.wait_for_property("externalSignerSetupDeviceRowValue", "text", "None found", timeout_ms=10000)
+    checkpoints.checkpoint("missing device reported", gui)
+
+    check(signer_path)
+    gui.wait_for_property("externalSignerSetupDeviceRowValue", "text", EXPECTED_SIGNER_NAME, timeout_ms=10000)
+    gui.wait_for_property("externalSignerSetupContinueButton", "text", "Use this device", timeout_ms=10000)
+    wait_until(
+        lambda: os.path.exists(harness.gui_settings_path)
+        and load_settings(harness.gui_settings_path).get("signer") == signer_path,
+        description="signer setting persistence",
+    )
+    checkpoints.checkpoint("mock signer detected in wallet creation", gui)
+
+    gui.click("externalSignerSetupContinueButton")
+    gui.wait_for_property("externalWalletNameInput", "visible", True, timeout_ms=10000)
+
+
+def check_external_signer_settings(harness, checkpoints, signer_path):
     gui = harness.driver
     open_wallet_settings(gui)
     checkpoints.checkpoint("wallet settings opened", gui)
 
-    gui.set_text("externalSignerPathInput", signer_path)
-    checkpoints.checkpoint("mock signer path populated", gui)
-
+    gui.wait_for_property("externalSignerPathInput", "text", signer_path, timeout_ms=10000)
     gui.click("externalSignerCheckDeviceButton")
     gui.wait_for_property("externalSignerCommandRowValue", "text", "Responding", timeout_ms=10000)
     gui.wait_for_property("externalSignerDeviceRowValue", "text", EXPECTED_SIGNER_NAME, timeout_ms=10000)
@@ -283,19 +345,12 @@ def configure_external_signer_via_gui(harness, checkpoints, signer_path):
         lambda: load_settings(harness.gui_settings_path).get("signer") == signer_path,
         description="signer setting persistence",
     )
-    checkpoints.checkpoint("mock signer detected", gui)
+    checkpoints.checkpoint("mock signer detected in settings", gui)
     print(f"[{checkpoints.case_name}] signer device: {gui.get_text('externalSignerDeviceRowValue')}")
 
 
 def create_and_verify_external_wallet(harness, checkpoints):
     gui = harness.driver
-    open_add_wallet_flow(gui)
-    checkpoints.checkpoint("add wallet flow opened", gui)
-
-    gui.wait_for_property("walletTypeExternalSigner", "visible", True, timeout_ms=10000)
-    checkpoints.checkpoint("external wallet option available", gui)
-
-    gui.click("walletTypeExternalSigner")
     gui.wait_for_property("externalWalletNameInput", "visible", True, timeout_ms=10000)
     gui.wait_for_property("createExternalWalletButton", "enabled", True, timeout_ms=10000)
     checkpoints.checkpoint("external wallet form opened", gui)
@@ -498,8 +553,9 @@ def run_test(args):
         )
         checkpoints.checkpoint("missing signer setting rejected", harness.driver)
 
-        configure_external_signer_via_gui(harness, checkpoints, signer_path)
+        set_up_hwi_in_wallet_creation(harness, checkpoints, signer_path, no_signer_path)
         wallet_name = create_and_verify_external_wallet(harness, checkpoints)
+        check_external_signer_settings(harness, checkpoints, signer_path)
         open_selected_wallet_settings(harness.driver)
         harness.driver.wait_for_property("walletPasswordRow", "visible", False, timeout_ms=10000)
         harness.driver.wait_for_property("walletBackupRow", "visible", True, timeout_ms=10000)

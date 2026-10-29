@@ -16,6 +16,7 @@ OnboardingView {
     property bool modalView: false
     property string defaultWalletName: ""
     property string nameError: ""
+    property bool nameEdited: false
     property bool submitted: false
     readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
     readonly property bool canCreate: walletController.initialized
@@ -41,15 +42,21 @@ OnboardingView {
         ? walletController.externalSignerError
         : walletController.externalSignerName.length > 0
           ? qsTr("Connected signer: %1").arg(walletController.externalSignerName)
-          : qsTr("Connect one external signer to continue.")
+          //: Shown on external signer wallet creation while HWI responds but no device is found.
+          : qsTr("Connect and unlock your device, then check again.")
     maximumContentWidth: 800
     showBackButton: !creatingWallet && navigationStack && navigationStack.depth > 1
     showCloseButton: modalView && !creatingWallet
     primaryButtonText: creatingWallet ? qsTr("Creating…") : qsTr("Create wallet")
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
+    //: Looks for the connected hardware wallet again during external signer wallet creation.
+    secondaryButtonText: qsTr("Check again")
+    secondaryButtonObjectName: "externalWalletCheckAgainButton"
+    secondaryButtonEnabled: !creatingWallet
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
+    onSecondaryClicked: walletController.refreshExternalSignerStatus()
 
     Component.onCompleted: {
         walletController.clearWalletLoadStatus()
@@ -58,6 +65,12 @@ OnboardingView {
 
     Connections {
         target: walletController
+        // A device found by checking again names the wallet, unless the
+        // name was already typed.
+        function onExternalSignerStatusChanged() {
+            if (root.nameEdited || root.creatingWallet || !root.loadedChildView) return
+            root.loadedChildView.walletName = walletController.suggestedExternalSignerWalletName
+        }
         function onWalletLoadSucceeded() {
             if (!root.submitted) return
             root.submitted = false
@@ -96,6 +109,7 @@ OnboardingView {
             fieldBackgroundColor: Theme.color.surface2
             enabled: !root.creatingWallet
             onTextEdited: {
+                root.nameEdited = true
                 root.nameError = ""
                 walletController.clearWalletLoadStatus()
             }

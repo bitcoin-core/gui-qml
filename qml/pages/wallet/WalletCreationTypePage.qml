@@ -61,10 +61,9 @@ OnboardingView {
             objectName: "walletTypeExternalSigner"
             Layout.fillWidth: true
             enabled: !root.importingWallet
+            // Offered before HWI is set up; choosing it starts with setup.
             visible: BuildInfo.externalSignerSupported
-                && walletController.canCreateExternalSignerWallet
-            title: walletController.externalSignerName.length > 0
-                ? qsTr("External signer") : qsTr("Hardware wallet")
+            title: qsTr("External signer")
             description: qsTr("Sign with a connected device.")
             iconSource: "image://images/devices-filled"
             onClicked: root.externalSignerSelected()

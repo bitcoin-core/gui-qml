@@ -21,6 +21,7 @@ FormSection {
 
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
     readonly property bool editable: root.signerStatus.canEdit !== false
+    readonly property string pathText: pathInput.text
     readonly property string pathError: optionsModel.externalSignerPathValidationError(pathInput.text)
     readonly property bool pathChanged: pathInput.text.trim() !== optionsModel.externalSignerPath
     // The status below describes the path in the field.

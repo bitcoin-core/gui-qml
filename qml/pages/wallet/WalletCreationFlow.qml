@@ -67,6 +67,13 @@ Item {
         walletController.importWallet(walletController.normalizeWalletPath(path))
     }
 
+    function showExternalSignerForm() {
+        walletController.clearWalletLoadStatus()
+        root.push(externalWallet, {
+            "defaultWalletName": walletController.suggestedExternalSignerWalletName
+        })
+    }
+
     function showImportResult() {
         if (root.busy || root.pendingImportResult.length === 0) return
         const result = root.pendingImportResult
@@ -206,11 +213,11 @@ Item {
             onWatchOnlySelected: root.push(formPage, { "watchOnly": true,
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
-                walletController.clearWalletLoadStatus()
                 walletController.refreshExternalSignerStatus()
-                root.push(externalWallet, {
-                    "defaultWalletName": walletController.suggestedExternalSignerWalletName
-                })
+                // A responding command goes straight to device detection and
+                // naming; a missing or broken one is set up or corrected first.
+                if (walletController.externalSignerResponding) root.showExternalSignerForm()
+                else root.push(externalSetup, { "modalView": root.modalView })
             }
             onImportSelected: root.chooseImportFile()
         }
@@ -249,6 +256,13 @@ Item {
         id: importSuccess
         WalletImportCompletePage {
             onDone: root.finished(true)
+        }
+    }
+    Component {
+        id: externalSetup
+        ExternalSignerSetupPage {
+            onCancel: root.finished(false)
+            onReady: root.showExternalSignerForm()
         }
     }
     Component {
