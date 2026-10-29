@@ -35,6 +35,7 @@ FormSection {
         if (path !== optionsModel.externalSignerPath) optionsModel.externalSignerPath = path
         // The model normalizes the path; show what it stored.
         pathInput.text = optionsModel.externalSignerPath
+        root.showPathStart()
         return true
     }
 
@@ -42,11 +43,29 @@ FormSection {
         if (root.commitPath()) walletController.refreshExternalSignerStatus()
     }
 
+    // A long path scrolls to its end after editing; show where it starts
+    // whenever it isn't being edited.
+    function showPathStart() {
+        if (!pathInput.field.activeFocus) pathInput.field.cursorPosition = 0
+    }
+
+    function choosePath() {
+        pathDialog.currentFolder = optionsModel.externalSignerPathFolder(pathInput.text)
+        pathDialog.open()
+    }
+
+    Component.onCompleted: root.showPathStart()
+
+    Connections {
+        target: pathInput.field
+        function onActiveFocusChanged() { root.showPathStart() }
+    }
+
     AppFileDialog {
         id: pathDialog
         objectName: root.namePrefix + "PathDialog"
-        //: Title of the file dialog for choosing the external signer program, such as HWI.
-        title: qsTr("Select signer program")
+        //: Title of the file dialog for choosing the external signer executable, such as HWI.
+        title: qsTr("Select signer executable")
         fileMode: AppFileDialog.OpenFile
         onAccepted: {
             if (selectedFile.toString().length === 0) return
@@ -61,44 +80,53 @@ FormSection {
         Layout.fillWidth: true
         enabled: root.editable
         bodySpacing: 0
-        topPadding: 16
-        bottomPadding: 16
-        bodyItem: RowLayout {
+        bodyItem: GridLayout {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            spacing: 16
+            // The buttons go under the field when there is no room beside it.
+            columns: SizeClass.isCompact(root.width) ? 1 : 3
+            columnSpacing: Theme.space.ml
+            rowSpacing: Theme.space.ml
 
             LabeledTextField {
                 id: pathInput
                 Layout.fillWidth: true
+                Layout.alignment: Qt.AlignTop
                 // The section title is the visible label.
                 accessibleName: root.title
                 fieldObjectName: root.namePrefix + "PathInput"
                 fieldHeight: Theme.size.control
-                fieldBackgroundColor: Theme.color.surface2
+                fieldBackgroundColor: Theme.color.surface(root.surfaceLevel + 2)
                 fieldTextStyle: Theme.text.monoDescription
                 text: optionsModel.externalSignerPath
                 //: Placeholder of the field for the external signer command path.
                 placeholderText: qsTr("Enter external signer path")
                 errorText: root.pathError
                 supportingText: root.signerStatus.infoText || ""
-                //: Opens a file dialog to choose the external signer program.
-                actionText: qsTr("Browse…")
-                actionObjectName: root.namePrefix + "BrowseButton"
-                actionEnabled: root.editable
-                onActionRequested: pathDialog.open()
                 onEditingFinished: root.check()
+            }
+
+            NeutralButton {
+                objectName: root.namePrefix + "BrowseButton"
+                Layout.alignment: Qt.AlignTop
+                Layout.preferredHeight: Theme.size.control
+                // Large matches the primary button's text beside it.
+                buttonSize: NeutralButton.Large
+                surfaceLevel: root.surfaceLevel + 1
+                //: Opens a file dialog to choose the external signer executable.
+                text: qsTr("Browse…")
+                enabled: root.editable
+                onClicked: root.choosePath()
             }
 
             PrimaryButton {
                 objectName: root.namePrefix + "CheckDeviceButton"
                 visible: root.showCheckButton
-                Layout.preferredWidth: Math.max(140, implicitWidth)
-                Layout.preferredHeight: Math.max(40, implicitHeight)
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignTop
+                Layout.preferredHeight: Theme.size.control
+                horizontalPadding: Theme.space.xl
                 //: Button that saves the signer path and checks the command and the connected device.
                 text: qsTr("Check device")
-                textStyle: Theme.text.subheading
                 enabled: root.pathError.length === 0 && root.editable
                 onClicked: root.check()
             }

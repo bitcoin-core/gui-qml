@@ -450,6 +450,18 @@ QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) 
     return {};
 }
 
+QUrl OptionsQmlModel::externalSignerPathFolder(const QString& path) const
+{
+    // Start the file dialog next to the current signer executable, or in the
+    // home folder rather than wherever the app happened to be started from.
+    const QString token = FirstCommandToken(NormalizeCommandPath(path));
+    if (!token.isEmpty() && TokenLooksLikePath(token)) {
+        const QDir folder = QFileInfo(ExpandUserPath(token)).absoluteDir();
+        if (folder.exists()) return QUrl::fromLocalFile(folder.absolutePath());
+    }
+    return QUrl::fromLocalFile(QDir::homePath());
+}
+
 QString OptionsQmlModel::getDefaultDataDirString()
 {
     return QmlDataDir::DefaultDataDirString();

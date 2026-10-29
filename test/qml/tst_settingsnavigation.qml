@@ -284,9 +284,14 @@ TestCase {
 
             browseButton.clicked()
             compare(dialog.openCalls, 1)
+            // Starts next to the current signer, or at home, never the launch folder.
+            compare(dialog.currentFolder.toString(), "file:///signer/folder")
             dialog.selectAndAccept("/opt/hwi/hwi")
             compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-            compare(findChild(view, "externalSignerPathInput").text, "/opt/hwi/hwi")
+            const pathField = findChild(view, "externalSignerPathInput")
+            compare(pathField.text, "/opt/hwi/hwi")
+            // A path that isn't being edited is shown from its start.
+            compare(pathField.cursorPosition, 0)
 
             dialog.rejected()
             compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
@@ -1207,8 +1212,6 @@ TestCase {
                 compare(introduction.description, "Connect a hardware wallet or another external signing tool.")
                 compare(signerPage.maximumContentWidth, 840)
                 compare(signerSection.title, "Signer path")
-                compare(signerPathRow.topPadding, 16)
-                compare(signerPathRow.bottomPadding, 16)
                 compare(signerFooter.text,
                     "Creating an external signer wallet needs exactly one connected device.")
                 compare(signerCommandRow.title, "Signer command")
