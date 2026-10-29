@@ -1811,6 +1811,8 @@ class MockWalletController : public QObject
     Q_PROPERTY(bool externalSignerPathConfigured MEMBER m_external_signer_path_configured NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(bool externalSignerResponding MEMBER m_external_signer_responding NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(int externalSignerCount MEMBER m_external_signer_count NOTIFY externalSignerStatusChanged)
+    // How often the signer was checked, so tests can tell which actions check it.
+    Q_PROPERTY(int externalSignerChecks MEMBER m_external_signer_checks NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerName MEMBER m_external_signer_name NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerError MEMBER m_external_signer_error NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString suggestedExternalSignerWalletName MEMBER m_suggested_external_signer_wallet_name NOTIFY externalSignerStatusChanged)
@@ -1839,6 +1841,7 @@ public:
     bool m_external_signer_path_configured{false};
     bool m_external_signer_responding{false};
     int m_external_signer_count{0};
+    int m_external_signer_checks{0};
     QString m_external_signer_name;
     QString m_external_signer_error;
     QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
@@ -1866,7 +1869,11 @@ public:
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
-    Q_INVOKABLE void refreshExternalSignerStatus() { Q_EMIT externalSignerStatusChanged(); }
+    Q_INVOKABLE void refreshExternalSignerStatus()
+    {
+        ++m_external_signer_checks;
+        Q_EMIT externalSignerStatusChanged();
+    }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
         m_wallet_load_error.clear();
@@ -1980,6 +1987,7 @@ public:
         m_external_signer_path_configured = false;
         m_external_signer_responding = false;
         m_external_signer_count = 0;
+        m_external_signer_checks = 0;
         m_external_signer_name.clear();
         m_external_signer_error.clear();
         m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");

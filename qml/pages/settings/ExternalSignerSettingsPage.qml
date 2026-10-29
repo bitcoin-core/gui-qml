@@ -36,11 +36,12 @@ SettingsPage {
         objectName: "externalSignerCheckDeviceButton"
         Layout.alignment: Qt.AlignRight
         horizontalPadding: Theme.space.xl
-        //: Button that saves the signer path and checks the command and the connected device.
-        text: qsTr("Check device")
-        enabled: pathSection.pathError.length === 0 && pathSection.editable
+        text: pathSection.checking
+            //: Check device button while the signer command and the device are being checked.
+            ? qsTr("Checking…")
+            //: Button that saves the signer path and checks the command and the connected device.
+            : qsTr("Check device")
+        enabled: pathSection.pathError.length === 0 && pathSection.editable && !pathSection.checking
         onClicked: pathSection.check()
     }
-
-    Component.onCompleted: walletController.refreshExternalSignerStatus()
 }

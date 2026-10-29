@@ -278,14 +278,23 @@ TestCase {
         }
     }
 
-    function test_externalSignerBrowseChecksPickedProgram() {
+    // Browse and leaving the field only fill in a path; checking it, and
+    // opening the page, take the Check device button or Return.
+    function test_externalSignerChecksOnlyWhenAsked() {
+        optionsModel.externalSignerPath = ""
         try {
+            const checks = walletController.externalSignerChecks
             const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
             verify(view !== null)
             view.selectSection("external-signer", true)
             tryCompare(view.pageContainer, "depth", 1)
+            compare(walletController.externalSignerChecks, checks)
             const browseButton = findChild(view, "externalSignerBrowseButton")
             const dialog = findChild(view, "externalSignerPathDialog")
+            const pathField = findChild(view, "externalSignerPathInput")
+            const commandRow = findChild(view, "externalSignerCommandRow")
+            const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+            const section = findChild(view, "externalSignerPathSection")
             verify(browseButton !== null)
             verify(dialog !== null)
             compare(browseButton.text, "Browse…")
@@ -297,15 +306,64 @@ TestCase {
             // Starts next to the current signer, or at home, never the launch folder.
             compare(dialog.currentFolder.toString(), "file:///signer/folder")
             dialog.selectAndAccept("/opt/hwi/hwi")
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
-            const pathField = findChild(view, "externalSignerPathInput")
             compare(pathField.text, "/opt/hwi/hwi")
             // A path that isn't being edited is shown from its start.
             compare(pathField.cursorPosition, 0)
+            compare(optionsModel.externalSignerPath, "")
+            compare(commandRow.value, "Not checked")
+            pathField.editingFinished()
+            compare(optionsModel.externalSignerPath, "")
+            compare(walletController.externalSignerChecks, checks)
+
+            checkButton.clicked()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(commandRow.value, "Checking…")
+            compare(checkButton.text, "Checking…")
+            compare(checkButton.enabled, false)
+            tryCompare(section, "checking", false)
+            compare(checkButton.text, "Check device")
+            compare(walletController.externalSignerChecks, checks + 1)
+
+            // Return in the field checks too.
+            pathField.text = "/opt/hwi/hwi2"
+            pathField.accepted()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
+            tryCompare(section, "checking", false)
+            compare(walletController.externalSignerChecks, checks + 2)
 
             dialog.rejected()
-            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
         } finally {
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
+    // Closing the section while a check is still waiting runs the check, so
+    // the result on file belongs to the path that was saved.
+    function test_externalSignerCheckRunsWhenClosedEarly() {
+        optionsModel.externalSignerPath = ""
+        const motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+        try {
+            const checks = walletController.externalSignerChecks
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const section = findChild(view, "externalSignerPathSection")
+            findChild(view, "externalSignerPathInput").text = "/opt/hwi/hwi"
+            findChild(view, "externalSignerCheckDeviceButton").clicked()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(section.checking, true)
+            compare(walletController.externalSignerChecks, checks)
+
+            view.destroy()
+            tryCompare(walletController, "externalSignerChecks", checks + 1)
+            // And only once.
+            wait(400)
+            compare(walletController.externalSignerChecks, checks + 1)
+        } finally {
+            Theme.motion.mode = motionMode
             optionsModel.externalSignerPath = ""
         }
     }

@@ -40,6 +40,8 @@ OnboardingView {
     showCloseButton: modalView
     primaryButtonObjectName: "externalSignerSetupContinueButton"
     primaryButtonText: {
+        //: Footer button while HWI and the hardware wallet are being checked.
+        if (root.pathSection && root.pathSection.checking) return qsTr("Checking…")
         //: Continues external signer wallet creation with the hardware wallet that was found.
         if (root.deviceReady) return qsTr("Use this device")
         //: Checks again for a connected hardware wallet after HWI responded.
@@ -48,6 +50,7 @@ OnboardingView {
         return qsTr("Check HWI")
     }
     primaryButtonEnabled: root.pathSection !== null && root.pathSection.editable
+        && !root.pathSection.checking
         && root.pathSection.pathText.trim().length > 0 && root.pathSection.pathError.length === 0
     onCloseClicked: root.cancel()
     onPrimaryClicked: {

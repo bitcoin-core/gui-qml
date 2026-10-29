@@ -85,7 +85,6 @@ Item {
 
     Component.onCompleted: {
         if (!walletController.initialized) nodeModel.startNodeInitializionThread()
-        walletController.refreshExternalSignerStatus()
     }
 
     AppFileDialog {

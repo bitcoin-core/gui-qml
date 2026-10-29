@@ -18,10 +18,12 @@ OnboardingView {
     property string nameError: ""
     property bool nameEdited: false
     property bool submitted: false
+    // True from Check again until its result is in.
+    property bool checking: false
     readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
     readonly property bool canCreate: walletController.initialized
         && walletController.canCreateExternalSignerWallet
-        && !creatingWallet && loadedChildView
+        && !creatingWallet && !checking && loadedChildView
         && loadedChildView.walletName.trim().length > 0
 
     signal cancel()
@@ -51,18 +53,33 @@ OnboardingView {
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
     // Only needed until a usable device is found.
-    secondaryButtonText: walletController.canCreateExternalSignerWallet ? ""
+    secondaryButtonText: walletController.canCreateExternalSignerWallet && !checking ? ""
+        //: Check again button while the hardware wallet is being looked for.
+        : checking ? qsTr("Checking…")
         //: Looks for the connected hardware wallet again during external signer wallet creation.
         : qsTr("Check again")
     secondaryButtonObjectName: "externalWalletCheckAgainButton"
-    secondaryButtonEnabled: !creatingWallet
+    secondaryButtonEnabled: !creatingWallet && !checking
     onCloseClicked: root.cancel()
     onPrimaryClicked: root.submit()
-    onSecondaryClicked: walletController.refreshExternalSignerStatus()
+    // Like the setup step, the button shows that the check ran even when it
+    // finds the same thing.
+    onSecondaryClicked: {
+        if (checking) return
+        checking = true
+        checkTimer.restart()
+    }
 
-    Component.onCompleted: {
-        walletController.clearWalletLoadStatus()
-        walletController.refreshExternalSignerStatus()
+    // The flow checked the signer just before showing this form.
+    Component.onCompleted: walletController.clearWalletLoadStatus()
+
+    Timer {
+        id: checkTimer
+        interval: Theme.motion.animated ? 300 : 0
+        onTriggered: {
+            walletController.refreshExternalSignerStatus()
+            root.checking = false
+        }
     }
 
     Connections {

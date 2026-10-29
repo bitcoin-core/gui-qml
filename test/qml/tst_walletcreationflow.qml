@@ -208,28 +208,45 @@ TestCase {
         compare(setup.primaryButton, findChild(setup, "externalSignerSetupContinueButton"))
         compare(setup.primaryButton.enabled, false)
 
-        findChild(setup, "externalSignerSetupPathInput").text = "/opt/hwi/hwi"
-        compare(findChild(setup, "externalSignerSetupCommandRow").value, "Not checked")
+        const pathField = findChild(setup, "externalSignerSetupPathInput")
+        const commandRow = findChild(setup, "externalSignerSetupCommandRow")
+        const checks = walletController.externalSignerChecks
+        pathField.text = "/opt/hwi/hwi"
+        compare(commandRow.value, "Not checked")
+        // Leaving the field saves and checks nothing; that takes the button.
+        pathField.editingFinished()
+        compare(optionsModel.externalSignerPath, "")
+        compare(walletController.externalSignerChecks, checks)
         compare(setup.primaryButton.text, "Check HWI")
         compare(setup.primaryButton.enabled, true)
         setup.primaryButton.clicked()
         compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+        // The check shows that it runs before its result is in.
+        compare(pathSection.checking, true)
+        compare(commandRow.value, "Checking…")
+        compare(setup.primaryButton.text, "Checking…")
+        compare(setup.primaryButton.enabled, false)
+        tryCompare(pathSection, "checking", false)
+        compare(walletController.externalSignerChecks, checks + 1)
         compare(findChild(flow, "externalSignerWalletFormPage"), null)
 
         // HWI works but no device is connected yet.
         walletController.externalSignerPathConfigured = true
         walletController.externalSignerResponding = true
-        walletController.refreshExternalSignerStatus()
-        compare(findChild(setup, "externalSignerSetupCommandRow").value, "Responding")
+        compare(commandRow.value, "Responding")
         compare(findChild(setup, "externalSignerSetupDeviceRow").value, "None found")
         compare(setup.primaryButton.text, "Check again")
-        setup.primaryButton.clicked()
-        compare(findChild(flow, "externalSignerWalletFormPage"), null)
 
+        // The device turns up while the next check runs. That click only
+        // checks; continuing takes another one.
+        setup.primaryButton.clicked()
         walletController.canCreateExternalSignerWallet = true
         walletController.externalSignerName = "trezor_t"
         walletController.suggestedExternalSignerWalletName = "trezor_t"
-        walletController.refreshExternalSignerStatus()
+        compare(setup.primaryButton.text, "Checking…")
+        compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
+        tryCompare(pathSection, "checking", false)
+        compare(findChild(flow, "externalSignerWalletFormPage"), null)
         compare(findChild(setup, "externalSignerSetupDeviceRow").value, "trezor_t")
         compare(setup.primaryButton.text, "Use this device")
         setup.primaryButton.clicked()
@@ -283,9 +300,14 @@ TestCase {
     // again, and a device found that way names the wallet.
     function test_external_signer_responding_without_device_checks_again_on_form() {
         setSignerResponding("")
+        // Opening Add wallet checks nothing; choosing the type checks once,
+        // and the form it opens doesn't check again.
+        const checks = walletController.externalSignerChecks
         const flow = createFlow()
+        compare(walletController.externalSignerChecks, checks)
         findChild(flow, "walletTypeExternalSigner").clicked()
         tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
+        compare(walletController.externalSignerChecks, checks + 1)
         compare(findChild(flow, "externalSignerSetupPage"), null)
 
         const form = findChild(flow, "externalSignerWalletFormPage")
@@ -294,10 +316,15 @@ TestCase {
         compare(form.secondaryButton, findChild(form, "externalWalletCheckAgainButton"))
         compare(form.secondaryButton.text, "Check again")
 
+        form.secondaryButton.clicked()
+        compare(form.secondaryButton.text, "Checking…")
+        compare(form.secondaryButton.enabled, false)
         walletController.canCreateExternalSignerWallet = true
         walletController.externalSignerName = "Coldcard Mk4"
         walletController.suggestedExternalSignerWalletName = "Coldcard_Mk4"
-        form.secondaryButton.clicked()
+        compare(form.primaryButton.enabled, false)
+        tryCompare(form, "checking", false)
+        compare(walletController.externalSignerChecks, checks + 2)
         compare(form.subheading, "Connected signer: Coldcard Mk4")
         compare(findChild(form, "externalWalletNameInput").text, "Coldcard_Mk4")
         compare(form.primaryButton.enabled, true)
