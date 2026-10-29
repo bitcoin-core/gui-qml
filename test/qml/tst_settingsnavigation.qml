@@ -202,6 +202,67 @@ TestCase {
 
     // A build without signer support can't run a signer command, so a path
     // saved by another build must not bring back any signer settings.
+    // Whether the signer command works and whether a device was found are
+    // reported separately, each with text and an icon, not color alone.
+    function test_externalSignerSettingsSeparateCommandFromDevice() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        walletController.externalSignerPathConfigured = true
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const commandRow = findChild(view, "externalSignerCommandRow")
+            const deviceRow = findChild(view, "externalSignerDeviceRow")
+            const pathInput = findChild(view, "externalSignerPathInput")
+            verify(commandRow !== null)
+            verify(deviceRow !== null)
+            verify(pathInput !== null)
+
+            walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Not responding")
+            compare(commandRow.valueIconSource, "image://images/cross-circle-filled")
+            compare(commandRow.errorText, walletController.externalSignerError)
+            compare(deviceRow.visible, false)
+
+            walletController.externalSignerError = ""
+            walletController.externalSignerResponding = true
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Responding")
+            compare(commandRow.valueIconSource, "image://images/check")
+            compare(commandRow.errorText, "")
+            compare(deviceRow.visible, true)
+            compare(deviceRow.value, "None found")
+            compare(deviceRow.valueIconSource, "")
+            compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
+
+            walletController.externalSignerError = "The device reported an error: Device is locked"
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Responding")
+            compare(deviceRow.value, "Not ready")
+            compare(deviceRow.valueIconSource, "image://images/alert-filled")
+            compare(deviceRow.errorText, "The device reported an error: Device is locked")
+
+            walletController.externalSignerError = ""
+            walletController.externalSignerName = "trezor_t"
+            walletController.canCreateExternalSignerWallet = true
+            walletController.refreshExternalSignerStatus()
+            compare(deviceRow.value, "trezor_t")
+            compare(deviceRow.valueIconSource, "image://images/check")
+            compare(deviceRow.errorText, "")
+            compare(deviceRow.supportingText, "")
+
+            // An edited path has not been checked, so nothing is claimed about it.
+            pathInput.text = "/opt/hwi/hwi"
+            compare(commandRow.value, "Not checked")
+            compare(commandRow.valueIconSource, "")
+            compare(deviceRow.visible, false)
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
     function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
         optionsModel.externalSignerPath = "/usr/local/bin/hwi"
         try {
@@ -1097,8 +1158,8 @@ TestCase {
                 const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
                 const signerPathFocusBorder = findChild(view, "externalSignerPathInputFocusRing")
-                const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
-                const signerStatusText = findChild(view, "externalSignerStatusText")
+                const signerCommandRow = findChild(view, "externalSignerCommandRow")
+                const signerDeviceRow = findChild(view, "externalSignerDeviceRow")
                 const checkDeviceButton = findChild(view, "externalSignerCheckDeviceButton")
                 verify(signerPage !== null)
                 verify(introduction !== null)
@@ -1107,8 +1168,8 @@ TestCase {
                 verify(signerFooter !== null)
                 verify(signerPathInput !== null)
                 verify(signerPathFocusBorder !== null)
-                verify(signerStatusIndicator !== null)
-                verify(signerStatusText !== null)
+                verify(signerCommandRow !== null)
+                verify(signerDeviceRow !== null)
                 verify(checkDeviceButton !== null)
                 compare(introduction.title, "")
                 compare(introduction.description, "Connect a hardware wallet or another external signing tool.")
@@ -1118,15 +1179,15 @@ TestCase {
                 compare(signerPathRow.bottomPadding, 16)
                 compare(signerFooter.text,
                     "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-                compare(signerStatusIndicator.color, Theme.color.danger)
+                compare(signerCommandRow.title, "Signer command")
+                compare(signerCommandRow.value, "Not set")
+                compare(signerDeviceRow.visible, false)
                 compare(checkDeviceButton.text, "Check device")
                 compare(signerPathInput.height, Theme.size.control)
                 compare(signerPathInput.Accessible.name, "Signer path")
                 compare(signerPathInput.background.color, Theme.color.surface2)
                 compare(signerPathInput.background.radius, Theme.radius.field)
                 compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)
-                compare(signerStatusIndicator.width, 10)
-                compare(signerStatusIndicator.height, 10)
             }
             if (destination.id === "about") {
                 const versionRow = findChild(view, "aboutVersionRow")

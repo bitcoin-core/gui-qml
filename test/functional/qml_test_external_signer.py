@@ -18,7 +18,6 @@ from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
 
 EXPECTED_SIGNER_NAME = "trezor_t"
-EXPECTED_STATUS_TEXT = f"Detected external signer: {EXPECTED_SIGNER_NAME}"
 EXPECTED_FIRST_BECH32_ADDRESS = "bcrt1qm90ugl4d48jv8n6e5t9ln6t9zlpm5th68x4f8g"
 EXPECTED_FIRST_BECH32M_ADDRESS = "bcrt1phw4cgpt6cd30kz9k4wkpwm872cdvhss29jga2xpmftelhqll62ms4e9sqj"
 EXPECTED_FIRST_HD_KEYPATH = "m/84h/1h/0h/0/0"
@@ -274,7 +273,8 @@ def configure_external_signer_via_gui(harness, checkpoints, signer_path):
     checkpoints.checkpoint("mock signer path populated", gui)
 
     gui.click("externalSignerCheckDeviceButton")
-    gui.wait_for_property("externalSignerStatusText", "text", EXPECTED_STATUS_TEXT, timeout_ms=10000)
+    gui.wait_for_property("externalSignerCommandRowValue", "text", "Responding", timeout_ms=10000)
+    gui.wait_for_property("externalSignerDeviceRowValue", "text", EXPECTED_SIGNER_NAME, timeout_ms=10000)
     wait_until(
         lambda: os.path.exists(harness.gui_settings_path),
         description="settings.json creation",
@@ -284,7 +284,7 @@ def configure_external_signer_via_gui(harness, checkpoints, signer_path):
         description="signer setting persistence",
     )
     checkpoints.checkpoint("mock signer detected", gui)
-    print(f"[{checkpoints.case_name}] signer status: {gui.get_text('externalSignerStatusText')}")
+    print(f"[{checkpoints.case_name}] signer device: {gui.get_text('externalSignerDeviceRowValue')}")
 
 
 def create_and_verify_external_wallet(harness, checkpoints):

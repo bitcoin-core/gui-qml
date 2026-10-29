@@ -15,6 +15,7 @@
         <file>components/DesktopNativeMenuBar.qml</file>
         <file>components/MenuCommand.qml</file>
         <file>components/DeveloperOptions.qml</file>
+        <file>components/ExternalSignerPathSection.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/SendRecipientEditor.qml</file>

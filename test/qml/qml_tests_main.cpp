@@ -1808,6 +1808,8 @@ class MockWalletController : public QObject
     Q_PROPERTY(QString lastImportedWalletName MEMBER m_last_imported_wallet_name NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme MEMBER m_last_imported_wallet_key_scheme NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(bool canCreateExternalSignerWallet MEMBER m_can_create_external_signer_wallet NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(bool externalSignerPathConfigured MEMBER m_external_signer_path_configured NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(bool externalSignerResponding MEMBER m_external_signer_responding NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerName MEMBER m_external_signer_name NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerError MEMBER m_external_signer_error NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString suggestedExternalSignerWalletName MEMBER m_suggested_external_signer_wallet_name NOTIFY externalSignerStatusChanged)
@@ -1833,6 +1835,8 @@ public:
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
     bool m_can_create_external_signer_wallet{false};
+    bool m_external_signer_path_configured{false};
+    bool m_external_signer_responding{false};
     QString m_external_signer_name;
     QString m_external_signer_error;
     QString m_suggested_external_signer_wallet_name{QStringLiteral("external_signer")};
@@ -1971,6 +1975,8 @@ public:
         m_last_imported_wallet_name.clear();
         m_last_imported_wallet_key_scheme.clear();
         m_can_create_external_signer_wallet = false;
+        m_external_signer_path_configured = false;
+        m_external_signer_responding = false;
         m_external_signer_name.clear();
         m_external_signer_error.clear();
         m_suggested_external_signer_wallet_name = QStringLiteral("external_signer");

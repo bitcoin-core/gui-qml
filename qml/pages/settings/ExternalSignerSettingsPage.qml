@@ -15,131 +15,17 @@ SettingsPage {
     title: qsTr("External signer")
     showBackButton: false
 
-    readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
-    readonly property string signerPathError: optionsModel.externalSignerPathValidationError(signerPathInput.text)
-    readonly property bool signerConnected: root.signerPathError.length === 0
-        && walletController.canCreateExternalSignerWallet
-    readonly property string signerStatusText: {
-        if (root.signerPathError.length > 0) return root.signerPathError
-        if (walletController.canCreateExternalSignerWallet) {
-            return qsTr("Detected external signer: %1").arg(walletController.externalSignerName)
-        }
-        if (walletController.externalSignerError.length > 0) {
-            return walletController.externalSignerError
-        }
-        if ((root.signerStatus.infoText || "").length > 0) {
-            return root.signerStatus.infoText
-        }
-        if (optionsModel.walletSettingsDirty) {
-            return qsTr("Path updated. Press Check device to rescan with the current signer command.")
-        }
-        if (optionsModel.externalSignerPath.length > 0) {
-            return qsTr("No external signer is currently detected.")
-        }
-        return qsTr("Set the command path for HWI or another external signer tool.")
-    }
-
-    function commitSignerPath() {
-        if (root.signerPathError.length > 0) return false
-        const normalizedPath = signerPathInput.text.trim()
-        if (normalizedPath !== optionsModel.externalSignerPath) {
-            optionsModel.externalSignerPath = normalizedPath
-        }
-        return true
-    }
-
-    function checkDevice() {
-        if (root.commitSignerPath()) walletController.refreshExternalSignerStatus()
-    }
-
     PageHeading {
         objectName: "externalSignerIntroduction"
         Layout.fillWidth: true
         description: qsTr("Connect a hardware wallet or another external signing tool.")
     }
 
-    FormSection {
+    ExternalSignerPathSection {
         objectName: "externalSignerPathSection"
         Layout.fillWidth: true
         title: qsTr("Signer path")
         footerText: qsTr("The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-
-        FormRow {
-            objectName: "externalSignerPathRow"
-            Layout.fillWidth: true
-            enabled: root.signerStatus.canEdit !== false
-            showDivider: false
-            bodySpacing: 0
-            topPadding: 16
-            bottomPadding: 16
-            bodyItem: RowLayout {
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                spacing: 16
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    spacing: 12
-
-                    LabeledTextField {
-                        id: signerPathInput
-                        Layout.fillWidth: true
-                        // The section title is the visible label.
-                        accessibleName: qsTr("Signer path")
-                        fieldObjectName: "externalSignerPathInput"
-                        fieldHeight: Theme.size.control
-                        fieldBackgroundColor: Theme.color.surface2
-                        fieldTextStyle: Theme.text.monoDescription
-                        text: optionsModel.externalSignerPath
-                        placeholderText: qsTr("Enter external signer path")
-                        onEditingFinished: root.checkDevice()
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Rectangle {
-                            objectName: "externalSignerStatusIndicator"
-                            Layout.preferredWidth: 10
-                            Layout.preferredHeight: 10
-                            Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: 4
-                            radius: width / 2
-                            color: root.signerConnected ? Theme.color.success : Theme.color.danger
-
-                            Behavior on color {
-                                enabled: Theme.motion.animated
-                                ColorAnimation { duration: Theme.motion.normal }
-                            }
-                        }
-
-                        CoreText {
-                            objectName: "externalSignerStatusText"
-                            Layout.fillWidth: true
-                            text: root.signerStatusText
-                            color: Theme.color.neutral7
-                            textStyle: Theme.text.description
-                            horizontalAlignment: Text.AlignLeft
-                            wrap: true
-                        }
-                    }
-                }
-
-                PrimaryButton {
-                    objectName: "externalSignerCheckDeviceButton"
-                    Layout.preferredWidth: Math.max(140, implicitWidth)
-                    Layout.preferredHeight: Math.max(40, implicitHeight)
-                    Layout.alignment: Qt.AlignVCenter
-                    text: qsTr("Check device")
-                    textStyle: Theme.text.subheading
-                    enabled: root.signerPathError.length === 0
-                        && root.signerStatus.canEdit !== false
-                    onClicked: root.checkDevice()
-                }
-            }
-        }
     }
 
     Component.onCompleted: walletController.refreshExternalSignerStatus()
