@@ -2400,7 +2400,7 @@ bool WalletQmlModel::prepareTransactionInternal(std::optional<SecureString> pass
         m_current_psbt.reset();
         m_current_transaction_source = CurrentTransactionSource::SendDraft;
         m_current_transaction_sweeps_wallet = !result->change_pos && TransactionSweepsAvailableFunds(*m_wallet, *newTx, coin_control);
-        m_current_transaction_can_send = true;
+        m_current_transaction_can_send = sign || m_wallet->hasExternalSigner();
         m_current_transaction_can_broadcast = false;
         m_current_transaction_review_message.clear();
         m_current_transaction->setWtx(newTx);
