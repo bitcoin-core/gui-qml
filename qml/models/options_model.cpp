@@ -431,6 +431,7 @@ QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) 
     const QString token = FirstCommandToken(normalized_path);
     if (token.contains(SPACE_RE) ||
         (normalized_path.contains(SPACE_RE) && QFileInfo(ExpandUserPath(normalized_path)).isFile())) {
+        //: Error under the external signer path field. Bitcoin Core cannot run a signer from a path that contains spaces.
         return tr("The signer path can't contain spaces. Move the signer to a folder whose path has no spaces.");
     }
     if (token.isEmpty() || !TokenLooksLikePath(token)) {

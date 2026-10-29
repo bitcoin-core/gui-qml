@@ -63,6 +63,7 @@ OnboardingView {
             enabled: !root.importingWallet
             // Offered before HWI is set up; choosing it starts with setup.
             visible: BuildInfo.externalSignerSupported
+            //: Wallet type in Add wallet: a wallet whose keys stay on a hardware wallet used through HWI.
             title: qsTr("External signer")
             description: qsTr("Sign with a connected device.")
             iconSource: "image://images/devices-filled"
