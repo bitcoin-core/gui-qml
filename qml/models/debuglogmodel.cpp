@@ -73,6 +73,9 @@ bool IsLogCategory(const QString& value)
 DebugLogModel::DebugLogModel(const fs::path& log_path, QObject* parent)
     : QAbstractListModel(parent)
     , m_log_path(log_path)
+    , m_open_local_file_fn([](const QString& path) {
+        return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    })
 {
     m_reader = new QObject;
     m_reader_thread = new QThread(this);
@@ -299,23 +302,30 @@ void DebugLogModel::loadMore()
 bool DebugLogModel::openLogFile()
 {
     const QString path_str = QString::fromStdString(m_log_path.utf8string());
-    if (!fs::exists(m_log_path)) {
-        m_open_error = tr("Debug log file not found: %1").arg(path_str);
-        Q_EMIT openErrorChanged();
-        return false;
-    }
-    const bool ok = QDesktopServices::openUrl(QUrl::fromLocalFile(path_str));
+    // A missing log is a state of the log, not the outcome of this click, so
+    // it is left to the background reader to report and keep reporting. The
+    // UI disables this action while the log is unavailable; the check remains
+    // because the method is invokable from QML at any time.
+    if (!fs::exists(m_log_path)) return false;
+    const bool ok = m_open_local_file_fn(path_str);
     if (!ok) {
-        m_open_error = tr("Could not open debug log file. "
-                          "No application is associated with this file type.");
+        m_external_open_error = tr("Could not open debug log file. "
+                                   "No application is associated with this file type.");
         Q_EMIT openErrorChanged();
         return false;
     }
-    if (!m_open_error.isEmpty()) {
-        m_open_error.clear();
+    if (!m_external_open_error.isEmpty()) {
+        m_external_open_error.clear();
         Q_EMIT openErrorChanged();
     }
     return true;
+}
+
+void DebugLogModel::clearOpenError()
+{
+    if (m_external_open_error.isEmpty()) return;
+    m_external_open_error.clear();
+    Q_EMIT openErrorChanged();
 }
 
 void DebugLogModel::stop()
@@ -640,6 +650,10 @@ void DebugLogModel::onReadCompleted(const ReadResult& result,
     if (!m_active || m_stopping) return;
 
     // Propagate open-error state from the background read.
+    if (m_log_available != result.file_opened) {
+        m_log_available = result.file_opened;
+        Q_EMIT logAvailableChanged();
+    }
     if (!result.file_opened) {
         if (m_open_error != result.error_message) {
             m_open_error = result.error_message;

@@ -36,14 +36,20 @@ def assert_close(actual, expected, label, tolerance=1):
 class DebugLogHarness:
     """Launch the GUI node with an onboarded regtest profile."""
 
-    def __init__(self):
+    def __init__(self, seed_history=True):
         self.gui_binary = find_gui_binary()
         self.tmpdir = tempfile.mkdtemp(prefix="qml_test_debug_log_")
         self.socket_path = os.path.join(self.tmpdir, "test_bridge.sock")
         self.process = None
         self.driver = None
+        self.seed_history = seed_history
         self.datadir = setup_datadir(self.tmpdir)
-        self._seed_debug_log_history()
+        if seed_history:
+            self._seed_debug_log_history()
+
+    @property
+    def log_path(self):
+        return os.path.join(self.datadir, "regtest", "debug.log")
 
     def _seed_debug_log_history(self):
         network_dir = os.path.join(self.datadir, "regtest")
@@ -83,6 +89,10 @@ class DebugLogHarness:
             "-debugexclude=leveldb",
             "-nolisten",
         ]
+        if not self.seed_history:
+            # Keep the log from being created, so the viewer has to cope with
+            # a log it cannot read.
+            args.append("-nodebuglogfile")
         print(f"Starting GUI: {' '.join(args)}")
         self.process = subprocess.Popen(
             args, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -268,6 +278,60 @@ def test_close_settings(gui):
     print("  PASSED: Done closed node settings")
 
 
+def test_unreadable_log(gui, harness):
+    """The viewer has to stay usable, and honest, with no readable log."""
+    print("\n── test_unreadable_log ───────────────────────────────────────────")
+    assert not os.path.exists(harness.log_path), "expected no debug.log on disk"
+
+    banner = "debugLogOpenErrorBanner"
+    gui.wait_for_property(banner, "opacity", 1, timeout_ms=10000)
+    message = gui.get_property("debugLogOpenErrorText", "text")
+    assert "not found" in message, f"unexpected banner text: {message!r}"
+    print(f"  banner shown: {message}")
+
+    # Searching and opening the log elsewhere are meaningless without content.
+    assert gui.get_property("debugLogSearchBar", "enabled") is False, \
+        "search should be disabled while the log is unreadable"
+    assert gui.get_property("debugLogOpenFileButton", "enabled") is False, \
+        "Open debug.log should be disabled while the log is unreadable"
+    print("  PASSED: search and Open debug.log disabled")
+
+    # The log being missing is a state, not the outcome of one click, so it has
+    # to survive leaving the page. The banner is faded in from a visibility
+    # change, so a page rebuilt with the failure already pending is the case
+    # that can silently render it transparent.
+    gui.click("settingsSidebar_display")
+    gui.settle()
+    gui.click("settingsSidebar_debug-log")
+    gui.wait_for_page("debugLogView", timeout_ms=10000)
+    gui.wait_for_property(banner, "opacity", 1, timeout_ms=10000)
+    assert gui.get_property("debugLogSearchBar", "enabled") is False, \
+        "search should still be disabled after re-entering the page"
+    print("  PASSED: banner survives leaving and re-entering the page")
+
+    # Once the log exists the page recovers on the next read: the model
+    # watches the log's directory while the file is missing.
+    os.makedirs(os.path.dirname(harness.log_path), exist_ok=True)
+    with open(harness.log_path, "w", encoding="utf-8") as f:
+        f.write("2026-01-01T00:00:00Z test-automation recovered\n")
+    gui.wait_for_property(banner, "opacity", 0, timeout_ms=10000)
+    gui.wait_for_property("debugLogSearchBar", "enabled", True, timeout_ms=10000)
+    assert gui.get_property("debugLogOpenFileButton", "enabled") is True, \
+        "Open debug.log should be re-enabled once the log is readable"
+    print("  PASSED: banner clears and controls re-enable once the log exists")
+
+
+def run_unreadable_log_tests():
+    harness = DebugLogHarness(seed_history=False)
+    try:
+        harness.start()
+        gui = harness.driver
+        navigate_to_debug_log(gui)
+        test_unreadable_log(gui, harness)
+    finally:
+        harness.stop()
+
+
 def run_tests():
     harness = DebugLogHarness()
     try:
@@ -283,6 +347,8 @@ def run_tests():
         test_live_append(gui, harness.datadir)
         test_load_older(gui)
         test_close_settings(gui)
+
+        run_unreadable_log_tests()
 
         print("\n" + "=" * 50)
         print("All debug log tests PASSED")

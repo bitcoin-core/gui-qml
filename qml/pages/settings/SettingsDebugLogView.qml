@@ -32,6 +32,9 @@ SettingsPage {
 
     function updateDebugLogActivity() {
         if (root.visible) {
+            // A stale open failure from a previous visit is about that visit's
+            // open attempt; start the page without it.
+            debugLogModel.clearOpenError()
             debugLogModel.active = true
             root.ownsDebugLogActivity = true
         } else {
@@ -84,6 +87,11 @@ SettingsPage {
             Layout.fillWidth: true
             Layout.minimumWidth: 140
             Layout.maximumWidth: implicitWidth
+            // Nothing to search or filter while the log cannot be read.
+            // Opening the log is disabled too; the page keeps watching the
+            // file and reloads it once it exists again.
+            enabled: debugLogModel.logAvailable
+            opacity: enabled ? 1.0 : 0.5
             text: debugLogModel.filter
             placeholderText: qsTr("Search messages")
             accessibleName: qsTr("Search debug log messages")
@@ -93,6 +101,7 @@ SettingsPage {
         FilterButton {
             id: messageFilterButton
             objectName: "debugLogFilterButton"
+            enabled: debugLogModel.logAvailable
             active: debugLogModel.warningsAndErrorsOnly
             Accessible.name: qsTr("Filter debug log messages")
             onClicked: {
@@ -158,11 +167,26 @@ SettingsPage {
 
             ContextMenuButton {
                 objectName: "debugLogOpenFileButton"
+                // Nothing to hand to another application while the log cannot
+                // be read.
+                enabled: debugLogModel.logAvailable
                 text: qsTr("Open debug.log")
                 iconSource: "image://images/export"
                 onTriggered: debugLogModel.openLogFile()
             }
         }
+    }
+
+    // Clears on a later successful open, or when the page is shown again
+    // (updateDebugLogActivity above).
+    ToastBanner {
+        objectName: "debugLogOpenErrorBanner"
+        Layout.fillWidth: true
+        visible: debugLogModel.openError.length > 0
+        tintColor: Theme.color.red
+        iconSource: "image://images/info-filled"
+        text: debugLogModel.openError
+        textObjectName: "debugLogOpenErrorText"
     }
 
     Shortcut {
@@ -238,15 +262,14 @@ SettingsPage {
             }
 
             CoreText {
+                objectName: "debugLogEmptyStateText"
                 anchors.centerIn: parent
                 width: Math.max(0, parent.width - 48)
-                visible: logList.count === 0
-                text: debugLogModel.openError.length > 0
-                    ? debugLogModel.openError
-                    : root.emptyMessage()
-                color: debugLogModel.openError.length > 0
-                    ? Theme.color.red
-                    : Theme.color.neutral7
+                // The banner above reports a read failure, so the empty state
+                // does not repeat it.
+                visible: logList.count === 0 && debugLogModel.logAvailable
+                text: root.emptyMessage()
+                color: Theme.color.neutral7
                 font: Theme.text.caption.font
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
