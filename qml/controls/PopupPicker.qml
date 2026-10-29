@@ -89,6 +89,7 @@ Control {
         parent: button
         modal: true
         dim: false
+        margins: 6
         backgroundColor: root.embedded ? Theme.color.neutral2 : Theme.color.neutral1
         minMenuWidth: Math.max(root.minimumMenuWidth, root.width)
         x: button.width - width
