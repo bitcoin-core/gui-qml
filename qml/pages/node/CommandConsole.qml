@@ -175,6 +175,7 @@ Page {
         focus: false
         // Modeless: the user keeps typing in the field while it is open.
         modal: false
+        margins: 6
         // Deliberately NOT CloseOnPressOutside: a real mouse press on the submit
         // button would otherwise close this popup (and clear filteredCommands)
         // before the button's onClicked fires, so the button could never act on
@@ -293,8 +294,8 @@ Page {
                 // popup is open; otherwise it submits the command. This mirrors the
                 // Tab behaviour and avoids submitting the raw half-typed text while a
                 // completion is highlighted.
-                Keys.onReturnPressed: root.acceptHighlightedOrSubmit(event)
-                Keys.onEnterPressed: root.acceptHighlightedOrSubmit(event)
+                Keys.onReturnPressed: function(event) { root.acceptHighlightedOrSubmit(event) }
+                Keys.onEnterPressed: function(event) { root.acceptHighlightedOrSubmit(event) }
 
                 // Up/Down: navigate autocomplete when popup is open,
                 // otherwise browse command history.
@@ -322,7 +323,7 @@ Page {
                 }
 
                 // Tab key: accept the top autocomplete suggestion.
-                Keys.onTabPressed: {
+                Keys.onTabPressed: function(event) {
                     if (autocompletePopup.visible && filteredCommands.length > 0) {
                         applySuggestion(filteredCommands[autocompleteIndex])
                         event.accepted = true
