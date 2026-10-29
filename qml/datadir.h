@@ -47,8 +47,8 @@ bool IsDefaultDataDir(const QString& path);
 QString ValidateCustomDataDir(const QString& path);
 StorageSpaceResult CheckStorageSpace(const QString& path);
 bool EnsureDataDir(const QString& path, QString* error = nullptr);
-bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr);
-void PersistDefaultDataDirSelection();
+[[nodiscard]] bool PersistGuiDataDirSelection(const QString& path, QString* error = nullptr);
+[[nodiscard]] bool PersistDefaultDataDirSelection(QString* error = nullptr);
 bool ResetGuiSettings(ArgsManager& args, QString* error = nullptr);
 
 bool HasExplicitDataDirArg(const ArgsManager& args);

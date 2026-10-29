@@ -13,6 +13,7 @@ import time
 from datetime import datetime
 
 from qml_driver import QmlDriverError
+from qml_process_checks import check_gui_exit
 from qml_test_harness import dump_qml_tree
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call, wait_for_rpc
 
@@ -23,6 +24,15 @@ EXPECTED_FIRST_BECH32_ADDRESS = "bcrt1qm90ugl4d48jv8n6e5t9ln6t9zlpm5th68x4f8g"
 EXPECTED_FIRST_BECH32M_ADDRESS = "bcrt1phw4cgpt6cd30kz9k4wkpwm872cdvhss29jga2xpmftelhqll62ms4e9sqj"
 EXPECTED_FIRST_HD_KEYPATH = "m/84h/1h/0h/0/0"
 EXPECTED_FIRST_TAPROOT_HD_KEYPATH = "m/86h/1h/0h/0/0"
+
+
+class ExternalSignerHarness(WalletFlowHarness):
+    def stop_gui(self):
+        process = self.gui_process
+        super().stop_gui()
+        if process is not None:
+            _, stderr = process.communicate(timeout=5)
+            check_gui_exit(process.returncode, stderr.decode("utf-8", errors="replace"), socket_path=self.socket_path)
 
 
 def parse_args():
@@ -475,7 +485,7 @@ def run_test(args):
         screenshot_root = make_screenshot_root()
         print(f"Checkpoint screenshots will be saved under: {screenshot_root}")
 
-    harness = WalletFlowHarness(case_name, port_offset=90)
+    harness = ExternalSignerHarness(case_name, port_offset=90)
     checkpoints = CheckpointRecorder(case_name, args.save_screenshots, screenshot_root)
     try:
         signer_path = find_mock_signer_path("signer")
@@ -549,6 +559,7 @@ def run_test(args):
         )
         checkpoints.checkpoint("no-signer review error surfaced", harness.driver)
 
+        assert harness.driver.get_property("transactionFlowInput_0", "visible")
         harness.update_gui_settings({"signer": signer_path})
         harness.restart_gui(cwd=harness.tmpdir)
         wait_for_rpc(harness.gui_rpc_port)

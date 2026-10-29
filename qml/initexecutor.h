@@ -9,6 +9,7 @@
 #include <qml/backendexecutor.h>
 
 #include <exception>
+#include <functional>
 #include <memory>
 
 #include <QObject>
@@ -17,12 +18,19 @@ QT_BEGIN_NAMESPACE
 class QString;
 QT_END_NAMESPACE
 
+namespace interfaces {
+class Handler;
+}
+
 /** Runs app initialization and shutdown work off the GUI thread. */
 class QmlInitExecutor : public QObject
 {
     Q_OBJECT
 public:
-    explicit QmlInitExecutor(interfaces::Node& node);
+    using SubscriptionFactory = std::function<std::unique_ptr<interfaces::Handler>()>;
+
+    explicit QmlInitExecutor(interfaces::Node& node, SubscriptionFactory subscribe = {});
+    ~QmlInitExecutor();
 
 public Q_SLOTS:
     void initialize();
