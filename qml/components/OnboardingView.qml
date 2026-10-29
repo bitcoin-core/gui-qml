@@ -124,6 +124,11 @@ Page {
         onCloseClicked: root.closeClicked()
     }
 
+    // The height the scroll view gets between the header and the footer.
+    readonly property real viewportHeight: root.availableHeight
+        - (root.header && root.header.visible ? root.header.height + root.spacing : 0)
+        - (root.footer && root.footer.visible ? root.footer.height + root.spacing : 0)
+
     ScrollView {
         id: scrollView
         objectName: "onboardingScrollView"
@@ -138,7 +143,13 @@ Page {
         Item {
             id: contentFrame
             width: scrollView.availableWidth
-            height: content.height + 96
+            // Leave room under the content, but only as much as fits: a page
+            // whose content fits never scrolls just to show empty space, and
+            // one that overflows scrolls to its content plus a small margin.
+            // Measured from the page: reading the scroll view's own size
+            // here makes a binding loop.
+            height: Math.max(content.height + Theme.space.m + Theme.space.xxl,
+                             Math.min(content.height + 96, root.viewportHeight))
 
             // Inside the Flickable, so it sees taps before the Flickable takes them.
             TapHandler {

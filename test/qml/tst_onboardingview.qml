@@ -84,6 +84,42 @@ TestCase {
         }
     }
 
+    Component {
+        id: nearlyFullPage
+        OnboardingView {
+            id: nearlyFull
+            width: 480
+            height: 360
+            showNavigationBar: false
+            heading: "Nearly full"
+            primaryButtonText: "Continue"
+            property real childHeight: 0
+            childView: Item { implicitHeight: nearlyFull.childHeight }
+        }
+    }
+
+    // The room under the content never makes a page that fits scrollable.
+    function test_pageThatFitsDoesNotScrollIntoPadding() {
+        // failOnWarning() exists from Qt 6.3; older Qt only checks the layout.
+        if (typeof failOnWarning === "function") failOnWarning(/Binding loop detected/)
+        const page = createTemporaryObject(nearlyFullPage, testCase)
+        verify(page !== null)
+        const content = findChild(page, "onboardingContent")
+        const view = page.scrollView
+        const fixedHeight = content.height
+        page.childHeight = view.height - fixedHeight - Theme.space.xxxl - Theme.space.m
+        // The layout picks up the new child height on its next polish.
+        tryCompare(content, "height", fixedHeight + page.childHeight)
+        verify(content.height + 96 > view.height)
+        verify(view.contentHeight <= view.height)
+
+        // Content that does overflow scrolls only to its end and a margin.
+        page.childHeight = view.height
+        tryCompare(content, "height", fixedHeight + page.childHeight)
+        verify(view.contentHeight > view.height)
+        compare(view.contentHeight, content.height + Theme.space.m + Theme.space.xxl)
+    }
+
     function test_backOnlyAppearsAfterPushAndPopsStack() {
         const stack = createTemporaryObject(stackComponent, testCase)
         verify(stack !== null)
