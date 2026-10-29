@@ -33,7 +33,6 @@
         <file>tst_popuppicker.qml</file>
         <file>tst_proxylocationinput.qml</file>
         <file>tst_requestpayment.qml</file>
-        <file>tst_rightcontenticon.qml</file>
         <file>tst_searchbar.qml</file>
         <file>tst_rangeslider.qml</file>
         <file>tst_slider.qml</file>
