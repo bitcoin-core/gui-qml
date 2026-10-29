@@ -188,6 +188,9 @@ TestCase {
         verify(findChild(setup, "externalSignerSetupBrowseButton") !== null)
         const pathSection = findChild(setup, "externalSignerSetupPathSection")
         compare(pathSection.title, "HWI executable")
+        compare(findChild(setup, "externalSignerSetupPathDialog").title, "Select HWI executable")
+        // The placeholder is an example path, not an instruction.
+        verify(findChild(setup, "externalSignerSetupPathInput").placeholderText.indexOf("hwi") >= 0)
         // The card sits one level up on the dialog's surface.
         compare(pathSection.surfaceLevel, setup.surfaceLevel)
         compare(findChild(setup, "externalSignerSetupCheckDeviceButton").visible, false)

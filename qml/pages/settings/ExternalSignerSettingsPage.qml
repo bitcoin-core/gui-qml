@@ -25,7 +25,8 @@ SettingsPage {
     ExternalSignerPathSection {
         objectName: "externalSignerPathSection"
         Layout.fillWidth: true
-        title: qsTr("Signer path")
+        //: Title of the field for the external signer executable, such as HWI.
+        title: qsTr("Signer executable")
     }
 
     Component.onCompleted: walletController.refreshExternalSignerStatus()

@@ -289,6 +289,7 @@ TestCase {
             verify(browseButton !== null)
             verify(dialog !== null)
             compare(browseButton.text, "Browse…")
+            compare(dialog.title, "Select signer executable")
             compare(dialog.fileMode, 0)
 
             browseButton.clicked()
@@ -1219,13 +1220,13 @@ TestCase {
                 compare(introduction.description,
                     "Connect a hardware wallet or another external signing tool. Creating an external signer wallet needs exactly one connected device.")
                 compare(signerPage.maximumContentWidth, 840)
-                compare(signerSection.title, "Signer path")
+                compare(signerSection.title, "Signer executable")
                 compare(signerCommandRow.title, "Signer command")
                 compare(signerCommandRow.value, "Not set")
                 compare(signerDeviceRow.visible, false)
                 compare(checkDeviceButton.text, "Check device")
                 compare(signerPathInput.height, Theme.size.control)
-                compare(signerPathInput.Accessible.name, "Signer path")
+                compare(signerPathInput.Accessible.name, "Signer executable")
                 compare(signerPathInput.background.color, Theme.color.surface2)
                 compare(signerPathInput.background.radius, Theme.radius.field)
                 compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)

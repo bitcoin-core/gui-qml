@@ -18,6 +18,8 @@ FormSection {
     // Prefix for the objectNames of the rows, so two instances stay apart.
     property string namePrefix: "externalSigner"
     property bool showCheckButton: true
+    //: Title of the file dialog for choosing the external signer executable, such as HWI.
+    property string pathDialogTitle: qsTr("Select signer executable")
 
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
     readonly property bool editable: root.signerStatus.canEdit !== false
@@ -64,8 +66,7 @@ FormSection {
     AppFileDialog {
         id: pathDialog
         objectName: root.namePrefix + "PathDialog"
-        //: Title of the file dialog for choosing the external signer executable, such as HWI.
-        title: qsTr("Select signer executable")
+        title: root.pathDialogTitle
         fileMode: AppFileDialog.OpenFile
         onAccepted: {
             if (selectedFile.toString().length === 0) return
@@ -99,8 +100,15 @@ FormSection {
                 fieldBackgroundColor: Theme.color.surface(root.surfaceLevel + 2)
                 fieldTextStyle: Theme.text.monoDescription
                 text: optionsModel.externalSignerPath
-                //: Placeholder of the field for the external signer command path.
-                placeholderText: qsTr("Enter external signer path")
+                // An example path, not an instruction: the section title names the field.
+                placeholderText: Qt.platform.os === "windows"
+                    //: Example path shown in the empty signer executable field on Windows. Keep it a file path.
+                    ? qsTr("C:\\Downloads\\hwi.exe")
+                    : Qt.platform.os === "osx"
+                        //: Example path shown in the empty signer executable field on macOS. Keep it a file path.
+                        ? qsTr("/Users/you/Downloads/hwi")
+                        //: Example path shown in the empty signer executable field on Linux. Keep it a file path.
+                        : qsTr("/home/you/Downloads/hwi")
                 errorText: root.pathError
                 supportingText: root.signerStatus.infoText || ""
                 onEditingFinished: root.check()

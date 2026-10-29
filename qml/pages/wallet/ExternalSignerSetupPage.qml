@@ -84,6 +84,8 @@ OnboardingView {
             surfaceLevel: root.surfaceLevel
             //: Title of the field for the path of the HWI executable during wallet creation.
             title: qsTr("HWI executable")
+            //: Title of the file dialog for choosing the HWI executable during wallet creation.
+            pathDialogTitle: qsTr("Select HWI executable")
         }
     }
 
