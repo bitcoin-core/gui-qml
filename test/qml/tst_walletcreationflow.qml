@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 import "../../qml/components"
 import "../../qml/pages/wallet"
@@ -30,6 +31,7 @@ TestCase {
     }
 
     function init() {
+        BuildInfo.externalSignerSupported = true
         walletController.reset()
         walletController.initialized = true
     }
@@ -154,6 +156,19 @@ TestCase {
         flow.finished.connect(function(openActivity) { finished = openActivity })
         findChild(ready, "externalWalletCreatedDoneButton").clicked()
         compare(finished, true)
+    }
+
+    // Without build support no signer can be used, whatever the signer
+    // status says, so the other wallet types are all that is offered.
+    function test_external_signer_hidden_without_build_support() {
+        BuildInfo.externalSignerSupported = false
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "trezor_t"
+        const flow = createFlow()
+        compare(findChild(flow, "walletTypeExternalSigner").visible, false)
+        compare(findChild(flow, "walletTypeRegular").visible, true)
+        compare(findChild(flow, "walletTypeViewOnly").visible, true)
+        compare(findChild(flow, "walletTypeImport").visible, true)
     }
 
     function test_regular_requires_acknowledgement_and_warns_for_unencrypted_creation() {

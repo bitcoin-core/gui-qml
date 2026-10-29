@@ -126,6 +126,7 @@ TestCase {
         secondDestroyed = 0
         AppMode.walletEnabled = true
         AppMode.isDesktop = true
+        BuildInfo.externalSignerSupported = true
         nodeModel.mempoolInformationAvailable = true
         Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
@@ -197,6 +198,36 @@ TestCase {
         compare(view.sectionIsVisible("display"), true)
         compare(view.selectedSectionId, "display")
         verify(findChild(view, "settingsSidebar_display") !== null)
+    }
+
+    // A build without signer support can't run a signer command, so a path
+    // saved by another build must not bring back any signer settings.
+    function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        try {
+            const supported = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(supported !== null)
+            compare(supported.sectionIsVisible("external-signer"), true)
+            supported.selectSection("wallet", true)
+            tryCompare(supported.pageContainer, "depth", 1)
+            compare(findChild(supported, "walletExternalSignerRow").visible, true)
+            supported.destroy()
+
+            BuildInfo.externalSignerSupported = false
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            compare(view.sectionIsVisible("wallet"), true)
+            compare(view.sectionIsVisible("external-signer"), false)
+            verify(findChild(view, "settingsSidebar_wallet") !== null)
+            verify(findChild(view, "settingsSidebar_external-signer") === null)
+            view.selectSection("wallet", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const signerRow = findChild(view, "walletExternalSignerRow")
+            verify(signerRow !== null)
+            compare(signerRow.visible, false)
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
     }
 
     function test_containerLazilyCachesAndRestoresEachSectionStack() {

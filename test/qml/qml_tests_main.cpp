@@ -93,10 +93,17 @@ class MockBuildInfo : public QObject
     Q_OBJECT
     Q_PROPERTY(bool isDebug READ isDebug CONSTANT)
     Q_PROPERTY(QString fullClientVersion READ fullClientVersion CONSTANT)
+    Q_PROPERTY(bool externalSignerSupported MEMBER m_external_signer_supported NOTIFY externalSignerSupportedChanged)
 
 public:
     bool isDebug() const { return false; }
     QString fullClientVersion() const { return QStringLiteral("v0.0.0-test"); }
+
+Q_SIGNALS:
+    void externalSignerSupportedChanged();
+
+private:
+    bool m_external_signer_supported{true};
 };
 
 class MockPeerDetailsModel : public QObject

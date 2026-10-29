@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <qml/walletqmlcontroller.h>
 #include <qml/backendexecutor.h>
 
@@ -564,6 +566,10 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
 {
     clearWalletLoadStatus();
     clearWalletMigrationStatus();
+#ifndef ENABLE_EXTERNAL_SIGNER
+    setWalletLoadError(tr("This build does not support external signers."));
+    return false;
+#endif
     if (!m_initialized) {
         setWalletLoadError(tr("Wallets are still loading. Try again in a moment."));
         return false;

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -60,7 +61,8 @@ OnboardingView {
             objectName: "walletTypeExternalSigner"
             Layout.fillWidth: true
             enabled: !root.importingWallet
-            visible: walletController.canCreateExternalSignerWallet
+            visible: BuildInfo.externalSignerSupported
+                && walletController.canCreateExternalSignerWallet
             title: walletController.externalSignerName.length > 0
                 ? qsTr("External signer") : qsTr("Hardware wallet")
             description: qsTr("Sign with a connected device.")

@@ -146,10 +146,14 @@ SettingsPage {
             Layout.fillWidth: true
             title: qsTr("Private keys")
             value: root.wallet ? root.wallet.privateKeysStatus : ""
+            showDivider: walletExternalSignerRow.visible
         }
 
         ValueRow {
+            id: walletExternalSignerRow
+            objectName: "walletExternalSignerRow"
             Layout.fillWidth: true
+            visible: BuildInfo.externalSignerSupported
             title: qsTr("External signer")
             value: root.wallet ? root.wallet.externalSignerStatus : ""
             showDivider: false

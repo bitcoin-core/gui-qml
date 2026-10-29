@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
@@ -327,6 +329,7 @@ private Q_SLOTS:
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
+    void externalSignerCreationNeedsBuildSupport();
     void initializedControllerSignalsMigrationForLegacyWallet();
     void createWalletBeforeInitializationReturnsFalseAndSetsError();
     void importWalletBeforeInitializationSetsLoadError();
@@ -738,6 +741,22 @@ void WalletQmlControllerTests::externalSignerSuggestionUsesSignerName()
     QVERIFY(controller.canCreateExternalSignerWallet());
     QCOMPARE(controller.externalSignerName(), QString("Coldcard Mk4"));
     QCOMPARE(controller.suggestedExternalSignerWalletName(), QString("Coldcard_Mk4"));
+}
+
+void WalletQmlControllerTests::externalSignerCreationNeedsBuildSupport()
+{
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+
+    DrainingWalletController controller(node);
+    QVERIFY(!controller.createExternalSignerWallet("Coldcard Mk4"));
+#ifdef ENABLE_EXTERNAL_SIGNER
+    // Supported builds go on to the usual checks.
+    QCOMPARE(controller.walletLoadError(), QString("Wallets are still loading. Try again in a moment."));
+#else
+    QCOMPARE(controller.walletLoadError(), QString("This build does not support external signers."));
+#endif
+    QVERIFY(!controller.walletLoadInProgress());
 }
 
 void WalletQmlControllerTests::initializedControllerSignalsMigrationForLegacyWallet()
