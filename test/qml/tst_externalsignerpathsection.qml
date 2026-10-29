@@ -101,7 +101,7 @@ TestCase {
         setStatus(true, 2, "", "More than one external signer was found. Connect only one device.")
         wait(400)
         compareIcon("testCommandRow", Theme.color.successText)
-        compareIcon("testDeviceRow", Theme.color.warningText)
+        compareIcon("testDeviceRow", Theme.color.warningIcon)
     }
 
     Component {

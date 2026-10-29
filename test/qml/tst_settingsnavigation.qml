@@ -237,7 +237,7 @@ TestCase {
             // never error styling.
             compare(deviceRow.value, "None found")
             compare(deviceRow.valueIconSource, "image://images/alert-filled")
-            compare(deviceRow.valueIconColor, Theme.color.warningText)
+            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
             compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
             compare(deviceRow.errorText, "")
 
@@ -246,7 +246,7 @@ TestCase {
             compare(commandRow.value, "Responding")
             compare(deviceRow.value, "Not ready")
             compare(deviceRow.valueIconSource, "image://images/alert-filled")
-            compare(deviceRow.valueIconColor, Theme.color.warningText)
+            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
             compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
             compare(deviceRow.errorText, "")
 
