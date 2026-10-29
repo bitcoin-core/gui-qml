@@ -229,6 +229,17 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot)
 {
     const bool initial = !m_ready;
     const DirtySnapshot before = dirtySnapshot();
+    const bool dbcache_changed = m_dbcache_size_mib != snapshot.dbcache;
+    const bool mempool_changed = m_max_mempool_size_mb != snapshot.mempool;
+    const bool threads_changed = m_script_threads != snapshot.threads;
+    const bool signer_changed = m_external_signer_path != snapshot.signer;
+    const bool data_dir_changed = m_dataDir != snapshot.data_dir;
+    const bool default_data_dir_changed = m_default_data_dir != snapshot.default_data_dir;
+    const bool custom_data_dir_changed = m_custom_datadir_string != snapshot.custom_data_dir;
+    const bool language_changed = m_language != snapshot.language;
+    const bool display_unit_changed = m_display_unit != snapshot.display_unit;
+    const bool transaction_urls_changed = m_third_party_transaction_urls != snapshot.transaction_urls;
+    const bool money_font_changed = m_money_font_choice != snapshot.money_font;
     m_core_setting_statuses = std::move(snapshot.statuses);
     m_applying_snapshot = true;
     m_core_settings.clearTouchedSettings();
@@ -252,18 +263,20 @@ void OptionsQmlModel::applySnapshot(Snapshot snapshot)
         m_initial_max_mempool_size_mb = snapshot.effective_mempool;
     }
     QmlCoreSettings::EmitCoreSettingSignals(*this, change);
-    Q_EMIT dbcacheSizeMiBChanged(m_dbcache_size_mib);
-    Q_EMIT maxMempoolSizeMBChanged(m_max_mempool_size_mb);
-    Q_EMIT scriptThreadsChanged(m_script_threads);
-    Q_EMIT externalSignerPathChanged(m_external_signer_path);
-    Q_EMIT dataDirChanged(m_dataDir);
-    Q_EMIT dataDirDefaultsChanged();
-    Q_EMIT customDataDirStringChanged(m_custom_datadir_string);
-    Q_EMIT languageChanged();
-    Q_EMIT displayUnitChanged(m_display_unit);
-    Q_EMIT thirdPartyTransactionUrlsChanged();
-    Q_EMIT moneyFontChoiceChanged();
-    Q_EMIT moneyFontChanged();
+    if (dbcache_changed) Q_EMIT dbcacheSizeMiBChanged(m_dbcache_size_mib);
+    if (mempool_changed) Q_EMIT maxMempoolSizeMBChanged(m_max_mempool_size_mb);
+    if (threads_changed) Q_EMIT scriptThreadsChanged(m_script_threads);
+    if (signer_changed) Q_EMIT externalSignerPathChanged(m_external_signer_path);
+    if (data_dir_changed) Q_EMIT dataDirChanged(m_dataDir);
+    if (default_data_dir_changed) Q_EMIT dataDirDefaultsChanged();
+    if (custom_data_dir_changed) Q_EMIT customDataDirStringChanged(m_custom_datadir_string);
+    if (language_changed) Q_EMIT languageChanged();
+    if (display_unit_changed) Q_EMIT displayUnitChanged(m_display_unit);
+    if (transaction_urls_changed) Q_EMIT thirdPartyTransactionUrlsChanged();
+    if (money_font_changed) {
+        Q_EMIT moneyFontChoiceChanged();
+        Q_EMIT moneyFontChanged();
+    }
     refreshCoreSettingStatuses();
     emitDirtySignals(before);
     if (initial) Q_EMIT settingsReadyChanged();

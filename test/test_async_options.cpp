@@ -123,6 +123,8 @@ private Q_SLOTS:
         const QString blocked = fixture.directory.filePath("blocked-settings");
         QVERIFY(QDir().mkpath(blocked));
         fixture.args.ForceSetArg("-settings", blocked.toStdString());
+        QSignalSpy mempool_changed(&model, &OptionsQmlModel::maxMempoolSizeMBChanged);
+        QSignalSpy language_changed(&model, &OptionsQmlModel::languageChanged);
         model.setMaxMempoolSizeMB(initial + 10);
         QVERIFY(model.settingsPending());
         QTRY_VERIFY(!model.settingsPending());
@@ -130,6 +132,40 @@ private Q_SLOTS:
         QCOMPARE(model.maxMempoolSizeMB(), initial);
         QVERIFY(fixture.args.GetPersistentSetting("maxmempool").isNull());
         QVERIFY(!model.mempoolSettingsDirty());
+        QCOMPARE(mempool_changed.size(), 2); // Optimistic edit followed by rollback.
+        QCOMPARE(mempool_changed.last().first().toInt(), initial);
+        QVERIFY(language_changed.empty());
+    }
+
+    void savingSettingsOnlyNotifiesChangedValues()
+    {
+        Fixture fixture;
+        OptionsQmlModel model(fixture.node, fixture.args);
+        QTRY_VERIFY(!model.settingsPending());
+        QVERIFY(model.settingsReady());
+        QSignalSpy dbcache(&model, &OptionsQmlModel::dbcacheSizeMiBChanged);
+        QSignalSpy mempool(&model, &OptionsQmlModel::maxMempoolSizeMBChanged);
+        QSignalSpy threads(&model, &OptionsQmlModel::scriptThreadsChanged);
+        QSignalSpy signer(&model, &OptionsQmlModel::externalSignerPathChanged);
+        QSignalSpy data_dir(&model, &OptionsQmlModel::dataDirChanged);
+        QSignalSpy defaults(&model, &OptionsQmlModel::dataDirDefaultsChanged);
+        QSignalSpy custom_data_dir(&model, &OptionsQmlModel::customDataDirStringChanged);
+        QSignalSpy language(&model, &OptionsQmlModel::languageChanged);
+        QSignalSpy display_unit(&model, &OptionsQmlModel::displayUnitChanged);
+        QSignalSpy urls(&model, &OptionsQmlModel::thirdPartyTransactionUrlsChanged);
+        QSignalSpy font_choice(&model, &OptionsQmlModel::moneyFontChoiceChanged);
+        QSignalSpy font(&model, &OptionsQmlModel::moneyFontChanged);
+
+        const int unit = (model.displayUnit() + 1) % 4;
+        model.setDisplayUnit(unit);
+        QTRY_VERIFY(!model.settingsPending());
+        QVERIFY2(model.settingsError().isEmpty(), qPrintable(model.settingsError()));
+        QCOMPARE(model.displayUnit(), unit);
+        QCOMPARE(display_unit.size(), 1); // Saving the optimistic value adds no notification.
+        for (const auto* spy : {&dbcache, &mempool, &threads, &signer, &data_dir, &defaults,
+                               &custom_data_dir, &language, &urls, &font_choice, &font}) {
+            QVERIFY(spy->empty());
+        }
     }
 
     void mappingDrainDoesNotBlockGuiOrAcceptMoreCommands()
