@@ -37,6 +37,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QTextDocument>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -783,14 +784,21 @@ QString WalletQmlController::externalSignerDeviceError(const std::string& error,
     const std::string prefix{"'" + command + "' "};
     if (!error.starts_with(prefix)) return {};
     const std::string detail{error.substr(prefix.size())};
-    if (detail == "error") {
-        return tr("The device reported an error. Unlock it and check again.");
-    }
     if (detail.starts_with("error: ")) {
-        return tr("The device reported an error: %1").arg(QString::fromStdString(detail.substr(7)));
+        // The reason is the signer tool's own text, and the QML text that
+        // shows it reads anything tag-like as markup, so such a reason is
+        // left out rather than rendered.
+        const QString reason{QString::fromStdString(detail.substr(7))};
+        if (!Qt::mightBeRichText(reason)) {
+            //: %1 is the reason given by the external signer tool, for example "Device is locked".
+            return tr("Your device isn't ready: %1").arg(reason);
+        }
+    }
+    if (detail == "error" || detail.starts_with("error: ")) {
+        return tr("Your device isn't ready. Unlock it, then check again.");
     }
     if (detail == "received invalid response, missing signer fingerprint") {
-        return tr("The device did not share its fingerprint. Unlock it and check again.");
+        return tr("Your device didn't share its fingerprint. Unlock it, then check again.");
     }
     return {};
 }

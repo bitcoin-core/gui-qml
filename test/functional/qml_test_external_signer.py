@@ -304,7 +304,7 @@ def set_up_hwi_in_wallet_creation(harness, checkpoints, signer_path, no_signer_p
     gui.wait_for_property(
         "externalSignerSetupDeviceRowSupportingText",
         "text",
-        "The device reported an error: Device is locked",
+        "Your device isn't ready: Device is locked",
         timeout_ms=10000,
     )
     checkpoints.checkpoint("locked device reported", gui)

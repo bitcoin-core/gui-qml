@@ -147,12 +147,15 @@ FormSection {
             //: Device status: the signer command works but found no device.
             return qsTr("None found")
         }
-        valueIconSource: root.deviceReady ? "image://images/check"
-            : walletController.externalSignerError.length > 0 ? "image://images/alert-filled" : ""
+        // A missing, locked or extra device is fixed at the device, not in
+        // the path, so it reads as guidance with a warning, not as an error.
+        valueIconSource: root.deviceReady ? "image://images/check" : "image://images/alert-filled"
         valueIconColor: root.deviceReady ? Theme.color.successText : Theme.color.warningText
-        errorText: !root.deviceReady ? walletController.externalSignerError : ""
-        //: Shown when the external signer command works but no hardware device was found.
-        supportingText: !root.deviceReady && walletController.externalSignerError.length === 0
-            ? qsTr("Connect and unlock your device, then check again.") : ""
+        supportingText: {
+            if (root.deviceReady) return ""
+            if (walletController.externalSignerError.length > 0) return walletController.externalSignerError
+            //: Shown when the external signer command works but no hardware device was found.
+            return qsTr("Connect and unlock your device, then check again.")
+        }
     }
 }

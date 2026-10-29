@@ -796,10 +796,13 @@ void WalletQmlControllerTests::externalSignerStatusSeparatesCommandFromDevice_da
     QTest::newRow("output not json") << "Unable to parse JSON: hwi 3.1.0" << false << not_responding;
     QTest::newRow("output not a list") << "'/usr/bin/hwi' received invalid response, expected array of signers" << false << not_responding;
     QTest::newRow("another command") << "'/usr/bin/other' error: Device is locked" << false << not_responding;
-    QTest::newRow("device error") << "'/usr/bin/hwi' error: Device is locked" << true << QString{"The device reported an error: Device is locked"};
-    QTest::newRow("device error without text") << "'/usr/bin/hwi' error" << true << QString{"The device reported an error. Unlock it and check again."};
+    QTest::newRow("device error") << "'/usr/bin/hwi' error: Device is locked" << true << QString{"Your device isn't ready: Device is locked"};
+    QTest::newRow("device error without text") << "'/usr/bin/hwi' error" << true << QString{"Your device isn't ready. Unlock it, then check again."};
+    // The tool's reason is shown in text that reads tags as markup.
+    QTest::newRow("device error that looks like markup") << "'/usr/bin/hwi' error: <img src=\"https://example.com/x.png\">Locked"
+                                                         << true << QString{"Your device isn't ready. Unlock it, then check again."};
     QTest::newRow("missing fingerprint") << "'/usr/bin/hwi' received invalid response, missing signer fingerprint" << true
-                                         << QString{"The device did not share its fingerprint. Unlock it and check again."};
+                                         << QString{"Your device didn't share its fingerprint. Unlock it, then check again."};
 }
 
 void WalletQmlControllerTests::externalSignerStatusSeparatesCommandFromDevice()
