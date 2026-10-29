@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -425,7 +425,14 @@ QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) 
         return {};
     }
 
+    // Core splits the signer command at every space or tab and does not
+    // handle quotes, so an executable whose path contains one never starts.
+    static const QRegularExpression SPACE_RE(QStringLiteral(R"(\s)"));
     const QString token = FirstCommandToken(normalized_path);
+    if (token.contains(SPACE_RE) ||
+        (normalized_path.contains(SPACE_RE) && QFileInfo(ExpandUserPath(normalized_path)).isFile())) {
+        return tr("The signer path can't contain spaces. Move the signer to a folder whose path has no spaces.");
+    }
     if (token.isEmpty() || !TokenLooksLikePath(token)) {
         return {};
     }

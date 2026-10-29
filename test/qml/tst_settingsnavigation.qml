@@ -263,6 +263,32 @@ TestCase {
         }
     }
 
+    function test_externalSignerBrowseChecksPickedProgram() {
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const browseButton = findChild(view, "externalSignerBrowseButton")
+            const dialog = findChild(view, "externalSignerPathDialog")
+            verify(browseButton !== null)
+            verify(dialog !== null)
+            compare(browseButton.text, "Browse…")
+            compare(dialog.fileMode, 0)
+
+            browseButton.clicked()
+            compare(dialog.openCalls, 1)
+            dialog.selectAndAccept("/opt/hwi/hwi")
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(findChild(view, "externalSignerPathInput").text, "/opt/hwi/hwi")
+
+            dialog.rejected()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
     function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
         optionsModel.externalSignerPath = "/usr/local/bin/hwi"
         try {

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
 import "../controls"
 
@@ -40,6 +41,20 @@ FormSection {
         if (root.commitPath()) walletController.refreshExternalSignerStatus()
     }
 
+    AppFileDialog {
+        id: pathDialog
+        objectName: root.namePrefix + "PathDialog"
+        //: Title of the file dialog for choosing the external signer program, such as HWI.
+        title: qsTr("Select signer program")
+        fileMode: AppFileDialog.OpenFile
+        onAccepted: {
+            if (selectedFile.toString().length === 0) return
+            // Show a local path, not a file URL, if the check rejects it.
+            pathInput.text = walletController.normalizeWalletPath(selectedFile.toString())
+            root.check()
+        }
+    }
+
     FormRow {
         objectName: root.namePrefix + "PathRow"
         Layout.fillWidth: true
@@ -66,6 +81,11 @@ FormSection {
                 placeholderText: qsTr("Enter external signer path")
                 errorText: root.pathError
                 supportingText: root.signerStatus.infoText || ""
+                //: Opens a file dialog to choose the external signer program.
+                actionText: qsTr("Browse…")
+                actionObjectName: root.namePrefix + "BrowseButton"
+                actionEnabled: root.editable
+                onActionRequested: pathDialog.open()
                 onEditingFinished: root.check()
             }
 

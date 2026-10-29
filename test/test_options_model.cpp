@@ -13,6 +13,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <qml/backendexecutor.h>
 #include <test/mocks/mocknode.h>
 #include <chainparams.h>
@@ -70,6 +71,7 @@ private Q_SLOTS:
     void signerDirtyResetWhenReverted();
     void externalSignerPathValidationRejectsMissingPath();
     void externalSignerPathValidationAcceptsExecutablePath();
+    void externalSignerPathValidationRejectsSpaces();
     void connectionDirtyTracksRestartSettings();
     void natpmpAppliesLiveWithoutRestartDirty();
     void storageDirtyIgnoresDisabledPruneSize();
@@ -651,6 +653,31 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
 
     OptionsQmlModel model(node);
     QVERIFY(model.externalSignerPathValidationError(script_path).isEmpty());
+}
+
+void OptionsModelTests::externalSignerPathValidationRejectsSpaces()
+{
+    MockNode node;
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    QVERIFY(QDir(temp_dir.path()).mkpath("signer tools"));
+
+    const QString script_path = temp_dir.filePath("signer tools/fake-signer");
+    QFile script(script_path);
+    QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Text));
+    script.write("#!/bin/sh\nexit 0\n");
+    script.close();
+    QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    OptionsQmlModel model(node);
+    const QString spaces_error{"The signer path can't contain spaces. Move the signer to a folder whose path has no spaces."};
+    // As picked in a file dialog, as a plain path, and quoted.
+    QCOMPARE(model.externalSignerPathValidationError(QUrl::fromLocalFile(script_path).toString()), spaces_error);
+    QCOMPARE(model.externalSignerPathValidationError(script_path), spaces_error);
+    QCOMPARE(model.externalSignerPathValidationError("\"" + script_path + "\""), spaces_error);
+    // Arguments after an executable without spaces are still allowed.
+    QVERIFY(model.externalSignerPathValidationError("hwi --emulators").isEmpty());
 }
 
 void OptionsModelTests::connectionDirtyTracksRestartSettings()
