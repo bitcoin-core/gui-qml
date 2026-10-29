@@ -726,6 +726,8 @@ void WalletQmlControllerTests::externalSignerCreationRequiresExactlyOneSigner()
 
     QVERIFY(!controller.canCreateExternalSignerWallet());
     QVERIFY(controller.externalSignerName().isEmpty());
+    QVERIFY(controller.externalSignerResponding());
+    QCOMPARE(controller.externalSignerCount(), 2);
     QCOMPARE(controller.externalSignerError(), QString("More than one external signer was found. Connect only one device."));
 }
 

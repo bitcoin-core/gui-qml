@@ -250,6 +250,15 @@ TestCase {
             compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
             compare(deviceRow.errorText, "")
 
+            // Two connected devices are not "not ready"; the value says what is wrong.
+            walletController.externalSignerCount = 2
+            walletController.externalSignerError = "More than one external signer was found. Connect only one device."
+            walletController.refreshExternalSignerStatus()
+            compare(deviceRow.value, "More than one")
+            compare(deviceRow.valueIconSource, "image://images/alert-filled")
+            compare(deviceRow.supportingText, walletController.externalSignerError)
+            walletController.externalSignerCount = 0
+
             walletController.externalSignerError = ""
             walletController.externalSignerName = "trezor_t"
             walletController.canCreateExternalSignerWallet = true

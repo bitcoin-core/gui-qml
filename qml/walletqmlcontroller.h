@@ -46,6 +46,7 @@ class WalletQmlController : public QObject
     Q_PROPERTY(bool canCreateExternalSignerWallet READ canCreateExternalSignerWallet NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(bool externalSignerPathConfigured READ externalSignerPathConfigured NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(bool externalSignerResponding READ externalSignerResponding NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(int externalSignerCount READ externalSignerCount NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerName READ externalSignerName NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerError READ externalSignerError NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString suggestedExternalSignerWalletName READ suggestedExternalSignerWalletName NOTIFY externalSignerStatusChanged)
@@ -104,6 +105,7 @@ public:
     bool canCreateExternalSignerWallet() const { return m_external_signer_path_configured && m_external_signer_count == 1; }
     bool externalSignerPathConfigured() const { return m_external_signer_path_configured; }
     bool externalSignerResponding() const { return m_external_signer_responding; }
+    int externalSignerCount() const { return m_external_signer_count; }
     QString externalSignerName() const { return m_external_signer_name; }
     QString externalSignerError() const { return m_external_signer_error; }
     QString suggestedExternalSignerWalletName() const { return m_suggested_external_signer_wallet_name; }

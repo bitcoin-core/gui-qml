@@ -170,6 +170,8 @@ FormSection {
                     //: Device status: one device was found, but it did not report a name.
                     : qsTr("Found")
             }
+            //: Device status: more than one hardware device is connected; only one can be used.
+            if (walletController.externalSignerCount > 1) return qsTr("More than one")
             //: Device status: a device was found but cannot be used yet, for example because it is locked.
             if (walletController.externalSignerError.length > 0) return qsTr("Not ready")
             //: Device status: the signer command works but found no device.
