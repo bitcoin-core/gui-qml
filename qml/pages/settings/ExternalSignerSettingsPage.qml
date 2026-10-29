@@ -18,15 +18,14 @@ SettingsPage {
     PageHeading {
         objectName: "externalSignerIntroduction"
         Layout.fillWidth: true
-        description: qsTr("Connect a hardware wallet or another external signing tool.")
+        //: Introduction of the external signer settings page.
+        description: qsTr("Connect a hardware wallet or another external signing tool. Creating an external signer wallet needs exactly one connected device.")
     }
 
     ExternalSignerPathSection {
         objectName: "externalSignerPathSection"
         Layout.fillWidth: true
         title: qsTr("Signer path")
-        //: Footer of the external signer path settings.
-        footerText: qsTr("Creating an external signer wallet needs exactly one connected device.")
     }
 
     Component.onCompleted: walletController.refreshExternalSignerStatus()

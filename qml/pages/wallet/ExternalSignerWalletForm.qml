@@ -50,8 +50,10 @@ OnboardingView {
     primaryButtonText: creatingWallet ? qsTr("Creating…") : qsTr("Create wallet")
     primaryButtonObjectName: "createExternalWalletButton"
     primaryButtonEnabled: canCreate
-    //: Looks for the connected hardware wallet again during external signer wallet creation.
-    secondaryButtonText: qsTr("Check again")
+    // Only needed until a usable device is found.
+    secondaryButtonText: walletController.canCreateExternalSignerWallet ? ""
+        //: Looks for the connected hardware wallet again during external signer wallet creation.
+        : qsTr("Check again")
     secondaryButtonObjectName: "externalWalletCheckAgainButton"
     secondaryButtonEnabled: !creatingWallet
     onCloseClicked: root.cancel()

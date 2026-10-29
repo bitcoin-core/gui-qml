@@ -28,8 +28,11 @@ OnboardingView {
     //: Heading of the wallet creation step for setting up HWI, the program Bitcoin Core uses to talk to hardware wallets.
     heading: qsTr("Set up HWI")
     //: Explains HWI at the start of external signer wallet creation. "HWI" is a program name; keep it untranslated.
-    subheading: qsTr("HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet. Download HWI for your operating system from the releases page, extract it, and select the HWI program below. If you already have HWI installed, select your existing program.")
+    subheading: qsTr("HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet. Download HWI for your operating system from the releases page, extract it, and select the HWI executable below. If you already have HWI installed, select your existing executable.")
     maximumContentWidth: 800
+    // The intro and the status rows fill the step; a smaller gap keeps them
+    // in view without scrolling.
+    childTopMargin: Theme.space.xxl
     showBackButton: navigationStack && navigationStack.depth > 1
     showCloseButton: modalView
     primaryButtonObjectName: "externalSignerSetupContinueButton"
@@ -77,8 +80,10 @@ OnboardingView {
             Layout.fillWidth: true
             namePrefix: "externalSignerSetup"
             showCheckButton: false
-            //: Title of the field for the path of the HWI program during wallet creation.
-            title: qsTr("HWI program")
+            // The step sits on a dialog, so the card is one level up.
+            surfaceLevel: root.surfaceLevel
+            //: Title of the field for the path of the HWI executable during wallet creation.
+            title: qsTr("HWI executable")
         }
     }
 

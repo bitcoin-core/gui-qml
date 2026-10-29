@@ -155,6 +155,7 @@ TestCase {
         compare(findChild(form, "externalWalletNameInput").text, "trezor_t2")
         compare(form.primaryButton, findChild(form, "createExternalWalletButton"))
         compare(form.primaryButton.enabled, true)
+        compare(form.secondaryButtonText, "")
         form.primaryButton.clicked()
 
         tryVerify(function() { return findChild(flow, "externalWalletCreatedPage") !== null })
@@ -185,6 +186,10 @@ TestCase {
         verify(findChild(setup, "externalSignerSetupReleasesLink") !== null)
         verify(findChild(setup, "externalSignerSetupGuideLink") !== null)
         verify(findChild(setup, "externalSignerSetupBrowseButton") !== null)
+        const pathSection = findChild(setup, "externalSignerSetupPathSection")
+        compare(pathSection.title, "HWI executable")
+        // The card sits one level up on the dialog's surface.
+        compare(pathSection.surfaceLevel, setup.surfaceLevel)
         compare(findChild(setup, "externalSignerSetupCheckDeviceButton").visible, false)
         compare(findChild(setup, "externalSignerSetupCommandRow").value, "Not set")
         compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
@@ -284,6 +289,8 @@ TestCase {
         compare(form.subheading, "Connected signer: Coldcard Mk4")
         compare(findChild(form, "externalWalletNameInput").text, "Coldcard_Mk4")
         compare(form.primaryButton.enabled, true)
+        // With a usable device there is nothing left to check.
+        compare(form.secondaryButtonText, "")
     }
 
     // Without build support no signer can be used, whatever the signer
