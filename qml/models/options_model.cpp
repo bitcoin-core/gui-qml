@@ -663,8 +663,8 @@ bool OptionsQmlModel::selectCustomDataDir(const QString& path)
     setError({});
     m_executor.submit(this, [local_path] {
         QString error;
-        QmlDataDir::PersistGuiDataDirSelection(local_path, &error);
-        return error;
+        if (!QmlDataDir::PersistGuiDataDirSelection(local_path, &error)) return error;
+        return QString{};
     }, [this, local_path](const QString& error) {
         m_validated_data_dir = local_path;
         m_data_dir_validation_error = error;
@@ -692,7 +692,11 @@ void OptionsQmlModel::useDefaultDataDir()
     if (!m_ready || m_stopping || m_pending || m_validation_pending) return;
     m_validation_pending = true;
     Q_EMIT validationPendingChanged();
-    m_executor.submit(this, [] { QString error; QmlDataDir::PersistDefaultDataDirSelection(&error); return error; }, [this](const QString& error) {
+    m_executor.submit(this, [] {
+        QString error;
+        if (!QmlDataDir::PersistDefaultDataDirSelection(&error)) return error;
+        return QString{};
+    }, [this](const QString& error) {
         if (error.isEmpty()) {
             m_custom_datadir_string.clear();
             Q_EMIT customDataDirStringChanged({});

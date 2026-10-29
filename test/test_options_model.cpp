@@ -124,6 +124,7 @@ private Q_SLOTS:
     void configuredDatadirPreviewKeepsConfigSource();
     void configuredDatadirApplyDoesNotPersistGuiDataDir();
     void explicitDatadirApplyDoesNotPersistGuiDataDir();
+    void onboardingApplyReportsDefaultDataDirSaveFailure();
     void asynchronousOnboardingPreparation_data();
     void asynchronousOnboardingPreparation();
     void qmlOnboardedResetGuiSettingsShowsPreInitOnboarding();
@@ -1260,7 +1261,7 @@ void OptionsModelTests::legacyQtDataDirFallbackReadsOldQtSetting()
 
     QCOMPARE(QmlDataDir::ReadGuiDataDir(), legacy_data_dir);
 
-    QmlDataDir::PersistDefaultDataDirSelection();
+    QVERIFY(QmlDataDir::PersistDefaultDataDirSelection());
     QVERIFY(!legacy_default_settings.settings().contains(SettingsKeys::DATA_DIR));
 }
 
@@ -1892,6 +1893,35 @@ void OptionsModelTests::explicitDatadirApplyDoesNotPersistGuiDataDir()
     QCOMPARE(SettingToBool(args.GetPersistentSetting("qml_onboarded")), true);
 }
 
+void OptionsModelTests::onboardingApplyReportsDefaultDataDirSaveFailure()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    // Fail QSettings writes independently of filesystem permissions and platform.
+    static const auto format = QSettings::registerFormat(QStringLiteral("onboarding-write-failure"),
+        [](QIODevice&, QSettings::SettingsMap&) { return true; },
+        [](QIODevice&, const QSettings::SettingsMap&) { return false; });
+    QVERIFY(format != QSettings::InvalidFormat);
+    QSettings::setPath(format, QSettings::UserScope, directory.path());
+    SavedSettingsFormat settings_format{format};
+
+    // Keep Core's files in the fixture while exercising the default GUI selection.
+    const QString config_path = directory.filePath(QStringLiteral("bitcoin.conf"));
+    QFile config{config_path};
+    QVERIFY(config.open(QIODevice::WriteOnly));
+    QVERIFY(config.write(QStringLiteral("regtest=1\ndatadir=%1\n").arg(directory.path()).toUtf8()) > 0);
+    config.close();
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, {"bitcoinqml", "-conf=" + config_path.toStdString()}, parse_error), parse_error.c_str());
+    QString error;
+    QVERIFY(!QmlOnboardingSettings::ApplyToArgs(args,
+        QmlOnboardingSettings::DataDirSelection{QmlDataDir::DefaultDataDirString(), QmlOnboardingSettings::DataDirSource::UserSelection},
+        {}, QmlCoreSettings::Values{}, &error));
+    QCOMPARE(error, QStringLiteral("Unable to save the selected data directory."));
+    QVERIFY(QFileInfo(directory.filePath(QStringLiteral("regtest/settings.json"))).isFile());
+}
+
 void OptionsModelTests::asynchronousOnboardingPreparation_data()
 {
     QTest::addColumn<QString>("outcome");
@@ -2050,7 +2080,7 @@ void OptionsModelTests::qmlOnboardedLegacyResetFlagShowsPreInitOnboarding()
     QVERIFY(status.should_show_onboarding);
     QCOMPARE(status.active_data_dir, data_dir.path());
 
-    QmlDataDir::PersistDefaultDataDirSelection();
+    QVERIFY(QmlDataDir::PersistDefaultDataDirSelection());
     QVERIFY(!legacy_default_settings.settings().contains(SettingsKeys::DATA_DIR));
     QVERIFY(!legacy_default_settings.settings().contains(QStringLiteral("fReset")));
 }

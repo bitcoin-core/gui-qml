@@ -584,7 +584,10 @@ bool ApplyToArgs(ArgsManager& args, const DataDirSelection& data_dir_selection, 
 
     if (ShouldPersistGuiDataDirSelection(data_dir_selection.source, explicit_datadir)) {
         if (QmlDataDir::IsDefaultDataDir(data_dir)) {
-            QmlDataDir::PersistDefaultDataDirSelection();
+            if (!QmlDataDir::PersistDefaultDataDirSelection(&data_dir_error)) {
+                if (error) *error = data_dir_error;
+                return false;
+            }
         } else if (!QmlDataDir::PersistGuiDataDirSelection(data_dir, &data_dir_error)) {
             if (error) *error = data_dir_error;
             return false;
