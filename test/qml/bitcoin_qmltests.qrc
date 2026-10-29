@@ -19,6 +19,7 @@
         <file>tst_desktopmenuactions.qml</file>
         <file>tst_desktopwallets.qml</file>
         <file>tst_dropdownbutton.qml</file>
+        <file>tst_externalsignerpathsection.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
