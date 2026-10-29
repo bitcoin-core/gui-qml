@@ -310,6 +310,31 @@ TestCase {
         }
     }
 
+    Component {
+        id: compactSignerSectionComponent
+        ExternalSignerPathSection { width: 900; title: "Signer executable" }
+    }
+
+    // Browse sits beside the field at the field's height at any width,
+    // including after an existing page is narrowed.
+    function test_externalSignerBrowseSitsBesideTheField() {
+        const section = createTemporaryObject(compactSignerSectionComponent, settingsWindow.contentItem)
+        verify(section !== null)
+        const field = findChild(section, "externalSignerPathInput")
+        const browse = findChild(section, "externalSignerBrowseButton")
+        const besideField = function() {
+            const fieldTop = field.mapToItem(section, 0, 0)
+            const browseTop = browse.mapToItem(section, 0, 0)
+            return browseTop.y === fieldTop.y && browse.height === field.height
+                && browseTop.x >= fieldTop.x + field.width
+                && browseTop.x + browse.width <= section.width
+        }
+        tryVerify(besideField)
+
+        section.width = 300
+        tryVerify(function() { return field.width > 0 && besideField() })
+    }
+
     function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
         optionsModel.externalSignerPath = "/usr/local/bin/hwi"
         try {
@@ -1225,6 +1250,14 @@ TestCase {
                 compare(signerCommandRow.value, "Not set")
                 compare(signerDeviceRow.visible, false)
                 compare(checkDeviceButton.text, "Check device")
+                // Outside the card, under it and on its right edge.
+                const sectionBottom = signerSection.mapToItem(signerPage, 0, signerSection.height).y
+                const sectionRight = signerSection.mapToItem(signerPage, signerSection.width, 0).x
+                tryVerify(function() {
+                    const buttonTop = checkDeviceButton.mapToItem(signerPage, 0, 0)
+                    return buttonTop.y >= sectionBottom
+                        && Math.abs(buttonTop.x + checkDeviceButton.width - sectionRight) < 1
+                })
                 compare(signerPathInput.height, Theme.size.control)
                 compare(signerPathInput.Accessible.name, "Signer executable")
                 compare(signerPathInput.background.color, Theme.color.surface2)

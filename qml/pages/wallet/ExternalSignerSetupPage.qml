@@ -79,7 +79,6 @@ OnboardingView {
             objectName: "externalSignerSetupPathSection"
             Layout.fillWidth: true
             namePrefix: "externalSignerSetup"
-            showCheckButton: false
             // The step sits on a dialog, so the card is one level up.
             surfaceLevel: root.surfaceLevel
             //: Title of the field for the path of the HWI executable during wallet creation.

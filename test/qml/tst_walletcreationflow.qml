@@ -193,7 +193,7 @@ TestCase {
         verify(findChild(setup, "externalSignerSetupPathInput").placeholderText.indexOf("hwi") >= 0)
         // The card sits one level up on the dialog's surface.
         compare(pathSection.surfaceLevel, setup.surfaceLevel)
-        compare(findChild(setup, "externalSignerSetupCheckDeviceButton").visible, false)
+        compare(findChild(setup, "externalSignerSetupCheckDeviceButton"), null)
         compare(findChild(setup, "externalSignerSetupCommandRow").value, "Not set")
         compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
         compare(setup.primaryButton, findChild(setup, "externalSignerSetupContinueButton"))

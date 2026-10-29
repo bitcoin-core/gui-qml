@@ -17,10 +17,12 @@ FormSection {
 
     // Prefix for the objectNames of the rows, so two instances stay apart.
     property string namePrefix: "externalSigner"
-    property bool showCheckButton: true
     //: Title of the file dialog for choosing the external signer executable, such as HWI.
     property string pathDialogTitle: qsTr("Select signer executable")
 
+    // The field and Browse share one height, which grows with larger text
+    // so neither label outgrows its control.
+    readonly property int controlHeight: Math.round(Theme.size.control * Math.max(1, Theme.textScale))
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
     readonly property bool editable: root.signerStatus.canEdit !== false
     readonly property string pathText: pathInput.text
@@ -81,22 +83,22 @@ FormSection {
         Layout.fillWidth: true
         enabled: root.editable
         bodySpacing: 0
-        bodyItem: GridLayout {
+        // Browse sits beside the field it fills, at the same height. A plain
+        // row never reflows, so narrowing the page only narrows the field.
+        bodyItem: RowLayout {
             Layout.fillWidth: true
             Layout.minimumWidth: 0
-            // The buttons go under the field when there is no room beside it.
-            columns: SizeClass.isCompact(root.width) ? 1 : 3
-            columnSpacing: Theme.space.ml
-            rowSpacing: Theme.space.ml
+            spacing: Theme.space.m
 
             LabeledTextField {
                 id: pathInput
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignTop
                 // The section title is the visible label.
                 accessibleName: root.title
                 fieldObjectName: root.namePrefix + "PathInput"
-                fieldHeight: Theme.size.control
+                fieldHeight: root.controlHeight
                 fieldBackgroundColor: Theme.color.surface(root.surfaceLevel + 2)
                 fieldTextStyle: Theme.text.monoDescription
                 text: optionsModel.externalSignerPath
@@ -117,26 +119,12 @@ FormSection {
             NeutralButton {
                 objectName: root.namePrefix + "BrowseButton"
                 Layout.alignment: Qt.AlignTop
-                Layout.preferredHeight: Theme.size.control
-                // Large matches the primary button's text beside it.
-                buttonSize: NeutralButton.Large
+                Layout.preferredHeight: root.controlHeight
                 surfaceLevel: root.surfaceLevel + 1
                 //: Opens a file dialog to choose the external signer executable.
                 text: qsTr("Browse…")
                 enabled: root.editable
                 onClicked: root.choosePath()
-            }
-
-            PrimaryButton {
-                objectName: root.namePrefix + "CheckDeviceButton"
-                visible: root.showCheckButton
-                Layout.alignment: Qt.AlignTop
-                Layout.preferredHeight: Theme.size.control
-                horizontalPadding: Theme.space.xl
-                //: Button that saves the signer path and checks the command and the connected device.
-                text: qsTr("Check device")
-                enabled: root.pathError.length === 0 && root.editable
-                onClicked: root.check()
             }
         }
     }

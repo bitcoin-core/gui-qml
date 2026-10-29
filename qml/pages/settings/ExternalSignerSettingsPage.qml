@@ -23,10 +23,23 @@ SettingsPage {
     }
 
     ExternalSignerPathSection {
+        id: pathSection
         objectName: "externalSignerPathSection"
         Layout.fillWidth: true
         //: Title of the field for the external signer executable, such as HWI.
         title: qsTr("Signer executable")
+    }
+
+    // Under the results it acts on, where wallet creation's setup step has
+    // its check button.
+    PrimaryButton {
+        objectName: "externalSignerCheckDeviceButton"
+        Layout.alignment: Qt.AlignRight
+        horizontalPadding: Theme.space.xl
+        //: Button that saves the signer path and checks the command and the connected device.
+        text: qsTr("Check device")
+        enabled: pathSection.pathError.length === 0 && pathSection.editable
+        onClicked: pathSection.check()
     }
 
     Component.onCompleted: walletController.refreshExternalSignerStatus()
