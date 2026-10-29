@@ -747,23 +747,52 @@ void WalletQmlController::refreshExternalSignerStatus()
     } else {
         m_node.forceSetting("signer", common::SettingsValue{});
     }
+    bool responding = false;
     int signer_count = 0;
     QString signer_name;
     QString error;
 
     try {
         auto signers = m_node.listExternalSigners();
+        // Without a path Core returns no signers without running anything.
+        responding = path_configured;
         signer_count = static_cast<int>(signers.size());
         if (signer_count == 1) {
             signer_name = QString::fromStdString(signers.front()->getName());
         } else if (signer_count > 1) {
             error = tr("More than one external signer was found. Connect only one device.");
         }
-    } catch (const std::runtime_error&) {
-        error = tr("The signer command did not return valid output. Check that the path is correct.");
+    } catch (const std::runtime_error& e) {
+        // A device that answers with an error, for example because it is
+        // locked, is reported the same way as a command that cannot run.
+        // Only the first means the signer command itself works.
+        error = externalSignerDeviceError(e.what(), signer_path.toStdString());
+        responding = !error.isEmpty();
+        if (!responding) {
+            error = tr("The signer command did not return valid output. Check that the path is correct.");
+        }
     }
 
-    setExternalSignerStatus(path_configured, signer_count, signer_name, error);
+    setExternalSignerStatus(path_configured, responding, signer_count, signer_name, error);
+}
+
+QString WalletQmlController::externalSignerDeviceError(const std::string& error, const std::string& command)
+{
+    // ExternalSigner::Enumerate() names the command in errors about an entry
+    // of the signer list it printed. Other errors mean no list was printed.
+    const std::string prefix{"'" + command + "' "};
+    if (!error.starts_with(prefix)) return {};
+    const std::string detail{error.substr(prefix.size())};
+    if (detail == "error") {
+        return tr("The device reported an error. Unlock it and check again.");
+    }
+    if (detail.starts_with("error: ")) {
+        return tr("The device reported an error: %1").arg(QString::fromStdString(detail.substr(7)));
+    }
+    if (detail == "received invalid response, missing signer fingerprint") {
+        return tr("The device did not share its fingerprint. Unlock it and check again.");
+    }
+    return {};
 }
 
 void WalletQmlController::requestOpenReceive()
@@ -1365,10 +1394,11 @@ QString WalletQmlController::makeSuggestedExternalSignerWalletName(const QString
     return suggested.left(20);
 }
 
-void WalletQmlController::setExternalSignerStatus(bool path_configured, int signer_count, const QString& signer_name, const QString& error)
+void WalletQmlController::setExternalSignerStatus(bool path_configured, bool responding, int signer_count, const QString& signer_name, const QString& error)
 {
     const QString suggested_name = makeSuggestedExternalSignerWalletName(signer_name);
     if (m_external_signer_path_configured == path_configured &&
+        m_external_signer_responding == responding &&
         m_external_signer_count == signer_count &&
         m_external_signer_name == signer_name &&
         m_external_signer_error == error &&
@@ -1377,6 +1407,7 @@ void WalletQmlController::setExternalSignerStatus(bool path_configured, int sign
     }
 
     m_external_signer_path_configured = path_configured;
+    m_external_signer_responding = responding;
     m_external_signer_count = signer_count;
     m_external_signer_name = signer_name;
     m_external_signer_error = error;
