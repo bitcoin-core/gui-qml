@@ -281,6 +281,34 @@ TestCase {
         compare(findChild(page, "transactionOverviewGrid").columns, 2)
         compare(findChild(page, "transactionDetailsGrid").columns, 2)
     }
+    // Third-party links must route through the confirmation popup rather than
+    // opening the URL directly, so the user sees the destination before
+    // leaving the app.
+    function test_thirdPartyTransactionLink_routes_through_confirmation_popup() {
+        testUrlOpener.reset()
+        optionsModel.thirdPartyTransactionUrls = "https://example.com/tx/%s"
+        const data = transaction()
+        const page = createDetail(data)
+        mouseClick(findChild(page, "transactionDetailMoreButton"))
+        const menu = findChild(page, "transactionDetailMoreMenu")
+        tryCompare(menu, "opened", true)
+        const link = findChild(menu.contentItem, "transactionThirdPartyLink_0")
+        verify(link !== null)
+        compare(link.text, "Show in example.com")
+
+        mouseClick(link)
+
+        tryCompare(menu, "visible", false)
+        const popup = findChild(page, "transactionExternalLinkPopup")
+        verify(popup !== null)
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://example.com/tx/" + data.txid)
+        // Nothing is handed to the OS until the user confirms.
+        compare(testUrlOpener.lastUrl(), "")
+        popup.close()
+        tryCompare(popup, "visible", false)
+    }
+
     function test_details_toggle_reveals_raw_transaction() {
         const raw = "02000000" + "abcdef0123456789".repeat(1000)
         const page = createDetail(transaction({rawTransaction: raw}))

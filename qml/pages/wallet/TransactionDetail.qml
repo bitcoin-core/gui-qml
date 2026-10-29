@@ -89,10 +89,12 @@ Page {
                 Repeater {
                     model: optionsModel.thirdPartyTransactionLinks(root.txid)
                     delegate: ContextMenuButton {
+                        required property int index
                         required property var modelData
+                        objectName: "transactionThirdPartyLink_" + index
                         text: qsTr("Show in %1").arg(modelData.host)
                         iconSource: "image://images/export"
-                        onTriggered: Qt.openUrlExternally(modelData.url)
+                        onTriggered: root.openExternalLink(modelData.url)
                     }
                 }
             }
@@ -104,6 +106,17 @@ Page {
     }
 
     PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
+
+    function openExternalLink(link) {
+        externalLinkPopup.link = link
+        externalLinkPopup.open()
+    }
+
+    ExternalPopup {
+        id: externalLinkPopup
+        objectName: "transactionExternalLinkPopup"
+        parent: Overlay.overlay
+    }
 
     ScrollView {
         id: scroll

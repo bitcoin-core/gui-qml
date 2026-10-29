@@ -17,6 +17,7 @@
         <file>tst_desktopmenuactions.qml</file>
         <file>tst_desktopwallets.qml</file>
         <file>tst_dropdownbutton.qml</file>
+        <file>tst_externalpopup.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_feeselection.qml</file>
         <file>tst_formcontrols.qml</file>
