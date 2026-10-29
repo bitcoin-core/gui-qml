@@ -183,8 +183,21 @@ TestCase {
         const setup = findChild(flow, "externalSignerSetupPage")
         compare(setup.heading, "Set up HWI")
         compare(setup.showBackButton, true)
-        verify(findChild(setup, "externalSignerSetupReleasesLink") !== null)
-        verify(findChild(setup, "externalSignerSetupGuideLink") !== null)
+        // The links are inside their sentences and reachable from the keyboard.
+        const releasesLink = findChild(setup, "externalSignerSetupReleasesLink")
+        const guideLink = findChild(setup, "externalSignerSetupGuideLink")
+        // A link at the end takes the sentence's period, so its icon comes last.
+        compare(releasesLink.sentence, "Download HWI for your operating system from its %1")
+        compare(releasesLink.linkText, "releases page.")
+        compare(releasesLink.link.toString(), "https://github.com/bitcoin-core/HWI/releases")
+        compare(guideLink.sentence, "Need help? Follow the %1")
+        compare(guideLink.linkText, "HWI setup guide.")
+        compare(guideLink.link.toString(), "https://github.com/bitcoin-core/HWI#readme")
+        compare(findChild(setup, "externalSignerSetupStepsTitle").text, "Install HWI")
+        compare(releasesLink.activeFocusOnTab, true)
+        compare(releasesLink.Accessible.role, Accessible.Link)
+        compare(releasesLink.Accessible.name, "releases page")
+        compare(setup.subheading, "HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet.")
         const warning = findChild(setup, "externalSignerSetupDownloadWarning")
         compare(warning.text,
                 "Only use HWI from its official releases page. A modified executable can steal your coins.")
@@ -265,13 +278,16 @@ TestCase {
         const popup = findChild(setup, "externalSignerSetupLinkPopup")
         verify(popup !== null)
 
-        findChild(setup, "externalSignerSetupReleasesLink").clicked()
+        findChild(setup, "externalSignerSetupReleasesLink").linkActivated("https://github.com/bitcoin-core/HWI/releases")
         tryCompare(popup, "opened", true)
         compare(popup.link, "https://github.com/bitcoin-core/HWI/releases")
         popup.close()
         tryCompare(popup, "opened", false)
 
-        findChild(setup, "externalSignerSetupGuideLink").clicked()
+        // The keyboard opens the same link from the focused sentence.
+        const guideLink = findChild(setup, "externalSignerSetupGuideLink")
+        guideLink.forceActiveFocus()
+        keyClick(Qt.Key_Return)
         tryCompare(popup, "opened", true)
         compare(popup.link, "https://github.com/bitcoin-core/HWI#readme")
         popup.close()

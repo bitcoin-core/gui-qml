@@ -31,7 +31,7 @@ OnboardingView {
     //: Heading of the wallet creation step for setting up HWI, the program Bitcoin Core uses to talk to hardware wallets.
     heading: qsTr("Set up HWI")
     //: Explains HWI at the start of external signer wallet creation. "HWI" is a program name; keep it untranslated.
-    subheading: qsTr("HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet. Download HWI for your operating system from the releases page, extract it, and select the HWI executable below. If you already have HWI installed, select your existing executable.")
+    subheading: qsTr("HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet.")
     maximumContentWidth: 800
     // The intro and the status rows fill the step; a smaller gap keeps them
     // in view without scrolling.
@@ -62,21 +62,73 @@ OnboardingView {
         property alias pathSection: pathSection
         spacing: Theme.space.l
 
-        Flow {
+        // Titled like the "HWI executable" section under it, so the step
+        // reads as what to do, then where to do it. The links are part of
+        // the sentences (LinkText).
+        ColumnLayout {
+            objectName: "externalSignerSetupSteps"
             Layout.fillWidth: true
             spacing: Theme.space.m
 
-            LinkButton {
-                objectName: "externalSignerSetupReleasesLink"
-                //: Link to the download page for HWI releases.
-                text: qsTr("HWI releases")
-                onClicked: linkPopup.openLink("https://github.com/bitcoin-core/HWI/releases")
+            CoreText {
+                objectName: "externalSignerSetupStepsTitle"
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                //: Title of the HWI install instructions in the external signer setup step.
+                text: qsTr("Install HWI")
+                color: Theme.color.neutral9
+                textStyle: Theme.text.subheading
+                horizontalAlignment: Text.AlignLeft
             }
-            LinkButton {
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                spacing: Theme.space.s
+
+                StepRow {
+                    number: 1
+                    LinkText {
+                        objectName: "externalSignerSetupReleasesLink"
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignBaseline
+                        onActivated: function(link) { linkPopup.openLink(link) }
+                        link: "https://github.com/bitcoin-core/HWI/releases"
+                        //: Link text that ends the first HWI install step, with the sentence's period, so the external-link icon after it comes last.
+                        linkText: qsTr("releases page.")
+                        //: First HWI install step. %1 is the "releases page." link, which already carries the period.
+                        sentence: qsTr("Download HWI for your operating system from its %1")
+                    }
+                }
+
+                StepRow {
+                    number: 2
+                    CoreText {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignBaseline
+                        //: Second HWI install step.
+                        text: qsTr("Extract it, then select the HWI executable below. If HWI is already installed, select that one.")
+                        color: Theme.color.neutral7
+                        textStyle: Theme.text.description
+                        wrap: true
+                        horizontalAlignment: Text.AlignLeft
+                    }
+                }
+            }
+
+            LinkText {
                 objectName: "externalSignerSetupGuideLink"
-                //: Link to the HWI setup documentation.
-                text: qsTr("HWI setup guide")
-                onClicked: linkPopup.openLink("https://github.com/bitcoin-core/HWI#readme")
+                Layout.fillWidth: true
+                onActivated: function(link) { linkPopup.openLink(link) }
+                Layout.leftMargin: Theme.space.xs
+                Layout.rightMargin: Theme.space.xs
+                link: "https://github.com/bitcoin-core/HWI#readme"
+                //: Link text that ends the HWI help line, with the sentence's period, so the external-link icon after it comes last.
+                linkText: qsTr("HWI setup guide.")
+                //: Offers help with installing HWI. %1 is the "HWI setup guide." link, which already carries the period.
+                sentence: qsTr("Need help? Follow the %1")
             }
         }
 
@@ -106,6 +158,27 @@ OnboardingView {
             title: qsTr("HWI executable")
             //: Title of the file dialog for choosing the HWI executable during wallet creation.
             pathDialogTitle: qsTr("Select HWI executable")
+        }
+    }
+
+    // A numbered step: the number, then the step's text with a hanging
+    // indent. The number lines up with the text's first line, which an
+    // inline link icon can make taller than the others.
+    component StepRow: RowLayout {
+        id: stepRow
+        required property int number
+
+        Layout.fillWidth: true
+        spacing: Theme.space.s
+
+        CoreText {
+            Layout.alignment: Qt.AlignBaseline
+            Layout.preferredWidth: Theme.space.l
+            //: Number of a step in a list of instructions, such as "1.".
+            text: qsTr("%1.").arg(stepRow.number)
+            color: Theme.color.neutral7
+            textStyle: Theme.text.description
+            horizontalAlignment: Text.AlignLeft
         }
     }
 
