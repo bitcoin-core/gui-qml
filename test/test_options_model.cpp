@@ -1983,6 +1983,16 @@ void OptionsModelTests::asynchronousOnboardingPreparation()
     else if (outcome == "unknown") QVERIFY(error.contains("Unknown exception"));
     else if (outcome == "settings-error") QVERIFY(!error.isEmpty());
     else QVERIFY(error.isEmpty());
+
+    // Preparation has already drained the executor. Shutdown must still finish once.
+    QSignalSpy shutdown_finished{&model, &OnboardingOptionsModel::shutdownFinished};
+    model.beginShutdown();
+    model.beginShutdown();
+    QVERIFY(shutdown_finished.empty());
+    QTRY_COMPARE(shutdown_finished.size(), 1);
+    model.beginShutdown();
+    QCoreApplication::processEvents();
+    QCOMPARE(shutdown_finished.size(), 1);
 }
 
 void OptionsModelTests::qmlOnboardedResetGuiSettingsShowsPreInitOnboarding()

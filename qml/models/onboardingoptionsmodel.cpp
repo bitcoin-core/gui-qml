@@ -68,12 +68,17 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
 
 void OnboardingOptionsModel::beginShutdown()
 {
-    if (m_stopping) return;
+    if (m_shutdown_requested) return;
+    m_shutdown_requested = true;
     m_stopping = true;
     ++m_preview_request_id;
     ++m_storage_request_id;
-    connect(m_executor.get(), &BackendExecutor::drained, this, &OnboardingOptionsModel::shutdownFinished);
-    m_executor->shutdown();
+    if (m_executor->isDrained()) {
+        QMetaObject::invokeMethod(this, &OnboardingOptionsModel::shutdownFinished, Qt::QueuedConnection);
+    } else {
+        connect(m_executor.get(), &BackendExecutor::drained, this, &OnboardingOptionsModel::shutdownFinished);
+        m_executor->shutdown();
+    }
     Q_EMIT canFinishChanged();
 }
 
@@ -89,7 +94,7 @@ OnboardingOptionsModel::~OnboardingOptionsModel() = default;
 
 void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool()> prepare_node)
 {
-    if (m_preparing) return;
+    if (m_preparing || m_stopping) return;
     m_preparing = true;
     m_stopping = true;
     ++m_preview_request_id;

@@ -181,6 +181,7 @@ private:
     std::unique_ptr<BackendExecutor> m_executor;
     bool m_preparing{false};
     bool m_stopping{false};
+    bool m_shutdown_requested{false};
     bool m_preview_pending{true};
     bool m_preview_in_flight{false};
     uint64_t m_preview_request_id{0};
