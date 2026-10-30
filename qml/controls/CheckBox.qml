@@ -9,14 +9,17 @@ import org.bitcoincore.qt 1.0
 Controls.CheckBox {
     id: root
 
-    property color checkedColor: Theme.color.orange
-    property color borderColor: Theme.color.neutral4
-    property color checkColor: Theme.color.white
-    property bool animationsEnabled: true
+    property color checkedColor: Theme.color.accent
+    property color borderColor: Theme.color.controlBorder
+    property color checkColor: Theme.color.accentForeground
+    property bool animationsEnabled: Theme.motion.animated
+    // Secondary line under the label, such as "Recommended".
+    property string description: ""
 
     padding: 0
     spacing: 10
-    implicitHeight: 28
+    implicitHeight: Math.max(Theme.size.controlSmall, implicitContentHeight + topPadding + bottomPadding)
+    Accessible.description: description
     focusPolicy: Qt.StrongFocus
     hoverEnabled: AppMode.isDesktop
 
@@ -38,8 +41,8 @@ Controls.CheckBox {
         property: "checkProgress"
         from: 0
         to: 1
-        duration: 350
-        easing.type: Easing.OutCubic
+        duration: Theme.motion.slow
+        easing.type: Theme.motion.easing.enter
     }
 
     indicator: Rectangle {
@@ -51,12 +54,21 @@ Controls.CheckBox {
         y: (root.height - height) / 2
         radius: 6
         color: root.checked ? root.checkedColor : "transparent"
-        border.width: root.visualFocus || !root.checked ? 2 : 0
-        border.color: root.visualFocus ? Theme.color.orange : root.borderColor
+        border.width: root.checked ? 0 : 2
+        border.color: root.borderColor
+        opacity: root.enabled ? 1.0 : 0.4
+        // Fade the box as one layer, so the fill does not show through the check.
+        layer.enabled: !root.enabled
 
         Behavior on color {
             enabled: root.animationsEnabled
-            ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+            ColorAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
+        }
+
+        FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
+            visible: root.visualFocus
+            targetRadius: indicator.radius
         }
 
         Canvas {
@@ -101,13 +113,42 @@ Controls.CheckBox {
         }
     }
 
-    contentItem: CoreText {
-        text: root.text
-        leftPadding: root.indicator.width + root.spacing
-        verticalAlignment: Text.AlignVCenter
-        horizontalAlignment: Text.AlignLeft
-        font: Theme.text.description.font
-        color: root.enabled ? Theme.color.neutral7 : Theme.color.neutral5
-        wrapMode: Text.WordWrap
+    // Positioned by hand, not in a ColumnLayout: Qt 6.4 layouts report a
+    // wrapped label's single-line height, so the row overlapped what follows.
+    contentItem: Item {
+        readonly property real textX: root.indicator.width + root.spacing
+        readonly property real textHeight: label.height
+            + (descriptionLabel.visible ? Theme.space.xxs + descriptionLabel.height : 0)
+        implicitWidth: textX + Math.max(label.implicitWidth,
+            descriptionLabel.visible ? descriptionLabel.implicitWidth : 0)
+        implicitHeight: textHeight
+
+        CoreText {
+            id: label
+            x: parent.textX
+            y: Math.max(0, (parent.height - parent.textHeight) / 2)
+            width: Math.max(0, parent.width - x)
+            text: root.text
+            verticalAlignment: Text.AlignVCenter
+            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.description
+            color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+            wrapMode: Text.WordWrap
+            Accessible.ignored: true
+        }
+
+        CoreText {
+            id: descriptionLabel
+            visible: root.description.length > 0
+            x: parent.textX
+            y: label.y + label.height + Theme.space.xxs
+            width: Math.max(0, parent.width - x)
+            text: root.description
+            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.caption
+            color: root.enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+            wrapMode: Text.WordWrap
+            Accessible.ignored: true
+        }
     }
 }

@@ -29,6 +29,12 @@ Page {
         badgeEntrance.start()
         textEntrance.start()
         buttonsEntrance.start()
+        // Under reduced motion everything appears at once, without the staged entrance.
+        if (Theme.motion.reduced) {
+            badgeEntrance.complete()
+            textEntrance.complete()
+            buttonsEntrance.complete()
+        }
     }
 
     ColumnLayout {
@@ -49,7 +55,7 @@ Page {
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Theme.color.green
+                color: Theme.color.success
             }
 
             Canvas {
@@ -83,7 +89,7 @@ Page {
                                    start[1] + (end[1] - start[1]) * fraction)
                         remaining -= length
                     }
-                    ctx.strokeStyle = Theme.color.white
+                    ctx.strokeStyle = Theme.color.accentForeground
                     ctx.lineWidth = 5
                     ctx.lineCap = "round"
                     ctx.lineJoin = "round"
@@ -103,9 +109,7 @@ Page {
             CoreText {
                 Layout.fillWidth: true
                 text: qsTr("Transaction sent")
-                font: Theme.text.headline.font
-                lineHeight: Theme.text.headline.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.headline
                 horizontalAlignment: Text.AlignHCenter
             }
 
@@ -114,9 +118,7 @@ Page {
                 Layout.fillWidth: true
                 text: root.descriptionText
                 color: Theme.color.neutral7
-                font: Theme.text.description.font
-                lineHeight: Theme.text.description.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignHCenter
             }
         }
@@ -125,7 +127,7 @@ Page {
             id: actions
             Layout.fillWidth: true
             Layout.topMargin: 32
-            columns: width < 340 ? 1 : 2
+            columns: width < SizeClass.stackColumnsMax ? 1 : 2
             columnSpacing: 12
             rowSpacing: 12
             opacity: 0
@@ -140,7 +142,7 @@ Page {
                 onClicked: root.viewNewTransaction(root.txid)
             }
 
-            ContinueButton {
+            PrimaryButton {
                 objectName: "sendResultDoneButton"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46

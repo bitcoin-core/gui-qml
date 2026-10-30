@@ -13,7 +13,7 @@ ListRow {
     property url linkIconSource: "image://images/export"
     property int linkIconSize: 18
     property int valueMaximumWidth: 300
-    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
+    property color valueColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
     property color linkIconColor: valueColor
     property var valueTextStyle: Theme.text.description
 
@@ -23,16 +23,14 @@ ListRow {
     accessibleRole: Accessible.Link
 
     trailingItem: RowLayout {
-        spacing: 6
+        spacing: Theme.space.s
 
         CoreText {
             objectName: root.objectName.length > 0 ? root.objectName + "Value" : ""
             Layout.maximumWidth: root.valueMaximumWidth
             text: root.value
             color: root.valueColor
-            font: root.valueTextStyle.font
-            lineHeight: root.valueTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.valueTextStyle
             horizontalAlignment: Text.AlignRight
             wrap: false
             elide: Text.ElideMiddle

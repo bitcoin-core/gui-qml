@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import "../../controls"
+import "../../components"
 
 OnboardingView {
     id: root
@@ -12,7 +13,7 @@ OnboardingView {
     signal next()
     property bool useSharedMotion: false
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false
@@ -54,7 +55,7 @@ OnboardingView {
                             width: 14
                             height: 14
                             radius: 2
-                            color: index === 9 ? Theme.color.orange : "#F9D63C"
+                            color: index === 9 ? Theme.color.accent : Theme.color.illustrationSignal
                         }
                     }
                 }

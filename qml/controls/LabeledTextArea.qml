@@ -76,7 +76,7 @@ LabeledField {
         textFormat: TextEdit.PlainText
         font: root.textStyle.font
         color: Theme.color.neutral9
-        placeholderTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
+        placeholderTextColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
         background: Item {}
         selectByMouse: true
         Accessible.name: root.label
@@ -87,6 +87,14 @@ LabeledField {
                 root.pasteRequested()
                 event.accepted = true
             }
+        }
+        Keys.onTabPressed: (event) => {
+            const next = input.nextItemInFocusChain(true)
+            if (next && next !== input) next.forceActiveFocus(Qt.TabFocusReason)
+        }
+        Keys.onBacktabPressed: (event) => {
+            const previous = input.nextItemInFocusChain(false)
+            if (previous && previous !== input) previous.forceActiveFocus(Qt.BacktabFocusReason)
         }
 
         Component.onCompleted: if (root.interceptPaste) syncFromModel()

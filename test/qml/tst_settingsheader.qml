@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtTest 1.2
 
 import "../../qml/controls"
+import "../../qml/components"
 
 TestCase {
     id: testCase
@@ -80,7 +81,7 @@ TestCase {
     }
 
     function test_compactBackIconKeepsSizeAcrossThemeChanges() {
-        const originalDark = Theme.dark
+        const originalPaletteId = Theme.paletteId
         const header = createTemporaryObject(compactBackHeader, testCase)
         verify(header !== null)
         const icon = findChild(header, "settingsHeaderBackIcon")
@@ -89,9 +90,9 @@ TestCase {
         compare(icon.width, 24)
         compare(icon.height, 24)
 
-        Theme.dark = !originalDark
+        Theme.paletteId = Theme.dark ? "core-light" : "core-dark"
         tryCompare(icon, "width", 24)
         tryCompare(icon, "height", 24)
-        Theme.dark = originalDark
+        Theme.paletteId = originalPaletteId
     }
 }

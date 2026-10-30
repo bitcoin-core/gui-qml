@@ -78,6 +78,16 @@ TestCase {
     }
 
     Component {
+        id: compactSettingsViewComponent
+
+        SettingsView {
+            width: 390
+            height: 700
+            selectedSectionId: "display"
+        }
+    }
+
+    Component {
         id: firstPage
 
         Item {
@@ -117,7 +127,7 @@ TestCase {
         AppMode.walletEnabled = true
         AppMode.isDesktop = true
         nodeModel.mempoolInformationAvailable = true
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
         optionsModel.displayUnit = 0
         optionsModel.moneyFontChoice = "embedded"
@@ -155,7 +165,7 @@ TestCase {
         compare(walletGroup.text, "Wallet")
         compare(generalGroup.text, "General")
         compare(networkGroup.text, "Network")
-        compare(walletGroup.font.styleName, "Semi Bold")
+        compare(walletGroup.font.weight, Font.DemiBold)
 
         let activatedSection = ""
         sidebar.sectionActivated.connect(function(sectionId) {
@@ -280,8 +290,8 @@ TestCase {
         verify(networkTrafficSentGraph !== null)
         compare(networkTrafficHeading.descriptionTextStyle.font.pixelSize,
             Theme.text.description.font.pixelSize)
-        compare(networkTrafficDescription.horizontalAlignment, Text.AlignHCenter)
-        compare(networkTrafficSection.backgroundColor, Theme.color.neutral1)
+        compare(networkTrafficDescription.horizontalAlignment, Text.AlignLeft)
+        compare(networkTrafficSection.backgroundColor, Theme.color.surface1)
         compare(networkTrafficSentRow.bottomPadding, 16)
         compare(networkTrafficRangePicker.model.length, 4)
         networkTrafficRangePicker.selected(1, networkTrafficRangePicker.model[1])
@@ -420,13 +430,13 @@ TestCase {
         compare(heading.title, "")
         compare(title.visible, false)
         compare(heading.description, "Add a wallet to manage its settings.")
-        compare(action.text, "Add wallet")
+        compare(action.text, "Add wallet…")
 
         walletController.noWalletsFound = false
         compare(heading.title, "No wallet selected")
         compare(title.visible, true)
         compare(heading.description, "Select a wallet to manage wallet-specific settings.")
-        compare(action.text, "Select wallet")
+        compare(action.text, "Select wallet…")
     }
 
     function test_settingsViewPinsSidebarAndLetsPageContainerGrow() {
@@ -442,16 +452,76 @@ TestCase {
 
         tryCompare(sidebarSurface, "x", 0)
         tryCompare(sidebarSurface, "width", view.sidebarWidth)
-        compare(sidebarSurface.color, Theme.color.neutral1)
+        compare(sidebarSurface.color, Theme.color.surface1)
         compare(sidebarHeading.text, "Settings")
         compare(sidebarHeading.font.pixelSize, Theme.text.display.font.pixelSize)
         compare(sidebarHeading.horizontalAlignment, Text.AlignLeft)
-        tryCompare(view.pageContainer, "x", view.sidebarWidth)
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        verify(pageColumn !== null)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
         tryCompare(view.pageContainer, "width", view.width - view.sidebarWidth)
+        compare(findChild(view, "navigationSplitSeparator").visible, false)
 
-        verify(displayPage.contentHorizontalPadding >= 24)
+        verify(displayPage.contentHorizontalPadding >= Theme.space.pageCompact)
         verify(displayPage.contentLayout.width <= displayPage.maximumContentWidth)
         verify(displayPage.contentLayout.width < view.pageContainer.width)
+    }
+
+    function test_compactSettingsShowOneColumnWithBackToTheSidebar() {
+        const view = createTemporaryObject(compactSettingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        const split = findChild(view, "settingsSplitView")
+        const sidebarColumn = findChild(view, "navigationSplitPrimary")
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        const sidebarSurface = findChild(view, "settingsSidebarSurface")
+        verify(split !== null)
+        verify(sidebarSurface !== null)
+
+        compare(view.compact, true)
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        compare(sidebarColumn.x, 0)
+        compare(sidebarSurface.width, 390)
+        compare(pageColumn.x, 390)
+        compare(pageColumn.visible, false)
+        compare(view.sidebar.currentSectionId, "")
+
+        view.sidebar.sectionActivated("connection")
+        tryCompare(pageColumn, "x", 0)
+        compare(pageColumn.visible, true)
+        compare(view.pageContainer.width, 390)
+        compare(sidebarColumn.x, -390)
+        compare(sidebarColumn.visible, false)
+        const connectionPage = findChild(view, "connectionSettingsPage")
+        verify(connectionPage !== null)
+        compare(connectionPage.showBackButton, true)
+
+        const back = findChild(connectionPage, "settingsSectionBackButton")
+        verify(back !== null)
+        back.clicked()
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        tryCompare(pageColumn, "x", 390)
+        compare(sidebarColumn.x, 0)
+        compare(view.selectedSectionId, "connection")
+
+        view.openWalletSettings()
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(view.selectedSectionId, "wallet")
+
+        view.width = 900
+        compare(view.compact, false)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
+        compare(sidebarSurface.width, view.sidebarWidth)
+        compare(connectionPage.showBackButton, false)
+        compare(view.sidebar.currentSectionId, "wallet")
+
+        // Narrowing shows the open section's page, even when the list was
+        // the last compact column.
+        split.showPrimary()
+        view.selectSection("display")
+        view.width = 390
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(pageColumn.x, 0)
+        compare(view.pageContainer.currentSectionId, "display")
     }
 
     function test_dataHeavyPagesUseAvailableWidthWithResponsivePadding() {
@@ -462,7 +532,7 @@ TestCase {
         view.selectSection("network-traffic")
         const networkTrafficPage = findChild(view, "networkTrafficSettingsPage")
         verify(networkTrafficPage !== null)
-        verify(networkTrafficPage.contentHorizontalPadding >= 24)
+        verify(networkTrafficPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(networkTrafficPage.contentLayout, "width",
             networkTrafficPage.scrollView.availableWidth
                 - networkTrafficPage.contentHorizontalPadding * 2)
@@ -473,7 +543,7 @@ TestCase {
         const debugLogContent = findChild(view, "debugLogContentLayout")
         verify(debugLogPage !== null)
         verify(debugLogContent !== null)
-        verify(debugLogPage.contentHorizontalPadding >= 24)
+        verify(debugLogPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(debugLogContent, "width",
             debugLogPage.width - debugLogPage.contentHorizontalPadding * 2)
         verify(debugLogContent.width > 840)
@@ -562,7 +632,7 @@ TestCase {
         compare(header.title, "RPC console")
         compare(header.showBackButton, false)
         compare(page.maximumContentWidth, page.width)
-        verify(page.contentHorizontalPadding >= 24)
+        verify(page.contentHorizontalPadding >= Theme.space.pageCompact)
         compare(heading.description, "Execute RPC commands and inspect their responses.")
         compare(warning.text,
                 "Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")
@@ -573,8 +643,8 @@ TestCase {
         compare(searchBar.height, 48)
         compare(search.height, 40)
         compare(searchBar.background.visible, true)
-        compare(searchBar.background.color, Theme.color.neutral1)
-        compare(search.background.color, Theme.color.neutral2)
+        compare(searchBar.background.color, Theme.color.surface1)
+        compare(search.background.color, Theme.color.surface2)
         compare(searchIcon.source.toString(), "image://images/search")
         compare(searchClearButton.visible, true)
         compare(previousSearchIcon.width, 14)
@@ -583,8 +653,8 @@ TestCase {
         compare(nextSearchIcon.height, 14)
         compare(previousSearchIcon.strokeWidth, 2)
         compare(nextSearchIcon.strokeWidth, 2)
-        compare(previousSearchIcon.strokeColor, Theme.color.neutral4)
-        compare(nextSearchIcon.strokeColor, Theme.color.neutral4)
+        compare(previousSearchIcon.strokeColor, Theme.color.disabledContent)
+        compare(nextSearchIcon.strokeColor, Theme.color.disabledContent)
         compare(previousSearchIcon.rotation, -90)
         compare(nextSearchIcon.rotation, 90)
         compare(previousSearchButton.enabled, false)
@@ -604,10 +674,10 @@ TestCase {
         compare(helpFooter.text,
                 "Use ↑↓ arrows to navigate history. Type help for an overview of available commands. Type help-console for console syntax help.")
         compare(commandInput.placeholderText, "Enter command…")
-        compare(commandInputRow.color, Theme.color.neutral1)
-        compare(commandInput.background.color, Theme.color.neutral2)
+        compare(commandInputRow.color, Theme.color.surface1)
+        compare(commandInput.background.color, Theme.color.surface2)
         compare(commandInputDivider.height, 1)
-        compare(commandInputDivider.color, Theme.color.neutral2)
+        compare(commandInputDivider.color, Theme.color.surfaceDivider)
         compare(rpcConsole.showHeader, false)
         compare(rpcConsole.tabActive, true)
         compare(rpcConsole.outputFontPixelSize, 13)
@@ -625,22 +695,22 @@ TestCase {
         tryCompare(previousSearchButton, "activeFocus", true)
         // FocusBorder animates visibility, so wait for both showing and hiding.
         tryCompare(previousSearchFocusBorder, "visible", true)
-        compare(previousSearchFocusBorder.border.color, Theme.color.purple)
+        compare(previousSearchFocusBorder.border.color, Theme.color.focus)
         tryCompare(nextSearchFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(nextSearchButton, "activeFocus", true)
         tryCompare(nextSearchFocusBorder, "visible", true)
-        compare(nextSearchFocusBorder.border.color, Theme.color.purple)
+        compare(nextSearchFocusBorder.border.color, Theme.color.focus)
         tryCompare(previousSearchFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(decreaseButton, "activeFocus", true)
         tryCompare(decreaseFocusBorder, "visible", true)
-        compare(decreaseFocusBorder.border.color, Theme.color.purple)
+        compare(decreaseFocusBorder.border.color, Theme.color.focus)
         tryCompare(increaseFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(increaseButton, "activeFocus", true)
         tryCompare(increaseFocusBorder, "visible", true)
-        compare(increaseFocusBorder.border.color, Theme.color.purple)
+        compare(increaseFocusBorder.border.color, Theme.color.focus)
         tryCompare(decreaseFocusBorder, "visible", false)
 
         mouseClick(increaseButton)
@@ -661,6 +731,25 @@ TestCase {
 
         view.selectSection("about")
         tryCompare(rpcConsole, "tabActive", false)
+    }
+
+    function test_settings_scroll_to_keyboard_focus() {
+        const originalHeight = settingsWindow.height
+        settingsWindow.height = 420
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(waitForRendering(view))
+            const row = findChild(view, "displayTransactionUrlsRow")
+            const page = view.pageContainer.currentItem
+            const viewport = page.scrollView.contentItem
+            row.forceActiveFocus(Qt.TabFocusReason)
+            tryVerify(function() {
+                const y = row.mapToItem(viewport, 0, 0).y
+                return y >= 0 && y + row.height <= viewport.height + 1
+            })
+        } finally {
+            settingsWindow.height = originalHeight
+        }
     }
 
     function test_displayPageUsesInlineGenericPickers() {
@@ -729,7 +818,7 @@ TestCase {
         const embeddedMoneyFontWidth = moneyFontPicker.width
         moneyFontPicker.activated("best_system")
         compare(optionsModel.moneyFontChoice, "best_system")
-        compare(moneyFontPicker.currentText, "System Monospace")
+        compare(moneyFontPicker.currentText, "System monospace")
         tryVerify(function() { return moneyFontPicker.width > embeddedMoneyFontWidth })
         moneyFontPicker.activated("embedded")
         compare(optionsModel.moneyFontChoice, "embedded")
@@ -748,6 +837,53 @@ TestCase {
             compare(optionsModel.displayUnit, unit.value)
             compare(displayUnitPicker.currentValue, unit.value)
             compare(displayUnitPicker.currentText, unit.text)
+        }
+
+        const sizeSlider = findChild(view, "displayTextSizeSlider")
+        compare(sizeSlider.minimumValue, 0)
+        compare(sizeSlider.maximumValue, Theme.textScales.length - 1)
+        compare(sizeSlider.Accessible.description, findChild(view, "displayTextSizePercentage").text)
+
+        const reduceMotionRow = findChild(view, "displayReduceMotionRow")
+        verify(reduceMotionRow !== null)
+        compare(reduceMotionRow.checked, Theme.reduceMotion)
+        const reduceMotion = Theme.reduceMotion
+        reduceMotionRow.switchItem.toggle()
+        reduceMotionRow.switchItem.toggled()
+        compare(Theme.reduceMotion, !reduceMotion)
+        Theme.reduceMotion = reduceMotion
+
+        // The View menu and its shortcut change the setting too, so the row follows it.
+        const hideAmountsRow = findChild(view, "displayHideAmountsRow")
+        verify(hideAmountsRow !== null)
+        try {
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            hideAmountsRow.switchItem.toggle()
+            hideAmountsRow.switchItem.toggled()
+            compare(optionsModel.hideAmounts, true)
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            optionsModel.hideAmounts = true
+            compare(hideAmountsRow.checked, true)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+
+        const textSizeSlider = findChild(view, "displayTextSizeSlider")
+        verify(textSizeSlider !== null)
+        const textScale = Theme.textScale
+        try {
+            Theme.textScale = 1
+            compare(textSizeSlider.value, 3)
+            compare(textSizeSlider.stepCount, 6)
+            textSizeSlider.value = 5
+            textSizeSlider.moved()
+            compare(Theme.textScale, Theme.textScales[5])
+            Theme.textScale = Theme.textScales[0]
+            compare(textSizeSlider.value, 0)
+        } finally {
+            Theme.textScale = textScale
         }
 
         designSystemRow.clicked()
@@ -929,7 +1065,7 @@ TestCase {
                 const signerPathRow = findChild(view, "externalSignerPathRow")
                 const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
-                const signerPathFocusBorder = findChild(view, "externalSignerPathFocusBorder")
+                const signerPathFocusBorder = findChild(view, "externalSignerPathInputFocusRing")
                 const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
                 const signerStatusText = findChild(view, "externalSignerStatusText")
                 const checkDeviceButton = findChild(view, "externalSignerCheckDeviceButton")
@@ -951,14 +1087,13 @@ TestCase {
                 compare(signerPathRow.bottomPadding, 16)
                 compare(signerFooter.text,
                     "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-                compare(signerStatusIndicator.color, Theme.color.red)
+                compare(signerStatusIndicator.color, Theme.color.danger)
                 compare(checkDeviceButton.text, "Check device")
-                compare(signerPathInput.implicitHeight, 37)
-                compare(signerPathInput.leftPadding, 15)
-                compare(signerPathInput.rightPadding, 10)
-                compare(signerPathInput.background.color, Theme.color.neutral2)
-                compare(signerPathInput.background.radius, 5)
-                compare(signerPathFocusBorder.border.color, Theme.color.orange)
+                compare(signerPathInput.height, Theme.size.control)
+                compare(signerPathInput.Accessible.name, "Signer path")
+                compare(signerPathInput.background.color, Theme.color.surface2)
+                compare(signerPathInput.background.radius, Theme.radius.field)
+                compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)
                 compare(signerStatusIndicator.width, 10)
                 compare(signerStatusIndicator.height, 10)
             }

@@ -18,21 +18,20 @@ AbstractButton {
     property int iconSize: large ? 20 : 15
     property int contentSpacing: large ? 4 : 8
     property var textStyle: large ? Theme.text.buttonStrong : Theme.text.captionStrong
-    property int textFontPixelSize: textStyle.pixelSize
-    property color textColor: enabled ? Theme.color.neutral9 : Theme.color.neutral5
-    property bool isOnSurface: true
-    property color backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
-    property color hoverBackgroundColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
+    property color textColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    property int surfaceLevel: 1
+    property color backgroundColor: Theme.color.surface(surfaceLevel + 1)
+    property color hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
     property bool forceHoverBackground: false
-    property bool showBorder: isOnSurface
-    property int backgroundRadius: 5
-    property string focusBorderObjectName: ""
+    property bool showBorder: surfaceLevel > 0
+    property int backgroundRadius: Theme.radius.s
+    property string focusBorderObjectName: objectName.length > 0 ? objectName + "FocusBorder" : ""
     readonly property color currentBackgroundColor: forceHoverBackground || hovered || down
         ? hoverBackgroundColor : backgroundColor
-    readonly property bool useNeutral1BorderGradient: Qt.colorEqual(backgroundColor, Theme.color.neutral1)
-    readonly property color borderReferenceColor: useNeutral1BorderGradient ? Theme.color.neutral1 : Theme.color.neutral2
-    readonly property var borderGradientReference: useNeutral1BorderGradient
-        ? Theme.color.neutral1SurfaceBorderGradient : Theme.color.neutral2SurfaceBorderGradient
+    readonly property bool useSurface1BorderGradient: Qt.colorEqual(backgroundColor, Theme.color.surface1)
+    readonly property color borderReferenceColor: useSurface1BorderGradient ? Theme.color.surface1 : Theme.color.surface2
+    readonly property var borderGradientReference: useSurface1BorderGradient
+        ? Theme.color.surface1BorderGradient : Theme.color.surface2BorderGradient
     readonly property color borderTopReferenceColor: borderGradientReference[0]
     readonly property color borderBottomReferenceColor: borderGradientReference[1]
     readonly property color borderTopColor: shiftedBorderColor(currentBackgroundColor, borderTopReferenceColor)
@@ -52,11 +51,12 @@ AbstractButton {
     horizontalPadding: large ? 20 : 13
     hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
-    scale: enabled && down ? 0.98 : 1
+    scale: enabled && down ? Theme.motion.pressScale : 1
     Accessible.name: text
 
     Behavior on scale {
-        NumberAnimation { duration: 100; easing.type: Easing.OutCubic }
+        enabled: Theme.motion.animated
+        NumberAnimation { duration: Theme.motion.fast; easing.type: Theme.motion.easing.enter }
     }
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }
@@ -84,11 +84,7 @@ AbstractButton {
                 elide: Text.ElideRight
                 visible: root.text.length > 0
                 text: root.text
-                font: Qt.font({
-                    family: root.textStyle.family,
-                    styleName: root.textStyle.styleName,
-                    pixelSize: root.textFontPixelSize
-                })
+                textStyle: root.textStyle
                 color: root.textColor
                 horizontalAlignment: Text.AlignHCenter
             }
@@ -103,12 +99,12 @@ AbstractButton {
             GradientStop {
                 position: 0
                 color: root.showBorder ? root.borderTopColor : root.currentBackgroundColor
-                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
             }
             GradientStop {
                 position: 1
                 color: root.showBorder ? root.borderBottomColor : root.currentBackgroundColor
-                Behavior on color { ColorAnimation { duration: 150 } }
+                Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
             }
         }
 
@@ -118,16 +114,13 @@ AbstractButton {
             anchors.margins: 1
             radius: Math.max(0, parent.radius - 1)
             color: root.currentBackgroundColor
-            Behavior on color { ColorAnimation { duration: 150 } }
+            Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
         }
 
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            color: "transparent"
-            border.width: root.visualFocus ? 2 : 0
-            border.color: Theme.color.orange
+        FocusBorder {
             objectName: root.focusBorderObjectName
+            visible: root.visualFocus
+            targetRadius: root.backgroundRadius
         }
     }
 }

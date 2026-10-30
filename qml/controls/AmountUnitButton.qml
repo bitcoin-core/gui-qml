@@ -18,17 +18,17 @@ NeutralButton {
         : unit === BitcoinAmount.MicroBTC ? qsTr("bits") : "BTC"
     implicitHeight: 32
     textStyle: Theme.text.caption
-    padding: 6
-    leftPadding: 8
-    rightPadding: 8
+    padding: Theme.space.s
+    leftPadding: Theme.space.m
+    rightPadding: Theme.space.m
     Accessible.name: qsTr("Change amount unit")
 
     contentItem: RowLayout {
-        spacing: 4
+        spacing: Theme.space.xs
         CoreText {
             id: label
             text: root.text
-            font: root.textStyle.font
+            textStyle: root.textStyle
             color: root.textColor
         }
         Icon {
@@ -40,7 +40,7 @@ NeutralButton {
             Layout.preferredHeight: 12
             Layout.maximumHeight: 12
             source: "qrc:/icons/arrow-up-down.svg"
-            size: 12
+            size: Theme.size.icon.xs
             color: root.textColor
         }
     }

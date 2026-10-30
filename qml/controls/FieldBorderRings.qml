@@ -8,7 +8,7 @@ Item {
     id: root
 
     property color ringColor: Theme.color.neutral6
-    property real cornerRadius: 10
+    property real cornerRadius: Theme.radius.field
     property string outerObjectName: ""
     property string innerObjectName: ""
 

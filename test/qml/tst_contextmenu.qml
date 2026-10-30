@@ -40,6 +40,58 @@ TestCase {
     }
 
     Component {
+        id: keyboardMenuComponent
+
+        ContextMenu {
+            property alias first: firstItem
+            property alias second: secondItem
+            property alias last: lastItem
+            ContextMenuButton { id: firstItem; text: "First" }
+            ContextMenuButton { id: secondItem; text: "Second" }
+            ContextMenuButton { text: "Disabled"; enabled: false }
+            ContextMenuDivider {}
+            ContextMenuButton { id: lastItem; text: "Last" }
+        }
+    }
+
+    Component {
+        id: menuTriggerComponent
+        DropdownButton {
+            text: "Menu"
+            property alias menu: menu
+            opened: menu.opened
+            onClicked: menu.openBelow(this)
+            ContextMenu {
+                id: menu
+                ContextMenuButton { objectName: "keyboardOpenedMenuItem"; text: "First" }
+            }
+        }
+    }
+
+    function test_trigger_opens_and_focuses_menu_with_keyboard() {
+        const button = createTemporaryObject(menuTriggerComponent, host)
+        verify(waitForRendering(button))
+        button.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Down)
+        tryCompare(button.menu, "opened", true)
+        tryCompare(findChild(button.menu.contentItem, "keyboardOpenedMenuItem"), "activeFocus", true)
+        button.menu.close()
+        button.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Space)
+        tryCompare(button.menu, "opened", true)
+        tryCompare(findChild(button.menu.contentItem, "keyboardOpenedMenuItem"), "activeFocus", true)
+        button.menu.close()
+    }
+
+    Item {
+        id: trigger
+        x: 300
+        y: 40
+        width: 40
+        height: 40
+    }
+
+    Component {
         id: menuWithButtonComponent
 
         ContextMenu {
@@ -98,13 +150,13 @@ TestCase {
     function test_empty_menu_clamps_to_min_width() {
         const menu = openMenu(emptyMenuComponent)
         compare(menu.implicitWidth, menu.minMenuWidth)
-        compare(menu.background.color, Theme.color.neutral1)
+        compare(menu.background.color, Theme.color.surface1)
     }
 
     function test_section_title_uses_bold_caption_typography() {
         const menu = openMenu(titledMenuComponent)
         compare(menu.titleItem.font.pixelSize, Theme.text.captionStrong.pixelSize)
-        compare(menu.titleItem.font.styleName, "Semi Bold")
+        compare(menu.titleItem.font.weight, Font.DemiBold)
         compare(menu.titleItem.lineHeight, Theme.text.captionStrong.lineHeight)
     }
 
@@ -157,5 +209,36 @@ TestCase {
         keyClick(Qt.Key_Space)
         compare(menu.triggerCount, 1)
         tryCompare(menu, "opened", false)
+    }
+
+    function test_arrowKeysMoveBetweenEnabledItems() {
+        const menu = createTemporaryObject(keyboardMenuComponent, host)
+        menu.open()
+        tryCompare(menu, "opened", true)
+        keyClick(Qt.Key_Down)
+        verify(menu.first.activeFocus)
+        keyClick(Qt.Key_Down)
+        verify(menu.second.activeFocus)
+        keyClick(Qt.Key_Down)
+        verify(menu.last.activeFocus)
+        keyClick(Qt.Key_Down)
+        verify(menu.first.activeFocus)
+        keyClick(Qt.Key_Up)
+        verify(menu.last.activeFocus)
+        keyClick(Qt.Key_Home)
+        verify(menu.first.activeFocus)
+        keyClick(Qt.Key_End)
+        verify(menu.last.activeFocus)
+    }
+
+    function test_openBelowAlignsRightEdgeAndStaysInWindow() {
+        const menu = createTemporaryObject(keyboardMenuComponent, host)
+        menu.openBelow(trigger, 4)
+        tryCompare(menu, "opened", true)
+        compare(menu.y, trigger.y + trigger.height + 4)
+        compare(menu.x + menu.width, trigger.x + trigger.width)
+        verify(menu.modal)
+        compare(menu.dim, false)
+        compare(menu.margins, Theme.space.ml)
     }
 }

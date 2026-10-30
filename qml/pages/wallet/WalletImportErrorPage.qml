@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
+import "../../components"
 
 OnboardingView {
     id: root
@@ -35,12 +36,12 @@ OnboardingView {
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: Theme.color.amber
+            color: Theme.color.danger
         }
         Icon {
             anchors.centerIn: parent
             source: "qrc:/icons/cross.svg"
-            color: Theme.color.white
+            color: Theme.color.accentForeground
             size: 26
         }
     }
@@ -53,7 +54,7 @@ OnboardingView {
             visible: text.length > 0
             text: walletController.walletImportErrorHelpText
             color: Theme.color.neutral6
-            font: Theme.text.caption.font
+            textStyle: Theme.text.caption
             wrap: true
             horizontalAlignment: Text.AlignHCenter
         }

@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
+import "../../components"
 
 Item {
     id: root
@@ -130,9 +131,8 @@ Item {
         id: navigationBar
         objectName: "walletCreationNavigationBar"
         width: parent.width
-        isOnSurface: root.modalView
-        buttonSidePadding: width >= 640 ? 24 : 16
-        closeButtonSize: CloseButton.Large
+        surfaceLevel: root.modalView ? 1 : 0
+        buttonSidePadding: SizeClass.isCompact(width) ? 16 : 24
         visible: root.currentItem && root.currentItem.usesSharedNavigation === true
         height: visible ? implicitHeight : 0
         title: visible ? root.currentItem.title : ""
@@ -182,8 +182,10 @@ Item {
 
             childView: Item {
                 implicitHeight: root.walletDiscoveryReady ? 0 : 48
-                BusyIndicator {
+                SpinningIndicator {
                     objectName: "createWalletDiscoveryBusyIndicator"
+                    size: 32
+                    color: Theme.color.neutral7
                     anchors.centerIn: parent
                     visible: !root.walletDiscoveryReady
                     running: visible

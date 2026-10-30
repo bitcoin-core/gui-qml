@@ -82,39 +82,18 @@ SettingsPage {
                     Layout.minimumWidth: 0
                     spacing: 12
 
-                    TextField {
+                    LabeledTextField {
                         id: signerPathInput
-                        objectName: "externalSignerPathInput"
                         Layout.fillWidth: true
-                        implicitHeight: 37
+                        // The section title is the visible label.
+                        accessibleName: qsTr("Signer path")
+                        fieldObjectName: "externalSignerPathInput"
+                        fieldHeight: Theme.size.control
+                        fieldBackgroundColor: Theme.color.surface2
+                        fieldTextStyle: Theme.text.monoDescription
                         text: optionsModel.externalSignerPath
                         placeholderText: qsTr("Enter external signer path")
-                        placeholderTextColor: Theme.color.neutral7
-                        color: Theme.color.neutral9
-                        font: Theme.text.description.font
-                        selectByMouse: true
-                        leftPadding: 15
-                        rightPadding: 10
-                        topPadding: 0
-                        bottomPadding: 0
-                        verticalAlignment: TextInput.AlignVCenter
-                        background: Rectangle {
-                            color: Theme.color.neutral2
-                            radius: 5
-
-                            FocusBorder {
-                                objectName: "externalSignerPathFocusBorder"
-                                visible: signerPathInput.activeFocus
-                                border.color: Theme.color.orange
-                                borderRadius: 7
-                                topMargin: -2
-                                bottomMargin: -2
-                                leftMargin: -2
-                                rightMargin: -2
-                            }
-                        }
                         onEditingFinished: root.checkDevice()
-                        onAccepted: focus = false
                     }
 
                     RowLayout {
@@ -128,10 +107,11 @@ SettingsPage {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: 4
                             radius: width / 2
-                            color: root.signerConnected ? Theme.color.green : Theme.color.red
+                            color: root.signerConnected ? Theme.color.success : Theme.color.danger
 
                             Behavior on color {
-                                ColorAnimation { duration: 150 }
+                                enabled: Theme.motion.animated
+                                ColorAnimation { duration: Theme.motion.normal }
                             }
                         }
 
@@ -140,19 +120,17 @@ SettingsPage {
                             Layout.fillWidth: true
                             text: root.signerStatusText
                             color: Theme.color.neutral7
-                            font: Theme.text.description.font
-                            lineHeight: Theme.text.description.lineHeight
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.description
                             horizontalAlignment: Text.AlignLeft
                             wrap: true
                         }
                     }
                 }
 
-                ContinueButton {
+                PrimaryButton {
                     objectName: "externalSignerCheckDeviceButton"
-                    Layout.preferredWidth: 140
-                    Layout.preferredHeight: 40
+                    Layout.preferredWidth: Math.max(140, implicitWidth)
+                    Layout.preferredHeight: Math.max(40, implicitHeight)
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("Check device")
                     textStyle: Theme.text.subheading

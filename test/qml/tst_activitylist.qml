@@ -31,7 +31,7 @@ TestCase {
     function test_activity_svg_resources_load_data() {
         return ["activity-send", "activity-receive", "activity-multiple", "activity-payment-request",
             "activity-consolidation", "activity-split", "activity-internal", "activity-invoice",
-            "check", "coinbase", "file"].map(function(name) { return { tag: name, name: name } })
+            "coinbase", "file"].map(function(name) { return { tag: name, name: name } })
     }
 
     function test_activity_svg_resources_load(data) {
@@ -94,8 +94,14 @@ TestCase {
                 timestamp: new Date(2026, 6, 12, 17, 40).getTime() / 1000})
         ]
     }
+    property string motionMode: ""
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
     function init() {
-        Theme.dark = true
+        motionMode = Theme.motion.mode
+        Theme.paletteId = "core-dark"
         walletController.reset()
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
@@ -155,17 +161,26 @@ TestCase {
         verify(item !== null)
         const target = data.child ? findChild(item, "activityAction_robert") : item
         mouseClick(target, target.width / 2, target.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        // Transactions and payment requests each have their shared actions menu.
+        const menu = findChild(page, data.request ? "activityRequestContextMenu" : "activityRowContextMenu")
         tryCompare(menu, "opened", true)
+        // With motion off the menu opens before its rows are laid out.
+        verify(waitForItemPolished(menu.contentItem))
         compare(page.depth, 1)
         const copyId = findChild(menu.contentItem, "activityCopyTransactionId")
         const copyRaw = findChild(menu.contentItem, "activityCopyRawTransaction")
         const copyRequest = findChild(menu.contentItem, "activityCopyPaymentRequest")
-        compare(copyId.visible, !data.request)
-        compare(copyRaw.visible, !data.request)
-        compare(copyRequest.visible, data.request)
-        compare(findChild(menu.contentItem, "activityDeletePaymentRequest").visible, data.request)
-        compare(findChild(menu.contentItem, "activityDeletePaymentRequestDivider").visible, data.request)
+        compare(copyId !== null, !data.request)
+        compare(copyRaw !== null, !data.request)
+        compare(copyRequest !== null, data.request)
+        if (data.request) {
+            verify(copyRequest.visible)
+            verify(findChild(menu.contentItem, "activityDeletePaymentRequest").visible)
+            verify(findChild(menu.contentItem, "activityDeletePaymentRequestDivider").visible)
+        } else {
+            verify(copyId.visible)
+            verify(copyRaw.visible)
+        }
         if (data.request) {
             mouseClick(copyRequest)
             compare(Clipboard.text(), "bitcoin:bc1qexample?amount=0.0001&label=Invoice")
@@ -188,7 +203,7 @@ TestCase {
         const page = createPage()
         const item = findChild(page, "activityRequest_invoice")
         mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        const menu = findChild(page, "activityRequestContextMenu")
         tryCompare(menu, "opened", true)
         const copy = findChild(menu.contentItem, "activityCopyPaymentRequest")
         verify(!copy.enabled)
@@ -204,18 +219,25 @@ TestCase {
         const page = createPage()
         const item = findChild(page, "activityRequest_invoice")
         mouseClick(item, item.width / 2, item.height / 2, Qt.RightButton)
-        const menu = findChild(page, "activityRowContextMenu")
+        const menu = findChild(page, "activityRequestContextMenu")
         tryCompare(menu, "opened", true)
         const button = findChild(menu.contentItem, "activityDeletePaymentRequest")
         compare(button.role, ContextMenuButton.Destructive)
         mouseClick(button)
+        tryCompare(menu, "visible", false)
+        // Nothing is deleted until the user confirms.
+        compare(testWalletModel.lastRemovedRequestId, "")
+        const confirmation = findChild(page, "activityDeletePaymentRequestConfirmation")
+        tryCompare(confirmation, "opened", true)
+        findChild(confirmation.contentItem, "deletePaymentRequestConfirmButton").clicked()
+        tryCompare(confirmation, "opened", false)
+        const error = findChild(page, "activityDeletePaymentRequestConfirmationError")
         if (data.succeeds) {
-            tryCompare(menu, "visible", false)
             compare(testWalletModel.lastRemovedRequestId, "invoice")
+            compare(error.opened, false)
         } else {
-            verify(menu.opened)
             compare(testWalletModel.lastRemovedRequestId, "")
-            verify(findChild(menu.contentItem, "activityDeletePaymentRequestError").visible)
+            tryCompare(error, "opened", true)
         }
         compare(page.depth, 1)
     }
@@ -233,7 +255,7 @@ TestCase {
         verify(findChild(batch, "activityAction_elisabeth") !== null)
         const icon = findChild(batch, "activityRowIcon")
         compare(icon.iconSource.toString(), "qrc:/icons/activity-send.svg")
-        compare(icon.accent, Theme.color.orange)
+        compare(icon.accent, Theme.color.txOutgoing)
         const children = findChild(batch, "activityRowChildren")
         verify(children.height >= findChild(batch, "activityAction_robert").height
             + findChild(batch, "activityAction_elisabeth").height)
@@ -247,7 +269,46 @@ TestCase {
         testTransactionActivityModel.setRows(updated)
         const incomingIcon = findChild(findRow(page, "batch"), "activityRowIcon")
         compare(incomingIcon.iconSource.toString(), "qrc:/icons/activity-receive.svg")
-        compare(incomingIcon.accent, Theme.color.green)
+        compare(incomingIcon.accent, Theme.color.txIncoming)
+    }
+
+    function test_amounts_follow_privacy_setting_data() {
+        return [
+            {tag: "regular", width: 1180, hidden: false},
+            {tag: "compact", width: 390, hidden: false},
+            {tag: "initially_hidden", width: 1180, hidden: true},
+            {tag: "compact_initially_hidden", width: 390, hidden: true}
+        ]
+    }
+
+    function test_amounts_follow_privacy_setting(data) {
+        const original = optionsModel.hideAmounts
+        testAccessibility.activate()
+        try {
+            optionsModel.hideAmounts = data.hidden
+            const fixture = [rows()[0], rows()[3], rows()[6]]
+            testTransactionActivityModel.setRows(fixture)
+            const page = createPage({width: data.width})
+            for (const hidden of [data.hidden, !data.hidden, data.hidden]) {
+                optionsModel.hideAmounts = hidden
+                for (const entry of fixture) {
+                    const item = findRow(page, entry.txid)
+                    const parent = testAccessibility.info(findChild(item, "activityRowOpenButton"))
+                    verify(parent.description.includes(hidden ? "Hidden amount" : entry.amount))
+                    if (hidden) verify(!parent.description.includes(entry.amount))
+                    for (const action of entry.actions) {
+                        const child = findChild(item, "activityAction_" + action.actionId)
+                        verify(child !== null)
+                        const info = testAccessibility.info(child)
+                        compare(info.name, action.label || action.address || "Wallet contribution")
+                        compare(info.description, action.address + ". " + (hidden ? "Hidden amount" : action.amount))
+                    }
+                }
+            }
+        } finally {
+            optionsModel.hideAmounts = original
+            testAccessibility.deactivate()
+        }
     }
 
     function test_whole_row_highlights_and_opens_transaction_data() {
@@ -282,7 +343,7 @@ TestCase {
         const x = target.width / 2
         const y = data.target.length > 0 ? target.height / 2 : row.height - 3
         mouseMove(target, x, y)
-        tryCompare(findChild(row, "activityRowBackground"), "color", Theme.color.neutral2)
+        tryCompare(findChild(row, "activityRowBackground"), "color", Qt.tint(Theme.color.surface1, Theme.color.surfaceHover))
         compare(findChild(row, "activityRowLabel").color, Theme.color.neutral9)
 
         mouseClick(target, x, y)
@@ -348,14 +409,14 @@ TestCase {
         verify(findChild(receive, "activityRowMetadata").text.endsWith("5 confirmations"))
         compare(findChild(receive, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-receive.svg")
         verify(!findChild(receive, "activityPendingRing").visible)
-        compare(findChild(receive, "activityRowAmount").color, Theme.color.green)
+        compare(findChild(receive, "activityRowAmount").color, Theme.color.txIncoming)
         verify(findChild(receive, "activityRowRequestBadge").visible)
         const request = findChild(page, "activityRequest_invoice")
         verify(request !== null)
         verify(findChild(request, "activityRowMetadata").text.includes("Payment request · Awaiting payment"))
         compare(findChild(request, "activityRowAmount").color, Theme.color.neutral7)
         compare(findChild(request, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-payment-request.svg")
-        compare(findChild(request, "activityRowIcon").accent, Theme.color.lavender)
+        compare(findChild(request, "activityRowIcon").accent, Theme.color.paymentRequest)
         verify(findChild(request, "activityPendingRing").visible)
         mouseClick(findChild(request, "activityRowOpenButton"))
         tryCompare(findChild(page, "paymentRequestModal"), "opened", true)
@@ -379,9 +440,16 @@ TestCase {
         verify(total !== null)
         compare(proxy.pendingBalanceSat, 10000)
         compare(total.text, "+10000 sats")
-        compare(total.color, Theme.color.green)
+        optionsModel.hideAmounts = true
+        try {
+            compare(total.shownText, total.maskText)
+            compare(total.Accessible.name, "Hidden amount")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+        compare(total.color, Theme.color.txIncoming)
         verify(waitForRendering(page))
-        fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset, 0.1)
+        fuzzyCompare(total.mapToItem(page, total.width, 0).x, page.width - page.currentItem.activitySideInset - Theme.space.xs, 0.1)
         compare(findChild(findChild(page, "activityRequest_invoice"), "activityRowAmount").color, Theme.color.neutral7)
 
         findChild(page, "activitySearchField").text = "Robert"
@@ -439,7 +507,7 @@ TestCase {
         tryCompare(menu, "visible", false)
         tryCompare(single, "isCompact", true)
         tryVerify(function() { return single.height < comfortableHeight && batch.height < comfortableBatchHeight })
-        compare(findChild(single, "activityRowIcon").width, 32)
+        tryCompare(findChild(single, "activityRowIcon"), "width", 32)
         verify(findChild(single, "activityRowLabel").visible)
         verify(!findChild(single, "activityRowAddress").visible)
         verify(findChild(findRow(page, "no-note"), "activityRowAddress").visible)
@@ -516,7 +584,7 @@ TestCase {
         fixture[3].depth = 3
         testTransactionActivityModel.setRows(fixture)
         tryCompare(page.currentItem, "depth", 3)
-        verify(!findChild(page.currentItem, "transactionDetailsError").visible)
+        tryVerify(function() { return !findChild(page.currentItem, "transactionDetailsError").visible })
     }
 
     function test_request_modal_preserves_activity_and_transaction_navigation() {
@@ -593,9 +661,8 @@ TestCase {
         compare(selfSend.displayLabel, "Sent to yourself")
         compare(selfSend.hasChildren, false)
         compare(findChild(selfSend, "activityRowIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
-        compare(findChild(selfSend, "activityRowIcon").accent, Theme.color.purple)
-        const purple = Theme.color.purple
-        compare(findChild(selfSend, "activityRowIcon").color, Qt.rgba(purple.r, purple.g, purple.b, 64 / 255))
+        compare(findChild(selfSend, "activityRowIcon").accent, Theme.color.txInternal)
+        compare(findChild(selfSend, "activityRowIcon").color, Theme.color.tint(Theme.color.txInternal))
         fixture.label = "Personal savings"
         testTransactionActivityModel.setRows([fixture])
         compare(findRow(page, "self").displayLabel, "Personal savings")
@@ -717,6 +784,7 @@ TestCase {
     }
 
     function test_filter_button_animates_and_reserves_space() {
+        Theme.motion.mode = "full"
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")
         const button = findChild(page, "activityTypeFilterButton")
@@ -761,9 +829,9 @@ TestCase {
         verify(sent.selected && sentToSelf.selected && !all.selected)
         compare(proxy.typeFilters.length, 2)
         compare(badge.count, 1)
-        compare(button.background.color, Theme.color.orange)
-        compare(findChild(button, "dropdownButtonCaret").color, Theme.color.neutral9)
-        compare(badge.background.color, Theme.color.orange)
+        compare(button.background.color, Theme.color.activeFill)
+        compare(findChild(button, "dropdownButtonCaret").color, Theme.color.activeForeground)
+        compare(badge.background.color, Theme.color.activeFill)
         verify(findRow(page, "batch") !== null)
         verify(findRow(page, "consolidation") !== null)
         verify(findRow(page, "split") !== null)
@@ -790,7 +858,7 @@ TestCase {
         const clearMenu = findChild(page, "activityClearFiltersMenu")
         tryCompare(clearMenu, "opened", true)
         const clear = findChild(clearMenu.contentItem, "activityClearFiltersAction")
-        compare(clear.role, ContextMenuButton.Destructive)
+        compare(clear.role, ContextMenuButton.Normal)
         mouseClick(clear)
         tryCompare(badge, "visible", false)
         compare(proxy.typeFilters.length, 0)
@@ -842,6 +910,14 @@ TestCase {
         const menu = findChild(page, "activityAmountFilterPopup")
         tryCompare(menu, "opened", true)
         const slider = findChild(page, "activityAmountRangeSlider")
+        optionsModel.hideAmounts = true
+        try {
+            compare(findChild(page, "activityAmountRangeLabel").Accessible.name, "Hidden amount")
+            compare(slider.first.handle.value, undefined)
+            compare(slider.second.handle.maximumValue, undefined)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
         const handle = slider.second.handle
         const start = handle.mapToItem(slider, handle.width / 2, handle.height / 2)
         mousePress(slider, start.x, start.y)
@@ -927,11 +1003,11 @@ TestCase {
         const metadata = findChild(receive, "activityRowMetadata")
         verify(amount.y >= metadata.y + metadata.height)
         verify(receive.width <= page.width)
-        Theme.dark = false
+        Theme.paletteId = "core-light"
         page.width = 1180
         tryCompare(receive, "compact", false)
-        tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.green)
-        compare(page.currentItem.background.color, Theme.color.neutral0)
-        Theme.dark = true
+        tryCompare(findChild(receive, "activityRowAmount"), "color", Theme.color.txIncoming)
+        compare(page.currentItem.background.color, Theme.color.background)
+        Theme.paletteId = "core-dark"
     }
 }

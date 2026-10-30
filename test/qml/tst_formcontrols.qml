@@ -6,7 +6,7 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 import QtTest 1.2
 import "../../qml/controls"
-import "../../qml/pages/settings"
+import "../../qml/components"
 
 TestCase {
     id: testCase
@@ -15,6 +15,16 @@ TestCase {
     visible: true
     width: 640
     height: 640
+
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
 
     Item {
         id: host
@@ -107,10 +117,43 @@ TestCase {
     }
 
     Component {
-        id: outlineButtonComponent
+        id: switchRowComponent
 
-        OutlineButton {
-            objectName: "exampleOutlineButton"
+        SwitchRow {
+            objectName: "exampleSwitchRow"
+            width: 400
+            title: "Open at login"
+        }
+    }
+
+    Component {
+        id: segmentedPickerComponent
+
+        SegmentedPicker {
+            objectName: "exampleSegments"
+            width: 260
+            model: ["Light", "Dark"]
+            onSelected: function(index, option) { currentIndex = index }
+        }
+    }
+
+    Component {
+        id: optionButtonComponent
+
+        OptionButton {
+            property string model: "a"
+            width: 300
+            text: "Option B"
+            selected: model === "b"
+        }
+    }
+
+    Component {
+        id: largeNeutralButtonComponent
+
+        NeutralButton {
+            objectName: "exampleLargeNeutralButton"
+            buttonSize: NeutralButton.Large
             width: 140
             height: 46
             text: "Cancel"
@@ -118,9 +161,9 @@ TestCase {
     }
 
     Component {
-        id: continueButtonComponent
+        id: primaryButtonComponent
 
-        ContinueButton {
+        PrimaryButton {
             text: "Continue"
             enabled: false
         }
@@ -131,15 +174,6 @@ TestCase {
 
         CloseButton {
             objectName: "exampleCloseButton"
-        }
-    }
-
-    Component {
-        id: designSystemPageComponent
-
-        SettingsDesignSystem {
-            width: 600
-            height: 900
         }
     }
 
@@ -254,11 +288,11 @@ TestCase {
         tryVerify(function() { return row.loadedTrailingItem !== null })
         compare(row.loadedTrailingItem.objectName, "exampleSwitch")
         compare(row.loadedTrailingItem.enabled, true)
-        compare(row.dividerColor, Theme.color.neutral2)
+        compare(row.dividerColor, Theme.color.surfaceDivider)
 
         row.enabled = false
         compare(row.loadedTrailingItem.enabled, false)
-        tryCompare(findChild(row, "exampleRowTitle"), "color", Theme.color.neutral4)
+        tryCompare(findChild(row, "exampleRowTitle"), "color", Theme.color.disabledContent)
     }
 
     function test_formRowValidationChangesHeightWithoutChangingPreferredWidth() {
@@ -284,7 +318,7 @@ TestCase {
         verify(section !== null)
         const card = findChild(section, "exampleSectionCard")
         verify(card !== null)
-        compare(card.color, Theme.color.neutral1)
+        compare(card.color, Theme.color.surface1)
         compare(card.radius, 16)
         const footer = findChild(section, "exampleSectionFooter")
         verify(footer !== null)
@@ -380,14 +414,14 @@ TestCase {
         const menu = findChild(picker, "examplePickerMenu")
         verify(button !== null)
         verify(menu !== null)
-        compare(button.defaultBgColor, Theme.color.neutral1)
-        compare(button.hoverBgColor, Theme.color.neutral2)
-        compare(menu.backgroundColor, Theme.color.neutral1)
+        compare(button.defaultBgColor, Theme.color.surface1)
+        compare(button.hoverBgColor, Theme.color.surface2)
+        compare(menu.backgroundColor, Theme.color.surface1)
 
-        picker.embedded = true
-        compare(button.defaultBgColor, Theme.color.neutral2)
-        compare(button.hoverBgColor, Theme.color.neutral3)
-        compare(menu.backgroundColor, Theme.color.neutral2)
+        picker.surfaceLevel = 1
+        compare(button.defaultBgColor, Theme.color.surface2)
+        compare(button.hoverBgColor, Theme.color.surface3)
+        compare(menu.backgroundColor, Theme.color.surface2)
 
         picker.currentValue = "dark"
         compare(picker.currentText, "Dark")
@@ -401,51 +435,148 @@ TestCase {
         compare(picker.currentValue, "dark")
     }
 
-    function test_outlineButtonUsesLargeNeutralAppearance() {
-        const button = createTemporaryObject(outlineButtonComponent, host)
+    function test_segmentedPickerPaintsSelection_data() {
+        const cases = []
+        for (const palette of ["core-light", "core-dark"]) {
+            for (const mode of ["full", "reduced", "off"]) {
+                for (const scale of [0.85, 1.3]) {
+                    cases.push({tag: palette + "-" + mode + "-" + scale, palette: palette, mode: mode, scale: scale})
+                }
+            }
+        }
+        return cases
+    }
+
+    function test_segmentedPickerPaintsSelection(data) {
+        const palette = Theme.paletteId
+        const scale = Theme.textScale
+        try {
+            Theme.paletteId = data.palette
+            Theme.textScale = data.scale
+            Theme.motion.mode = data.mode
+            const picker = createTemporaryObject(segmentedPickerComponent, host)
+            verify(picker !== null)
+            tryCompare(picker, "count", 2)
+            for (const index of [0, 1, 0]) {
+                const segment = picker.itemAt(index)
+                verify(segment.width > 0 && segment.height > 0)
+                mouseClick(segment)
+                tryCompare(picker, "currentIndex", index)
+                compare(picker.currentText, picker.model[index])
+                tryCompare(segment.background, "color", Theme.color.accent)
+                verify(waitForRendering(picker))
+                const point = segment.mapToItem(picker, segment.width / 2, 2)
+                let captured = false
+                let color
+                verify(picker.grabToImage(function(result) {
+                    color = testImage.pixelAt(result.image, point, picker.width)
+                    captured = true
+                }))
+                tryVerify(function() { return captured })
+                compare(color, Theme.color.accent)
+            }
+        } finally {
+            Theme.paletteId = palette
+            Theme.textScale = scale
+        }
+    }
+
+    function test_switchRowFlipsOnceFromRowOrSwitch() {
+        const row = createTemporaryObject(switchRowComponent, host)
+        verify(row !== null)
+        const toggle = findChild(row, "exampleSwitchRowSwitch")
+        verify(toggle !== null)
+        verify(waitForRendering(row))
+        let toggles = 0
+        row.toggled.connect(function() { toggles += 1 })
+
+        mouseClick(row, Theme.space.cardInset + 4, row.height / 2)
+        compare(row.checked, true)
+        compare(toggles, 1)
+        mouseClick(toggle)
+        compare(row.checked, false)
+        compare(toggles, 2)
+        toggle.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        compare(row.checked, true)
+        compare(toggles, 3)
+
+        row.enabled = false
+        mouseClick(row, Theme.space.cardInset + 4, row.height / 2)
+        compare(row.checked, true)
+        compare(toggles, 3)
+    }
+
+    function test_optionButtonSelectionStaysBoundToTheModel() {
+        const option = createTemporaryObject(optionButtonComponent, host)
+        verify(option !== null)
+        compare(option.checked, false)
+        compare(option.Accessible.role, Accessible.RadioButton)
+
+        // A click the caller ignores leaves the tile unselected...
+        mouseClick(option)
+        compare(option.checked, false)
+        option.forceActiveFocus()
+        keyClick(Qt.Key_Space)
+        compare(option.checked, false)
+
+        // ...and the binding still follows the model afterwards.
+        option.model = "b"
+        compare(option.checked, true)
+        mouseClick(option)
+        compare(option.checked, true)
+        option.model = "a"
+        compare(option.checked, false)
+    }
+
+    function test_largeNeutralButtonAppearance() {
+        Theme.motion.mode = "full"
+        const button = createTemporaryObject(largeNeutralButtonComponent, host)
         verify(button !== null)
-        const background = findChild(button, "exampleOutlineButtonBackground")
+        const background = findChild(button, "exampleLargeNeutralButtonBackground")
         verify(background !== null)
 
         compare(button.buttonSize, NeutralButton.Large)
-        compare(button.backgroundColor, Theme.color.neutral2)
-        compare(button.currentBackgroundColor, Theme.color.neutral2)
+        compare(button.backgroundColor, Theme.color.surface2)
+        compare(button.currentBackgroundColor, Theme.color.surface2)
         compare(button.implicitHeight, 46)
 
         button.down = true
-        compare(button.currentBackgroundColor, Theme.color.neutral3)
-        tryCompare(button, "scale", 0.98)
+        compare(button.currentBackgroundColor, Theme.color.surface3)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button, "scale", 1.0)
     }
 
-    function test_continueButtonKeepsPrimaryColorWhenDisabled() {
-        const button = createTemporaryObject(continueButtonComponent, host)
+    function test_primaryButtonKeepsAccentColorWhenDisabled() {
+        Theme.motion.mode = "full"
+        const button = createTemporaryObject(primaryButtonComponent, host)
         verify(button !== null)
 
         compare(button.enabled, false)
-        compare(button.background.color, Theme.color.orange)
-        compare(button.textColor, Theme.color.white)
+        compare(button.background.color, Theme.color.accent)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.opacity, 0.4)
 
         button.down = true
-        compare(button.background.color, Theme.color.orange)
-        compare(button.textColor, Theme.color.white)
+        compare(button.background.color, Theme.color.accent)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.scale, 1.0)
 
         button.enabled = true
-        tryCompare(button.background, "color", Theme.color.orangeLight2)
-        compare(button.textColor, Theme.color.white)
+        tryCompare(button.background, "color", Theme.color.accentPressed)
+        compare(button.textColor, Theme.color.accentForeground)
         compare(button.opacity, 1.0)
-        tryCompare(button, "scale", 0.98)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
-        tryCompare(button.background, "color", Theme.color.orange)
+        tryCompare(button.background, "color", Theme.color.accent)
         tryCompare(button, "scale", 1.0)
     }
 
     function test_closeButtonInteractionStates() {
+        Theme.motion.mode = "full"
         const button = createTemporaryObject(closeButtonComponent, host)
         verify(button !== null)
         const background = findChild(button, "exampleCloseButtonBackground")
@@ -458,37 +589,19 @@ TestCase {
         compare(button.height, 30)
         compare(button.scale, 1.0)
         compare(background.radius, 15)
-        tryCompare(background, "color", Theme.color.neutral2)
+        tryCompare(background, "color", Theme.color.surface2)
         compare(icon.size, 10)
         compare(icon.color, Theme.color.neutral6)
-        compare(button.backgroundHoverColor, Theme.color.neutral3)
-        compare(button.backgroundPressedColor, Theme.color.neutral3)
+        compare(button.backgroundHoverColor, Theme.color.surface3)
+        compare(button.backgroundPressedColor, Theme.color.surface3)
 
         button.down = true
-        tryCompare(background, "color", Theme.color.neutral3)
-        tryCompare(button, "scale", 0.95)
+        tryCompare(background, "color", Theme.color.surface3)
+        tryCompare(button, "scale", Theme.motion.pressScale)
 
         button.down = false
         tryCompare(button, "scale", 1.0)
-        tryCompare(background, "color", Theme.color.neutral2)
-    }
-
-    function test_designSystemPageShowsGenericControlExamples() {
-        const page = createTemporaryObject(designSystemPageComponent, host)
-        verify(page !== null)
-        verify(findChild(page, "settingsPageContentLayout") !== null)
-        verify(findChild(page, "designSystemAppearanceSection") !== null)
-        verify(findChild(page, "designSystemThemeRow") !== null)
-        verify(findChild(page, "designSystemLanguagePicker") !== null)
-        verify(findChild(page, "designSystemBehaviorSection") !== null)
-        verify(findChild(page, "designSystemNavigationSection") !== null)
-        verify(findChild(page, "designSystemValueSection") !== null)
-        verify(findChild(page, "designSystemWebsiteRow") !== null)
-        verify(findChild(page, "designSystemVersionRow") !== null)
-        verify(findChild(page, "designSystemFieldSection") !== null)
-        verify(findChild(page, "designSystemBlockStorageField") !== null)
-        verify(findChild(page, "designSystemProxyLocationField") !== null)
-        verify(findChild(page, "designSystemDataDirectoryValue") !== null)
+        tryCompare(background, "color", Theme.color.surface2)
     }
 
     function test_settingsPageOwnsNavigationAndConstrainedScrollableContent() {
@@ -551,13 +664,15 @@ TestCase {
         compare(value.text, "v32.0")
     }
 
-    function test_pageHeadingCentersProminentDescription() {
+    function test_pageHeadingAlignsDescriptionWithTitle() {
         const heading = createTemporaryObject(pageHeadingComponent, host)
         verify(heading !== null)
         const description = findChild(heading, "exampleHeadingDescription")
         verify(description !== null)
         compare(heading.descriptionTextStyle.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(description.font.pixelSize, Theme.text.description.font.pixelSize)
+        compare(description.horizontalAlignment, Text.AlignLeft)
+        heading.titleAlignment = Text.AlignHCenter
         compare(description.horizontalAlignment, Text.AlignHCenter)
     }
 
@@ -578,12 +693,13 @@ TestCase {
         verify(row !== null)
         verify(row.field !== null)
         compare(row.field.objectName, "exampleTextField")
-        compare(row.field, row.loadedTrailingItem)
+        compare(row.loadedTrailingAccessory, null)
         compare(row.loadedBodyItem, null)
         compare(row.text, "127.0.0.1:9050")
         compare(row.field.horizontalAlignment, Text.AlignRight)
-        compare(row.focusBorderColor, Theme.color.orange)
-        compare(row.field.background.border.color, Theme.color.orange)
+        compare(row.focusBorderColor, Theme.color.neutral6)
+        compare(row.fieldFocusRing.ringColor, Theme.color.neutral6)
+        compare(row.field.background.color, Qt.rgba(0, 0, 0, 0))
 
         row.text = "127.0.0.1:9150"
         compare(row.field.text, "127.0.0.1:9150")
@@ -620,15 +736,17 @@ TestCase {
         compare(label.text, "Username")
         compare(field.placeholderText, "Enter username...")
         compare(field.background.radius, 10)
-        compare(field.background.color, Theme.color.neutral1)
-        compare(field.background.border.width, 0)
+        compare(field.background.color, Theme.color.surface1)
+        const focusRing = findChild(control, "exampleLabeledTextFieldInputFocusRing")
+        verify(focusRing !== null)
+        compare(focusRing.visible, false)
 
         field.forceActiveFocus()
-        tryCompare(field.background.border, "width", 2)
-        tryCompare(field.background.border, "color", Theme.color.orange)
+        tryCompare(focusRing, "visible", true)
+        compare(focusRing.parent.ringColor, Theme.color.neutral6)
         keyClick(Qt.Key_Return)
         tryCompare(field, "activeFocus", false)
-        compare(field.background.border.width, 0)
+        compare(focusRing.visible, false)
     }
 
     function test_passwordTextFieldComposesSecureEntryAndVisibilityToggle() {

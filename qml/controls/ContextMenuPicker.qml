@@ -23,7 +23,7 @@ Item {
     property var currentValue
     property url selectionIconSource: "image://images/check"
     property int iconSize: 18
-    property int rowHeight: 36
+    property int rowHeight: Theme.size.control
     property int subtitleRowHeight: 52
     readonly property alias titleItem: _title
 
@@ -91,17 +91,12 @@ Item {
             visible: root.title !== ""
             Layout.fillWidth: true
             Layout.leftMargin: 10
-            Layout.rightMargin: 8
+            Layout.rightMargin: Theme.space.m
             Layout.topMargin: visible ? 8 : 0
             Layout.bottomMargin: visible ? 4 : 0
             text: root.title
             horizontalAlignment: Text.AlignLeft
-            // Bind font properties directly for older Qt versions.
-            font.family: Theme.text.captionStrong.family
-            font.styleName: Theme.text.captionStrong.styleName
-            font.pixelSize: Theme.text.captionStrong.pixelSize
-            lineHeight: Theme.text.captionStrong.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.captionStrong
             wrap: false
             color: Theme.color.neutral6
         }
@@ -145,13 +140,13 @@ Item {
                     onTriggered: root.activated(_row.rowValue)
 
                     contentItem: RowLayout {
-                        spacing: 7
+                        spacing: Theme.space.m
 
                         Item {
                             visible: _row.rowIconSource.toString() !== ""
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: visible ? root.iconSize : 0
-                            Layout.preferredHeight: visible ? root.iconSize : 0
+                            Layout.preferredWidth: visible && root ? root.iconSize : 0
+                            Layout.preferredHeight: visible && root ? root.iconSize : 0
 
                             Icon {
                                 anchors.centerIn: parent
@@ -164,15 +159,13 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             Layout.alignment: Qt.AlignVCenter
-                            spacing: 2
+                            spacing: Theme.space.xxs
 
                             CoreText {
                                 Layout.fillWidth: true
                                 text: _row.rowText
                                 horizontalAlignment: Text.AlignLeft
-                                font: Theme.text.menuItem.font
-                                lineHeight: Theme.text.menuItem.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.menuItem
                                 wrap: false
                                 elide: Text.ElideRight
                                 color: _row._highlighted ? _row._hoverColor : _row._idleColor
@@ -184,9 +177,7 @@ Item {
                                 Layout.fillWidth: true
                                 text: _row.subtitle
                                 horizontalAlignment: Text.AlignLeft
-                                font: Theme.text.caption.font
-                                lineHeight: Theme.text.caption.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 wrap: false
                                 elide: Text.ElideRight
                                 color: Theme.color.neutral6
@@ -202,8 +193,8 @@ Item {
                                 anchors.centerIn: parent
                                 visible: _row.selected
                                 source: root.selectionIconSource
-                                color: Theme.color.orange
-                                size: 20
+                                color: Theme.color.neutral9
+                                size: Theme.size.icon.l
                             }
                         }
                     }

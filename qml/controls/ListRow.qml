@@ -24,14 +24,21 @@ AbstractButton {
     property alias disclosureIndicatorColor: row.disclosureIndicatorColor
     property bool selected: false
     property int accessibleRole: Accessible.ListItem
-    property int cornerRadius: 16
-    property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-    property color hoverBackgroundColor: Theme.color.neutral2
-    property color selectedTextColor: Theme.color.orange
+    property int cornerRadius: Theme.radius.listRow
+    property color selectedBackgroundColor: Theme.color.surfaceSelected
+    property color hoverBackgroundColor: Theme.color.surfaceHover
+    property color pressedBackgroundColor: Theme.color.surfacePressed
+    property color selectedTextColor: Theme.color.neutral9
 
-    Accessible.name: title
-    Accessible.description: description
+    // A trailing switch only mirrors the row, which is the control and
+    // reports the switch's state.
+    readonly property var trailingControl: loadedTrailingItem
+
+    Accessible.name: title.length > 0 ? title : description
+    Accessible.description: title.length > 0 ? description : ""
     Accessible.role: accessibleRole
+    checkable: trailingControl !== null && trailingControl.checkable === true
+    checked: checkable && trailingControl.checked
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     padding: 0
@@ -43,21 +50,22 @@ AbstractButton {
         cursorShape: Qt.PointingHandCursor
     }
 
-    background: Rectangle {
+    background: StateBackground {
         radius: root.cornerRadius
-        color: root.selected
-            ? root.selectedBackgroundColor
-            : root.down || root.hovered
-                ? root.hoverBackgroundColor
-                : "transparent"
+        stateColor: root.down ? root.pressedBackgroundColor
+            : root.selected ? root.selectedBackgroundColor
+            : root.hovered ? root.hoverBackgroundColor
+            : "transparent"
 
+        // Inset, so the clipped FormSection card does not cut the ring off.
         FocusBorder {
+            objectName: root.objectName.length > 0 ? root.objectName + "FocusBorder" : ""
             visible: root.visualFocus
-            borderRadius: root.cornerRadius + 2
-            topMargin: -2
-            bottomMargin: -2
-            leftMargin: -2
-            rightMargin: -2
+            targetRadius: root.cornerRadius
+            topMargin: Theme.space.xxs
+            bottomMargin: Theme.space.xxs
+            leftMargin: Theme.space.xxs
+            rightMargin: Theme.space.xxs
         }
     }
 
@@ -65,6 +73,6 @@ AbstractButton {
         id: row
         enabled: root.enabled
         width: root.availableWidth
-        titleColor: root.selected && root.enabled ? root.selectedTextColor : (root.enabled ? Theme.color.neutral9 : Theme.color.neutral4)
+        titleColor: !root.enabled ? Theme.color.disabledContent : root.selected ? root.selectedTextColor : Theme.color.neutral9
     }
 }

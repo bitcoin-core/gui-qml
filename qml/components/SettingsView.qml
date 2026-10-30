@@ -24,8 +24,11 @@ Page {
     property bool showDoneButton: true
     property string selectedSectionId: ""
     property int sidebarWidth: 286
-    readonly property alias sidebar: sidebar
-    readonly property alias pageContainer: pageContainer
+    // Compact widths show one column: the sidebar is the root list, and
+    // choosing a section slides its page over it until Back.
+    readonly property bool compact: splitView.isCompact
+    readonly property SettingsSidebar sidebar: splitView.primaryItem ? splitView.primaryItem.sidebar : null
+    readonly property SettingsPageContainer pageContainer: splitView.detailItem
     readonly property var groupTitles: ({
         "wallet": qsTr("Wallet"),
         "general": qsTr("General"),
@@ -131,16 +134,22 @@ Page {
     }
 
     function selectSection(sectionId, forceReload) {
+        if (!root.pageContainer) return
         const resolvedId = root.sectionIsVisible(sectionId) ? sectionId : root.firstVisibleSectionId()
         if (resolvedId.length === 0) {
             root.selectedSectionId = ""
-            pageContainer.clear()
+            root.pageContainer.clear()
             return
         }
 
-        if (forceReload === true) pageContainer.clear()
+        if (forceReload === true) root.pageContainer.clear()
         root.selectedSectionId = resolvedId
-        pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
+        root.pageContainer.showSection(resolvedId, root.componentForSection(resolvedId))
+    }
+
+    function showSectionPage(sectionId, forceReload) {
+        root.selectSection(sectionId, forceReload)
+        if (root.selectedSectionId.length > 0) splitView.showDetail()
     }
 
     function ensureVisibleSelection() {
@@ -148,32 +157,32 @@ Page {
     }
 
     function openWalletSettings() {
-        root.selectSection("wallet")
+        root.showSectionPage("wallet")
     }
 
     function openWalletAddressHistory() {
         if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
         walletController.selectedWallet.addressListModel.refresh()
-        root.selectSection("wallet", true)
-        pageContainer.push(addressListPage)
+        root.showSectionPage("wallet", true)
+        root.pageContainer.push(addressListPage)
     }
 
     function openWalletPassword(updating) {
         if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        pageContainer.push(walletPasswordPage, { "updating": updating })
+        root.showSectionPage("wallet", true)
+        root.pageContainer.push(walletPasswordPage, { "updating": updating })
     }
 
     function openSignVerifyMessage(initialTab) {
         if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        pageContainer.push(signVerifyPage, { "initialTab": initialTab })
+        root.showSectionPage("wallet", true)
+        root.pageContainer.push(signVerifyPage, { "initialTab": initialTab })
     }
 
     function startWalletBackup() {
         if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
-        root.selectSection("wallet", true)
-        const walletSettingsPage = pageContainer.currentItem
+        root.showSectionPage("wallet", true)
+        const walletSettingsPage = root.pageContainer.currentItem
         if (walletSettingsPage && typeof walletSettingsPage.startBackup === "function") {
             walletSettingsPage.startBackup()
         }
@@ -187,43 +196,58 @@ Page {
         if (visible) root.selectSection(root.selectedSectionId)
     }
 
-    Component.onCompleted: root.selectSection(
-        root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
+    Component.onCompleted: {
+        root.selectSection(
+            root.sectionIsVisible(root.selectedSectionId) ? root.selectedSectionId : root.firstVisibleSectionId())
+        internal.completed = true
+    }
+
+    QtObject {
+        id: internal
+        property bool completed: false
+    }
 
     Connections {
         target: typeof walletController !== "undefined" ? walletController : null
 
         function onSelectedWalletChanged() {
-            pageContainer.resetSection("wallet")
+            root.pageContainer.resetSection("wallet")
         }
 
         function onIsWalletLoadedChanged() {
-            if (!walletController.isWalletLoaded) pageContainer.resetSection("wallet")
+            if (!walletController.isWalletLoaded) root.pageContainer.resetSection("wallet")
         }
     }
 
-    contentItem: RowLayout {
-        spacing: 0
+    contentItem: NavigationSplitView {
+        id: splitView
+        objectName: "settingsSplitView"
+        primaryMinimumWidth: root.sidebarWidth
+        primaryPreferredWidth: root.sidebarWidth
+        primaryMaximumWidth: root.sidebarWidth
+        separatorWidth: 0
 
-        Rectangle {
-            id: sidebarSurface
+        // Narrowing the window keeps the page that was on screen.
+        onIsCompactChanged: {
+            if (isCompact && internal.completed && root.selectedSectionId.length > 0) showDetail()
+        }
+
+        primaryComponent: Rectangle {
             objectName: "settingsSidebarSurface"
-            Layout.preferredWidth: root.sidebarWidth
-            Layout.minimumWidth: root.sidebarWidth
-            Layout.maximumWidth: root.sidebarWidth
-            Layout.fillHeight: true
-            color: Theme.color.neutral1
+            readonly property alias sidebar: sidebar
+            color: Theme.color.surface1
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                anchors.topMargin: 20
-                anchors.bottomMargin: 16
+                anchors.leftMargin: Theme.space.xl
+                anchors.rightMargin: Theme.space.xl
+                anchors.topMargin: Theme.space.xl
+                anchors.bottomMargin: Theme.space.l
                 spacing: 0
 
                 CoreText {
@@ -231,12 +255,10 @@ Page {
                     Layout.fillWidth: true
                     Layout.leftMargin: 10
                     Layout.rightMargin: 10
-                    Layout.bottomMargin: 24
+                    Layout.bottomMargin: Theme.space.xxl
                     text: qsTr("Settings")
                     color: Theme.color.neutral9
-                    font: Theme.text.display.font
-                    lineHeight: Theme.text.display.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.display
                     horizontalAlignment: Text.AlignLeft
                 }
 
@@ -247,15 +269,16 @@ Page {
                     Layout.fillHeight: true
                     model: root.sections
                     groupTitles: root.groupTitles
-                    currentSectionId: root.selectedSectionId
+                    // The compact list is a menu of destinations, not a selection.
+                    currentSectionId: splitView.isCompact ? "" : root.selectedSectionId
                     onSectionActivated: function(sectionId) {
                         // Re-selecting the current section from the sidebar
                         // returns to its root; pushed sub-pages such as the
                         // address list otherwise survive tab round trips.
                         if (sectionId === root.selectedSectionId) {
-                            pageContainer.resetSection(sectionId)
+                            root.pageContainer.resetSection(sectionId)
                         }
-                        root.selectSection(sectionId)
+                        root.showSectionPage(sectionId)
                     }
                 }
 
@@ -264,18 +287,16 @@ Page {
                     visible: root.showDoneButton
                     text: qsTr("Done")
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.bottomMargin: 20
+                    Layout.bottomMargin: Theme.space.xl
                     onClicked: root.doneClicked()
                 }
             }
         }
 
-        SettingsPageContainer {
-            id: pageContainer
+        detailComponent: SettingsPageContainer {
             objectName: "settingsPageContainer"
-            Layout.minimumWidth: 0
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            showRootBackButton: splitView.isCompact
+            onRootBackRequested: splitView.showPrimary()
         }
     }
 
@@ -284,30 +305,30 @@ Page {
 
         SettingsPages.WalletSectionPage {
             onSelectWalletRequested: root.selectWalletRequested()
-            onPasswordRequested: pageContainer.push(walletPasswordPage, {
+            onPasswordRequested: root.pageContainer.push(walletPasswordPage, {
                 "updating": walletController.selectedWallet.isEncrypted
             })
-            onSignVerifyMessageRequested: pageContainer.push(signVerifyPage)
-            onCoinsRequested: pageContainer.push(coinsPage)
+            onSignVerifyMessageRequested: root.pageContainer.push(signVerifyPage)
+            onCoinsRequested: root.pageContainer.push(coinsPage)
             onAddressesRequested: {
                 if (!walletController.isWalletLoaded || !walletController.selectedWallet) return
                 walletController.selectedWallet.addressListModel.refresh()
-                pageContainer.push(addressListPage)
+                root.pageContainer.push(addressListPage)
             }
         }
     }
 
     Component {
         id: coinsPage
-        WalletPages.WalletCoins { onBack: pageContainer.pop() }
+        WalletPages.WalletCoins { onBack: root.pageContainer.pop() }
     }
 
     Component {
         id: walletPasswordPage
 
         WalletPages.WalletPasswordSettings {
-            onBack: pageContainer.pop()
-            onSaved: pageContainer.pop()
+            onBack: root.pageContainer.pop()
+            onSaved: root.pageContainer.pop()
         }
     }
 
@@ -315,7 +336,7 @@ Page {
         id: signVerifyPage
 
         WalletPages.SignVerifyMessage {
-            onBack: pageContainer.pop()
+            onBack: root.pageContainer.pop()
         }
     }
 
@@ -323,7 +344,7 @@ Page {
         id: addressListPage
 
         WalletPages.AddressList {
-            onBack: pageContainer.pop()
+            onBack: root.pageContainer.pop()
             // Keep the Addresses page on the stack: leaving for the request
             // view and returning to settings should land back here, not on
             // the settings root.

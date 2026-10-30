@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
@@ -20,18 +21,19 @@ Page {
     readonly property bool dateFilterActive: activityFilterProxy.dateFilter !== ActivityFilterProxyModel.DateAll
     readonly property bool amountFilterActive: activityFilterProxy.minAmount >= 0 || activityFilterProxy.maxAmount >= 0
     readonly property int activeFilterCount: Number(typeFilterActive) + Number(dateFilterActive) + Number(amountFilterActive)
-    readonly property real pageSidePadding: width < 640 ? 16 : 40
+    readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real activityContentWidth: Math.max(0, Math.min(1100, width - pageSidePadding * 2))
     readonly property real activitySideInset: (width - activityContentWidth) / 2
 
     signal transactionRequested(string txid)
     signal paymentRequestRequested(string requestId)
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
     Component.onCompleted: ready = true
     onWalletChanged: if (ready) {
         activityRowMenu.close()
+        activityRequestMenu.close()
         clearFilters()
         activityFilterProxy.searchText = ""
         searchField.text = ""
@@ -204,33 +206,31 @@ Page {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Activity")
-                    font: Theme.text.headline.font
-                    lineHeight: Theme.text.headline.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.headline
                     horizontalAlignment: Text.AlignLeft
                 }
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Your wallet’s payments and transactions")
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
                 CoreText {
-                    visible: root.width < 640
+                    visible: SizeClass.isCompact(root.width)
                     Layout.fillWidth: true
                     text: root.countText()
-                    font: Theme.text.caption.font
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
             }
             CoreText {
                 objectName: "activityCount"
-                visible: root.width >= 640
+                visible: !SizeClass.isCompact(root.width)
                 Layout.alignment: Qt.AlignVCenter
                 text: root.countText()
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral7
             }
         }
@@ -285,7 +285,8 @@ Page {
                 width: Math.max(0, (activeFiltersButton.implicitWidth + filters.spacing) * reveal - filters.spacing)
                 height: activeFiltersButton.height
                 Behavior on reveal {
-                    NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                    enabled: !Theme.motion.reduced
+                    NumberAnimation { duration: Theme.motion.moderate; easing.type: Theme.motion.easing.move }
                 }
                 FilterButton {
                     id: activeFiltersButton
@@ -337,6 +338,30 @@ Page {
             ListView {
                 id: listView
                 objectName: "activityListView"
+                function ensureFocusedItemVisible() {
+                    const window = root.Window.window
+                    const item = window ? window.activeFocusItem : null
+                    let ancestor = item
+                    while (ancestor && ancestor !== listView.contentItem) ancestor = ancestor.parent
+                    if (!ancestor) return
+                    const position = item.mapToItem(listView, 0, 0)
+                    const margin = Theme.space.m
+                    let y = listView.contentY
+                    if (position.y < margin) y += position.y - margin
+                    else if (position.y + item.height > listView.height - margin)
+                        y += position.y + item.height - listView.height + margin
+                    listView.contentY = Math.max(listView.originY,
+                        Math.min(y, listView.originY + listView.contentHeight - listView.height))
+                }
+                Timer {
+                    id: focusScrollTimer
+                    interval: 0
+                    onTriggered: listView.ensureFocusedItemVisible()
+                }
+                Connections {
+                    target: root.Window.window
+                    function onActiveFocusItemChanged() { focusScrollTimer.restart() }
+                }
                 anchors.fill: parent
                 clip: true
                 model: activityFilterProxy
@@ -354,8 +379,8 @@ Page {
                     RowLayout {
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.leftMargin: root.activitySideInset
-                        anchors.rightMargin: root.activitySideInset
+                        anchors.leftMargin: root.activitySideInset + Theme.space.xs
+                        anchors.rightMargin: root.activitySideInset + Theme.space.xs
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 12
                         spacing: 12
@@ -363,15 +388,16 @@ Page {
                             objectName: "activitySectionTitle"
                             Layout.fillWidth: true
                             text: sectionHeader.section
-                            font: Theme.text.subheading.font
+                            textStyle: Theme.text.subheading
                             horizontalAlignment: Text.AlignLeft
                         }
-                        CoreText {
+                        BitcoinAmountDisplayLabel {
                             objectName: sectionHeader.isPending ? "activityPendingBalance" : ""
+                            hidesAmount: true
                             visible: sectionHeader.isPending && activityFilterProxy.pendingBalanceSat !== 0
                             text: visible ? activityFilterProxy.pendingBalance : ""
-                            font: Theme.text.subheading.font
-                            color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.green
+                            textStyle: Theme.text.amountDescription
+                            color: !visible ? Theme.color.neutral7 : activityFilterProxy.pendingBalanceSat > 0 ? Theme.color.txIncoming
                                 : activityFilterProxy.pendingBalanceSat < 0 ? Theme.color.neutral9 : Theme.color.neutral7
                             horizontalAlignment: Text.AlignRight
                         }
@@ -408,13 +434,13 @@ Page {
                         firstInSection: activityDelegate.ListView.section !== activityDelegate.ListView.previousSection
                         lastInSection: activityDelegate.ListView.section !== activityDelegate.ListView.nextSection
                         onContextMenuRequested: function(x, y) {
-                            const point = activityRow.mapToItem(activityRowMenu.parent, x, y)
-                            activityRowMenu.txid = activityRow.txid
-                            activityRowMenu.requestId = activityRow.requestId
-                            activityRowMenu.isRequest = activityRow.isPendingRequest
-                            activityRowMenu.x = point.x
-                            activityRowMenu.y = point.y
-                            activityRowMenu.open()
+                            const menu = activityRow.isPendingRequest ? activityRequestMenu : activityRowMenu
+                            const point = activityRow.mapToItem(menu.parent, x, y)
+                            if (activityRow.isPendingRequest) activityRequestMenu.requestId = activityRow.requestId
+                            else activityRowMenu.txid = activityRow.txid
+                            menu.x = point.x
+                            menu.y = point.y
+                            menu.open()
                         }
                         onActivated: function(txid, requestId, isRequest) {
                             if (isRequest) root.paymentRequestRequested(requestId)
@@ -436,17 +462,19 @@ Page {
                     objectName: "activityEmptyStateTitle"
                     Layout.fillWidth: true
                     text: root.emptyActivityTitle()
-                    font: Theme.text.heading.font
+                    textStyle: Theme.text.heading
                 }
                 CoreText {
                     objectName: "activityEmptyStateDescription"
                     Layout.fillWidth: true
                     text: root.emptyActivityDescription()
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral7
                 }
-                Button {
+                NeutralButton {
                     objectName: "activityRetryButton"
+                    surfaceLevel: 0
+                    Layout.alignment: Qt.AlignHCenter
                     visible: root.wallet && !!root.wallet.transactionActivityModel.loadError
                     text: qsTr("Try again")
                     onClicked: root.wallet.transactionActivityModel.reload()
@@ -468,74 +496,49 @@ Page {
         }
     }
 
-    ContextMenu {
+    TransactionActionsMenu {
         id: activityRowMenu
         objectName: "activityRowContextMenu"
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
         parent: Overlay.overlay
-        margins: 8
-        property string txid: ""
+        itemObjectNamePrefix: "activity"
+        rawTransaction: function(txid) {
+            return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
+        }
+        onExplorerLinkRequested: function(url) { explorerLinkPopup.openLink(url) }
+    }
+
+    PaymentRequestActionsMenu {
+        id: activityRequestMenu
+        objectName: "activityRequestContextMenu"
         property string requestId: ""
-        property bool isRequest: false
-        property string deleteError: ""
-        onAboutToShow: deleteError = ""
-        ContextMenuButton {
-            objectName: "activityCopyTransactionId"
-            visible: !activityRowMenu.isRequest
-            text: qsTr("Copy transaction ID")
-            onTriggered: Clipboard.setText(activityRowMenu.txid)
+        backgroundColor: Theme.color.surface2
+        parent: Overlay.overlay
+        showsCopyRequest: true
+        copyRequestEnabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
+        copyRequestObjectName: "activityCopyPaymentRequest"
+        deleteObjectName: "activityDeletePaymentRequest"
+        onCopyRequestRequested: {
+            const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRequestMenu.requestId) : ""
+            if (uri.length === 0) return
+            Clipboard.setText(uri)
         }
-        ContextMenuButton {
-            objectName: "activityCopyRawTransaction"
-            visible: !activityRowMenu.isRequest
-            text: qsTr("Copy raw transaction hex")
-            onTriggered: {
-                const hex = root.wallet ? root.wallet.transactionActivityModel.rawTransaction(activityRowMenu.txid) : ""
-                if (hex.length > 0) Clipboard.setText(hex)
+        onDeleteRequested: deleteRequestConfirmation.confirmDelete(root.wallet, activityRequestMenu.requestId)
+    }
+
+    // The explorer receives the transaction ID, so opening it is confirmed.
+    ExternalPopup {
+        id: explorerLinkPopup
+        objectName: "activityExplorerLinkPopup"
+    }
+
+    PaymentRequestDeleteConfirmation {
+        id: deleteRequestConfirmation
+        objectName: "activityDeletePaymentRequestConfirmation"
+        onDeleted: function(requestId) {
+            for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
+                if (request && request.id === requestId) request.clear()
             }
-        }
-        ContextMenuButton {
-            objectName: "activityCopyPaymentRequest"
-            visible: activityRowMenu.isRequest
-            enabled: !!root.wallet && !root.wallet.receiveRequestReconciliationPending
-            text: qsTr("Copy payment request")
-            onTriggered: {
-                const uri = root.wallet ? root.wallet.transactionActivityModel.paymentRequestUri(activityRowMenu.requestId) : ""
-                if (uri.length > 0) Clipboard.setText(uri)
-            }
-        }
-        ContextMenuDivider {
-            objectName: "activityDeletePaymentRequestDivider"
-            visible: activityRowMenu.isRequest
-        }
-        ContextMenuButton {
-            objectName: "activityDeletePaymentRequest"
-            visible: activityRowMenu.isRequest
-            text: qsTr("Delete payment request")
-            role: ContextMenuButton.Destructive
-            autoClose: false
-            onTriggered: {
-                const requestId = activityRowMenu.requestId
-                if (!root.wallet || !root.wallet.removeReceiveRequest(requestId)) {
-                    activityRowMenu.deleteError = qsTr("The payment request could not be deleted. Please try again.")
-                    return
-                }
-                for (const request of [root.wallet.currentPaymentRequest, root.wallet.detailPaymentRequest]) {
-                    if (request && request.id === requestId) request.clear()
-                }
-                activityRowMenu.close()
-            }
-        }
-        CoreText {
-            objectName: "activityDeletePaymentRequestError"
-            visible: activityRowMenu.isRequest && activityRowMenu.deleteError.length > 0
-            Layout.fillWidth: true
-            Layout.maximumWidth: 240
-            Layout.margins: 10
-            text: activityRowMenu.deleteError
-            color: Theme.color.red
-            font: Theme.text.caption.font
-            horizontalAlignment: Text.AlignLeft
         }
     }
 
@@ -580,7 +583,7 @@ Page {
         ContextMenuDivider {}
         ContextMenuButton {
             objectName: "activityExportButton"
-            text: qsTr("Export CSV")
+            text: qsTr("Export CSV…")
             iconSource: "qrc:/icons/export"
             onTriggered: {
                 if (automationExportPathField.text.length > 0) {
@@ -592,88 +595,20 @@ Page {
         }
     }
 
-    Popup {
+    AlertPopup {
         id: exportResultPopup
         objectName: "activityExportResultPopup"
-        modal: true
-        anchors.centerIn: parent
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        padding: 20
-        width: Math.min(420, root.width - 40)
-        height: exportResultLayout.implicitHeight + 40
+        parent: Overlay.overlay
+        tone: root.exportSucceeded ? AlertPopup.Success : AlertPopup.Error
+        iconSource: root.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
+        title: root.exportResultTitle()
+        titleObjectName: "activityExportResultTitle"
+        message: root.exportResultDescription()
+        messageObjectName: "activityExportResultDescription"
 
-        background: Rectangle {
-            color: Theme.color.neutral0
-            border.color: Theme.color.neutral4
-            border.width: 1
-            radius: 5
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                surfaceColor: parent.color
-                referenceColor: Theme.color.neutral1
-                cornerRadius: parent.radius
-            }
-        }
-
-        contentItem: ColumnLayout {
-            id: exportResultLayout
-            spacing: 20
-
-            Item {
-                Layout.alignment: Qt.AlignHCenter
-                width: 60
-                height: 60
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 30
-                    color: root.exportSucceeded ? Theme.color.green : Theme.color.red
-                    opacity: 0.2
-                }
-
-                Icon {
-                    anchors.centerIn: parent
-                    source: root.exportSucceeded ? "qrc:/icons/check" : "qrc:/icons/cross"
-                    color: root.exportSucceeded ? Theme.color.green : Theme.color.red
-                    size: 30
-                }
-            }
-
-            CoreText {
-                objectName: "activityExportResultTitle"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                text: root.exportResultTitle()
-                font.pixelSize: 28
-                bold: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            CoreText {
-                objectName: "activityExportResultDescription"
-                Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                color: Theme.color.neutral7
-                text: root.exportResultDescription()
-                font.pixelSize: 18
-                wrap: true
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            ContinueButton {
-                objectName: "activityExportResultCloseButton"
-                Layout.preferredWidth: Math.min(200, parent.width - 40)
-                Layout.alignment: Qt.AlignCenter
-                text: qsTr("Close window")
-                borderColor: Theme.color.neutral6
-                borderHoverColor: Theme.color.neutral9
-                borderPressedColor: Theme.color.neutral9
-                textColor: Theme.color.neutral9
-                backgroundColor: "transparent"
-                backgroundHoverColor: "transparent"
-                backgroundPressedColor: "transparent"
-                onClicked: exportResultPopup.close()
-            }
+        AlertAction {
+            text: qsTr("Close")
+            buttonObjectName: "activityExportResultCloseButton"
         }
     }
 
@@ -753,10 +688,22 @@ Page {
 
             // Return to the preset list.
             ItemDelegate {
+                id: presetsBackButton
                 objectName: "activityDatePresetsBack"
                 Layout.fillWidth: true
                 implicitHeight: 30
                 padding: 0
+                focusPolicy: Qt.StrongFocus
+                background: Item {
+                    FocusBorder {
+                        visible: presetsBackButton.visualFocus
+                        topMargin: 0
+                        bottomMargin: 0
+                        leftMargin: -4
+                        rightMargin: -4
+                        borderRadius: 5
+                    }
+                }
                 //: Accessibility label for the control that leaves the custom date range calendar and returns to the date presets.
                 Accessible.name: qsTr("Back to date presets")
                 Accessible.role: Accessible.Button
@@ -764,15 +711,15 @@ Page {
                     spacing: 4
                     Icon {
                         source: "image://images/caret-left"
-                        color: Theme.color.orange
+                        color: Theme.color.accentText
                         size: 14
                     }
                     CoreText {
                         Layout.fillWidth: true
                         //: Activity custom date range: link back to the list of date presets.
                         text: qsTr("Presets")
-                        color: Theme.color.orange
-                        font.pixelSize: 14
+                        color: Theme.color.accentText
+                        textStyle: Theme.text.captionStrong
                         horizontalAlignment: Text.AlignLeft
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -792,17 +739,15 @@ Page {
                 Layout.fillWidth: true
                 Layout.topMargin: 2
 
-                TextButton {
+                LinkButton {
                     objectName: "activityDateRangeReset"
                     //: Button that clears the Activity custom date range.
                     text: qsTr("Reset")
-                    textSize: 15
+                    textStyle: Theme.text.menuItemStrong
                     // Nothing to reset until a date has been picked.
                     enabled: calendar.hasSelection
-                    textColor: enabled ? Theme.color.neutral7 : Theme.color.neutral5
-                    // A disabled control still receives hover, which would
-                    // trigger the button's hover recolor; gate it on enabled.
-                    hoverEnabled: enabled && AppMode.isDesktop
+                    textColor: !enabled ? Theme.color.disabledContent
+                        : down || hovered ? Theme.color.neutral9 : Theme.color.neutral7
                     // Clear the picked dates and drop the applied filter,
                     // but stay in the calendar so a new range can be picked.
                     onClicked: {
@@ -813,14 +758,12 @@ Page {
 
                 Item { Layout.fillWidth: true }
 
-                TextButton {
+                LinkButton {
                     objectName: "activityDateRangeApply"
                     //: Button that applies the picked Activity custom date range.
                     text: qsTr("Apply")
-                    textSize: 15
+                    textStyle: Theme.text.menuItemStrong
                     enabled: calendar.valid
-                    textColor: enabled ? Theme.color.orange : Theme.color.neutral5
-                    hoverEnabled: enabled && AppMode.isDesktop
                     // Pass ISO strings rather than the Dates: a JS Date
                     // converted straight to QDate can shift a day across
                     // time zones. applyCustomRange selects the custom
@@ -891,17 +834,19 @@ Page {
             Layout.margins: 12
             spacing: 8
 
-            CoreText {
+            BitcoinAmountDisplayLabel {
+                hidesAmount: true
                 objectName: "activityAmountRangeLabel"
                 Layout.fillWidth: true
                 text: qsTr("%1 to %2").arg(lowerAmountFormatter.display).arg(upperAmountFormatter.displayWithUnit)
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignLeft
             }
             RangeSlider {
                 id: amountSlider
                 objectName: "activityAmountRangeSlider"
                 Layout.fillWidth: true
+                valuesHidden: optionsModel.hideAmounts
                 minValue: 0
                 maxValue: activityFilterProxy.availableMaxAmount
                 Accessible.name: qsTr("Activity amount range")
@@ -924,7 +869,6 @@ Page {
         ContextMenuButton {
             objectName: "activityClearFiltersAction"
             text: qsTr("Clear filters")
-            role: ContextMenuButton.Destructive
             onTriggered: root.clearFilters()
         }
     }

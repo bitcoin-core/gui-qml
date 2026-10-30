@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
 import org.bitcoincore.qt 1.0
+import "../../qml/controls"
 import "../../qml/pages/wallet"
 
 TestCase {
@@ -14,6 +15,8 @@ TestCase {
     when: windowShown
     width: 900
     height: 700
+
+    property string motionMode: ""
 
     Component {
         id: sendComponent
@@ -27,7 +30,12 @@ TestCase {
         SendTransactionReview { wallet: testWalletModel }
     }
 
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     function init() {
+        motionMode = Theme.motion.mode
         walletController.setSelectedWallet("send-create-test-wallet")
         testWalletModel.sendDraftSweepsWallet = false
         testWalletModel.currentTransactionSweepsWallet = false
@@ -73,6 +81,7 @@ TestCase {
     }
 
     function test_available_balance_keeps_caption_static() {
+        Theme.motion.mode = "full"
         const page = createTemporaryObject(sendComponent, testCase.Window.window.contentItem)
         verify(page !== null)
         page.width = testCase.width
@@ -175,9 +184,10 @@ TestCase {
         const closeButton = findChild(popup.contentItem, "sendTransactionReviewCloseButton")
         verify(reviewTitle !== null)
         verify(closeButton !== null)
-        compare(reviewTitle.text, "Review Transaction")
-        compare(closeButton.size, 45)
-        compare(closeButton.iconSize, 15)
+        compare(reviewTitle.text, "Review transaction")
+        compare(closeButton.size, Theme.size.iconButton)
+        compare(closeButton.iconSize, Theme.size.icon.s)
+        compare(closeButton.background.radius, closeButton.size / 2)
         const summary = findChild(popup.contentItem, "sendTransactionReviewSummary")
         compare(summary.amount, testWalletTransaction.total)
         const icon = findChild(summary, "sendTransactionReviewIcon")
@@ -556,6 +566,24 @@ TestCase {
         compare(testSendRecipient.label, "")
         compare(sendPage.paymentRequestStatus, "Payment request imported from clipboard")
         compare(sendPage.paymentRequestIsError, false)
+    }
+
+    function test_send_uri_import_dialog_focuses_field_and_applies_on_return() {
+        const page = createTemporaryObject(sendComponent, this)
+        verify(page !== null)
+        const sendPage = findChild(page, "walletSendPage")
+        sendPage.openPaymentRequestImport()
+        const popup = findChild(sendPage, "sendUriImportPopup")
+        tryCompare(popup, "opened", true)
+        const field = findChild(popup.contentItem, "sendUriImportInput")
+        tryCompare(field, "activeFocus", true)
+        compare(findChild(popup.contentItem, "sendUriImportApplyButton").enabled, false)
+
+        field.text = "bitcoin:bcrt1qdavt4j2sd7dlhqsavtnfxvzppw6k7qy97tmnu9?amount=0.01000000"
+        keyClick(Qt.Key_Return)
+        tryCompare(popup, "opened", false)
+        compare(testSendRecipient.amount.display, "0.01000000")
+        compare(sendPage.paymentRequestStatus, "Payment request imported from manual entry")
     }
 
     function test_send_payment_uri_paste_applies_from_each_recipient_field_data() {
@@ -942,6 +970,29 @@ TestCase {
         compare(status.visible, false)
     }
 
+    function test_coin_selection_body_fits_small_window_with_large_text() {
+        const window = testCase.Window.window
+        const originalHeight = window.height
+        const originalScale = Theme.textScale
+        window.height = 720
+        Theme.textScale = 1.3
+        try {
+            const page = createTemporaryObject(sendComponent, window.contentItem, {width: 1000, height: 720})
+            const popup = findChild(page, "coinSelectionPopup")
+            popup.open()
+            tryCompare(popup, "opened", true)
+            verify(waitForRendering(popup.contentItem))
+            const body = findChild(popup.contentItem, "coinSelectionBodyScroll")
+            const footer = findChild(popup.contentItem, "coinSelectionDoneButton")
+            verify(body.y + body.height <= footer.mapToItem(popup.contentItem, 0, 0).y)
+            verify(findChild(body, "sendCoinsList").height >= body.availableHeight)
+            popup.close()
+        } finally {
+            window.height = originalHeight
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_coin_selection_cancel_and_apply() {
         testSendRecipient.amount.satoshi = 0
         testWalletModel.feeEstimatePending = true
@@ -992,6 +1043,10 @@ TestCase {
         keyClick(Qt.Key_A, Qt.ControlModifier)
         keyClick("x")
         compare(addressInput.text, originalAddress)
+
+        keyClick(Qt.Key_Escape)
+        tryCompare(popup, "opened", false)
+        tryCompare(reviewButton, "activeFocus", true)
     }
 
     function test_locked_coin_confirmation_uses_identity_after_refresh() {
@@ -999,6 +1054,7 @@ TestCase {
         const popup = findChild(page, "coinSelectionPopup")
         popup.open()
         tryCompare(popup, "opened", true)
+        tryVerify(function() { return findChild(popup.contentItem, "coinSelectionItem_2") !== null })
         findChild(popup.contentItem, "coinSelectionItem_2").clicked()
         const alert = findChild(page, "lockedCoinSelectionAlert")
         tryCompare(alert, "opened", true)

@@ -6,7 +6,6 @@ import QtQuick 2.15
 import QtQuick.Layouts 1.15
 
 import "../../controls"
-import "../../components"
 
 ColumnLayout {
     id: root
@@ -42,40 +41,31 @@ ColumnLayout {
 
     spacing: 0
 
-    RowLayout {
+    DialogHeader {
         Layout.fillWidth: true
-        Layout.bottomMargin: 22
-
-        Header {
-            Layout.fillWidth: true
-            header: qsTr("Address details")
-            headerBold: true
-            center: false
-        }
-
-        CloseButton {
-            objectName: "addressDetailsCloseButton"
-            onClicked: root.closeRequested()
-        }
+        Layout.bottomMargin: Theme.space.xl
+        title: qsTr("Address details")
+        closeButtonObjectName: "addressDetailsCloseButton"
+        onCloseRequested: root.closeRequested()
     }
 
     FormSection {
         objectName: "addressDetailsSection"
         Layout.fillWidth: true
-        backgroundColor: Theme.color.neutral2
+        backgroundColor: Theme.color.surface2
 
         ValueRow {
             objectName: "addressDetailsAddressRow"
             Layout.fillWidth: true
             title: qsTr("Address")
             minimumRowHeight: 76
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
 
             trailingItem: AddressLabel {
                 objectName: "addressDetailsAddressLabel"
-                width: Math.min(380, Math.max(200, root.width * 0.68))
+                Layout.preferredWidth: Math.min(380, Math.max(200, root.width * 0.68))
                 address: root.address
-                embedded: true
+                surfaceLevel: 2
                 textStyle: Theme.text.monoCaption
                 textAlignment: Text.AlignRight
                 leftPadding: 0
@@ -88,11 +78,12 @@ ColumnLayout {
         ValueRow {
             objectName: "addressDetailsAmountRow"
             amountValue: true
+            hidesAmount: true
             Layout.fillWidth: true
             title: qsTr("Amount")
             value: root.amount
-            valueColor: root.hasAmount ? Theme.color.green : Theme.color.neutral6
-            dividerColor: Theme.color.neutral3
+            valueColor: root.hasAmount ? Theme.color.txIncoming : Theme.color.neutral6
+            dividerColor: Theme.color.surfaceDivider
         }
 
         TextFieldRow {
@@ -106,11 +97,11 @@ ColumnLayout {
             fieldWidth: Math.min(320, Math.max(180, root.width * 0.55))
             text: root.label
             //: Placeholder shown when an address has no private note yet.
-            placeholderText: qsTr("Add note...")
+            placeholderText: qsTr("Add note…")
             enabled: root.canEditLabel
             readOnly: !root.canEditLabel
             errorText: root.noteErrorText
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
             onEditingFinished: {
                 if (text !== root.label) {
                     root.editLabelRequested(root.address, text)
@@ -123,7 +114,7 @@ ColumnLayout {
             Layout.fillWidth: true
             title: qsTr("Type")
             value: root.category === "change" ? qsTr("Change") : qsTr("Receive")
-            dividerColor: Theme.color.neutral3
+            dividerColor: Theme.color.surfaceDivider
         }
 
         ValueRow {
@@ -135,7 +126,7 @@ ColumnLayout {
         }
     }
 
-    ContinueButton {
+    PrimaryButton {
         objectName: "addressDetailsCreatePaymentRequestButton"
         Layout.fillWidth: true
         Layout.topMargin: 24
@@ -145,10 +136,6 @@ ColumnLayout {
             //: Starts a new payment request for this address
             : qsTr("Create payment request")
         visible: root.category === "single-use" && !root.used
-        backgroundColor: Theme.color.orange
-        backgroundHoverColor: Theme.color.orangeLight1
-        backgroundPressedColor: Theme.color.orangeLight2
-        textColor: Theme.color.white
         onClicked: root.createPaymentRequestRequested()
     }
 }

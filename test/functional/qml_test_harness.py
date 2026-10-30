@@ -79,6 +79,10 @@ def setup_datadir(tmpdir, rpc_port=None):
     return datadir
 
 
+# Animations off, so tests wait for state instead of for transitions.
+TEST_MOTION_ARGS = ["-test-motion=off"]
+
+
 def qsettings_sandbox_args(env, config_home):
     """Configure a process environment and CLI args for isolated QSettings."""
     os.makedirs(config_home, exist_ok=True)
@@ -194,7 +198,7 @@ class QmlTestHarness:
         args = [
             self.gui_binary,
             f"-test-automation={self.socket_path}",
-        ] + settings_args + (["-resetguisettings"] if self.reset_settings else []) + qml_onboarded_args(
+        ] + TEST_MOTION_ARGS + settings_args + (["-resetguisettings"] if self.reset_settings else []) + qml_onboarded_args(
             self.extra_args,
             reset_settings=self.reset_settings,
             start_onboarded=self.start_onboarded,
@@ -364,7 +368,7 @@ def complete_visible_onboarding(gui):
         )
     walk_onboarding_to_connection(gui)
     gui.click("onboardingConnectionButton")
-    time.sleep(1)  # Allow navigation to the post-onboarding screen to settle.
+    gui.settle()
 
 
 def complete_preinit_onboarding(gui):

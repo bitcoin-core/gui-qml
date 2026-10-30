@@ -5,9 +5,14 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 
-Button {
+// A choice tile. Selection is the caller's: bind `selected` to the model and
+// update the model in onClicked. `checked` only mirrors `selected`; a click
+// or Space press toggles it, and the binding is put back at once.
+AbstractButton {
     id: button
+    property bool selected: false
     property string description
     property string errorText: ""
     property bool showErrorText: errorText.length > 0
@@ -15,132 +20,135 @@ Button {
     property string image: ""
     property string customDir: ""
     property bool surfaceSelectionStyle: false
+    readonly property int cornerRadius: Theme.radius.field
+
     padding: 15
     checkable: true
-    hoverEnabled: enabled
+    checked: selected
+    onToggled: checked = Qt.binding(function() { return button.selected })
+    hoverEnabled: enabled && AppMode.isDesktop
+    focusPolicy: Qt.StrongFocus
     implicitWidth: 450
+    implicitHeight: implicitContentHeight + topPadding + bottomPadding
+
+    Accessible.role: Accessible.RadioButton
+    Accessible.name: text
+    Accessible.description: description
+
+    HoverHandler {
+        enabled: button.enabled && AppMode.isDesktop
+        cursorShape: Qt.PointingHandCursor
+    }
+
     background: Rectangle {
         objectName: "optionButtonBackground"
         border.width: button.surfaceSelectionStyle ? 0 : 1
-        border.color: !button.enabled ? Theme.color.neutral4 : button.checked ? Theme.color.orange : button.hovered ? Theme.color.neutral9 : Theme.color.neutral5
-        radius: 10
+        border.color: !button.enabled ? Theme.color.disabledContent : button.checked ? Theme.color.neutral9 : button.hovered ? Theme.color.neutral7 : Theme.color.neutral5
+        radius: button.cornerRadius
         color: button.surfaceSelectionStyle
-            ? button.checked
-                ? Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-                : button.hovered ? Theme.color.neutral2 : Theme.color.neutral1
+            ? Qt.tint(Theme.color.surface1, button.down ? Theme.color.surfacePressed
+                : button.checked ? Theme.color.surfaceSelected
+                : button.hovered ? Theme.color.surfaceHover : "transparent")
             : "transparent"
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
         FocusBorder {
             visible: button.enabled && button.visualFocus
-            borderRadius: 14
+            targetRadius: button.cornerRadius
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        enabled: button.enabled
-        onClicked: button.clicked()
     }
 
     contentItem: RowLayout {
         opacity: button.enabled ? 1 : 0.55
         spacing: 3
-        Loader {
-            active: button.image !== ""
-            visible: active
+
+        Icon {
+            visible: button.image !== ""
             Layout.rightMargin: 7
-            sourceComponent: Button {
-                icon.source: button.image
-                icon.height: 40
-                icon.width: 40
-                icon.color: Theme.color.neutral9
-                padding: 0
-                background: null
-            }
+            source: button.image
+            size: 40
+            color: Theme.color.neutral9
         }
+
         ColumnLayout {
             spacing: 3
             Layout.fillWidth: true
-            Header {
+            CoreText {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
-                center: false
-                header: button.text
-                headerSize: 18
-                headerMargin: 0
-                headerColor: button.surfaceSelectionStyle && button.checked ? Theme.color.orange : Theme.color.neutral9
-                description: button.description
-                descriptionSize: 15
-                descriptionMargin: 0
+                visible: text.length > 0
+                text: button.text
+                textStyle: Theme.text.button
+                color: Theme.color.neutral9
+                horizontalAlignment: Text.AlignLeft
+                Accessible.ignored: true
             }
-            Loader {
+            CoreText {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 0
+                visible: text.length > 0
+                text: button.description
+                textStyle: Theme.text.description
+                color: Theme.color.neutral8
+                horizontalAlignment: Text.AlignLeft
+                Accessible.ignored: true
+            }
+            Rectangle {
+                visible: button.recommended
                 Layout.topMargin: 2
-                active: button.recommended
-                visible: active
-                sourceComponent: Label {
-                    background: Rectangle {
-                        color: Theme.color.neutral9
-                        radius: 3
+                implicitWidth: recommendedText.implicitWidth + 14
+                implicitHeight: recommendedText.implicitHeight + 4
+                color: Theme.color.activeFill
+                radius: Theme.radius.xs
 
-                        Behavior on color {
-                            ColorAnimation { duration: 150 }
-                        }
-                    }
-                    font.styleName: "Regular"
-                    font.pixelSize: 13
-                    topPadding: 3
-                    rightPadding: 7
-                    bottomPadding: 4
-                    leftPadding: 7
-                    color: Theme.color.neutral0
+                Behavior on color {
+                    enabled: Theme.motion.animated
+                    ColorAnimation { duration: Theme.motion.normal }
+                }
+
+                CoreText {
+                    id: recommendedText
+                    anchors.centerIn: parent
+                    textStyle: Theme.text.captionStrong
+                    color: Theme.color.activeForeground
                     text: qsTr("Recommended")
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
+                    wrap: false
                 }
             }
-            Loader {
+            Rectangle {
+                objectName: "optionButtonCustomDir"
+                visible: button.customDir.length > 0
                 Layout.topMargin: 12
                 Layout.fillWidth: true
-                active: button.customDir.length > 0
-                visible: active
-                sourceComponent: Button {
-                    id: container
-                    background: Rectangle {
-                        color: Theme.color.neutral2
-                        radius: 5
-                    }
-                    font.family: "BitcoinCoreSans"
-                    font.styleName: "Semi Bold"
-                    font.pixelSize: 13
-                    contentItem: Text {
-                        font: container.font
-                        color: Theme.color.neutral9
-                        text: button.customDir
-                        wrapMode: Text.WordWrap
-                    }
+                implicitHeight: customDirText.implicitHeight + Theme.space.m * 2
+                color: Theme.color.surface2
+                radius: Theme.radius.s
+
+                CoreText {
+                    id: customDirText
+                    anchors.fill: parent
+                    anchors.leftMargin: Theme.space.m
+                    anchors.rightMargin: Theme.space.m
+                    textStyle: Theme.text.monoCaption
+                    color: Theme.color.neutral9
+                    text: button.customDir
+                    horizontalAlignment: Text.AlignLeft
+                    wrapMode: Text.WrapAnywhere
                 }
             }
-            Loader {
+            CoreText {
+                objectName: "optionButtonErrorText"
+                visible: button.showErrorText && button.errorText.length > 0
                 Layout.topMargin: 3
                 Layout.fillWidth: true
-                active: button.showErrorText && button.errorText.length > 0
-                visible: active
-                sourceComponent: Label {
-                    objectName: "optionButtonErrorText"
-                    Layout.fillWidth: true
-                    font.family: "BitcoinCoreSans"
-                    font.styleName: "Regular"
-                    font.pixelSize: 15
-                    color: Theme.color.red
-                    text: button.errorText
-                    horizontalAlignment: Text.AlignLeft
-                    wrapMode: Text.WordWrap
-                }
+                Layout.preferredWidth: 0
+                textStyle: Theme.text.description
+                color: Theme.color.dangerText
+                text: button.errorText
+                horizontalAlignment: Text.AlignLeft
             }
         }
         Item {
@@ -153,8 +161,8 @@ Button {
             Icon {
                 anchors.centerIn: parent
                 source: "image://images/check"
-                color: button.surfaceSelectionStyle ? Theme.color.orange : Theme.color.neutral9
-                size: 24
+                color: Theme.color.neutral9
+                size: Theme.size.icon.xl
             }
         }
     }

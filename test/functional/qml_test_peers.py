@@ -28,6 +28,7 @@ import time
 
 from qml_test_harness import (
     GUI_STARTUP_TIMEOUT,
+    TEST_MOTION_ARGS,
     dump_qml_tree,
     find_gui_binary,
 )
@@ -184,6 +185,7 @@ class PeerQmlTestHarness:
             self.gui_binary,
             f"-datadir={self.gui_datadir}",
             f"-test-automation={self.socket_path}",
+            *TEST_MOTION_ARGS,
             "-disablewallet",
             "-qml_onboarded=1",
             "-logtimemicros",
@@ -362,6 +364,7 @@ class PeerQmlTestHarness:
             self.gui_binary,
             f"-datadir={self.gui_datadir}",
             f"-test-automation={self.socket_path}",
+            *TEST_MOTION_ARGS,
             "-disablewallet",
             "-qml_onboarded=1",
             "-logtimemicros",

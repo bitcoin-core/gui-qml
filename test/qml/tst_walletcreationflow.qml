@@ -59,7 +59,7 @@ TestCase {
         verify(modal !== null)
         modal.open()
         tryCompare(modal, "opened", true)
-        compare(modal.width, 768)
+        compare(modal.width, 760)
         compare(modal.height, 625)
         mouseClick(findChild(modal, "walletTypeRegular"))
         tryCompare(modal.flow.currentItem, "objectName", "createWalletFormPage")
@@ -98,7 +98,7 @@ TestCase {
         verify(findChild(form, "onboardingScrollView") !== null)
         compare(form.showBackButton, true)
         compare(form.title, "")
-        compare(form.heading, "View-only wallet")
+        compare(form.heading, "Watch-only wallet")
         compare(findChild(form, "watchOnlyXpubPasteButton"), null)
         const name = findChild(form, "createWalletNameInput")
         const xpub = findChild(form, "watchOnlyXpubInput")
@@ -177,30 +177,30 @@ TestCase {
         compare(findChild(form, "createWalletNameEntry").supportingText,
             "You cannot change this later.")
         compare(encrypt.text, "Encrypt this wallet with a strong password.")
-        compare(acknowledgement.loadedTrailingItem.checked, false)
+        compare(acknowledgement.checked, false)
         findChild(form, "createWalletNameInput").text = "Regular wallet"
         password.text = "correct horse battery staple"
         confirm.text = "different"
         compare(form.canCreate, false)
         confirm.text = password.text
         compare(form.canCreate, false)
-        acknowledgement.clicked()
-        compare(acknowledgement.loadedTrailingItem.checked, true)
+        acknowledgement.toggle()
+        compare(acknowledgement.checked, true)
         compare(form.canCreate, true)
         encrypt.checked = false
-        compare(acknowledgement.loadedTrailingItem.checked, false)
+        compare(acknowledgement.checked, false)
         compare(unencryptedAcknowledgement.visible, true)
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(unencryptedAcknowledgement.checked, false)
         compare(form.canCreate, false)
         compare(create.enabled, false)
-        unencryptedAcknowledgement.clicked()
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, true)
+        unencryptedAcknowledgement.toggle()
+        compare(unencryptedAcknowledgement.checked, true)
         compare(form.canCreate, true)
         encrypt.checked = true
         encrypt.checked = false
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(unencryptedAcknowledgement.checked, false)
         compare(form.canCreate, false)
-        unencryptedAcknowledgement.clicked()
+        unencryptedAcknowledgement.toggle()
         create.clicked()
         verify(warning.message.indexOf("won't be able to set a password later") !== -1)
         compare(warning.visibleActions[1].role, 0)
@@ -222,7 +222,7 @@ TestCase {
         findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
         findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
         compare(form.canCreate, false)
-        findChild(form, "createWalletPasswordConfirmToggle").clicked()
+        findChild(form, "createWalletPasswordConfirmToggle").toggle()
         compare(form.canCreate, true)
         let warningOpened = false
         const warning = findChild(form, "createWalletUnencryptedWarning")
@@ -259,8 +259,7 @@ TestCase {
         verify(findChild(complete, "importWalletSuccessBadge") !== null)
         const infoSection = findChild(complete, "importWalletInfoSection")
         compare(infoSection.showBackground, true)
-        compare(infoSection.isOnSurface, true)
-        compare(infoSection.showGradientBorder, false)
+        compare(infoSection.surfaceLevel, 1)
         compare(findChild(complete, "importWalletSuccessWalletName").text, "Imported wallet")
         compare(findChild(complete, "importWalletSuccessKeyScheme").text, "Single-key")
         compare(complete.primaryButton.visible, false)

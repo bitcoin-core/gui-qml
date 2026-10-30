@@ -43,6 +43,25 @@ TestCase {
         return data
     }
 
+    function test_amount_and_title_do_not_overlap() {
+        const originalScale = Theme.textScale
+        try {
+            for (const scale of [0.85, 1, 1.3]) {
+                Theme.textScale = scale
+                const flow = createTemporaryObject(flowComponent, this, {flow: snapshot()})
+                verify(waitForRendering(flow))
+                const node = findChild(flow, "transactionFlowOutput_0")
+                const amount = findChild(node, "transactionFlowAmountWide")
+                const title = findChild(node, "transactionFlowTitle")
+                verify(amount.visible)
+                verify(amount.x >= title.x + title.width)
+                verify(amount.x + amount.width <= amount.parent.width + 1)
+            }
+        } finally {
+            Theme.textScale = originalScale
+        }
+    }
+
     function test_amount_labels_survive_unit_changes() {
         const flow = createTemporaryObject(flowComponent, this, {flow: snapshot(), displayUnit: BitcoinAmount.SAT})
         verify(waitForRendering(flow))
@@ -54,8 +73,7 @@ TestCase {
             // The model publishes a fresh snapshot when formatting changes.
             flow.flow = snapshot()
             compare(findChild(flow, "transactionFlowOutput_0"), node)
-            tryCompare(label, "animating", true)
-            tryCompare(label, "animating", false)
+            compare(label.animating, false)
             verify(label.text.endsWith(unit === BitcoinAmount.SAT ? " sats" : " BTC"))
         }
     }
@@ -248,7 +266,7 @@ TestCase {
         compare(fee.strokeWidth, 2)
         for (const line of [fee]) {
             compare(line.strokeStyle, ShapePath.SolidLine)
-            compare(line.strokeColor, Theme.color.neutral3)
+            compare(line.strokeColor, Theme.color.surface3)
             compare(line.fillGradient, null)
         }
         verify(output.ribbon.proportional)
@@ -371,6 +389,8 @@ TestCase {
         for (let i = 0; i < paths.length; ++i) compare(flow.ribbonObjects[i], paths[i])
         const output = findChild(flow, "transactionFlowOutput_327")
         const path = flow.ribbonObjects.find(function(item) { return item.ribbon.id === "out:output:327" })
+        // Card heights settle in a later, coalesced measurement pass.
+        tryVerify(function() { return Math.abs(path.ribbon.endY - (output.y + output.height / 2)) < 0.01 })
         fuzzyCompare(path.ribbon.endX, output.x, 0.01)
         fuzzyCompare(path.ribbon.endY, output.y + output.height / 2, 0.01)
         mouseClick(findChild(flow, "transactionFlowOutputsToggle"))
@@ -402,10 +422,10 @@ TestCase {
         const line = flow.ribbonObjects.find(function(r) { return r.ribbon.id === "out:output:0" })
         verify(line !== undefined)
         compare(line.strokeWidth, 1)
-        compare(line.strokeColor, Theme.color.neutral2)
+        compare(line.strokeColor, Theme.color.surface2)
         compare(line.strokeStyle, ShapePath.SolidLine)
         compare(line.fillGradient, null)
-        compare(pill.color, Theme.color.neutral3)
+        compare(pill.color, Theme.color.surface3)
         verify(pill.visible)
         verify(content.visible)
         compare(content.text, data.expected)

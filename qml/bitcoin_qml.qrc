@@ -1,36 +1,29 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
-        <file>components/AboutOptions.qml</file>
-        <file>components/AddressDetailRow.qml</file>
-        <file>components/AddressLabel.qml</file>
-        <file>components/AlertAction.qml</file>
-        <file>components/AlertPopup.qml</file>
+        <file>controls/AddressLabel.qml</file>
+        <file>controls/AlertAction.qml</file>
+        <file>controls/AlertPopup.qml</file>
         <file>components/BannedPeersPopup.qml</file>
-        <file>components/BitcoinAddressDisplayField.qml</file>
-        <file>components/BitcoinAddressInputField.qml</file>
-        <file>components/BitcoinAmountInputField.qml</file>
+        <file>controls/BitcoinAddressInputField.qml</file>
+        <file>controls/BitcoinAmountInputField.qml</file>
         <file>components/BlockClock.qml</file>
-        <file>components/BlockCounter.qml</file>
-        <file>components/ConnectionOptions.qml</file>
-        <file>components/ConnectionSettings.qml</file>
         <file>components/DebugLogItemRow.qml</file>
+        <file>controls/DialogHeader.qml</file>
+        <file>controls/DialogPopup.qml</file>
         <file>components/DebugLogTitlesHeader.qml</file>
         <file>components/DesktopMenuActions.qml</file>
         <file>components/DesktopNativeMenuBar.qml</file>
-        <file>components/MempoolInformationRows.qml</file>
         <file>components/MenuCommand.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
         <file>components/ExternalPopup.qml</file>
-        <file>components/SendSection.qml</file>
         <file>components/SendRecipientEditor.qml</file>
         <file>components/CoinsList.qml</file>
         <file>components/SendCoinSelection.qml</file>
         <file>components/SendFeeSelection.qml</file>
-        <file>components/FeeSelection.qml</file>
         <file>components/MiniBlockClock.qml</file>
-        <file>components/MonospaceOutputView.qml</file>
-        <file>components/InfoBanner.qml</file>
+        <file>controls/MonospaceOutputView.qml</file>
+        <file>controls/InfoBanner.qml</file>
         <file>components/NetworkTrafficGraph.qml</file>
         <file>components/NetworkIndicator.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
@@ -38,45 +31,38 @@
         <file>components/NodeRuntimeDialog.qml</file>
         <file>components/NodeStatusActions.qml</file>
         <file>components/NodeWarningsPopup.qml</file>
-        <file>components/OptionPopup.qml</file>
         <file>components/PeersIndicator.qml</file>
-        <file>components/ProxySettings.qml</file>
         <file>components/SettingsPageContainer.qml</file>
-        <file>components/SettingsRestartNotice.qml</file>
         <file>components/SettingsSidebar.qml</file>
         <file>components/SettingsView.qml</file>
         <file>components/StorageLocations.qml</file>
-        <file>components/Separator.qml</file>
+        <file>controls/Separator.qml</file>
         <file>components/StorageOptions.qml</file>
-        <file>components/StorageSettings.qml</file>
-        <file>components/ToastBanner.qml</file>
-        <file>components/ToastPopup.qml</file>
-        <file>components/TotalBytesIndicator.qml</file>
-        <file>components/DetailEditRow.qml</file>
+        <file>controls/ToastBanner.qml</file>
+        <file>components/PaymentRequestActionsMenu.qml</file>
         <file>components/PeerActionsMenu.qml</file>
-        <file>components/QRCodePopup.qml</file>
         <file>components/PaymentRequestCard.qml</file>
+        <file>components/PaymentRequestDeleteConfirmation.qml</file>
         <file>components/PaymentRequestModal.qml</file>
         <file>components/OnboardingSettingsPopup.qml</file>
         <file>components/WalletCreationModal.qml</file>
         <file>components/WalletSuccessBadge.qml</file>
         <file>components/PaymentRequestField.qml</file>
-        <file>components/SearchBar.qml</file>
-        <file>components/Tooltip.qml</file>
+        <file>controls/SearchBar.qml</file>
+        <file>controls/HoverToolTip.qml</file>
+        <file>controls/Tooltip.qml</file>
         <file>components/TransactionFlow.qml</file>
-        <file>components/ConfirmationPill.qml</file>
-        <file>components/StatusPill.qml</file>
+        <file>controls/StatusPill.qml</file>
         <file>components/TransactionSummary.qml</file>
         <file>components/TransactionDetailsSection.qml</file>
+        <file>components/TransactionActionsMenu.qml</file>
         <file>components/TransactionDetailsGrid.qml</file>
         <file>components/TransactionFlowNode.qml</file>
         <file>components/TransactionFlowRibbon.qml</file>
         <file>components/TransactionFlowLayout.js</file>
-        <file>components/LabeledValueField.qml</file>
-        <file>components/LabeledBitcoinAddressField.qml</file>
+        <file>controls/LabeledBitcoinAddressField.qml</file>
         <file>components/WalletMigrationPopup.qml</file>
         <file>components/WalletPassphrasePopup.qml</file>
-        <file>controls/AddWalletButton.qml</file>
         <file>controls/AppFolderDialog.qml</file>
         <file>controls/CaretRightIcon.qml</file>
         <file>controls/CloseButton.qml</file>
@@ -87,18 +73,14 @@
         <file>controls/ContextMenuToggle.qml</file>
         <file>controls/CopyButton.qml</file>
         <file>controls/ActivityCalendar.qml</file>
-        <file>controls/ContinueButton.qml</file>
+        <file>controls/PrimaryButton.qml</file>
         <file>controls/DropdownButton.qml</file>
-        <file>controls/CoreCheckBox.qml</file>
         <file>controls/CheckBox.qml</file>
         <file>controls/CoreText.qml</file>
         <file>controls/BitcoinAmountDisplayLabelBase.qml</file>
         <file>controls/BitcoinAmountDisplayLabel.qml</file>
         <file>controls/BitcoinAmountDigitBase.qml</file>
         <file>controls/AmountDisplayLayout.js</file>
-        <file>controls/CoreTextField.qml</file>
-        <file>controls/EditableKeyValueRow.qml</file>
-        <file>controls/ExternalLink.qml</file>
         <file>controls/FilterButton.qml</file>
         <file>controls/RangeSlider.qml</file>
         <file>controls/Slider.qml</file>
@@ -106,68 +88,55 @@
         <file>controls/FieldBorderRings.qml</file>
         <file>controls/FormRow.qml</file>
         <file>controls/FormSection.qml</file>
+        <file>controls/GroupedRowBackground.qml</file>
         <file>controls/SurfaceGradientBorder.qml</file>
-        <file>controls/Header.qml</file>
+        <file>controls/SwitchRow.qml</file>
         <file>controls/Icon.qml</file>
         <file>controls/IconButton.qml</file>
-        <file>controls/InformationPage.qml</file>
-        <file>controls/KeyValueRow.qml</file>
         <file>controls/LinkRow.qml</file>
         <file>controls/ListRow.qml</file>
         <file>controls/LabeledField.qml</file>
-        <file>controls/LabeledTextInput.qml</file>
         <file>controls/LabeledTextArea.qml</file>
         <file>controls/LabeledTextField.qml</file>
         <file>controls/LabeledTextView.qml</file>
-        <file>controls/LabeledCoinControlButton.qml</file>
         <file>controls/NavButton.qml</file>
-        <file>controls/NavigationBar.qml</file>
         <file>controls/NavigationBar2.qml</file>
         <file>controls/NavigationTab.qml</file>
         <file>controls/NavigationSplitView.qml</file>
         <file>controls/OptionButton.qml</file>
         <file>controls/OptionSwitch.qml</file>
-        <file>controls/OutlineButton.qml</file>
         <file>controls/OverflowMenuButton.qml</file>
-        <file>controls/PageIndicator.qml</file>
         <file>controls/PageHeading.qml</file>
         <file>controls/PageStack.qml</file>
         <file>controls/PasswordTextField.qml</file>
         <file>controls/PopupPicker.qml</file>
-        <file>controls/ProgressIndicator.qml</file>
-        <file>controls/ProxyLocationInput.qml</file>
         <file>controls/QRImage.qml</file>
-        <file>controls/RightContentIcon.qml</file>
         <file>controls/qmldir</file>
-        <file>controls/SendOptionsPopup.qml</file>
-        <file>controls/SendCreateOptionsPopup.qml</file>
+        <file>components/SendCreateOptionsPopup.qml</file>
         <file>controls/SegmentedPicker.qml</file>
+        <file>controls/SelectableText.qml</file>
         <file>controls/SizeClass.qml</file>
-        <file>controls/Setting.qml</file>
-        <file>controls/SettingsHeader.qml</file>
-        <file>controls/SettingsPage.qml</file>
+        <file>components/SettingsHeader.qml</file>
+        <file>components/SettingsPage.qml</file>
         <file>controls/Skeleton.qml</file>
         <file>controls/SpinningIndicator.qml</file>
-        <file>controls/TextButton.qml</file>
+        <file>controls/StateBackground.qml</file>
         <file>controls/AmountUnitButton.qml</file>
         <file>controls/NeutralButton.qml</file>
-        <file>controls/OnboardingFooter.qml</file>
-        <file>controls/OnboardingBackButton.qml</file>
-        <file>controls/OnboardingNavigationBar.qml</file>
-        <file>controls/OnboardingView.qml</file>
+        <file>components/OnboardingFooter.qml</file>
+        <file>components/OnboardingBackButton.qml</file>
+        <file>components/OnboardingNavigationBar.qml</file>
+        <file>components/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
-        <file>controls/ToggleButton.qml</file>
         <file>controls/utils.js</file>
-        <file>controls/ValueInput.qml</file>
         <file>controls/ValueRow.qml</file>
-        <file>controls/WalletCreationTypeRow.qml</file>
+        <file>components/WalletCreationTypeRow.qml</file>
         <file>pages/initerrormessage.qml</file>
         <file>pages/MainWindow.qml</file>
         <file>pages/preinit.qml</file>
         <file>pages/node/CommandConsole.qml</file>
-        <file>pages/node/NetworkTraffic.qml</file>
         <file>pages/node/NodeRunner.qml</file>
         <file>pages/node/Peers.qml</file>
         <file>pages/node/PeersView.qml</file>
@@ -182,14 +151,29 @@
         <file>pages/onboarding/OnboardingStorageLocation.qml</file>
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/onboarding/OnboardingWizard.qml</file>
-        <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
-        <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDebugLogView.qml</file>
         <file>pages/settings/SettingsDesignSystem.qml</file>
+        <file>pages/settings/designsystem/DesignSystemButtons.qml</file>
+        <file>pages/settings/designsystem/DesignSystemColors.qml</file>
+        <file>pages/settings/designsystem/DesignSystemDataDisplay.qml</file>
+        <file>pages/settings/designsystem/DesignSystemFeedback.qml</file>
+        <file>pages/settings/designsystem/DesignSystemFields.qml</file>
+        <file>pages/settings/designsystem/DesignSystemGroup.qml</file>
+        <file>pages/settings/designsystem/DesignSystemLayout.qml</file>
+        <file>pages/settings/designsystem/DesignSystemMenus.qml</file>
+        <file>pages/settings/designsystem/DesignSystemMotion.qml</file>
+        <file>pages/settings/designsystem/DesignSystemNavigation.qml</file>
+        <file>pages/settings/designsystem/DesignSystemPage.qml</file>
+        <file>pages/settings/designsystem/DesignSystemPageList.qml</file>
+        <file>pages/settings/designsystem/DesignSystemRows.qml</file>
+        <file>pages/settings/designsystem/DesignSystemSection.qml</file>
+        <file>pages/settings/designsystem/DesignSystemSectionPage.qml</file>
+        <file>pages/settings/designsystem/DesignSystemSelection.qml</file>
+        <file>pages/settings/designsystem/DesignSystemSpecimen.qml</file>
+        <file>pages/settings/designsystem/DesignSystemState.qml</file>
+        <file>pages/settings/designsystem/DesignSystemTypography.qml</file>
         <file>pages/settings/SettingsDeveloper.qml</file>
-        <file>pages/settings/SettingsProxy.qml</file>
-        <file>pages/settings/SettingsStorage.qml</file>
         <file>pages/settings/AboutSettingsPage.qml</file>
         <file>pages/settings/ConnectionSettingsPage.qml</file>
         <file>pages/settings/DisplaySettingsPage.qml</file>
@@ -210,7 +194,6 @@
         <file>pages/wallet/AddressList.qml</file>
         <file>pages/wallet/AddressDetails.qml</file>
         <file>pages/wallet/AddressRow.qml</file>
-        <file>pages/wallet/CoinSelection.qml</file>
         <file>pages/wallet/SendCreate.qml</file>
         <file>pages/wallet/SendComplete.qml</file>
         <file>pages/wallet/SpeedUpComplete.qml</file>
@@ -231,13 +214,15 @@
         <file>pages/wallet/WalletBadge.qml</file>
         <file>pages/wallet/WalletPasswordSettings.qml</file>
         <file>pages/wallet/WalletSelect.qml</file>
+        <file>themes/CoreDark.qml</file>
+        <file>themes/CoreLight.qml</file>
+        <file>themes/CoreTypeSet.qml</file>
+        <file>themes/Palette.qml</file>
+        <file>themes/TypeSet.qml</file>
     </qresource>
     <qresource prefix="/icons">
-        <file alias="add-wallet-dark">res/icons/add-wallet-dark.png</file>
         <file alias="alert-filled">res/icons/alert-filled.png</file>
         <file alias="arrow-diagonal-square">res/icons/arrow-diagonal-square.png</file>
-        <file alias="arrow-down">res/icons/arrow-down.png</file>
-        <file alias="arrow-up">res/icons/arrow-up.png</file>
         <file alias="arrow-up-down.svg">res/src/arrow-up-down.svg</file>
         <file alias="group-by.svg">res/src/group-by.svg</file>
         <file alias="checklist.svg">res/src/checklist.svg</file>
@@ -256,7 +241,6 @@
         <file alias="activity-invoice.svg">res/src/activity-invoice.svg</file>
         <file alias="bitcoin-circle">res/icons/bitcoin-circle.png</file>
         <file alias="onboarding-bitcoin.svg">res/src/onboarding-bitcoin.svg</file>
-        <file alias="blockclock-icon">res/icons/blockclock-icon.png</file>
         <file alias="blockclock-size-compact">res/icons/blockclock-size-compact.png</file>
         <file alias="blockclock-size-showcase">res/icons/blockclock-size-showcase.png</file>
         <file alias="onboarding-clock-face-dark.svg">res/src/onboarding-clock-face-dark.svg</file>
@@ -268,30 +252,25 @@
         <file alias="caret-left">res/icons/caret-left.png</file>
         <file alias="caret-right">res/icons/caret-right.png</file>
         <file alias="check-bold">res/icons/check-bold.png</file>
-        <file alias="check.svg">res/src/check.svg</file>
         <file alias="check">res/icons/check.png</file>
         <file alias="copy">res/icons/copy.png</file>
-        <file alias="circle-file">res/icons/circle-file.png</file>
-        <file alias="circle-green-check">res/icons/circle-green-check.png</file>
-        <file alias="circle-red-cross">res/icons/circle-red-cross.png</file>
+        <file alias="check.svg">res/src/check.svg</file>
         <file alias="coinbase.svg">res/src/coinbase.svg</file>
         <file alias="coinbase">res/icons/coinbase.png</file>
         <file alias="console">res/icons/console.png</file>
         <file alias="cross">res/icons/cross.png</file>
-        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="cross-circle-filled">res/icons/cross-circle-filled.png</file>
-        <file alias="cross-filled">res/icons/cross-filled.png</file>
         <file alias="devices-filled">res/icons/devices-filled.png</file>
         <file alias="edit">res/icons/edit.png</file>
         <file alias="ellipsis">res/icons/ellipsis.png</file>
         <file alias="error">res/icons/error.png</file>
         <file alias="export">res/icons/export.png</file>
+        <file alias="cross.svg">res/src/cross.svg</file>
         <file alias="file.svg">res/src/file.svg</file>
         <file alias="file">res/icons/file.png</file>
         <file alias="flip-vertical">res/icons/flip-vertical.png</file>
         <file alias="gear">res/icons/gear.png</file>
         <file alias="gear-outline">res/icons/gear-outline.png</file>
-        <file alias="green-check">res/icons/green-check.png</file>
         <file alias="hidden">res/icons/hidden.png</file>
         <file alias="info">res/icons/info.png</file>
         <file alias="info-filled">res/icons/info-filled.png</file>
@@ -306,24 +285,17 @@
         <file alias="node-3-connections">res/icons/node-3-connections.png</file>
         <file alias="node-4-connections">res/icons/node-4-connections.png</file>
         <file alias="network-light">res/icons/network-light.png</file>
-        <file alias="pending-dark">res/icons/pending-dark.png</file>
-        <file alias="pending-light">res/icons/pending-light.png</file>
         <file alias="plus">res/icons/plus.png</file>
         <file alias="plus-filled">res/icons/plus-filled.png</file>
         <file alias="refresh">res/icons/refresh.png</file>
-        <file alias="qr-code">res/icons/qr-code.png</file>
-        <file alias="plus-big-filled">res/icons/plus-big-filled.png</file>
         <file alias="pending">res/icons/pending.png</file>
         <file alias="search">res/icons/search.png</file>
         <file alias="share">res/icons/share.png</file>
         <file alias="shutdown">res/icons/shutdown.png</file>
-        <file alias="singlesig-wallet">res/icons/singlesig-wallet.png</file>
         <file alias="storage-dark">res/icons/storage-dark.png</file>
         <file alias="storage-light">res/icons/storage-light.png</file>
         <file alias="tooltip-arrow-dark">res/icons/tooltip-arrow-dark.png</file>
         <file alias="tooltip-arrow-light">res/icons/tooltip-arrow-light.png</file>
-        <file alias="triangle-down">res/icons/triangle-down.png</file>
-        <file alias="triangle-up">res/icons/triangle-up.png</file>
         <file alias="two-keys">res/icons/two-keys.png</file>
         <file alias="two-keys-filled">res/icons/two-keys-filled.png</file>
         <file alias="wallet">res/icons/wallet.png</file>

@@ -9,14 +9,11 @@ import org.bitcoincore.qt 1.0
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "bannedPeersPopup"
 
     property var model: banListModel
-    readonly property bool compact: parent ? parent.width <= SizeClass.compactWidthMax : false
-    readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
-    property real verticalOffset: 0
 
     function unbanPeer(row) {
         if (!root.model.unbanAt(row)) {
@@ -25,118 +22,27 @@ Popup {
         }
     }
 
-    x: parent ? Math.round((parent.width - width) / 2) : 0
-    y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-    width: Math.min(640, parent ? parent.width - 40 : 640)
-    height: Math.min(implicitHeight, parent ? parent.height - 40 : implicitHeight)
-    modal: true
-    focus: true
-    leftPadding: root.compact ? 24 : 40
-    rightPadding: root.compact ? 24 : 40
-    topPadding: 30
-    bottomPadding: 30
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-    enter: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 0
-            to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            from: -30
-            to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
-        }
-    }
-
-    exit: Transition {
-        NumberAnimation {
-            property: "opacity"
-            from: 1
-            to: 0
-            duration: 250
-            easing.type: Easing.InCubic
-        }
-        NumberAnimation {
-            property: "verticalOffset"
-            from: 0
-            to: -30
-            duration: 250
-            easing.type: Easing.InCubic
-        }
-    }
-
-    Overlay.modal: Rectangle {
-        color: root.modalOverlayColor
-        opacity: root.opacity
-    }
-
-    background: Rectangle {
-        objectName: "bannedPeersPopupSurface"
-        color: Theme.color.neutral1
-        border.color: Theme.color.neutral2
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            cornerRadius: parent.radius
-        }
-        radius: 10
-    }
+    title: qsTr("Banned peers")
+    surfaceObjectName: "bannedPeersPopupSurface"
+    implicitWidth: 640
 
     contentItem: ColumnLayout {
         spacing: 0
 
-        RowLayout {
+        DialogHeader {
             Layout.fillWidth: true
-            Layout.bottomMargin: 12
-
-            Header {
-                Layout.fillWidth: true
-                header: qsTr("Banned peers")
-                headerBold: true
-                center: false
-            }
-
-            IconButton {
-                id: closeButton
-                objectName: "bannedPeersCloseButton"
-                size: 28
-                iconSize: 12
-                iconSource: "image://images/cross"
-                iconColor: Theme.color.neutral8
-                Accessible.name: qsTr("Close")
-                background: Rectangle {
-                    radius: 5
-                    color: closeButton.down || closeButton.hovered
-                        ? Theme.color.neutral2 : Theme.color.neutral1
-                }
-                onClicked: root.close()
-            }
-        }
-
-        CoreText {
-            Layout.fillWidth: true
-            Layout.bottomMargin: 20
-            text: qsTr("These peers are blocked from connecting to your node.")
-            font: Theme.text.description.font
-            lineHeight: Theme.text.description.lineHeight
-            lineHeightMode: Text.FixedHeight
-            color: Theme.color.neutral6
-            horizontalAlignment: Text.AlignLeft
-            wrapMode: Text.WordWrap
+            Layout.bottomMargin: Theme.space.xl
+            title: root.title
+            description: qsTr("These peers are blocked from connecting to your node.")
+            closeButtonObjectName: "bannedPeersCloseButton"
+            onCloseRequested: root.close()
         }
 
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(360, Math.max(72, bannedPeersList.contentHeight))
-            color: Theme.color.neutral2
-            radius: 12
+            color: Theme.color.surface2
+            radius: Theme.radius.cardInset
             clip: true
 
             ListView {
@@ -154,41 +60,38 @@ Popup {
                     required property int index
                     width: bannedPeersList.width
                     height: 72
-                    leftPadding: 16
-                    rightPadding: 12
+                    leftPadding: Theme.space.l
+                    rightPadding: Theme.space.ml
                     topPadding: 10
                     bottomPadding: 10
                     hoverEnabled: AppMode.isDesktop
                     background: Item {
-                        Rectangle {
+                        StateBackground {
                             anchors.fill: parent
-                            anchors.margins: 4
-                            radius: 10
-                            color: bannedPeerRow.down || bannedPeerRow.hovered
-                                ? Theme.color.neutral3 : "transparent"
+                            anchors.margins: Theme.space.xs
+                            radius: Theme.radius.sidebarRow
+                            stateColor: bannedPeerRow.down ? Theme.color.surfacePressed
+                                : bannedPeerRow.hovered ? Theme.color.surfaceHover : "transparent"
                         }
                         Separator {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
-                            anchors.leftMargin: 16
-                            anchors.rightMargin: 16
+                            anchors.leftMargin: Theme.space.l
+                            anchors.rightMargin: Theme.space.l
                             visible: bannedPeerRow.index < bannedPeersList.count - 1
-                            color: Theme.color.neutral3
                         }
                     }
                     contentItem: RowLayout {
-                        spacing: 12
+                        spacing: Theme.space.ml
                         ColumnLayout {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 0
-                            spacing: 3
+                            spacing: Theme.space.xs
                             CoreText {
                                 Layout.fillWidth: true
                                 text: bannedPeerRow.address
-                                font: Theme.text.monoDescription.font
-                                lineHeight: Theme.text.monoDescription.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.monoDescription
                                 color: Theme.color.neutral9
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideMiddle
@@ -197,19 +100,18 @@ Popup {
                             CoreText {
                                 Layout.fillWidth: true
                                 text: qsTr("Until %1").arg(bannedPeerRow.banUntil)
-                                font: Theme.text.caption.font
-                                lineHeight: Theme.text.caption.lineHeight
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 color: Theme.color.neutral6
                                 horizontalAlignment: Text.AlignLeft
                                 elide: Text.ElideRight
                                 wrap: false
                             }
                         }
-                        OutlineButton {
+                        NeutralButton {
                             objectName: "unbanButton_" + bannedPeerRow.index
-                            bold: false
-                            horizontalPadding: 18
+                            buttonSize: NeutralButton.Large
+                            textStyle: Theme.text.button
+                            horizontalPadding: Theme.space.l
                             text: qsTr("Unban")
                             onClicked: root.unbanPeer(bannedPeerRow.index)
                         }
@@ -221,7 +123,7 @@ Popup {
                 anchors.centerIn: parent
                 visible: bannedPeersList.count === 0
                 text: qsTr("No banned peers")
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
                 color: Theme.color.neutral6
             }
         }

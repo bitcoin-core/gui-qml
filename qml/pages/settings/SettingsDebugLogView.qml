@@ -180,7 +180,7 @@ SettingsPage {
         objectName: "debugLogTableSection"
         Layout.fillWidth: true
         rowSpacing: 0
-        backgroundColor: Theme.color.neutral1
+        backgroundColor: Theme.color.surface1
 
         DebugLogTitlesHeader {
             id: titlesHeader
@@ -245,9 +245,9 @@ SettingsPage {
                     ? debugLogModel.openError
                     : root.emptyMessage()
                 color: debugLogModel.openError.length > 0
-                    ? Theme.color.red
+                    ? Theme.color.dangerText
                     : Theme.color.neutral7
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 horizontalAlignment: Text.AlignHCenter
                 wrap: true
             }
@@ -258,8 +258,8 @@ SettingsPage {
             objectName: "debugLogTableFooter"
             Layout.fillWidth: true
             Layout.preferredHeight: 44
-            color: Theme.color.neutral1
-            radius: 16
+            color: Theme.color.surface1
+            radius: Theme.radius.card
 
             Rectangle {
                 objectName: "debugLogTableFooterTopFill"
@@ -270,13 +270,11 @@ SettingsPage {
                 color: parent.color
             }
 
-            Rectangle {
+            Separator {
                 objectName: "debugLogTableFooterDivider"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: 1
-                color: Theme.color.neutral2
             }
 
             NeutralButton {

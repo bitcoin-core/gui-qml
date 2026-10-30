@@ -61,7 +61,7 @@ TestCase {
         compare(searchBar.height, 40)
         compare(searchField.height, 40)
         compare(searchBar.background.visible, false)
-        compare(searchField.background.color, Theme.color.neutral2)
+        compare(searchField.background.color, Theme.color.surface2)
         compare(searchIcon.source.toString(), "image://images/search")
         compare(searchField.background.border.width, 0)
         testWindow.requestActivate()
@@ -90,7 +90,7 @@ TestCase {
         verify(filterPicker !== null)
         verify(openFileButton !== null)
         compare(filterButton.active, false)
-        compare(filterButton.background.color, Theme.color.neutral1)
+        compare(filterButton.background.color, Theme.color.surface1)
         compare(filterButton.iconSize, 24)
         verify(filterButton.x < optionsButton.x)
         compare(filterButton.x, searchBar.x + searchBar.width + 16)
@@ -98,10 +98,10 @@ TestCase {
         compare(inactiveFilterIcon.opacity, 1)
         compare(activeFilterIcon.opacity, 0)
         compare(optionsButton.iconSource.toString(), "image://images/ellipsis")
-        compare(optionsButton.iconSize, 40)
-        compare(optionsButton.iconItem.width, 40)
-        compare(optionsButton.iconItem.height, 40)
-        compare(optionsButton.background.color, Theme.color.neutral1)
+        compare(optionsButton.iconSize, Theme.size.icon.l)
+        compare(optionsButton.iconItem.width, Theme.size.icon.l)
+        compare(optionsButton.iconItem.height, Theme.size.icon.l)
+        compare(optionsButton.background.color, Theme.color.surface1)
         compare(filterPicker.currentValue, "all")
         mouseClick(filterButton)
         tryCompare(filterMenu, "opened", true)
@@ -136,13 +136,13 @@ TestCase {
         verify(footerDivider !== null)
         verify(scrollButton !== null)
         verify(loadMoreButton !== null)
-        compare(card.color, Theme.color.neutral1)
-        compare(titles.background.color, Theme.color.neutral1)
-        compare(footer.color, Theme.color.neutral1)
+        compare(card.color, Theme.color.surface1)
+        compare(titles.background.color, Theme.color.surface1)
+        compare(footer.color, Theme.color.surface1)
         compare(titlesDivider.height, 1)
-        compare(titlesDivider.color, Theme.color.neutral2)
+        compare(titlesDivider.color, Theme.color.surfaceDivider)
         compare(footerDivider.height, 1)
-        compare(footerDivider.color, Theme.color.neutral2)
+        compare(footerDivider.color, Theme.color.surfaceDivider)
         compare(titles.background.radius, 16)
         compare(footer.radius, 16)
         verify(findChild(view, "debugLogTitlesHeaderBottomFill") !== null)
@@ -151,8 +151,8 @@ TestCase {
         compare(loadMoreButton.buttonSize, NeutralButton.Medium)
         compare(scrollButton.implicitHeight, 34)
         compare(loadMoreButton.implicitHeight, 34)
-        compare(scrollButton.backgroundColor, Theme.color.neutral2)
-        compare(loadMoreButton.backgroundColor, Theme.color.neutral2)
+        compare(scrollButton.backgroundColor, Theme.color.surface2)
+        compare(loadMoreButton.backgroundColor, Theme.color.surface2)
     }
 
     function test_open_debug_log_button_invokes_model() {
@@ -178,20 +178,20 @@ TestCase {
 
         compare(filterIcon.width, 24)
         compare(filterIcon.height, 24)
-        compare(optionsIcon.width, 40)
-        compare(optionsIcon.height, 40)
+        compare(optionsIcon.width, Theme.size.icon.l)
+        compare(optionsIcon.height, Theme.size.icon.l)
 
         mouseMove(filterButton, filterButton.width / 2, filterButton.height / 2)
         tryCompare(filterButton, "hovered", true)
-        tryCompare(filterIcon, "color", Theme.color.orange)
+        tryCompare(filterIcon, "color", Theme.color.neutral9)
         compare(filterIcon.width, 24)
         compare(filterIcon.height, 24)
 
         mouseMove(optionsButton, optionsButton.width / 2, optionsButton.height / 2)
         tryCompare(optionsButton, "hovered", true)
-        tryCompare(optionsIcon, "color", Theme.color.orange)
-        compare(optionsIcon.width, 40)
-        compare(optionsIcon.height, 40)
+        tryCompare(optionsIcon, "color", Theme.color.neutral9)
+        compare(optionsIcon.width, Theme.size.icon.l)
+        compare(optionsIcon.height, Theme.size.icon.l)
     }
 
     function test_find_shortcut_focuses_search() {
@@ -222,8 +222,9 @@ TestCase {
 
         compare(row.typeColumnWidth, titles.typeColumnWidth)
         compare(row.timeColumnWidth, titles.timeColumnWidth)
-        compare(titles.typeColumnWidth, 32)
-        compare(titles.timeColumnWidth, 80)
+        compare(titles.typeColumnWidth, 48)
+        verify(titles.timeColumnWidth >= 80)
+        verify(findChild(row, "debugLogItemRow_0Time").implicitWidth <= titles.timeColumnWidth)
         tryVerify(function() {
             return findChild(row, "debugLogItemRow_0Message").width > 0
         })
@@ -248,12 +249,12 @@ TestCase {
         const warning = list.itemAtIndex(2)
         compare(findChild(regular, "debugLogItemRow_0TypeIndicator").color.a, 0)
         compare(findChild(error, "debugLogItemRow_1TypeIndicator").color,
-                Theme.color.red)
+                Theme.color.danger)
         compare(findChild(warning, "debugLogItemRow_2TypeIndicator").color,
-                Theme.color.amber)
-        compare(regular.background.color, Theme.color.neutral1)
-        compare(error.background.color, Theme.color.neutral2)
-        compare(warning.background.color, Theme.color.neutral1)
+                Theme.color.warning)
+        compare(regular.background.color, Theme.color.surface1)
+        compare(error.background.color, Theme.color.surface2)
+        compare(warning.background.color, Theme.color.surface1)
     }
 
     function test_message_wraps_and_is_selectable() {
@@ -297,8 +298,8 @@ TestCase {
         tryCompare(inactiveFilterIcon, "scale", filterButton.minimizedIconScale)
         tryCompare(activeFilterIcon, "opacity", 1)
         tryCompare(activeFilterIcon, "scale", 1)
-        compare(activeFilterIcon.color, Theme.color.white)
-        compare(filterButton.background.color, Theme.color.orange)
+        compare(activeFilterIcon.color, Theme.color.activeForeground)
+        compare(filterButton.background.color, Theme.color.activeFill)
         compare(warningsAndErrorsOption.selected, true)
         compare(allOption.selected, false)
 

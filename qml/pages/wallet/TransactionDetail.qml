@@ -44,11 +44,11 @@ Page {
         default: return qsTr("Transaction")
         }
     }
-    readonly property real sidePadding: width < 640 ? 16 : 40
+    readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real detailContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     signal showTransaction(string txid)
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
     title: qsTr("Transaction")
 
@@ -58,43 +58,26 @@ Page {
         rightPadding: leftPadding
         topPadding: 24
         bottomPadding: 4
-        leftItem: NavButton {
-            objectName: "activityDetailsBackButton"
-            text: root.width < 640 ? "" : qsTr("Activity")
-            Accessible.name: qsTr("Back to Activity")
-            iconSource: "image://images/caret-left"
-            onClicked: if (root.StackView.view) root.StackView.view.pop()
-        }
-        centerItem: CoreText {
-            objectName: "transactionDetailTitle"
-            text: root.title
-            font: Theme.text.heading.font
-            wrap: false
-        }
+        showBackButton: true
+        backButtonObjectName: "activityDetailsBackButton"
+        backButtonText: SizeClass.isCompact(root.width) ? "" : qsTr("Activity")
+        backButtonAccessibleName: qsTr("Back to Activity")
+        onBackClicked: if (root.StackView.view) root.StackView.view.pop()
+        title: root.title
+        titleObjectName: "transactionDetailTitle"
         rightItem: OverflowMenuButton {
             id: moreButton
             objectName: "transactionDetailMoreButton"
-            onClicked: moreMenu.open()
-            ContextMenu {
+            checked: moreMenu.opened
+            onClicked: moreMenu.openBelow(moreButton, Theme.space.m)
+            TransactionActionsMenu {
                 id: moreMenu
                 objectName: "transactionDetailMoreMenu"
-                x: moreButton.width - width
-                y: moreButton.height + 8
-                ContextMenuButton {
-                    objectName: "transactionCopyIdMenuButton"
-                    text: qsTr("Copy transaction ID")
-                    iconSource: "qrc:/icons/copy"
-                    onTriggered: Clipboard.setText(root.txid)
+                txid: root.txid
+                rawTransaction: function(txid) {
+                    return root.wallet ? root.wallet.transactionActivityModel.rawTransaction(txid) : ""
                 }
-                Repeater {
-                    model: optionsModel.thirdPartyTransactionLinks(root.txid)
-                    delegate: ContextMenuButton {
-                        required property var modelData
-                        text: qsTr("Show in %1").arg(modelData.host)
-                        iconSource: "image://images/export"
-                        onTriggered: Qt.openUrlExternally(modelData.url)
-                    }
-                }
+                onExplorerLinkRequested: function(url) { explorerLinkPopup.openLink(url) }
             }
         }
     }
@@ -103,7 +86,13 @@ Page {
         if (requestId) paymentRequestModal.openRequest(requestId)
     }
 
-    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; wallet: root.wallet }
+    PaymentRequestModal { id: paymentRequestModal; objectName: "transactionPaymentRequestModal"; parent: Overlay.overlay; wallet: root.wallet }
+
+    // The explorer receives the transaction ID, so opening it is confirmed.
+    ExternalPopup {
+        id: explorerLinkPopup
+        objectName: "transactionExplorerLinkPopup"
+    }
 
     ScrollView {
         id: scroll
@@ -129,9 +118,10 @@ Page {
                     Layout.fillWidth: true
                     Layout.bottomMargin: 8
                     amount: root.amount
-                    amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.green : Theme.color.neutral9
+                    hidesAmount: true
+                    amountColor: root.inactive ? Theme.color.neutral7 : root.incoming ? Theme.color.txIncoming : Theme.color.neutral9
                     subtitle: root.actionLabel + (root.transactionData.timestamp
-                        ? " · " + Qt.formatDateTime(new Date(root.transactionData.timestamp * 1000), "MMM d, h:mm AP") : "")
+                        ? " · " + new Date(root.transactionData.timestamp * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat) : "")
                     iconComponent: ActivityIcon {
                         objectName: "transactionDetailIcon"
                         iconSize: 48
@@ -142,55 +132,57 @@ Page {
                     }
                     statusComponent: RowLayout {
                         spacing: 8
-                        ConfirmationPill {
+                        StatusPill {
                             objectName: "transactionConfirmationPill"
-                            confirmations: root.depth
-                            statusKnown: root.statusKnown
-                            inactive: root.inactive
+                            readonly property bool neutralStatus: !root.statusKnown || root.inactive || root.depth <= 0
+                            accentColor: neutralStatus ? Theme.color.neutral7
+                                : root.depth < 6 ? Theme.color.warning : Theme.color.success
+                            backgroundColor: neutralStatus ? Theme.color.surface2 : Theme.color.tint(accentColor)
+                            text: !root.statusKnown ? qsTr("Status unavailable")
+                                : !root.inactive && root.depth === 0 ? qsTr("Unconfirmed")
+                                : root.depth === 1 ? qsTr("1 confirmation") : qsTr("%1 confirmations").arg(Math.max(0, root.depth))
                         }
                         Rectangle {
                             visible: root.inactiveLabel.length > 0
                             implicitWidth: inactiveText.implicitWidth + 24
                             implicitHeight: 30
-                            radius: 15
-                            color: Theme.color.neutral2
+                            radius: height / 2
+                            color: Theme.color.surface2
                             CoreText {
                                 id: inactiveText
                                 anchors.centerIn: parent
                                 text: root.inactiveLabel
                                 color: Theme.color.neutral7
-                                font: Theme.text.captionStrong.font
+                                textStyle: Theme.text.captionStrong
                             }
                         }
                     }
                 }
 
-                BusyIndicator {
+                SpinningIndicator {
                     objectName: "transactionDetailsLoading"
+                    size: 32
+                    color: Theme.color.neutral7
                     Layout.alignment: Qt.AlignHCenter
                     visible: root.detailsLoading
                     running: visible
                     Accessible.name: qsTr("Loading transaction details")
                 }
-                InfoBanner {
+                ToastBanner {
                     objectName: "transactionDetailsError"
                     Layout.fillWidth: true
-                    visible: root.detailsError.length > 0
-                    message: root.detailsError
-                    primaryButtonText: qsTr("Try again")
-                    onPrimaryClicked: if (root.wallet) root.wallet.transactionActivityModel.requestTransactionDetails(root.txid)
+                    shown: root.detailsError.length > 0
+                    tone: ToastBanner.Error
+                    text: root.detailsError
+                    actionText: qsTr("Try again")
+                    onActionTriggered: if (root.wallet) root.wallet.transactionActivityModel.requestTransactionDetails(root.txid)
                 }
                 InfoBanner {
                     objectName: "speedUpBanner"
                     visible: root.canBump
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
-                    radius: 16
-                    contentMargin: 20
-                    bannerLayout: width < 640 ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
-                    messageFontPixelSize: Theme.text.description.font.pixelSize
-                    messageLineHeight: Theme.text.description.lineHeight
-                    message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee")
+                    bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+                    message: qsTr("This transaction is still unconfirmed. You can speed it up by increasing the fee.")
                     primaryButtonText: qsTr("Speed up")
                     onPrimaryClicked: speedUpOverlay.open()
                 }
@@ -198,10 +190,7 @@ Page {
                     objectName: "replacedBanner"
                     visible: root.replacedByTxid.length > 0
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
-                    radius: 16
-                    contentMargin: 20
-                    bannerLayout: width < 640 ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
+                    bannerLayout: SizeClass.isCompact(width) ? InfoBanner.Layout.Vertical : InfoBanner.Layout.Horizontal
                     title: qsTr("Replaced by a newer transaction")
                     message: root.replacedByTxid.substring(0, 12) + "…" + root.replacedByTxid.slice(-12)
                     primaryButtonText: qsTr("View replacement")
@@ -212,8 +201,6 @@ Page {
                     objectName: "transactionMaturityBanner"
                     visible: !root.inactive && root.transactionData.blocksToMaturity > 0
                     Layout.fillWidth: true
-                    backgroundColor: Theme.color.neutral1
-                    contentMargin: 20
                     message: qsTr("This mining reward will be spendable after %1 more blocks.").arg(root.transactionData.blocksToMaturity || 0)
                 }
 
@@ -224,6 +211,7 @@ Page {
                     flow: root.flow
                     transactionId: root.txid
                     displayUnit: optionsModel.displayUnit
+                    hidesAmounts: true
                     walletName: root.wallet && root.wallet.name ? root.wallet.name : qsTr("Your wallet")
                     selectedEntryId: root.outputIndex >= 0 ? "output:" + root.outputIndex : ""
                     onPaymentRequestRequested: function(requestId) { root.openPaymentRequestDetail(requestId) }
@@ -238,6 +226,7 @@ Page {
                 TransactionDetailsSection {
                     visible: root.detailsExpanded
                     Layout.fillWidth: true
+                    hidesAmounts: true
                     details: root.transactionData
                 }
             }
@@ -246,6 +235,7 @@ Page {
 
     SpeedUpOverlay {
         id: speedUpOverlay
+        parent: Overlay.overlay
         txid: root.txid
         bumpModel: root.wallet ? root.wallet.bumpModel : null
         onBumpSucceeded: {
@@ -256,6 +246,7 @@ Page {
 
     SpeedUpComplete {
         id: speedUpComplete
+        parent: Overlay.overlay
         onClosed: if (root.wallet) root.wallet.transactionActivityModel.reload()
         onDone: close()
         onViewNewTransaction: function(txid) {

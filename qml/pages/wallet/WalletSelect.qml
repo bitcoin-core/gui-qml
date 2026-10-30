@@ -27,9 +27,10 @@ Popup {
 
     // Keep the trigger clickable while dimming the rest of the window.
     Overlay.modeless: Rectangle {
-        color: Qt.rgba(0, 0, 0, 0.5)
+        color: Theme.color.modalOverlay
         Behavior on opacity {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+            enabled: Theme.motion.animated
+            NumberAnimation { duration: Theme.motion.fade(Theme.motion.exit); easing.type: Theme.motion.easing.enter }
         }
     }
 
@@ -38,46 +39,43 @@ Popup {
             property: "opacity"
             from: 0
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fade(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: -12
+            from: Theme.motion.reduced ? 0 : -12
             to: 0
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
         NumberAnimation {
             property: "scale"
-            from: 0.96
+            from: Theme.motion.popoverScale
             to: 1
-            duration: 300
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.travel(Theme.motion.slow)
+            easing.type: Theme.motion.easing.enter
         }
     }
 
     exit: Transition {
         NumberAnimation {
             property: "opacity"
-            from: 1
             to: 0
-            duration: 250
-            easing.type: Easing.InCubic
+            duration: Theme.motion.fade(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "verticalOffset"
-            from: 0
-            to: -12
-            duration: 250
-            easing.type: Easing.InCubic
+            to: Theme.motion.reduced ? 0 : -12
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
         NumberAnimation {
             property: "scale"
-            from: 1
-            to: 0.96
-            duration: 250
-            easing.type: Easing.InCubic
+            to: Theme.motion.popoverScale
+            duration: Theme.motion.travel(Theme.motion.exit)
+            easing.type: Theme.motion.easing.exit
         }
     }
 
@@ -89,6 +87,13 @@ Popup {
     function closeLoadedWallet(name) {
         root.close()
         root.closeWalletRequested(name)
+    }
+
+    function focusRow(index) {
+        if (index < 0 || index >= listView.count) return
+        listView.positionViewAtIndex(index, ListView.Contain)
+        const row = listView.itemAtIndex(index)
+        if (row) row.forceActiveFocus(Qt.TabFocusReason)
     }
 
     Connections {
@@ -105,10 +110,10 @@ Popup {
     }
 
     background: Rectangle {
-        color: Theme.color.neutral1
-        border.color: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3
+        color: Theme.color.surface1
+        border.color: Theme.color.menuBorder
         border.width: 1
-        radius: 5
+        radius: Theme.radius.m
     }
 
     ButtonGroup {
@@ -141,7 +146,7 @@ Popup {
                 leftPadding: 10
                 text: section === "open" ? qsTr("Open wallets") : qsTr("Closed wallets")
                 horizontalAlignment: Text.AlignLeft
-                font: Theme.text.caption.font
+                textStyle: Theme.text.caption
                 color: Theme.color.neutral6
             }
 
@@ -176,17 +181,17 @@ Popup {
                         return qsTr("Failed to open wallet")
                     case WalletListModel.Open:
                         return balance + " " + (optionsModel.displayUnit === BitcoinAmount.SAT
-                            ? (balanceSatoshi === 1 ? "sat" : "sats") : optionsModel.displayUnitLabel)
+                            ? optionsModel.displayUnitLabelForAmount(balanceSatoshi) : optionsModel.displayUnitLabel)
                     case WalletListModel.Closed:
                     default:
                         return ""
                     }
                 }
                 readonly property color statusColor: {
-                    if (loadState === WalletListModel.LoadError) return Theme.color.red
-                    return delegate.checked ? Theme.color.orange : Theme.color.neutral9
+                    if (loadState === WalletListModel.LoadError) return Theme.color.dangerText
+                    return delegate.checked ? Theme.color.accentText : Theme.color.neutral9
                 }
-                readonly property color nameColor: delegate.checked ? Theme.color.orange : Theme.color.neutral9
+                readonly property color nameColor: delegate.checked ? Theme.color.accentText : Theme.color.neutral9
 
                 objectName: "walletSelectItem_" + name.replace(/[^A-Za-z0-9_]/g, "_")
                 width: listView.width
@@ -194,21 +199,39 @@ Popup {
                 checked: loadState === WalletListModel.Open && walletController.selectedWallet.name === name
                 enabled: !walletController.walletLoadInProgress
                 ButtonGroup.group: buttonGroup
+                focusPolicy: Qt.StrongFocus
                 leftPadding: 10
                 rightPadding: 10
                 topPadding: 0
                 bottomPadding: 0
+                Accessible.role: Accessible.ListItem
+                Accessible.name: delegate.displayName
+                Accessible.description: delegate.loadState === WalletListModel.Open && optionsModel.hideAmounts
+                    ? qsTr("Hidden amount") : delegate.statusText
+                Accessible.selected: delegate.checked
 
-                background: Rectangle {
-                    radius: 6
-                    color: delegate.hovered || delegate.visualFocus ? Theme.color.neutral3
-                        : delegate.checked ? Theme.color.neutral2 : "transparent"
-                    Rectangle {
+                Keys.onUpPressed: root.focusRow(delegate.index - 1)
+                Keys.onDownPressed: root.focusRow(delegate.index + 1)
+
+                background: StateBackground {
+                    radius: Theme.radius.sidebarRow
+                    stateColor: delegate.down ? Theme.color.surfacePressed
+                        : delegate.checked ? Theme.color.surfaceSelected
+                        : delegate.hovered ? Theme.color.surfaceHover : "transparent"
+                    Separator {
                         visible: delegate.loadState === WalletListModel.Open
                             && delegate.index > 0 && !delegate.checked && !delegate.hovered
                         width: parent.width
-                        height: 1
-                        color: Theme.color.neutral2
+                    }
+
+                    FocusBorder {
+                        objectName: delegate.objectName + "FocusBorder"
+                        visible: delegate.visualFocus
+                        targetRadius: parent.radius
+                        topMargin: 2
+                        bottomMargin: 2
+                        leftMargin: 2
+                        rightMargin: 2
                     }
                 }
 
@@ -239,31 +262,14 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.displayName
                             horizontalAlignment: Text.AlignLeft
-                            font: Theme.text.menuItemStrong.font
+                            textStyle: Theme.text.menuItemStrong
                             color: delegate.nameColor
                             wrap: false
                             elide: Text.ElideRight
 
-                            ToolTip {
-                                id: nameTooltip
+                            HoverToolTip {
                                 text: delegate.displayName
                                 visible: delegate.hovered && nameText.truncated
-                                delay: 500
-                                padding: 8
-                                background: Rectangle {
-                                    color: Theme.color.neutral0
-                                    border.color: Theme.color.neutral4
-                                    border.width: 1
-                                    radius: 5
-                                }
-                                contentItem: CoreText {
-                                    text: nameTooltip.text
-                                    color: (delegate.hovered ? Theme.color.neutral9 : Theme.color.neutral8)
-                                    font.pixelSize: 13
-                                    horizontalAlignment: Text.AlignLeft
-                                    wrapMode: Text.WordWrap
-                                    width: Math.min(implicitWidth, 220)
-                                }
                             }
                         }
 
@@ -272,13 +278,14 @@ Popup {
                             Layout.fillWidth: true
                             text: delegate.statusText
                             horizontalAlignment: Text.AlignLeft
-                            font: delegate.loadState === WalletListModel.Open
-                                ? Theme.text.monoCaption.font : Theme.text.caption.font
+                            textStyle: delegate.loadState === WalletListModel.Open
+                                ? Theme.text.amountCaption : Theme.text.caption
                             color: delegate.statusColor
                             wrap: false
                             elide: Text.ElideRight
                             visible: text.length > 0
                             animateUnitChanges: delegate.loadState === WalletListModel.Open
+                            hidesAmount: delegate.loadState === WalletListModel.Open
                         }
                     }
 
@@ -293,32 +300,28 @@ Popup {
                             width: 20
                             height: 20
                             radius: width / 2
-                            color: Theme.color.orange
+                            color: Theme.color.accent
                             Icon {
                                 anchors.centerIn: parent
                                 size: 14
                                 source: "image://images/check-bold"
-                                color: Theme.color.neutral0
+                                color: Theme.color.background
                             }
                         }
 
-                        IconButton {
+                        OverflowMenuButton {
                             id: actionsButton
                             objectName: "walletSelectActions_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             visible: delegate.loadState !== WalletListModel.Loading
                             enabled: visible && !walletController.walletLoadInProgress
-                            size: 24
-                            iconSize: 18
-                            iconSource: "image://images/ellipsis"
+                            size: Theme.size.controlSmall
                             iconColor: delegate.nameColor
-                            hoverColor: Theme.color.neutral9
+                            activeIconColor: Theme.color.neutral9
+                            backgroundColor: "transparent"
+                            hoverBackgroundColor: actionsButton.down ? Theme.color.surfacePressed : Theme.color.surfaceHover
                             Accessible.name: qsTr("Actions for %1").arg(delegate.displayName)
-                            background: Rectangle {
-                                radius: 6
-                                color: actionsButton.hovered ? Theme.color.neutral3 : "transparent"
-                            }
                             onClicked: actionsMenu.visible ? actionsMenu.close() : actionsMenu.open()
 
                             ContextMenu {
@@ -337,8 +340,10 @@ Popup {
                                 Component.onDestruction: {
                                     if (root.activeContextMenu === actionsMenu) root.activeContextMenu = null
                                 }
+                                // Modeless, so a second press on the trigger reaches it and toggles.
+                                modal: false
                                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
-                                backgroundColor: Theme.color.neutral2
+                                backgroundColor: Theme.color.surface2
                                 // Close immediately before the owning row can be removed or reordered.
                                 exit: null
                                 objectName: "walletSelectActionsMenu_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
@@ -368,7 +373,7 @@ Popup {
                                 ContextMenuButton {
                                     objectName: "walletSelectClose_" + delegate.name.replace(/[^A-Za-z0-9_]/g, "_")
                                     visible: delegate.loadState === WalletListModel.Open
-                                    text: qsTr("Close wallet")
+                                    text: qsTr("Close wallet…")
                                     iconSource: "image://images/cross"
                                     onTriggered: {
                                         actionsMenu.close()
@@ -378,11 +383,11 @@ Popup {
                             }
                         }
 
-                        BusyIndicator {
+                        SpinningIndicator {
                             anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 24
-                            height: 24
+                            size: Theme.size.icon.l
+                            color: Theme.color.neutral7
                             running: delegate.loadState === WalletListModel.Loading
                             visible: running
                         }
@@ -414,9 +419,9 @@ Popup {
         }
         ContextMenuButton {
             objectName: "walletSelectAddWalletButton"
-            text: qsTr("Add wallet")
-            textColor: Theme.color.orange
-            hoverTextColor: Theme.color.orange
+            text: qsTr("Add wallet…")
+            textColor: Theme.color.accentText
+            hoverTextColor: Theme.color.accentText
             iconSource: "image://images/plus-filled"
             enabled: !walletController.walletLoadInProgress
             onTriggered: {

@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
 import "../../qml/controls"
+import "../../qml/components"
 
 TestCase {
     id: testCase
@@ -14,6 +15,16 @@ TestCase {
     visible: true
     width: 900
     height: 600
+
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
 
     Component {
         id: stackComponent
@@ -90,6 +101,7 @@ TestCase {
     }
 
     function test_navigationBarCrossFadesTitleAndButtons() {
+        Theme.motion.mode = "full"
         const bar = createTemporaryObject(navigationBarComponent, testCase)
         verify(bar !== null)
         const back = findChild(bar, "onboardingBackButton")

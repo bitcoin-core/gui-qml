@@ -20,14 +20,16 @@ LabeledField {
     property alias trailingItem: trailingLoader.sourceComponent
     readonly property alias field: input
     readonly property alias loadedTrailingItem: trailingLoader.item
-    property int fieldHeight: 52
-    property int fieldCornerRadius: 10
+    property int fieldHeight: Theme.size.field
+    property int fieldCornerRadius: Theme.radius.field
     property int fieldHorizontalPadding: fieldSurface ? 14 : 16
-    property color fieldBackgroundColor: Theme.color.neutral1
-    property color focusBorderColor: fieldSurface ? Theme.color.neutral6 : Theme.color.orange
-    property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.neutral4
-    property color placeholderColor: enabled ? Theme.color.neutral6 : Theme.color.neutral4
+    property color fieldBackgroundColor: Theme.color.surface1
+    property color fieldTextColor: enabled ? Theme.color.neutral9 : Theme.color.disabledContent
+    property color placeholderColor: enabled ? Theme.color.placeholder : Theme.color.disabledContent
     property var fieldTextStyle: Theme.text.description
+    // For a field whose visible label is a section title outside it.
+    property string accessibleName: label
+    property string accessibleDescription: errorText.length > 0 ? errorText : supportingText
     fieldFocused: input.activeFocus
 
     signal textEdited(string text)
@@ -55,14 +57,20 @@ LabeledField {
             rightPadding: trailingLoader.active
                 ? trailingLoader.width + (root.fieldSurface ? root.fieldHorizontalPadding : root.fieldHorizontalPadding * 2)
                 : (root.fieldSurface ? 0 : root.fieldHorizontalPadding)
-            Accessible.name: root.label
-            Accessible.description: root.errorText.length > 0 ? root.errorText : root.supportingText
+            Accessible.name: root.accessibleName
+            Accessible.description: root.accessibleDescription
 
             background: Rectangle {
                 color: root.fieldSurface ? "transparent" : root.fieldBackgroundColor
                 radius: root.fieldCornerRadius
-                border.width: !root.fieldSurface && input.activeFocus ? 2 : 0
-                border.color: root.focusBorderColor
+
+                FieldBorderRings {
+                    anchors.fill: parent
+                    visible: !root.fieldSurface && input.activeFocus
+                    cornerRadius: root.fieldCornerRadius
+                    ringColor: root.activeBorderColor
+                    outerObjectName: input.objectName.length > 0 ? input.objectName + "FocusRing" : ""
+                }
             }
 
             onTextEdited: root.textEdited(text)

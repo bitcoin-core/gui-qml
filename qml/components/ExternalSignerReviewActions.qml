@@ -31,14 +31,14 @@ Item {
         return qsTr("Approve on external signer to broadcast this transaction.")
     }
     readonly property color statusColor: {
-        if (reviewState === "signed") return Theme.color.green
-        if (reviewState === "error") return Theme.color.red
+        if (reviewState === "signed") return Theme.color.successText
+        if (reviewState === "error") return Theme.color.dangerText
         return Theme.color.neutral7
     }
     readonly property string buttonText: {
         if (reviewState === "signed") return qsTr("Send")
         if (reviewState === "partiallySigned") return qsTr("More signatures required")
-        if (reviewState === "waiting") return qsTr("Waiting for approval...")
+        if (reviewState === "waiting") return qsTr("Waiting for approval…")
         if (reviewState === "error") return qsTr("Retry external signer")
         return qsTr("Approve on external signer")
     }
@@ -104,7 +104,7 @@ Item {
         id: actionsColumn
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 20
+        spacing: Theme.space.xl
 
         CoreText {
             objectName: root.statusObjectName
@@ -113,13 +113,11 @@ Item {
             horizontalAlignment: Text.AlignLeft
             wrap: true
             text: root.statusText
-            font: Theme.text.body.font
-            lineHeight: Theme.text.body.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.body
             color: root.statusColor
         }
 
-        ContinueButton {
+        PrimaryButton {
             objectName: root.buttonObjectName
             Layout.fillWidth: true
             text: root.buttonText

@@ -5,14 +5,20 @@
 #include <QtQuickTest/quicktest.h>
 
 #include <QAbstractListModel>
+#include <QAccessible>
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFont>
 #include <QHash>
 #include <QIcon>
+#include <QImage>
 #include <QLocale>
+#include <QPixmap>
+#include <QPointF>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -20,6 +26,7 @@
 #include <QRegularExpression>
 #include <QSortFilterProxyModel>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -32,8 +39,11 @@
 
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
+#include <qml/buttonkeyactivation.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
+#include <qml/globalsettings.h>
+#include <qml/motionpreference.h>
 
 class MockAppMode : public QObject
 {
@@ -2338,6 +2348,7 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(bool storageEnoughForFull READ storageEnoughForFull NOTIFY storageStatusChanged)
     Q_PROPERTY(QString thirdPartyTransactionUrls MEMBER m_third_party_transaction_urls NOTIFY thirdPartyTransactionUrlsChanged)
     Q_PROPERTY(QString moneyFontChoice MEMBER m_money_font_choice NOTIFY moneyFontChoiceChanged)
+    Q_PROPERTY(bool hideAmounts MEMBER m_hide_amounts NOTIFY hideAmountsChanged)
     Q_PROPERTY(QString externalSignerPath MEMBER m_external_signer_path NOTIFY externalSignerPathChanged)
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
 
@@ -2376,6 +2387,7 @@ public:
     QString m_storage_error_text;
     QString m_third_party_transaction_urls;
     QString m_money_font_choice{QStringLiteral("embedded")};
+    bool m_hide_amounts{false};
     QString m_external_signer_path;
     QVariantMap m_core_setting_status_overrides;
     MockCoreSettingsModel m_core_settings;
@@ -2415,7 +2427,7 @@ public:
     }
     QString storageAvailableText() const
     {
-        return m_storage_check_pending ? QStringLiteral("Checking available storage...") : QStringLiteral("%1GB available").arg(m_storage_available_gb);
+        return m_storage_check_pending ? QStringLiteral("Checking available storage…") : QStringLiteral("%1GB available").arg(m_storage_available_gb);
     }
     bool existingProfile() const { return m_existing_profile; }
     void setExistingProfile(bool value)
@@ -2603,6 +2615,7 @@ Q_SIGNALS:
     void storageStatusChanged();
     void thirdPartyTransactionUrlsChanged();
     void moneyFontChoiceChanged();
+    void hideAmountsChanged();
     void externalSignerPathChanged();
     void moneyFontChanged();
 
@@ -2666,6 +2679,7 @@ class MockNodeModel : public QObject
     Q_PROPERTY(QString runtimeDialogIcon MEMBER m_runtime_dialog_icon NOTIFY runtimeDialogChanged)
     Q_PROPERTY(unsigned int runtimeDialogButtons MEMBER m_runtime_dialog_buttons NOTIFY runtimeDialogChanged)
     Q_PROPERTY(bool runtimeDialogQuestion MEMBER m_runtime_dialog_question NOTIFY runtimeDialogChanged)
+    Q_PROPERTY(unsigned int lastRuntimeDialogAnswer MEMBER m_last_runtime_dialog_answer NOTIFY runtimeDialogChanged)
     Q_PROPERTY(int blockTipHeight MEMBER m_block_tip_height NOTIFY blockTipHeightChanged)
     Q_PROPERTY(int mempoolTransactionCount MEMBER m_mempool_transaction_count NOTIFY mempoolInfoChanged)
     Q_PROPERTY(double mempoolUsageMB MEMBER m_mempool_usage_mb NOTIFY mempoolInfoChanged)
@@ -2705,6 +2719,7 @@ public:
     QString m_runtime_dialog_icon{QStringLiteral("image://images/info-filled")};
     unsigned int m_runtime_dialog_buttons{0};
     bool m_runtime_dialog_question{false};
+    unsigned int m_last_runtime_dialog_answer{0};
     int m_block_tip_height{0};
     int m_mempool_transaction_count{0};
     double m_mempool_usage_mb{0.0};
@@ -2730,7 +2745,7 @@ public:
     Q_INVOKABLE void requestShutdown() { Q_EMIT requestedShutdown(); }
     Q_INVOKABLE void answerRuntimeDialog(unsigned int button)
     {
-        Q_UNUSED(button);
+        m_last_runtime_dialog_answer = button;
         m_runtime_dialog_visible = false;
         Q_EMIT runtimeDialogChanged();
     }
@@ -4109,6 +4124,87 @@ public:
     }
 };
 
+// Stands in for the app's QR provider so QRImage loads without warnings.
+class TestQrProvider : public QQuickImageProvider
+{
+public:
+    TestQrProvider() : QQuickImageProvider(QQuickImageProvider::Pixmap) {}
+
+    QPixmap requestPixmap(const QString&, QSize* size, const QSize& requested_size) override
+    {
+        QPixmap pixmap(requested_size.isValid() ? requested_size : QSize(1, 1));
+        pixmap.fill(Qt::white);
+        if (size) *size = pixmap.size();
+        return pixmap;
+    }
+};
+
+// Reads what a screen reader receives for an item. Controls fill in their
+// roles, names and states only once an assistive tool attaches. On older Qt
+// (6.5 and earlier) activate() only reaches the items that already exist,
+// and they don't track later changes, so tests call it after creating items
+// and again after changing them.
+class TestAccessibility : public QObject
+{
+    Q_OBJECT
+
+public:
+    // Returns whether accessibility is now active. Qt 6.5 and older only
+    // notify observers here; without a platform bridge isActive() stays
+    // false and controls never fill in their automatic names and states.
+    Q_INVOKABLE bool activate()
+    {
+        QAccessible::setActive(true);
+        return QAccessible::isActive();
+    }
+    Q_INVOKABLE void deactivate() { QAccessible::setActive(false); }
+    Q_INVOKABLE QVariantMap info(QObject* object) const
+    {
+        QVariantMap result;
+        QAccessibleInterface* iface = object ? QAccessible::queryAccessibleInterface(object) : nullptr;
+        if (!iface) return result;
+        const QAccessible::State state = iface->state();
+        result[QStringLiteral("role")] = int(iface->role());
+        result[QStringLiteral("name")] = iface->text(QAccessible::Name);
+        result[QStringLiteral("description")] = iface->text(QAccessible::Description);
+        result[QStringLiteral("checkable")] = bool(state.checkable);
+        result[QStringLiteral("checked")] = bool(state.checked);
+        return result;
+    }
+};
+
+class TestImage : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE QColor pixelAt(const QImage& image, const QPointF& point, qreal logical_width) const
+    {
+        if (image.isNull() || logical_width <= 0) return {};
+        // The grab has device pixels; the sample point uses item coordinates.
+        const qreal ratio = image.width() / logical_width;
+        return image.pixelColor(qRound(point.x() * ratio), qRound(point.y() * ratio));
+    }
+};
+
+// QML can't list a resource folder; the design system test needs the
+// shared controls and components to check that each has a showcase entry.
+class TestResources : public QObject
+{
+    Q_OBJECT
+
+public:
+    Q_INVOKABLE QStringList qmlTypes(const QString& folder) const
+    {
+        QStringList names;
+        const QDir dir(QStringLiteral(":/qml/") + folder);
+        for (const QFileInfo& info : dir.entryInfoList({QStringLiteral("*.qml")}, QDir::Files, QDir::Name)) {
+            names << info.completeBaseName();
+        }
+        return names;
+    }
+};
+
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
@@ -4116,8 +4212,14 @@ class QmlTestsSetup : public QObject
 public Q_SLOTS:
     void applicationAvailable()
     {
+        static ButtonKeyActivation button_key_activation;
         // Exercise the same customizable controls used by the application.
         qputenv("QT_QUICK_CONTROLS_STYLE", "Basic");
+        QCoreApplication::setOrganizationName(QStringLiteral("BitcoinCoreQmlTests"));
+        QCoreApplication::setOrganizationDomain(QStringLiteral("qmltests.bitcoincore.org"));
+        QCoreApplication::setApplicationName(QStringLiteral("bitcoinqml_qmltests"));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings_dir.path());
     }
 
     void processDeferredDeletes()
@@ -4138,8 +4240,12 @@ public Q_SLOTS:
     {
         engine->rootContext()->setContextProperty(QStringLiteral("testEventLoop"), this);
         engine->addImageProvider(QStringLiteral("images"), new TestIconProvider);
+        engine->addImageProvider(QStringLiteral("qr"), new TestQrProvider);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_TEST_MOCKS_DIR));
         static MockAppMode app_mode;
+        static TestAccessibility test_accessibility;
+        static TestImage test_image;
+        static TestResources test_resources;
         static MockBuildInfo build_info;
         static MockOptionsModel options_model;
         static MockChainModel chain_model;
@@ -4179,6 +4285,12 @@ public Q_SLOTS:
         wallet_controller.setSelectedWalletObject(&wallet_model);
         qmlRegisterSingletonInstance<MockAppMode>("org.bitcoincore.qt", 1, 0, "AppMode", &app_mode);
         qmlRegisterSingletonInstance<MockBuildInfo>("org.bitcoincore.qt", 1, 0, "BuildInfo", &build_info);
+        qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new GlobalSettings(QCoreApplication::applicationName());
+        });
+        qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
+            return new MotionPreference(QStringLiteral("off"));
+        });
         qmlRegisterUncreatableType<MockPeerDetailsModel>(
             "org.bitcoincore.qt",
             1,
@@ -4239,9 +4351,15 @@ public Q_SLOTS:
         engine->rootContext()->setContextProperty(QStringLiteral("testBumpModel"), &bump_model);
         engine->rootContext()->setContextProperty(QStringLiteral("desktopWindowBehaviorModel"), &desktop_window_behavior_model);
         engine->rootContext()->setContextProperty(QStringLiteral("debugLogModel"), &debug_log_model);
+        engine->rootContext()->setContextProperty(QStringLiteral("testAccessibility"), &test_accessibility);
+        engine->rootContext()->setContextProperty(QStringLiteral("testImage"), &test_image);
+        engine->rootContext()->setContextProperty(QStringLiteral("testResources"), &test_resources);
         engine->rootContext()->setContextProperty(QStringLiteral("testDebugLogModel"), &debug_log_model);
         engine->addImportPath(QStringLiteral(BITCOINQML_QML_SOURCE_DIR));
     }
+
+private:
+    const QTemporaryDir m_settings_dir;
 };
 
 QUICK_TEST_MAIN_WITH_SETUP(bitcoinqml_qmltests, QmlTestsSetup)

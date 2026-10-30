@@ -12,7 +12,7 @@ Item {
     width: 224
     height: 224
 
-    property bool reducedMotion: false
+    property bool reducedMotion: Theme.motion.reduced
     property real driftProgress: 0
     property real assembly: 0
     property real networkProgress: 0
@@ -39,8 +39,8 @@ Item {
         [6,24],[8,26],[10,28],[13,29],[16,3],[22,11]
     ]
     readonly property var signalLinks: [0, 1, 2, 3]
-    readonly property color signalColor: "#F9D63C"
-    readonly property color latestBlockColor: "#ED6E46"
+    readonly property color signalColor: Theme.color.illustrationSignal
+    readonly property color latestBlockColor: Theme.color.illustrationLatestBlock
     readonly property real clockSegmentGapMinutes: 6
     readonly property int minutesPerDay: 24 * 60
     readonly property int clockBlockCount: 24
@@ -78,7 +78,7 @@ Item {
     }
     function clockSegmentColor(index) {
         if (index === clockBlockCount - 1) return latestBlockColor
-        if (index >= clockBlockCount - 4) return Theme.color.orange
+        if (index >= clockBlockCount - 4) return Theme.color.accent
         return signalColor
     }
     function makeClockGroups() {
@@ -351,7 +351,7 @@ Item {
             antialiasing: true
             x: point[0] - width / 2
             y: point[1] - height / 2
-            color: index % 6 === 0 || index === 27 ? Theme.color.orange : Theme.color.neutral9
+            color: index % 6 === 0 || index === 27 ? Theme.color.accent : Theme.color.neutral9
             opacity: 1 - Math.max(0, (root.blocksProgress - 0.68) / 0.32)
         }
     }
@@ -426,11 +426,11 @@ Item {
             objectName: "onboardingMotionBlock" + index
             anchors.fill: parent
             readonly property real progress: root.blockProgress()
-            readonly property color blockColor: index === 9 ? Theme.color.orange : root.signalColor
+            readonly property color blockColor: index === 9 ? Theme.color.accent : root.signalColor
             opacity: root.clamp((root.blocksProgress - 0.62) / 0.38)
             onProgressChanged: requestPaint()
             onBlockColorChanged: requestPaint()
-            readonly property color orangeColor: Theme.color.orange
+            readonly property color orangeColor: Theme.color.accent
             readonly property color latestColor: root.latestBlockColor
             onOrangeColorChanged: requestPaint()
             onLatestColorChanged: requestPaint()
@@ -464,8 +464,7 @@ Item {
         anchors.centerIn: parent
         width: 182
         height: 182
-        source: Theme.dark ? "qrc:/icons/onboarding-clock-face-dark.svg"
-            : "qrc:/icons/onboarding-clock-face-light.svg"
+        source: Theme.image.onboardingClockFace
         sourceSize.width: 400
         sourceSize.height: 400
         fillMode: Image.PreserveAspectFit

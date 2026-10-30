@@ -5,23 +5,24 @@
         <file>tst_activitylist.qml</file>
         <file>tst_address_components.qml</file>
         <file>tst_blockclock.qml</file>
+        <file>tst_buttonkeyactivation.qml</file>
         <file>tst_contextmenubutton.qml</file>
         <file>tst_contextmenudivider.qml</file>
         <file>tst_contextmenupicker.qml</file>
         <file>tst_contextmenu.qml</file>
         <file>tst_contextmenutoggle.qml</file>
         <file>tst_copybutton.qml</file>
-        <file>tst_corecheckbox.qml</file>
         <file>tst_walletcreationflow.qml</file>
         <file>tst_debuglogview.qml</file>
+        <file>tst_designsystem.qml</file>
+        <file>tst_dialogpopup.qml</file>
         <file>tst_desktopmenuactions.qml</file>
         <file>tst_desktopwallets.qml</file>
         <file>tst_dropdownbutton.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
-        <file>tst_feeselection.qml</file>
         <file>tst_formcontrols.qml</file>
         <file>tst_mainrouting.qml</file>
-        <file>tst_mempoolinformationrows.qml</file>
+        <file>tst_mempoolsettingspage.qml</file>
         <file>tst_monospaceoutputview.qml</file>
         <file>tst_navbutton.qml</file>
         <file>tst_navigationsplitview.qml</file>
@@ -31,23 +32,23 @@
         <file>tst_onboardingview.qml</file>
         <file>tst_peeractions.qml</file>
         <file>tst_popuppicker.qml</file>
-        <file>tst_proxylocationinput.qml</file>
         <file>tst_requestpayment.qml</file>
-        <file>tst_rightcontenticon.qml</file>
         <file>tst_searchbar.qml</file>
         <file>tst_rangeslider.qml</file>
         <file>tst_slider.qml</file>
-        <file>tst_sendoptionspopup.qml</file>
         <file>tst_sendcreate.qml</file>
+        <file>tst_sendcreateoptionspopup.qml</file>
         <file>tst_sendfeeselection.qml</file>
         <file>tst_signverifymessage.qml</file>
-        <file>tst_setting.qml</file>
         <file>tst_settingsheader.qml</file>
         <file>tst_settingsnavigation.qml</file>
         <file>tst_settingsstatus.qml</file>
+        <file>tst_themecontrast.qml</file>
+        <file>tst_thememotion.qml</file>
+        <file>tst_themepalettes.qml</file>
+        <file>tst_toastbanner.qml</file>
         <file>tst_tooltip.qml</file>
         <file>tst_utils.qml</file>
-        <file>tst_valueinput.qml</file>
         <file>tst_walletpassphrasepopup.qml</file>
         <file>tst_walletpasswordsettings.qml</file>
         <file>tst_walletselect.qml</file>

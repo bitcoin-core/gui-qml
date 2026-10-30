@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 
-from qml_test_harness import GUI_STARTUP_TIMEOUT, dump_qml_tree, find_gui_binary, setup_datadir
+from qml_test_harness import GUI_STARTUP_TIMEOUT, TEST_MOTION_ARGS, dump_qml_tree, find_gui_binary, setup_datadir
 from qml_driver import QmlDriver
 
 
@@ -76,6 +76,7 @@ class DebugLogHarness:
             self.gui_binary,
             f"-datadir={self.datadir}",
             f"-test-automation={self.socket_path}",
+            *TEST_MOTION_ARGS,
             "-qml_onboarded=1",
             "-disablewallet",
             "-logtimemicros",

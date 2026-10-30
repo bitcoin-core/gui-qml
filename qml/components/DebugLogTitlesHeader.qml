@@ -11,16 +11,17 @@ import "../controls"
 Control {
     id: root
 
-    property int typeColumnWidth: 32
-    property int timeColumnWidth: 80
-    property int cornerRadius: 16
+    property int typeColumnWidth: 48
+    property int timeColumnWidth: Math.max(80, Math.ceil(timeMetrics.advanceWidth("00:00:00")) + Theme.space.m)
+    property FontMetrics timeMetrics: FontMetrics { font: Theme.text.monoCaption.font }
+    property int cornerRadius: Theme.radius.card
 
     implicitHeight: 44
     padding: 0
 
     background: Rectangle {
         objectName: "debugLogTitlesHeaderBackground"
-        color: Theme.color.neutral1
+        color: Theme.color.surface1
         radius: root.cornerRadius
 
         Rectangle {
@@ -32,13 +33,11 @@ Control {
             color: parent.color
         }
 
-        Rectangle {
+        Separator {
             objectName: "debugLogTitlesHeaderDivider"
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: 1
-            color: Theme.color.neutral2
         }
     }
 
@@ -50,9 +49,9 @@ Control {
         CoreText {
             text: qsTr("Type")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.preferredWidth: root.typeColumnWidth
         }
@@ -60,9 +59,9 @@ Control {
         CoreText {
             text: qsTr("Time")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.preferredWidth: root.timeColumnWidth
         }
@@ -70,9 +69,9 @@ Control {
         CoreText {
             text: qsTr("Message")
             color: Theme.color.neutral7
-            font.family: Theme.text.family
-            font.pixelSize: 11
-            fontStyleName: "Semi Bold"
+            textStyle: Theme.text.captionStrong
+            wrap: false
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignLeft
             Layout.fillWidth: true
             Layout.minimumWidth: 0

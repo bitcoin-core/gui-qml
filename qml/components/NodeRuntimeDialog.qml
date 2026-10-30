@@ -4,58 +4,47 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
-import org.bitcoincore.qt 1.0
 
 import "../controls"
 
-Popup {
+// Shows the node's message boxes. NodeModel owns visibility: every action
+// answers through answerRuntimeDialog and the popup follows runtimeDialogVisible.
+AlertPopup {
     id: root
     objectName: "nodeRuntimeDialog"
-    readonly property int contentMargin: 28
 
-    function runtimeButtonSpecs() {
-        return [
-            { id: DialogButtonBox.Ok, name: "Ok" },
-            { id: DialogButtonBox.Yes, name: "Yes" },
-            { id: DialogButtonBox.No, name: "No" },
-            { id: DialogButtonBox.Abort, name: "Abort" },
-            { id: DialogButtonBox.Retry, name: "Retry" },
-            { id: DialogButtonBox.Ignore, name: "Ignore" },
-            { id: DialogButtonBox.Close, name: "Close" },
-            { id: DialogButtonBox.Cancel, name: "Cancel" },
-            { id: DialogButtonBox.Discard, name: "Discard" },
-            { id: DialogButtonBox.Help, name: "Help" },
-            { id: DialogButtonBox.Apply, name: "Apply" },
-            { id: DialogButtonBox.Reset, name: "Reset" }
-        ]
+    component RuntimeAction: AlertAction {
+        required property int button
+        required property string name
+        buttonObjectName: "nodeRuntimeDialogButton" + name
+        closesPopup: false
+        onTriggered: nodeModel.answerRuntimeDialog(button)
     }
 
+    // Cancel-first order. No, Abort and Cancel are Cancel actions, so Escape
+    // answers with them.
+    readonly property list<AlertAction> runtimeActions: [
+        RuntimeAction { button: DialogButtonBox.No; name: "No"; text: qsTr("No"); role: AlertAction.Cancel },
+        RuntimeAction { button: DialogButtonBox.Abort; name: "Abort"; text: qsTr("Abort"); role: AlertAction.Cancel },
+        RuntimeAction { button: DialogButtonBox.Cancel; name: "Cancel"; text: qsTr("Cancel"); role: AlertAction.Cancel },
+        RuntimeAction { button: DialogButtonBox.Close; name: "Close"; text: qsTr("Close"); role: AlertAction.Neutral },
+        RuntimeAction { button: DialogButtonBox.Help; name: "Help"; text: qsTr("Help"); role: AlertAction.Neutral },
+        RuntimeAction { button: DialogButtonBox.Reset; name: "Reset"; text: qsTr("Reset"); role: AlertAction.Neutral },
+        RuntimeAction { button: DialogButtonBox.Discard; name: "Discard"; text: qsTr("Discard"); role: AlertAction.Neutral },
+        RuntimeAction { button: DialogButtonBox.Ignore; name: "Ignore"; text: qsTr("Ignore"); role: AlertAction.Neutral },
+        RuntimeAction { button: DialogButtonBox.Retry; name: "Retry"; text: qsTr("Retry") },
+        RuntimeAction { button: DialogButtonBox.Apply; name: "Apply"; text: qsTr("Apply") },
+        RuntimeAction { button: DialogButtonBox.Yes; name: "Yes"; text: qsTr("Yes") },
+        RuntimeAction { button: DialogButtonBox.Ok; name: "Ok"; text: qsTr("OK") }
+    ]
+
+    // Not gated on opened: an answer given during the enter transition must
+    // still close the popup, and open() and close() are no-ops when settled.
     function syncOpenState() {
-        if (nodeModel.runtimeDialogVisible && !opened) {
+        if (nodeModel.runtimeDialogVisible) {
             open()
-        } else if (!nodeModel.runtimeDialogVisible && opened) {
+        } else {
             close()
-        }
-    }
-
-    function standardButtonId(button) {
-        const specs = runtimeButtonSpecs()
-        for (let i = 0; i < specs.length; ++i) {
-            if (runtimeButtonBox.standardButton(specs[i].id) === button) {
-                return specs[i].id
-            }
-        }
-        return DialogButtonBox.NoButton
-    }
-
-    function tagRuntimeButtons() {
-        const specs = runtimeButtonSpecs()
-        for (let i = 0; i < specs.length; ++i) {
-            const button = runtimeButtonBox.standardButton(specs[i].id)
-            if (button !== null) {
-                button.objectName = "nodeRuntimeDialogButton" + specs[i].name
-            }
         }
     }
 
@@ -63,180 +52,28 @@ Popup {
         target: nodeModel
         function onRuntimeDialogChanged() {
             root.syncOpenState()
-            Qt.callLater(function() { root.tagRuntimeButtons() })
         }
     }
 
     Component.onCompleted: syncOpenState()
-    onOpened: Qt.callLater(function() { root.tagRuntimeButtons() })
 
-    modal: true
-    closePolicy: Popup.NoAutoClose
-    padding: 0
-    anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 640) : 640
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 520)
-    implicitHeight: columnLayout.implicitHeight
-
-    background: Rectangle {
-        color: Theme.color.background
-        radius: 8
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
+    title: nodeModel.runtimeDialogTitle
+    message: nodeModel.runtimeDialogMessage
+    messageObjectName: "nodeRuntimeDialogMessage"
+    messageAlignment: Text.AlignLeft
+    iconSource: nodeModel.runtimeDialogIcon
+    tone: iconSource.toString().indexOf("error") >= 0 ? AlertPopup.Error
+        : iconSource.toString().indexOf("alert") >= 0 ? AlertPopup.Warning
+        : AlertPopup.Default
+    implicitWidth: Math.max(480, horizontalActionsWidth + 40)
+    actionList: {
+        const buttons = nodeModel.runtimeDialogButtons
+        const actions = []
+        for (let i = 0; i < runtimeActions.length; ++i) {
+            if (buttons & runtimeActions[i].button) actions.push(runtimeActions[i])
         }
+        return actions
     }
-
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
-        spacing: 0
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 64
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            spacing: 12
-
-            Icon {
-                Layout.preferredWidth: 24
-                Layout.preferredHeight: 24
-                source: nodeModel.runtimeDialogIcon
-                color: Theme.color.orange
-                size: 24
-            }
-
-            CoreText {
-                objectName: "nodeRuntimeDialogTitle"
-                Layout.fillWidth: true
-                text: nodeModel.runtimeDialogTitle
-                bold: true
-                font.pixelSize: 20
-                horizontalAlignment: Text.AlignLeft
-            }
-        }
-
-        Separator { Layout.fillWidth: true }
-
-        ScrollView {
-            id: runtimeMessageScroll
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.margins: root.contentMargin
-            contentWidth: availableWidth
-            clip: true
-
-            CoreText {
-                objectName: "nodeRuntimeDialogMessage"
-                width: runtimeMessageScroll.availableWidth
-                text: nodeModel.runtimeDialogMessage
-                color: Theme.color.neutral8
-                font.pixelSize: 15
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignLeft
-            }
-        }
-
-        DialogButtonBox {
-            id: runtimeButtonBox
-            objectName: "nodeRuntimeDialogButtonBox"
-
-            Layout.fillWidth: true
-            Layout.margins: root.contentMargin
-            Layout.topMargin: 0
-            padding: 0
-            spacing: 12
-            standardButtons: nodeModel.runtimeDialogButtons
-            background: Item {}
-
-            onCountChanged: Qt.callLater(function() { root.tagRuntimeButtons() })
-            onStandardButtonsChanged: Qt.callLater(function() { root.tagRuntimeButtons() })
-            Component.onCompleted: Qt.callLater(function() { root.tagRuntimeButtons() })
-            onClicked: function(button) {
-                nodeModel.answerRuntimeDialog(root.standardButtonId(button))
-            }
-
-            delegate: Button {
-                id: runtimeDialogButton
-
-                readonly property bool primaryRole: DialogButtonBox.buttonRole === DialogButtonBox.AcceptRole ||
-                                                    DialogButtonBox.buttonRole === DialogButtonBox.YesRole ||
-                                                    DialogButtonBox.buttonRole === DialogButtonBox.ApplyRole
-
-                hoverEnabled: AppMode.isDesktop
-                leftPadding: 20
-                rightPadding: 20
-
-                contentItem: CoreText {
-                    id: runtimeDialogButtonText
-
-                    text: runtimeDialogButton.text
-                    bold: false
-                    fontStyleName: Theme.text.button.styleName
-                    font.pixelSize: Theme.text.button.pixelSize
-                    color: runtimeDialogButton.primaryRole ? Theme.color.white : Theme.color.neutral9
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-
-                    states: [
-                        State {
-                            name: "OUTLINE_PRESSED"; when: !runtimeDialogButton.primaryRole && runtimeDialogButton.pressed
-                            PropertyChanges { target: runtimeDialogButtonText; color: Theme.color.neutral9 }
-                        },
-                        State {
-                            name: "OUTLINE_HOVER"; when: !runtimeDialogButton.primaryRole && runtimeDialogButton.hovered
-                            PropertyChanges { target: runtimeDialogButtonText; color: Theme.color.neutral9 }
-                        }
-                    ]
-                }
-
-                background: Rectangle {
-                    id: runtimeDialogButtonBackground
-
-                    implicitHeight: 46
-                    color: runtimeDialogButton.primaryRole ? Theme.color.orange : Theme.color.background
-                    radius: 5
-                    border.width: runtimeDialogButton.primaryRole ? 0 : 1
-                    border.color: runtimeDialogButton.primaryRole ? "transparent" : Theme.color.neutral6
-
-                    states: [
-                        State {
-                            name: "PRIMARY_PRESSED"; when: runtimeDialogButton.primaryRole && runtimeDialogButton.pressed
-                            PropertyChanges { target: runtimeDialogButtonBackground; color: Theme.color.orangeLight2 }
-                        },
-                        State {
-                            name: "PRIMARY_HOVER"; when: runtimeDialogButton.primaryRole && runtimeDialogButton.hovered
-                            PropertyChanges { target: runtimeDialogButtonBackground; color: Theme.color.orangeLight1 }
-                        },
-                        State {
-                            name: "OUTLINE_PRESSED"; when: !runtimeDialogButton.primaryRole && runtimeDialogButton.pressed
-                            PropertyChanges { target: runtimeDialogButtonBackground; border.color: Theme.color.orangeLight2 }
-                        },
-                        State {
-                            name: "OUTLINE_HOVER"; when: !runtimeDialogButton.primaryRole && runtimeDialogButton.hovered
-                            PropertyChanges { target: runtimeDialogButtonBackground; border.color: Theme.color.neutral9 }
-                        },
-                        State {
-                            name: "DISABLED"; when: !runtimeDialogButton.enabled
-                            PropertyChanges { target: runtimeDialogButtonBackground; color: Theme.color.neutral2 }
-                            PropertyChanges { target: runtimeDialogButtonBackground; border.color: Theme.color.neutral2 }
-                        }
-                    ]
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
-
-                    FocusBorder {
-                        visible: runtimeDialogButton.visualFocus
-                    }
-                }
-            }
-        }
-    }
+    // A message with a single button is acknowledged by Escape too.
+    escapeAction: actionList.length === 1 ? actionList[0] : null
 }

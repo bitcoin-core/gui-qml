@@ -18,6 +18,18 @@ TestCase {
     height: 480
     visible: true
 
+    property string motionMode: ""
+
+    // Tests the digit roll and copy feedback, so motion stays on.
+    function init() {
+        motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
+
     Item {
         id: host
         width: parent.width
@@ -94,6 +106,25 @@ TestCase {
         }
     }
 
+    function test_address_amount_mask_has_constant_width() {
+        optionsModel.hideAmounts = true
+        Theme.motion.mode = "off"
+        try {
+            const row = createTemporaryObject(rowComponent, host)
+            verify(waitForRendering(row))
+            const amount = findChild(row, "addressRowAmountText")
+            const details = findChild(row, "addressRowDetailsButton")
+            compare(amount.shownText, amount.maskText)
+            const width = details.width
+            row.displayAmount = "₿ 21000000.00000000"
+            wait(0)
+            compare(details.width, width)
+            compare(amount.Accessible.name, "Hidden amount")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
     function test_amountDisplayLabel_unit_keeps_alignment_data() {
         return [
             {tag: "left", alignment: Text.AlignLeft, intrinsic: false},
@@ -141,17 +172,28 @@ TestCase {
         }
     }
 
-    function test_summary_animates_both_directions() {
+    function test_summary_shows_new_unit_without_rolling() {
         optionsModel.displayUnit = BitcoinAmount.SAT
         const summary = createTemporaryObject(animatedSummaryComponent, host)
         verify(waitForItemPolished(summary))
         const label = findObject(summary, "transactionSummaryAmount")
         for (const unit of [BitcoinAmount.BTC, BitcoinAmount.SAT]) {
             optionsModel.displayUnit = unit
-            tryCompare(label, "animating", true)
-            tryCompare(label, "animating", false)
-            verify(waitForItemPolished(summary))
+            tryCompare(label, "displayText", unit === BitcoinAmount.BTC ? "0.00012300" : "12,300")
+            compare(label.animating, false)
         }
+        optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_does_not_roll_under_reduced_motion() {
+        Theme.motion.mode = "reduced"
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        const label = createTemporaryObject(amountDisplayComponent, host)
+        compare(label.rollsUnitChanges, false)
+        optionsModel.displayUnit = BitcoinAmount.SAT
+        tryCompare(label, "displayText", "12345678 sats")
+        compare(label.animating, false)
+        optionsModel.displayUnit = BitcoinAmount.BTC
     }
 
     function test_amountDisplayLabel_animates_unit_switch_only() {
@@ -172,6 +214,57 @@ TestCase {
         tryCompare(label, "animating", false)
         compare(label.displayText, "12345678 sats")
         optionsModel.displayUnit = BitcoinAmount.BTC
+    }
+
+    function test_amountDisplayLabel_hides_amounts_that_opt_in() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        optionsModel.hideAmounts = false
+        const label = createTemporaryObject(amountDisplayComponent, host, { hidesAmount: true })
+        const other = createTemporaryObject(amountDisplayComponent, host)
+        try {
+            optionsModel.hideAmounts = true
+            tryCompare(label, "animationText", "∗∗∗∗∗∗∗∗∗∗")
+            verify(label.animating)
+            tryCompare(label, "animating", false)
+            compare(label.displayText, "∗∗∗∗∗∗∗∗∗∗")
+            compare(label.Accessible.name, "Hidden amount")
+            compare(other.displayText, "1.2 BTC")
+            compare(other.Accessible.name, "1.2 BTC")
+
+            optionsModel.hideAmounts = false
+            tryCompare(label, "animationText", "1.2 BTC")
+            // Revealed digits roll into place rather than only fading in.
+            compare(findObject(label, "amountColumn_d0").steps, 3)
+            compare(findObject(label, "amountColumn_f1").steps, 3)
+            tryCompare(label, "animating", false)
+            compare(label.displayText, "1.2 BTC")
+
+            // Reduced motion swaps the mask in at once.
+            Theme.motion.mode = "reduced"
+            optionsModel.hideAmounts = true
+            tryCompare(label, "displayText", "∗∗∗∗∗∗∗∗∗∗")
+            compare(label.animating, false)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+    }
+
+    function test_summary_rolls_to_the_mask_and_keeps_its_unit() {
+        optionsModel.displayUnit = BitcoinAmount.BTC
+        optionsModel.hideAmounts = false
+        const summary = createTemporaryObject(animatedSummaryComponent, host, { hidesAmount: true })
+        verify(waitForItemPolished(summary))
+        const amount = findObject(summary, "transactionSummaryAmount")
+        const unit = findObject(summary, "transactionSummaryUnit")
+        try {
+            optionsModel.hideAmounts = true
+            tryCompare(amount, "animating", true)
+            tryCompare(amount, "animating", false)
+            compare(amount.displayText, "∗∗∗∗∗∗∗∗∗∗")
+            compare(unit.displayText, "BTC")
+        } finally {
+            optionsModel.hideAmounts = false
+        }
     }
 
     function test_amountDisplayLabel_preserves_old_text_until_animation_start() {
@@ -324,17 +417,6 @@ TestCase {
         }
     }
 
-    Component {
-        id: addressDisplayFieldComponent
-
-        BitcoinAddressDisplayField {
-            objectName: "toggleAddressField"
-            width: 320
-            text: "abcd efgh ... mnop qrst"
-            fullText: "abcd efgh ijkl mnop qrst"
-        }
-    }
-
     function test_addressDetails_request_button_views_existing_request() {
         const details = createTemporaryObject(detailsComponent, host)
         verify(details !== null)
@@ -365,45 +447,16 @@ TestCase {
         verify(label.formattedText.indexOf("<font color=\"" + primary + "\">qrst</font>") !== -1)
     }
 
-    function test_addressDisplayField_toggles_same_monospace_text() {
-        const field = createTemporaryObject(addressDisplayFieldComponent, host)
-        const referenceLabel = createTemporaryObject(addressLabelComponent, host)
-        verify(field !== null)
-        verify(referenceLabel !== null)
-
-        const addressText = findObject(field, "toggleAddressFieldText")
-        const referenceText = findObject(referenceLabel, "referenceAddressLabelValue")
-        verify(addressText !== null)
-        verify(referenceText !== null)
-        compare(addressText.font.family, referenceText.font.family)
-        compare(addressText.font.styleName, referenceText.font.styleName)
-        compare(addressText.font.pixelSize, referenceText.font.pixelSize)
-        compare(addressText.text, "abcd efgh ... mnop qrst")
-        compare(field.expanded, false)
-
-        field.click()
-        compare(field.expanded, true)
-        compare(addressText.text, "abcd efgh ijkl mnop qrst")
-
-        field.click()
-        compare(field.expanded, false)
-        compare(addressText.text, "abcd efgh ... mnop qrst")
-        compare(findObject(field, "toggleAddressFieldText"), addressText)
-    }
-
     function test_addressLabel_truncatesVisuallyButRetainsFullAddress() {
         const label = createTemporaryObject(addressLabelComponent, host)
         verify(label !== null)
 
         compare(label.displayAddress, label.address)
         compare(label.isTruncated, false)
-        compare(label.embedded, false)
+        compare(label.surfaceLevel, 1)
         compare(label.textAlignment, Text.AlignLeft)
         const valueText = findObject(label, "referenceAddressLabelValue")
-        const copiedStatusText = findObject(label, "referenceAddressLabelCopiedStatusText")
         verify(valueText !== null)
-        verify(copiedStatusText !== null)
-        compare(copiedStatusText.font.pixelSize, label.textStyle.font.pixelSize)
         label.address = "bc1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv"
         tryVerify(function() { return valueText.paintedHeight > label.textStyle.lineHeight })
         compare(valueText.wrapMode, Text.WordWrap)
@@ -424,10 +477,10 @@ TestCase {
 
         const background = findObject(label, "referenceAddressLabelBackground")
         verify(background !== null)
-        label.embedded = true
+        label.surfaceLevel = 2
         compare(background.opacity, 0)
         mouseMove(label, label.width / 2, label.height / 2)
-        tryCompare(background, "color", Theme.color.neutral3)
+        tryCompare(background, "color", Theme.color.surface3)
         tryCompare(background, "opacity", 1)
     }
 
@@ -454,6 +507,15 @@ TestCase {
         mouseClick(label, label.width / 2, label.height / 2)
         compare(copiedText, label.address)
         compare(label.showCopiedStatus, true)
+        // The address fades out and "Copied" takes its place for a moment.
+        const copiedRow = findObject(label, "referenceAddressLabelCopiedStatus")
+        const valueText = findObject(label, "referenceAddressLabelValue")
+        verify(copiedRow !== null)
+        tryCompare(copiedRow, "opacity", 1)
+        tryCompare(valueText, "opacity", 0)
+        tryCompare(label, "showCopiedStatus", false, 3000)
+        tryCompare(copiedRow, "opacity", 0)
+        tryCompare(valueText, "opacity", 1)
     }
 
     function test_row_uses_display_amount_and_emits_actions() {
@@ -471,12 +533,12 @@ TestCase {
         verify(amountText !== null)
         verify(divider !== null)
         compare(noteField.text, "")
-        compare(noteField.placeholderText, "Add label...")
+        compare(noteField.placeholderText, "Add label…")
         compare(noteField.readOnly, false)
         compare(noteField.width, Math.min(350, noteField.parent.width))
         compare(noteField.activeFocusOnPress, true)
         compare(noteField.activeFocusOnTab, true)
-        compare(noteFocusBorder.border.color, Theme.color.orange)
+        compare(noteFocusBorder.ringColor, Theme.color.neutral6)
         compare(noteField.font.pixelSize, Theme.text.description.font.pixelSize)
         compare(addressLabel.address, "bcrt1qexampleaddress")
         compare(addressLabel.truncated, false)
@@ -488,7 +550,7 @@ TestCase {
         verify(addressLabel.y < noteField.y)
         compare(amountText.text, "₿ 0")
         compare(amountText.font.pixelSize, Theme.text.description.font.pixelSize)
-        compare(divider.color, Theme.color.neutral3)
+        compare(divider.color, Theme.color.surfaceDivider)
         const disclosureIndicator = findObject(row, "addressRowDisclosureIndicator")
         verify(disclosureIndicator !== null)
         compare(disclosureIndicator.size, 14)
@@ -648,12 +710,12 @@ TestCase {
         verify(noteField !== null)
         verify(typeRow !== null)
         verify(addressTypeRow !== null)
-        compare(sectionCard.color, Theme.color.neutral2)
+        compare(sectionCard.color, Theme.color.surface2)
         compare(addressRow.title, "Address")
         compare(addressRow.minimumRowHeight, 76)
-        compare(addressRow.dividerColor, Theme.color.neutral3)
+        compare(addressRow.dividerColor, Theme.color.surfaceDivider)
         compare(addressLabel.address, "bcrt1qabcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuv")
-        compare(addressLabel.embedded, true)
+        compare(addressLabel.surfaceLevel, 2)
         compare(addressLabel.truncateWhenNeeded, false)
         compare(addressLabel.textAlignment, Text.AlignRight)
         compare(addressLabel.isTruncated, false)
@@ -662,17 +724,18 @@ TestCase {
         tryVerify(function() { return addressValueText.paintedHeight > addressLabel.textStyle.lineHeight })
         compare(amountRow.title, "Amount")
         compare(amountRow.value, "₿ 1.25")
-        compare(amountRow.dividerColor, Theme.color.neutral3)
+        compare(amountRow.dividerColor, Theme.color.surfaceDivider)
         compare(noteRow.visible, true)
         compare(noteRow.text, "Pizza")
         compare(noteRow.title, "Note to self")
-        compare(noteRow.placeholderText, "Add note...")
+        compare(noteRow.placeholderText, "Add note…")
         compare(noteField.text, "Pizza")
         compare(noteField.readOnly, false)
-        compare(noteField.background.border.color, Theme.color.orange)
-        compare(noteRow.dividerColor, Theme.color.neutral3)
+        compare(noteRow.fieldFocusRing.ringColor, Theme.color.neutral6)
+        compare(noteField.background.color, Qt.rgba(0, 0, 0, 0))
+        compare(noteRow.dividerColor, Theme.color.surfaceDivider)
         compare(typeRow.value, "Receive")
-        compare(typeRow.dividerColor, Theme.color.neutral3)
+        compare(typeRow.dividerColor, Theme.color.surfaceDivider)
         compare(addressTypeRow.value, "P2WPKH")
         compare(addressTypeRow.showDivider, false)
         verify(findObject(details, "addressDetailsCopyAddressButton") === null)
@@ -734,8 +797,8 @@ TestCase {
         const closeButtonBackground = findObject(details, "addressDetailsCloseButtonBackground")
         verify(closeButton !== null)
         verify(closeButtonBackground !== null)
-        compare(closeButtonBackground.color, Theme.color.neutral2)
-        compare(closeButtonBackground.radius, closeButtonBackground.width / 2)
+        compare(closeButtonBackground.color, Theme.color.surface2)
+        compare(closeButtonBackground.radius, closeButton.size / 2)
         if (closeButton !== null) {
             closeButton.clicked()
             verify(closed)

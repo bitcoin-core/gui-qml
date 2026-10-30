@@ -8,7 +8,6 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
-import "../../components"
 
 AbstractButton {
     id: root
@@ -79,7 +78,7 @@ AbstractButton {
                 bottomPadding: 0
             }
 
-            CoreTextField {
+            TextField {
                 id: noteField
                 objectName: "addressRowNoteField"
                 property string submittedText: root.label
@@ -88,9 +87,9 @@ AbstractButton {
                 text: root.pendingLabel
                 placeholderText: root.canEditLabel
                     //: Placeholder shown when an address has no label yet.
-                    ? qsTr("Add label...")
+                    ? qsTr("Add label…")
                     : qsTr("Change address")
-                placeholderTextColor: Theme.color.neutral6
+                placeholderTextColor: Theme.color.placeholder
                 color: root.canEditLabel ? Theme.color.neutral9 : Theme.color.neutral7
                 font: Theme.text.description.font
                 readOnly: !root.canEditLabel
@@ -104,18 +103,14 @@ AbstractButton {
                 bottomPadding: 4
 
                 background: Rectangle {
-                    radius: 8
-                    color: noteField.activeFocus ? Theme.color.neutral2 : "transparent"
+                    radius: Theme.radius.field
+                    color: noteField.activeFocus ? Theme.color.surface2 : "transparent"
 
-                    FocusBorder {
+                    FieldBorderRings {
                         objectName: "addressRowNoteFocusBorder"
+                        anchors.fill: parent
                         visible: noteField.activeFocus
-                        border.color: Theme.color.orange
-                        borderRadius: 10
-                        topMargin: -2
-                        bottomMargin: -2
-                        leftMargin: -2
-                        rightMargin: -2
+                        cornerRadius: parent.radius
                     }
                 }
 
@@ -158,7 +153,17 @@ AbstractButton {
                 cursorShape: Qt.PointingHandCursor
             }
 
-            background: null
+            background: Item {
+                FocusBorder {
+                    objectName: "addressRowDetailsButtonFocusBorder"
+                    visible: detailsButton.visualFocus
+                    borderRadius: 8
+                    topMargin: 6
+                    bottomMargin: 6
+                    leftMargin: 0
+                    rightMargin: 0
+                }
+            }
 
             contentItem: RowLayout {
                 spacing: 8
@@ -168,12 +173,9 @@ AbstractButton {
                     objectName: "addressRowAmountText"
                     Layout.fillWidth: true
                     text: root.displayAmount
-                    color: root.hasAmount ? Theme.color.green : Theme.color.neutral7
-                    font.family: optionsModel.moneyFont.family
-                    font.weight: optionsModel.moneyFont.weight
-                    font.pixelSize: Theme.text.description.font.pixelSize
-                    lineHeight: Theme.text.description.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    hidesAmount: true
+                    color: root.hasAmount ? Theme.color.txIncoming : Theme.color.neutral7
+                    textStyle: Theme.text.amountDescription
                     horizontalAlignment: Text.AlignRight
                     elide: Text.ElideRight
                     wrap: false
@@ -193,7 +195,7 @@ AbstractButton {
         TextMetrics {
             id: amountMetrics
             font: amountText.font
-            text: root.displayAmount
+            text: amountText.shownText
         }
 
         Separator {
@@ -204,12 +206,11 @@ AbstractButton {
             anchors.bottom: parent.bottom
             anchors.leftMargin: 16
             anchors.rightMargin: 16
-            color: Theme.color.neutral3
         }
     }
 
     background: Rectangle {
-        radius: 16
+        radius: Theme.radius.listRow
         color: "transparent"
 
         FocusBorder {

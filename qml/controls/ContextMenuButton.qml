@@ -21,12 +21,12 @@ AbstractButton {
     property bool selected: false
     property color textColor: Theme.color.neutral8
     property color hoverTextColor: Theme.color.neutral9
-    property color hoverBackgroundColor: Theme.color.neutral3
+    property color hoverBackgroundColor: Theme.color.surfacePressed
 
     readonly property bool _destructive: role === ContextMenuButton.Destructive
     readonly property bool _highlighted: enabled && (selected || hovered || down || visualFocus)
-    readonly property color _idleColor: _destructive ? Theme.color.red : root.textColor
-    readonly property color _hoverColor: _destructive ? Theme.color.red : root.hoverTextColor
+    readonly property color _idleColor: _destructive ? Theme.color.dangerText : root.textColor
+    readonly property color _hoverColor: _destructive ? Theme.color.dangerText : root.hoverTextColor
 
     signal triggered()
 
@@ -35,15 +35,15 @@ AbstractButton {
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     leftPadding: 10
-    rightPadding: 8
+    rightPadding: Theme.space.m
     topPadding: 0
     bottomPadding: 0
     opacity: enabled ? 1.0 : 0.5
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 36
-    Layout.minimumHeight: 36
-    implicitHeight: 36
+    Layout.preferredHeight: Theme.size.control
+    Layout.minimumHeight: Theme.size.control
+    implicitHeight: Theme.size.control
 
     onClicked: {
         if (root.autoClose) root._closeEnclosingMenu()
@@ -69,7 +69,7 @@ AbstractButton {
 
     contentItem: RowLayout {
         id: _row
-        spacing: 7
+        spacing: Theme.space.m
 
         Item {
             visible: root.iconSource.toString() !== ""
@@ -90,16 +90,14 @@ AbstractButton {
             Layout.alignment: Qt.AlignVCenter
             text: root.text
             horizontalAlignment: Text.AlignLeft
-            font: Theme.text.menuItem.font
-            lineHeight: Theme.text.menuItem.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.menuItem
             wrap: false
             color: root._highlighted ? root._hoverColor : root._idleColor
         }
     }
 
-    background: Rectangle {
-        color: root._highlighted ? root.hoverBackgroundColor : "transparent"
+    background: StateBackground {
+        stateColor: root._highlighted ? root.hoverBackgroundColor : "transparent"
         radius: 6
     }
 }

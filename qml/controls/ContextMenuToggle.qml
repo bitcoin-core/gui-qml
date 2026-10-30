@@ -15,16 +15,14 @@ ContextMenuButton {
     Accessible.checked: checked
 
     contentItem: RowLayout {
-        spacing: 7
+        spacing: Theme.space.m
 
         CoreText {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             text: root.text
             horizontalAlignment: Text.AlignLeft
-            font: Theme.text.menuItem.font
-            lineHeight: Theme.text.menuItem.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: Theme.text.menuItem
             wrap: false
             color: root._highlighted ? root._hoverColor : root._idleColor
         }

@@ -15,7 +15,14 @@ import org.bitcoincore.qt 1.0
 // applying or clearing the filter is left to the caller.
 ColumnLayout {
     id: root
-    spacing: 8
+    readonly property real calendarCellWidth: {
+        let width = 36
+        for (let day = 1; day <= 7; ++day)
+            width = Math.max(width, weekdayMetrics.advanceWidth(Qt.locale().dayName(day, Locale.ShortFormat)) + Theme.space.m)
+        return Math.ceil(width)
+    }
+    property FontMetrics weekdayMetrics: FontMetrics { font: Theme.text.caption.font }
+    spacing: Theme.space.m
 
     // Public interface ------------------------------------------------------
 
@@ -249,7 +256,7 @@ ColumnLayout {
     // click will set.
     RowLayout {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: Theme.space.m
 
         DateRangeChip {
             objectName: "activityDateFromChip"
@@ -277,7 +284,7 @@ ColumnLayout {
     // jump a year (to reach distant dates fast).
     RowLayout {
         Layout.fillWidth: true
-        spacing: 2
+        spacing: Theme.space.xxs
 
         CalNavButton {
             objectName: "calendarPrevYear"
@@ -305,8 +312,7 @@ ColumnLayout {
             text: (new Date(root.calYear, root.calMonth, 1)).toLocaleDateString(Qt.locale(), "MMMM yyyy")
             horizontalAlignment: Text.AlignHCenter
             color: Theme.color.neutral9
-            font.pixelSize: 15
-            bold: true
+            textStyle: Theme.text.subheading
         }
 
         CalNavButton {
@@ -340,13 +346,13 @@ ColumnLayout {
             delegate: CoreText {
                 required property int index
                 readonly property int jsDay: (root.weekStart + index) % 7
-                width: 36
-                height: 22
+                width: root.calendarCellWidth
+                height: Math.max(22, implicitHeight)
                 text: Qt.locale().dayName(jsDay === 0 ? 7 : jsDay, Locale.ShortFormat)
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 color: Theme.color.neutral6
-                font.pixelSize: 12
+                textStyle: Theme.text.caption
             }
         }
     }
@@ -359,12 +365,17 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
         columns: 7
         columnSpacing: 0
-        rowSpacing: 2
+        rowSpacing: Theme.space.xxs
 
         // The grid is a single tab stop; arrows move the focus ring between
         // days, PageUp/PageDown step a month (with Ctrl, a year), Enter or Space
         // picks the day.
         activeFocusOnTab: true
+        Accessible.role: Accessible.Table
+        //: Screen reader name of the day grid in the Activity custom date range calendar.
+        Accessible.name: qsTr("Calendar")
+        Accessible.description: root.calendarFocusDate
+            ? root.calendarFocusDate.toLocaleDateString(Qt.locale(), Locale.LongFormat) : ""
         onActiveFocusChanged: {
             if (activeFocus) {
                 root.ensureCalendarFocusDate()
@@ -405,8 +416,8 @@ ColumnLayout {
             delegate: ItemDelegate {
                 id: dayCell
                 required property var modelData
-                width: 36
-                height: 32
+                width: root.calendarCellWidth
+                height: Math.max(32, implicitContentHeight + Theme.space.s)
                 padding: 0
                 enabled: modelData !== null
                 objectName: modelData ? "calendarDay_" + root.isoDate(modelData) : ""
@@ -437,33 +448,36 @@ ColumnLayout {
                     // Hover and press tints mark the day as clickable; the
                     // range tint wins so the preview stays readable.
                     color: dayCell.endpoint
-                        ? Theme.color.orange
+                        ? Theme.color.accent
                         : dayCell.ranged
-                            ? Theme.color.neutral3
+                            ? Theme.color.surfaceSelected
                             : dayCell.down
-                                ? Theme.color.neutral4
+                                ? Theme.color.surfacePressed
                                 : dayCell.hovered
-                                    ? Theme.color.neutral2
+                                    ? Theme.color.surfaceHover
                                     : "transparent"
-                    // The 2px neutral keyboard focus ring wins over the 1px
-                    // orange today ring, so the focused day is always
-                    // identifiable.
-                    border.width: dayCell.keyFocused ? 2 : 1
-                    border.color: dayCell.keyFocused
-                        ? Theme.color.neutral9
-                        : dayCell.isToday && !dayCell.endpoint
-                            ? Theme.color.orange
-                            : "transparent"
+                    border.width: 1
+                    border.color: dayCell.isToday && !dayCell.endpoint ? Theme.color.accent : "transparent"
+
+                    // The keyboard focus ring covers the 1px orange today
+                    // ring, so the focused day is always identifiable.
+                    FocusBorder {
+                        visible: dayCell.keyFocused
+                        topMargin: 0
+                        bottomMargin: 0
+                        leftMargin: 0
+                        rightMargin: 0
+                        targetRadius: parent.radius
+                    }
                 }
 
                 contentItem: CoreText {
                     text: dayCell.modelData ? dayCell.modelData.getDate() : ""
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    color: dayCell.endpoint ? Theme.color.white : Theme.color.neutral9
-                    font.pixelSize: 13
+                    color: dayCell.endpoint ? Theme.color.accentForeground : Theme.color.neutral9
                     // Mark today by weight too, so it does not rely on the ring color alone.
-                    bold: dayCell.isToday
+                    textStyle: dayCell.isToday ? Theme.text.captionStrong : Theme.text.caption
                 }
             }
         }
@@ -478,10 +492,10 @@ ColumnLayout {
         property bool highlighted: false
         //: Read for an Activity date range endpoint that has no date picked yet.
         readonly property string accessibleValue: chip.value !== "" ? chip.value : qsTr("no date selected")
-        implicitHeight: 46
-        radius: 5
-        color: Theme.color.neutral2
-        border.color: chip.highlighted ? Theme.color.orange : "transparent"
+        implicitHeight: Math.max(Theme.size.controlLarge, chipColumn.implicitHeight + 2 * Theme.space.s)
+        radius: Theme.radius.s
+        color: Theme.color.surface2
+        border.color: chip.highlighted ? Theme.color.accent : "transparent"
         border.width: 1
         Accessible.role: Accessible.StaticText
         Accessible.name: chip.highlighted
@@ -490,28 +504,30 @@ ColumnLayout {
             //: Accessibility name of an inactive Activity date range endpoint. %1 is "From" or "To", %2 the picked date or "no date selected".
             : qsTr("%1, %2").arg(chip.label).arg(chip.accessibleValue)
         ColumnLayout {
+            id: chipColumn
             anchors.fill: parent
             anchors.leftMargin: 10
             anchors.rightMargin: 10
-            anchors.topMargin: 6
-            anchors.bottomMargin: 6
+            anchors.topMargin: Theme.space.s
+            anchors.bottomMargin: Theme.space.s
             spacing: 1
             CoreText {
                 Layout.fillWidth: true
                 text: chip.label
                 color: Theme.color.neutral7
-                font.pixelSize: 11
                 // Weight marks the active endpoint too, so the state does not
                 // rely on the border color alone.
-                bold: chip.highlighted
+                textStyle: chip.highlighted ? Theme.text.captionStrong : Theme.text.caption
                 horizontalAlignment: Text.AlignLeft
+                wrap: false
+                elide: Text.ElideRight
             }
             CoreText {
                 Layout.fillWidth: true
                 //: Placeholder in the Activity date range From/To field before a date is picked.
                 text: chip.value !== "" ? chip.value : qsTr("Select date")
                 color: chip.value !== "" ? Theme.color.neutral9 : Theme.color.neutral6
-                font.pixelSize: 14
+                textStyle: Theme.text.description
                 horizontalAlignment: Text.AlignLeft
                 // CoreText wraps by default, which would defeat the elide and
                 // overflow the fixed-height chip on long dates.
@@ -529,11 +545,22 @@ ColumnLayout {
         property url iconSource
         property bool doubled: false
         property string accessibleName: ""
-        implicitWidth: 28
-        implicitHeight: 28
+        implicitWidth: Theme.size.iconButtonSmall
+        implicitHeight: Theme.size.iconButtonSmall
         padding: 0
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: AppMode.isDesktop
         Accessible.role: Accessible.Button
         Accessible.name: navButton.accessibleName
+        background: Rectangle {
+            radius: Theme.radius.s
+            color: navButton.down ? Theme.color.surfacePressed : navButton.hovered ? Theme.color.surfaceHover : "transparent"
+
+            FocusBorder {
+                visible: navButton.visualFocus
+                targetRadius: parent.radius
+            }
+        }
         contentItem: Item {
             // Two plain Icons rather than a Repeater over a 1-or-2 model: a
             // delegate inside an inline component is not wrapped in an implicit
@@ -545,14 +572,14 @@ ColumnLayout {
                 spacing: -5
                 Icon {
                     source: navButton.iconSource
-                    color: Theme.color.orange
-                    size: 14
+                    color: Theme.color.neutral9
+                    size: Theme.size.icon.s
                 }
                 Icon {
                     visible: navButton.doubled
                     source: navButton.iconSource
-                    color: Theme.color.orange
-                    size: 14
+                    color: Theme.color.neutral9
+                    size: Theme.size.icon.s
                 }
             }
         }

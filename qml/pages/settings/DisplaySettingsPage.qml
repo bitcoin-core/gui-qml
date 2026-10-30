@@ -9,12 +9,16 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
     objectName: "displaySettingsPage"
+    readonly property bool systemReducesMotion: MotionPreference.mode === "reduced"
     title: qsTranslate("SettingsDisplay", "Display")
     showBackButton: false
+
+    Shortcut { id: hideAmountsShortcut; sequence: qsTr("Ctrl+Shift+M"); enabled: false }
 
     FormSection {
         Layout.fillWidth: true
@@ -27,11 +31,22 @@ SettingsPage {
             trailingItem: SegmentedPicker {
                 objectName: "displayThemePicker"
                 implicitWidth: 190
-                implicitHeight: 36
-                model: [qsTr("Light"), qsTr("Dark")]
-                currentIndex: Theme.dark ? 1 : 0
+                model: {
+                    const names = []
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        names.push(Theme.palettes[i].displayName)
+                    }
+                    return names
+                }
+                // The active palette, not paletteId: an unknown stored id shows its fallback.
+                currentIndex: {
+                    for (let i = 0; i < Theme.palettes.length; ++i) {
+                        if (Theme.palettes[i] === Theme.color) return i
+                    }
+                    return 0
+                }
                 onSelected: function(index, option) {
-                    Theme.dark = index === 1
+                    Theme.paletteId = Theme.palettes[index].paletteId
                 }
             }
         }
@@ -42,7 +57,7 @@ SettingsPage {
             title: qsTranslate("SettingsDisplay", "Block status size")
             trailingItem: PopupPicker {
                 objectName: "displayBlockStatusSizePicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 520
                 subtitleRole: "description"
                 iconRole: "icon"
@@ -72,10 +87,9 @@ SettingsPage {
             objectName: "displayMoneyFontRow"
             Layout.fillWidth: true
             title: qsTr("Money font")
-            showDivider: false
             trailingItem: PopupPicker {
                 objectName: "displayMoneyFontPicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 400
                 subtitleRole: "description"
                 currentValue: optionsModel.moneyFontChoice
@@ -86,7 +100,7 @@ SettingsPage {
                         description: qsTr("Included with Bitcoin Core")
                     },
                     {
-                        text: qsTr("System Monospace"),
+                        text: qsTr("System monospace"),
                         value: "best_system",
                         description: qsTr("Uses your operating system’s default monospaced font")
                     }
@@ -95,6 +109,79 @@ SettingsPage {
                     optionsModel.moneyFontChoice = value
                 }
             }
+        }
+
+        SwitchRow {
+            objectName: "displayHideAmountsRow"
+            Layout.fillWidth: true
+            title: qsTr("Hide amounts")
+            description: qsTr("Mask your balance and activity amounts. Shortcut: %1").arg(hideAmountsShortcut.nativeText)
+            showDivider: false
+            checked: optionsModel.hideAmounts
+            onToggled: optionsModel.hideAmounts = checked
+        }
+    }
+
+    FormSection {
+        objectName: "displayAccessibilitySection"
+        Layout.fillWidth: true
+        title: qsTr("Accessibility")
+
+        FormRow {
+            objectName: "displayTextSizeRow"
+            Layout.fillWidth: true
+            title: qsTr("Text size")
+            bodyItem: RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.space.l
+
+                CoreText {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: textSizeSlider.trackCenterY - height / 2
+                    text: "A"
+                    textStyle: Theme.text.captionStrong
+                    color: Theme.color.neutral7
+                    Accessible.ignored: true
+                }
+
+                Slider {
+                    id: textSizeSlider
+                    objectName: "displayTextSizeSlider"
+                    Layout.fillWidth: true
+                    discrete: true
+                    showsTickMarks: true
+                    from: 0
+                    to: Theme.textScales.length - 1
+                    // Not a plain binding: dragging writes value, which would break it.
+                    Binding on value { value: Math.max(0, Theme.textScales.indexOf(Theme.textScale)) }
+                    //: The standard 100% text size, without accessibility scaling.
+                    tickLabels: [{ value: Theme.textScales.indexOf(1), text: qsTr("Default") }]
+                    Accessible.name: qsTr("Text size")
+                    Accessible.description: qsTr("%1%").arg(Math.round(Theme.textScale * 100))
+                    onMoved: Theme.textScale = Theme.textScales[Math.round(value)]
+                }
+
+                CoreText {
+                    Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: textSizeSlider.trackCenterY - height / 2
+                    objectName: "displayTextSizePercentage"
+                    text: qsTr("%1%").arg(Math.round(Theme.textScale * 100))
+                    textStyle: Theme.text.captionStrong
+                    color: Theme.color.neutral7
+                    Accessible.ignored: true
+                }
+            }
+        }
+
+        SwitchRow {
+            objectName: "displayReduceMotionRow"
+            Layout.fillWidth: true
+            title: qsTr("Reduce motion")
+            showDivider: false
+            description: root.systemReducesMotion ? qsTr("Following your system setting.") : ""
+            checked: root.systemReducesMotion || Theme.reduceMotion
+            enabled: !root.systemReducesMotion
+            onToggled: Theme.reduceMotion = checked
         }
     }
 
@@ -108,7 +195,7 @@ SettingsPage {
             title: qsTranslate("SettingsDisplay", "Display unit")
             trailingItem: PopupPicker {
                 objectName: "displayUnitPicker"
-                embedded: true
+                surfaceLevel: 1
                 minimumMenuWidth: 400
                 subtitleRole: "description"
                 objectNameRole: "objectName"
@@ -155,7 +242,7 @@ SettingsPage {
             trailingItem: CoreText {
                 text: optionsModel.languageLabel(optionsModel.language)
                 color: Theme.color.neutral7
-                font: Theme.text.description.font
+                textStyle: Theme.text.description
             }
             onClicked: root.StackView.view.push(languagePage)
         }
@@ -219,9 +306,11 @@ SettingsPage {
                 description: qsTr("Use %s for the transaction hash. Separate multiple URLs with |.")
             }
 
-            CoreTextField {
-                objectName: "thirdPartyTransactionUrlsInput"
+            LabeledTextField {
                 Layout.fillWidth: true
+                label: qsTr("URLs")
+                fieldObjectName: "thirdPartyTransactionUrlsInput"
+                fieldTextStyle: Theme.text.monoDescription
                 text: optionsModel.thirdPartyTransactionUrls
                 placeholderText: "https://example.com/tx/%s"
                 onEditingFinished: optionsModel.thirdPartyTransactionUrls = text

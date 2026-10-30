@@ -5,7 +5,6 @@
 import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
-import "../../qml/components"
 import "../../qml/controls"
 
 TestCase {
@@ -14,6 +13,17 @@ TestCase {
     visible: true
     width: 200
     height: 100
+
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
 
     Component {
         id: tooltipComponent
@@ -39,8 +49,8 @@ TestCase {
     function test_theme_and_open_close() {
         const tooltip = createTemporaryObject(tooltipComponent, this)
         verify(tooltip !== null)
-        compare(tooltip.backgroundColor, Theme.color.neutral1)
-        compare(tooltip.borderColor, Theme.color.neutral2)
+        compare(tooltip.backgroundColor, Theme.color.surface1)
+        compare(tooltip.borderColor, Theme.color.menuBorder)
         compare(tooltip.visible, false)
 
         tooltip.shown = true
@@ -61,7 +71,7 @@ TestCase {
 
         tooltip.shown = true
         tooltip.shown = false
-        wait(100)
+        wait(Theme.motion.tooltipDelay + 50)
         compare(tooltip.visible, false)
     }
 

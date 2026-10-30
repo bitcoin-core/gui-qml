@@ -8,6 +8,7 @@ import org.bitcoincore.qt 1.0
 import "../../qml/components"
 import "../../qml/controls"
 import "../../qml/pages/onboarding"
+import "../../qml/pages/settings"
 
 TestCase {
     name: "OnboardingDataDir"
@@ -15,6 +16,8 @@ TestCase {
     visible: true
     width: 640
     height: 665
+
+    property string motionMode: ""
 
     Component {
         id: fullWizard
@@ -56,8 +59,9 @@ TestCase {
 
     Component {
         id: storageSettings
-        StorageSettings {
+        StorageSettingsPage {
             width: 640
+            height: 665
             settingsModel: optionsModel
         }
     }
@@ -90,11 +94,16 @@ TestCase {
     }
 
     function init() {
+        motionMode = Theme.motion.mode
         optionsModel.clearCoreSettingStatusesForTest()
         optionsModel.existingProfile = false
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 2
         optionsModel.setStorageStatusForTest(false, 123, "", "")
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
     }
 
     function triggerButton(rootItem, objectName) {
@@ -114,7 +123,16 @@ TestCase {
     }
 
     function openStorageSettings(page) {
-        mouseClick(findChild(page, "onboardingStorageSettingsButton"))
+        const button = findChild(page, "onboardingStorageSettingsButton")
+        // The expanded storage options can push the button under the footer;
+        // focusing it scrolls it into view first.
+        button.forceActiveFocus()
+        const scrollView = findChild(page, "onboardingScrollView")
+        tryVerify(function() {
+            const position = button.mapToItem(scrollView, 0, 0)
+            return position.y >= 0 && position.y + button.height <= scrollView.height
+        })
+        mouseClick(button)
         const popup = findChild(page, "onboardingStorageSettingsPopup")
         tryCompare(popup, "opened", true)
         return popup
@@ -129,6 +147,8 @@ TestCase {
         for (let i = 0; i < target.length; ++i) keyClick(target.charAt(i))
         mouseClick(findChild(popup, "onboardingStorageSettingsCloseButton"))
         tryCompare(popup, "visible", false)
+        // Without an exit transition the window drops the next press until it renders a frame.
+        waitForRendering(popup.parent, 1000)
     }
 
     function test_storage_popup_commits_latest_custom_target_after_selecting_reduce() {
@@ -192,7 +212,7 @@ TestCase {
 
         const infoButton = findChild(wizard.currentItem, "onboardingCoverInfoButton")
         verify(infoButton !== null)
-        compare(infoButton.textColor, Theme.color.orange)
+        compare(infoButton.textColor, Theme.color.accentText)
 
         infoButton.clicked()
         const popup = findChild(wizard.currentItem, "onboardingAboutPopup")
@@ -203,14 +223,14 @@ TestCase {
         const aboutPage = findChild(popup, "aboutSettingsPage")
         verify(aboutPage !== null)
         compare(aboutPage.title, "About Bitcoin Core")
-        compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.neutral3)
+        compare(findChild(aboutPage, "aboutVersionRow").dividerColor, Theme.color.surfaceDivider)
 
         findChild(aboutPage, "aboutDeveloperRow").clicked()
         const developerPage = findChild(popup, "settingsDeveloper")
         verify(developerPage !== null)
         const developerSection = findChild(developerPage, "developerSettingsSection")
         verify(developerSection !== null)
-        compare(developerSection.backgroundColor, Theme.color.neutral2)
+        compare(developerSection.backgroundColor, Theme.color.surface2)
         const dbcacheField = findChild(developerPage, "developerDbcacheField")
         const scriptThreadsField = findChild(developerPage, "developerScriptThreadsField")
         verify(dbcacheField !== null)
@@ -230,15 +250,38 @@ TestCase {
     }
 
     function test_cover_footer_appears_after_content() {
+        Theme.motion.mode = "full"
         const wizard = createTemporaryObject(fullWizard, this)
         verify(wizard !== null)
         const footer = wizard.currentItem.footer
         compare(footer.opacity, 0)
-        compare(footer.enabled, false)
-        wait(1800)
-        compare(footer.opacity, 0)
-        tryCompare(footer, "opacity", 1, 2000)
         compare(footer.enabled, true)
+        tryCompare(footer, "opacity", 1, 4000)
+    }
+
+    function test_first_click_or_key_finishes_onboarding_entrance() {
+        Theme.motion.mode = "full"
+        let wizard = createTemporaryObject(fullWizard, this)
+        let cover = wizard.currentItem
+        compare(cover.footer.opacity, 0)
+        mouseClick(cover, 20, 120)
+        compare(cover.footer.opacity, 1)
+        const children = findChild(cover, "onboardingContent").children
+        for (let i = 0; i < children.length; ++i) verify(!children[i].visible || children[i].opacity === 1)
+
+        wizard = createTemporaryObject(fullWizard, this)
+        cover = wizard.currentItem
+        compare(cover.footer.opacity, 0)
+        cover.forceActiveFocus()
+        keyClick(Qt.Key_Shift)
+        compare(cover.footer.opacity, 1)
+    }
+
+    function test_reduced_motion_shows_onboarding_at_once() {
+        Theme.motion.mode = "reduced"
+        const wizard = createTemporaryObject(fullWizard, this)
+        compare(wizard.currentItem.footer.opacity, 1)
+        compare(wizard.currentItem.footer.enabled, true)
     }
 
     function test_full_preinit_wizard_can_go_back_from_storage_amount() {
@@ -246,7 +289,6 @@ TestCase {
         verify(wizard !== null)
         compare(wizard.currentItem.objectName, "onboardingCover")
         compare(findChild(wizard.currentItem, "onboardingWizardBackButton").visible, false)
-        compare(wizard.currentItem.footer.opacity, 0)
         const separator = findChild(wizard.currentItem, "onboardingFooterSeparator")
         const actions = findChild(wizard.currentItem, "onboardingFooterActions")
         verify(separator !== null)
@@ -267,7 +309,7 @@ TestCase {
         verify(backButton !== null)
         compare(backButton, wizard.currentItem.footerBackButton)
         tryCompare(backButton, "opacity", 1)
-        compare(backButton.isOnSurface, false)
+        compare(backButton.surfaceLevel, 0)
         const backButtonX = backButton.x
         const backButtonY = backButton.y
 
@@ -326,7 +368,7 @@ TestCase {
         const amountPage = createTemporaryObject(storageAmount, this)
         verify(amountPage !== null)
         findChild(amountPage, "onboardingStorageSettingsButton").clicked()
-        compare(findChild(amountPage, "onboardingStorageSettingsButton").textColor, Theme.color.orange)
+        compare(findChild(amountPage, "onboardingStorageSettingsButton").textColor, Theme.color.accentText)
         const storagePopup = findChild(amountPage, "onboardingStorageSettingsPopup")
         verify(storagePopup !== null)
         tryCompare(storagePopup, "visible", true)
@@ -340,7 +382,7 @@ TestCase {
         verify(connectionPage !== null)
         const connectionSettingsButton = findChild(connectionPage, "connectionSettingsButton")
         verify(connectionSettingsButton.width < connectionPage.width)
-        compare(connectionSettingsButton.textColor, Theme.color.orange)
+        compare(connectionSettingsButton.textColor, Theme.color.accentText)
         connectionSettingsButton.clicked()
         const connectionPopup = findChild(connectionPage, "onboardingConnectionSettingsPopup")
         verify(connectionPopup !== null)
@@ -537,9 +579,10 @@ TestCase {
         compare(fullOption.enabled, false)
 
         const initialBorderColor = fullOption.background.border.color.toString()
+        compare(initialBorderColor, Theme.color.disabledContent.toString())
         mouseMove(fullOption, fullOption.width / 2, fullOption.height / 2)
         wait(50)
-        compare(fullOption.hovered, false)
+        // Qt 6.2 can retain hover flags on disabled controls; check the style.
         compare(fullOption.background.border.color.toString(), initialBorderColor)
     }
 
@@ -580,16 +623,13 @@ TestCase {
 
         const page = createTemporaryObject(storageSettings, this)
         verify(page !== null)
-        const setting = findChild(page, "pruneTargetSetting")
         const input = findChild(page, "pruneTargetInput")
-        verify(setting !== null)
         verify(input !== null)
 
         input.text = "200"
         input.editingFinished()
 
-        compare(setting.showErrorText, true)
-        verify(setting.errorText.indexOf("111GB") !== -1)
+        verify(page.pruneTargetError.indexOf("111 GB") !== -1)
         compare(optionsModel.pruneSizeGB, 2)
     }
 

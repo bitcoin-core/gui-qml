@@ -22,63 +22,57 @@ SettingsPage {
     readonly property var natpmpSetting: coreSettingsModel.entry("natpmp")
     readonly property var serverSetting: coreSettingsModel.entry("server")
 
-    SettingsRestartNotice {
-        visible: !root.onboardingModal && root.settingsModel.connectionSettingsDirty
+    ToastBanner {
+        shown: !root.onboardingModal && root.settingsModel.connectionSettingsDirty
         Layout.fillWidth: true
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Incoming connections")
-        isOnSurface: root.onboardingModal
-        showGradientBorder: false
+        surfaceLevel: root.onboardingModal ? 1 : 0
 
-        FormRow {
+        SwitchRow {
+            objectName: "listenSettingRow"
             Layout.fillWidth: true
             title: qsTr("Enable listening")
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             description: qsTr("Allow incoming peer connections.")
             supportingText: root.listenSetting.infoText
             enabled: root.listenSetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "listenSwitch"
-                checked: root.listenSetting.value
-                onToggled: root.listenSetting.value = checked
-            }
+            switchObjectName: "listenSwitch"
+            checked: root.listenSetting.value
+            onToggled: root.listenSetting.value = checked
         }
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Map port using NAT-PMP")
-            dividerColor: root.onboardingModal ? Theme.color.neutral3 : Theme.color.neutral2
+            dividerColor: Theme.color.surfaceDivider
             supportingText: root.natpmpSetting.infoText
             enabled: root.natpmpSetting.canEdit
-            trailingItem: OptionSwitch {
-                objectName: "natpmpSwitch"
-                checked: root.natpmpSetting.value
-                onToggled: root.natpmpSetting.value = checked
-            }
+            switchObjectName: "natpmpSwitch"
+            checked: root.natpmpSetting.value
+            onToggled: root.natpmpSetting.value = checked
         }
 
-        FormRow {
+        SwitchRow {
             Layout.fillWidth: true
             title: qsTr("Enable RPC server")
             supportingText: root.serverSetting.infoText
             enabled: root.serverSetting.canEdit
             showDivider: false
-            trailingItem: OptionSwitch {
-                objectName: "serverSwitch"
-                checked: root.serverSetting.value
-                onToggled: root.serverSetting.value = checked
-            }
+            switchObjectName: "serverSwitch"
+            checked: root.serverSetting.value
+            onToggled: root.serverSetting.value = checked
         }
     }
 
     FormSection {
         Layout.fillWidth: true
         title: qsTr("Privacy")
-        isOnSurface: root.onboardingModal
-        showGradientBorder: false
+        surfaceLevel: root.onboardingModal ? 1 : 0
 
         ListRow {
             objectName: "proxySettingsRow"

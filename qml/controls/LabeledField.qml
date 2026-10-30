@@ -23,21 +23,21 @@ Control {
     property string actionObjectName: ""
     property string supportingText: ""
     property string errorText: ""
-    property int labelSpacing: 6
-    property int messageSpacing: 6
-    property color labelColor: enabled ? Theme.color.neutral8 : Theme.color.neutral4
-    property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.neutral4
-    property color errorTextColor: Theme.color.red
+    property int labelSpacing: Theme.space.s
+    property int messageSpacing: Theme.space.s
+    property color labelColor: enabled ? Theme.color.neutral8 : Theme.color.disabledContent
+    property color supportingTextColor: enabled ? Theme.color.neutral7 : Theme.color.disabledContent
+    property color errorTextColor: Theme.color.dangerText
     property var labelTextStyle: Theme.text.description
     property var messageTextStyle: Theme.text.caption
     property bool fieldSurface: false
     property bool fieldFocused: false
-    property color fieldBackgroundColor: Theme.color.neutral2
+    property color fieldBackgroundColor: Theme.color.surface2
     property color focusBorderColor: Theme.color.neutral6
-    property color errorBorderColor: Theme.color.red
+    property color errorBorderColor: Theme.color.danger
     readonly property color activeBorderColor: errorText.length > 0 ? errorBorderColor : focusBorderColor
     readonly property bool showFieldBorder: fieldSurface && (errorText.length > 0 || fieldFocused)
-    property int fieldCornerRadius: 10
+    property int fieldCornerRadius: Theme.radius.field
     property int fieldHorizontalPadding: 14
 
     signal copyRequested()
@@ -57,7 +57,7 @@ Control {
             visible: root.label.length > 0 || root.showCopyButton || root.actionText.length > 0
             Layout.fillWidth: true
             Layout.bottomMargin: visible ? root.labelSpacing : 0
-            spacing: 8
+            spacing: Theme.space.m
 
             CoreText {
                 objectName: root.labelObjectName.length > 0
@@ -66,9 +66,7 @@ Control {
                 Layout.fillWidth: true
                 text: root.label
                 color: root.labelColor
-                font: root.labelTextStyle.font
-                lineHeight: root.labelTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.labelTextStyle
                 horizontalAlignment: Text.AlignLeft
                 wrap: false
                 elide: Text.ElideRight
@@ -136,9 +134,7 @@ Control {
             Layout.topMargin: visible ? root.messageSpacing : 0
             text: root.errorText.length > 0 ? root.errorText : root.supportingText
             color: root.errorText.length > 0 ? root.errorTextColor : root.supportingTextColor
-            font: root.messageTextStyle.font
-            lineHeight: root.messageTextStyle.lineHeight
-            lineHeightMode: Text.FixedHeight
+            textStyle: root.messageTextStyle
             horizontalAlignment: Text.AlignLeft
             wrap: true
         }

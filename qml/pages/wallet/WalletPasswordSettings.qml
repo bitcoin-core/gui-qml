@@ -53,9 +53,7 @@ SettingsPage {
             if (root.updating) {
                 root.successText = qsTr("Password updated successfully.")
             } else {
-                if (acknowledgement.loadedTrailingItem) {
-                    acknowledgement.loadedTrailingItem.checked = false
-                }
+                acknowledgement.checked = false
                 root.saved()
             }
         } else {
@@ -105,12 +103,13 @@ SettingsPage {
     }
 
     FormSection {
+        id: passwordSection
         objectName: "walletPasswordFormSection"
         Layout.fillWidth: true
 
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: 20
+            Layout.margins: passwordSection.contentInset
             spacing: 20
 
             PasswordTextField {
@@ -122,8 +121,8 @@ SettingsPage {
                 labelObjectName: "walletPasswordCurrentLabel"
                 fieldObjectName: "walletPasswordCurrentField"
                 visibilityToggleObjectName: "walletPasswordCurrentVisibilityToggle"
-                placeholderText: qsTr("Enter current password...")
-                fieldBackgroundColor: Theme.color.neutral2
+                placeholderText: qsTr("Enter current password…")
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
                 onAccepted: newPassword.field.forceActiveFocus()
             }
@@ -136,8 +135,8 @@ SettingsPage {
                 labelObjectName: "walletPasswordNewLabel"
                 fieldObjectName: "walletPasswordNewField"
                 visibilityToggleObjectName: "walletPasswordNewVisibilityToggle"
-                placeholderText: root.updating ? qsTr("Enter new password...") : qsTr("Enter password...")
-                fieldBackgroundColor: Theme.color.neutral2
+                placeholderText: root.updating ? qsTr("Enter new password…") : qsTr("Enter password…")
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
                 onAccepted: confirmPassword.field.forceActiveFocus()
             }
@@ -150,37 +149,30 @@ SettingsPage {
                 labelObjectName: "walletPasswordConfirmLabel"
                 fieldObjectName: "walletPasswordConfirmField"
                 visibilityToggleObjectName: "walletPasswordConfirmVisibilityToggle"
-                placeholderText: root.updating ? qsTr("Enter new password again...") : qsTr("Enter password again...")
-                fieldBackgroundColor: Theme.color.neutral2
+                placeholderText: root.updating ? qsTr("Enter new password again…") : qsTr("Enter password again…")
+                fieldBackgroundColor: Theme.color.surface2
                 onTextEdited: root.clearResult()
             }
 
-            ListRow {
+            // Consent in a form is a checkbox.
+            CheckBox {
                 id: acknowledgement
                 objectName: "walletPasswordConfirmToggle"
                 visible: !root.updating
                 Layout.fillWidth: true
-                description: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
-                showDivider: false
-                accessibleRole: Accessible.CheckBox
-                trailingItem: OptionSwitch { }
-                onClicked: loadedTrailingItem.toggle()
+                text: qsTr("I understand that if I lose or forget this password I might lose access to the bitcoin stored in this wallet.")
             }
 
             ToastBanner {
                 objectName: "walletPasswordResultBanner"
-                visible: root.resultText.length > 0
+                shown: root.resultText.length > 0
                 Layout.fillWidth: true
-                readonly property color resultColor: root.resultSuccess ? Theme.color.green : Theme.color.red
-                backgroundColor: Qt.rgba(resultColor.r, resultColor.g, resultColor.b, 0.25)
-                iconSource: root.resultSuccess ? "image://images/check" : "image://images/info-filled"
-                iconColor: resultColor
+                tone: root.resultSuccess ? ToastBanner.Success : ToastBanner.Error
                 text: root.resultText
                 textObjectName: "walletPasswordErrorText"
-                textColor: resultColor
             }
 
-            ContinueButton {
+            PrimaryButton {
                 objectName: "walletPasswordSaveButton"
                 Layout.preferredWidth: Math.min(320, parent.width)
                 Layout.alignment: Qt.AlignHCenter
@@ -191,7 +183,7 @@ SettingsPage {
                     && newPassword.text === confirmPassword.text
                     && (root.updating
                         ? currentPassword.text !== ""
-                        : acknowledgement.loadedTrailingItem && acknowledgement.loadedTrailingItem.checked)
+                        : acknowledgement.checked)
                 onClicked: {
                     root.clearResult()
                     const ok = root.updating

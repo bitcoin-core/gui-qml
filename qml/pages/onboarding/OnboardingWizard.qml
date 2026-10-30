@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../../controls"
+import "../../components"
 
 Item {
     id: root
@@ -14,7 +15,7 @@ Item {
     signal finished()
     property var settingsModel: optionsModel
     property bool preInit: false
-    property bool reducedMotion: false
+    property bool reducedMotion: Theme.motion.reduced
     property int assumedBlockchainSize: 0
     property int assumedChainstateSize: 0
     readonly property alias currentItem: pages.currentItem
@@ -77,7 +78,7 @@ Item {
             footerFullWidth: true
             animateContent: !root.reducedMotion
             animateFooterAfterContent: !root.reducedMotion
-            contentAnimationDelay: 1800
+            contentAnimationDelay: Theme.motion.delay(1800)
             onNext: {
                 root.push(strengthen)
                 motion.toNetwork()
@@ -92,7 +93,7 @@ Item {
             showNavigationBar: false
             footerFullWidth: true
             animateContent: !root.reducedMotion
-            contentAnimationDelay: 650
+            contentAnimationDelay: Theme.motion.delay(650)
             onBack: {
                 root.pop()
                 motion.toLogo()
@@ -111,7 +112,7 @@ Item {
             showNavigationBar: false
             footerFullWidth: true
             animateContent: !root.reducedMotion
-            contentAnimationDelay: 650
+            contentAnimationDelay: Theme.motion.delay(650)
             onBack: {
                 root.pop()
                 motion.backToNetwork()
@@ -130,7 +131,7 @@ Item {
             showNavigationBar: false
             footerFullWidth: true
             animateContent: !root.reducedMotion
-            contentAnimationDelay: 650
+            contentAnimationDelay: Theme.motion.delay(650)
             onBack: {
                 root.pop()
                 motion.backToBlocks()
@@ -144,7 +145,7 @@ Item {
             showBackButton: pages.depth > 1
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
+            animateContent: !root.reducedMotion
             settingsModel: root.settingsModel
             assumedChainstateSize: root.assumedChainstateSize
             onBack: root.pop()
@@ -157,7 +158,7 @@ Item {
             showBackButton: pages.depth > 1
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
+            animateContent: !root.reducedMotion
             settingsModel: root.settingsModel
             assumedBlockchainSize: root.assumedBlockchainSize
             assumedChainstateSize: root.assumedChainstateSize
@@ -171,7 +172,7 @@ Item {
             showBackButton: pages.depth > 1
             showNavigationBar: false
             footerFullWidth: true
-            animateContent: true
+            animateContent: !root.reducedMotion
             settingsModel: root.settingsModel
             onBack: root.pop()
             onNext: root.finished()

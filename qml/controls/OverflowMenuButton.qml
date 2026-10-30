@@ -8,19 +8,29 @@ import org.bitcoincore.qt 1.0
 
 NeutralButton {
     id: root
+    property bool keyboardActivation: false
+    Keys.onPressed: function(event) {
+        keyboardActivation = event.key === Qt.Key_Space || event.key === Qt.Key_Down
+        if (event.key === Qt.Key_Down) {
+            root.clicked()
+            event.accepted = true
+        }
+    }
+    TapHandler { onPressedChanged: if (pressed) root.keyboardActivation = false }
 
-    isOnSurface: false
+    surfaceLevel: 0
     property color iconColor: Theme.color.neutral7
-    property color activeIconColor: Theme.color.orange
-    property int size: 40
+    property color activeIconColor: Theme.color.neutral9
+    property int size: Theme.size.iconButton
     property bool circular: false
     readonly property alias iconItem: ellipsisIcon
 
     iconSource: "image://images/ellipsis"
-    iconSize: 40
-    backgroundColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
-    hoverBackgroundColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
-    showBorder: isOnSurface
+    // Ellipsis artwork is drawn on a 24-unit grid; 20 suits every target size.
+    iconSize: Theme.size.icon.l
+    backgroundColor: Theme.color.surface(surfaceLevel + 1)
+    hoverBackgroundColor: Theme.color.surface(surfaceLevel + 2)
+    showBorder: surfaceLevel > 0
     backgroundRadius: circular ? size / 2 : 5
     scale: 1
 
@@ -45,12 +55,13 @@ NeutralButton {
                 ? root.checked || root.hovered || root.down
                     ? root.activeIconColor
                     : root.iconColor
-                : Theme.color.neutral4
+                : Theme.color.disabledContent
             size: root.iconSize
             hoverEnabled: false
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }

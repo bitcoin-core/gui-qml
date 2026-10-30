@@ -23,14 +23,15 @@ ColumnLayout {
     signal pasteRequested(string field)
     signal edited()
     signal removeRequested()
-    spacing: 18
+    spacing: Theme.space.l
 
     LabeledField {
+        id: addressGroup
         objectName: "sendAddressGroup"
         Layout.fillWidth: true
         label: qsTr("Bitcoin address")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         fieldSurface: true
         fieldFocused: addressField.field.activeFocus
         errorText: root.recipient ? root.recipient.addressError : ""
@@ -44,6 +45,7 @@ ColumnLayout {
             inputObjectName: "sendAddressInput"
             Layout.fillWidth: true
             embedded: false
+            labelText: addressGroup.label
             showLabel: false
             showErrorMessage: false
             interceptPaste: true
@@ -56,40 +58,32 @@ ColumnLayout {
         }
     }
 
-    ColumnLayout {
+    FormSection {
         objectName: "sendPaymentRequestSection"
         visible: root.recipient && root.recipient.hasPaymentRequest
             && (root.recipient.paymentRequestLabel.length > 0 || root.recipient.message.length > 0)
         Layout.fillWidth: true
-        spacing: 8
-        CoreText {
+        // Titled like the field labels around it.
+        title: qsTr("Payment request")
+        titleTextStyle: Theme.text.description
+        sectionSpacing: Theme.space.s
+        surfaceLevel: 1
+        ValueRow {
+            visible: root.recipient && root.recipient.paymentRequestLabel.length > 0
+            objectName: "sendPaymentRequestPayTo"
             Layout.fillWidth: true
-            text: qsTr("Payment request")
-            font: Theme.text.description.font
-            color: Theme.color.neutral7
-            horizontalAlignment: Text.AlignLeft
+            title: qsTr("Pay to")
+            value: root.recipient ? root.recipient.paymentRequestLabel : ""
+            showDivider: root.recipient && root.recipient.message.length > 0
+            dividerColor: Theme.color.surfaceDivider
         }
-        FormSection {
+        ValueRow {
+            visible: root.recipient && root.recipient.message.length > 0
+            objectName: "sendPaymentRequestMessageText"
             Layout.fillWidth: true
-            isOnSurface: true
-            showGradientBorder: false
-            ValueRow {
-                visible: root.recipient && root.recipient.paymentRequestLabel.length > 0
-                objectName: "sendPaymentRequestPayTo"
-                Layout.fillWidth: true
-                title: qsTr("Pay to")
-                value: root.recipient ? root.recipient.paymentRequestLabel : ""
-                showDivider: root.recipient && root.recipient.message.length > 0
-                dividerColor: Theme.color.neutral3
-            }
-            ValueRow {
-                visible: root.recipient && root.recipient.message.length > 0
-                objectName: "sendPaymentRequestMessageText"
-                Layout.fillWidth: true
-                title: qsTr("Message")
-                value: root.recipient ? root.recipient.message : ""
-                showDivider: false
-            }
+            title: qsTr("Message")
+            value: root.recipient ? root.recipient.message : ""
+            showDivider: false
         }
     }
 
@@ -97,8 +91,8 @@ ColumnLayout {
         objectName: "sendAmountGroup"
         Layout.fillWidth: true
         label: qsTr("Amount")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         messageObjectName: "sendAmountStatusText"
         fieldSurface: true
         fieldFocused: amountField.field.activeFocus
@@ -137,8 +131,8 @@ ColumnLayout {
         Layout.fillWidth: true
         label: qsTr("Note to self")
         supportingText: qsTr("Recommended")
-        labelSpacing: 6
-        messageSpacing: 8
+        labelSpacing: Theme.space.s
+        messageSpacing: Theme.space.m
         fieldSurface: true
         inputObjectName: "sendNoteInput"
         interceptPaste: true

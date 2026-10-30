@@ -19,7 +19,7 @@ OnboardingView {
     readonly property int minimumStorageRequiredGB: root.settingsModel.existingProfile
         ? root.settingsModel.storageMinimumRequiredGB : root.freshMinimumStorageRequiredGB
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false

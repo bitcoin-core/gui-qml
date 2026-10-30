@@ -9,29 +9,33 @@ import org.bitcoincore.qt 1.0
 Button {
     id: root
 
+    // Medium is the close button of every modal and banner. Large is for a
+    // full-window flow's navigation bar, where 30 px reads too small.
     enum Size { Medium, Large }
 
     property int buttonSize: CloseButton.Medium
-    property int size: buttonSize === CloseButton.Large ? 40 : 30
-    property int iconSize: buttonSize === CloseButton.Large ? 14 : 10
+    property int size: buttonSize === CloseButton.Large ? Theme.size.iconButton : 30
+    property int iconSize: buttonSize === CloseButton.Large ? Theme.size.icon.s : 10
+    property int backgroundRadius: size / 2
     property color iconColor: Theme.color.neutral6
-    property color backgroundColor: Theme.color.neutral2
-    property color backgroundHoverColor: Theme.color.neutral3
-    property color backgroundPressedColor: Theme.color.neutral3
+    property color backgroundColor: Theme.color.surface2
+    property color backgroundHoverColor: Theme.color.surface3
+    property color backgroundPressedColor: Theme.color.surface3
 
     implicitWidth: size
     implicitHeight: size
     hoverEnabled: enabled && AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
     padding: 0
-    scale: enabled && down ? 0.95 : 1.0
+    scale: enabled && down ? Theme.motion.pressScale : 1
     Accessible.name: qsTr("Close")
     Accessible.role: Accessible.Button
 
     Behavior on scale {
+        enabled: Theme.motion.animated
         NumberAnimation {
-            duration: 100
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fast
+            easing.type: Theme.motion.easing.enter
         }
     }
 
@@ -51,7 +55,7 @@ Button {
     background: Rectangle {
         id: background
         objectName: root.objectName.length > 0 ? root.objectName + "Background" : ""
-        radius: width / 2
+        radius: root.backgroundRadius
         color: root.down
             ? root.backgroundPressedColor
             : root.hovered
@@ -59,7 +63,8 @@ Button {
                 : root.backgroundColor
 
         Behavior on color {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         SurfaceGradientBorder {
@@ -71,7 +76,7 @@ Button {
 
         FocusBorder {
             visible: root.enabled && root.visualFocus
-            borderRadius: root.size / 2 + 4
+            targetRadius: root.backgroundRadius
         }
     }
 }

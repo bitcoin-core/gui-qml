@@ -6,11 +6,11 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import org.bitcoincore.qt 1.0
 
-Button {
-    property color bgActiveColor: Theme.color.orange
+TabButton {
+    property color bgActiveColor: Theme.color.accent
     property color textColor: Theme.color.neutral7
     property color textHoverColor: Theme.color.neutral9
-    property color textActiveColor: Theme.color.orange
+    property color textActiveColor: Theme.color.accentText
     property color iconColor: "transparent"
     property string iconSource: ""
     property int iconSize: 30
@@ -18,6 +18,7 @@ Button {
 
     id: root
     checkable: true
+    Accessible.role: Accessible.PageTab
     hoverEnabled: AppMode.isDesktop
     implicitHeight: 60
     implicitWidth: 80
@@ -40,10 +41,9 @@ Button {
         }
         CoreText {
             id: buttonText
-            font.pixelSize: 15
+            textStyle: Theme.text.subheading
             text: root.text
             color: root.textColor
-            bold: true
             visible: !customContentLoader.active && root.text !== ""
             anchors.centerIn: parent
         }
@@ -62,17 +62,19 @@ Button {
             id: bg
             height: parent.height - 5
             width: parent.width
-            radius: 5
-            color: Theme.color.neutral3
+            radius: Theme.radius.s
+            color: Theme.color.surfaceHover
             visible: root.hovered
 
-            FocusBorder {
-                visible: root.visualFocus
-            }
-
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
+        }
+        FocusBorder {
+            anchors.fill: bg
+            visible: root.visualFocus
+            targetRadius: bg.radius
         }
         Rectangle {
             anchors.bottom: parent.bottom

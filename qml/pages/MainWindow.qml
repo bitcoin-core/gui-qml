@@ -15,18 +15,20 @@ ApplicationWindow {
     id: appWindow
     objectName: "appWindow"
     title: qsTr("Bitcoin Core App")
-    minimumWidth: 800
+    minimumWidth: SizeClass.windowMinimumWidth
     minimumHeight: 665
     color: Theme.color.background
-    palette.window: Theme.color.neutral1 // Context menu background
+    palette.window: Theme.color.surface1 // Context menu background
     palette.windowText: Theme.color.neutral8 // Menu item text and icons
-    palette.dark: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3 // Menu border
-    palette.mid: Theme.dark ? Theme.color.neutral2 : Theme.color.neutral3 // Menu separators
-    palette.light: Theme.color.neutral3 // Highlighted menu item background
-    palette.midlight: Theme.color.neutral3 // Pressed menu item background
-    palette.disabled.windowText: Theme.color.neutral4 // Disabled item text and icons
-    palette.disabled.light: Theme.color.neutral1 // Disabled item highlight background
-    palette.disabled.midlight: Theme.color.neutral1 // Disabled item pressed background
+    palette.dark: Theme.color.menuBorder // Menu border
+    palette.mid: Theme.color.menuDivider // Menu separators
+    palette.light: Theme.color.surface3 // Highlighted menu item background
+    palette.midlight: Theme.color.surface3 // Pressed menu item background
+    palette.disabled.windowText: Theme.color.disabledContent // Disabled item text and icons
+    palette.disabled.light: Theme.color.surface1 // Disabled item highlight background
+    palette.disabled.midlight: Theme.color.surface1 // Disabled item pressed background
+    palette.highlight: Theme.color.selection // Text selection in fields
+    palette.highlightedText: Theme.color.selectedText
 
     // The window starts hidden and is shown at the end of Component.onCompleted,
     // after the saved size has been applied (below). Applying the size while
@@ -131,7 +133,8 @@ ApplicationWindow {
 
 
     Behavior on color {
-        ColorAnimation { duration: 150 }
+        enabled: Theme.motion.animated
+        ColorAnimation { duration: Theme.motion.normal }
     }
 
     Loader {
@@ -180,6 +183,7 @@ ApplicationWindow {
         shuttingDown: appWindow.shutdownInProgress || nodeModel.fatalException
         fatalException: nodeModel.fatalException
         isMacOs: Qt.platform.os === "osx"
+        amountsHidden: optionsModel.hideAmounts
 
         onCreateWalletRequested: appWindow.openWalletCreation()
         onCloseWalletRequested: appWindow.routeToShell("requestCloseWallet")
@@ -196,6 +200,7 @@ ApplicationWindow {
         onPasteRequested: appWindow.invokeEditCommand("paste")
         onToggleDisplayUnitRequested: optionsModel.displayUnit = optionsModel.displayUnit === BitcoinAmount.SAT
             ? BitcoinAmount.BTC : BitcoinAmount.SAT
+        onToggleHideAmountsRequested: optionsModel.hideAmounts = !optionsModel.hideAmounts
         onMinimizeRequested: appWindow.showMinimized()
         onZoomRequested: {
             if (appWindow.visibility === Window.Maximized) {
@@ -209,11 +214,11 @@ ApplicationWindow {
         onActivityRequested: appWindow.routeToShell("openActivity")
         onSendRequested: appWindow.routeToShell("openSend")
         onReceiveRequested: appWindow.routeToShell("openReceive")
-        onInformationRequested: menuInformationPopup.open()
+        onInformationRequested: appWindow.openNodeInformation()
         onConsoleRequested: appWindow.routeToShell("openConsole")
         onNetworkTrafficRequested: appWindow.routeToShell("openNetworkTraffic")
         onPeersRequested: appWindow.routeToShell("openPeers")
-        onRpcDocumentationRequested: Qt.openUrlExternally("https://bitcoincore.org/en/doc/")
+        onRpcDocumentationRequested: rpcDocumentationLinkPopup.openLink("https://bitcoincore.org/en/doc/")
         onAboutRequested: appWindow.openSettings("about")
     }
 
@@ -322,9 +327,30 @@ ApplicationWindow {
         parent: Overlay.overlay
     }
 
+    // One of each for the whole window: the menu bar and every
+    // NodeStatusActions open these.
     NodeInformationPopup {
-        id: menuInformationPopup
+        id: nodeInformationPopup
         parent: Overlay.overlay
+    }
+
+    NodeWarningsPopup {
+        id: nodeWarningsPopup
+        parent: Overlay.overlay
+    }
+
+    ExternalPopup {
+        id: rpcDocumentationLinkPopup
+        objectName: "rpcDocumentationLinkPopup"
+        parent: Overlay.overlay
+    }
+
+    function openNodeInformation() {
+        nodeInformationPopup.open()
+    }
+
+    function openNodeWarnings() {
+        nodeWarningsPopup.open()
     }
 
     Connections {
@@ -356,6 +382,7 @@ ApplicationWindow {
 
     WalletCreationModal {
         id: walletCreationModal
+        parent: Overlay.overlay
         onFinished: function(openActivity) {
             if (openActivity) appWindow.routeToShell("openActivity")
         }

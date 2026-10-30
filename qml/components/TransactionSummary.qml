@@ -12,13 +12,14 @@ ColumnLayout {
     property string amount: ""
     property string subtitle: ""
     property color amountColor: Theme.color.neutral9
+    property bool hidesAmount: false
     property Component iconComponent
     property Component statusComponent
     readonly property int unitSeparator: amount.lastIndexOf(" ")
     readonly property string amountValue: unitSeparator < 0 ? amount : amount.substring(0, unitSeparator)
     readonly property string amountUnit: unitSeparator < 0 ? "" : amount.substring(unitSeparator + 1)
 
-    spacing: 12
+    spacing: Theme.space.ml
     Loader {
         visible: !!root.iconComponent
         sourceComponent: root.iconComponent
@@ -35,7 +36,7 @@ ColumnLayout {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(parent.width, amountText.implicitWidth
                 + (amountUnit.visible ? spacing + amountUnit.implicitWidth : 0))
-            spacing: 12
+            spacing: Theme.space.ml
 
             BitcoinAmountDisplayLabel {
                 id: amountText
@@ -43,14 +44,22 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
                 Layout.alignment: Qt.AlignBaseline
+                // Amounts being reviewed or confirmed never roll through other digits.
+                animateUnitChanges: false
+                hidesAmount: root.hidesAmount
+                // The row shrinks to the mask while amounts are hidden; give the
+                // reveal the room the digits will take.
                 animationAvailableWidth: Math.max(0, amountRow.parent.width
                     - (amountUnit.visible ? amountRow.spacing + amountUnit.implicitWidth : 0))
                 text: root.amountValue
                 color: root.amountColor
-                font.family: Theme.text.monoLead.font.family
-                font.styleName: Theme.text.monoLead.font.styleName
+                textStyle: Theme.text.amountLead
                 font.pixelSize: 48
                 font.letterSpacing: -1.5
+                // The role's fixed line height is for its own 24 px size; at 48 px
+                // it puts the baseline the unit aligns to below the digits.
+                lineHeightMode: Text.ProportionalHeight
+                lineHeight: 1
                 fontSizeMode: Text.HorizontalFit
                 minimumPixelSize: 22
                 wrap: false
@@ -59,10 +68,11 @@ ColumnLayout {
                 id: amountUnit
                 objectName: "transactionSummaryUnit"
                 visible: root.amountUnit.length > 0
+                animateUnitChanges: false
                 Layout.alignment: Qt.AlignBaseline
                 text: root.amountUnit
                 color: Theme.color.neutral7
-                font.pixelSize: root.width < 500 ? 18 : 22
+                textStyle: root.width < 500 ? Theme.text.body : Theme.text.bodyLarge
                 wrap: false
             }
         }
@@ -72,7 +82,7 @@ ColumnLayout {
         Layout.fillWidth: true
         text: root.subtitle
         color: Theme.color.neutral7
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
     }
     Loader {
         visible: !!root.statusComponent

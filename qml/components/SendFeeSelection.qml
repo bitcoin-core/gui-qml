@@ -44,7 +44,7 @@ ColumnLayout {
             objectNameRole: "objectName"
             currentValue: root.presetIndex
             minimumMenuWidth: 340
-            embedded: true
+            surfaceLevel: 1
             onActivated: function(index) {
                 if (!root.walletModel) return
                 const option = root.speedOptions[index]
@@ -91,7 +91,7 @@ ColumnLayout {
                         width: 32
                         x: index / (root.blockTargets.length - 1) * (parent.width - width)
                         text: index === root.blockTargets.length - 1 ? qsTr("50+") : modelData
-                        font: Theme.text.caption.font
+                        textStyle: Theme.text.caption
                         color: Theme.color.neutral6
                         horizontalAlignment: Text.AlignHCenter
                     }
@@ -105,7 +105,7 @@ ColumnLayout {
         Layout.fillWidth: true
         title: qsTr("Fee rate")
         value: !root.walletModel || root.walletModel.feeEstimatePending || root.walletModel.estimatedFeeSatoshi < 0
-            ? "—" : root.walletModel.estimatedFeeRate + " sat/vB"
+            ? "—" : qsTr("%1 sat/vB").arg(root.walletModel.estimatedFeeRate)
         valueTextStyle: Theme.text.monoDescription
     }
 
@@ -117,6 +117,8 @@ ColumnLayout {
         title: qsTr("Fee rate")
         description: "sat/vB"
         text: root.walletModel ? root.walletModel.customFeeRate : ""
+        //: Placeholder for the empty custom fee rate field, in sat/vB.
+        placeholderText: qsTr("Enter custom fee")
         validator: RegularExpressionValidator { regularExpression: /^(|[0-9]+(\.[0-9]{0,3})?)$/ }
         //: Validation error for the custom transaction fee rate. sat/vB means satoshis per virtual byte.
         errorText: root.walletModel && !root.walletModel.customFeeRateValid
@@ -127,13 +129,13 @@ ColumnLayout {
     ValueRow {
         objectName: "feeSelectionEstimateLabel"
         amountValue: true
+        animateUnitChanges: false
         Layout.fillWidth: true
         title: qsTr("Fee amount")
         showDivider: false
         value: root.walletModel && !root.walletModel.feeEstimatePending && root.walletModel.estimatedFeeSatoshi >= 0
             ? fee.localizedDisplay : "—"
         valueUnit: fee.unitLabel
-        valueTextStyle: Theme.text.monoDescription
     }
 
     CoreText { objectName: "feeSelectionCustomEstimateLabel"; visible: false; text: fee.displayWithUnit }

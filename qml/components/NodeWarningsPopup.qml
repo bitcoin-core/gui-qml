@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "nodeWarningsPopup"
 
@@ -16,50 +16,24 @@ Popup {
     readonly property string firstWarningText: nodeModel.warningList.length > 0 ? nodeModel.warningList[0] : ""
     readonly property int firstWarningLineCount: warningRepeater.count > 0 ? warningRepeater.itemAt(0).warningLineCount : 0
     readonly property int firstWarningWrapMode: warningRepeater.count > 0 ? warningRepeater.itemAt(0).warningWrapMode : Text.NoWrap
-    readonly property int contentMargin: 28
 
-    modal: true
-    padding: 0
-    anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 720) : 720
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 520)
-    implicitHeight: Math.min(columnLayout.implicitHeight, 520)
+    title: qsTr("Node warnings")
+    implicitWidth: 720
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: 8
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
-    }
+    contentItem: ColumnLayout {
+        spacing: Theme.space.xl
 
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
-        spacing: 0
-
-        CoreText {
+        DialogHeader {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            text: qsTr("Node warnings")
-            bold: true
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            title: root.title
+            closeButtonObjectName: "nodeWarningsCloseButton"
+            onCloseRequested: root.close()
         }
-
-        Separator { Layout.fillWidth: true }
 
         ScrollView {
             id: warningsScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.contentMargin
             contentWidth: availableWidth
             clip: true
 
@@ -83,15 +57,15 @@ Popup {
                         readonly property int warningWrapMode: warningText.wrapMode
 
                         width: warningsColumn.width
-                        spacing: 10
+                        spacing: Theme.space.ml
 
                         Icon {
-                            Layout.preferredWidth: 18
-                            Layout.preferredHeight: 18
+                            Layout.preferredWidth: Theme.size.icon.l
+                            Layout.preferredHeight: Theme.size.icon.l
                             Layout.alignment: Qt.AlignTop
                             source: "image://images/alert-filled"
-                            color: Theme.color.orange
-                            size: 18
+                            color: Theme.color.warning
+                            size: Theme.size.icon.l
                         }
 
                         CoreText {
@@ -100,7 +74,7 @@ Popup {
                             Layout.fillWidth: true
                             text: modelData
                             color: Theme.color.neutral8
-                            font.pixelSize: 15
+                            textStyle: Theme.text.description
                             wrapMode: Text.WordWrap
                             horizontalAlignment: Text.AlignLeft
                         }
@@ -113,19 +87,10 @@ Popup {
                     visible: nodeModel.warningList.length === 0
                     text: qsTr("No current warnings.")
                     color: Theme.color.neutral7
-                    font.pixelSize: 15
+                    textStyle: Theme.text.description
+                    horizontalAlignment: Text.AlignLeft
                 }
             }
-        }
-
-        ContinueButton {
-            objectName: "nodeWarningsCloseButton"
-            Layout.fillWidth: true
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            Layout.bottomMargin: root.contentMargin
-            text: qsTr("OK")
-            onClicked: root.close()
         }
     }
 }

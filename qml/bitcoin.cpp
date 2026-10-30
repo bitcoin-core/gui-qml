@@ -21,6 +21,7 @@
 #include <noui.h>
 #include <qml/appmode.h>
 #include <qml/backendexecutor.h>
+#include <qml/buttonkeyactivation.h>
 #include <qml/quithandler.h>
 #include <qml/shutdowncoordinator.h>
 #include <qml/startupdialog.h>
@@ -28,6 +29,8 @@
 #include <qml/buildinfo.h>
 #include <qml/clipboard.h>
 #include <qml/datadir.h>
+#include <qml/globalsettings.h>
+#include <qml/motionpreference.h>
 #include <qml/guiargs.h>
 #include <qml/legacy_settings_migration.h>
 #include <qml/onboarding_settings.h>
@@ -200,6 +203,28 @@ bool InitErrorMessageBox(
     return false;
 }
 
+// Shows a startup error as an alert inside a window that is already open (the
+// onboarding window) and waits until it is dismissed.
+bool StartupErrorInWindow(
+    QQuickWindow& window,
+    const bilingual_str& message,
+    QmlQuitHandler& quit_handler)
+{
+    qCritical().noquote() << QString::fromStdString(message.original);
+    QQuickItem* content{window.contentItem()};
+    const bool content_enabled{content->isEnabled()};
+    content->setEnabled(true);
+    QEventLoop dialog_loop;
+    QObject::connect(&window, SIGNAL(startupErrorAcknowledged()), &dialog_loop, SLOT(quit()));
+    QObject::connect(&window, SIGNAL(closing(QQuickCloseEvent*)), &dialog_loop, SLOT(quit()));
+    QObject::connect(&quit_handler, &QmlQuitHandler::quitRequested, &dialog_loop, &QEventLoop::quit);
+    QMetaObject::invokeMethod(&window, "showStartupError",
+                              Q_ARG(QVariant, QString::fromStdString(message.translated)));
+    if (!quit_handler.isQuitRequested()) dialog_loop.exec();
+    content->setEnabled(content_enabled);
+    return false;
+}
+
 void RecordStartupWarning(QStringList& startup_warnings, const bilingual_str& message)
 {
     const QString warning{QString::fromStdString(message.translated).trimmed()};
@@ -272,6 +297,15 @@ void ApplyTestSettingsDir()
 }
 #endif
 
+QString StartupMotionMode()
+{
+#ifdef ENABLE_TEST_AUTOMATION
+    const QString test_mode{QString::fromStdString(gArgs.GetArg("-test-motion", ""))};
+    if (test_mode == QLatin1String("full") || test_mode == QLatin1String("reduced") || test_mode == QLatin1String("off")) return test_mode;
+#endif
+    return SystemPrefersReducedMotion() ? QStringLiteral("reduced") : QStringLiteral("full");
+}
+
 void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipboard, BitcoinUriModel& bitcoin_uri_model)
 {
     static bool registered{false};
@@ -300,6 +334,12 @@ void RegisterQmlTypes(AppMode& app_mode, BuildInfo& build_info, Clipboard& clipb
     qmlRegisterSingletonType<BitcoinUriModel>("org.bitcoincore.qt", 1, 0, "BitcoinUri", [](QQmlEngine*, QJSEngine*) -> QObject* {
         QQmlEngine::setObjectOwnership(bitcoin_uri_model_instance, QQmlEngine::CppOwnership);
         return bitcoin_uri_model_instance;
+    });
+    qmlRegisterSingletonType<GlobalSettings>("org.bitcoincore.qt", 1, 0, "GlobalSettings", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        return new GlobalSettings(QStringLiteral(QAPP_APP_NAME_DEFAULT));
+    });
+    qmlRegisterSingletonType<MotionPreference>("org.bitcoincore.qt", 1, 0, "MotionPreference", [](QQmlEngine*, QJSEngine*) -> QObject* {
+        return new MotionPreference(StartupMotionMode());
     });
     qmlRegisterType<QmlFileDialog>("org.bitcoincore.qt", 1, 0, "AppFileDialog");
     qmlRegisterType<BlockClockDial>("org.bitcoincore.qt", 1, 0, "BlockClockDial");
@@ -465,6 +505,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     // Route onboarding worker diagnostics to Core's logger as soon as logging is configured.
     qInstallMessageHandler(StartupDebugMessageHandler);
     QmlQuitHandler quit_handler;
+    ButtonKeyActivation button_key_activation;
     app.setQuitOnLastWindowClosed(false);
     const auto drain_workers_before_application_destruction = qScopeGuard([] {
         QEventLoop worker_drain_loop;
@@ -481,6 +522,8 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     std::unique_ptr<interfaces::Init> init = interfaces::MakeGuiInit(argc, argv);
     QStringList startup_warnings;
     bool startup_canceled{false};
+    // Set while the onboarding window is open, so errors show inside it.
+    QPointer<QQuickWindow> startup_error_window;
     btcsignals::scoped_connection gui_startup_message_handler{::uiInterface.ThreadSafeMessageBox.connect(
         [&](const bilingual_str& message, unsigned int style) {
             bool result{false};
@@ -488,8 +531,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
                 if (style & CClientUIInterface::ICON_WARNING) {
                     RecordStartupWarning(startup_warnings, message);
                 } else if (!startup_canceled && !quit_handler.isQuitRequested()) {
-                    result = InitErrorMessageBox(message, quit_handler,
-                                                 [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
+                    result = startup_error_window
+                        ? StartupErrorInWindow(*startup_error_window, message, quit_handler)
+                        : InitErrorMessageBox(message, quit_handler,
+                                              [this](QQmlApplicationEngine& engine) { qmlEngineCreated(engine); });
                 }
             };
             if (QThread::currentThread() == app.thread()) {
@@ -650,6 +695,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         // The onboarding window stays visible until MainWindow is ready.
         // Its model owns the settings write, node preparation and worker cleanup.
         auto& context = pre_init_onboarding_context;
+        startup_error_window = context.window;
         QEventLoop preparation_loop;
         bool preparation_finished{false};
         QObject::connect(context.window, &QWindow::visibleChanged, &preparation_loop,
@@ -663,6 +709,7 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
         });
         context.onboarding_options_model->prepareNode(gArgs, prepare_node);
         while (!preparation_finished) preparation_loop.exec();
+        startup_error_window.clear();
         if (startup_canceled || quit_handler.isQuitRequested()) return EXIT_SUCCESS;
     } else {
         // No window is visible, so retain the original synchronous startup path.
