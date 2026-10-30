@@ -2,6 +2,7 @@
 /*build*
 !/build-aux
 !/build_msvc
+**/build*
 
 *.pyc
 
