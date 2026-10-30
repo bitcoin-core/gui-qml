@@ -23,6 +23,8 @@ TestCase {
         walletController.reset()
         optionsModel.externalSignerPath = "/signer/signer.py"
         setStatus(true, 1, "trezor_t", "")
+        section = createTemporaryObject(sectionComponent, testCase)
+        verify(section !== null)
     }
 
     function cleanup() {
@@ -40,10 +42,16 @@ TestCase {
         walletController.canCreateExternalSignerWallet = responding && count === 1 && error.length === 0
     }
 
-    ExternalSignerPathSection {
-        id: section
-        width: 600
-        namePrefix: "test"
+    // A new section for each test: typing into the path field replaces its
+    // binding to the saved path, so a shared one would carry one test's path
+    // into the next.
+    property var section: null
+    Component {
+        id: sectionComponent
+        ExternalSignerPathSection {
+            width: 600
+            namePrefix: "test"
+        }
     }
 
     function findItem(item, predicate) {
@@ -123,5 +131,34 @@ TestCase {
         icon.color = Theme.color.successText
         icon.source = "image://images/check"
         verify(Qt.colorEqual(icon.icon.color, Theme.color.successText), "faded with a new image")
+    }
+
+    // The check and the alert leave a wide margin in their images while the
+    // cross fills its own, so each gets the box that draws its shape at the
+    // cross's size: about 0.56 and 0.6 of the box are shape, against all of it.
+    function compareIconBox(rowName, source, box) {
+        tryVerify(function() { return String(statusIcon(rowName).source) === source }, 3000,
+                  rowName + " never showed " + source)
+        const icon = statusIcon(rowName)
+        compare(icon.size, box, rowName + " box for " + source)
+        compare(icon.width, box, rowName + " width for " + source)
+        compare(icon.height, box, rowName + " height for " + source)
+    }
+
+    function test_statusIconsDrawAtOneSize() {
+        Theme.motion.mode = "off"
+        compareIconBox("testCommandRow", "image://images/check", 32)
+
+        findChild(section, "testPathInput").text = "/signer/multi_signers.py"
+        section.check()
+        setStatus(true, 2, "", "More than one external signer was found. Connect only one device.")
+        tryCompare(section, "checking", false)
+        compareIconBox("testDeviceRow", "image://images/alert-filled", 30)
+
+        findChild(section, "testPathInput").text = "/signer/not_a_signer.py"
+        section.check()
+        setStatus(false, 0, "", "The signer command did not return valid output. Check that the path is correct.")
+        tryCompare(section, "checking", false)
+        compareIconBox("testCommandRow", "image://images/cross-circle-filled", 18)
     }
 }

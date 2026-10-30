@@ -36,6 +36,16 @@ FormSection {
         && walletController.externalSignerResponding
     readonly property bool deviceReady: root.commandResponding && walletController.canCreateExternalSignerWallet
 
+    // The status icons' images pad their shapes differently: the cross fills
+    // its image, the check and the alert leave a wide margin. Each gets the
+    // box that shows its shape at the cross's size.
+    readonly property int statusIconSize: 18
+    function statusIconBox(source) {
+        if (source.indexOf("check") >= 0) return Math.round(root.statusIconSize / 0.56)
+        if (source.indexOf("alert-filled") >= 0) return Math.round(root.statusIconSize / 0.6)
+        return root.statusIconSize
+    }
+
     function commitPath() {
         if (root.pathError.length > 0) return false
         const path = pathInput.text.trim()
@@ -169,6 +179,7 @@ FormSection {
         }
         valueIconSource: !root.checked || root.checking ? ""
             : root.commandResponding ? "image://images/check" : "image://images/cross-circle-filled"
+        valueIconSize: root.statusIconBox(valueIconSource.toString())
         valueIconColor: root.commandResponding ? Theme.color.successText : Theme.color.dangerText
         errorText: root.checked && !root.checking && !root.commandResponding
             ? walletController.externalSignerError : ""
@@ -199,6 +210,7 @@ FormSection {
         // A missing, locked or extra device is fixed at the device, not in
         // the path, so it reads as guidance with a warning, not as an error.
         valueIconSource: root.deviceReady ? "image://images/check" : "image://images/alert-filled"
+        valueIconSize: root.statusIconBox(valueIconSource.toString())
         valueIconColor: root.deviceReady ? Theme.color.successText : Theme.color.warningText
         supportingText: {
             if (root.deviceReady) return ""
