@@ -3840,6 +3840,7 @@ class MockDebugLogModel : public QAbstractListModel
     Q_PROPERTY(bool warningsAndErrorsOnly READ warningsAndErrorsOnly WRITE setWarningsAndErrorsOnly NOTIFY warningsAndErrorsOnlyChanged)
     Q_PROPERTY(QString openError READ openError NOTIFY openErrorChanged)
     Q_PROPERTY(bool logAvailable READ logAvailable NOTIFY logAvailableChanged)
+    Q_PROPERTY(bool fileLoggingEnabled READ fileLoggingEnabled NOTIFY fileLoggingEnabledChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(int loadMoreCalls READ loadMoreCalls NOTIFY loadMoreCallsChanged)
     Q_PROPERTY(int openLogFileCalls READ openLogFileCalls NOTIFY openLogFileCallsChanged)
@@ -3907,6 +3908,13 @@ public:
         m_log_available = available;
         Q_EMIT logAvailableChanged();
     }
+    bool fileLoggingEnabled() const { return m_file_logging_enabled; }
+    Q_INVOKABLE void setFileLoggingEnabled(bool enabled)
+    {
+        if (m_file_logging_enabled == enabled) return;
+        m_file_logging_enabled = enabled;
+        Q_EMIT fileLoggingEnabledChanged();
+    }
     bool warningsAndErrorsOnly() const { return m_warnings_and_errors_only; }
     void setWarningsAndErrorsOnly(bool warnings_and_errors_only)
     {
@@ -3952,6 +3960,7 @@ public:
         m_open_result = true;
         m_pending_error.clear();
         setLogAvailable(true);
+        setFileLoggingEnabled(true);
         if (!m_open_error.isEmpty()) {
             m_open_error.clear();
             Q_EMIT openErrorChanged();
@@ -4096,6 +4105,7 @@ Q_SIGNALS:
     void warningsAndErrorsOnlyChanged();
     void openErrorChanged();
     void logAvailableChanged();
+    void fileLoggingEnabledChanged();
     void newLinesAdded(int count);
     void countChanged();
     void loadMoreCallsChanged();
@@ -4132,6 +4142,7 @@ private:
     QString m_pending_error;
     bool m_open_result{true};
     bool m_log_available{true};
+    bool m_file_logging_enabled{true};
 };
 
 class TestIconProvider : public QQuickImageProvider

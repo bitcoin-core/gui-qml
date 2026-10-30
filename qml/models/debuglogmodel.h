@@ -46,6 +46,7 @@ class DebugLogModel : public QAbstractListModel
     Q_PROPERTY(bool warningsAndErrorsOnly READ warningsAndErrorsOnly WRITE setWarningsAndErrorsOnly NOTIFY warningsAndErrorsOnlyChanged)
     Q_PROPERTY(QString openError READ openError   NOTIFY openErrorChanged)
     Q_PROPERTY(bool logAvailable READ logAvailable NOTIFY logAvailableChanged)
+    Q_PROPERTY(bool fileLoggingEnabled READ fileLoggingEnabled CONSTANT)
 
 public:
     enum Role {
@@ -63,7 +64,10 @@ public:
     //! in-app viewer. The debug.log file itself is never modified.
     static constexpr qsizetype kMaxLogLineBytes = 1024 * 1024;
 
-    explicit DebugLogModel(const fs::path& log_path, QObject* parent = nullptr);
+    //! log_path is the file the node writes to. Pass log_to_file = false when
+    //! the node writes no log file (-nodebuglogfile): the model then reads
+    //! nothing, since any file at log_path is left over from an earlier run.
+    explicit DebugLogModel(const fs::path& log_path, bool log_to_file = true, QObject* parent = nullptr);
     ~DebugLogModel() override;
 
     // QAbstractListModel interface
@@ -105,6 +109,10 @@ public:
     //! against readable log content (searching it, opening it in another
     //! application) are disabled on this.
     bool logAvailable() const { return m_log_available; }
+
+    //! False when the node writes no log file. That is the user's own setting,
+    //! not a failure, so the page reports it as information.
+    bool fileLoggingEnabled() const { return m_log_to_file; }
 
     Q_INVOKABLE void refresh(bool full_load = false);
     Q_INVOKABLE void loadMore();
@@ -211,6 +219,7 @@ private:
     static QString FormatTime(const QString& utc_seconds);
 
     fs::path m_log_path;
+    bool m_log_to_file{true};
 
     //! All loaded lines stored chronologically (index 0 = oldest loaded).
     QList<LogLine> m_all_lines;

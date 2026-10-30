@@ -692,7 +692,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     bool shutdown_requested{false};
     bool shutdown_finished{false};
     QObject::connect(&shutdown_coordinator, &QmlShutdownCoordinator::finished, &app, [&] { shutdown_finished = true; });
-    DebugLogModel debug_log_model{gArgs.GetDataDirNet() / "debug.log"};
+    // Read the file the node actually writes, so -debuglogfile=<file> and
+    // -nodebuglogfile are honoured rather than assuming <datadir>/debug.log.
+    DebugLogModel debug_log_model{LogInstance().m_file_path, LogInstance().m_print_to_file};
 #ifdef ENABLE_WALLET
     std::unique_ptr<WalletQmlController> wallet_controller;
     if (wallet_enabled) {

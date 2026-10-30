@@ -178,12 +178,13 @@ SettingsPage {
     }
 
     // Clears on a later successful open, or when the page is shown again
-    // (updateDebugLogActivity above).
+    // (updateDebugLogActivity above). File logging being off is the user's own
+    // setting rather than a failure, so it keeps the informational tint.
     ToastBanner {
         objectName: "debugLogOpenErrorBanner"
         Layout.fillWidth: true
         visible: debugLogModel.openError.length > 0
-        tintColor: Theme.color.red
+        tintColor: debugLogModel.fileLoggingEnabled ? Theme.color.red : Theme.color.blue
         iconSource: "image://images/info-filled"
         text: debugLogModel.openError
         textObjectName: "debugLogOpenErrorText"

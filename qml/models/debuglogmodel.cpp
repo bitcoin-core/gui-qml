@@ -70,9 +70,10 @@ bool IsLogCategory(const QString& value)
 
 } // namespace
 
-DebugLogModel::DebugLogModel(const fs::path& log_path, QObject* parent)
+DebugLogModel::DebugLogModel(const fs::path& log_path, bool log_to_file, QObject* parent)
     : QAbstractListModel(parent)
     , m_log_path(log_path)
+    , m_log_to_file(log_to_file)
     , m_open_local_file_fn([](const QString& path) {
         return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     })
@@ -92,6 +93,13 @@ DebugLogModel::DebugLogModel(const fs::path& log_path, QObject* parent)
     connect(&m_debounce, &QTimer::timeout, this, [this]() { refresh(); });
 
     connectFileWatcher();
+
+    // The reader never runs without a log file, so the reason is stated up
+    // front rather than reported as a missing file.
+    if (!m_log_to_file) {
+        m_open_error = tr("Writing the debug log to a file is turned off.");
+        m_log_available = false;
+    }
 }
 
 DebugLogModel::~DebugLogModel()
@@ -209,6 +217,9 @@ void DebugLogModel::setWarningsAndErrorsOnly(bool warnings_and_errors_only)
 void DebugLogModel::refresh(bool full_load)
 {
     if (!m_active || m_stopping) return;
+    // Nothing to read while the node writes no log file; a file at the path
+    // would only show stale lines from an earlier run.
+    if (!m_log_to_file) return;
 
     // Single-read-in-flight guard. If a read is already running, fold this
     // request into a trailing re-run rather than piling another job onto the
@@ -305,8 +316,9 @@ bool DebugLogModel::openLogFile()
     // A missing log is a state of the log, not the outcome of this click, so
     // it is left to the background reader to report and keep reporting. The
     // UI disables this action while the log is unavailable; the check remains
-    // because the method is invokable from QML at any time.
-    if (!fs::exists(m_log_path)) return false;
+    // because the method is invokable from QML at any time. With file logging
+    // off, a file at the path is stale and must not be handed out either.
+    if (!m_log_to_file || !fs::exists(m_log_path)) return false;
     const bool ok = m_open_local_file_fn(path_str);
     if (!ok) {
         m_external_open_error = tr("Could not open debug log file. "
@@ -743,7 +755,7 @@ void DebugLogModel::connectFileWatcher()
 
 void DebugLogModel::watchLogPath()
 {
-    if (!m_active || m_stopping) return;
+    if (!m_active || m_stopping || !m_log_to_file) return;
 
     const QString path = QString::fromStdString(m_log_path.utf8string());
     if (path.isEmpty()) return;

@@ -75,6 +75,7 @@ private Q_SLOTS:
     void clearOpenErrorClearsOnlyWhenSet();
     void openMissingFileIsLeftToTheReader();
     void logAvailableTracksReadFailures();
+    void fileLoggingOff_readsNothingAndSaysWhy();
 };
 
 void DebugLogModelTests::inactiveModel_ignoresRefreshUntilActivated()
@@ -750,6 +751,34 @@ void DebugLogModelTests::logAvailableTracksReadFailures()
     QTRY_VERIFY(model.logAvailable());
     QCOMPARE(available_spy.count(), 2);
     QVERIFY(model.openError().isEmpty());
+}
+
+// With -nodebuglogfile the node writes no log, so a file at the path is left
+// over from an earlier run: the model must not show it or hand it out, and it
+// says why the log is unavailable instead of reporting a missing file.
+void DebugLogModelTests::fileLoggingOff_readsNothingAndSaysWhy()
+{
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString path = temp_dir.filePath("debug.log");
+    QVERIFY(WriteBytes(path, NumberedRecords(0, 3)));
+
+    DebugLogModel model(fs::PathFromString(path.toStdString()), /*log_to_file=*/false);
+    int open_calls{0};
+    model.setOpenLocalFileFnForTesting([&](const QString&) { ++open_calls; return true; });
+
+    QVERIFY(!model.logAvailable());
+    QCOMPARE(model.openError(), QStringLiteral("Writing the debug log to a file is turned off."));
+
+    model.setActive(true);
+    model.refresh(/*full_load=*/true);
+    QTest::qWait(100);
+    QCOMPARE(model.rowCount(), 0);
+    QVERIFY(!model.logAvailable());
+
+    QVERIFY(!model.openLogFile());
+    QCOMPARE(open_calls, 0);
+    QCOMPARE(model.openError(), QStringLiteral("Writing the debug log to a file is turned off."));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

@@ -253,6 +253,19 @@ TestCase {
         compare(emptyText.visible, true)
     }
 
+    // A read or open failure is an error, but file logging being off is the
+    // user's own setting, so its banner keeps the informational tint.
+    function test_file_logging_off_uses_informational_tint() {
+        const view = createView()
+        const banner = findChild(view, "debugLogOpenErrorBanner")
+        verify(banner !== null)
+        verify(Qt.colorEqual(banner.tintColor, Theme.color.red))
+
+        testDebugLogModel.setFileLoggingEnabled(false)
+
+        verify(Qt.colorEqual(banner.tintColor, Theme.color.blue))
+    }
+
     // The open error is about the last open attempt on this visit, so it must
     // not survive navigation: a freshly created page clears any stale error
     // left in the long-lived model.
