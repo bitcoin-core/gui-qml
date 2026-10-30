@@ -129,6 +129,7 @@
         <file>components/OnboardingNavigationBar.qml</file>
         <file>components/OnboardingView.qml</file>
         <file>controls/LinkButton.qml</file>
+        <file>controls/LinkText.qml</file>
         <file>controls/TextFieldRow.qml</file>
         <file>controls/Theme.qml</file>
         <file>controls/utils.js</file>

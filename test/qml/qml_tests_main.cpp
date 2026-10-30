@@ -4142,8 +4142,10 @@ public:
 
     QPixmap requestPixmap(const QString& id, QSize* size, const QSize& requested_size) override
     {
+        // The app provider takes "<icon>?color=<rrggbb>"; the color doesn't matter here.
+        const QString name = id.section(QLatin1Char('?'), 0, 0);
         const QPixmap pixmap = QIcon(QStringLiteral(":/icons/") +
-            (id == QStringLiteral("app") ? QStringLiteral("bitcoin") : id)).pixmap(requested_size);
+            (name == QStringLiteral("app") ? QStringLiteral("bitcoin") : name)).pixmap(requested_size);
         if (size) *size = pixmap.size();
         return pixmap;
     }

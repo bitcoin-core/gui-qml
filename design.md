@@ -199,7 +199,10 @@ Reach for the shared control first. Check the showcase for its states.
   one per view.
 - NeutralButton: secondary actions. `NeutralButton.Large` matches
   PrimaryButton's height for side-by-side actions.
-- LinkButton: inline text actions and links.
+- LinkButton: standalone text actions and links.
+- LinkText: an external link inside a sentence. Text color with the
+  export icon, like LinkRow, and underlined; one Tab stop named after the
+  link, opened with Enter or Space. Confirm with ExternalPopup.
 - IconButton: toolbar and inline icon actions; always with an accessible
   name.
 - CloseButton: the close action of every modal and banner. Medium by

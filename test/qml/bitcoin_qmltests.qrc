@@ -22,6 +22,7 @@
         <file>tst_externalsignerpathsection.qml</file>
         <file>tst_externalsignerreviewactions.qml</file>
         <file>tst_formcontrols.qml</file>
+        <file>tst_linktext.qml</file>
         <file>tst_mainrouting.qml</file>
         <file>tst_mempoolsettingspage.qml</file>
         <file>tst_monospaceoutputview.qml</file>
