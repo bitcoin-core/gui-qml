@@ -87,7 +87,6 @@
 #include <exception>
 #include <functional>
 #include <memory>
-#include <tuple>
 #include <vector>
 
 #include <QApplication>
@@ -434,17 +433,7 @@ PreInitOnboardingStatus RunPreInitOnboarding(PreInitOnboardingContext& context, 
 int QmlGuiMain(int argc, char* argv[])
 {
     BitcoinQmlApplication app;
-    return app.runFromCommandLine(argc, argv);
-}
-
-int BitcoinQmlApplication::runFromCommandLine(int argc, char* argv[])
-{
-#ifdef WIN32
-    common::WinCmdLineArgs winArgs;
-    std::tie(argc, argv) = winArgs.get();
-#endif // WIN32
-
-    return run(argc, argv);
+    return app.run(argc, argv);
 }
 
 int BitcoinQmlApplication::run(int argc, char* argv[])
