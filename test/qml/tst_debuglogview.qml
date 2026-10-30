@@ -33,6 +33,7 @@ TestCase {
 
     function init() {
         testDebugLogModel.resetForTest(0, false)
+        testDebugLogModel.reset()
     }
 
     function createView() {
@@ -167,6 +168,121 @@ TestCase {
         mouseClick(openFileButton)
         compare(testDebugLogModel.openLogFileCalls, 1)
         tryCompare(optionsMenu, "opened", false)
+    }
+
+    function openLogFileFromMenu(view) {
+        const optionsMenu = findChild(view, "debugLogOptionsMenu")
+        mouseClick(findChild(view, "debugLogOptionsButton"))
+        tryCompare(optionsMenu, "opened", true)
+        mouseClick(findChild(view, "debugLogOpenFileButton"))
+        // Wait out the exit transition: a click while the menu is still
+        // fading out would land on its modal overlay instead of the button.
+        tryCompare(optionsMenu, "visible", false)
+    }
+
+    // A failed open surfaces the model's error message in the banner. The
+    // banner text is bound to the empty openError until the open fails.
+    function test_open_failure_shows_error_banner() {
+        testDebugLogModel.resetForTest(3, false)
+        const view = createView()
+        const errorText = findChild(view, "debugLogOpenErrorText")
+        verify(errorText !== null)
+        compare(errorText.text, "")
+
+        testDebugLogModel.setOpenLogFileResult(false, "Could not open debug log file.")
+        openLogFileFromMenu(view)
+
+        compare(testDebugLogModel.openLogFileCalls, 1)
+        compare(errorText.text, "Could not open debug log file.")
+    }
+
+    // A later successful open clears the previously shown error.
+    function test_successful_open_clears_error_banner() {
+        testDebugLogModel.resetForTest(3, false)
+        const view = createView()
+        const errorText = findChild(view, "debugLogOpenErrorText")
+        verify(errorText !== null)
+
+        testDebugLogModel.setOpenLogFileResult(false, "Could not open debug log file.")
+        openLogFileFromMenu(view)
+        compare(errorText.text, "Could not open debug log file.")
+
+        testDebugLogModel.setOpenLogFileResult(true, "")
+        openLogFileFromMenu(view)
+
+        compare(errorText.text, "")
+    }
+
+    // Searching, filtering and handing the log to another application all
+    // need readable log content, so they are disabled while there is none. The
+    // empty state stays hidden so it does not repeat the banner's read error.
+    function test_unreadable_log_disables_search_filter_and_open() {
+        const view = createView()
+        const searchBar = findChild(view, "debugLogSearchBar")
+        const filterButton = findChild(view, "debugLogFilterButton")
+        const openFileButton = findChild(view, "debugLogOpenFileButton")
+        const emptyText = findChild(view, "debugLogEmptyStateText")
+        verify(searchBar !== null)
+        verify(filterButton !== null)
+        verify(openFileButton !== null)
+        verify(emptyText !== null)
+        compare(searchBar.enabled, true)
+        compare(filterButton.enabled, true)
+        compare(openFileButton.enabled, true)
+        compare(emptyText.text, "No log messages")
+
+        testDebugLogModel.setLogAvailable(false)
+
+        compare(searchBar.enabled, false)
+        compare(filterButton.enabled, false)
+        compare(openFileButton.enabled, false)
+        compare(emptyText.visible, false)
+        // A disabled filter gives no hover feedback, like the disabled search.
+        mouseMove(filterButton, filterButton.width / 2, filterButton.height / 2)
+        wait(50)
+        verify(Qt.colorEqual(filterButton.background.color, filterButton.backgroundColor))
+        const disabledIcon = findChild(view, "debugLogFilterButtonInactiveIcon")
+        tryVerify(function() { return Qt.colorEqual(disabledIcon.color, Theme.color.neutral4) })
+        mouseMove(view, 1, 1)
+
+        testDebugLogModel.setLogAvailable(true)
+
+        compare(searchBar.enabled, true)
+        compare(filterButton.enabled, true)
+        compare(openFileButton.enabled, true)
+        compare(emptyText.visible, true)
+    }
+
+    // A read or open failure is an error, but file logging being off is the
+    // user's own setting, so its banner keeps the informational tint.
+    function test_file_logging_off_uses_informational_tint() {
+        const view = createView()
+        const banner = findChild(view, "debugLogOpenErrorBanner")
+        verify(banner !== null)
+        verify(Qt.colorEqual(banner.tintColor, Theme.color.red))
+
+        testDebugLogModel.setFileLoggingEnabled(false)
+
+        verify(Qt.colorEqual(banner.tintColor, Theme.color.blue))
+    }
+
+    // The open error is about the last open attempt on this visit, so it must
+    // not survive navigation: a freshly created page clears any stale error
+    // left in the long-lived model.
+    function test_reentering_page_clears_stale_error() {
+        testDebugLogModel.resetForTest(3, false)
+        const firstView = createView()
+        testDebugLogModel.setOpenLogFileResult(false, "Could not open debug log file.")
+        openLogFileFromMenu(firstView)
+        compare(findChild(firstView, "debugLogOpenErrorText").text,
+                "Could not open debug log file.")
+        firstView.destroy()
+        wait(0)
+
+        const secondView = createView()
+        const errorText = findChild(secondView, "debugLogOpenErrorText")
+        verify(errorText !== null)
+        compare(errorText.text, "")
     }
 
     function test_toolbar_icons_keep_their_size_and_use_hover_tint() {

@@ -39,11 +39,15 @@ AbstractButton {
     Accessible.checked: active
 
     HoverHandler {
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
     background: Rectangle {
-        color: root.active ? root.activeBackgroundColor : root.hovered || root.down ? root.hoverBackgroundColor : root.backgroundColor
+        // A disabled button keeps hover tracking, so gate the feedback on
+        // enabled like the icon does.
+        color: root.active ? root.activeBackgroundColor
+            : root.enabled && (root.hovered || root.down) ? root.hoverBackgroundColor
+            : root.backgroundColor
         radius: 6
 
         FocusBorder {

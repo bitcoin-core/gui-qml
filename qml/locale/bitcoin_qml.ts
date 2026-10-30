@@ -2,39 +2,6 @@
 <!DOCTYPE TS>
 <TS version="2.1">
 <context>
-    <name>AboutOptions</name>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="17"/>
-        <source>Website</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="29"/>
-        <source>Source code</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="41"/>
-        <source>License</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="53"/>
-        <source>Version</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="69"/>
-        <source>Developer options</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../components/AboutOptions.qml" line="70"/>
-        <source>Only use these if you have development experience</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
     <name>AddWalletButton</name>
     <message>
         <location filename="../controls/AddWalletButton.qml" line="49"/>
@@ -1933,28 +1900,6 @@ Users running nodes is what makes bitcoin so resilient and trustworthy.</source>
     <message>
         <location filename="../pages/wallet/SendReview.qml" line="137"/>
         <source>Send</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>SettingsAbout</name>
-    <message>
-        <location filename="../pages/settings/SettingsAbout.qml" line="19"/>
-        <location filename="../pages/settings/SettingsAbout.qml" line="60"/>
-        <source>About</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../pages/settings/SettingsAbout.qml" line="21"/>
-        <source>Bitcoin Core is an open source project.
-If you find it useful, please contribute.
-
- This is experimental software.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="../pages/settings/SettingsAbout.qml" line="51"/>
-        <source>Back</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
