@@ -19,8 +19,10 @@
         <file>components/DesktopNativeMenuBar.qml</file>
         <file>components/MempoolInformationRows.qml</file>
         <file>components/MenuCommand.qml</file>
+        <file>components/DescriptorText.qml</file>
         <file>components/DeveloperOptions.qml</file>
         <file>components/ExternalSignerReviewActions.qml</file>
+        <file>components/WatchOnlyExportModal.qml</file>
         <file>components/ExternalPopup.qml</file>
         <file>components/SendSection.qml</file>
         <file>components/SendRecipientEditor.qml</file>
