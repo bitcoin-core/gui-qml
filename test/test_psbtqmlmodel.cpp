@@ -207,7 +207,7 @@ void PsbtQmlModelTests::savePreservesPsbtMetadata()
 void PsbtQmlModelTests::broadcastsCompletePsbt()
 {
     MockNode node;
-    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, std::string&) {
+    node.broadcast_transaction_fn = [](CTransactionRef, CAmount, CFeeRate, std::string&) {
         return node::TransactionError::OK;
     };
 

@@ -2944,13 +2944,13 @@ void OptionsModelTests::commandLineOverriddenSettingsPreservePersistentValues()
     model.setMaxMempoolSizeMB(700);
     model.setExternalSignerPath(QStringLiteral("changed-signer"));
 
-    QCOMPARE(SettingToBool(args.GetPersistentSetting("server")), false);
-    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("prune"), -1), 0);
-    QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("proxy"), "")), QString("127.0.0.1:9050"));
-    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("dbcache"), -1), 300);
-    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("par"), -1), 1);
-    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("maxmempool"), -1), 300);
-    QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("signer"), "")), QString("saved-signer"));
+    QCOMPARE(SettingToBool(args.GetPersistentSetting("server")).value(), false);
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("prune")).value_or(-1), 0);
+    QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("proxy")).value_or("")), QString("127.0.0.1:9050"));
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("dbcache")).value_or(-1), 300);
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("par")).value_or(-1), 1);
+    QCOMPARE(SettingTo<int64_t>(args.GetPersistentSetting("maxmempool")).value_or(-1), 300);
+    QCOMPARE(QString::fromStdString(SettingToString(args.GetPersistentSetting("signer")).value_or("")), QString("saved-signer"));
     QVERIFY(node.update_rw_setting_arguments.empty());
     QVERIFY(node.force_setting_arguments.empty());
 }
@@ -3095,9 +3095,9 @@ void OptionsModelTests::legacyQtSettingsMigrateToCoreSettings()
     QCOMPARE(QString::fromStdString(dbcache.get_str()), QStringLiteral("600"));
     QVERIFY(script_threads.isStr());
     QCOMPARE(QString::fromStdString(script_threads.get_str()), QStringLiteral("12"));
-    QCOMPARE(SettingToBool(listen), false);
+    QCOMPARE(SettingToBool(listen).value(), false);
     QVERIFY(!has_natpmp);
-    QCOMPARE(SettingToBool(server), true);
+    QCOMPARE(SettingToBool(server).value(), true);
     QVERIFY(prune.isStr());
     QCOMPARE(QString::fromStdString(prune.get_str()), QString::number(QmlCoreSettings::PruneGBToMiB(10)));
     QCOMPARE(QString::fromStdString(proxy.get_str()), QStringLiteral("10.0.0.1:9050"));
@@ -3173,7 +3173,7 @@ void OptionsModelTests::legacyQtSettingsCommandLineOverrideStillMigratesPersiste
     QVERIFY2(result.error.isEmpty(), qPrintable(result.error));
     QVERIFY(result.settings_changed);
 
-    QCOMPARE(SettingToBool(args.GetPersistentSetting("listen")), false);
+    QCOMPARE(SettingToBool(args.GetPersistentSetting("listen")).value(), false);
     QCOMPARE(args.GetBoolArg("-listen", false), true);
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("fListen")));
 }
@@ -3246,7 +3246,7 @@ void OptionsModelTests::onboardingApplyMigratesLegacySettingsBeforeTouchedOverri
         server = core_settings.rw_settings.at("server");
     });
     QVERIFY(!has_listen_override);
-    QCOMPARE(SettingToBool(server), true);
+    QCOMPARE(SettingToBool(server).value(), true);
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("fListen")));
     QVERIFY(!legacy_settings.settings().contains(QStringLiteral("server")));
 }

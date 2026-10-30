@@ -734,7 +734,7 @@ void WalletQmlController::requestOpenWalletSettings()
 void WalletQmlController::refreshExternalSignerStatus()
 {
     const QString signer_path = QString::fromStdString(
-        SettingToString(m_node.getPersistentSetting("signer"), "")).trimmed();
+        SettingToString(m_node.getPersistentSetting("signer")).value_or("")).trimmed();
     const bool path_configured = !signer_path.isEmpty();
     if (path_configured) {
         m_node.forceSetting("signer", signer_path.toStdString());
@@ -1251,7 +1251,7 @@ void WalletQmlController::startWalletMigration(const QString& path, SecureString
 
     m_wallet_command_executor->submit(this, [node = &m_node, wallet_reference, passphrase = std::move(passphrase)]() mutable {
         WalletCommandResult out;
-        auto result = node->walletLoader().migrateWallet(wallet_reference.toStdString(), passphrase);
+        auto result = node->walletLoader().migrateWallet(wallet_reference.toStdString(), passphrase, /*load_wallet=*/true);
         QmlUtil::ClearSecureString(passphrase);
         if (!result) {
             out.error = QString::fromStdString(util::ErrorString(result).translated);

@@ -181,7 +181,7 @@ common::SettingsValue MigrationDefaultValue(const QString& name)
     if (name == QStringLiteral("natpmp")) return BoolValue(DEFAULT_NATPMP);
     if (name == QStringLiteral("server")) return BoolValue(false);
     if (name == QStringLiteral("prune")) return IntValue(0);
-    if (name == QStringLiteral("dbcache")) return IntValue(DEFAULT_DB_CACHE >> 20);
+    if (name == QStringLiteral("dbcache")) return IntValue(DEFAULT_KERNEL_CACHE / 1_MiB);
     if (name == QStringLiteral("par")) return IntValue(DEFAULT_SCRIPTCHECK_THREADS);
     if (name == QStringLiteral("signer")) return StringValue({});
     if (name == QStringLiteral("lang")) return StringValue({});
@@ -346,7 +346,7 @@ bool MigrateStore(ArgsManager& args, SettingsStore& store, QmlLegacySettings::Mi
     bool changed{false};
     changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("nDatabaseCache"), QStringLiteral("dbcache"), [settings_version](const QVariant& value) {
         const qlonglong dbcache = value.toLongLong();
-        return IntValue(settings_version < 130000 && dbcache == 100 ? DEFAULT_DB_CACHE >> 20 : dbcache);
+        return IntValue(settings_version < 130000 && dbcache == 100 ? DEFAULT_KERNEL_CACHE / 1_MiB : dbcache);
     });
     changed |= MigrateSimpleSetting(args, settings, mode, QStringLiteral("nThreadsScriptVerif"), QStringLiteral("par"), [](const QVariant& value) {
         return IntValue(value.toLongLong());

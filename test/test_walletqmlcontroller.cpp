@@ -13,6 +13,7 @@
 #include <scheduler.h>
 #include <test/mocks/mocknode.h>
 #include <util/translation.h>
+#include <wallet/imports.h>
 #include <wallet/types.h>
 #include <wallet/walletutil.h>
 
@@ -98,8 +99,8 @@ public:
         load_wallet_fn = [](const std::string&, std::vector<bilingual_str>&) {
             return util::Error{Untranslated("Unexpected loadWallet call")};
         };
-    std::function<util::Result<interfaces::WalletMigrationResult>(const std::string&, const SecureString&)>
-        migrate_wallet_fn = [](const std::string&, const SecureString&) {
+    std::function<util::Result<interfaces::WalletMigrationResult>(const std::string&, const SecureString&, bool)>
+        migrate_wallet_fn = [](const std::string&, const SecureString&, bool) {
             return util::Error{Untranslated("Unexpected migrateWallet call")};
         };
     std::function<util::Result<std::unique_ptr<interfaces::Wallet>>()>
@@ -139,10 +140,10 @@ public:
     {
         return restore_wallet_fn();
     }
-    util::Result<interfaces::WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase) override
+    util::Result<interfaces::WalletMigrationResult> migrateWallet(const std::string& name, const SecureString& passphrase, bool load_wallet) override
     {
         ++migrate_wallet_calls;
-        return migrate_wallet_fn(name, passphrase);
+        return migrate_wallet_fn(name, passphrase, load_wallet);
     }
     bool isEncrypted(const std::string& name) override
     {
@@ -189,9 +190,9 @@ public:
     bool encryptWallet(const SecureString&) override { return true; }
     bool isCrypted() override { return false; }
     bool lock() override { return true; }
-    bool unlock(const SecureString&) override { return true; }
+    util::Expected<void, wallet::WalletError> unlock(const SecureString&) override { return {}; }
     bool isLocked() override { return false; }
-    bool changeWalletPassphrase(const SecureString&, const SecureString&) override { return true; }
+    util::Expected<void, wallet::WalletError> changeWalletPassphrase(const SecureString&, const SecureString&) override { return {}; }
     void abortRescan() override {}
     bool backupWallet(const std::string&) override { return true; }
     std::string getWalletName() override { return m_wallet_name; }
@@ -200,6 +201,7 @@ public:
         return CTxDestination{CNoDestination{}};
     }
     bool getPubKey(const CScript&, const CKeyID&, CPubKey&) override { return false; }
+    util::Expected<CExtPubKey, wallet::WalletError> addHDKey(const std::optional<CExtKey>& key) override { return util::Unexpected{wallet::WalletError{wallet::WalletErrorCode::GenericError, Untranslated("not implemented")}}; }
     SigningResult signMessage(const std::string&, const PKHash&, std::string&) override
     {
         return SigningResult::PRIVATE_KEY_NOT_AVAILABLE;
@@ -223,7 +225,7 @@ public:
     {
         return util::Error{Untranslated("Unexpected createTransaction call")};
     }
-    void commitTransaction(CTransactionRef, interfaces::WalletValueMap, interfaces::WalletOrderForm) override {}
+    void commitTransaction(CTransactionRef, const std::vector<std::string>&) override {}
     bool transactionCanBeAbandoned(const Txid&) override { return false; }
     bool abandonTransaction(const Txid&) override { return false; }
     bool transactionCanBeBumped(const Txid&) override { return false; }
@@ -237,11 +239,12 @@ public:
     interfaces::WalletTx getWalletTx(const Txid&) override { return {}; }
     std::set<interfaces::WalletTx> getWalletTxs() override { return {}; }
     bool tryGetTxStatus(const Txid&, interfaces::WalletTxStatus&, int&, int64_t&) override { return false; }
-    interfaces::WalletTx getWalletTxDetails(const Txid&, interfaces::WalletTxStatus&, interfaces::WalletOrderForm&, bool&, int&) override { return {}; }
+    interfaces::WalletTx getWalletTxDetails(const Txid&, interfaces::WalletTxStatus&, std::vector<std::string>&, std::vector<std::string>&, bool&, int&) override { return {}; }
     std::optional<common::PSBTError> fillPSBT(const common::PSBTFillOptions&, size_t*, PartiallySignedTransaction&, bool&) override
     {
         return std::nullopt;
     }
+    std::vector<wallet::ImportResult> importDescriptors(std::vector<wallet::ImportDescriptorRequest>&) override { return {wallet::ImportResult{wallet::WalletErrorCode::GenericError, "not implemented", /*warnings=*/{}, /*general_error=*/true}}; }
     interfaces::WalletBalances getBalances() override { return {}; }
     bool tryGetBalances(interfaces::WalletBalances&, uint256&) override { return false; }
     CAmount getBalance() override { return m_state ? m_state->balance.load() : 0; }
@@ -253,7 +256,7 @@ public:
     CoinsList listCoins() override { return {}; }
     std::vector<interfaces::WalletTxOut> getCoins(const std::vector<COutPoint>&) override { return {}; }
     CAmount getRequiredFee(unsigned int) override { return 0; }
-    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, int*, FeeReason*) override { return 0; }
+    CAmount getMinimumFee(unsigned int, const wallet::CCoinControl&, std::optional<int>*, FeeReason*) override { return 0; }
     unsigned int getConfirmTarget() override { return 6; }
     bool hdEnabled() override { return true; }
     bool canGetAddresses() override { return true; }
@@ -261,7 +264,7 @@ public:
     bool taprootEnabled() override { return true; }
     bool hasExternalSigner() override { return external_signer; }
     OutputType getDefaultAddressType() override { return OutputType::BECH32; }
-    CAmount getDefaultMaxTxFee() override { return COIN; }
+    CAmount getMaxTxFee() override { return COIN; }
     void remove() override
     {
         if (m_state) {
@@ -283,6 +286,7 @@ public:
     std::unique_ptr<interfaces::Handler> handleAddressBookChanged(AddressBookChangedFn) override { return MakeNoopHandler(); }
     std::unique_ptr<interfaces::Handler> handleTransactionChanged(TransactionChangedFn) override { return MakeNoopHandler(); }
     std::unique_ptr<interfaces::Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn) override { return MakeNoopHandler(); }
+    util::Result<std::string> exportWatchOnlyWallet(const fs::path&) override { return util::Error{Untranslated("not implemented")}; }
 
 private:
     std::string m_wallet_name;
@@ -453,7 +457,7 @@ void WalletQmlControllerTests::shutdownReleasesNotificationsBeforeMigrationRollb
             probe->rollback_can_finish.release();
         }
     };
-    loader.migrate_wallet_fn = [&, probe, gui_thread](const std::string&, const SecureString&) -> util::Result<interfaces::WalletMigrationResult> {
+    loader.migrate_wallet_fn = [&, probe, gui_thread](const std::string&, const SecureString&, bool) -> util::Result<interfaces::WalletMigrationResult> {
         loader.captured_load_wallet_fn(std::make_unique<RollbackBlockingWallet>(&state, probe, gui_thread));
         probe->notification_queued.release();
         probe->rollback_can_finish.acquire();
@@ -561,7 +565,7 @@ void WalletQmlControllerTests::walletCommandCompletionDuringShutdown()
     loader.create_wallet_fn = [&](const auto&, const auto&, uint64_t, auto&) { return complete(); };
     loader.load_wallet_fn = [&](const auto&, auto&) { return complete(); };
     loader.restore_wallet_fn = [&] { return complete(); };
-    loader.migrate_wallet_fn = [&](const auto&, const auto&) {
+    loader.migrate_wallet_fn = [&](const auto&, const auto&, bool) {
         interfaces::WalletMigrationResult result;
         result.wallet = complete();
         return result;
@@ -853,7 +857,7 @@ void WalletQmlControllerTests::initializedControllerForwardsMigrationPassphrase(
 
     bool saw_expected_name{false};
     bool saw_expected_passphrase{false};
-    loader.migrate_wallet_fn = [&](const std::string& name, const SecureString& passphrase) {
+    loader.migrate_wallet_fn = [&](const std::string& name, const SecureString& passphrase, bool) {
         saw_expected_name = (name == "legacy_wallet");
         saw_expected_passphrase = (passphrase == SecureString{"secret"});
         return util::Result<interfaces::WalletMigrationResult>{
@@ -1195,7 +1199,7 @@ void WalletQmlControllerTests::initializedControllerMigratesUnencryptedWalletWit
     QSignalSpy failed_spy(&controller, &WalletQmlController::walletMigrationFailed);
 
     bool saw_empty_passphrase{false};
-    loader.migrate_wallet_fn = [&](const std::string& name, const SecureString& passphrase) {
+    loader.migrate_wallet_fn = [&](const std::string& name, const SecureString& passphrase, bool) {
         saw_empty_passphrase = (name == "legacy_wallet" && passphrase.empty());
         return util::Result<interfaces::WalletMigrationResult>{
             util::Error{Untranslated("Migration failed.")}};

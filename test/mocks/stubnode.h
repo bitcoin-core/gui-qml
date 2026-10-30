@@ -56,7 +56,7 @@ public:
     }
 
     util::Result<interfaces::WalletMigrationResult> migrateWallet(
-        const std::string&, const SecureString&) override
+        const std::string&, const SecureString&, bool) override
     {
         return util::Error{};
     }
@@ -254,7 +254,7 @@ public:
         UnhandledCall("getUnspentOutput");
         return std::nullopt;
     }
-    node::TransactionError broadcastTransaction(CTransactionRef, CAmount, std::string&) override
+    node::TransactionError broadcastTransaction(CTransactionRef, CAmount, CFeeRate, std::string&) override
     {
         UnhandledCall("broadcastTransaction");
         return {};

@@ -50,6 +50,7 @@
 #include <wallet/fees.h>
 #include <wallet/scriptpubkeyman.h>
 #include <wallet/spend.h>
+#include <wallet/types.h>
 #include <wallet/wallet.h>
 
 #include <QDateTime>
@@ -112,12 +113,12 @@ std::map<QString, CAmount> ScanReceiveRequestTransaction(const interfaces::Walle
     if (received.empty()) return received;
 
     interfaces::WalletTxStatus status{};
-    interfaces::WalletOrderForm order_form;
+    std::vector<std::string> messages;
+    std::vector<std::string> payment_requests;
     bool in_mempool{false};
     int num_blocks{0};
-    wallet.getWalletTxDetails(tx.tx->GetHash(), status, order_form, in_mempool, num_blocks);
-    const auto replacement = tx.value_map.find("replaced_by_txid");
-    const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+    wallet.getWalletTxDetails(tx.tx->GetHash(), status, messages, payment_requests, in_mempool, num_blocks);
+    const bool replaced{tx.replaced_by_txid.has_value()};
     // The receiver's wallet has no replacement marker on the original tx.
     // An unconfirmed transaction that left the mempool must not add to the
     // received total, but its address remains locked against reuse.
@@ -287,12 +288,11 @@ util::Result<wallet::CreatedTransactionResult> CreateSendAllTransaction(
         return util::Error{Untranslated("Unable to prepare a send-all transaction.")};
     }
     LOCK(wallet->cs_wallet);
-    FeeCalculation fee_calc;
-    const CFeeRate rate = wallet::GetMinimumFeeRate(*wallet, control, &fee_calc);
-    if (control.m_feerate && rate > *control.m_feerate) {
+    const wallet::MinimumFeeRateResult min_fee_rate_result{wallet::GetMinimumFeeRate(*wallet, control)};
+    if (control.m_feerate && min_fee_rate_result.fee_rate > *control.m_feerate) {
         return util::Error{Untranslated("Fee rate is below the minimum fee rate.")};
     }
-    if (fee_calc.reason == FeeReason::FALLBACK && !wallet->m_allow_fallback_fee) {
+    if (min_fee_rate_result.fee_reason == FeeReason::FALLBACK && !wallet->m_allow_fallback_fee) {
         return util::Error{Untranslated("Fee estimation failed. Fallbackfee is disabled.")};
     }
     // Explicit selections restrict sendall; otherwise use all available coins
@@ -309,14 +309,14 @@ util::Result<wallet::CreatedTransactionResult> CreateSendAllTransaction(
     CAmount total{0};
     for (const auto& input : inputs) {
         const auto* source = wallet->GetWalletTx(input.hash);
-        if (!source || input.n >= source->tx->vout.size() || wallet->IsSpent(input)
-            || !wallet->IsMine(source->tx->vout[input.n])) {
+        if (!source || input.n >= source->GetTx()->vout.size() || wallet->IsSpent(input)
+            || !wallet->IsMine(source->GetTx()->vout[input.n])) {
             return util::Error{Untranslated("A selected input is no longer available.")};
         }
-        if (wallet->GetTxDepthInMainChain(*source) == 0 && source->tx->version == TRUC_VERSION) {
+        if (wallet->GetTxDepthInMainChain(*source) == 0 && source->GetTx()->version == TRUC_VERSION) {
             return util::Error{Untranslated("Cannot spend an unconfirmed version 3 input in this transaction.")};
         }
-        total += source->tx->vout[input.n].nValue;
+        total += source->GetTx()->vout[input.n].nValue;
         const uint32_t sequence = wallet->m_signal_rbf ? MAX_BIP125_RBF_SEQUENCE : CTxIn::MAX_SEQUENCE_NONFINAL;
         tx.vin.emplace_back(input, CScript{}, sequence);
     }
@@ -334,9 +334,9 @@ util::Result<wallet::CreatedTransactionResult> CreateSendAllTransaction(
     const auto size = wallet::CalculateMaximumSignedTxSize(CTransaction(tx), wallet);
     if (size.vsize < 0) return util::Error{Untranslated("Unable to determine the transaction size.")};
     if (size.weight > MAX_STANDARD_TX_WEIGHT) return util::Error{Untranslated("Transaction too large.")};
-    const CAmount fee = rate.GetFee(size.vsize)
-        + wallet->chain().calculateCombinedBumpFee(inputs, rate).value_or(0);
-    if (fee > wallet->m_default_max_tx_fee) return util::Error{Untranslated("Transaction fee exceeds the maximum configured fee.")};
+    const CAmount fee = min_fee_rate_result.fee_rate.GetFee(size.vsize)
+        + wallet->chain().calculateCombinedBumpFee(inputs, min_fee_rate_result.fee_rate).value_or(0);
+    if (fee > wallet->m_max_tx_fee) return util::Error{Untranslated("Transaction fee exceeds the maximum configured fee.")};
     if (total <= fee || fixed_amount > total - fee) {
         return util::Error{Untranslated("Selected inputs do not cover the amount plus fee")};
     }
@@ -349,7 +349,7 @@ util::Result<wallet::CreatedTransactionResult> CreateSendAllTransaction(
     FastRandomContext rng;
     wallet::DiscourageFeeSniping(tx, rng, wallet->chain(), wallet->GetLastBlockHash(), wallet->GetLastBlockHeight());
     if (sign && !wallet->SignTransaction(tx)) return util::Error{Untranslated("Signing transaction failed.")};
-    return wallet::CreatedTransactionResult{MakeTransactionRef(std::move(tx)), fee, std::nullopt, fee_calc};
+    return wallet::CreatedTransactionResult{MakeTransactionRef(std::move(tx)), fee, std::nullopt, min_fee_rate_result.fee_reason};
 }
 
 // A failed fixed-amount preview can still report the fee needed to spend
@@ -362,10 +362,10 @@ std::optional<SendFeePreview> EstimateInsufficientSelectedInputsFee(
     if (!wallet || !control.HasSelected() || control.m_allow_other_inputs) return std::nullopt;
 
     LOCK(wallet->cs_wallet);
-    FeeCalculation fee_calc;
-    const CFeeRate rate = wallet::GetMinimumFeeRate(*wallet, control, &fee_calc);
-    if (rate.GetFeePerK() <= 0 || (control.m_feerate && rate > *control.m_feerate)
-        || (fee_calc.reason == FeeReason::FALLBACK && !wallet->m_allow_fallback_fee)) {
+    const wallet::MinimumFeeRateResult min_fee_rate_result{wallet::GetMinimumFeeRate(*wallet, control)};
+    if (min_fee_rate_result.fee_rate.GetFeePerK() <= 0
+        || (control.m_feerate && min_fee_rate_result.fee_rate > *control.m_feerate)
+        || (min_fee_rate_result.fee_reason == FeeReason::FALLBACK && !wallet->m_allow_fallback_fee)) {
         return std::nullopt;
     }
 
@@ -375,11 +375,11 @@ std::optional<SendFeePreview> EstimateInsufficientSelectedInputsFee(
     const auto inputs = control.ListSelected();
     for (const auto& input : inputs) {
         const auto* source = wallet->GetWalletTx(input.hash);
-        if (!source || input.n >= source->tx->vout.size() || wallet->IsSpent(input)
-            || !wallet->IsMine(source->tx->vout[input.n])) {
+        if (!source || input.n >= source->GetTx()->vout.size() || wallet->IsSpent(input)
+            || !wallet->IsMine(source->GetTx()->vout[input.n])) {
             return std::nullopt;
         }
-        input_amount += source->tx->vout[input.n].nValue;
+        input_amount += source->GetTx()->vout[input.n].nValue;
         tx.vin.emplace_back(input);
     }
 
@@ -390,10 +390,10 @@ std::optional<SendFeePreview> EstimateInsufficientSelectedInputsFee(
     }
     const auto size = wallet::CalculateMaximumSignedTxSize(CTransaction(tx), wallet, &control);
     if (size.vsize < 0) return std::nullopt;
-    const CAmount fee = rate.GetFee(size.vsize)
-        + wallet->chain().calculateCombinedBumpFee(inputs, rate).value_or(0);
+    const CAmount fee = min_fee_rate_result.fee_rate.GetFee(size.vsize)
+        + wallet->chain().calculateCombinedBumpFee(inputs, min_fee_rate_result.fee_rate).value_or(0);
     if (!AmountPlusFeeExceedsBalance(send_amount, fee, input_amount)) return std::nullopt;
-    return SendFeePreview{fee, static_cast<int>(inputs.size()), rate.GetFeePerK(), std::nullopt, false};
+    return SendFeePreview{fee, static_cast<int>(inputs.size()), min_fee_rate_result.fee_rate.GetFeePerK(), std::nullopt, false};
 }
 
 std::optional<SendFeePreview> TryPreviewFee(interfaces::Wallet& wallet,
@@ -1617,11 +1617,16 @@ void WalletQmlModel::refreshReceiveRequestPayments()
                 removeReceiveRequestPayment(txid);
                 if (!deleted) {
                     interfaces::WalletTxStatus status{};
-                    interfaces::WalletOrderForm order_form;
+                    std::vector<std::string> messages;
+                    std::vector<std::string> payment_requests;
                     bool in_mempool{false};
                     int num_blocks{0};
-                    recordReceiveRequestPayment(m_wallet->getWalletTxDetails(txid, status, order_form,
-                                                                             in_mempool, num_blocks));
+                    recordReceiveRequestPayment(m_wallet->getWalletTxDetails(txid,
+                                                                             status,
+                                                                             messages,
+                                                                             payment_requests,
+                                                                             in_mempool,
+                                                                             num_blocks));
                     recheckReceiveRequestPayments(txid);
                 }
             }
@@ -1731,12 +1736,12 @@ void WalletQmlModel::pollUnconfirmedReceiveRequestPayments()
         UnconfirmedReceiveRequestPaymentCheck check;
         for (const Txid& txid : txids) {
             interfaces::WalletTxStatus status{};
-            interfaces::WalletOrderForm order_form;
+            std::vector<std::string> messages;
+            std::vector<std::string> payment_requests;
             bool in_mempool{false};
             int num_blocks{0};
-            const auto tx = wallet->getWalletTxDetails(txid, status, order_form, in_mempool, num_blocks);
-            const auto replacement = tx.value_map.find("replaced_by_txid");
-            const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+            const auto tx = wallet->getWalletTxDetails(txid, status, messages, payment_requests, in_mempool, num_blocks);
+            const bool replaced{tx.replaced_by_txid.has_value()};
             if (!tx.tx || status.depth_in_main_chain < 0 || status.is_abandoned ||
                 (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) check.inactive.insert(txid);
             else if (status.depth_in_main_chain > 0) check.confirmed.insert(txid);
@@ -1766,12 +1771,12 @@ void WalletQmlModel::recheckReceiveRequestPayments(const Txid& changed_txid)
     related.erase(changed_txid);
     for (const Txid& txid : related) {
         interfaces::WalletTxStatus status{};
-        interfaces::WalletOrderForm order_form;
+        std::vector<std::string> messages;
+        std::vector<std::string> payment_requests;
         bool in_mempool{false};
         int num_blocks{0};
-        const auto tx = m_wallet->getWalletTxDetails(txid, status, order_form, in_mempool, num_blocks);
-        const auto replacement = tx.value_map.find("replaced_by_txid");
-        const bool replaced = replacement != tx.value_map.end() && !replacement->second.empty();
+        const auto tx = m_wallet->getWalletTxDetails(txid, status, messages, payment_requests, in_mempool, num_blocks);
+        const bool replaced{tx.replaced_by_txid.has_value()};
         if (status.depth_in_main_chain < 0 || status.is_abandoned ||
             (status.depth_in_main_chain == 0 && (!in_mempool || replaced))) removeReceiveRequestPayment(txid);
     }
@@ -2510,7 +2515,7 @@ bool WalletQmlModel::broadcastCurrentTransaction()
     const CTransactionRef tx{MakeTransactionRef(std::move(mutable_tx))};
     std::string error_string;
     const node::TransactionError error{
-        m_node->broadcastTransaction(tx, node::DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), error_string)};
+        m_node->broadcastTransaction(tx, node::DEFAULT_MAX_RAW_TX_FEE_RATE.GetFeePerK(), node::DEFAULT_MAX_RAW_TX_FEE_RATE, error_string)};
     if (error != node::TransactionError::OK) {
         QString message{QString::fromStdString(common::TransactionErrorString(error).translated)};
         if (!error_string.empty()) {
@@ -2599,9 +2604,7 @@ bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphr
         }
 
         const CTransactionRef signed_tx{MakeTransactionRef(std::move(mutable_tx))};
-        interfaces::WalletValueMap value_map;
-        interfaces::WalletOrderForm order_form;
-        m_wallet->commitTransaction(signed_tx, value_map, order_form);
+        m_wallet->commitTransaction(/*tx=*/signed_tx, /*messages=*/{});
         saveSentRecipientLabels();
         m_current_transaction->setWtx(signed_tx);
         m_current_psbt.reset();
@@ -2630,9 +2633,7 @@ bool WalletQmlModel::sendTransactionInternal(std::optional<SecureString> passphr
         return false;
     }
 
-    interfaces::WalletValueMap value_map;
-    interfaces::WalletOrderForm order_form;
-    m_wallet->commitTransaction(signed_tx, value_map, order_form);
+    m_wallet->commitTransaction(/*tx=*/signed_tx, /*messages=*/{});
     saveSentRecipientLabels();
     m_current_transaction_source = CurrentTransactionSource::None;
 

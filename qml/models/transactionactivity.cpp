@@ -37,11 +37,11 @@ std::optional<TransactionActivity> TransactionActivity::fromWalletTx(const inter
             if (wtx.txout_is_mine[i]) activity.wallet_credit += wtx.tx->vout[i].nValue;
         }
     }
-    if (const auto it = wtx.value_map.find("replaces_txid"); it != wtx.value_map.end()) {
-        activity.replaces_txid = QString::fromStdString(it->second);
+    if (wtx.replaces_txid.has_value()) {
+        activity.replaces_txid = QString::fromStdString(wtx.replaces_txid->ToString());
     }
-    if (const auto it = wtx.value_map.find("replaced_by_txid"); it != wtx.value_map.end()) {
-        activity.replaced_by_txid = QString::fromStdString(it->second);
+    if (wtx.replaced_by_txid.has_value()) {
+        activity.replaced_by_txid = QString::fromStdString(wtx.replaced_by_txid->ToString());
     }
 
     const bool all_from_wallet = !wtx.is_coinbase && std::cmp_equal(owned_inputs, wtx.tx->vin.size());

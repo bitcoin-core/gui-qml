@@ -41,7 +41,7 @@ public:
     {
         return util::Error{Untranslated("Unexpected restoreWallet call")};
     }
-    util::Result<interfaces::WalletMigrationResult> migrateWallet(const std::string&, const SecureString&) override
+    util::Result<interfaces::WalletMigrationResult> migrateWallet(const std::string&, const SecureString&, bool) override
     {
         return util::Error{Untranslated("Unexpected migrateWallet call")};
     }
