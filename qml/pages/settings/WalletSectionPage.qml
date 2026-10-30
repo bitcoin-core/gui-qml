@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
+import "../../components"
 import "../../controls"
 import "../../components"
 
@@ -21,6 +22,8 @@ SettingsPage {
     readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
+    readonly property bool canExportWatchOnly: root.walletLoaded && !!root.wallet
+        && root.wallet.watchOnlyExports().length > 0
 
     signal selectWalletRequested()
     signal passwordRequested()
@@ -84,6 +87,11 @@ SettingsPage {
             else root.errorText = ""
         }
         onRejected: targetWallet = null
+    }
+
+    WatchOnlyExportModal {
+        id: watchOnlyExportModal
+        wallet: root.wallet
     }
 
     TextField {
@@ -194,6 +202,16 @@ SettingsPage {
             title: qsTr("Back up wallet")
             showsDisclosureIndicator: true
             onClicked: root.startBackup()
+        }
+
+        ListRow {
+            objectName: "walletExportWatchOnlyRow"
+            visible: root.canExportWatchOnly
+            Layout.fillWidth: true
+            //: Shows the wallet's public descriptors and keys for setting up a watch-only copy elsewhere.
+            title: qsTr("Export watch-only wallet")
+            showsDisclosureIndicator: true
+            onClicked: watchOnlyExportModal.openForWallet()
         }
 
         ListRow {
