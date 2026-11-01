@@ -87,6 +87,7 @@ SettingsPage {
     }
 
     function updateAddressLabel(address, label) {
+        if (root.addressModel.labelChangePending) return false
         root.errorText = ""
         if (root.addressModel.setAddressLabel(address, label)) return true
         root.errorText = qsTr("The address label could not be saved. Please try again.")
@@ -205,11 +206,13 @@ SettingsPage {
             scriptType: root.selectedScriptType
             used: root.selectedUsed
             hasPaymentRequest: root.selectedHasPaymentRequest
+            labelChangePending: root.addressModel.labelChangePending
             onCloseRequested: detailsPopup.close()
             onCreatePaymentRequestRequested: {
                 root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
             }
             onEditLabelRequested: (address, label) => {
+                if (root.addressModel.labelChangePending) return
                 if (root.updateAddressLabel(address, label)) {
                     noteErrorText = "";
                 } else {
@@ -264,6 +267,16 @@ SettingsPage {
         horizontalAlignment: Text.AlignLeft
     }
 
+    CoreText {
+        objectName: "addressLabelSavingText"
+        Layout.fillWidth: true
+        visible: root.addressModel.labelChangePending
+        text: qsTr("Saving…")
+        color: Theme.color.neutral6
+        font: Theme.text.description.font
+        horizontalAlignment: Text.AlignLeft
+    }
+
     FormSection {
         objectName: "addressListSection"
         visible: addressModel.count > 0
@@ -283,6 +296,7 @@ SettingsPage {
             delegate: AddressRow {
                 width: ListView.view.width
                 pendingLabel: root.pendingNote(address, label)
+                labelChangePending: root.addressModel.labelChangePending
                 showDivider: index < addressList.count - 1
                 onNoteDraftEdited: (address, label) => root.updatePendingNote(address, label)
                 onNoteDraftDiscarded: (address) => root.clearPendingNote(address)

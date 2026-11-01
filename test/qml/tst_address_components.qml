@@ -24,6 +24,11 @@ TestCase {
         height: parent.height
     }
 
+    function init() {
+        tryCompare(testWalletModel.addressListModel, "labelChangePending", false)
+        testWalletModel.addressListModel.labelChangeDelay = 0
+    }
+
     function findObject(root, objectName) {
         if (!root) {
             return null
@@ -556,6 +561,63 @@ TestCase {
         compare(noteField.readOnly, true)
         compare(noteField.activeFocusOnPress, false)
         compare(noteField.activeFocusOnTab, false)
+    }
+
+    function test_addressList_blocks_edits_while_saving_data() {
+        return [{tag: "success", success: true}, {tag: "failure", success: false}]
+    }
+
+    function test_addressList_blocks_edits_while_saving(data) {
+        const page = createTemporaryObject(addressListComponent, host)
+        page.addressModel.resetForTest()
+        page.addressModel.setAddressLabelSucceeds = data.success
+        page.addressModel.labelChangeDelay = 300
+        const list = findObject(page, "addressListView")
+        tryVerify(() => list.itemAtIndex(0) !== null)
+        const row = list.itemAtIndex(0)
+        const address = page.addressModel.addressAt(0)
+        page.selectedAddress = address
+        page.selectedLabel = page.addressModel.labelAt(0)
+        const details = findChild(page, "addressDetails")
+        const popup = findChild(page, "addressDetailsPopup")
+        popup.open()
+        tryCompare(popup, "opened", true)
+        const detailsNote = findObject(details, "addressDetailsNoteField")
+        const rowNote = findObject(row, "addressRowNoteField")
+        detailsNote.forceActiveFocus()
+        detailsNote.text = "First"
+        keyClick(Qt.Key_Return)
+        compare(page.addressModel.labelChangePending, true)
+        compare(detailsNote.readOnly, true)
+        compare(rowNote.readOnly, true)
+        compare(findObject(details, "addressDetailsNoteRow").description, "Saving…")
+        compare(findObject(page, "addressLabelSavingText").visible, true)
+        detailsNote.forceActiveFocus()
+        keyClick(Qt.Key_A, Qt.ControlModifier)
+        keyClick(Qt.Key_S)
+        compare(detailsNote.text, "First")
+        detailsNote.editingFinished()
+        verify(!page.updateAddressLabel(address, "Second"))
+        compare(page.errorText, "")
+        tryCompare(page.addressModel, "labelChangePending", false)
+        compare(detailsNote.readOnly, false)
+        compare(findObject(page, "addressLabelSavingText").visible, false)
+        if (data.success) {
+            compare(page.selectedLabel, "First")
+            compare(page.addressModel.labelAt(0), "First")
+        } else {
+            verify(details.noteErrorText.length > 0)
+        }
+        // Completion unlocks both editors so a corrected note can be saved.
+        page.addressModel.setAddressLabelSucceeds = true
+        page.addressModel.labelChangeDelay = 0
+        detailsNote.text = "Second"
+        detailsNote.editingFinished()
+        tryCompare(page, "selectedLabel", "Second")
+        compare(page.addressModel.labelAt(0), "Second")
+        page.addressModel.setAddressLabelSucceeds = false
+        popup.close()
+        tryCompare(popup, "visible", false)
     }
 
     function test_addressList_preservesPendingNotesAcrossRefresh() {
