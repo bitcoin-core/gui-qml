@@ -18,6 +18,10 @@ Page {
     property var presentedRequest: null
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
+    property bool addressPreparationDeferred: false
+    // The request sent to the wallet, which a retry repeats; a deferred request may replace the pending fields.
+    property bool submittedNextAddress: false
+    property string submittedAddressType: ""
     property string addressErrorText: ""
     readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
@@ -30,11 +34,17 @@ Page {
 
     function ensureReceivingAddress(next, type) {
         if (!wallet) return
-        if (wallet.receiveOperationPending) return
         pendingNextAddress = !!next
         pendingAddressType = type || ""
+        if (wallet.receiveOperationPending) {
+            addressPreparationDeferred = true
+            return
+        }
+        addressPreparationDeferred = false
+        submittedNextAddress = pendingNextAddress
+        submittedAddressType = pendingAddressType
         root.addressErrorText = ""
-        if (!wallet.ensureReceivingAddress(pendingNextAddress, pendingAddressType)) {
+        if (!wallet.ensureReceivingAddress(submittedNextAddress, submittedAddressType)) {
             //: Error shown in Receive when preparing an address for a payment request fails.
             root.addressErrorText = wallet.receiveOperationError || qsTr("A receiving address could not be generated. Please try again.")
         }
@@ -181,7 +191,7 @@ Page {
                     addressErrorText: root.addressErrorText
                     clipboard: root.clipboard
                     enabled: walletController.initialized && (!root.wallet || !root.wallet.receiveOperationPending)
-                    onRetryAddressRequested: root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                    onRetryAddressRequested: root.ensureReceivingAddress(root.submittedNextAddress, root.submittedAddressType)
                     onCreated: function(requestId) {
                         root.presentedRequest = root.request
                         root.paymentRequestCreated()
@@ -213,6 +223,7 @@ Page {
     WalletPassphrasePopup {
         id: passphrasePopup
         parent: Overlay.overlay
+        popupObjectName: "receivePassphrasePopup"
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
         titleText: qsTr("Enter wallet password")
         //: Explains why the wallet password is needed to prepare a payment request.
@@ -221,7 +232,7 @@ Page {
         confirmText: qsTr("Unlock and create address")
         onSubmitted: function(passphrase) {
             if (!root.wallet || root.wallet.receiveOperationPending) return
-            busy = root.wallet.ensureReceivingAddressWithPassphrase(passphrase, root.pendingNextAddress, root.pendingAddressType)
+            busy = root.wallet.ensureReceivingAddressWithPassphrase(passphrase, root.submittedNextAddress, root.submittedAddressType)
             //: Error shown when an address cannot be generated after unlocking the wallet.
             if (!busy) errorText = root.wallet.receiveOperationError || qsTr("The receiving address could not be created.")
         }
@@ -230,7 +241,19 @@ Page {
     readonly property Connections walletCompletion: Connections {
         target: root.wallet
         function onReceiveOperationFinished(operation, success) {
-            if (operation === "rememberAddress" && root.visible && root.wallet.receivingAddress.address === "") {
+            if (root.addressPreparationDeferred && root.visible) {
+                Qt.callLater(function() {
+                    if (!root.visible || !root.addressPreparationDeferred) return
+                    const address = root.wallet.receivingAddress
+                    // Receive asks twice on open; the first request may already cover this one.
+                    if (!root.pendingNextAddress && address.address !== ""
+                            && (!root.pendingAddressType || root.pendingAddressType === address.addressType)) {
+                        root.addressPreparationDeferred = false
+                        return
+                    }
+                    root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                })
+            } else if (operation === "rememberAddress" && root.visible && root.wallet.receivingAddress.address === "") {
                 Qt.callLater(function() { if (root.visible) root.prepareReceivingAddress() })
                 return
             }
@@ -253,6 +276,7 @@ Page {
         }
     }
     onWalletChanged: {
+        root.addressPreparationDeferred = false
         root.addressErrorText = ""
         passphrasePopup.close()
         passphrasePopup.busy = false

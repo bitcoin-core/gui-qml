@@ -225,7 +225,7 @@ def _wait_receiving_address(gui, previous=None, prefix=None):
 
     def ready():
         nonlocal address
-        address = gui.get_property("receivingAddressQRImage", "code")
+        address = gui.get_property("requestPaymentPage", "wallet.receivingAddress.address")
         return bool(address) and address != previous and (prefix is None or address.startswith(prefix))
 
     wait_until(ready, description="receiving address after the wallet command")

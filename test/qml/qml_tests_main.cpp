@@ -372,6 +372,8 @@ class MockAddressListModel : public QAbstractListModel
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
+    Q_PROPERTY(bool labelChangePending MEMBER m_label_change_pending NOTIFY labelChangePendingChanged)
+    Q_PROPERTY(int labelChangeDelay MEMBER m_label_change_delay)
 
 public:
     enum Category {
@@ -478,8 +480,15 @@ public:
     Q_INVOKABLE void refresh() {}
     Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label)
     {
+        if (m_label_change_pending) return false;
+        m_label_change_pending = true;
+        Q_EMIT labelChangePendingChanged();
+        QTimer::singleShot(m_label_change_delay, this, [this, address, label, success = m_set_address_label_succeeds] {
+            m_label_change_pending = false;
+            Q_EMIT labelChangePendingChanged();
+            Q_EMIT labelChangeFinished(address, label, success, success ? QString{} : QStringLiteral("This address is no longer available."));
+        });
         if (!m_set_address_label_succeeds) {
-            QTimer::singleShot(0, this, [this, address, label] { Q_EMIT labelChangeFinished(address, label, false, QStringLiteral("This address is no longer available.")); });
             return true;
         }
         for (int row = 0; row < rowCount(); ++row) {
@@ -489,7 +498,6 @@ public:
             Q_EMIT dataChanged(index(row), index(row), {LabelRole});
             break;
         }
-        QTimer::singleShot(0, this, [this, address, label] { Q_EMIT labelChangeFinished(address, label, true, {}); });
         return true;
     }
     Q_INVOKABLE QString addressAt(int row) const
@@ -510,6 +518,7 @@ public:
     }
 
 Q_SIGNALS:
+    void labelChangePendingChanged();
     void labelChangeFinished(const QString& address, const QString& label, bool success, const QString& error);
     void categoryChanged();
     void showUsedChanged();
@@ -535,6 +544,8 @@ private:
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
+    bool m_label_change_pending{false};
+    int m_label_change_delay{0};
 };
 
 class MockFileDialog : public QObject
@@ -1206,6 +1217,8 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QObject* currentPaymentRequest READ currentPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receivingAddress READ receivingAddress CONSTANT)
     Q_PROPERTY(bool ensureReceivingAddressResult MEMBER m_ensure_receiving_address_result)
+    Q_PROPERTY(bool ensureReceivingAddressNeedsUnlock MEMBER m_ensure_receiving_address_needs_unlock)
+    Q_PROPERTY(QString lastPassphraseAddressType MEMBER m_last_passphrase_address_type)
     Q_PROPERTY(QObject* detailPaymentRequest READ detailPaymentRequest CONSTANT)
     Q_PROPERTY(QObject* receiveRequests READ receiveRequests CONSTANT)
     Q_PROPERTY(bool receiveRequestReconciliationPending MEMBER m_receive_request_reconciliation_pending NOTIFY receiveRequestReconciliationPendingChanged)
@@ -1332,9 +1345,17 @@ public:
     QObject* receivingAddress() { return &m_receiving_address; }
     int m_receiving_sequence{0};
     bool m_ensure_receiving_address_result{true};
+    bool m_ensure_receiving_address_needs_unlock{false};
+    QString m_last_passphrase_address_type;
     Q_INVOKABLE bool ensureReceivingAddress(bool next = false, const QString& type = {})
     {
         if (!m_ensure_receiving_address_result) return false;
+        if (m_ensure_receiving_address_needs_unlock) {
+            m_receiving_address.m_needs_unlock = true;
+            Q_EMIT m_receiving_address.needsUnlockChanged();
+            finishReceiveOperation(QStringLiteral("address"), false);
+            return true;
+        }
         const QString selected = type.isEmpty() ? m_default_receive_address_type : type;
         if (next || m_receiving_address.m_address.isEmpty() || m_receiving_address.m_payment_received || selected != m_receiving_address.m_address_type) {
             m_receiving_address.clear();
@@ -1348,7 +1369,13 @@ public:
         return true;
     }
     Q_INVOKABLE bool ensureReceivingAddressWithPassphrase(const QString&, bool next = false, const QString& type = {})
-    { return ensureReceivingAddress(next, type); }
+    {
+        m_last_passphrase_address_type = type;
+        m_ensure_receiving_address_needs_unlock = false;
+        m_receiving_address.m_needs_unlock = false;
+        Q_EMIT m_receiving_address.needsUnlockChanged();
+        return ensureReceivingAddress(next, type);
+    }
     Q_INVOKABLE QString receiveAddressTypeLabel(const QString& type) const { return type; }
     Q_INVOKABLE bool commitReceivingPaymentRequest()
     {
@@ -1767,6 +1794,7 @@ public:
         Q_EMIT request->addressTypeChanged();
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
+        finishReceiveOperation(QStringLiteral("rememberAddress"));
     }
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id)
     {
