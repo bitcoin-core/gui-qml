@@ -683,14 +683,42 @@ TestCase {
         verify(!findChild(card, "requestPaymentError").visible)
     }
 
+    function test_address_preparation_resumes_after_pending_operation_data() {
+        return [{tag: "label", operation: "label"}, {tag: "remember", operation: "rememberAddress"}]
+    }
+
+    function test_address_preparation_resumes_after_pending_operation(data) {
+        const page = createPage()
+        testWalletModel.receivingAddress.clear()
+        testWalletModel.receiveOperationPending = true
+        page.ensureReceivingAddress(true, "legacy")
+        compare(testWalletModel.receivingAddress.address, "")
+        compare(page.addressPreparationDeferred, true)
+        testWalletModel.receiveOperationPending = false
+        testWalletModel.receiveOperationFinished(data.operation, true)
+        tryVerify(() => testWalletModel.receivingAddress.address !== "")
+        tryCompare(testWalletModel, "receiveOperationPending", false)
+        compare(page.addressPreparationDeferred, false)
+        compare(testWalletModel.receivingAddress.addressType, "legacy")
+    }
+
     function test_request_again_prefills_without_saving_data() {
-        return [{tag: "unpaid", paid: false}, {tag: "paid", paid: true}]
+        return [
+            {tag: "unpaid_legacy", paid: false, type: "legacy"},
+            {tag: "paid_legacy", paid: true, type: "legacy"},
+            {tag: "unpaid_taproot", paid: false, type: "bech32m"},
+            {tag: "paid_taproot", paid: true, type: "bech32m"}
+        ]
     }
     function test_request_again_prefills_without_saving(data) {
         const page = createPage()
+        page.ensureReceivingAddress(false, data.type)
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         editField(page.draftCard, "requestPaymentNoteSelfInput", "Lunch with Hal")
         const card = createRequest(page)
         const id = card.request.id
+        page.ensureReceivingAddress(false, data.type === "legacy" ? "bech32m" : "legacy")
+        tryCompare(testWalletModel, "receiveOperationPending", false)
         card.request.paymentReceived = data.paid
         const opened = walletController.openReceiveRequests
         findChild(card, "paymentRequestMoreButton").clicked()
@@ -703,6 +731,7 @@ TestCase {
         compare(testPaymentRequest.noteSelf, "Lunch with Hal")
         tryCompare(findChild(page.draftCard, "requestPaymentNoteSelfInput"), "text", "Lunch with Hal")
         tryCompare(findChild(page.draftCard, "requestPaymentGenerateButton"), "enabled", true)
+        compare(testWalletModel.receivingAddress.addressType, data.type)
     }
 
     function test_request_again_reveals_populated_hidden_fields() {

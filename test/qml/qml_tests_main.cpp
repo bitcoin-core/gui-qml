@@ -362,6 +362,8 @@ class MockAddressListModel : public QAbstractListModel
     Q_PROPERTY(bool showUsed READ showUsed WRITE setShowUsed NOTIFY showUsedChanged)
     Q_PROPERTY(int count READ count NOTIFY countChanged)
     Q_PROPERTY(bool setAddressLabelSucceeds MEMBER m_set_address_label_succeeds)
+    Q_PROPERTY(bool labelChangePending MEMBER m_label_change_pending NOTIFY labelChangePendingChanged)
+    Q_PROPERTY(int labelChangeDelay MEMBER m_label_change_delay)
 
 public:
     enum Category {
@@ -468,8 +470,15 @@ public:
     Q_INVOKABLE void refresh() {}
     Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label)
     {
+        if (m_label_change_pending) return false;
+        m_label_change_pending = true;
+        Q_EMIT labelChangePendingChanged();
+        QTimer::singleShot(m_label_change_delay, this, [this, address, label, success = m_set_address_label_succeeds] {
+            m_label_change_pending = false;
+            Q_EMIT labelChangePendingChanged();
+            Q_EMIT labelChangeFinished(address, label, success, success ? QString{} : QStringLiteral("This address is no longer available."));
+        });
         if (!m_set_address_label_succeeds) {
-            QTimer::singleShot(0, this, [this, address, label] { Q_EMIT labelChangeFinished(address, label, false, QStringLiteral("This address is no longer available.")); });
             return true;
         }
         for (int row = 0; row < rowCount(); ++row) {
@@ -479,7 +488,6 @@ public:
             Q_EMIT dataChanged(index(row), index(row), {LabelRole});
             break;
         }
-        QTimer::singleShot(0, this, [this, address, label] { Q_EMIT labelChangeFinished(address, label, true, {}); });
         return true;
     }
     Q_INVOKABLE QString addressAt(int row) const
@@ -500,6 +508,7 @@ public:
     }
 
 Q_SIGNALS:
+    void labelChangePendingChanged();
     void labelChangeFinished(const QString& address, const QString& label, bool success, const QString& error);
     void categoryChanged();
     void showUsedChanged();
@@ -525,6 +534,8 @@ private:
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
+    bool m_label_change_pending{false};
+    int m_label_change_delay{0};
 };
 
 class MockFileDialog : public QObject
@@ -1755,6 +1766,7 @@ public:
         Q_EMIT request->addressTypeChanged();
         Q_EMIT request->isEditingChanged();
         Q_EMIT request->m_amount.displayChanged();
+        finishReceiveOperation(QStringLiteral("rememberAddress"));
     }
     Q_INVOKABLE bool removeReceiveRequest(const QString& request_id)
     {

@@ -18,6 +18,7 @@ Page {
     property var presentedRequest: null
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
+    property bool addressPreparationDeferred: false
     property string addressErrorText: ""
     readonly property real pageSidePadding: width < 640 ? 16 : 40
     readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
@@ -30,9 +31,13 @@ Page {
 
     function ensureReceivingAddress(next, type) {
         if (!wallet) return
-        if (wallet.receiveOperationPending) return
         pendingNextAddress = !!next
         pendingAddressType = type || ""
+        if (wallet.receiveOperationPending) {
+            addressPreparationDeferred = true
+            return
+        }
+        addressPreparationDeferred = false
         root.addressErrorText = ""
         if (!wallet.ensureReceivingAddress(pendingNextAddress, pendingAddressType)) {
             //: Error shown in Receive when preparing an address for a payment request fails.
@@ -232,7 +237,12 @@ Page {
     readonly property Connections walletCompletion: Connections {
         target: root.wallet
         function onReceiveOperationFinished(operation, success) {
-            if (operation === "rememberAddress" && root.visible && root.wallet.receivingAddress.address === "") {
+            if (root.addressPreparationDeferred && root.visible) {
+                Qt.callLater(function() {
+                    if (root.visible && root.addressPreparationDeferred)
+                        root.ensureReceivingAddress(root.pendingNextAddress, root.pendingAddressType)
+                })
+            } else if (operation === "rememberAddress" && root.visible && root.wallet.receivingAddress.address === "") {
                 Qt.callLater(function() { if (root.visible) root.prepareReceivingAddress() })
                 return
             }
@@ -255,6 +265,7 @@ Page {
         }
     }
     onWalletChanged: {
+        root.addressPreparationDeferred = false
         root.addressErrorText = ""
         passphrasePopup.close()
         passphrasePopup.busy = false
