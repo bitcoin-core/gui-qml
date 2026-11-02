@@ -83,7 +83,7 @@ void OnboardingAsyncTests::prepareAfterShutdownReportsFailure()
     model.beginShutdown();
     model.beginShutdown();
     bool called{false};
-    model.prepareNode(args, [&] { called = true; return true; });
+    model.prepareNode(args, [&](const QmlOnboardingSettings::PendingApply&) { called = true; return true; });
     QVERIFY(prepared.empty());
     QTRY_COMPARE(prepared.size(), 1);
     QVERIFY(!prepared.first().at(0).toBool());
@@ -132,7 +132,7 @@ void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion()
     QStringList signals;
     connect(&model, &OnboardingOptionsModel::nodePrepared, this, [&] { signals.append(QStringLiteral("prepared")); });
     connect(&model, &OnboardingOptionsModel::shutdownFinished, this, [&] { signals.append(QStringLiteral("shutdown")); });
-    model.prepareNode(args, [&] {
+    model.prepareNode(args, [&](const QmlOnboardingSettings::PendingApply&) {
         ++calls;
         entered.release();
         release.acquire();
@@ -144,7 +144,7 @@ void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion()
     entered.acquire();
     model.beginShutdown();
     model.beginShutdown();
-    model.prepareNode(args, [&] { ++calls; return true; });
+    model.prepareNode(args, [&](const QmlOnboardingSettings::PendingApply&) { ++calls; return true; });
     bool heartbeat{false};
     QTimer::singleShot(0, &model, [&] { heartbeat = true; });
     QTRY_VERIFY(heartbeat);
@@ -193,7 +193,7 @@ void OnboardingAsyncTests::shutdownObserverCanDestroyPreparedModel()
         prepared_at_shutdown = prepared;
         delete model.data();
     });
-    model->prepareNode(args, [&] { entered.release(); release.acquire(); return true; });
+    model->prepareNode(args, [&](const QmlOnboardingSettings::PendingApply&) { entered.release(); release.acquire(); return true; });
     QTRY_VERIFY(entered.available() > 0);
     entered.acquire();
     model->beginShutdown();
