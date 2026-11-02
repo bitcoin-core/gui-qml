@@ -413,6 +413,8 @@ def run_existing_profile_storage_choices_flow():
 
 def run_existing_profile_custom_storage_flow():
     for target, custom_gb in ((0, 7), (1907, 7), (4096, 7), (4096, 5), (6675, 7)):
+        custom_target_mib = custom_gb * 1000000000 // (1024 * 1024)
+        selected = "storageReduceOption" if custom_target_mib == target else "storageCustomOption"
         with tempfile.TemporaryDirectory(prefix="qml_custom_storage_") as tmpdir:
             datadir = os.path.join(tmpdir, "node0")
             write_datadir(datadir, pick_unused_port(), pick_unused_port(), extra_lines=[f"prune={target}"])
@@ -436,8 +438,9 @@ def run_existing_profile_custom_storage_flow():
                 gui.click("onboardingStorageSettingsCloseButton")
                 gui.wait_for_property("onboardingStorageSettingsPopup", "visible", False)
                 gui.click("storageCustomOption")
-                gui.wait_for_property("storageCustomOption", "checked", True)
-                assert not gui.get_property("storageReduceOption", "checked")
+                gui.wait_for_property(selected, "checked", True)
+                assert gui.get_property("storageCustomOption", "checked") == (custom_target_mib != target)
+                assert gui.get_property("storageReduceOption", "checked") == (custom_target_mib == target)
                 description = gui.get_property("storageCustomOption", "description")
                 assert description == f"Storing recent blocks up to {custom_gb} GB. Uses about {custom_gb} GB in total."
 
@@ -448,13 +451,13 @@ def run_existing_profile_custom_storage_flow():
                     assert not gui.get_property("storageCustomOption", "checked")
                     assert gui.get_property("storageCustomOption", "description") == description
                 gui.click("storageCustomOption")
-                gui.wait_for_property("storageCustomOption", "checked", True)
+                gui.wait_for_property(selected, "checked", True)
                 gui.click("onboardingStorageAmountButton")
                 gui.wait_for_page("onboardingConnection")
                 gui.click("onboardingConnectionButton")
                 gui = harness.wait_for_main_window_reconnect()
                 assert_node_shell_visible(gui)
-                assert int(read_settings_json(datadir).get("prune", target)) == custom_gb * 1000000000 // (1024 * 1024)
+                assert int(read_settings_json(datadir).get("prune", target)) == custom_target_mib
             finally:
                 harness.stop(cleanup=False)
 
