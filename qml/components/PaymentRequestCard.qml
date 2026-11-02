@@ -31,6 +31,7 @@ Pane {
     property string pendingRequestId: ""
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
+    readonly property bool hasCurrentPayment: !!request && request.receivedAmountSatoshi > 0
     readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
@@ -490,8 +491,8 @@ Pane {
                     id: statusLabel
                     objectName: "paymentRequestStatus"
                     anchors.centerIn: parent
-                    text: root.paymentReceived ? qsTr("Payment received") : qsTr("Awaiting payment")
-                    color: root.paymentReceived ? Theme.color.green : Theme.color.lavender
+                    text: root.hasCurrentPayment ? qsTr("Payment received") : qsTr("Awaiting payment")
+                    color: root.hasCurrentPayment ? Theme.color.green : Theme.color.lavender
                     font: Theme.text.captionStrong.font
                 }
             }
