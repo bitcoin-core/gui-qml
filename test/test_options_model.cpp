@@ -659,7 +659,13 @@ void OptionsModelTests::localizedSettingsCommit()
     QFETCH(QString, locale_name);
     const QLocale locale{locale_name};
     MockNode node;
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     const int mempool_size = std::min(10000, model.maxMaxMempoolSizeMB());
     model.setPrune(true);
     node.update_rw_setting_arguments.clear();
@@ -671,27 +677,35 @@ void OptionsModelTests::localizedSettingsCommit()
     QCOMPARE(model.maxMempoolSizeMB(), mempool_size);
     QCOMPARE(model.dbcacheSizeMiB(), 1000);
     QCOMPARE(model.scriptThreads(), -1);
-    const auto* prune = FindSettingWrite(node, "prune");
-    const auto* mempool = FindSettingWrite(node, "maxmempool");
-    const auto* cache = FindSettingWrite(node, "dbcache");
-    const auto* threads = FindSettingWrite(node, "par");
-    QVERIFY(prune && mempool && cache && threads);
-    QCOMPARE(prune->get_str(), std::string{"953674"});
-    QCOMPARE(mempool->getInt<int>(), mempool_size);
-    QCOMPARE(cache->get_str(), std::string{"1000"});
-    QCOMPARE(threads->get_str(), std::string{"-1"});
-    node.update_rw_setting_arguments.clear();
+    QTRY_VERIFY(!model.settingsPending());
+    const auto prune = ReadRwSetting(model_args, "prune");
+    const auto mempool = ReadRwSetting(model_args, "maxmempool");
+    const auto cache = ReadRwSetting(model_args, "dbcache");
+    const auto threads = ReadRwSetting(model_args, "par");
+    QVERIFY(!prune.isNull() && mempool.isNum() && !cache.isNull() && !threads.isNull());
+    QCOMPARE(prune.get_str(), std::string{"953674"});
+    QCOMPARE(mempool.getInt<int>(), mempool_size);
+    QCOMPARE(cache.get_str(), std::string{"1000"});
+    QCOMPARE(threads.get_str(), std::string{"-1"});
+    QSignalSpy pending_spy{&model, &OptionsQmlModel::settingsPendingChanged};
     QVERIFY(model.commitPruneSizeGB(QStringLiteral("1000"), locale_name).isEmpty());
     QVERIFY(model.commitMaxMempoolSizeMB(QString::number(mempool_size), locale_name).isEmpty());
     QVERIFY(model.commitDbcacheSizeMiB(QStringLiteral("1000"), locale_name).isEmpty());
     QVERIFY(model.commitScriptThreads(QStringLiteral("-") + locale.toString(1), locale_name).isEmpty());
-    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(!model.settingsPending());
+    QCOMPARE(pending_spy.size(), 0);
 }
 
 void OptionsModelTests::invalidIntegerSettingsPreserveValues()
 {
     MockNode node;
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     const int prune = model.pruneSizeGB();
     const int mempool = model.maxMempoolSizeMB();
     const int cache = model.dbcacheSizeMiB();
@@ -714,14 +728,21 @@ void OptionsModelTests::invalidIntegerSettingsPreserveValues()
     QCOMPARE(model.maxMempoolSizeMB(), mempool);
     QCOMPARE(model.dbcacheSizeMiB(), cache);
     QCOMPARE(model.scriptThreads(), threads);
-    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(!model.settingsPending());
+    QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     QVERIFY(!model.restartRequired());
 }
 
 void OptionsModelTests::databaseCacheErrorsShowMinimumGuidance()
 {
     MockNode node;
-    OptionsQmlModel model(node);
+    ArgsManager model_args;
+    QTemporaryDir model_settings_dir;
+    QVERIFY(model_settings_dir.isValid());
+    PrepareRuntimePersistence(node, model_args, model_settings_dir);
+    OptionsQmlModel model(node, model_args);
+    QTRY_VERIFY(model.settingsReady());
+    QTRY_VERIFY(!model.settingsPending());
     const int initial = model.dbcacheSizeMiB();
     const QString guidance = QStringLiteral("Enter a whole number of at least %1 MiB.").arg(model.minDbcacheSizeMiB());
     const QStringList invalid{
@@ -733,8 +754,10 @@ void OptionsModelTests::databaseCacheErrorsShowMinimumGuidance()
         QCOMPARE(model.commitDbcacheSizeMiB(text, "en_US"), guidance);
         QCOMPARE(model.dbcacheSizeMiB(), initial);
     }
-    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(!model.settingsPending());
+    QVERIFY(!QFile::exists(model_settings_dir.filePath(QStringLiteral("runtime-settings.json"))));
     QVERIFY(model.commitDbcacheSizeMiB(QString::number(model.maxDbcacheSizeMiB()), "en_US").isEmpty());
+    QTRY_VERIFY(!model.settingsPending());
     QCOMPARE(model.dbcacheSizeMiB(), model.maxDbcacheSizeMiB());
 }
 
@@ -768,6 +791,7 @@ void OptionsModelTests::onboardingStorageEditsRestoreExactTarget()
     conf.close();
     const auto argv = TestArgvWithDataDir(data_dir.path());
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QTRY_VERIFY(!model.storageCheckPending());
     QVERIFY(model.keepingCurrentStorage());
     model.setPrune(true);
@@ -798,6 +822,7 @@ void OptionsModelTests::onboardingIntegerCommitPreservesLimits()
     QVERIFY(conf.write("prune=4096\n") > 0);
     conf.close();
     OnboardingOptionsModel model(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QTRY_VERIFY(!model.storageCheckPending());
     QVERIFY(model.previewError().isEmpty());
     const int initial = model.pruneSizeGB();
@@ -1248,6 +1273,7 @@ void OptionsModelTests::onboardingRemembersCustomDataDir()
     QVERIFY(initial_dir.isValid());
     QVERIFY(chosen_dir.isValid());
     OnboardingOptionsModel model(TestArgvWithDataDir(initial_dir.path()), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.dataDir(), initial_dir.path());
     QCOMPARE(model.customDataDir(), initial_dir.path());
     QSignalSpy custom_changed(&model, &OnboardingOptionsModel::customDataDirStringChanged);
@@ -1257,14 +1283,17 @@ void OptionsModelTests::onboardingRemembersCustomDataDir()
     QCOMPARE(model.customDataDir(), initial_dir.path());
     QCOMPARE(custom_changed.size(), 0);
     QVERIFY(model.selectCustomDataDir(model.customDataDir()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.dataDir(), initial_dir.path());
 
     QVERIFY(model.selectCustomDataDir(chosen_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(custom_changed.size(), 1);
     model.useDefaultDataDir();
     QCOMPARE(model.customDataDir(), chosen_dir.path());
     QCOMPARE(custom_changed.size(), 1);
     QVERIFY(model.selectCustomDataDir(model.customDataDir()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.dataDir(), chosen_dir.path());
 }
 
@@ -2199,6 +2228,7 @@ void OptionsModelTests::asynchronousOnboardingPreparation()
         QVERIFY(QTest::qWaitFor([&] { return drained; }, 5000));
     });
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     if (outcome == "settings-error") {
         QVERIFY(QDir().mkpath(data_dir.filePath("regtest/settings.json")));
     }
@@ -2410,6 +2440,7 @@ void OptionsModelTests::onboardingKeepCurrentStoragePreservesSetting()
 
     const auto argv = TestArgvWithDataDir(data_dir.path());
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY2(model.previewError().isEmpty(), qPrintable(model.previewError()));
     QVERIFY(model.existingProfile());
     QVERIFY(model.keepingCurrentStorage());
@@ -2479,6 +2510,7 @@ void OptionsModelTests::onboardingResetStorageUsesConfiguration()
     auto argv = TestArgvWithDataDir(data_dir.path());
     argv.emplace_back("-resetguisettings");
     OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     const int expected_target = std::max(0, config_target);
     QVERIFY2(model.previewError().isEmpty(), qPrintable(model.previewError()));
     QVERIFY(model.existingProfile());
@@ -2520,19 +2552,24 @@ void OptionsModelTests::onboardingStorageChoiceResetsForAnotherDirectory()
     second_conf.close();
 
     OnboardingOptionsModel model(TestArgv(), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(model.selectCustomDataDir(first_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.currentPruneTargetMiB(), 4096);
     model.selectStorage(false, 2);
     QVERIFY(!model.keepingCurrentStorage());
     QVERIFY(model.selectCustomDataDir(second_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.currentPruneTargetMiB(), 1);
     QVERIFY(model.keepingCurrentStorage());
     QVERIFY(!model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
     QVERIFY(model.selectCustomDataDir(first_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QCOMPARE(model.currentPruneTargetMiB(), 4096);
     QCOMPARE(model.pruneSizeGB(), 5);
     QVERIFY(model.keepingCurrentStorage());
     QVERIFY(model.selectCustomDataDir(fresh_dir.path()));
+    QTRY_VERIFY(!model.validationPending());
     QVERIFY(!model.existingProfile());
     QVERIFY(!model.keepingCurrentStorage());
     QCOMPARE(model.currentPruneTargetMiB(), 0);
@@ -2552,6 +2589,7 @@ void OptionsModelTests::onboardingStorageDefaultsToFullWithoutInspectingBlockInd
     current.close();
 
     OnboardingOptionsModel model(TestArgvWithDataDir(data_dir.path()), /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.validationPending());
     QTRY_VERIFY(!model.storageCheckPending());
     QVERIFY2(model.storageErrorText().isEmpty(), qPrintable(model.storageErrorText()));
     QVERIFY(model.existingProfile());

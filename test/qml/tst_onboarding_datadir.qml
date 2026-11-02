@@ -739,6 +739,51 @@ TestCase {
         compare(page.customStorageAmount, data.amount)
     }
 
+    function test_native_storage_selection_uses_the_model_data() {
+        return [
+            { tag: "exact-reduced", target: 1907, amount: 2, current: true },
+            { tag: "exact-custom", target: 6675, amount: 7, current: true },
+            { tag: "rounded-reduced", target: 1908, amount: 3, current: false },
+            { tag: "rounded-custom", target: 4096, amount: 5, current: false }
+        ]
+    }
+
+    function test_native_storage_selection_uses_the_model(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const page = createTemporaryObject(storageOptions, this, {
+            customStorage: true, customStorageAmount: data.amount
+        })
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        const custom = findChild(page, "storageCustomOption")
+        function activate(button) {
+            button.forceActiveFocus()
+            verify(button.activeFocus)
+            keyClick(Qt.Key_Space)
+        }
+
+        compare(reduce.checked, true)
+        compare(custom.checked, false)
+        activate(custom)
+        compare(optionsModel.keepingCurrentStorage, data.current)
+        compare(reduce.checked, data.current)
+        compare(custom.checked, !data.current)
+        compare(full.checked, false)
+        compare(page.customStorageAmount, data.amount)
+
+        activate(full)
+        compare(full.checked, true)
+        activate(reduce)
+        compare(reduce.checked, true)
+        compare(optionsModel.keepingCurrentStorage, true)
+        activate(custom)
+        compare(optionsModel.keepingCurrentStorage, data.current)
+        compare(reduce.checked, data.current)
+        compare(custom.checked, !data.current)
+        compare(page.customStorageAmount, data.amount)
+    }
+
     function test_existing_pruned_profile_can_switch_with_limited_free_space() {
         optionsModel.setCurrentStorageForTest(4096)
         optionsModel.setStorageStatusForTest(false, 5, "", "")

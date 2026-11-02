@@ -68,7 +68,9 @@ ColumnLayout {
             : qsTr("Uses about %1GB with older data pruned, suitable for regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
         recommended: !root.existingProfile && root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
-        checked: root.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
+        // Read the model notification directly to restore native button toggles even
+        // when selecting the same target keeps the derived current-setting value.
+        checked: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
             : root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
                 && !(root.existingProfile && root.currentPruneTargetMiB > 0)
         onClicked: {
@@ -86,7 +88,7 @@ ColumnLayout {
         ButtonGroup.group: group
         surfaceSelectionStyle: true
         text: qsTr("Store all data")
-        checked: root.keepingCurrentStorage ? root.currentPruneTargetMiB === 0 : !root.pruneSetting.enabled
+        checked: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB === 0 : !root.pruneSetting.enabled
         badgeText: root.existingProfile && root.currentPruneTargetMiB === 0
             ? qsTr("Your current setting") : recommended ? qsTr("Recommended") : ""
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
@@ -115,7 +117,7 @@ ColumnLayout {
             objectName: "storageCustomOption"
             ButtonGroup.group: group
             surfaceSelectionStyle: true
-            checked: !root.keepingCurrentStorage && root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
+            checked: !(root.existingProfile && root.settingsModel.keepingCurrentStorage) && root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
             text: qsTr("Custom")
             description: qsTr("Storing recent blocks up to %1 GB. Uses about %2 GB in total.")
                 .arg(root.effectiveCustomStorageAmount).arg(root.customRequiredGB)
