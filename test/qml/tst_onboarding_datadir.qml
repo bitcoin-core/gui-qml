@@ -95,6 +95,8 @@ TestCase {
         optionsModel.existingProfile = false
         optionsModel.prune = true
         optionsModel.pruneSizeGB = 2
+        optionsModel.useDefaultDataDir()
+        optionsModel.setCustomDataDirString("")
         optionsModel.setStorageStatusForTest(false, 123, "", "")
     }
 
@@ -401,21 +403,51 @@ TestCase {
         compare(defaultOption.checked, true)
         compare(customOption.checked, false)
         compare(customOption.customDir, "")
-
         defaultOption.clicked()
-        wait(0)
-
         optionsModel.selectCustomDataDir("/tmp/probe-custom")
-        wait(0)
         compare(defaultOption.checked, false)
         compare(customOption.checked, true)
         compare(customOption.customDir, "/tmp/probe-custom")
-
-        optionsModel.useDefaultDataDir()
-        wait(0)
+        defaultOption.clicked()
         compare(defaultOption.checked, true)
         compare(customOption.checked, false)
-        compare(customOption.customDir, "")
+        compare(customOption.customDir, "/tmp/probe-custom")
+        const dialog = findChild(page, "customDataDirFolderDialog")
+        customOption.clicked()
+        compare(optionsModel.dataDir, "/tmp/probe-custom")
+        compare(customOption.checked, true)
+        compare(dialog.visible, false)
+    }
+
+    function test_choose_location_preserves_selection_on_cancel_data() {
+        return [{ tag: "default", useDefault: true }, { tag: "custom", useDefault: false }]
+    }
+
+    function test_choose_location_preserves_selection_on_cancel(data) {
+        optionsModel.selectCustomDataDir("/tmp/remembered")
+        if (data.useDefault) optionsModel.useDefaultDataDir()
+        const page = createTemporaryObject(storageLocations, this)
+        const button = findChild(page, "onboardingChooseLocationButton")
+        const dialog = findChild(page, "customDataDirFolderDialog")
+        const previous = optionsModel.dataDir
+        button.clicked()
+        compare(dialog.visible, true)
+        dialog.close()
+        dialog.rejected()
+        compare(optionsModel.dataDir, previous)
+        compare(findChild(page, "storageCustomLocationOption").customDir, "/tmp/remembered")
+        button.clicked()
+        dialog.selectAndAccept("file:///tmp/new-location")
+        compare(optionsModel.dataDir, "file:///tmp/new-location")
+        compare(findChild(page, "storageCustomLocationOption").checked, true)
+        compare(findChild(page, "storageCustomLocationOption").customDir, "file:///tmp/new-location")
+    }
+
+    function test_custom_location_opens_picker_without_saved_location() {
+        const page = createTemporaryObject(storageLocations, this)
+        findChild(page, "storageCustomLocationOption").clicked()
+        compare(findChild(page, "customDataDirFolderDialog").visible, true)
+        compare(optionsModel.dataDir, optionsModel.getDefaultDataDirString)
     }
 
     function test_storage_location_shows_default_location_insufficient_storage_error() {

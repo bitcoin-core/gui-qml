@@ -2354,6 +2354,7 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
     Q_PROPERTY(int pruneSizeGB READ pruneSizeGB WRITE setPruneSizeGB NOTIFY pruneSizeGBChanged)
     Q_PROPERTY(QString dataDir MEMBER m_data_dir NOTIFY dataDirChanged)
+    Q_PROPERTY(QString customDataDir READ getCustomDataDirString NOTIFY customDataDirStringChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(int displayUnit READ displayUnit WRITE setDisplayUnit NOTIFY displayUnitChanged)
     Q_PROPERTY(QString displayUnitLabel READ displayUnitLabel NOTIFY displayUnitChanged)
@@ -2567,10 +2568,10 @@ public:
     bool storageEnoughForSelected() const { return m_storage_available_gb >= selectedStorageRequiredGB(); }
     bool storageEnoughForFull() const { return m_existing_profile ? storageEnoughForSelected() : m_storage_available_gb >= fullStorageRequiredGB(); }
     Q_INVOKABLE QString getCustomDataDirString() const { return m_custom_data_dir; }
-    Q_INVOKABLE void setCustomDataDirString(const QString& dir) { m_custom_data_dir = dir; }
+    Q_INVOKABLE void setCustomDataDirString(const QString& dir) { m_custom_data_dir = dir; Q_EMIT customDataDirStringChanged(); }
     Q_INVOKABLE void setCustomDataDirArgs(const QString& dir) { selectCustomDataDir(dir); }
     Q_INVOKABLE QString validateCustomDataDir(const QString&) const { return {}; }
-    Q_INVOKABLE bool selectCustomDataDir(const QString& dir) { m_custom_data_dir = dir; m_data_dir = dir; Q_EMIT dataDirChanged(); return true; }
+    Q_INVOKABLE bool selectCustomDataDir(const QString& dir) { setCustomDataDirString(dir); m_data_dir = dir; Q_EMIT dataDirChanged(); return true; }
     Q_INVOKABLE void useDefaultDataDir() { m_data_dir = getDefaultDataDirString(); Q_EMIT dataDirChanged(); }
     Q_INVOKABLE void setStorageStatusForTest(bool pending, int available_gb, const QString& error_text, const QString& warning_text) {
         m_storage_check_pending = pending;
@@ -2726,6 +2727,7 @@ Q_SIGNALS:
     void pruneChanged();
     void pruneSizeGBChanged();
     void dataDirChanged();
+    void customDataDirStringChanged();
     void displayUnitChanged(int unit);
     void languageChanged();
     void connectionSettingsDirtyChanged();
