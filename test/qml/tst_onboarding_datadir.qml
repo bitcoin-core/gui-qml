@@ -618,10 +618,10 @@ TestCase {
         compare(reduce.recommended, false)
         compare(full.description, "Uses about 622GB. Support the network.")
         if (data.target > 0) {
-            compare(full.errorText, "Requires downloading the full blockchain again.")
+            compare(full.errorText, "May require downloading the full blockchain again.")
             const warning = findChild(full, "optionButtonErrorText")
             verify(warning.visible)
-            compare(warning.text, "Requires downloading the full blockchain again.")
+            compare(warning.text, "May require downloading the full blockchain again.")
             compare(warning.color, Theme.color.red)
         } else {
             compare(full.errorText, "")
@@ -694,7 +694,7 @@ TestCase {
         compare(reduce.checked, true)
         compare(reduce.enabled, true)
         compare(full.enabled, true)
-        compare(full.errorText, "Requires downloading the full blockchain again.\n622GB needed; 5GB available.")
+        compare(full.errorText, "May require downloading the full blockchain again.\n622GB needed; 5GB available.")
         compare(page.primaryButtonEnabled, true)
 
         full.clicked()

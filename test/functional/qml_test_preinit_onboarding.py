@@ -545,7 +545,7 @@ def run_pruned_storage_rebuild_flow():
             gui = harness.driver
             click_to_storage_amount(gui, datadir)
             assert current_storage_option(gui) == "storageReduceOption"
-            assert "Requires downloading the full blockchain again." in gui.get_property("storageFullOption", "errorText")
+            assert "May require downloading the full blockchain again." in gui.get_property("storageFullOption", "errorText")
             gui.click("storageFullOption")
             gui.wait_for_property("storageFullOption", "checked", True)
             gui.click("onboardingStorageAmountButton")
