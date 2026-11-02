@@ -4,7 +4,7 @@
 
 #include <QtTest/QtTest>
 
-#include <qml/bitcoin.h>
+#include <qml/qmlcachepolicy.h>
 
 #include <QByteArray>
 #include <QtGlobal>

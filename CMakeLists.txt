@@ -239,30 +239,8 @@ if(ENABLE_TEST_AUTOMATION)
     qt6_import_plugins(bitcoin-core-app INCLUDE Qt6::QMinimalIntegrationPlugin)
   endif()
 endif()
-set(BITCOIN_QML_MODULE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/BitcoinCore/Gui")
-# Cachegen still consumes a module descriptor when qmldir generation is
-# disabled. Keep this build-only descriptor out of the runtime resources.
-file(GENERATE
-  OUTPUT "${BITCOIN_QML_MODULE_OUTPUT_DIRECTORY}/qmldir"
-  CONTENT "module BitcoinCore.Gui\n"
-)
-set(BITCOIN_QML_MODULE_OPTIONS)
-if(Qt6_VERSION VERSION_GREATER_EQUAL 6.3)
-  list(APPEND BITCOIN_QML_MODULE_OPTIONS NO_IMPORT_SCAN)
-endif()
-qt6_add_qml_module(bitcoin-core-app
-  URI BitcoinCore.Gui
-  VERSION 1.0
-  OUTPUT_DIRECTORY "${BITCOIN_QML_MODULE_OUTPUT_DIRECTORY}"
-  RESOURCE_PREFIX /
-  NO_RESOURCE_TARGET_PATH
-  NO_GENERATE_QMLDIR
-  NO_GENERATE_QMLTYPES
-  ${BITCOIN_QML_MODULE_OPTIONS}
-  NO_LINT
-  QML_FILES
-    ${BITCOIN_QML_FILES}
-)
+include(cmake/BitcoinQml.cmake)
+bitcoin_qml_add_application_sources(bitcoin-core-app)
 qt6_import_qml_plugins(bitcoin-core-app)
 
 if(BUILD_APP_TESTS)
