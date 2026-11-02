@@ -201,8 +201,20 @@ TestCase {
         tryCompare(view.pageContainer, "depth", 2)
         const proxyPage = view.pageContainer.currentItem
         const save = findChild(proxyPage, "proxySettingsSaveButton")
-        proxyPage.draftProxyEnabled = true
-        proxyPage.draftProxyAddress = "10.0.0.1:9050"
+        settingsWindow.requestActivate()
+        tryCompare(settingsWindow, "active", true)
+        tryCompare(view.pageContainer.stack, "busy", false)
+        mouseClick(findChild(proxyPage, "proxyEnableSwitch"))
+        tryCompare(proxyPage, "draftProxyEnabled", true)
+        const input = findChild(proxyPage, "proxyAddressInput")
+        input.forceActiveFocus()
+        tryCompare(input, "activeFocus", true)
+        input.selectAll()
+        keyClick(Qt.Key_Backspace)
+        const address = "10.0.0.1:9050"
+        for (let index = 0; index < address.length; ++index) keyClick(address.charAt(index))
+        compare(input.text, address)
+        compare(proxyPage.draftProxyAddress, address)
         verify(proxyPage.proxyDraftDirty)
         verify(save.enabled)
         view.selectSection("display")
@@ -215,14 +227,18 @@ TestCase {
         compare(save.enabled, false)
         compare(proxyPage.draftProxyAddress, "10.0.0.1:9050")
         verify(proxyPage.proxyDraftDirty)
-        view.openWalletPassword(false)
+        view.selectSection("wallet")
+        findChild(view, "walletPasswordRow").clicked()
         tryCompare(view.pageContainer, "depth", 2)
         compare(view.pageContainer.currentItem.enabled, true)
         view.selectSection("connection")
         optionsModel.settingsPending = false
         tryCompare(save, "enabled", true)
+        compare(view.pageContainer.currentItem, proxyPage)
+        compare(view.pageContainer.depth, 2)
+        compare(proxyPage.draftProxyAddress, address)
         verify(proxyPage.proxyDraftDirty)
-        save.clicked()
+        mouseClick(save)
         tryCompare(view.pageContainer, "depth", 1)
         compare(optionsModel.coreSettings.entry("proxy").address, "10.0.0.1:9050")
     }
