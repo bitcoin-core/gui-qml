@@ -553,11 +553,6 @@ y multiclave.</translation>
         <translation type="unfinished">Tamaño de caché de base de datos (MiB)</translation>
     </message>
     <message>
-        <location filename="../components/DeveloperOptions.qml" line="17"/>
-        <source>This is not a valid cache size. Please choose a value between %1 and %2 MiB.</source>
-        <translation type="unfinished">No es un tamaño de caché válido. Elige un valor entre %1 y %2 MiB.</translation>
-    </message>
-    <message>
         <location filename="../components/DeveloperOptions.qml" line="41"/>
         <source>Script verification threads</source>
         <translation type="unfinished">Hilos de verificación de scripts</translation>
@@ -1168,6 +1163,11 @@ Que los usuarios ejecuten nodos es lo que hace que bitcoin sea tan resistente y 
 </context>
 <context>
     <name>OptionsQmlModel</name>
+    <message>
+        <location filename="../models/options_model.cpp" line="317"/>
+        <source>Enter a whole number of at least %1 MiB.</source>
+        <translation>Introduce un número entero de al menos %1 MiB.</translation>
+    </message>
     <message>
         <location filename="../models/options_model.cpp" line="321"/>
         <source>The configured signer path does not exist.</source>

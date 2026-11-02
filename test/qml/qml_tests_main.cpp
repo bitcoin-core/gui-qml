@@ -2485,7 +2485,8 @@ public:
     Q_INVOKABLE QString commitDbcacheSizeMiB(const QString& text, const QString& locale_name)
     {
         const auto value = ParseLocalizedInteger(text, locale_name, m_min_dbcache_size_mib, m_max_dbcache_size_mib);
-        if (!value || !m_core_settings.canEdit(QStringLiteral("dbcache"))) return QStringLiteral("Invalid cache size.");
+        if (!m_core_settings.canEdit(QStringLiteral("dbcache"))) return QStringLiteral("This setting is set by the command line.");
+        if (!value) return QStringLiteral("Enter a whole number of at least %1 MiB.").arg(m_min_dbcache_size_mib);
         m_dbcache_size_mib = *value;
         Q_EMIT dbcacheSizeMiBChanged();
         return {};
@@ -2555,7 +2556,13 @@ public:
         setPrune(prune);
         if (prune) setPruneSizeGB(target_gb);
         m_keeping_current_storage = false;
+        restoreExactStorageSelection();
         Q_EMIT storageStatusChanged();
+    }
+    void restoreExactStorageSelection()
+    {
+        const qint64 target_mib = prune() ? qint64{pruneSizeGB()} * 1000000000 / 1024 / 1024 : 0;
+        if (m_existing_profile && target_mib == m_current_prune_target_mib) m_keeping_current_storage = true;
     }
     int storageMinimumRequiredGB() const { return m_existing_profile ? 1 : m_assumed_chainstate_size + 2; }
     int fullStorageRequiredGB() const { return m_assumed_blockchain_size + m_assumed_chainstate_size; }
@@ -2700,12 +2707,14 @@ public:
         if (m_prune != m_core_settings.prune()) {
             m_keeping_current_storage = false;
             m_prune = m_core_settings.prune();
+            restoreExactStorageSelection();
             Q_EMIT pruneChanged();
             Q_EMIT storageStatusChanged();
         }
         if (m_prune_size_gb != m_core_settings.pruneSizeGB()) {
             m_keeping_current_storage = false;
             m_prune_size_gb = m_core_settings.pruneSizeGB();
+            restoreExactStorageSelection();
             Q_EMIT pruneSizeGBChanged();
             Q_EMIT storageStatusChanged();
         }
