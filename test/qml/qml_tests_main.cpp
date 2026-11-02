@@ -40,6 +40,7 @@
 #include <qml/backendexecutor.h>
 #include <qml/bitcoinamount.h>
 #include <qml/buttonkeyactivation.h>
+#include <qml/qmlcachepolicy.h>
 #include <qml/components/blockclockdial.h>
 #include <qml/controls/linegraph.h>
 #include <qml/globalsettings.h>
@@ -4373,6 +4374,9 @@ public:
 class QmlTestsSetup : public QObject
 {
     Q_OBJECT
+
+public:
+    QmlTestsSetup() { ConfigureQmlCachePolicy(); }
 
 public Q_SLOTS:
     void applicationAvailable()
