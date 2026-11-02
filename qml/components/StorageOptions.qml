@@ -53,6 +53,7 @@ ColumnLayout {
         horizontalAlignment: Text.AlignLeft
     }
     OptionButton {
+        id: reduceOption
         objectName: "storageReduceOption"
         Layout.fillWidth: true
         surfaceSelectionStyle: true
@@ -64,7 +65,9 @@ ColumnLayout {
             : qsTr("Uses about %1GB with older data pruned, suitable for regular wallet use.").arg(root.reduceRequiredGB)
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.reduceRequiredGB)
         recommended: !root.existingProfile && root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
-        selected: root.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
+        // Read the model notification directly to restore native button toggles even
+        // when selecting the same target keeps the derived current-setting value.
+        selected: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
             : root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
                 && !(root.existingProfile && root.currentPruneTargetMiB > 0)
         onClicked: {
@@ -81,7 +84,7 @@ ColumnLayout {
         Layout.fillWidth: true
         surfaceSelectionStyle: true
         text: qsTr("Store all data")
-        selected: root.keepingCurrentStorage ? root.currentPruneTargetMiB === 0 : !root.pruneSetting.enabled
+        selected: root.existingProfile && root.settingsModel.keepingCurrentStorage ? root.currentPruneTargetMiB === 0 : !root.pruneSetting.enabled
         badgeText: root.existingProfile && root.currentPruneTargetMiB === 0
             ? qsTr("Your current setting") : recommended ? qsTr("Recommended") : ""
         description: qsTr("Uses about %1GB. Support the network.").arg(root.fullRequiredGB)
@@ -109,7 +112,10 @@ ColumnLayout {
         sourceComponent: OptionButton {
             objectName: "storageCustomOption"
             surfaceSelectionStyle: true
-            selected: !root.keepingCurrentStorage && root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
+            // The cards are exclusive: Reduce storage wins when both match.
+            selected: !reduceOption.selected
+                && !(root.existingProfile && root.settingsModel.keepingCurrentStorage)
+                && root.pruneSetting.enabled && root.pruneSetting.value === root.effectiveCustomStorageAmount
             text: qsTr("Custom")
             description: qsTr("Storing recent blocks up to %1 GB. Uses about %2 GB in total.")
                 .arg(root.effectiveCustomStorageAmount).arg(root.customRequiredGB)
