@@ -93,7 +93,7 @@ ColumnLayout {
         enabled: root.storageOptionsEditable && root.hasEnoughStorage(root.fullRequiredGB)
         recommended: !root.existingProfile && root.storageOptionsEditable && root.settingsModel.storageEnoughForFull
         errorText: root.existingProfile && root.currentPruneTargetMiB > 0
-            ? qsTr("Requires downloading the full blockchain again.")
+            ? qsTr("May require downloading the full blockchain again.")
                 + (root.hasStorageResult && root.availableGB < root.fullRequiredGB
                     ? "\n" + qsTr("%1GB needed; %2GB available.").arg(root.fullRequiredGB).arg(root.availableGB)
                     : "")
