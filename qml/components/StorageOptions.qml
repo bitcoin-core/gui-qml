@@ -30,8 +30,11 @@ ColumnLayout {
     readonly property bool existingProfile: root.settingsModel.existingProfile || false
     readonly property bool keepingCurrentStorage: root.existingProfile && root.settingsModel.keepingCurrentStorage
     readonly property real currentPruneTargetMiB: root.existingProfile ? root.settingsModel.currentPruneTargetMiB : 0
-    readonly property bool showCustomOption: root.customStorage || (!root.keepingCurrentStorage && root.pruneSetting.enabled && root.pruneSetting.value !== root.reducedStorageTargetGB)
-    readonly property int effectiveCustomStorageAmount: root.customStorage ? root.customStorageAmount : root.pruneSetting.value
+    readonly property bool showCustomOption: root.customStorage || (!root.keepingCurrentStorage && root.pruneSetting.enabled
+        && ((root.existingProfile && root.currentPruneTargetMiB > 0) || root.pruneSetting.value !== root.reducedStorageTargetGB))
+    readonly property int effectiveCustomStorageAmount: root.existingProfile && root.currentPruneTargetMiB > 0
+        && !root.keepingCurrentStorage && root.pruneSetting.enabled
+        ? root.pruneSetting.value : root.customStorage ? root.customStorageAmount : root.pruneSetting.value
     readonly property int customRequiredGB: root.effectiveCustomStorageAmount + root.assumedChainstateSize
 
     function hasEnoughStorage(requiredGB) {
@@ -67,7 +70,7 @@ ColumnLayout {
         recommended: !root.existingProfile && root.storageOptionsEditable && !root.settingsModel.storageEnoughForFull && root.hasEnoughStorage(root.reduceRequiredGB)
         checked: root.keepingCurrentStorage ? root.currentPruneTargetMiB > 0
             : root.pruneSetting.enabled && root.pruneSetting.value === root.reducedStorageTargetGB
-                && !(root.existingProfile && root.currentPruneTargetMiB > 0 && root.showCustomOption)
+                && !(root.existingProfile && root.currentPruneTargetMiB > 0)
         onClicked: {
             root.storageSelectionChanged(root.showCustomOption, root.effectiveCustomStorageAmount)
             if (root.existingProfile && root.currentPruneTargetMiB > 0) {
