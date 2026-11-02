@@ -122,6 +122,10 @@ TestCase {
         optionsModel.settingsReady = true
         optionsModel.settingsPending = false
         optionsModel.settingsError = ""
+        optionsModel.holdSignerPathValidationForTest = false
+        optionsModel.finishSignerPathValidationForTest("")
+        optionsModel.externalSignerPath = ""
+        optionsModel.walletSettingsDirty = false
         optionsModel.displayUnit = 0
         optionsModel.moneyFontChoice = "embedded"
         optionsModel.maxMempoolSizeMB = 300
@@ -148,13 +152,105 @@ TestCase {
         const status = findChild(view, "settingsOperationStatus")
         verify(status !== null)
         optionsModel.settingsPending = true
-        tryCompare(view.pageContainer, "enabled", false)
+        tryCompare(view.pageContainer.currentItem, "enabled", false)
         compare(status.text, "Saving settings…")
         optionsModel.settingsError = "The settings file could not be written."
         optionsModel.settingsPending = false
-        tryCompare(view.pageContainer, "enabled", true)
+        tryCompare(view.pageContainer.currentItem, "enabled", true)
         compare(status.text, optionsModel.settingsError)
         optionsModel.settingsError = ""
+    }
+
+    function test_pendingOptionsOnlyDisableSettingsEditors_data() {
+        return [{ tag: "loading", ready: false, pending: false },
+                { tag: "saving", ready: true, pending: true }]
+    }
+
+    function test_pendingOptionsOnlyDisableSettingsEditors(data) {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        optionsModel.settingsReady = data.ready
+        optionsModel.settingsPending = data.pending
+        const editableSections = ["external-signer", "display", "window-behavior", "storage", "connection"]
+        for (const section of editableSections) {
+            view.selectSection(section)
+            compare(view.pageContainer.currentItem.enabled, false, section)
+        }
+        for (const section of ["wallet", "network-traffic", "mempool", "rpc-console", "debug-log", "about"]) {
+            view.selectSection(section)
+            compare(view.pageContainer.currentItem.enabled, true, section)
+        }
+        view.openWalletPassword(false)
+        tryCompare(view.pageContainer, "depth", 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+        view.selectSection("display")
+        compare(view.pageContainer.currentItem.enabled, false)
+        optionsModel.settingsReady = true
+        optionsModel.settingsPending = false
+        tryCompare(view.pageContainer.currentItem, "enabled", true)
+        view.selectSection("wallet")
+        compare(view.pageContainer.depth, 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+    }
+
+    function test_signerPendingDoesNotShowStaleConnectedDevice() {
+        optionsModel.externalSignerPath = "old-hwi"
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "Old device"
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer")
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "externalSignerPathInput")
+        const indicator = findChild(page, "externalSignerStatusIndicator")
+        const check = findChild(page, "externalSignerCheckDeviceButton")
+        verify(page.signerConnected)
+        const initialScans = walletController.externalSignerRefreshCalls
+        optionsModel.holdSignerPathValidationForTest = true
+        input.text = "new-hwi"
+        verify(optionsModel.signerPathValidationPending)
+        compare(page.signerConnected, false)
+        compare(page.signerStatusText, "Checking signer path…")
+        tryCompare(indicator, "color", Theme.color.neutral7)
+        compare(check.enabled, false)
+        input.editingFinished()
+        input.editingFinished()
+        compare(optionsModel.externalSignerPath, "old-hwi")
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        // Validation completes, then saving the new command completes.
+        optionsModel.settingsPending = true
+        optionsModel.finishSignerPathValidationForTest("")
+        compare(optionsModel.externalSignerPath, "new-hwi")
+        compare(page.signerConnected, false)
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        optionsModel.settingsPending = false
+        compare(walletController.externalSignerRefreshCalls, initialScans + 1)
+        compare(page.checkAfterSave, false)
+    }
+
+    function test_invalidSignerValidationAndFailedSaveDoNotRescan() {
+        optionsModel.externalSignerPath = "old-hwi"
+        walletController.canCreateExternalSignerWallet = true
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer")
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "externalSignerPathInput")
+        const initialScans = walletController.externalSignerRefreshCalls
+        optionsModel.holdSignerPathValidationForTest = true
+        input.text = "/missing/hwi"
+        input.editingFinished()
+        optionsModel.finishSignerPathValidationForTest("Signer does not exist.")
+        compare(page.signerConnected, false)
+        compare(page.signerStatusText, "Signer does not exist.")
+        compare(optionsModel.externalSignerPath, "old-hwi")
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        input.text = "new-hwi"
+        input.editingFinished()
+        optionsModel.settingsPending = true
+        optionsModel.finishSignerPathValidationForTest("")
+        optionsModel.settingsError = "Save failed."
+        optionsModel.settingsPending = false
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        compare(page.checkAfterSave, false)
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {

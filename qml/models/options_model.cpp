@@ -544,9 +544,9 @@ QString SignerPathError(const QString& normalized_path)
     const QString token = FirstCommandToken(normalized_path);
     if (token.isEmpty() || !TokenLooksLikePath(token)) return {};
     const QFileInfo info(ExpandUserPath(token));
-    if (!info.exists()) return QObject::tr("The configured signer path does not exist.");
-    if (!info.isFile()) return QObject::tr("The configured signer path is not a file.");
-    if (!info.isExecutable()) return QObject::tr("The configured signer path is not executable.");
+    if (!info.exists()) return OptionsQmlModel::tr("The configured signer path does not exist.");
+    if (!info.isFile()) return OptionsQmlModel::tr("The configured signer path is not a file.");
+    if (!info.isExecutable()) return OptionsQmlModel::tr("The configured signer path is not executable.");
     return {};
 }
 

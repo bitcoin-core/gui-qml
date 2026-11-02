@@ -24,6 +24,8 @@ Page {
     property bool showDoneButton: true
     property string selectedSectionId: ""
     property int sidebarWidth: 286
+    readonly property bool optionsEditable: typeof optionsModel === "undefined"
+        || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
     readonly property alias sidebar: sidebar
     readonly property alias pageContainer: pageContainer
     readonly property var groupTitles: ({
@@ -284,8 +286,6 @@ Page {
         SettingsPageContainer {
             id: pageContainer
             objectName: "settingsPageContainer"
-            enabled: typeof optionsModel === "undefined"
-                || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
             Layout.minimumWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -347,27 +347,27 @@ Page {
 
     Component {
         id: externalSignerPage
-        SettingsPages.ExternalSignerSettingsPage {}
+        SettingsPages.ExternalSignerSettingsPage { enabled: root.optionsEditable }
     }
 
     Component {
         id: displayPage
-        SettingsPages.DisplaySettingsPage {}
+        SettingsPages.DisplaySettingsPage { enabled: root.optionsEditable }
     }
 
     Component {
         id: windowBehaviorPage
-        SettingsPages.WindowBehaviorSettingsPage {}
+        SettingsPages.WindowBehaviorSettingsPage { enabled: root.optionsEditable }
     }
 
     Component {
         id: storagePage
-        SettingsPages.StorageSettingsPage {}
+        SettingsPages.StorageSettingsPage { enabled: root.optionsEditable }
     }
 
     Component {
         id: connectionPage
-        SettingsPages.ConnectionSettingsPage {}
+        SettingsPages.ConnectionSettingsPage { enabled: root.optionsEditable }
     }
 
     Component {

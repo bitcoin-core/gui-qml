@@ -9,12 +9,14 @@
 #include <util/translation.h>
 
 #include <QDir>
+#include <QFile>
 #include <QSemaphore>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QTranslator>
 #include <QtTest/QtTest>
 
 #include <atomic>
@@ -226,6 +228,48 @@ private Q_SLOTS:
         QCOMPARE(model.natpmp(), initial);
         QVERIFY(model.settingsError().isEmpty());
         QVERIFY(!model.restartRequired());
+    }
+
+    void signerErrorsKeepSpanishTranslations_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("missing") << QStringLiteral("missing") << QStringLiteral("La ruta configurada del firmante no existe.");
+        QTest::newRow("directory") << QStringLiteral("directory") << QStringLiteral("La ruta configurada del firmante no es un archivo.");
+        QTest::newRow("not-executable") << QStringLiteral("not-executable") << QStringLiteral("La ruta configurada del firmante no es ejecutable.");
+    }
+
+    void signerErrorsKeepSpanishTranslations()
+    {
+        QFETCH(QString, kind);
+        QFETCH(QString, expected);
+        Q_INIT_RESOURCE(qml_gui_translations);
+        QTranslator translator;
+        QVERIFY(translator.load(QStringLiteral(":/translations/bitcoin_qml_es.qm")));
+        QVERIFY(QCoreApplication::installTranslator(&translator));
+        struct RemoveTranslator {
+            QTranslator& translator;
+            ~RemoveTranslator() { QCoreApplication::removeTranslator(&translator); }
+        } remove_translator{translator};
+        Fixture fixture;
+        const QString path = fixture.directory.filePath(kind);
+        if (kind == QStringLiteral("directory")) {
+            QVERIFY(QDir().mkpath(path));
+        } else if (kind == QStringLiteral("not-executable")) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.close();
+            QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+        }
+        OptionsQmlModel model(fixture.node, fixture.args);
+        QTRY_VERIFY(model.settingsReady());
+        model.requestExternalSignerPathValidation(path);
+        QTRY_VERIFY(!model.signerPathValidationPending());
+        QCOMPARE(model.signerPathError(), expected);
+        model.setExternalSignerPath(path);
+        QTRY_VERIFY(!model.settingsPending());
+        QCOMPARE(model.settingsError(), expected);
+        QVERIFY(model.externalSignerPath().isEmpty());
     }
 
     void signerValidationAndDataDirectoryReturnOwnedResults()

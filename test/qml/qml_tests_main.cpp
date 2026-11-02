@@ -1843,7 +1843,9 @@ public:
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
-    Q_INVOKABLE void refreshExternalSignerStatus() { Q_EMIT externalSignerStatusChanged(); }
+    Q_PROPERTY(int externalSignerRefreshCalls MEMBER m_external_signer_refresh_calls NOTIFY externalSignerStatusChanged)
+    int m_external_signer_refresh_calls{0};
+    Q_INVOKABLE void refreshExternalSignerStatus() { ++m_external_signer_refresh_calls; Q_EMIT externalSignerStatusChanged(); }
     Q_INVOKABLE void clearWalletLoadStatus()
     {
         m_wallet_load_error.clear();
@@ -1953,6 +1955,7 @@ public:
         clearWalletMigrationStatus();
         m_last_imported_wallet_name.clear();
         m_last_imported_wallet_key_scheme.clear();
+        m_external_signer_refresh_calls = 0;
         m_can_create_external_signer_wallet = false;
         m_external_signer_name.clear();
         m_external_signer_error.clear();
@@ -2292,6 +2295,7 @@ class MockOptionsModel : public QObject
     Q_PROPERTY(bool settingsPending MEMBER m_settings_pending NOTIFY settingsPendingChanged)
     Q_PROPERTY(QString settingsError MEMBER m_settings_error NOTIFY settingsErrorChanged)
     Q_PROPERTY(bool validationPending MEMBER m_validation_pending NOTIFY validationPendingChanged)
+    Q_PROPERTY(bool signerPathValidationPending MEMBER m_signer_path_validation_pending NOTIFY signerPathValidationChanged)
     Q_PROPERTY(QString signerPathError MEMBER m_signer_path_error NOTIFY signerPathValidationChanged)
     Q_PROPERTY(bool listen READ listen WRITE setListen NOTIFY listenChanged)
     Q_PROPERTY(bool natpmp READ natpmp WRITE setNatpmp NOTIFY natpmpChanged)
@@ -2351,8 +2355,22 @@ public:
     bool m_settings_pending{false};
     bool m_validation_pending{false};
     QString m_settings_error;
+    bool m_signer_path_validation_pending{false};
     QString m_signer_path_error;
-    Q_INVOKABLE void requestExternalSignerPathValidation(const QString&) {}
+    Q_PROPERTY(bool holdSignerPathValidationForTest MEMBER m_hold_signer_validation)
+    bool m_hold_signer_validation{false};
+    Q_INVOKABLE void requestExternalSignerPathValidation(const QString&)
+    {
+        m_signer_path_validation_pending = m_hold_signer_validation;
+        m_signer_path_error.clear();
+        Q_EMIT signerPathValidationChanged();
+    }
+    Q_INVOKABLE void finishSignerPathValidationForTest(const QString& error)
+    {
+        m_signer_path_validation_pending = false;
+        m_signer_path_error = error;
+        Q_EMIT signerPathValidationChanged();
+    }
     bool m_listen{true};
     bool m_natpmp{false};
     bool m_server{false};
