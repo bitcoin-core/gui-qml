@@ -107,6 +107,7 @@ private Q_SLOTS:
     void customDataDirValidationRejectsFile();
     void customDataDirSelectionCreatesDirectoryAndPersists();
     void customDataDirSelectionPreservesExistingWalletDiscovery();
+    void onboardingRemembersCustomDataDir();
     void guiDataDirSettingSoftSetsCustomPath();
     void guiDataDirSettingAbsolutizesSavedRelativePath();
     void guiDataDirSettingPreservesExistingWalletDiscovery();
@@ -1164,6 +1165,34 @@ void OptionsModelTests::proxyDisabledPreservesPreviousValue()
     QCOMPARE(previous_write.get_str(), std::string{"127.0.0.1:9050"});
     const auto proxy_write = ReadRwSetting(model_args, "proxy");
     QVERIFY(proxy_write.isNull());
+}
+
+void OptionsModelTests::onboardingRemembersCustomDataDir()
+{
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir initial_dir;
+    QTemporaryDir chosen_dir;
+    QVERIFY(initial_dir.isValid());
+    QVERIFY(chosen_dir.isValid());
+    OnboardingOptionsModel model(TestArgvWithDataDir(initial_dir.path()), /*can_listen_ipc=*/false);
+    QCOMPARE(model.dataDir(), initial_dir.path());
+    QCOMPARE(model.customDataDir(), initial_dir.path());
+    QSignalSpy custom_changed(&model, &OnboardingOptionsModel::customDataDirStringChanged);
+
+    model.useDefaultDataDir();
+    QCOMPARE(model.dataDir(), model.getDefaultDataDirString());
+    QCOMPARE(model.customDataDir(), initial_dir.path());
+    QCOMPARE(custom_changed.size(), 0);
+    QVERIFY(model.selectCustomDataDir(model.customDataDir()));
+    QCOMPARE(model.dataDir(), initial_dir.path());
+
+    QVERIFY(model.selectCustomDataDir(chosen_dir.path()));
+    QCOMPARE(custom_changed.size(), 1);
+    model.useDefaultDataDir();
+    QCOMPARE(model.customDataDir(), chosen_dir.path());
+    QCOMPARE(custom_changed.size(), 1);
+    QVERIFY(model.selectCustomDataDir(model.customDataDir()));
+    QCOMPARE(model.dataDir(), chosen_dir.path());
 }
 
 void OptionsModelTests::customDataDirValidationRejectsFile()

@@ -77,10 +77,24 @@ ColumnLayout {
         surfaceSelectionStyle: true
         text: qsTr("Custom")
         description: root.locationDescription(qsTr("Choose the directory and storage device."), checked)
-        customDir: checked && root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString ? root.settingsModel.dataDir : ""
+        customDir: root.settingsModel.customDataDir
         checked: root.settingsModel.dataDir !== root.settingsModel.getDefaultDataDirString
         errorText: checked ? root.selectedLocationStorageError : ""
         showErrorText: checked && root.selectedLocationStorageError.length > 0
+        onClicked: {
+            if (root.settingsModel.customDataDir.length > 0) {
+                root.validationError = root.settingsModel.validateCustomDataDir(root.settingsModel.customDataDir)
+                if (root.validationError === "") root.settingsModel.selectCustomDataDir(root.settingsModel.customDataDir)
+            } else {
+                folderDialog.open()
+            }
+        }
+    }
+    LinkButton {
+        objectName: "onboardingChooseLocationButton"
+        Layout.alignment: Qt.AlignHCenter
+        Layout.topMargin: 6
+        text: qsTr("Choose location…")
         onClicked: folderDialog.open()
     }
     AppFolderDialog {
