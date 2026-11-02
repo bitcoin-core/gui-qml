@@ -9,6 +9,7 @@
 #include <txdb.h>
 #include <common/settings.h>
 #include <node/caches.h>
+#include <node/chainstatemanager_args.h>
 #include <kernel/mempool_options.h>
 #include <common/system.h>
 #include <policy/policy.h>

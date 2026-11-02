@@ -1185,9 +1185,8 @@ TestCase {
                 verify(versionValue !== null)
                 compare(versionValue.text, BuildInfo.fullClientVersion)
                 verify(versionValue.text.length > 0)
-                // Version opens an external URL, so it carries the external-link
-                // icon like the other About links, not the in-app chevron.
-                compare(versionRow.linkIconSource.toString(), "image://images/export")
+                // Version is a read-only value.
+                compare(versionRow.activeFocusOnTab, false)
                 compare(versionRow.showsDisclosureIndicator, false)
             }
         }

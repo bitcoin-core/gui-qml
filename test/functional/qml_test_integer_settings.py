@@ -27,6 +27,7 @@ def open_settings(gui, section):
 
 
 def type_integer(gui, field, text):
+    gui.wait_for_property("settingsView", "optionsEditable", True, timeout_ms=10000)
     gui.set_text(field, "")
     gui.type_text(field, text)
     assert gui.get_text(field) == text
@@ -53,13 +54,16 @@ def run_tests():
         gui.click("settingsSidebar_mempool")
         type_integer(gui, "mempoolSizeLimitInput", "10,000")
         gui.type_text("mempoolSizeLimitInput", "\n")
+        gui.wait_for_property("settingsView", "optionsEditable", True, timeout_ms=10000)
         gui.click("settingsSidebar_about")
         gui.click("aboutDeveloperRow")
         gui.wait_for_page("developerDbcacheField")
         type_integer(gui, "developerDbcacheField", "1,000")
         gui.type_text("developerDbcacheField", "\n")
+        gui.wait_for_property("settingsView", "optionsEditable", True, timeout_ms=10000)
         type_integer(gui, "developerScriptThreadsField", "-1")
         gui.type_text("developerScriptThreadsField", "\n")
+        gui.wait_for_property("settingsView", "optionsEditable", True, timeout_ms=10000)
         settings_path = Path(harness.datadir) / "regtest/settings.json"
         settings = json.loads(settings_path.read_text())
         assert int(settings["prune"]) == 953674, settings
@@ -78,6 +82,7 @@ def run_tests():
         assert gui.get_text("mempoolSizeLimitInput") == "10000"
         type_integer(gui, "mempoolSizeLimitInput", "1,00")
         gui.type_text("mempoolSizeLimitInput", "\n")
+        gui.wait_for_property("settingsView", "optionsEditable", True, timeout_ms=10000)
         assert gui.get_property("mempoolSettingsPage", "mempoolSizeError")
         assert json.loads(settings_path.read_text()) == settings
         gui.click("settingsSidebar_about")
