@@ -549,7 +549,9 @@ def run_first_reset_onboarding(tmpdir, custom_datadir):
         assert "fReset=false" in settings_text, settings_text
 
         settings = load_settings(custom_datadir)
-        assert "listen" not in settings, settings
+        # Turning listening off before enabling the proxy is an explicit
+        # choice that must survive removing the proxy on a later launch.
+        assert settings.get("listen") is False, settings
         assert "natpmp" not in settings, settings
         assert settings.get("server") is True, settings
         assert settings.get("proxy") == "10.0.0.1:9050", settings

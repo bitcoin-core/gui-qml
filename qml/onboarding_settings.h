@@ -118,6 +118,7 @@ struct OnboardingStartupStatus {
 
 bool PrepareArgs(ArgsManager& args, const std::vector<std::string>& argv, bool can_listen_ipc, std::string& error);
 bool CaptureSettingsFileBackup(ArgsManager& args, SettingsFileBackup& backup, QString* error = nullptr);
+bool PrepareSettingsDirectory(const PendingApply& pending, QString* error = nullptr);
 GuiSettingsStore CurrentGuiSettingsStore();
 OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::string>& argv, bool can_listen_ipc);
 PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc, const DataDirSelection& data_dir);

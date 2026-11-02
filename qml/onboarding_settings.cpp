@@ -21,6 +21,7 @@
 #include <univalue.h>
 #include <util/fs.h>
 #include <util/fs_helpers.h>
+#include <util/log.h>
 #include <wallet/db.h>
 
 #include <QDir>
@@ -31,6 +32,7 @@
 #include <QSettings>
 #include <QVariantMap>
 
+#include <fstream>
 #include <map>
 #include <memory>
 #include <optional>
@@ -40,6 +42,12 @@
 
 namespace {
 constexpr const char* QML_ONBOARDED_KEY{"qml_onboarded"};
+
+class PreviewArgsManager : public ArgsManager
+{
+public:
+    using ArgsManager::ReadConfigStream;
+};
 
 bool HasExplicitDataDirArg(const ArgsManager& args)
 {
@@ -221,7 +229,7 @@ struct ReadOnlyProfileResult {
     bool settings_file_unreadable{false};
 };
 
-bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QString* error)
+bool ReadResolvedProfileImpl(ArgsManager& args, ReadOnlyProfileResult& result, QString* error)
 {
     result = {};
     if (!ReadConfigAndSelectNetwork(args, error)) return false;
@@ -254,6 +262,92 @@ bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QStri
                 *error = QString::fromStdString(settings_errors.front());
             }
         }
+        return false;
+    }
+    if (error) error->clear();
+    return true;
+}
+
+bool ReadResolvedProfile(ArgsManager& args, ReadOnlyProfileResult& result, QString* error)
+{
+    try {
+        return ReadResolvedProfileImpl(args, result, error);
+    } catch (const std::exception& e) {
+        if (error) *error = QString::fromStdString(e.what());
+        return false;
+    }
+}
+
+// Core's ReadConfigFiles requires an existing -datadir. Preview must not
+// create a selected directory, but an absolute -conf still applies to it.
+bool ReadConfigForNewDataDir(PreviewArgsManager& args, const QString& data_dir, QString* error)
+{
+    const fs::path config_path{args.GetPathArg("-conf")};
+    if (!config_path.is_absolute()) {
+        args.SelectConfigNetwork(args.GetChainTypeString());
+        return true;
+    }
+
+    const auto read_file = [&](const fs::path& path) {
+        if (fs::is_directory(path)) {
+            if (error) {
+                //: Startup error shown when an onboarding configuration path names a directory. %1 is the path.
+                *error = QObject::tr("Configuration path %1 is a directory.").arg(QString::fromStdString(fs::PathToString(path)));
+            }
+            return false;
+        }
+        std::ifstream stream{path.std_path()};
+        std::string config_error;
+        if (!stream.good() || !args.ReadConfigStream(stream, fs::PathToString(path), config_error, /*ignore_invalid_keys=*/true)) {
+            if (error) {
+                //: Startup error shown when an onboarding configuration file cannot be opened. %1 is the file path.
+                *error = config_error.empty()
+                    ? QObject::tr("Configuration file %1 could not be read.").arg(QString::fromStdString(fs::PathToString(path)))
+                    : QString::fromStdString(config_error);
+            }
+            return false;
+        }
+        return true;
+    };
+
+    try {
+        args.SetConfigFilePath(config_path);
+        if (!read_file(config_path)) return false;
+        bool use_includes{true};
+        args.LockSettings([&](const common::Settings& settings) {
+            if (const auto* values = common::FindKey(settings.command_line_options, "includeconf")) {
+                use_includes = !common::SettingsSpan(*values).last_negated();
+            }
+        });
+        if (use_includes) {
+            std::vector<fs::path> includes;
+            const std::string chain{args.GetChainTypeString()};
+            args.LockSettings([&](const common::Settings& settings) {
+                for (const std::string& section : {chain, std::string{}}) {
+                    if (const auto* values = common::FindKey(settings.ro_config, section)) {
+                        if (const auto* files = common::FindKey(*values, "includeconf")) {
+                            for (size_t i = common::SettingsSpan(*files).negated(); i < files->size(); ++i) {
+                                fs::path include{fs::PathFromString((*files)[i].get_str())};
+                                // A relative include may leave the not-yet-created
+                                // directory (../shared.conf). Resolve that virtual
+                                // part without changing existing parent symlinks.
+                                if (!include.is_absolute()) {
+                                    include = fs::weakly_canonical(fsbridge::AbsPathJoin(QmlDataDir::QStringToPath(data_dir), include));
+                                }
+                                includes.push_back(std::move(include));
+                            }
+                        }
+                    }
+                }
+            });
+            for (const fs::path& path : includes) {
+                if (!read_file(path)) return false;
+            }
+        }
+        CreateChainParams(args, args.GetChainType());
+        args.SelectConfigNetwork(args.GetChainTypeString());
+    } catch (const std::exception& e) {
+        if (error) *error = QString::fromStdString(e.what());
         return false;
     }
     if (error) error->clear();
@@ -647,6 +741,16 @@ bool ApplyPendingCoreSettings(ArgsManager& args, const QmlOnboardingSettings::Pe
     }
     recompute_interactions();
     settings_written = write_setting(QStringLiteral("listen")) && settings_written;
+    // A touched listen=false is a user choice even when enabling a proxy
+    // also forces listening off for this startup.
+    if (pending.touched_settings.contains(QStringLiteral("listen")) &&
+        QmlCoreSettings::CanEditCoreSetting(args, QStringLiteral("listen"))) {
+        args.LockSettings([&](common::Settings& settings) {
+            if (settings.forced_settings.contains("listen")) {
+                settings.rw_settings["listen"] = common::SettingsValue{pending.values.listen};
+            }
+        });
+    }
     recompute_interactions();
     settings_written = write_setting(QStringLiteral("natpmp")) && settings_written;
     RestoreForcedSettings(args, original_forced_settings);
@@ -671,10 +775,10 @@ bool SameOptionalPath(const QString& left, const QString& right)
 
 QString SettingsPathString(ArgsManager& args)
 {
-    fs::path settings_path;
-    if (!args.GetSettingsPath(&settings_path)) return {};
+    const auto settings_path = PreviewSettingsPath(args);
+    if (!settings_path) return {};
     return QmlDataDir::NormalizeLocalPath(
-        QString::fromStdString(fs::PathToString(settings_path)));
+        QString::fromStdString(fs::PathToString(*settings_path)));
 }
 
 QString SettingsPathForNewDataDir(ArgsManager& args, const QString& data_dir)
@@ -683,9 +787,7 @@ QString SettingsPathForNewDataDir(ArgsManager& args, const QString& data_dir)
     if (settings.empty()) return {};
 
     fs::path network_data_dir{QmlDataDir::QStringToPath(data_dir)};
-    if (!BaseParams().DataDir().empty()) {
-        network_data_dir /= fs::PathFromString(BaseParams().DataDir());
-    }
+    network_data_dir /= fs::PathFromString(CreateBaseChainParams(args, args.GetChainType())->DataDir());
     return QmlDataDir::NormalizeLocalPath(
         QString::fromStdString(
             fs::PathToString(fsbridge::AbsPathJoin(network_data_dir, settings))));
@@ -809,7 +911,22 @@ bool CaptureSettingsFileBackup(ArgsManager& args, SettingsFileBackup& backup, QS
         backup = {};
         return false;
     }
-    return true;
+    // InitConfig overwrites an unreadable file as soon as its error callback
+    // accepts Reset. Persist the original bytes before accepting that choice.
+    return BackupSettingsFile(args, &backup, error);
+}
+
+bool PrepareSettingsDirectory(const PendingApply& pending, QString* error)
+{
+    if (error) error->clear();
+    if (pending.resolved_settings_path.isEmpty()) return true;
+    const QString parent{QFileInfo(pending.resolved_settings_path).absolutePath()};
+    if (QDir().mkpath(parent)) return true;
+    if (error) {
+        //: Startup error shown when onboarding cannot create the directory for a selected settings file. %1 is the directory path.
+        *error = QObject::tr("Settings directory %1 could not be created.").arg(parent);
+    }
+    return false;
 }
 
 GuiSettingsStore CurrentGuiSettingsStore()
@@ -882,6 +999,16 @@ OnboardingStartupStatus ResolveOnboardingStartupStatus(const std::vector<std::st
     ReadOnlyProfileResult profile_read;
     if (can_read_profile) {
         if (!ReadResolvedProfile(preview_args, profile_read, &read_error)) {
+            const QString configured_data_dir{QmlDataDir::NormalizeLocalPath(
+                QString::fromStdString(fs::PathToString(preview_args.GetPathArg("-datadir"))))};
+            if (!explicit_datadir && !configured_data_dir.isEmpty() &&
+                (!QFileInfo(configured_data_dir).isDir() ||
+                 !QmlDataDir::ValidateCustomDataDir(configured_data_dir).isEmpty())) {
+                SetStartupDataDirs(status, selected_data_dir, selected_data_dir_source, configured_data_dir, false);
+                status.ok = true;
+                status.should_show_onboarding = true;
+                return status;
+            }
             status.error = read_error;
             status.settings_file_unreadable = profile_read.settings_file_unreadable;
             return status;
@@ -939,7 +1066,7 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
         return result;
     }
 
-    ArgsManager preview_args;
+    PreviewArgsManager preview_args;
     std::string parse_error;
     if (!PrepareArgs(preview_args, argv, can_listen_ipc, parse_error)) {
         result.error = QString::fromStdString(parse_error);
@@ -993,7 +1120,8 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
             }
         }
     } else {
-        preview_args.SelectConfigNetwork(preview_args.GetChainTypeString());
+        if (!ReadConfigForNewDataDir(preview_args, selected_data_dir, &result.error)) return result;
+        config_file_path_available = preview_args.GetPathArg("-conf").is_absolute();
         SetPreviewDataDirs(result, selected_data_dir, selected_data_dir_source, selected_data_dir, explicit_datadir);
         result.effective_reset = preview_args.GetBoolArg("-resetguisettings", false);
         if (!result.effective_reset) {
@@ -1016,7 +1144,12 @@ PreviewResult Preview(const std::vector<std::string>& argv, bool can_listen_ipc,
     const auto chain_params = CreateChainParams(preview_args, preview_args.GetChainType());
     result.assumed_blockchain_size = static_cast<int>(chain_params->AssumedBlockchainSize());
     result.assumed_chainstate_size = static_cast<int>(chain_params->AssumedChainStateSize());
-    result.profile = BuildProfileSummary(preview_args, config_file_path_available);
+    if (apply_datadir_before_config && !custom_datadir_exists) {
+        result.profile.has_config_file = config_file_path_available && PathExists(preview_args.GetConfigFilePath());
+        result.profile.existing_profile = result.profile.has_config_file;
+    } else {
+        result.profile = BuildProfileSummary(preview_args, config_file_path_available);
+    }
     result.core_setting_statuses = QmlCoreSettings::BuildCoreSettingStatuses(preview_args, QmlCoreSettings::OnboardingCoreSettingNames());
     result.values = QmlCoreSettings::LoadEffectiveValues(preview_args);
     result.resolved_chain = QString::fromStdString(preview_args.GetChainTypeString());
@@ -1235,6 +1368,12 @@ bool FinalizeStartupSettings(ArgsManager& args, const GuiSettingsStore& bootstra
         legacy_cleanup_error = migration_result.error;
     }
 
+    if (!legacy_cleanup_ok && !pending && !reset_gui_settings) {
+        // The migrated Core values are already durable. Obsolete GUI keys can
+        // be retried next time without preventing an ordinary startup.
+        LogWarning("Legacy GUI settings cleanup failed: %s", legacy_cleanup_error.toStdString());
+        legacy_cleanup_ok = true;
+    }
     if (!legacy_cleanup_ok) {
         if (error) *error = legacy_cleanup_error;
         if (bootstrap_gui_settings_changed) {
