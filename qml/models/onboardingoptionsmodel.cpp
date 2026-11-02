@@ -36,6 +36,7 @@ OnboardingOptionsModel::OnboardingOptionsModel(std::vector<std::string> argv, bo
         if (origin == CoreSettingsModel::ChangeOrigin::User &&
             (QmlCoreSettings::PruneChanged(change) || QmlCoreSettings::PruneSizeGBChanged(change))) {
             m_prune_auto_recommended = false;
+            clearUnchangedStorageSelection();
             emitStorageStatusChanged();
         }
     });
@@ -224,12 +225,21 @@ void OnboardingOptionsModel::keepCurrentStorage()
     emitStorageStatusChanged();
 }
 
+void OnboardingOptionsModel::clearUnchangedStorageSelection()
+{
+    const int64_t target_mib = prune() ? QmlCoreSettings::PruneGBToMiB(pruneSizeGB()) : 0;
+    if (existingProfile() && target_mib == currentPruneTargetMiB()) {
+        m_core_settings.clearTouched(QStringLiteral("prune"));
+    }
+}
+
 void OnboardingOptionsModel::selectStorage(bool prune, int prune_size_gb)
 {
     if (!m_core_settings.canEdit(QStringLiteral("prune"))) return;
     m_core_settings.changePrune(prune);
     if (prune) m_core_settings.changePruneSizeGB(prune_size_gb);
     m_core_settings.markTouched(QStringLiteral("prune"));
+    clearUnchangedStorageSelection();
     m_prune_auto_recommended = false;
     emitStorageStatusChanged();
 }

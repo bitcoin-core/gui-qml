@@ -685,6 +685,60 @@ TestCase {
         compare(optionsModel.currentPruneTargetMiB, data.target)
     }
 
+    function test_popup_restores_only_the_exact_current_target_data() {
+        return [
+            { tag: "exact-reduced", target: 1907, amount: 2, prune: true, current: true },
+            { tag: "rounded-to-two", target: 1908, amount: 2, prune: true, current: false },
+            { tag: "rounded-same-display", target: 1908, amount: 3, prune: true, current: false },
+            { tag: "rounded-custom", target: 4096, amount: 5, prune: true, current: false },
+            { tag: "exact-custom", target: 6675, amount: 7, prune: true, current: true },
+            { tag: "full", target: 0, amount: 2, prune: false, current: true },
+            { tag: "manual-is-not-full", target: 1, amount: 2, prune: false, current: false }
+        ]
+    }
+
+    function test_popup_restores_only_the_exact_current_target(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const page = createTemporaryObject(storageAmount, this)
+        const popup = findChild(page, "onboardingStorageSettingsPopup")
+        function openPopup() {
+            findChild(page, "onboardingStorageSettingsButton").clicked()
+            tryCompare(popup, "opened", true)
+        }
+        openPopup()
+        const toggle = findChild(popup, "pruneSwitch")
+        if (!toggle.checked) { toggle.toggle(); toggle.toggled() }
+        editStorageTarget(popup, String(Math.max(data.amount, optionsModel.pruneSizeGB) + 1))
+        compare(optionsModel.keepingCurrentStorage, false)
+        openPopup()
+        editStorageTarget(popup, String(data.amount))
+        compare(optionsModel.keepingCurrentStorage, data.current && data.prune)
+        openPopup()
+        toggle.toggle()
+        toggle.toggled()
+        compare(optionsModel.keepingCurrentStorage, data.target === 0)
+        if (data.prune) { toggle.toggle(); toggle.toggled() }
+        popup.close()
+
+        compare(optionsModel.keepingCurrentStorage, data.current)
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        const custom = findChild(page, "storageCustomOption")
+        compare(reduce.checked, data.current && data.target > 0)
+        compare(full.checked, !data.prune)
+        if (custom) compare(custom.checked, data.prune && !data.current)
+        else verify(!data.prune || data.current)
+        compare(page.customStorageAmount, data.amount)
+        if (data.amount !== 2) verify(custom.visible)
+        const current = data.target === 0 ? full : reduce
+        current.clicked()
+        compare(current.checked, true)
+        compare(optionsModel.keepingCurrentStorage, true)
+        compare(optionsModel.currentPruneTargetMiB, data.target)
+        compare(page.customStorageAmount, data.amount)
+    }
+
     function test_existing_pruned_profile_can_switch_with_limited_free_space() {
         optionsModel.setCurrentStorageForTest(4096)
         optionsModel.setStorageStatusForTest(false, 5, "", "")
@@ -846,8 +900,9 @@ TestCase {
         const custom = findChild(page, "storageCustomOption")
         verify(custom !== null)
         mouseClick(custom)
-        compare(custom.checked, true)
-        compare(reduce.checked, false)
+        const exactCurrent = data.target > 1 && Math.floor(data.custom * 1000000000 / 1024 / 1024) === data.target
+        compare(custom.checked, !exactCurrent)
+        compare(reduce.checked, exactCurrent)
 
         for (let i = 0; i < 2; ++i) {
             mouseClick(reduce)
@@ -862,7 +917,7 @@ TestCase {
         compare(findChild(page, "storageCustomOption"), custom)
         compare(custom.visible, true)
         mouseClick(custom)
-        compare(custom.checked, true)
+        compare(custom.checked, !exactCurrent)
         compare(optionsModel.pruneSizeGB, data.custom)
         compare(custom.description, "Storing recent blocks up to " + data.custom + " GB. Uses about " + (data.custom + 12) + " GB in total.")
     }

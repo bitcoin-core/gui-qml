@@ -453,7 +453,7 @@ QString OptionsQmlModel::commitDbcacheSizeMiB(const QString& text, const QString
 {
     if (!canEditCoreSetting(QStringLiteral("dbcache"))) return tr("This setting is set by the command line.");
     const auto value = ParseLocalizedInteger(text, locale_name, minDbcacheSizeMiB(), maxDbcacheSizeMiB());
-    if (!value) return tr("Enter a whole number between %1 and %2 MiB.").arg(minDbcacheSizeMiB()).arg(maxDbcacheSizeMiB());
+    if (!value) return tr("Enter a whole number of at least %1 MiB.").arg(minDbcacheSizeMiB());
     setDbcacheSizeMiB(*value);
     return {};
 }

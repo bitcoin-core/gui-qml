@@ -85,6 +85,9 @@ private Q_SLOTS:
     void localizedSettingsCommit_data();
     void localizedSettingsCommit();
     void invalidIntegerSettingsPreserveValues();
+    void databaseCacheErrorsShowMinimumGuidance();
+    void onboardingStorageEditsRestoreExactTarget_data();
+    void onboardingStorageEditsRestoreExactTarget();
     void onboardingIntegerCommitPreservesLimits();
     void legacyNumericSettingsWriteStrings();
     void externalSignerPathWritesSigner();
@@ -713,6 +716,76 @@ void OptionsModelTests::invalidIntegerSettingsPreserveValues()
     QCOMPARE(model.scriptThreads(), threads);
     QVERIFY(node.update_rw_setting_arguments.empty());
     QVERIFY(!model.restartRequired());
+}
+
+void OptionsModelTests::databaseCacheErrorsShowMinimumGuidance()
+{
+    MockNode node;
+    OptionsQmlModel model(node);
+    const int initial = model.dbcacheSizeMiB();
+    const QString guidance = QStringLiteral("Enter a whole number of at least %1 MiB.").arg(model.minDbcacheSizeMiB());
+    const QStringList invalid{
+        QStringLiteral("1,00"), QStringLiteral("4.5"), QString{},
+        QString::number(model.minDbcacheSizeMiB() - 1),
+        QString::number(qint64{model.maxDbcacheSizeMiB()} + 1),
+    };
+    for (const auto& text : invalid) {
+        QCOMPARE(model.commitDbcacheSizeMiB(text, "en_US"), guidance);
+        QCOMPARE(model.dbcacheSizeMiB(), initial);
+    }
+    QVERIFY(node.update_rw_setting_arguments.empty());
+    QVERIFY(model.commitDbcacheSizeMiB(QString::number(model.maxDbcacheSizeMiB()), "en_US").isEmpty());
+    QCOMPARE(model.dbcacheSizeMiB(), model.maxDbcacheSizeMiB());
+}
+
+void OptionsModelTests::onboardingStorageEditsRestoreExactTarget_data()
+{
+    QTest::addColumn<int>("target_mib");
+    QTest::addColumn<int>("amount_gb");
+    QTest::addColumn<bool>("prune");
+    QTest::addColumn<bool>("current");
+    QTest::newRow("exact-reduced") << 1907 << 2 << true << true;
+    QTest::newRow("rounded-to-two") << 1908 << 2 << true << false;
+    QTest::newRow("rounded-same-display") << 1908 << 3 << true << false;
+    QTest::newRow("rounded-custom") << 4096 << 5 << true << false;
+    QTest::newRow("exact-custom") << 6675 << 7 << true << true;
+    QTest::newRow("full") << 0 << 2 << false << true;
+    QTest::newRow("manual-is-not-full") << 1 << 2 << false << false;
+}
+
+void OptionsModelTests::onboardingStorageEditsRestoreExactTarget()
+{
+    QFETCH(int, target_mib);
+    QFETCH(int, amount_gb);
+    QFETCH(bool, prune);
+    QFETCH(bool, current);
+    SavedGuiDataDirSettings saved_settings;
+    QTemporaryDir data_dir;
+    QVERIFY(data_dir.isValid());
+    QFile conf(data_dir.filePath(QStringLiteral("bitcoin.conf")));
+    QVERIFY(conf.open(QIODevice::WriteOnly | QIODevice::Text));
+    QVERIFY(conf.write("prune=" + QByteArray::number(target_mib) + '\n') > 0);
+    conf.close();
+    const auto argv = TestArgvWithDataDir(data_dir.path());
+    OnboardingOptionsModel model(argv, /*can_listen_ipc=*/false);
+    QTRY_VERIFY(!model.storageCheckPending());
+    QVERIFY(model.keepingCurrentStorage());
+    model.setPrune(true);
+    QVERIFY(model.commitPruneSizeGB(QString::number(std::max(amount_gb, model.pruneSizeGB()) + 1), "en_US").isEmpty());
+    QVERIFY(!model.keepingCurrentStorage());
+    QVERIFY(model.commitPruneSizeGB(QString::number(amount_gb), "en_US").isEmpty());
+    QCOMPARE(model.keepingCurrentStorage(), current && prune);
+    model.setPrune(false);
+    QCOMPARE(model.keepingCurrentStorage(), target_mib == 0);
+    model.setPrune(prune);
+    QCOMPARE(model.keepingCurrentStorage(), current);
+    QCOMPARE(model.applyRequest().touched_settings.contains(QStringLiteral("prune")), !current);
+    ArgsManager args;
+    std::string parse_error;
+    QVERIFY2(PrepareTestArgs(args, argv, parse_error), parse_error.c_str());
+    QString error;
+    QVERIFY2(model.applyToArgs(args, &error), qPrintable(error));
+    QCOMPARE(args.GetIntArg("-prune", 0), current ? target_mib : prune ? QmlCoreSettings::PruneGBToMiB(amount_gb) : 0);
 }
 
 void OptionsModelTests::onboardingIntegerCommitPreservesLimits()
@@ -2346,10 +2419,10 @@ void OptionsModelTests::onboardingKeepCurrentStoragePreservesSetting()
     model.setListen(!model.listen());
 
     model.selectStorage(true, 2);
-    QVERIFY(!model.keepingCurrentStorage());
-    QVERIFY(model.applyRequest().touched_settings.contains(QStringLiteral("prune")));
+    QCOMPARE(model.keepingCurrentStorage(), expected_target_mib == QmlCoreSettings::PruneGBToMiB(2));
+    QCOMPARE(model.applyRequest().touched_settings.contains(QStringLiteral("prune")), !model.keepingCurrentStorage());
     model.selectStorage(false, 2);
-    QVERIFY(!model.keepingCurrentStorage());
+    QCOMPARE(model.keepingCurrentStorage(), expected_target_mib == 0);
     model.keepCurrentStorage();
     QVERIFY(model.keepingCurrentStorage());
     QCOMPARE(model.prune(), initial_prune);

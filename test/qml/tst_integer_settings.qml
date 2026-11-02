@@ -78,6 +78,28 @@ TestCase {
         compare(input.text, String(spec.value))
     }
 
+    function test_dbcache_errors_show_minimum_guidance_data() {
+        return [
+            { tag: "malformed", text: "1,00" },
+            { tag: "below-minimum", text: String(optionsModel.minDbcacheSizeMiB - 1) },
+            { tag: "overflow", text: "2,147,483,648" },
+            { tag: "fraction", text: "4.5" }
+        ]
+    }
+
+    function test_dbcache_errors_show_minimum_guidance(data) {
+        const initial = optionsModel.dbcacheSizeMiB
+        const page = createTemporaryObject(developer, testCase)
+        const input = findChild(page, "developerDbcacheField")
+        input.validator.locale = "en_US"
+        input.text = data.text
+        input.textEdited()
+        input.editingFinished()
+        compare(optionsModel.dbcacheSizeMiB, initial)
+        compare(page.dbcacheError, "Enter a whole number of at least %1 MiB.".arg(optionsModel.minDbcacheSizeMiB))
+        verify(page.dbcacheError.indexOf(String(optionsModel.maxDbcacheSizeMiB)) === -1)
+    }
+
     function test_malformed_grouping_data() {
         return test_grouped_input_data().filter(row => row.field.property !== "scriptThreads" && row.locale !== "ar_EG")
     }
