@@ -138,6 +138,8 @@ private Q_SLOTS:
     void networkCommandsCoalesceDesiredStateWithoutBlockingGui();
     void newerNetworkNotificationSupersedesBlockedCommandResult();
     void statusNotificationBurstUsesOneFollowupSnapshot();
+    void overlappingStatusNotificationsPublishEachCompletedSnapshot();
+    void networkNotificationSupersedesBlockedStatusSnapshot();
     void refreshMempoolInfoUpdatesProperties();
     void activatingMempoolPollingEmitsSignalsAndRefreshesImmediately();
     void peerCountsInitializeAndRefreshFromDirectionalNodeCounts();
@@ -2129,12 +2131,109 @@ void NodeModelTests::statusNotificationBurstUsesOneFollowupSnapshot()
     QCOMPARE(node.calls.getWarnings.load(), 0);
     release.release();
     QTRY_COMPARE_WITH_TIMEOUT(model.numPeers(), 10'000, ASYNC_TIMEOUT_MS);
-    QCOMPARE(model.numInboundPeers(), 9);
+    QTRY_COMPARE_WITH_TIMEOUT(model.numInboundPeers(), 9, ASYNC_TIMEOUT_MS);
     QCOMPARE(model.numOutboundPeers(), 4);
     QCOMPARE(model.warnings(), QStringLiteral("Latest warning"));
     QCOMPARE(node.calls.getNodeCount.load(), 4);
     QCOMPARE(node.calls.getWarnings.load(), 2);
     QVERIFY(off_gui.load());
+}
+
+void NodeModelTests::overlappingStatusNotificationsPublishEachCompletedSnapshot()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_int snapshots{0};
+    interfaces::Node::NotifyNumConnectionsChangedFn connections_changed;
+    interfaces::Node::NotifyAlertChangedFn warnings_changed;
+    node.handle_notify_num_connections_changed_fn = [&](interfaces::Node::NotifyNumConnectionsChangedFn callback) {
+        connections_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.handle_notify_alert_changed_fn = [&](interfaces::Node::NotifyAlertChangedFn callback) {
+        warnings_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.get_node_count_fn = [&](ConnectionDirection direction) {
+        if (direction == ConnectionDirection::In) {
+            ++snapshots;
+            entered.release();
+            release.acquire();
+            return static_cast<size_t>(snapshots.load());
+        }
+        return static_cast<size_t>(2 * snapshots.load());
+    };
+    node.get_warnings_fn = [&] {
+        return Untranslated(QStringLiteral("Status %1").arg(snapshots.load()).toStdString());
+    };
+    NodeModel model{node};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(5); });
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    entered.acquire();
+    for (int completed = 1; completed <= 3; ++completed) {
+        // Every query overlaps newer notifications; there is never a quiet
+        // interval in which the old implementation would publish a result.
+        connections_changed(100 + completed);
+        warnings_changed();
+        QCoreApplication::sendPostedEvents(&model, QEvent::MetaCall);
+        release.release();
+        QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+        entered.acquire();
+        QCOMPARE(model.numInboundPeers(), completed);
+        QCOMPARE(model.numOutboundPeers(), 2 * completed);
+        QCOMPARE(model.numPeers(), 100 + completed);
+        QCOMPARE(model.warnings(), QStringLiteral("Status %1").arg(completed));
+        QCOMPARE(snapshots.load(), completed + 1);
+    }
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(model.numInboundPeers(), 4, ASYNC_TIMEOUT_MS);
+    QCOMPARE(model.numOutboundPeers(), 8);
+    QCOMPARE(model.numPeers(), 103);
+    QCOMPARE(model.warnings(), QStringLiteral("Status 4"));
+}
+
+void NodeModelTests::networkNotificationSupersedesBlockedStatusSnapshot()
+{
+    MockNode node;
+    MempoolState mempool;
+    ConfigureNodeModelDefaults(node);
+    ConfigureMempoolGetters(node, mempool);
+    QSemaphore entered;
+    QSemaphore release;
+    std::atomic_bool active{true};
+    std::atomic_int queries{0};
+    interfaces::Node::NotifyNetworkActiveChangedFn network_changed;
+    node.handle_notify_network_active_changed_fn = [&](interfaces::Node::NotifyNetworkActiveChangedFn callback) {
+        network_changed = std::move(callback);
+        return MakeNoopHandler();
+    };
+    node.get_network_active_fn = [&] {
+        const bool result = active.load();
+        if (++queries == 1) {
+            entered.release();
+            release.acquire();
+        }
+        return result;
+    };
+    NodeModel model{node, false};
+    const auto drain = qScopeGuard([&] { DrainNodeModel(model); });
+    const auto unblock = qScopeGuard([&] { release.release(); });
+    model.initializeResult(true, {}, false, false);
+    QTRY_VERIFY_WITH_TIMEOUT(entered.available() > 0, ASYNC_TIMEOUT_MS);
+    active = false;
+    network_changed(false);
+    QTRY_VERIFY_WITH_TIMEOUT(model.pause(), ASYNC_TIMEOUT_MS);
+    QSignalSpy pause_changes{&model, &NodeModel::pauseChanged};
+    release.release();
+    QTRY_VERIFY_WITH_TIMEOUT(queries.load() >= 2, ASYNC_TIMEOUT_MS);
+    QCoreApplication::processEvents();
+    QVERIFY(model.pause());
+    QCOMPARE(pause_changes.count(), 0);
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

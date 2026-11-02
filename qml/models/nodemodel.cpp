@@ -285,9 +285,11 @@ void NodeModel::refreshStatus()
     }
     m_status_pending = true;
     uint64_t generation;
+    uint64_t network_generation;
     {
         std::lock_guard lock{m_notifications->mutex};
         generation = m_notifications->status_generation;
+        network_generation = m_notifications->network_generation;
     }
     m_snapshots.submit(this, [node = &m_node, ready = m_node_ready] {
         return StatusSnapshot{static_cast<int>(node->getNodeCount(ConnectionDirection::In)),
@@ -295,35 +297,38 @@ void NodeModel::refreshStatus()
                               QString::fromStdString(node->getWarnings().translated),
                               ready ? std::optional<bool>{node->getNetworkActive()} : std::nullopt,
                               !gArgs.GetBoolArg("-blocksonly", DEFAULT_BLOCKSONLY)};
-    }, [this, generation](StatusSnapshot snapshot) {
+    }, [this, generation, network_generation](StatusSnapshot snapshot) {
         m_status_pending = false;
         if (m_shutdown_requested) return;
         bool current;
+        bool network_current;
         std::optional<int> total;
         {
             std::lock_guard lock{m_notifications->mutex};
             current = generation == m_notifications->status_generation;
+            network_current = network_generation == m_notifications->network_generation;
             total = m_notifications->last_peer_total;
         }
-        if (current) {
-            m_status_ready = true;
-            setNumInboundPeers(snapshot.inbound);
-            setNumOutboundPeers(snapshot.outbound);
-            setNumPeers(total.value_or(snapshot.inbound + snapshot.outbound));
-            setWarnings(snapshot.warnings);
-            if (snapshot.network_active) {
-                m_network_known = true;
-                if (m_pause != !*snapshot.network_active) {
-                    m_pause = !*snapshot.network_active;
-                    Q_EMIT pauseChanged(m_pause);
-                }
+        // Publish completed reads even when another refresh is needed. Requiring
+        // a quiet notification interval can otherwise starve these properties.
+        m_status_ready = true;
+        setNumInboundPeers(snapshot.inbound);
+        setNumOutboundPeers(snapshot.outbound);
+        setNumPeers(total.value_or(snapshot.inbound + snapshot.outbound));
+        setWarnings(snapshot.warnings);
+        // A newer network notification is already authoritative on the GUI.
+        if (snapshot.network_active && network_current) {
+            m_network_known = true;
+            if (m_pause != !*snapshot.network_active) {
+                m_pause = !*snapshot.network_active;
+                Q_EMIT pauseChanged(m_pause);
             }
-            if (m_mempool_information_available != snapshot.mempool_available) {
-                m_mempool_information_available = snapshot.mempool_available;
-                Q_EMIT mempoolInfoChanged();
-            }
-            Q_EMIT nodeInformationChanged();
         }
+        if (m_mempool_information_available != snapshot.mempool_available) {
+            m_mempool_information_available = snapshot.mempool_available;
+            Q_EMIT mempoolInfoChanged();
+        }
+        Q_EMIT nodeInformationChanged();
         if (std::exchange(m_status_again, false) || !current) refreshStatus();
     }, [this](std::exception_ptr) {
         m_status_pending = false;
