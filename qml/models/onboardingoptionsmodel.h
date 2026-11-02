@@ -181,6 +181,7 @@ private:
     void startStorageCheck(uint64_t request_id, const QString& path);
     void applyStorageCheckResult(uint64_t request_id, const QmlDataDir::StorageSpaceResult& result);
     void applyAutomaticPruneRecommendation();
+    void clearUnchangedStorageSelection();
     void emitStorageStatusChanged();
     QmlCoreSettings::Values coreValues() const;
     QmlOnboardingStorage::State storageState() const;
