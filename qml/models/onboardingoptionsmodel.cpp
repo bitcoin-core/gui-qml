@@ -178,10 +178,6 @@ bool OnboardingOptionsModel::selectCustomDataDir(const QString& path)
 
 void OnboardingOptionsModel::useDefaultDataDir()
 {
-    if (!m_custom_datadir_string.isEmpty()) {
-        m_custom_datadir_string.clear();
-        Q_EMIT customDataDirStringChanged({});
-    }
     const QString default_data_dir = getDefaultDataDirString();
     m_data_dir_source = QmlOnboardingSettings::DataDirSource::UserSelection;
     setDataDir(default_data_dir);

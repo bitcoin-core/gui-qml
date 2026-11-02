@@ -34,6 +34,7 @@ class OnboardingOptionsModel : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString dataDir READ dataDir NOTIFY dataDirChanged)
+    Q_PROPERTY(QString customDataDir READ customDataDir NOTIFY customDataDirStringChanged)
     Q_PROPERTY(QString getDefaultDataDirString READ getDefaultDataDirString CONSTANT)
     Q_PROPERTY(QUrl getDefaultDataDirectory READ getDefaultDataDirectory CONSTANT)
     Q_PROPERTY(bool prune READ prune WRITE setPrune NOTIFY pruneChanged)
@@ -82,6 +83,7 @@ public:
     void beginShutdown();
     bool validationPending() const { return m_preview_pending; }
     QString dataDir() const { return m_data_dir; }
+    QString customDataDir() const { return m_custom_datadir_string; }
     QString getDefaultDataDirString() const;
     QUrl getDefaultDataDirectory() const;
     Q_INVOKABLE QString getCustomDataDirString() const;
