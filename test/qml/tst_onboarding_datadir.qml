@@ -641,6 +641,50 @@ TestCase {
         compare(current.description, data.description)
     }
 
+    function test_popup_prune_toggle_selects_changed_storage_data() {
+        return [
+            { tag: "manual", target: 1 }, { tag: "rounded", target: 4096 },
+            { tag: "manual-remembered", target: 1, remembered: true },
+            { tag: "rounded-remembered", target: 4096, remembered: true }
+        ]
+    }
+
+    function test_popup_prune_toggle_selects_changed_storage(data) {
+        optionsModel.setCurrentStorageForTest(data.target)
+        optionsModel.setStorageStatusForTest(false, 1000, "", "")
+        const page = createTemporaryObject(storageAmount, this, {
+            customStorage: !!data.remembered, customStorageAmount: 7
+        })
+        const reduce = findChild(page, "storageReduceOption")
+        const full = findChild(page, "storageFullOption")
+        findChild(page, "onboardingStorageSettingsButton").clicked()
+        const popup = findChild(page, "onboardingStorageSettingsPopup")
+        tryCompare(popup, "visible", true)
+        const pruneSwitch = findChild(popup, "pruneSwitch")
+        if (pruneSwitch.checked) {
+            pruneSwitch.toggle()
+            pruneSwitch.toggled()
+            compare(full.checked, true)
+        }
+        pruneSwitch.toggle()
+        pruneSwitch.toggled()
+        popup.close()
+        compare(optionsModel.keepingCurrentStorage, false)
+        compare(reduce.checked, false)
+        compare(full.checked, false)
+        const custom = findChild(page, "storageCustomOption")
+        verify(custom !== null)
+        compare(custom.checked, true)
+        compare(custom.description, "Storing recent blocks up to %1 GB. Uses about %2 GB in total."
+            .arg(optionsModel.pruneSizeGB).arg(optionsModel.pruneSizeGB + 12))
+        compare(custom.badgeText, "")
+        reduce.clicked()
+        compare(reduce.checked, true)
+        compare(custom.checked, false)
+        compare(optionsModel.keepingCurrentStorage, true)
+        compare(optionsModel.currentPruneTargetMiB, data.target)
+    }
+
     function test_existing_pruned_profile_can_switch_with_limited_free_space() {
         optionsModel.setCurrentStorageForTest(4096)
         optionsModel.setStorageStatusForTest(false, 5, "", "")
