@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <qml/models/options_model.h>
+#include <qml/models/settings_keys.h>
 #include <test/mocks/mocknode.h>
 #include <chainparams.h>
 #include <init.h>
@@ -10,6 +11,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QScopeGuard>
 #include <QSemaphore>
 #include <QSettings>
 #include <QSignalSpy>
@@ -228,6 +230,80 @@ private Q_SLOTS:
         QCOMPARE(model.natpmp(), initial);
         QVERIFY(model.settingsError().isEmpty());
         QVERIFY(!model.restartRequired());
+    }
+
+    void legacyLanguageMatchesStartupFallback_data()
+    {
+        QTest::addColumn<QString>("chain_language");
+        QTest::addColumn<QVariant>("gui_language");
+        QTest::addColumn<QString>("cli_language");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("legacy-chain") << QStringLiteral("es") << QVariant{} << QString{} << QStringLiteral("es");
+        QTest::newRow("legacy-default") << QString{} << QVariant{} << QString{} << QStringLiteral("es");
+        QTest::newRow("explicit-system-default") << QStringLiteral("es") << QVariant{QString{}} << QString{} << QString{};
+        QTest::newRow("explicit-current-language") << QStringLiteral("es") << QVariant{QStringLiteral("fr")} << QString{} << QStringLiteral("fr");
+        QTest::newRow("command-line") << QStringLiteral("es") << QVariant{} << QStringLiteral("de") << QStringLiteral("de");
+    }
+
+    void legacyLanguageMatchesStartupFallback()
+    {
+        QFETCH(QString, chain_language);
+        QFETCH(QVariant, gui_language);
+        QFETCH(QString, cli_language);
+        QFETCH(QString, expected);
+        Fixture fixture;
+        fixture.args.ForceSetArg("-regtest", "1");
+        if (!cli_language.isEmpty()) fixture.args.ForceSetArg("-lang", cli_language.toStdString());
+        QSettings current;
+        current.remove(SettingsKeys::LANGUAGE);
+        if (gui_language.isValid()) current.setValue(SettingsKeys::LANGUAGE, gui_language);
+        current.sync();
+        QSettings legacy_chain(QSettings::defaultFormat(), QSettings::UserScope, QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt-regtest"));
+        QSettings legacy_default(QSettings::defaultFormat(), QSettings::UserScope, QStringLiteral("Bitcoin"), QStringLiteral("Bitcoin-Qt"));
+        const QVariant old_chain = legacy_chain.value(SettingsKeys::LANGUAGE);
+        const QVariant old_default = legacy_default.value(SettingsKeys::LANGUAGE);
+        const auto restore_legacy = qScopeGuard([&] {
+            if (old_chain.isValid()) legacy_chain.setValue(SettingsKeys::LANGUAGE, old_chain);
+            else legacy_chain.remove(SettingsKeys::LANGUAGE);
+            if (old_default.isValid()) legacy_default.setValue(SettingsKeys::LANGUAGE, old_default);
+            else legacy_default.remove(SettingsKeys::LANGUAGE);
+            legacy_chain.sync();
+            legacy_default.sync();
+        });
+        if (chain_language.isEmpty()) legacy_chain.remove(SettingsKeys::LANGUAGE);
+        else legacy_chain.setValue(SettingsKeys::LANGUAGE, chain_language);
+        legacy_default.setValue(SettingsKeys::LANGUAGE, QStringLiteral("es"));
+        legacy_chain.sync();
+        legacy_default.sync();
+        OptionsQmlModel model(fixture.node, fixture.args);
+        QSignalSpy changed(&model, &OptionsQmlModel::languageChanged);
+        QTRY_VERIFY(model.settingsReady());
+        QCOMPARE(model.language(), expected);
+        QCOMPARE(changed.size(), expected.isEmpty() ? 0 : 1);
+        if (gui_language.isValid() || !cli_language.isEmpty()) return;
+
+        model.setLanguage(QString{});
+        QTRY_VERIFY(!model.settingsPending());
+        QVERIFY2(model.settingsError().isEmpty(), qPrintable(model.settingsError()));
+        QCOMPARE(model.language(), QString{});
+        QCOMPARE(changed.size(), 2);
+        QVERIFY(current.contains(SettingsKeys::LANGUAGE));
+        QCOMPARE(current.value(SettingsKeys::LANGUAGE).toString(), QString{});
+        QCOMPARE(QString::fromStdString(fixture.args.GetArg("-lang", "")), QString{});
+
+        ArgsManager restarted_args;
+        SetupServerArgs(restarted_args, false);
+        restarted_args.ForceSetArg("-datadir", fixture.directory.path().toStdString());
+        restarted_args.ForceSetArg("-settings", fixture.directory.filePath("settings.json").toStdString());
+        restarted_args.ForceSetArg("-regtest", "1");
+        restarted_args.SelectConfigNetwork("regtest");
+        std::vector<std::string> errors;
+        QVERIFY(restarted_args.ReadSettingsFile(&errors));
+        MockNode restarted_node;
+        restarted_node.get_persistent_setting_fn = [&](const std::string& name) { return restarted_args.GetPersistentSetting(name); };
+        OptionsQmlModel restarted(restarted_node, restarted_args);
+        QTRY_VERIFY(restarted.settingsReady());
+        QCOMPARE(restarted.language(), QString{});
     }
 
     void signerErrorsKeepSpanishTranslations_data()

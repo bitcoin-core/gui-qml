@@ -163,7 +163,8 @@ OptionsQmlModel::Snapshot OptionsQmlModel::readSnapshot(interfaces::Node& node, 
     QSettings settings;
     result.language = QString::fromStdString(SettingToString(QmlCoreSettings::DisplaySettingValue(node, args, QStringLiteral("lang")), ""));
     if (result.language.isEmpty() && !QmlCoreSettings::IsCommandLineOverridden(args, QStringLiteral("lang"))) {
-        result.language = settings.value(SettingsKeys::LANGUAGE, "").toString();
+        result.language = settings.value(SettingsKeys::LANGUAGE,
+            QmlLegacySettings::ReadLegacyGuiLanguage(QString::fromStdString(args.GetChainTypeString()))).toString();
     }
     const QString command_line_language = QString::fromStdString(args.GetArg("-lang", ""));
     if (!command_line_language.isEmpty()) result.language = command_line_language;

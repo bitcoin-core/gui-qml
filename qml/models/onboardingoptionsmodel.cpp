@@ -75,6 +75,10 @@ void OnboardingOptionsModel::beginShutdown()
     ++m_storage_request_id;
     if (m_executor->isDrained()) {
         QMetaObject::invokeMethod(this, &OnboardingOptionsModel::shutdownFinished, Qt::QueuedConnection);
+    } else if (m_preparing) {
+        // Preparation must publish its terminal result before shutdown observers can
+        // destroy the model. finishNodePreparation() shuts down the executor.
+        connect(this, &OnboardingOptionsModel::nodePrepared, this, &OnboardingOptionsModel::shutdownFinished, Qt::QueuedConnection);
     } else {
         connect(m_executor.get(), &BackendExecutor::drained, this, &OnboardingOptionsModel::shutdownFinished);
         m_executor->shutdown();
@@ -94,7 +98,11 @@ OnboardingOptionsModel::~OnboardingOptionsModel() = default;
 
 void OnboardingOptionsModel::prepareNode(ArgsManager& args, std::function<bool()> prepare_node)
 {
-    if (m_preparing || m_stopping) return;
+    if (m_preparing) return;
+    if (m_stopping) {
+        QMetaObject::invokeMethod(this, [this] { Q_EMIT nodePrepared(false, tr("The application is shutting down.")); }, Qt::QueuedConnection);
+        return;
+    }
     m_preparing = true;
     m_stopping = true;
     ++m_preview_request_id;

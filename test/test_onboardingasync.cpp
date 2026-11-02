@@ -5,12 +5,17 @@
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
+#include <common/args.h>
+#include <init.h>
+#include <qml/backendexecutor.h>
+#include <qml/guiargs.h>
 #include <qml/models/onboardingoptionsmodel.h>
 #include <qml/onboarding_settings.h>
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QScopeGuard>
 #include <QSemaphore>
 #include <QTemporaryDir>
@@ -18,6 +23,7 @@
 #include <QUrl>
 
 #include <atomic>
+#include <stdexcept>
 #include <thread>
 
 #ifdef Q_OS_UNIX
@@ -43,6 +49,11 @@ class OnboardingAsyncTests : public QObject
 {
     Q_OBJECT
 private Q_SLOTS:
+    void prepareAfterShutdownReportsFailure_data();
+    void prepareAfterShutdownReportsFailure();
+    void shutdownDuringPreparationPreservesCompletion_data();
+    void shutdownDuringPreparationPreservesCompletion();
+    void shutdownObserverCanDestroyPreparedModel();
     void previewReadsOwnNetworkWithoutChangingGlobalParams();
     void startupStatusReadsOwnNetworkWithoutChangingGlobalParams();
     void reselectCustomDataDirAfterRepair_data();
@@ -51,6 +62,147 @@ private Q_SLOTS:
     void reselectDefaultDataDirRefreshesPreview();
     void blockedConfigReadKeepsGuiResponsiveAndRejectsStaleSelection();
 };
+
+void OnboardingAsyncTests::prepareAfterShutdownReportsFailure_data()
+{
+    QTest::addColumn<bool>("wait_for_preview");
+    QTest::newRow("preview-pending") << false;
+    QTest::newRow("preview-finished") << true;
+}
+
+void OnboardingAsyncTests::prepareAfterShutdownReportsFailure()
+{
+    QFETCH(bool, wait_for_preview);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ArgsManager args;
+    OnboardingOptionsModel model(Arguments(directory.path()), false);
+    if (wait_for_preview) QTRY_VERIFY(!model.validationPending());
+    QSignalSpy prepared(&model, &OnboardingOptionsModel::nodePrepared);
+    QSignalSpy shutdown(&model, &OnboardingOptionsModel::shutdownFinished);
+    model.beginShutdown();
+    model.beginShutdown();
+    bool called{false};
+    model.prepareNode(args, [&] { called = true; return true; });
+    QVERIFY(prepared.empty());
+    QTRY_COMPARE(prepared.size(), 1);
+    QVERIFY(!prepared.first().at(0).toBool());
+    QCOMPARE(prepared.first().at(1).toString(), QStringLiteral("The application is shutting down."));
+    QTRY_COMPARE(shutdown.size(), 1);
+    QVERIFY(!called);
+    model.beginShutdown();
+    QCoreApplication::processEvents();
+    QCOMPARE(prepared.size(), 1);
+    QCOMPARE(shutdown.size(), 1);
+}
+
+void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion_data()
+{
+    QTest::addColumn<QString>("outcome");
+    for (const auto* outcome : {"success", "failure", "exception", "unknown"}) {
+        QTest::newRow(outcome) << QString::fromLatin1(outcome);
+    }
+}
+
+void OnboardingAsyncTests::shutdownDuringPreparationPreservesCompletion()
+{
+    QFETCH(QString, outcome);
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const auto argv = Arguments(directory.path());
+    ArgsManager args;
+    SetupServerArgs(args, false);
+    SetupQmlGuiArgs(args);
+    std::vector<const char*> raw;
+    raw.reserve(argv.size());
+    for (const auto& arg : argv) raw.push_back(arg.c_str());
+    std::string error;
+    QVERIFY2(args.ParseParameters(static_cast<int>(raw.size()), raw.data(), error), error.c_str());
+    QSemaphore entered, release;
+    std::atomic_int calls{0};
+    OnboardingOptionsModel model(argv, false);
+    const auto drain = qScopeGuard([&] {
+        release.release();
+        bool drained{false};
+        BackendExecutor::shutdownAll(this, [&] { drained = true; });
+        QVERIFY(QTest::qWaitFor([&] { return drained; }, 5000));
+    });
+    QSignalSpy prepared(&model, &OnboardingOptionsModel::nodePrepared);
+    QSignalSpy shutdown(&model, &OnboardingOptionsModel::shutdownFinished);
+    QStringList signals;
+    connect(&model, &OnboardingOptionsModel::nodePrepared, this, [&] { signals.append(QStringLiteral("prepared")); });
+    connect(&model, &OnboardingOptionsModel::shutdownFinished, this, [&] { signals.append(QStringLiteral("shutdown")); });
+    model.prepareNode(args, [&] {
+        ++calls;
+        entered.release();
+        release.acquire();
+        if (outcome == QStringLiteral("exception")) throw std::runtime_error{"preparation failed"};
+        if (outcome == QStringLiteral("unknown")) throw 42;
+        return outcome == QStringLiteral("success");
+    });
+    QTRY_VERIFY(entered.available() > 0);
+    entered.acquire();
+    model.beginShutdown();
+    model.beginShutdown();
+    model.prepareNode(args, [&] { ++calls; return true; });
+    bool heartbeat{false};
+    QTimer::singleShot(0, &model, [&] { heartbeat = true; });
+    QTRY_VERIFY(heartbeat);
+    QVERIFY(prepared.empty());
+    QVERIFY(shutdown.empty());
+    release.release();
+    QTRY_COMPARE_WITH_TIMEOUT(prepared.size(), 1, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(shutdown.size(), 1, 5000);
+    QCOMPARE(calls.load(), 1);
+    QCOMPARE(prepared.first().at(0).toBool(), outcome == QStringLiteral("success"));
+    const QString failure = prepared.first().at(1).toString();
+    if (outcome == QStringLiteral("exception")) QCOMPARE(failure, QStringLiteral("preparation failed"));
+    else if (outcome == QStringLiteral("unknown")) QCOMPARE(failure, QStringLiteral("Unknown exception preparing the node."));
+    else QVERIFY(failure.isEmpty());
+    QCOMPARE(signals, QStringList({QStringLiteral("prepared"), QStringLiteral("shutdown")}));
+    model.beginShutdown();
+    QCoreApplication::processEvents();
+    QCOMPARE(prepared.size(), 1);
+    QCOMPARE(shutdown.size(), 1);
+}
+
+void OnboardingAsyncTests::shutdownObserverCanDestroyPreparedModel()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    ArgsManager args;
+    SetupServerArgs(args, false);
+    SetupQmlGuiArgs(args);
+    args.ForceSetArg("-regtest", "1");
+    args.ForceSetArg("-datadir", directory.path().toStdString());
+    QSemaphore entered, release;
+    QPointer<OnboardingOptionsModel> model = new OnboardingOptionsModel(Arguments(directory.path()), false);
+    const auto cleanup = qScopeGuard([&] {
+        release.release();
+        bool drained{false};
+        BackendExecutor::shutdownAll(this, [&] { drained = true; });
+        QVERIFY(QTest::qWaitFor([&] { return drained; }, 5000));
+        delete model.data();
+    });
+    int prepared{0};
+    int shutdown{0};
+    int prepared_at_shutdown{-1};
+    connect(model, &OnboardingOptionsModel::nodePrepared, this, [&] { ++prepared; });
+    connect(model, &OnboardingOptionsModel::shutdownFinished, this, [&] {
+        ++shutdown;
+        prepared_at_shutdown = prepared;
+        delete model.data();
+    });
+    model->prepareNode(args, [&] { entered.release(); release.acquire(); return true; });
+    QTRY_VERIFY(entered.available() > 0);
+    entered.acquire();
+    model->beginShutdown();
+    release.release();
+    QTRY_VERIFY(model.isNull());
+    QCOMPARE(prepared, 1);
+    QCOMPARE(shutdown, 1);
+    QCOMPARE(prepared_at_shutdown, 1);
+}
 
 void OnboardingAsyncTests::previewReadsOwnNetworkWithoutChangingGlobalParams()
 {
