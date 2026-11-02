@@ -661,6 +661,10 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     std::unique_ptr<interfaces::Node> node;
     std::unique_ptr<interfaces::Chain> chain;
     const auto prepare_node = [&](const QmlOnboardingSettings::PendingApply* pending = nullptr) {
+        QString settings_directory_error;
+        if (pending && !QmlOnboardingSettings::PrepareSettingsDirectory(*pending, &settings_directory_error)) {
+            return InitError(Untranslated(settings_directory_error.toStdString()));
+        }
         std::optional<QmlOnboardingSettings::SettingsFileBackup> settings_file_backup;
         QString settings_file_backup_error;
         const auto read_error = [&](const bilingual_str& message, const std::vector<std::string>& details) {

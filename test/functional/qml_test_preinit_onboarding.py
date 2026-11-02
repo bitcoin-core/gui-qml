@@ -16,6 +16,7 @@ import subprocess
 import time
 import tempfile
 
+from qml_process_checks import check_gui_exit
 from qml_test_harness import (
     QmlTestHarness,
     assert_node_shell_visible,
@@ -499,6 +500,32 @@ def run_qml_onboarded_override_reloads_saved_settings_flow():
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
+def run_nested_settings_path_flow(absolute):
+    with tempfile.TemporaryDirectory(prefix="qml_nested_settings_") as tmpdir:
+        datadir = setup_datadir(tmpdir)
+        settings_path = os.path.join(tmpdir, "external", "nested", "settings.json") if absolute else "nested/profile/settings.json"
+        expected_path = settings_path if absolute else os.path.join(datadir, "regtest", settings_path)
+        harness = QmlTestHarness(
+            datadir=datadir,
+            start_onboarded=False,
+            extra_args=["-regtest", "-disablewallet", f"-settings={settings_path}"],
+        )
+        try:
+            harness.start()
+            assert not os.path.exists(os.path.dirname(expected_path)), expected_path
+            complete_preinit_onboarding(harness.driver)
+            gui = harness.wait_for_main_window_reconnect()
+            assert_node_shell_visible(gui)
+            with open(expected_path, encoding="utf8") as settings_file:
+                assert json.load(settings_file).get("qml_onboarded") is True
+            gui.request_quit()
+            harness.process.wait(timeout=30)
+            _, stderr = harness.process.communicate(timeout=5)
+            check_gui_exit(harness.process.returncode, stderr.decode("utf8", errors="replace"), socket_path=harness.socket_path)
+        finally:
+            harness.stop(cleanup=False)
+
+
 def run_tests():
     args = parse_args()
     if args.socket_path:
@@ -511,6 +538,8 @@ def run_tests():
     run_existing_profile_preserves_root_wallet_discovery_flow()
     run_existing_profile_detects_explicit_walletdir_flow()
     run_qml_onboarded_override_reloads_saved_settings_flow()
+    run_nested_settings_path_flow(absolute=False)
+    run_nested_settings_path_flow(absolute=True)
 
     print("\n" + "=" * 50)
     print("All tests PASSED")
