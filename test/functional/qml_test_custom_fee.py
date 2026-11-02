@@ -5,8 +5,13 @@
 """Explicit custom rates override the wallet minimum but respect the relay minimum."""
 
 from decimal import Decimal
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "bitcoin", "test", "functional"))
 
 from qml_wallet_test_lib import WalletFlowHarness, rpc_call
+from test_framework.util import assert_fee_amount
 
 
 def run_case(wallet_minimum, relay_minimum, rate, below_minimum=None):
@@ -49,9 +54,9 @@ def run_case(wallet_minimum, relay_minimum, rate, below_minimum=None):
         assert rpc_call(harness.gui_rpc_port, "getrawmempool") == [txid]
         tx = rpc_call(harness.gui_rpc_port, "gettransaction", [txid], wallet="custom_fee")
         decoded = rpc_call(harness.gui_rpc_port, "decoderawtransaction", [tx["hex"]])
-        fee_sats = -Decimal(str(tx["fee"])) * 100000000
-        expected = (Decimal(rate) * decoded["vsize"]).to_integral_value(rounding="ROUND_CEILING")
-        assert fee_sats == expected, (fee_sats, expected)
+        # Core budgets the fee using the maximum signed size. A shorter ECDSA
+        # signature can reduce the final vsize, so use Core's bounded assertion.
+        assert_fee_amount(-Decimal(str(tx["fee"])), decoded["vsize"], Decimal(rate) / 100000)
         print(f"Custom {rate} sat/vB broadcast with relay minimum {relay_minimum}: passed")
     finally:
         harness.stop()
