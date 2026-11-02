@@ -10,6 +10,8 @@ import "../controls"
 Page {
     id: root
 
+    property var disabledSectionIds: []
+
     readonly property string currentSectionId: internal.currentSectionId
     readonly property int depth: internal.currentStack ? internal.currentStack.depth : 0
     readonly property bool canGoBack: internal.currentStack ? internal.currentStack.canGoBack : false
@@ -110,6 +112,7 @@ Page {
 
         PageStack {
             required property string sectionId
+            enabled: root.disabledSectionIds.indexOf(sectionId) < 0
             objectName: "settingsNavigationStack_" + sectionId
             anchors.fill: parent
             visible: false

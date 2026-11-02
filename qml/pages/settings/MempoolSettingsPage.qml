@@ -66,7 +66,8 @@ SettingsPage {
             objectName: "mempoolSizeLimitRow"
             Layout.fillWidth: true
             title: qsTr("Mempool size limit (MB)")
-            enabled: root.maxMempoolStatus.canEdit !== false
+            enabled: optionsModel.settingsReady !== false && !optionsModel.settingsPending
+                && root.maxMempoolStatus.canEdit !== false
             fieldObjectName: "mempoolSizeLimitInput"
             fieldWidth: 80
             text: root.mempoolSizeText

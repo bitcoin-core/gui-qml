@@ -286,6 +286,8 @@ Page {
         SettingsPageContainer {
             id: pageContainer
             objectName: "settingsPageContainer"
+            disabledSectionIds: root.optionsEditable ? []
+                : ["external-signer", "display", "window-behavior", "storage", "connection"]
             Layout.minimumWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -347,27 +349,27 @@ Page {
 
     Component {
         id: externalSignerPage
-        SettingsPages.ExternalSignerSettingsPage { enabled: root.optionsEditable }
+        SettingsPages.ExternalSignerSettingsPage {}
     }
 
     Component {
         id: displayPage
-        SettingsPages.DisplaySettingsPage { enabled: root.optionsEditable }
+        SettingsPages.DisplaySettingsPage {}
     }
 
     Component {
         id: windowBehaviorPage
-        SettingsPages.WindowBehaviorSettingsPage { enabled: root.optionsEditable }
+        SettingsPages.WindowBehaviorSettingsPage {}
     }
 
     Component {
         id: storagePage
-        SettingsPages.StorageSettingsPage { enabled: root.optionsEditable }
+        SettingsPages.StorageSettingsPage {}
     }
 
     Component {
         id: connectionPage
-        SettingsPages.ConnectionSettingsPage { enabled: root.optionsEditable }
+        SettingsPages.ConnectionSettingsPage {}
     }
 
     Component {

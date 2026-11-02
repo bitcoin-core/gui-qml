@@ -179,6 +179,7 @@ TestCase {
         for (const section of ["wallet", "network-traffic", "mempool", "rpc-console", "debug-log", "about"]) {
             view.selectSection(section)
             compare(view.pageContainer.currentItem.enabled, true, section)
+            if (section === "mempool") compare(findChild(view, "mempoolSizeLimitInput").enabled, false)
         }
         view.openWalletPassword(false)
         tryCompare(view.pageContainer, "depth", 2)
@@ -191,6 +192,39 @@ TestCase {
         view.selectSection("wallet")
         compare(view.pageContainer.depth, 2)
         compare(view.pageContainer.currentItem.enabled, true)
+    }
+
+    function test_pendingSavePreservesPushedProxyDraft() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("connection")
+        findChild(view, "proxySettingsRow").clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        const proxyPage = view.pageContainer.currentItem
+        const save = findChild(proxyPage, "proxySettingsSaveButton")
+        proxyPage.draftProxyEnabled = true
+        proxyPage.draftProxyAddress = "10.0.0.1:9050"
+        verify(proxyPage.proxyDraftDirty)
+        verify(save.enabled)
+        view.selectSection("display")
+        findChild(view, "displayLanguageRow").clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        optionsModel.settingsPending = true
+        compare(view.pageContainer.currentItem.enabled, false)
+        view.selectSection("connection")
+        compare(view.pageContainer.currentItem, proxyPage)
+        compare(save.enabled, false)
+        compare(proxyPage.draftProxyAddress, "10.0.0.1:9050")
+        verify(proxyPage.proxyDraftDirty)
+        view.openWalletPassword(false)
+        tryCompare(view.pageContainer, "depth", 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+        view.selectSection("connection")
+        optionsModel.settingsPending = false
+        tryCompare(save, "enabled", true)
+        verify(proxyPage.proxyDraftDirty)
+        save.clicked()
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(optionsModel.coreSettings.entry("proxy").address, "10.0.0.1:9050")
     }
 
     function test_signerPendingDoesNotShowStaleConnectedDevice() {
