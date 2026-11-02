@@ -942,6 +942,31 @@ TestCase {
         compare(card.request.noteSelf, "Received, thank you")
     }
 
+    function test_cancelled_payment_clears_success_badge_without_restoring_sharing() {
+        const card = createRequest(createPage())
+        const status = findChild(card, "paymentRequestStatus")
+        card.request.receivedAmountSatoshi = 141
+        card.request.paymentReceived = true
+        compare(status.text, "Payment received")
+        compare(status.accentColor, Theme.color.success)
+
+        // A replacement can pay elsewhere after this address was observed.
+        card.request.receivedAmountSatoshi = 0
+        compare(status.text, "Awaiting payment")
+        compare(status.accentColor, Theme.color.paymentRequest)
+        verify(card.paymentReceived)
+        verify(!card.sharing)
+        verify(!findChild(card, "requestPaymentQRImage").visible)
+        verify(!findChild(card, "requestPaymentCopyButton").visible)
+        verify(!findChild(card, "requestPaymentAddressText").interactive)
+        verify(!findChild(card, "requestPaymentAmountInput").enabled)
+
+        card.request.receivedAmountSatoshi = 200
+        compare(status.text, "Payment received")
+        compare(status.accentColor, Theme.color.success)
+        verify(!card.sharing)
+    }
+
     function test_saved_request_cannot_be_shared_while_payment_scan_is_pending() {
         const page = createPage()
         const saved = createRequest(page)
