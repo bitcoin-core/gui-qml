@@ -16,11 +16,20 @@ SettingsPage {
     showBackButton: false
 
     readonly property var signerStatus: (optionsModel.coreSettingStatuses || ({})).signer || ({})
-    readonly property string signerPathError: optionsModel.externalSignerPathValidationError(signerPathInput.text)
-    readonly property bool signerConnected: root.signerPathError.length === 0
+    property bool checkAfterSave: false
+    property bool checkAfterValidation: false
+    readonly property bool signerPathPending: optionsModel.signerPathValidationPending || optionsModel.settingsPending
+    readonly property bool signerInputChanged: signerPathInput.text.trim() !== optionsModel.externalSignerPath
+    readonly property string signerPathError: optionsModel.signerPathError || ""
+    readonly property bool signerConnected: !root.signerPathPending && !root.signerInputChanged
+        && root.signerPathError.length === 0
         && walletController.canCreateExternalSignerWallet
     readonly property string signerStatusText: {
+        if (root.signerPathPending) return qsTr("Checking signer path…")
         if (root.signerPathError.length > 0) return root.signerPathError
+        if (root.signerInputChanged) {
+            return qsTr("Path updated. Press Check device to rescan with the current signer command.")
+        }
         if (walletController.canCreateExternalSignerWallet) {
             return qsTr("Detected external signer: %1").arg(walletController.externalSignerName)
         }
@@ -49,7 +58,26 @@ SettingsPage {
     }
 
     function checkDevice() {
-        if (root.commitSignerPath()) walletController.refreshExternalSignerStatus()
+        if (optionsModel.signerPathValidationPending) {
+            root.checkAfterValidation = true
+            return
+        }
+        root.checkAfterValidation = false
+        if (!root.commitSignerPath()) return
+        if (optionsModel.settingsPending) root.checkAfterSave = true
+        else walletController.refreshExternalSignerStatus()
+    }
+
+    Connections {
+        target: optionsModel
+        function onSignerPathValidationChanged() {
+            if (!optionsModel.signerPathValidationPending && root.checkAfterValidation) root.checkDevice()
+        }
+        function onSettingsPendingChanged() {
+            if (optionsModel.settingsPending || !root.checkAfterSave) return
+            root.checkAfterSave = false
+            if (!optionsModel.settingsError) walletController.refreshExternalSignerStatus()
+        }
     }
 
     PageHeading {
@@ -113,6 +141,7 @@ SettingsPage {
                                 rightMargin: -2
                             }
                         }
+                        onTextChanged: optionsModel.requestExternalSignerPathValidation(text)
                         onEditingFinished: root.checkDevice()
                         onAccepted: focus = false
                     }
@@ -128,7 +157,8 @@ SettingsPage {
                             Layout.alignment: Qt.AlignTop
                             Layout.topMargin: 4
                             radius: width / 2
-                            color: root.signerConnected ? Theme.color.green : Theme.color.red
+                            color: root.signerPathPending || root.signerInputChanged ? Theme.color.neutral7
+                                : root.signerConnected ? Theme.color.green : Theme.color.red
 
                             Behavior on color {
                                 ColorAnimation { duration: 150 }
@@ -156,7 +186,7 @@ SettingsPage {
                     Layout.alignment: Qt.AlignVCenter
                     text: qsTr("Check device")
                     textStyle: Theme.text.subheading
-                    enabled: root.signerPathError.length === 0
+                    enabled: root.signerPathError.length === 0 && !root.signerPathPending
                         && root.signerStatus.canEdit !== false
                     onClicked: root.checkDevice()
                 }

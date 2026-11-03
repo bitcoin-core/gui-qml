@@ -5,16 +5,16 @@
 #ifndef BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H
 #define BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H
 
+#include <atomic>
 #include <functional>
+#include <memory>
 
 #include <QDateTime>
 #include <QList>
 #include <QObject>
 #include <QTimer>
 
-namespace interfaces {
-class Chain;
-}
+class BlockClockHistory;
 
 /**
  * Raw data represented by the block clock.
@@ -42,9 +42,10 @@ struct BlockClockTimeline
  * period, not that synchronization is incomplete. Initial-sync state belongs
  * to NodeModel.
  *
- * All methods and the owned timer run on this object's thread (the GUI thread
- * in production). Active-chain history is refreshed after initialization, on
- * block-tip notifications, and when the local clock crosses midnight or noon.
+ * History comes from a local notification cache. A callback only schedules
+ * one pending GUI refresh; all presentation work and the minute timer run on
+ * this object's thread. This model never calls the node or chain interfaces.
+ * Block updates wake the GUI even while the clock is hidden, without polling.
  */
 class BlockClockModel : public QObject
 {
@@ -56,11 +57,11 @@ class BlockClockModel : public QObject
 public:
     static constexpr qint64 PERIOD_SECONDS{12 * 60 * 60};
     static constexpr int CLOCK_UPDATE_INTERVAL_MS{60 * 1000};
-    using HistoryLoader = std::function<QList<qint64>(qint64 period_start, qint64 period_end)>;
     using CurrentTimeProvider = std::function<QDateTime()>;
 
-    explicit BlockClockModel(HistoryLoader history_loader = {}, bool start_timer = true,
+    explicit BlockClockModel(std::shared_ptr<BlockClockHistory> history = {}, bool start_timer = true,
                              CurrentTimeProvider current_time_provider = {}, QObject* parent = nullptr);
+    ~BlockClockModel() override;
 
     qint64 periodStart() const { return m_timeline.period_start; }
     qreal currentTimeFraction() const { return m_current_time_fraction; }
@@ -76,11 +77,8 @@ public:
 public Q_SLOTS:
     void stop();
 
-    /** Load the current period's active-chain block history. */
-    void initializeHistory();
-
-    /** Record a new active-chain block timestamp, if it belongs on this dial. */
-    void recordBlockTime(qint64 block_timestamp);
+    /** Consume coalesced block notifications without querying the backend. */
+    void refreshHistory();
 
 Q_SIGNALS:
     void periodChanged();
@@ -88,23 +86,22 @@ Q_SIGNALS:
     void blockTimeFractionsChanged();
 
 private:
+    /** Called only by the cache under its mutex; stop() detaches before destruction. */
+    void scheduleHistoryRefresh();
     void scheduleNextClockUpdate(const QDateTime& current_time);
-    void loadHistory();
-    void replaceBlockHistory(QList<qint64> block_timestamps);
+    void replaceBlockHistory(QList<qint64> block_timestamps, bool period_changed = false);
     void rebuildBlockTimeFractions();
     qreal fractionForTimestamp(qint64 timestamp) const;
 
-    HistoryLoader m_history_loader;
+    std::shared_ptr<BlockClockHistory> m_history;
     CurrentTimeProvider m_current_time_provider;
     QTimer m_clock_timer;
+    std::atomic_bool m_history_refresh_pending{false};
+    QList<qint64> m_cached_block_timestamps;
     BlockClockTimeline m_timeline;
     qreal m_current_time_fraction{0.0};
     QList<qreal> m_block_time_fractions;
-    bool m_history_initialized{false};
     bool m_stopped{false};
 };
-
-/** Read active-chain block timestamps belonging to the requested dial period. */
-QList<qint64> LoadBlockClockHistory(interfaces::Chain& chain, qint64 period_start, qint64 period_end);
 
 #endif // BITCOIN_QML_MODELS_BLOCKCLOCKMODEL_H

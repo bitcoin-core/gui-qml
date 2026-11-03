@@ -119,6 +119,13 @@ TestCase {
         nodeModel.mempoolInformationAvailable = true
         Theme.dark = true
         Theme.blockclocksize = 5 / 12
+        optionsModel.settingsReady = true
+        optionsModel.settingsPending = false
+        optionsModel.settingsError = ""
+        optionsModel.holdSignerPathValidationForTest = false
+        optionsModel.finishSignerPathValidationForTest("")
+        optionsModel.externalSignerPath = ""
+        optionsModel.walletSettingsDirty = false
         optionsModel.displayUnit = 0
         optionsModel.moneyFontChoice = "embedded"
         optionsModel.maxMempoolSizeMB = 300
@@ -137,6 +144,163 @@ TestCase {
         onionSetting.address = onionSetting.defaultAddress()
         testNetworkTrafficTower.active = false
         testDebugLogModel.active = false
+    }
+
+    function test_pendingSettingsAndSaveErrorRemainVisible() {
+        const view = createTemporaryObject(settingsViewComponent, host)
+        verify(view !== null)
+        const status = findChild(view, "settingsOperationStatus")
+        verify(status !== null)
+        optionsModel.settingsPending = true
+        tryCompare(view.pageContainer.currentItem, "enabled", false)
+        compare(status.text, "Saving settings…")
+        optionsModel.settingsError = "The settings file could not be written."
+        optionsModel.settingsPending = false
+        tryCompare(view.pageContainer.currentItem, "enabled", true)
+        compare(status.text, optionsModel.settingsError)
+        optionsModel.settingsError = ""
+    }
+
+    function test_pendingOptionsOnlyDisableSettingsEditors_data() {
+        return [{ tag: "loading", ready: false, pending: false },
+                { tag: "saving", ready: true, pending: true }]
+    }
+
+    function test_pendingOptionsOnlyDisableSettingsEditors(data) {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        optionsModel.settingsReady = data.ready
+        optionsModel.settingsPending = data.pending
+        const editableSections = ["external-signer", "display", "window-behavior", "storage", "connection"]
+        for (const section of editableSections) {
+            view.selectSection(section)
+            compare(view.pageContainer.currentItem.enabled, false, section)
+        }
+        for (const section of ["wallet", "network-traffic", "mempool", "rpc-console", "debug-log", "about"]) {
+            view.selectSection(section)
+            compare(view.pageContainer.currentItem.enabled, true, section)
+            if (section === "mempool") compare(findChild(view, "mempoolSizeLimitInput").enabled, false)
+        }
+        view.openWalletPassword(false)
+        tryCompare(view.pageContainer, "depth", 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+        view.selectSection("display")
+        compare(view.pageContainer.currentItem.enabled, false)
+        optionsModel.settingsReady = true
+        optionsModel.settingsPending = false
+        tryCompare(view.pageContainer.currentItem, "enabled", true)
+        view.selectSection("wallet")
+        compare(view.pageContainer.depth, 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+    }
+
+    function test_pendingSavePreservesPushedProxyDraft() {
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("connection")
+        findChild(view, "proxySettingsRow").clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        const proxyPage = view.pageContainer.currentItem
+        const save = findChild(proxyPage, "proxySettingsSaveButton")
+        settingsWindow.requestActivate()
+        tryCompare(settingsWindow, "active", true)
+        tryCompare(view.pageContainer.stack, "busy", false)
+        mouseClick(findChild(proxyPage, "proxyEnableSwitch"))
+        tryCompare(proxyPage, "draftProxyEnabled", true)
+        const input = findChild(proxyPage, "proxyAddressInput")
+        input.forceActiveFocus()
+        tryCompare(input, "activeFocus", true)
+        input.selectAll()
+        keyClick(Qt.Key_Backspace)
+        const address = "10.0.0.1:9050"
+        for (let index = 0; index < address.length; ++index) keyClick(address.charAt(index))
+        compare(input.text, address)
+        compare(proxyPage.draftProxyAddress, address)
+        verify(proxyPage.proxyDraftDirty)
+        verify(save.enabled)
+        view.selectSection("display")
+        findChild(view, "displayLanguageRow").clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        optionsModel.settingsPending = true
+        compare(view.pageContainer.currentItem.enabled, false)
+        view.selectSection("connection")
+        compare(view.pageContainer.currentItem, proxyPage)
+        compare(save.enabled, false)
+        compare(proxyPage.draftProxyAddress, "10.0.0.1:9050")
+        verify(proxyPage.proxyDraftDirty)
+        view.selectSection("wallet")
+        findChild(view, "walletPasswordRow").clicked()
+        tryCompare(view.pageContainer, "depth", 2)
+        compare(view.pageContainer.currentItem.enabled, true)
+        view.selectSection("connection")
+        optionsModel.settingsPending = false
+        tryCompare(save, "enabled", true)
+        compare(view.pageContainer.currentItem, proxyPage)
+        compare(view.pageContainer.depth, 2)
+        compare(proxyPage.draftProxyAddress, address)
+        verify(proxyPage.proxyDraftDirty)
+        mouseClick(save)
+        tryCompare(view.pageContainer, "depth", 1)
+        compare(optionsModel.coreSettings.entry("proxy").address, "10.0.0.1:9050")
+    }
+
+    function test_signerPendingDoesNotShowStaleConnectedDevice() {
+        optionsModel.externalSignerPath = "old-hwi"
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "Old device"
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer")
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "externalSignerPathInput")
+        const indicator = findChild(page, "externalSignerStatusIndicator")
+        const check = findChild(page, "externalSignerCheckDeviceButton")
+        verify(page.signerConnected)
+        const initialScans = walletController.externalSignerRefreshCalls
+        optionsModel.holdSignerPathValidationForTest = true
+        input.text = "new-hwi"
+        verify(optionsModel.signerPathValidationPending)
+        compare(page.signerConnected, false)
+        compare(page.signerStatusText, "Checking signer path…")
+        tryCompare(indicator, "color", Theme.color.neutral7)
+        compare(check.enabled, false)
+        input.editingFinished()
+        input.editingFinished()
+        compare(optionsModel.externalSignerPath, "old-hwi")
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        // Validation completes, then saving the new command completes.
+        optionsModel.settingsPending = true
+        optionsModel.finishSignerPathValidationForTest("")
+        compare(optionsModel.externalSignerPath, "new-hwi")
+        compare(page.signerConnected, false)
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        optionsModel.settingsPending = false
+        compare(walletController.externalSignerRefreshCalls, initialScans + 1)
+        compare(page.checkAfterSave, false)
+    }
+
+    function test_invalidSignerValidationAndFailedSaveDoNotRescan() {
+        optionsModel.externalSignerPath = "old-hwi"
+        walletController.canCreateExternalSignerWallet = true
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        view.selectSection("external-signer")
+        const page = view.pageContainer.currentItem
+        const input = findChild(page, "externalSignerPathInput")
+        const initialScans = walletController.externalSignerRefreshCalls
+        optionsModel.holdSignerPathValidationForTest = true
+        input.text = "/missing/hwi"
+        input.editingFinished()
+        optionsModel.finishSignerPathValidationForTest("Signer does not exist.")
+        compare(page.signerConnected, false)
+        compare(page.signerStatusText, "Signer does not exist.")
+        compare(optionsModel.externalSignerPath, "old-hwi")
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        input.text = "new-hwi"
+        input.editingFinished()
+        optionsModel.settingsPending = true
+        optionsModel.finishSignerPathValidationForTest("")
+        optionsModel.settingsError = "Save failed."
+        optionsModel.settingsPending = false
+        compare(walletController.externalSignerRefreshCalls, initialScans)
+        compare(page.checkAfterSave, false)
     }
 
     function test_sidebarFiltersGroupsAndEmitsStableSectionId() {

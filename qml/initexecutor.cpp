@@ -9,24 +9,43 @@
 #include <stdexcept>
 #endif
 
+#include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <util/exception.h>
 #include <util/threadnames.h>
 
 #include <QString>
 
+#include <atomic>
+#include <utility>
+
 struct QmlInitExecutor::WorkerState {
-    // Only accessed on the shared initialization/shutdown worker.
+    SubscriptionFactory pending_subscription_factory;
+    std::unique_ptr<interfaces::Handler> subscription;
+    std::atomic_bool stopping{false};
     bool initialization_threw{false};
+
+    explicit WorkerState(SubscriptionFactory subscribe) : pending_subscription_factory(std::move(subscribe)) {}
+    void retireSubscription()
+    {
+        subscription.reset();
+        pending_subscription_factory = {};
+    }
 };
 
-QmlInitExecutor::QmlInitExecutor(interfaces::Node& node)
-    : QObject(), m_node(node), m_worker_state(std::make_shared<WorkerState>())
+QmlInitExecutor::QmlInitExecutor(interfaces::Node& node, SubscriptionFactory subscribe)
+    : QObject(), m_node(node), m_worker_state(std::make_shared<WorkerState>(std::move(subscribe)))
 {
     m_init_and_shutdown_executor.setObjectName(QStringLiteral("node-init-shutdown"));
     m_interrupt_executor.setObjectName(QStringLiteral("node-interrupt"));
     connect(&m_init_and_shutdown_executor, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
     connect(&m_interrupt_executor, &BackendExecutor::drained, this, &QmlInitExecutor::finishShutdown);
+}
+
+QmlInitExecutor::~QmlInitExecutor()
+{
+    m_worker_state->stopping = true;
+    m_init_and_shutdown_executor.submit(this, [state = std::move(m_worker_state)] { state->retireSubscription(); }, [] {});
 }
 
 void QmlInitExecutor::handleRunawayException(std::exception_ptr error)
@@ -64,6 +83,10 @@ void QmlInitExecutor::initialize()
                 throw std::runtime_error("Test fatal exception after initialization");
             }
 #endif
+            if (result.success && state->pending_subscription_factory && !state->stopping && !node->shutdownRequested()) {
+                auto subscribe_once{std::exchange(state->pending_subscription_factory, {})};
+                state->subscription = subscribe_once();
+            }
             result.initial_block_download = result.success && node->isInitialBlockDownload();
             result.shutdown_requested = node->shutdownRequested();
             return result;
@@ -84,6 +107,7 @@ void QmlInitExecutor::interrupt()
 {
     if (m_interrupt_requested || m_runaway_exception) return;
     m_interrupt_requested = true;
+    m_worker_state->stopping = true;
     m_interrupt_executor.submit(this, [node = &m_node] {
         util::ThreadRename("qml-control");
         node->startShutdown();
@@ -103,6 +127,7 @@ void QmlInitExecutor::shutdown()
 {
     if (m_shutdown_requested || m_runaway_exception) return;
     m_shutdown_requested = true;
+    m_worker_state->stopping = true;
     m_init_and_shutdown_executor.submit(this, [node = &m_node, state = m_worker_state] {
         if (state->initialization_threw) return false;
 #ifdef ENABLE_TEST_AUTOMATION
@@ -110,6 +135,7 @@ void QmlInitExecutor::shutdown()
             throw std::runtime_error("Test fatal exception before shutdown");
         }
 #endif
+        state->retireSubscription();
         node->appShutdown();
         return true;
     }, [this](bool completed) {

@@ -201,28 +201,40 @@ bool EnsureDataDir(const QString& path, QString* error)
     return true;
 }
 
+namespace {
+bool SaveDataDirSelection(const QString& local_path, QString* error)
+{
+    QSettings settings;
+    const QVariant old_path = settings.value(SettingsKeys::DATA_DIR);
+    const QVariant old_reset = settings.value(RESET_GUI_SETTINGS_KEY);
+    if (IsDefaultDataDir(local_path)) settings.remove(SettingsKeys::DATA_DIR);
+    else settings.setValue(SettingsKeys::DATA_DIR, local_path);
+    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
+    settings.sync();
+    if (settings.status() != QSettings::NoError) {
+        if (old_path.isValid()) settings.setValue(SettingsKeys::DATA_DIR, old_path);
+        else settings.remove(SettingsKeys::DATA_DIR);
+        if (old_reset.isValid()) settings.setValue(RESET_GUI_SETTINGS_KEY, old_reset);
+        else settings.remove(RESET_GUI_SETTINGS_KEY);
+        settings.sync();
+        if (error) *error = QObject::tr("Unable to save the selected data directory.");
+        return false;
+    }
+    QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
+    if (error) error->clear();
+    return true;
+}
+} // namespace
+
 bool PersistGuiDataDirSelection(const QString& path, QString* error)
 {
     const QString local_path = NormalizeLocalPath(path);
-    if (!EnsureDataDir(local_path, error)) return false;
-
-    QSettings settings;
-    if (IsDefaultDataDir(local_path)) {
-        settings.remove(SettingsKeys::DATA_DIR);
-    } else {
-        settings.setValue(SettingsKeys::DATA_DIR, local_path);
-    }
-    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
-    QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
-    return true;
+    return EnsureDataDir(local_path, error) && SaveDataDirSelection(local_path, error);
 }
 
-void PersistDefaultDataDirSelection()
+bool PersistDefaultDataDirSelection(QString* error)
 {
-    QSettings settings;
-    settings.remove(SettingsKeys::DATA_DIR);
-    settings.setValue(RESET_GUI_SETTINGS_KEY, false);
-    QmlLegacySettings::ClearLegacyGuiSettings(QString::fromStdString(Params().GetChainTypeString()));
+    return SaveDataDirSelection(DefaultDataDirString(), error);
 }
 
 bool ResetGuiSettings(ArgsManager& args, QString* error)

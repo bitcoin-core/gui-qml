@@ -151,6 +151,7 @@ jobs:
           python3 test/functional/qml_test_onboarding_startup.py
           python3 test/functional/qml_test_disablewallet_boot.py
           python3 test/functional/qml_test_blockclock.py
+          python3 test/functional/qml_test_blockclock_history.py
           python3 test/functional/qml_test_blocksonly_settings.py
           python3 test/functional/qml_test_external_signer.py
           python3 test/functional/qml_test_peers.py

@@ -24,6 +24,8 @@ Page {
     property bool showDoneButton: true
     property string selectedSectionId: ""
     property int sidebarWidth: 286
+    readonly property bool optionsEditable: typeof optionsModel === "undefined"
+        || (optionsModel.settingsReady !== false && optionsModel.settingsPending !== true)
     readonly property alias sidebar: sidebar
     readonly property alias pageContainer: pageContainer
     readonly property var groupTitles: ({
@@ -202,6 +204,17 @@ Page {
         }
     }
 
+    footer: CoreText {
+        objectName: "settingsOperationStatus"
+        visible: text.length > 0
+        padding: 16
+        wrapMode: Text.WordWrap
+        text: typeof optionsModel === "undefined" ? ""
+            : optionsModel.settingsError || (optionsModel.settingsReady === false ? qsTr("Loading settings…")
+            : optionsModel.settingsPending ? qsTr("Saving settings…") : "")
+        color: optionsModel.settingsError ? Theme.color.red : Theme.color.neutral7
+    }
+
     contentItem: RowLayout {
         spacing: 0
 
@@ -273,6 +286,8 @@ Page {
         SettingsPageContainer {
             id: pageContainer
             objectName: "settingsPageContainer"
+            disabledSectionIds: root.optionsEditable ? []
+                : ["external-signer", "display", "window-behavior", "storage", "connection"]
             Layout.minimumWidth: 0
             Layout.fillWidth: true
             Layout.fillHeight: true

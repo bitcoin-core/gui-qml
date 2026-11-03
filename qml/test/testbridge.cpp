@@ -652,7 +652,13 @@ QByteArray TestBridge::cmdGetProperty(const QString& object_name, const QString&
     }
 
     QJsonObject resp;
-    resp[QStringLiteral("value")] = QJsonValue::fromVariant(value);
+    QJsonValue json_value{QJsonValue::fromVariant(value)};
+    // Qt does not serialize typed sequences such as QList<qreal> directly.
+    // Preserve supported scalars: strings can also convert to a variant list.
+    if (json_value.isNull() && value.canConvert<QVariantList>()) {
+        json_value = QJsonValue::fromVariant(value.toList());
+    }
+    resp[QStringLiteral("value")] = json_value;
     return QJsonDocument(resp).toJson(QJsonDocument::Compact);
 }
 

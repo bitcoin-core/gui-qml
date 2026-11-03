@@ -22,7 +22,7 @@ ColumnLayout {
     readonly property bool hasStorageResult: root.storageAvailableText.length > 0 && root.storageErrorText.length === 0 && !root.storageCheckPending
     readonly property bool selectedLocationBelowMinimum: root.validationError.length === 0 && root.minimumStorageRequiredGB > 0 && root.hasStorageResult && root.storageAvailableGB < root.minimumStorageRequiredGB
     readonly property string selectedLocationStorageError: root.selectedLocationBelowMinimum ? qsTr("Not enough storage available.") : ""
-    readonly property bool validSelection: validationError.length === 0 && storageErrorText.length === 0 && !storageCheckPending && !selectedLocationBelowMinimum
+    readonly property bool validSelection: !root.settingsModel.validationPending && validationError.length === 0 && storageErrorText.length === 0 && !storageCheckPending && !selectedLocationBelowMinimum
 
     function locationDescription(baseDescription, selected) {
         if (!selected || !root.hasStorageResult) return baseDescription
@@ -41,6 +41,9 @@ ColumnLayout {
 
     Connections {
         target: root.settingsModel
+        function onDataDirSelectionFinished(success, error) {
+            root.validationError = success ? "" : error
+        }
         function onDataDirChanged() {
             root.updateValidation()
         }
@@ -86,10 +89,9 @@ ColumnLayout {
         onAccepted: {
             var customDataDir = folderDialog.selectedFolder.toString();
             if (customDataDir !== "") {
-                root.validationError = root.settingsModel.validateCustomDataDir(customDataDir)
-                if (root.validationError === "" && root.settingsModel.selectCustomDataDir(customDataDir)) {
-                } else if (root.validationError === "") {
-                    root.validationError = qsTr("The selected data directory could not be created.")
+                root.validationError = ""
+                if (!root.settingsModel.selectCustomDataDir(customDataDir)) {
+                    root.validationError = qsTr("The selected data directory could not be checked.")
                 }
             }
         }
@@ -115,7 +117,7 @@ ColumnLayout {
     }
     CoreText {
         Layout.fillWidth: true
-        visible: root.validationError.length === 0 && root.storageErrorText.length === 0 && root.storageCheckPending
+        visible: root.validationError.length === 0 && root.storageErrorText.length === 0 && (root.storageCheckPending || root.settingsModel.validationPending)
         text: qsTr("Checking available storage...")
         color: Theme.color.neutral7
         horizontalAlignment: Text.AlignLeft

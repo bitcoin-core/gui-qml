@@ -17,7 +17,7 @@ std::optional<int64_t> SyncProgressTracker::addSample(int64_t monotonic_millisec
     // Verification estimates can dip when block timestamps go backwards. Keep
     // those samples and estimate the net progress over the whole window.
     m_samples.push_back({monotonic_milliseconds, progress});
-    ++m_samples_since_publication;
+    if (!m_last_publication) m_last_publication = monotonic_milliseconds;
 
     const int64_t cutoff{monotonic_milliseconds - WINDOW_MILLISECONDS};
     // Retain the newest sample at or before the cutoff as the baseline.
@@ -26,10 +26,10 @@ std::optional<int64_t> SyncProgressTracker::addSample(int64_t monotonic_millisec
     }
     while (m_samples.size() > MAX_SAMPLES) m_samples.pop_front();
 
-    if (m_samples_since_publication < PUBLISH_SAMPLE_INTERVAL || m_samples.size() < 2) {
+    if (monotonic_milliseconds - *m_last_publication < PUBLISH_INTERVAL_MILLISECONDS || m_samples.size() < 2) {
         return std::nullopt;
     }
-    m_samples_since_publication = 0;
+    m_last_publication = monotonic_milliseconds;
 
     const Sample& oldest{m_samples.front()};
     const Sample& newest{m_samples.back()};
@@ -49,5 +49,5 @@ std::optional<int64_t> SyncProgressTracker::addSample(int64_t monotonic_millisec
 void SyncProgressTracker::reset()
 {
     m_samples.clear();
-    m_samples_since_publication = 0;
+    m_last_publication.reset();
 }

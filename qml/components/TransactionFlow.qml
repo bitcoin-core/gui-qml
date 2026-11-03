@@ -52,6 +52,7 @@ ColumnLayout {
         nodeMeasurements.inputs, nodeMeasurements.outputs, diagramWidth, !!flow.complete)
     signal paymentRequestRequested(string requestId)
     onTransactionIdChanged: outputsExpanded = false
+    Component.onDestruction: ribbonInstantiator.active = false
 
     BitcoinAmount {
         id: groupedAmount
@@ -150,6 +151,7 @@ ColumnLayout {
                             data: root.ribbonObjects
                         }
                         Instantiator {
+                            id: ribbonInstantiator
                             // Keep paths alive while card measurements change. Replacing
                             // the array model rebuilds every path for each measured card.
                             // Qt 6.4 retains the previous delegates for a numeric
