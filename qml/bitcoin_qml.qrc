@@ -1,6 +1,5 @@
 <!DOCTYPE RCC><RCC version="1.0">
     <qresource prefix="/qml">
-        <file>components/AboutOptions.qml</file>
         <file>components/AddressDetailRow.qml</file>
         <file>components/AddressLabel.qml</file>
         <file>components/AlertAction.qml</file>
@@ -98,7 +97,6 @@
         <file>controls/AmountDisplayLayout.js</file>
         <file>controls/CoreTextField.qml</file>
         <file>controls/EditableKeyValueRow.qml</file>
-        <file>controls/ExternalLink.qml</file>
         <file>controls/FilterButton.qml</file>
         <file>controls/RangeSlider.qml</file>
         <file>controls/Slider.qml</file>
@@ -137,7 +135,6 @@
         <file>controls/ProgressIndicator.qml</file>
         <file>controls/ProxyLocationInput.qml</file>
         <file>controls/QRImage.qml</file>
-        <file>controls/RightContentIcon.qml</file>
         <file>controls/qmldir</file>
         <file>controls/SendOptionsPopup.qml</file>
         <file>controls/SendCreateOptionsPopup.qml</file>
@@ -182,7 +179,6 @@
         <file>pages/onboarding/OnboardingStorageLocation.qml</file>
         <file>pages/onboarding/OnboardingStrengthen.qml</file>
         <file>pages/onboarding/OnboardingWizard.qml</file>
-        <file>pages/settings/SettingsAbout.qml</file>
         <file>pages/settings/SettingsLanguage.qml</file>
         <file>pages/settings/SettingsConnection.qml</file>
         <file>pages/settings/SettingsDebugLogView.qml</file>
