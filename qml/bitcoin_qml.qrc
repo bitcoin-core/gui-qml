@@ -35,6 +35,7 @@
         <file>components/NetworkIndicator.qml</file>
         <file>components/NodeFatalErrorPopup.qml</file>
         <file>components/NodeInformationPopup.qml</file>
+        <file>components/PaymentRequestReviewPopup.qml</file>
         <file>components/NodeRuntimeDialog.qml</file>
         <file>components/NodeStatusActions.qml</file>
         <file>components/NodeWarningsPopup.qml</file>

@@ -41,6 +41,7 @@ PageStack {
         : (feeBalanceErrorText.length > 0 ? feeBalanceErrorText : prepareTransactionErrorText)
 
     signal viewTransactionInActivity(string txid)
+    signal paymentRequestOutcome(string outcome)
 
     function confirmTransactionReview() {
         if (!root.wallet) return
@@ -80,6 +81,21 @@ PageStack {
         root.returnToSendForm()
         Qt.callLater(sendPage.openPsbtFileImport)
     }
+
+    function applyPaymentRequest(uri, source) {
+        Qt.callLater(function() { sendPage.handleIncomingPaymentUri(uri, source) })
+    }
+
+    // Coin selection and an open review both own the form; a request waits.
+    function canAcceptPaymentRequest() {
+        return root.wallet !== null
+            && root.recipient !== null
+            && root.depth === 1
+            && !paymentRequestReviewPopup.visible
+            && !paymentUriOverwritePopup.visible
+    }
+
+    onDepthChanged: if (root.depth === 1) root.paymentRequestOutcome("available")
 
     function clearPrepareTransactionError() {
         if (prepareTransactionErrorText.length > 0) {
@@ -148,8 +164,11 @@ PageStack {
             sendPage.m_filledUri = ""
             sendPage.m_dismissedUri = ""
             sendPage.m_applyingUri = false
+            sendPage.m_paymentUriInterrupted = paymentUriOverwritePopup.visible
+                || paymentRequestReviewPopup.visible
             sendPage.clearPendingPaymentUriPaste()
             paymentUriOverwritePopup.close()
+            paymentRequestReviewPopup.close()
         }
     }
 
@@ -423,6 +442,8 @@ PageStack {
         property bool m_applyingUri: false
         property var m_pendingPastedPaymentRequest: null
         property string m_pendingPastedPaymentRequestText: ""
+        property string m_pendingPastedPaymentRequestSource: ""
+        property bool m_paymentUriInterrupted: false
 
         function looksLikePaymentUri(text) {
             return String(text).trim().toLowerCase().startsWith("bitcoin:")
@@ -466,10 +487,11 @@ PageStack {
         function clearPendingPaymentUriPaste() {
             m_pendingPastedPaymentRequest = null
             m_pendingPastedPaymentRequestText = ""
+            m_pendingPastedPaymentRequestSource = ""
         }
 
-        function applyPastedPaymentRequest(result, text) {
-            applyParsedPaymentRequest(result, qsTr("clipboard"))
+        function applyPastedPaymentRequest(result, text, source) {
+            applyParsedPaymentRequest(result, source)
             if (result.success && Clipboard.text() === text) {
                 m_filledUri = text
                 showClipboardUriBanner = false
@@ -477,18 +499,45 @@ PageStack {
         }
 
         function handlePaymentUriPaste(text, sourceField) {
+            handlePaymentUriRequest(text, qsTr("clipboard"), sourceField)
+        }
+
+        function handleIncomingPaymentUri(text, source) {
             const result = BitcoinUri.parseBitcoinUri(text)
             if (!result.success) {
-                applyParsedPaymentRequest(result, qsTr("clipboard"))
+                applyParsedPaymentRequest(result, source)
+                root.paymentRequestOutcome("rejected")
+                return
+            }
+            m_pendingPastedPaymentRequest = result
+            m_pendingPastedPaymentRequestText = text
+            m_pendingPastedPaymentRequestSource = source
+            paymentRequestReviewPopup.source = source
+            paymentRequestReviewPopup.address = result.address
+            paymentRequestReviewPopup.hasAmount = result.hasAmount
+            paymentRequestReviewPopup.amountSatoshi = result.hasAmount ? result.amountSats : 0
+            paymentRequestReviewPopup.requestLabel = result.hasLabel ? result.label : ""
+            paymentRequestReviewPopup.requestMessage = result.hasMessage ? result.uriMessage : ""
+            paymentRequestReviewPopup.replacesValues = paymentUriConflicts(result, "")
+            paymentRequestReviewPopup.open()
+        }
+
+        function handlePaymentUriRequest(text, source, sourceField) {
+            const result = BitcoinUri.parseBitcoinUri(text)
+            if (!result.success) {
+                applyParsedPaymentRequest(result, source)
+                root.paymentRequestOutcome("rejected")
                 return
             }
             if (paymentUriConflicts(result, sourceField)) {
                 m_pendingPastedPaymentRequest = result
                 m_pendingPastedPaymentRequestText = text
+                m_pendingPastedPaymentRequestSource = source
                 paymentUriOverwritePopup.open()
                 return
             }
-            applyPastedPaymentRequest(result, text)
+            applyPastedPaymentRequest(result, text, source)
+            root.paymentRequestOutcome("resolved")
         }
 
         function handleClipboardPaste(field, editor) {
@@ -592,6 +641,26 @@ PageStack {
             applyParsedPaymentRequest(result, qsTr("file"))
         }
 
+        PaymentRequestReviewPopup {
+            id: paymentRequestReviewPopup
+            objectName: "sendPaymentRequestReviewPopup"
+            parent: Overlay.overlay
+
+            onClosed: {
+                const accept = accepted
+                const interrupted = sendPage.m_paymentUriInterrupted
+                const result = sendPage.m_pendingPastedPaymentRequest
+                const text = sendPage.m_pendingPastedPaymentRequestText
+                const source = sendPage.m_pendingPastedPaymentRequestSource
+                sendPage.m_paymentUriInterrupted = false
+                sendPage.clearPendingPaymentUriPaste()
+                if (accept && result) {
+                    sendPage.applyPastedPaymentRequest(result, text, source)
+                }
+                root.paymentRequestOutcome(interrupted ? "interrupted" : "resolved")
+            }
+        }
+
         AlertPopup {
             id: paymentUriOverwritePopup
             objectName: "sendPaymentUriOverwritePopup"
@@ -600,15 +669,21 @@ PageStack {
             message: qsTr("The payment request from the clipboard contains information that differs from the currently populated values. Pasting will replace the values.")
             messageObjectName: "sendPaymentUriOverwriteMessage"
 
+            // Escape, a press outside and a wallet switch all close the popup
+            // without going through an action, so the outcome is reported here.
+            onClosed: {
+                const interrupted = sendPage.m_paymentUriInterrupted
+                sendPage.m_paymentUriInterrupted = false
+                sendPage.clearPendingPaymentUriPaste()
+                root.paymentRequestOutcome(interrupted ? "interrupted" : "resolved")
+            }
+
             AlertAction {
                 text: qsTr("Cancel")
                 role: AlertAction.Cancel
                 buttonObjectName: "sendPaymentUriOverwriteCancelButton"
                 closesPopup: false
-                onTriggered: {
-                    sendPage.clearPendingPaymentUriPaste()
-                    paymentUriOverwritePopup.close()
-                }
+                onTriggered: paymentUriOverwritePopup.close()
             }
 
             AlertAction {
@@ -618,9 +693,9 @@ PageStack {
                 onTriggered: {
                     const result = sendPage.m_pendingPastedPaymentRequest
                     const text = sendPage.m_pendingPastedPaymentRequestText
-                    sendPage.clearPendingPaymentUriPaste()
+                    const source = sendPage.m_pendingPastedPaymentRequestSource
                     paymentUriOverwritePopup.close()
-                    if (result) sendPage.applyPastedPaymentRequest(result, text)
+                    if (result) sendPage.applyPastedPaymentRequest(result, text, source)
                 }
             }
         }
