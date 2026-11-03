@@ -84,6 +84,7 @@ endif()
 if(APPLE)
   enable_language(OBJCXX)
   list(APPEND QML_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/qml/models/macdockiconhandler.mm")
+  list(APPEND QML_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/qml/motionpreference_mac.mm")
 endif()
 
 set(QML_QRC ${CMAKE_CURRENT_SOURCE_DIR}/qml/bitcoin_qml.qrc)

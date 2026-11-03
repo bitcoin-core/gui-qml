@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import "../../controls"
+import "../../components"
 
 OnboardingView {
     id: root
@@ -12,7 +13,7 @@ OnboardingView {
     signal next()
     property bool useSharedMotion: false
 
-    isOnSurface: false
+    surfaceLevel: 0
     backButtonInFooter: true
     backButtonObjectName: "onboardingWizardBackButton"
     autoNavigateBack: false

@@ -75,6 +75,7 @@ class OptionsQmlModel : public QObject
     Q_PROPERTY(QString thirdPartyTransactionUrls READ thirdPartyTransactionUrls WRITE setThirdPartyTransactionUrls NOTIFY thirdPartyTransactionUrlsChanged)
     Q_PROPERTY(QString moneyFontChoice READ moneyFontChoice WRITE setMoneyFontChoice NOTIFY moneyFontChoiceChanged)
     Q_PROPERTY(QFont moneyFont READ moneyFont NOTIFY moneyFontChanged)
+    Q_PROPERTY(bool hideAmounts READ hideAmounts WRITE setHideAmounts NOTIFY hideAmountsChanged)
 
 public:
     void beginShutdown();
@@ -112,6 +113,7 @@ public:
     Q_INVOKABLE bool selectCustomDataDir(const QString& path);
     Q_INVOKABLE void useDefaultDataDir();
     Q_INVOKABLE QString externalSignerPathValidationError(const QString& path) const;
+    Q_INVOKABLE QUrl externalSignerPathFolder(const QString& path) const;
     bool proxyEnabled() const { return m_core_settings.values().proxy_enabled; }
     void setProxyEnabled(bool enabled);
     QString proxyAddress() const { return m_core_settings.values().proxy_address; }
@@ -162,6 +164,8 @@ public:
     QString moneyFontChoice() const { return m_money_font_choice; }
     void setMoneyFontChoice(const QString& choice);
     QFont moneyFont() const;
+    bool hideAmounts() const { return m_hide_amounts; }
+    void setHideAmounts(bool hide);
 
 public Q_SLOTS:
     void setCustomDataDirString(const QString &new_custom_datadir_string) {
@@ -198,6 +202,7 @@ Q_SIGNALS:
     void thirdPartyTransactionUrlsChanged();
     void moneyFontChoiceChanged();
     void moneyFontChanged();
+    void hideAmountsChanged();
 
 private:
     bool m_stopping{false};
@@ -242,6 +247,7 @@ private:
     int m_display_unit{0};
     QString m_third_party_transaction_urls;
     QString m_money_font_choice;
+    bool m_hide_amounts{false};
     DirtySnapshot m_core_change_dirty_snapshot;
     QVariantMap m_core_setting_statuses;
 

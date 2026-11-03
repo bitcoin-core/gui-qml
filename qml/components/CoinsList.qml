@@ -12,6 +12,9 @@ ColumnLayout {
     property var wallet
     property var coins: wallet ? wallet.coinsListModel : null
     property bool selectionMode: true
+    // Masks coin amounts and totals while Hide amounts is on; off while
+    // picking coins to send.
+    property bool hidesAmounts: false
     property bool walletSelectionActive: false
     property var markedIds: []
     property string errorText: ""
@@ -27,7 +30,7 @@ ColumnLayout {
     readonly property real remainingAmount: Math.max(0, target - selectedAmount)
     readonly property real changeAmount: Math.max(0, selectedAmount - target)
     readonly property int activeFilterCount: !coins ? 0 : (coins.filter !== "all" ? 1 : 0) + (coins.minAmount >= 0 || coins.maxAmount >= 0 ? 1 : 0)
-    spacing: 16
+    spacing: Theme.space.l
     onWalletChanged: { markedIds = []; walletSelectionActive = false; pendingLockedCoinId = ""; errorText = "" }
 
     BitcoinAmount { id: targetAmount; unit: optionsModel.displayUnit; satoshi: root.target }
@@ -60,10 +63,7 @@ ColumnLayout {
         errorText = coins.setCoinsLocked([coinId], locked) ? "" : qsTr("This coin could not be updated. Try again.")
     }
     function openMenu(menu, button) {
-        const p = button.mapToItem(Overlay.overlay, button.width, button.height + 6)
-        menu.x = Math.max(12, Math.min(p.x - menu.width, Overlay.overlay.width - menu.width - 12))
-        menu.y = Math.max(12, Math.min(p.y, Overlay.overlay.height - menu.height - 12))
-        menu.open()
+        menu.openBelow(button, Theme.space.s)
     }
     function clearFilters() {
         if (!coins) return
@@ -79,46 +79,41 @@ ColumnLayout {
             objectName: "coinBrowserSearch"
             fieldObjectName: "coinBrowserSearchField"
             Layout.fillWidth: true
-            placeholderText: root.width < 600 ? qsTr("Search coins") : qsTr("Search notes, addresses or transaction IDs")
+            placeholderText: SizeClass.isCompact(root.width) ? qsTr("Search coins") : qsTr("Search notes, addresses or transaction IDs")
             accessibleName: qsTr("Search coins")
             text: root.coins ? root.coins.searchText : ""
             onTextChanged: if (root.coins) root.coins.searchText = text
         }
-        NeutralButton {
+        IconButton {
             id: sortButton
             objectName: "coinBrowserSortButton"
-            implicitWidth: 40; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
-            iconSize: 16
+            toolbar: true
+            surfaceLevel: 1
+            iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/arrow-up-down.svg"
-            text: ""
-            Accessible.name: qsTr("Sort coins")
+            accessibleName: qsTr("Sort coins")
             onClicked: root.openMenu(sortMenu, sortButton)
         }
-        NeutralButton {
+        IconButton {
             id: groupButton
             objectName: "coinBrowserGroupButton"
-            implicitWidth: 40; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
-            iconSize: 16
+            toolbar: true
+            surfaceLevel: 1
+            iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/group-by.svg"
-            text: ""
-            Accessible.name: qsTr("Group coins")
+            accessibleName: qsTr("Group coins")
             onClicked: root.openMenu(groupMenu, groupButton)
         }
-        NeutralButton {
+        IconButton {
             id: selectionButton
             objectName: "walletCoinsSelectionButton"
             visible: !root.selectionMode
-            implicitWidth: visible ? 40 : 0; implicitHeight: 40
-            leftPadding: 0; rightPadding: 0
-            iconSize: 16
+            toolbar: true
+            surfaceLevel: 1
+            iconSize: Theme.size.icon.m
             iconSource: "qrc:/icons/checklist.svg"
-            text: ""
-            backgroundColor: root.walletSelectionActive ? Theme.color.orange : Theme.color.neutral2
-            hoverBackgroundColor: root.walletSelectionActive ? Theme.color.orangeLight1 : Theme.color.neutral3
-            textColor: root.walletSelectionActive ? Theme.color.white : Theme.color.neutral9
-            Accessible.name: qsTr("Select coins")
+            accessibleName: qsTr("Select coins")
+            checked: root.walletSelectionActive
             Accessible.checkable: true
             Accessible.checked: root.walletSelectionActive
             onClicked: {
@@ -139,14 +134,14 @@ ColumnLayout {
             active: true
             count: root.activeFilterCount
             size: coinTypeButton.height
-            iconSize: 20
+            iconSize: Theme.size.icon.l
             text: count === 1 ? qsTr("1 active filter") : qsTr("%1 active filters").arg(count)
             onClicked: root.openMenu(clearFiltersMenu, activeFiltersButton)
         }
         DropdownButton {
             id: coinTypeButton
             objectName: "coinBrowserFilterButton"
-            implicitHeight: 40; isOnSurface: true
+            implicitHeight: 40; surfaceLevel: 1
             text: !root.coins || root.coins.filter === "all" ? qsTr("Coin type") : root.coins.filter === "locked" ? qsTr("Locked") : qsTr("Spendable")
             active: root.coins && root.coins.filter !== "all"
             opened: filterMenu.opened
@@ -155,7 +150,7 @@ ColumnLayout {
         DropdownButton {
             id: amountFilterButton
             objectName: "coinBrowserAmountFilterButton"
-            implicitHeight: 40; isOnSurface: true
+            implicitHeight: 40; surfaceLevel: 1
             text: qsTr("Amount")
             active: root.coins && (root.coins.minAmount >= 0 || root.coins.maxAmount >= 0)
             opened: amountPopup.opened
@@ -177,9 +172,10 @@ ColumnLayout {
             width: list.width; height: 44
             CoreText {
                 anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 8
+                anchors.leftMargin: Theme.space.xs; anchors.rightMargin: Theme.space.xs
                 text: parent.section; horizontalAlignment: Text.AlignLeft; wrap: false; elide: Text.ElideMiddle
-                font: root.coins && root.coins.groupBy === "address" ? Theme.text.monoCaption.font : Theme.text.captionStrong.font
-                color: Theme.color.neutral7
+                textStyle: root.coins && root.coins.groupBy === "address" ? Theme.text.monoDescription : Theme.text.subheading
+                color: Theme.color.neutral9
             }
         }
         delegate: ItemDelegate {
@@ -194,15 +190,16 @@ ColumnLayout {
             required property bool selected
             required property bool groupFirst
             required property bool groupLast
-            property bool isOnSurface: root.selectionMode
+            property int surfaceLevel: root.selectionMode ? 1 : 0
             property bool suppressNextRowClick: false
             objectName: "coinSelectionItem_" + index
             readonly property bool marked: root.selectionMode ? selected : root.markedIds.indexOf(coinId) >= 0
             width: list.width
-            height: root.coins && root.coins.groupBy === "address"
-                ? (label.length > 0 ? 72 : 52)
-                : (label.length > 0 ? 92 : 72)
-            leftPadding: 12; rightPadding: 12
+            implicitHeight: Math.max(implicitContentHeight + 2 * Theme.space.ml,
+                root.coins && root.coins.groupBy === "address"
+                    ? (label.length > 0 ? 72 : 52) : (label.length > 0 ? 92 : 72))
+            height: implicitHeight
+            leftPadding: Theme.space.cardInset; rightPadding: Theme.space.cardInset
             onClicked: {
                 if (suppressNextRowClick) {
                     suppressNextRowClick = false
@@ -224,38 +221,21 @@ ColumnLayout {
                     coinContextMenu.open()
                 }
             }
-            Accessible.name: (label.length ? label + " " : "") + address + " " + rowAmount.displayWithUnit
+            Accessible.name: (label.length ? label + " " : "") + address + " "
+                + (root.hidesAmounts && optionsModel.hideAmounts ? qsTr("Hidden amount") : rowAmount.displayWithUnit)
             Accessible.checkable: root.selectionMode || root.walletSelectionActive
             Accessible.checked: marked
-            background: Rectangle {
+            background: GroupedRowBackground {
                 id: rowBackground
-                radius: coinRow.groupFirst || coinRow.groupLast ? 10 : 0
-                color: coinRow.marked || coinRow.hovered
-                    ? (coinRow.isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2)
-                    : (coinRow.isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1)
-                border.color: coinRow.visualFocus ? Theme.color.orange : "transparent"
-                Rectangle {
-                    visible: coinRow.groupFirst && !coinRow.groupLast
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                    height: parent.height / 2
-                    color: rowBackground.color
-                }
-                Rectangle {
-                    visible: coinRow.groupLast && !coinRow.groupFirst
-                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                    height: parent.height / 2
-                    color: rowBackground.color
-                }
-                Rectangle {
-                    visible: !coinRow.groupLast
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    anchors.leftMargin: 50
-                    anchors.rightMargin: 12
-                    height: 1
-                    color: Theme.color.neutral3
-                }
+                firstInGroup: coinRow.groupFirst
+                lastInGroup: coinRow.groupLast
+                surfaceLevel: coinRow.surfaceLevel
+                hovered: coinRow.hovered
+                pressed: coinRow.down
+                selected: coinRow.marked
+                showFocus: coinRow.visualFocus
+                dividerLeftInset: coinRow.leftPadding
+                dividerRightInset: coinRow.rightPadding
             }
             BitcoinAmount { id: rowAmount; satoshi: coinRow.amountSatoshi; unit: optionsModel.displayUnit }
             contentItem: RowLayout {
@@ -269,8 +249,8 @@ ColumnLayout {
                     clip: true
 
                     Behavior on Layout.preferredWidth {
-                        enabled: !root.selectionMode
-                        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                        enabled: !root.selectionMode && !Theme.motion.reduced
+                        NumberAnimation { duration: Theme.motion.moderate; easing.type: Theme.motion.easing.move }
                     }
 
                     CheckBox {
@@ -284,8 +264,8 @@ ColumnLayout {
                         enabled: checkboxSlot.shown && coinRow.enabled
                         checked: coinRow.marked
                         Accessible.name: coinRow.Accessible.name
-                        Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                        Behavior on x { enabled: !Theme.motion.reduced; NumberAnimation { duration: Theme.motion.moderate; easing.type: Theme.motion.easing.move } }
+                        Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                         onClicked: {
                             coinRow.suppressNextRowClick = true
                             root.toggleRow(coinRow.index, coinRow.coinId, coinRow.locked, coinRow.marked)
@@ -294,17 +274,17 @@ ColumnLayout {
                     }
                 }
                 ColumnLayout {
-                    Layout.fillWidth: true; Layout.minimumWidth: 60; Layout.alignment: Qt.AlignVCenter; spacing: 3
+                    Layout.fillWidth: true; Layout.minimumWidth: 60; Layout.alignment: Qt.AlignVCenter; spacing: Theme.space.xs
                     RowLayout {
                         visible: coinRow.label.length > 0
                         Layout.fillWidth: true
-                        CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; font: Theme.text.subheading.font; wrap: false; elide: Text.ElideRight }
+                        CoreText { visible: coinRow.label.length > 0; Layout.fillWidth: true; text: coinRow.label; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.subheading; wrap: false; elide: Text.ElideRight }
                     }
-                    CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; font: Theme.text.monoCaption.font; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
-                    CoreText { Layout.fillWidth: true; text: Qt.formatDateTime(coinRow.date, "MMM d, h:mm AP"); horizontalAlignment: Text.AlignLeft; font: Theme.text.caption.font; color: Theme.color.neutral7; wrap: false }
+                    CoreText { visible: !root.coins || root.coins.groupBy !== "address"; Layout.fillWidth: true; text: coinRow.address; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.monoCaption; color: Theme.color.neutral7; wrap: false; elide: Text.ElideMiddle }
+                    CoreText { Layout.fillWidth: true; text: coinRow.date ? new Date(coinRow.date).toLocaleString(Qt.locale(), Locale.ShortFormat) : ""; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.caption; color: Theme.color.neutral7; wrap: false }
                 }
                 RowLayout {
-                    spacing: 6
+                    spacing: Theme.space.s
                     Layout.alignment: Qt.AlignVCenter
                     Item {
                         visible: coinRow.locked
@@ -312,16 +292,16 @@ ColumnLayout {
                         Layout.preferredHeight: visible ? 20 : 0
                         Icon { anchors.centerIn: parent; source: "qrc:/icons/lock.fill.svg"; size: 16; color: Theme.color.neutral6 }
                         HoverHandler { id: lockHover }
-                        ToolTip {
+                        HoverToolTip {
                             visible: lockHover.hovered
-                            delay: 400
                             text: qsTr("Locked from automatic coin selection")
                         }
                     }
                     BitcoinAmountDisplayLabel {
                         Layout.preferredWidth: Math.min(190, implicitWidth); Layout.alignment: Qt.AlignVCenter
                         amount: rowAmount.localizedDisplay; unit: rowAmount.unitLabel; horizontalAlignment: Text.AlignRight
-                        font: Theme.text.monoDescription.font; wrap: false
+                        hidesAmount: root.hidesAmounts
+                        textStyle: Theme.text.amountDescription; wrap: false
                     }
                 }
             }
@@ -330,7 +310,7 @@ ColumnLayout {
             anchors.centerIn: parent; width: parent.width - 32
             visible: list.count === 0
             text: root.coins && root.coins.coinCount > 0 ? qsTr("No coins match your search or filters.") : qsTr("No coins in this wallet yet.")
-            font: Theme.text.description.font; color: Theme.color.neutral7
+            textStyle: Theme.text.description; color: Theme.color.neutral7
         }
     }
 
@@ -338,24 +318,23 @@ ColumnLayout {
         objectName: "coinBrowserSummary"
         visible: root.selectionMode || !root.walletSelectionActive
         Layout.fillWidth: true
-        isOnSurface: root.selectionMode
-        showGradientBorder: false
+        surfaceLevel: root.selectionMode ? 1 : 0
         rowSpacing: 0
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; amountValue: true; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: root.selectionMode ? Theme.color.neutral3 : Theme.color.neutral2 }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.neutral3 }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
-        ValueRow { Layout.fillWidth: true; amountValue: true; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; title: root.selectionMode ? qsTr("Target amount") : qsTr("Total in coins"); value: root.selectionMode ? (root.target > 0 ? targetAmount.localizedDisplay : "—") : totalAmountText.localizedDisplay; valueUnit: root.selectionMode ? targetAmount.unitLabel : totalAmountText.unitLabel; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; title: root.selectionMode ? qsTr("Amount selected") : qsTr("Spendable"); value: root.selectionMode ? selectedAmountText.localizedDisplay : spendableAmountText.localizedDisplay; valueUnit: root.selectionMode ? selectedAmountText.unitLabel : spendableAmountText.unitLabel; showDivider: !root.selectionMode || root.remainingAmount > 0 || root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: root.selectionMode && root.remainingAmount > 0; title: qsTr("Remaining to select"); value: remainingAmountText.localizedDisplay; valueUnit: remainingAmountText.unitLabel; showDivider: root.changeAmount > 0; dividerColor: Theme.color.surfaceDivider }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: root.selectionMode && root.changeAmount > 0; title: qsTr("Change"); value: root.target > 0 ? changeAmountText.localizedDisplay : "—"; valueUnit: changeAmountText.unitLabel; showDivider: false }
+        ValueRow { Layout.fillWidth: true; amountValue: true; hidesAmount: root.hidesAmounts; visible: !root.selectionMode; title: qsTr("Locked"); value: lockedAmountText.localizedDisplay; valueUnit: lockedAmountText.unitLabel; showDivider: false }
     }
 
     RowLayout {
         visible: !root.selectionMode && root.walletSelectionActive
         Layout.fillWidth: true
-        CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font }
+        CoreText { text: qsTr("%1 selected").arg(root.markedIds.length); Layout.fillWidth: true; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description }
         NeutralButton { objectName: "coinsLockButton"; text: qsTr("Lock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(true) }
         NeutralButton { objectName: "coinsUnlockButton"; text: qsTr("Unlock coins"); enabled: root.markedIds.length > 0; onClicked: root.lockMarked(false) }
     }
-    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.red; horizontalAlignment: Text.AlignLeft }
+    CoreText { Layout.fillWidth: true; visible: root.errorText.length > 0; text: root.errorText; color: Theme.color.dangerText; horizontalAlignment: Text.AlignLeft }
 
     ContextMenu {
         id: sortMenu; parent: Overlay.overlay; objectName: "coinBrowserSortMenu"
@@ -401,11 +380,12 @@ ColumnLayout {
         }
         ColumnLayout {
             Layout.fillWidth: true
-            Layout.margins: 12
-            spacing: 8
-            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); font: Theme.text.description.font; horizontalAlignment: Text.AlignLeft }
+            Layout.margins: Theme.space.ml
+            spacing: Theme.space.m
+            BitcoinAmountDisplayLabel { Layout.fillWidth: true; text: qsTr("%1 to %2").arg(lowerAmountText.display).arg(upperAmountText.displayWithUnit); hidesAmount: root.hidesAmounts; textStyle: Theme.text.amountDescription; horizontalAlignment: Text.AlignLeft }
             RangeSlider {
                 id: amountSlider; objectName: "coinBrowserAmountRangeSlider"; Layout.fillWidth: true
+                valuesHidden: root.hidesAmounts && optionsModel.hideAmounts
                 minValue: root.coins && root.coins.availableMinAmount !== undefined ? root.coins.availableMinAmount : 0
                 maxValue: root.coins && root.coins.availableMaxAmount !== undefined ? root.coins.availableMaxAmount : 0
                 Accessible.name: qsTr("Coin amount range")
@@ -416,7 +396,7 @@ ColumnLayout {
     }
     ContextMenu {
         id: clearFiltersMenu; parent: Overlay.overlay; objectName: "coinBrowserClearFiltersMenu"
-        ContextMenuButton { text: qsTr("Clear filters"); role: ContextMenuButton.Destructive; onTriggered: { root.clearFilters(); clearFiltersMenu.close() } }
+        ContextMenuButton { text: qsTr("Clear filters"); onTriggered: { root.clearFilters(); clearFiltersMenu.close() } }
     }
     ContextMenu {
         id: coinContextMenu
@@ -435,17 +415,20 @@ ColumnLayout {
         parent: Overlay.overlay
         title: qsTr("Use locked coin?")
         message: qsTr("This coin is excluded from automatic coin selection. Do you still want to spend it?")
-        onClosed: root.pendingLockedCoinId = ""
+        // AlertPopup closes before it triggers the action, so the pending coin is
+        // cleared by the actions rather than onClosed.
         AlertAction {
             text: qsTr("Cancel")
-            role: AlertAction.Neutral
+            role: AlertAction.Cancel
             buttonObjectName: "lockedCoinSelectionCancelButton"
+            onTriggered: root.pendingLockedCoinId = ""
         }
         AlertAction {
             text: qsTr("Use coin")
             buttonObjectName: "lockedCoinSelectionConfirmButton"
             onTriggered: {
                 const coinId = root.pendingLockedCoinId
+                root.pendingLockedCoinId = ""
                 if (coinId.length && root.coins && !root.coins.toggleCoinSelectionById(coinId)) {
                     root.errorText = qsTr("This coin is no longer available. Try again.")
                 }

@@ -13,6 +13,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <qml/backendexecutor.h>
 #include <test/mocks/mocknode.h>
 #include <chainparams.h>
@@ -70,6 +71,8 @@ private Q_SLOTS:
     void signerDirtyResetWhenReverted();
     void externalSignerPathValidationRejectsMissingPath();
     void externalSignerPathValidationAcceptsExecutablePath();
+    void externalSignerPathValidationRejectsSpaces();
+    void externalSignerPathFolderStartsNextToSigner();
     void connectionDirtyTracksRestartSettings();
     void natpmpAppliesLiveWithoutRestartDirty();
     void storageDirtyIgnoresDisabledPruneSize();
@@ -131,6 +134,7 @@ private Q_SLOTS:
     void storageSpaceCheckRejectsExistingFile();
     void thirdPartyTransactionLinksParseValidUrls();
     void moneyFontChoicePersists();
+    void hideAmountsPersists();
     void displayUnitUsesQtCompatibleSettingsKey();
     void displayUnitUsesLegacyQtFallback();
     void displayUnitPrefersQmlSettingOverLegacyQtFallback();
@@ -463,7 +467,7 @@ void OptionsModelTests::proxyDirtyResetWhenReverted()
     OptionsQmlModel model(node);
     QVERIFY(!model.proxySettingsDirty());
 
-    // Simulate what ProxySettings.qml does: set address before enabling.
+    // Simulate what ProxySettingsPage.qml does: set address before enabling.
     model.setProxyAddress("127.0.0.1:9050");
     // Address changed but proxy is still disabled — should NOT be dirty since
     // the address is irrelevant when proxy is off.
@@ -650,6 +654,50 @@ void OptionsModelTests::externalSignerPathValidationAcceptsExecutablePath()
 
     OptionsQmlModel model(node);
     QVERIFY(model.externalSignerPathValidationError(script_path).isEmpty());
+}
+
+void OptionsModelTests::externalSignerPathValidationRejectsSpaces()
+{
+    MockNode node;
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    QVERIFY(QDir(temp_dir.path()).mkpath("signer tools"));
+
+    const QString script_path = temp_dir.filePath("signer tools/fake-signer");
+    QFile script(script_path);
+    QVERIFY(script.open(QIODevice::WriteOnly | QIODevice::Text));
+    script.write("#!/bin/sh\nexit 0\n");
+    script.close();
+    QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+
+    OptionsQmlModel model(node);
+    const QString spaces_error{"The signer path can't contain spaces. Move the signer to a folder whose path has no spaces."};
+    // As picked in a file dialog, as a plain path, and quoted.
+    QCOMPARE(model.externalSignerPathValidationError(QUrl::fromLocalFile(script_path).toString()), spaces_error);
+    QCOMPARE(model.externalSignerPathValidationError(script_path), spaces_error);
+    QCOMPARE(model.externalSignerPathValidationError("\"" + script_path + "\""), spaces_error);
+    // Arguments after an executable without spaces are still allowed.
+    QVERIFY(model.externalSignerPathValidationError("hwi --emulators").isEmpty());
+}
+
+void OptionsModelTests::externalSignerPathFolderStartsNextToSigner()
+{
+    MockNode node;
+
+    QTemporaryDir temp_dir;
+    QVERIFY(temp_dir.isValid());
+    const QString signer_path = temp_dir.filePath("hwi");
+
+    OptionsQmlModel model(node);
+    const QUrl home{QUrl::fromLocalFile(QDir::homePath())};
+    QCOMPARE(model.externalSignerPathFolder(signer_path), QUrl::fromLocalFile(QDir(temp_dir.path()).absolutePath()));
+    QCOMPARE(model.externalSignerPathFolder(QUrl::fromLocalFile(signer_path).toString()),
+        QUrl::fromLocalFile(QDir(temp_dir.path()).absolutePath()));
+    // No path, a command found on PATH, or a folder that is gone: start at home.
+    QCOMPARE(model.externalSignerPathFolder(""), home);
+    QCOMPARE(model.externalSignerPathFolder("hwi"), home);
+    QCOMPARE(model.externalSignerPathFolder("/definitely/not/a/real/folder/hwi"), home);
 }
 
 void OptionsModelTests::connectionDirtyTracksRestartSettings()
@@ -2223,6 +2271,33 @@ void OptionsModelTests::moneyFontChoicePersists()
         settings.setValue(SettingsKeys::MONEY_FONT_CHOICE, previous_font_setting);
     } else {
         settings.remove(SettingsKeys::MONEY_FONT_CHOICE);
+    }
+}
+
+void OptionsModelTests::hideAmountsPersists()
+{
+    QSettings settings;
+    const bool had_setting = settings.contains(SettingsKeys::HIDE_AMOUNTS);
+    const QVariant previous_setting = settings.value(SettingsKeys::HIDE_AMOUNTS);
+    settings.remove(SettingsKeys::HIDE_AMOUNTS);
+
+    MockNode node;
+    {
+        OptionsQmlModel model(node);
+        QCOMPARE(model.hideAmounts(), false);
+        QSignalSpy spy(&model, &OptionsQmlModel::hideAmountsChanged);
+        model.setHideAmounts(true);
+        model.setHideAmounts(true);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(settings.value(SettingsKeys::HIDE_AMOUNTS).toBool(), true);
+    }
+    OptionsQmlModel reloaded(node);
+    QCOMPARE(reloaded.hideAmounts(), true);
+
+    if (had_setting) {
+        settings.setValue(SettingsKeys::HIDE_AMOUNTS, previous_setting);
+    } else {
+        settings.remove(SettingsKeys::HIDE_AMOUNTS);
     }
 }
 

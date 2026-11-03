@@ -20,18 +20,20 @@ AbstractButton {
     property string copiedText: qsTr("Copied")
     property url copyIconSource: "qrc:/icons/copy"
     property url copiedIconSource: "qrc:/icons/check"
-    property int iconSize: 16
+    property int iconSize: Theme.size.icon.m
     property int resetInterval: 1000
     readonly property bool copied: copiedResetTimer.running
 
     readonly property bool _showsIcon: displayMode !== CopyButton.TextOnly
     readonly property bool _showsText: displayMode !== CopyButton.IconOnly
     readonly property color _iconColor: !enabled
-        ? Theme.color.neutral4
-        : hovered || down ? Theme.color.orange : Theme.color.neutral7
+        ? Theme.color.disabledContent
+        : hovered || down ? Theme.color.neutral9 : Theme.color.neutral7
     readonly property color _textColor: !enabled
-        ? Theme.color.neutral4
-        : hovered || down ? Theme.color.orange : Theme.color.neutral8
+        ? Theme.color.disabledContent
+        : hovered || down ? Theme.color.neutral9 : Theme.color.neutral8
+    // The copied swap fades, and also scales unless motion is reduced.
+    readonly property real _swapScale: Theme.motion.reduced ? 1 : 0.9
 
     signal copyRequested()
 
@@ -39,12 +41,12 @@ AbstractButton {
     Accessible.name: text
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
-    leftPadding: 6
-    rightPadding: 6
+    leftPadding: Theme.space.s
+    rightPadding: Theme.space.s
     topPadding: 0
     bottomPadding: 0
-    implicitHeight: 28
-    scale: enabled && down ? 0.98 : 1.0
+    implicitHeight: Theme.size.controlSmall
+    scale: enabled && down ? Theme.motion.pressScale : 1
 
     onClicked: {
         copiedResetTimer.restart()
@@ -52,9 +54,10 @@ AbstractButton {
     }
 
     Behavior on scale {
+        enabled: Theme.motion.animated
         NumberAnimation {
-            duration: 100
-            easing.type: Easing.OutCubic
+            duration: Theme.motion.fast
+            easing.type: Theme.motion.easing.enter
         }
     }
 
@@ -86,11 +89,11 @@ AbstractButton {
                     color: root._iconColor
                     size: root.iconSize
                     opacity: root.copied ? 0 : 1
-                    scale: root.copied ? 0.75 : 1
+                    scale: root.copied ? root._swapScale : 1
                     hoverEnabled: false
 
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
+                    Behavior on scale { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                 }
 
                 Icon {
@@ -100,11 +103,11 @@ AbstractButton {
                     color: root._iconColor
                     size: root.iconSize
                     opacity: root.copied ? 1 : 0
-                    scale: root.copied ? 1 : 0.75
+                    scale: root.copied ? 1 : root._swapScale
                     hoverEnabled: false
 
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
+                    Behavior on scale { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                 }
             }
 
@@ -121,14 +124,12 @@ AbstractButton {
                     anchors.centerIn: parent
                     text: root.copyText
                     color: root._textColor
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     opacity: root.copied ? 0 : 1
-                    scale: root.copied ? 0.9 : 1
+                    scale: root.copied ? root._swapScale : 1
 
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
+                    Behavior on scale { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                 }
 
                 CoreText {
@@ -137,33 +138,28 @@ AbstractButton {
                     anchors.centerIn: parent
                     text: root.copiedText
                     color: root._textColor
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     opacity: root.copied ? 1 : 0
-                    scale: root.copied ? 1 : 0.9
+                    scale: root.copied ? 1 : root._swapScale
 
-                    Behavior on opacity { NumberAnimation { duration: 150 } }
-                    Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
+                    Behavior on scale { enabled: Theme.motion.animated; NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter } }
                 }
             }
         }
     }
 
-    background: Rectangle {
-        color: root.hovered || root.down ? Theme.color.neutral3 : "transparent"
-        radius: 7
-
-        Behavior on color {
-            ColorAnimation { duration: 150 }
-        }
+    background: StateBackground {
+        stateColor: root.down ? Theme.color.surfacePressed
+            : root.hovered ? Theme.color.surfaceHover : "transparent"
+        radius: Theme.radius.m
 
         FocusBorder {
             visible: root.visualFocus
-            topMargin: -2
-            bottomMargin: -2
-            leftMargin: -2
-            rightMargin: -2
+            topMargin: -Theme.focusRing.offsetDense
+            bottomMargin: -Theme.focusRing.offsetDense
+            leftMargin: -Theme.focusRing.offsetDense
+            rightMargin: -Theme.focusRing.offsetDense
             borderRadius: 9
         }
     }

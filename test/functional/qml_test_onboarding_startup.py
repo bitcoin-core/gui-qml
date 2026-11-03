@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import sys
 import threading
+import tempfile
 
 from qml_process_checks import check_gui_exit
 from qml_test_harness import QmlTestHarness, assert_node_shell_visible, walk_onboarding_to_connection
@@ -76,10 +77,42 @@ def run_case(action):
         harness.stop()
 
 
+def run_startup_error_case(action):
+    import fcntl
+
+    with tempfile.TemporaryDirectory(prefix="qml-startup-<b>-") as tmpdir:
+        harness = QmlTestHarness(tmpdir=tmpdir, extra_args=["-regtest", "-disablewallet", "-qml_onboarded=0"])
+        try:
+            harness.start()
+            gui = harness.driver
+            walk_onboarding_to_connection(gui)
+            network_dir = Path(harness.datadir) / "regtest"
+            network_dir.mkdir(exist_ok=True)
+            with (network_dir / ".lock").open("a+") as lock:
+                fcntl.lockf(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                gui.click("onboardingConnectionButton")
+                gui.wait_for_property("preInitStartupErrorPopup", "visible", True)
+                message = gui.get_text("preInitStartupErrorMessage")
+                assert "Cannot obtain a lock" in message, message
+                assert "<b>" in message, message
+                text_format = gui.get_property("preInitStartupErrorMessage", "textFormat")
+                assert text_format in (0, "PlainText"), text_format
+                if action == "acknowledge":
+                    gui.click("preInitStartupErrorCloseButton")
+                else:
+                    gui.close_window()
+                _, stderr = harness.process.communicate(timeout=30)
+                assert harness.process.returncode == (1 if action == "acknowledge" else 0), stderr.decode("utf8", errors="replace")
+        finally:
+            harness.stop()
+
+
 if __name__ == "__main__":
     if not hasattr(os, "mkfifo"):
         print("Skipped: blocking config-read fixture requires POSIX FIFOs")
         sys.exit(0)
     for action in ("finish", "quit", "close"):
         run_case(action)
+    for action in ("acknowledge", "close"):
+        run_startup_error_case(action)
     print("Visible onboarding startup checks passed")

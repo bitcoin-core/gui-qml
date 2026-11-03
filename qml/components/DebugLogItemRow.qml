@@ -17,12 +17,13 @@ Control {
     property bool isWarning: false
     property bool alternate: false
 
-    property int typeColumnWidth: 32
-    property int timeColumnWidth: 80
+    property int typeColumnWidth: 48
+    property int timeColumnWidth: Math.max(80, Math.ceil(timeMetrics.advanceWidth("00:00:00")) + Theme.space.m)
+    property FontMetrics timeMetrics: FontMetrics { font: Theme.text.monoCaption.font }
 
     readonly property color indicatorColor: isError
-        ? Theme.color.red
-        : isWarning ? Theme.color.amber : "transparent"
+        ? Theme.color.danger
+        : isWarning ? Theme.color.warning : "transparent"
     readonly property string typeLabel: isError
         ? qsTr("Error")
         : isWarning ? qsTr("Warning") : qsTr("Regular")
@@ -34,9 +35,9 @@ Control {
     padding: 0
 
     background: Rectangle {
-        color: root.alternate ? Theme.color.neutral2 : Theme.color.neutral1
+        color: root.alternate ? Theme.color.surface2 : Theme.color.surface1
 
-        Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on color { enabled: Theme.motion.animated; ColorAnimation { duration: Theme.motion.normal } }
     }
 
     contentItem: RowLayout {
@@ -65,8 +66,8 @@ Control {
             objectName: root.objectName.length > 0 ? root.objectName + "Time" : ""
             text: root.timestamp.length > 0 ? root.timestamp : "—"
             color: Theme.color.neutral7
-            font.family: Theme.text.monoFamily
-            font.pixelSize: 11
+            textStyle: Theme.text.monoCaption
+            wrap: false
             horizontalAlignment: Text.AlignLeft
             elide: Text.ElideRight
             Layout.preferredWidth: root.timeColumnWidth
@@ -74,20 +75,12 @@ Control {
             Layout.topMargin: 14
         }
 
-        TextEdit {
+        SelectableText {
             id: messageText
             objectName: root.objectName.length > 0 ? root.objectName + "Message" : ""
             text: root.message
-            readOnly: true
-            selectByMouse: true
-            persistentSelection: false
-            textFormat: Text.PlainText
             wrapMode: Text.WrapAnywhere
-            color: Theme.color.neutral9
-            selectionColor: Theme.color.orange
-            selectedTextColor: Theme.color.white
-            font: Theme.text.monoCaption.font
-            horizontalAlignment: Text.AlignLeft
+            textStyle: Theme.text.monoCaption
             Layout.fillWidth: true
             Layout.minimumWidth: 0
             Layout.alignment: Qt.AlignTop

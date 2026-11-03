@@ -1,0 +1,435 @@
+// Copyright (c) 2026 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
+
+import "../../../controls"
+
+DesignSystemSection {
+    id: root
+
+    property string exampleLanguage: "en"
+    property string exampleBlockClockMode: "compact"
+    property bool exampleStartupEnabled: true
+    property bool exampleNotificationsEnabled: false
+    property bool exampleAcknowledged: false
+    property url lastExampleLink: ""
+
+    description: "FormSection cards and the rows settings pages are built from. Rows host controls without owning their state."
+
+    DesignSystemSpecimen {
+        objectName: "designSystemFormSection"
+        Layout.fillWidth: true
+        name: "FormSection"
+
+        DesignSystemState {
+            width: 380
+            label: "title, description, footerText"
+            FormSection {
+                Layout.fillWidth: true
+                title: "Section title"
+                description: "Description under the title."
+                footerText: "Footer text under the card."
+
+                FormRow { Layout.fillWidth: true; title: "First row" }
+                FormRow { Layout.fillWidth: true; title: "Last row"; showDivider: false }
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "surfaceLevel: 1, nested"
+            FormSection {
+                Layout.fillWidth: true
+                title: "Outer section"
+
+                FormSection {
+                    Layout.fillWidth: true
+                    Layout.margins: 12
+                    surfaceLevel: 1
+                    title: "surfaceLevel: 1"
+
+                    FormRow { Layout.fillWidth: true; title: "First row" }
+                    FormRow { Layout.fillWidth: true; title: "Last row"; showDivider: false }
+                }
+            }
+        }
+        DesignSystemState {
+            width: 380
+            label: "showBackground: false"
+            FormSection {
+                Layout.fillWidth: true
+                showBackground: false
+                title: "No card"
+
+                FormRow { Layout.fillWidth: true; title: "First row" }
+                FormRow { Layout.fillWidth: true; title: "Last row"; showDivider: false }
+            }
+        }
+    }
+
+    FormSection {
+        objectName: "designSystemFormRowSection"
+        Layout.fillWidth: true
+        title: "FormRow"
+        description: "Title, description, supporting and error text, leading, trailing and body items."
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Title only"
+        }
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Title and description"
+            description: "Description in caption."
+        }
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Supporting text"
+            supportingText: "Supporting text."
+        }
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Error text"
+            errorText: "Error text replaces the supporting text."
+        }
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Disabled"
+            description: "enabled: false"
+            enabled: false
+            trailingItem: OptionSwitch { checked: true }
+        }
+
+        FormRow {
+            Layout.fillWidth: true
+            title: "Leading item"
+            leadingItem: Icon {
+                source: "image://images/wallet"
+                color: Theme.color.neutral9
+                size: 24
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemLanguageRow"
+            Layout.fillWidth: true
+            title: "Language"
+            description: "Trailing PopupPicker."
+            trailingItem: PopupPicker {
+                objectName: "designSystemLanguagePicker"
+                surfaceLevel: 1
+                minimumMenuWidth: 180
+                currentValue: root.exampleLanguage
+                model: [
+                    { text: "English", value: "en" },
+                    { text: "Deutsch", value: "de" },
+                    { text: "Español", value: "es" }
+                ]
+                onActivated: function(value) {
+                    root.exampleLanguage = value
+                }
+            }
+        }
+
+        FormRow {
+            objectName: "designSystemDataDirectoryRow"
+            Layout.fillWidth: true
+            title: "Data directory"
+            supportingText: "Selected before startup. The data directory cannot be changed while the node is running."
+            showDivider: false
+            bodyItem: CoreText {
+                objectName: "designSystemDataDirectoryValue"
+                Layout.fillWidth: true
+                text: "/Users/example/Bitcoin"
+                color: Theme.color.neutral7
+                textStyle: Theme.text.monoCaption
+                horizontalAlignment: Text.AlignLeft
+                wrap: true
+            }
+        }
+    }
+
+    FormSection {
+        objectName: "designSystemSwitchRowSection"
+        Layout.fillWidth: true
+        title: "Switch rows"
+        description: "Settings that apply immediately use a SwitchRow (the whole row flips the switch, which is the one focus stop) or a FormRow with a SegmentedPicker. Consent in a form is a CheckBox."
+
+        SwitchRow {
+            objectName: "designSystemStartupRow"
+            Layout.fillWidth: true
+            title: "Open at login"
+            description: "Start the app after signing in."
+            switchObjectName: "designSystemStartupSwitch"
+            checked: root.exampleStartupEnabled
+            onToggled: root.exampleStartupEnabled = checked
+        }
+
+        SwitchRow {
+            Layout.fillWidth: true
+            title: "Notifications"
+            checked: root.exampleNotificationsEnabled
+            onToggled: root.exampleNotificationsEnabled = checked
+        }
+
+        SwitchRow {
+            Layout.fillWidth: true
+            title: "Disabled"
+            description: "enabled: false"
+            enabled: false
+            checked: true
+        }
+
+        FormRow {
+            objectName: "designSystemBlockClockRow"
+            Layout.fillWidth: true
+            title: "Block status size"
+            description: "Set the scale used for the block status display."
+            showDivider: false
+            trailingItem: SegmentedPicker {
+                implicitWidth: 220
+                model: [
+                    { text: "Compact", value: "compact" },
+                    { text: "Showcase", value: "showcase" }
+                ]
+                currentIndex: root.exampleBlockClockMode === "compact" ? 0 : 1
+                onSelected: function(index, option) {
+                    root.exampleBlockClockMode = option.value
+                }
+            }
+        }
+
+        CheckBox {
+            objectName: "designSystemAcknowledgementRow"
+            Layout.fillWidth: true
+            Layout.margins: Theme.space.cardInset
+            text: "I understand that if I lose this password I might lose access to my bitcoin."
+            checked: root.exampleAcknowledged
+            onToggled: root.exampleAcknowledged = checked
+        }
+    }
+
+    FormSection {
+        objectName: "designSystemListRowSection"
+        Layout.fillWidth: true
+        title: "ListRow"
+        description: "Destinations and disclosure actions. Selection and keyboard focus are independent states."
+
+        ListRow {
+            objectName: "designSystemSelectedListRow"
+            Layout.fillWidth: true
+            title: "Selected destination"
+            description: "selected: true"
+            selected: true
+            showsDisclosureIndicator: true
+            disclosureIndicatorColor: Theme.color.accent
+        }
+
+        ListRow {
+            objectName: "designSystemDisclosureListRow"
+            Layout.fillWidth: true
+            title: "Advanced options"
+            description: "showsDisclosureIndicator: true"
+            showsDisclosureIndicator: true
+        }
+
+        ListRow {
+            Layout.fillWidth: true
+            title: "Leading item"
+            leadingItem: Icon {
+                source: "image://images/gear"
+                color: Theme.color.neutral9
+                size: 24
+            }
+            showsDisclosureIndicator: true
+        }
+
+        ListRow {
+            Layout.fillWidth: true
+            title: "Disabled"
+            description: "enabled: false"
+            enabled: false
+            showDivider: false
+            showsDisclosureIndicator: true
+        }
+    }
+
+    FormSection {
+        objectName: "designSystemValueSection"
+        property var shows: ["ValueRow", "LinkRow"]
+        Layout.fillWidth: true
+        title: "ValueRow and LinkRow"
+        description: "Value rows show read-only data; link rows hand their link to the caller."
+
+        LinkRow {
+            objectName: "designSystemWebsiteRow"
+            Layout.fillWidth: true
+            title: "Website"
+            value: "bitcoincore.org"
+            link: "https://bitcoincore.org"
+            onActivated: function(link) {
+                root.lastExampleLink = link
+            }
+        }
+
+        LinkRow {
+            Layout.fillWidth: true
+            title: "Disabled link"
+            value: "github.com/bitcoin/bitcoin"
+            link: "https://github.com/bitcoin/bitcoin"
+            enabled: false
+        }
+
+        ValueRow {
+            objectName: "designSystemVersionRow"
+            Layout.fillWidth: true
+            title: "Version"
+            value: "v31.99.0-unk"
+        }
+
+        ValueRow {
+            Layout.fillWidth: true
+            title: "Value icon"
+            value: "Connected"
+            valueIconSource: "image://images/check"
+        }
+
+        ValueRow {
+            objectName: "designSystemAmountValueRow"
+            Layout.fillWidth: true
+            title: "Amount"
+            amountValue: true
+            value: "0.00150000"
+            valueUnit: "BTC"
+            valueTextStyle: Theme.text.monoDescription
+        }
+
+        ValueRow {
+            objectName: "designSystemWrappingValueRow"
+            Layout.fillWidth: true
+            title: "Wrapping value"
+            value: "/Users/satoshi/Library/Application Support/Bitcoin/wallets/savings"
+            valueWrap: true
+        }
+
+        ValueRow {
+            Layout.fillWidth: true
+            title: "Disabled"
+            value: "v31.99.0-unk"
+            enabled: false
+            showDivider: false
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemGroupedRowBackground"
+        Layout.fillWidth: true
+        name: "GroupedRowBackground"
+        note: "Rows of a virtualised grouped list (activity, coins): the first and last rows round their outer corners, the rows in between are square and divided."
+
+        DesignSystemState {
+            width: 360
+            label: "firstInGroup, middle (hovered), lastInGroup (selected)"
+            Column {
+                Layout.fillWidth: true
+
+                Repeater {
+                    model: [
+                        { text: "First", first: true, last: false, hovered: false, selected: false },
+                        { text: "Middle, hovered", first: false, last: false, hovered: true, selected: false },
+                        { text: "Last, selected", first: false, last: true, hovered: false, selected: true }
+                    ]
+
+                    Item {
+                        id: groupedRow
+                        required property var modelData
+                        width: parent ? parent.width : 0
+                        height: Theme.size.row
+
+                        GroupedRowBackground {
+                            anchors.fill: parent
+                            firstInGroup: groupedRow.modelData.first
+                            lastInGroup: groupedRow.modelData.last
+                            hovered: groupedRow.modelData.hovered
+                            selected: groupedRow.modelData.selected
+                        }
+                        CoreText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            x: Theme.space.cardInset
+                            text: groupedRow.modelData.text
+                            textStyle: Theme.text.body
+                            color: Theme.color.neutral9
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemStateBackground"
+        Layout.fillWidth: true
+        name: "StateBackground"
+        note: "Fades between rest, hover, pressed and selected tints; set stateColor, not color."
+
+        Repeater {
+            model: [
+                { label: "rest", color: "transparent" },
+                { label: "surfaceHover", color: Theme.color.surfaceHover },
+                { label: "surfacePressed", color: Theme.color.surfacePressed },
+                { label: "surfaceSelected", color: Theme.color.surfaceSelected }
+            ]
+
+            DesignSystemState {
+                id: stateSample
+                required property var modelData
+                width: 120
+                label: modelData.label
+
+                Rectangle {
+                    Layout.preferredWidth: 104
+                    Layout.preferredHeight: Theme.size.control
+                    radius: Theme.radius.s
+                    color: Theme.color.surface1
+
+                    StateBackground {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        stateColor: stateSample.modelData.color
+                    }
+                }
+            }
+        }
+    }
+
+    DesignSystemSpecimen {
+        objectName: "designSystemSeparator"
+        Layout.fillWidth: true
+        name: "Separator"
+        note: "A 1 px surfaceDivider line between rows and sections."
+
+        DesignSystemState {
+            width: 360
+            label: "on surface1"
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 33
+                color: Theme.color.surface1
+                radius: Theme.radius.s
+
+                Separator {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.margins: Theme.space.m
+                }
+            }
+        }
+    }
+}

@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <QtTest/QtTest>
 
 #include <chainparams.h>
@@ -35,7 +37,7 @@ namespace {
 class DrainingWalletController : public WalletQmlController
 {
 public:
-    explicit DrainingWalletController(interfaces::Node& node) : WalletQmlController(node)
+    explicit DrainingWalletController(interfaces::Node& node, ArgsManager& args = gArgs) : WalletQmlController(node, args)
     {
         connect(this, &WalletQmlController::walletsDrained, this, [this] { m_drained = true; });
     }
@@ -327,6 +329,12 @@ private Q_SLOTS:
     void externalSignerCreationRequiresConfiguredPath();
     void externalSignerCreationRequiresExactlyOneSigner();
     void externalSignerSuggestionUsesSignerName();
+    void externalSignerCreationNeedsBuildSupport();
+    void externalSignerWithoutPathIsNotResponding();
+    void externalSignerFromCommandLineIsUsedAsGiven();
+    void externalSignerTurnedOffOnCommandLine();
+    void externalSignerStatusSeparatesCommandFromDevice_data();
+    void externalSignerStatusSeparatesCommandFromDevice();
     void initializedControllerSignalsMigrationForLegacyWallet();
     void createWalletBeforeInitializationReturnsFalseAndSetsError();
     void importWalletBeforeInitializationSetsLoadError();
@@ -700,6 +708,7 @@ void WalletQmlControllerTests::externalSignerCreationRequiresConfiguredPath()
     controller.refreshExternalSignerStatus();
 
     QVERIFY(!controller.canCreateExternalSignerWallet());
+    QVERIFY(!controller.externalSignerResponding());
     QCOMPARE(controller.externalSignerName(), QString("Ledger Nano X"));
     QCOMPARE(controller.suggestedExternalSignerWalletName(), QString("Ledger_Nano_X"));
 }
@@ -719,6 +728,8 @@ void WalletQmlControllerTests::externalSignerCreationRequiresExactlyOneSigner()
 
     QVERIFY(!controller.canCreateExternalSignerWallet());
     QVERIFY(controller.externalSignerName().isEmpty());
+    QVERIFY(controller.externalSignerResponding());
+    QCOMPARE(controller.externalSignerCount(), 2);
     QCOMPARE(controller.externalSignerError(), QString("More than one external signer was found. Connect only one device."));
 }
 
@@ -736,8 +747,144 @@ void WalletQmlControllerTests::externalSignerSuggestionUsesSignerName()
     controller.refreshExternalSignerStatus();
 
     QVERIFY(controller.canCreateExternalSignerWallet());
+    QVERIFY(controller.externalSignerPathConfigured());
+    QVERIFY(controller.externalSignerResponding());
     QCOMPARE(controller.externalSignerName(), QString("Coldcard Mk4"));
     QCOMPARE(controller.suggestedExternalSignerWalletName(), QString("Coldcard_Mk4"));
+}
+
+void WalletQmlControllerTests::externalSignerCreationNeedsBuildSupport()
+{
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+
+    DrainingWalletController controller(node);
+    QVERIFY(!controller.createExternalSignerWallet("Coldcard Mk4"));
+#ifdef ENABLE_EXTERNAL_SIGNER
+    // Supported builds go on to the usual checks.
+    QCOMPARE(controller.walletLoadError(), QString("Wallets are still loading. Try again in a moment."));
+#else
+    QCOMPARE(controller.walletLoadError(), QString("This build does not support external signers."));
+#endif
+    QVERIFY(!controller.walletLoadInProgress());
+}
+
+void WalletQmlControllerTests::externalSignerWithoutPathIsNotResponding()
+{
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string&) { return common::SettingsValue{}; };
+    node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node);
+    controller.refreshExternalSignerStatus();
+
+    QVERIFY(!controller.externalSignerPathConfigured());
+    QVERIFY(!controller.externalSignerResponding());
+    QVERIFY(controller.externalSignerError().isEmpty());
+}
+
+// A signer given with -signer is the one checked, even with another path
+// saved in settings, and the saved path isn't forced over it.
+void WalletQmlControllerTests::externalSignerFromCommandLineIsUsedAsGiven()
+{
+    ArgsManager args;
+    args.LockSettings([](common::Settings& settings) {
+        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"/opt/cli/hwi"}});
+    });
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string& name) {
+        return name == "signer" ? common::SettingsValue{std::string{"/usr/bin/hwi"}} : common::SettingsValue{};
+    };
+    // Core runs the command-line signer, so a device error names that command.
+    node.list_external_signers_fn = []() -> std::vector<std::unique_ptr<interfaces::ExternalSigner>> {
+        throw std::runtime_error("'/opt/cli/hwi' error: Device is locked");
+    };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node, args);
+    controller.refreshExternalSignerStatus();
+
+    QVERIFY(controller.externalSignerPathConfigured());
+    QVERIFY(controller.externalSignerResponding());
+    QCOMPARE(controller.externalSignerError(), QString{"Your device isn't ready: Device is locked"});
+    QVERIFY(node.force_setting_arguments.empty());
+}
+
+void WalletQmlControllerTests::externalSignerTurnedOffOnCommandLine()
+{
+    ArgsManager args;
+    args.LockSettings([](common::Settings& settings) {
+        settings.command_line_options["signer"].push_back(common::SettingsValue{false});
+    });
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string& name) {
+        return name == "signer" ? common::SettingsValue{std::string{"/usr/bin/hwi"}} : common::SettingsValue{};
+    };
+    node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node, args);
+    controller.refreshExternalSignerStatus();
+
+    // -nosigner is not a path, and the saved one doesn't replace it.
+    QVERIFY(!controller.externalSignerPathConfigured());
+    QVERIFY(!controller.externalSignerResponding());
+    QVERIFY(node.force_setting_arguments.empty());
+}
+
+void WalletQmlControllerTests::externalSignerStatusSeparatesCommandFromDevice_data()
+{
+    QTest::addColumn<QString>("thrown");
+    QTest::addColumn<bool>("responding");
+    QTest::addColumn<QString>("error");
+
+    const QString not_responding{"The signer command did not return valid output. Check that the path is correct."};
+    // Messages as Core raises them from ExternalSigner::Enumerate() and
+    // RunCommandParseJSON() for the command "/usr/bin/hwi".
+    QTest::newRow("no device") << QString{} << true << QString{};
+    QTest::newRow("command not found") << "execve failed: No such file or directory (2)" << false << not_responding;
+    QTest::newRow("command failed") << "RunCommandParseJSON error: process(/usr/bin/hwi enumerate) returned 1: usage\n" << false << not_responding;
+    QTest::newRow("output not json") << "Unable to parse JSON: hwi 3.1.0" << false << not_responding;
+    QTest::newRow("output not a list") << "'/usr/bin/hwi' received invalid response, expected array of signers" << false << not_responding;
+    QTest::newRow("another command") << "'/usr/bin/other' error: Device is locked" << false << not_responding;
+    QTest::newRow("device error") << "'/usr/bin/hwi' error: Device is locked" << true << QString{"Your device isn't ready: Device is locked"};
+    QTest::newRow("device error without text") << "'/usr/bin/hwi' error" << true << QString{"Your device isn't ready. Unlock it, then check again."};
+    // The tool's reason is shown in text that reads tags as markup.
+    QTest::newRow("device error that looks like markup") << "'/usr/bin/hwi' error: <img src=\"https://example.com/x.png\">Locked"
+                                                         << true << QString{"Your device isn't ready. Unlock it, then check again."};
+    QTest::newRow("missing fingerprint") << "'/usr/bin/hwi' received invalid response, missing signer fingerprint" << true
+                                         << QString{"Your device didn't share its fingerprint. Unlock it, then check again."};
+}
+
+void WalletQmlControllerTests::externalSignerStatusSeparatesCommandFromDevice()
+{
+    QFETCH(QString, thrown);
+    QFETCH(bool, responding);
+    QFETCH(QString, error);
+
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string& name) {
+        return name == "signer" ? common::SettingsValue{std::string{"/usr/bin/hwi"}} : common::SettingsValue{};
+    };
+    node.list_external_signers_fn = [thrown] {
+        if (!thrown.isEmpty()) throw std::runtime_error(thrown.toStdString());
+        return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{};
+    };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node);
+    controller.refreshExternalSignerStatus();
+
+    QVERIFY(controller.externalSignerPathConfigured());
+    QCOMPARE(controller.externalSignerResponding(), responding);
+    QCOMPARE(controller.externalSignerError(), error);
+    QVERIFY(controller.externalSignerName().isEmpty());
+    QVERIFY(!controller.canCreateExternalSignerWallet());
 }
 
 void WalletQmlControllerTests::initializedControllerSignalsMigrationForLegacyWallet()

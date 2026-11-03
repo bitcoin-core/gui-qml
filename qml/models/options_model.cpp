@@ -1,4 +1,4 @@
-// Copyright (c) 2022 The Bitcoin Core developers
+// Copyright (c) 2022-2026 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -155,6 +155,7 @@ OptionsQmlModel::OptionsQmlModel(interfaces::Node& node, ArgsManager& args)
     if (m_money_font_choice != MONEY_FONT_EMBEDDED && m_money_font_choice != MONEY_FONT_BEST_SYSTEM) {
         m_money_font_choice = MONEY_FONT_EMBEDDED;
     }
+    m_hide_amounts = settings.value(SettingsKeys::HIDE_AMOUNTS, false).toBool();
 
     buildAvailableLanguages();
 
@@ -424,7 +425,15 @@ QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) 
         return {};
     }
 
+    // Core splits the signer command at every space or tab and does not
+    // handle quotes, so an executable whose path contains one never starts.
+    static const QRegularExpression SPACE_RE(QStringLiteral(R"(\s)"));
     const QString token = FirstCommandToken(normalized_path);
+    if (token.contains(SPACE_RE) ||
+        (normalized_path.contains(SPACE_RE) && QFileInfo(ExpandUserPath(normalized_path)).isFile())) {
+        //: Error under the external signer path field. Bitcoin Core cannot run a signer from a path that contains spaces.
+        return tr("The signer path can't contain spaces. Move the signer to a folder whose path has no spaces.");
+    }
     if (token.isEmpty() || !TokenLooksLikePath(token)) {
         return {};
     }
@@ -440,6 +449,18 @@ QString OptionsQmlModel::externalSignerPathValidationError(const QString& path) 
         return tr("The configured signer path is not executable.");
     }
     return {};
+}
+
+QUrl OptionsQmlModel::externalSignerPathFolder(const QString& path) const
+{
+    // Start the file dialog next to the current signer executable, or in the
+    // home folder rather than wherever the app happened to be started from.
+    const QString token = FirstCommandToken(NormalizeCommandPath(path));
+    if (!token.isEmpty() && TokenLooksLikePath(token)) {
+        const QDir folder = QFileInfo(ExpandUserPath(token)).absoluteDir();
+        if (folder.exists()) return QUrl::fromLocalFile(folder.absolutePath());
+    }
+    return QUrl::fromLocalFile(QDir::homePath());
 }
 
 QString OptionsQmlModel::getDefaultDataDirString()
@@ -617,6 +638,15 @@ void OptionsQmlModel::setMoneyFontChoice(const QString& choice)
     settings.setValue(SettingsKeys::MONEY_FONT_CHOICE, m_money_font_choice);
     Q_EMIT moneyFontChoiceChanged();
     Q_EMIT moneyFontChanged();
+}
+
+void OptionsQmlModel::setHideAmounts(bool hide)
+{
+    if (hide == m_hide_amounts) return;
+    m_hide_amounts = hide;
+    QSettings settings;
+    settings.setValue(SettingsKeys::HIDE_AMOUNTS, m_hide_amounts);
+    Q_EMIT hideAmountsChanged();
 }
 
 QFont OptionsQmlModel::moneyFont() const

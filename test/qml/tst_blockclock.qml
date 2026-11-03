@@ -6,6 +6,7 @@ import QtQuick 2.15
 import QtQuick.Window 2.15
 import QtTest 1.2
 import "../../qml/components"
+import "../../qml/controls"
 
 TestCase {
     name: "BlockClock"
@@ -13,6 +14,16 @@ TestCase {
     visible: true
     width: 800
     height: 700
+
+    property string motionMode: ""
+
+    function init() {
+        motionMode = Theme.motion.mode
+    }
+
+    function cleanup() {
+        Theme.motion.mode = motionMode
+    }
 
     Window {
         id: presentationWindow
@@ -132,7 +143,8 @@ TestCase {
     }
 
     function clickClock(clock) {
-        verify(waitForRendering(clock))
+        // A static scene may render no further frame, so wait for layout only.
+        verify(waitForItemPolished(clock))
         mouseClick(clock, clock.width / 2, clock.width / 2)
         wait(0)
     }
@@ -540,6 +552,7 @@ TestCase {
     }
 
     function test_inactive_clock_retains_latest_model_snapshot_without_animations() {
+        Theme.motion.mode = "full"
         resetMocks()
         nodeModelMock.numPeers = 1
         nodeModelMock.verificationProgress = 0.5
@@ -590,7 +603,23 @@ TestCase {
         presentationWindow.visible = false
     }
 
+    function test_dials_follow_motion_policy() {
+        resetMocks()
+        const clock = createClock()
+        const miniClock = createMiniBlockClock()
+        miniClock.pageSelected = false
+        miniClock.paused = false
+        const dial = findChild(clock, "blockClockDial")
+        const miniDial = findChild(miniClock, "miniBlockClockDial")
+        for (const mode of ["full", "reduced", "off", "full"]) {
+            Theme.motion.mode = mode
+            compare(dial.animateDial, mode === "full")
+            compare(miniDial.animateDial, mode === "full")
+        }
+    }
+
     function test_hidden_window_suspends_clock_presentations() {
+        Theme.motion.mode = "full"
         resetMocks()
         nodeModelMock.numPeers = 1
         nodeModelMock.verificationProgress = 0.5

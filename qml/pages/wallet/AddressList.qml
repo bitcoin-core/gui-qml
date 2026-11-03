@@ -34,13 +34,6 @@ SettingsPage {
     signal paymentRequestRequested(string requestId)
     signal receiveRequested
 
-    function openMenuAt(menu, item) {
-        const pos = item.mapToItem(Overlay.overlay, item.width, item.height);
-        menu.x = Math.max(12, Math.min(pos.x - menu.width, Overlay.overlay.width - menu.width - 12));
-        menu.y = Math.max(12, Math.min(pos.y, Overlay.overlay.height - menu.height - 12));
-        menu.open();
-    }
-
     function createPaymentRequestFromSelected(closeAction) {
         root.errorText = "";
         const requests = wallet && wallet.receiveRequests
@@ -99,13 +92,11 @@ SettingsPage {
         return false
     }
 
-    rightItem: IconButton {
+    rightItem: OverflowMenuButton {
         objectName: "addressesMenuButton"
-        iconSource: "image://images/ellipsis"
-        iconColor: Theme.color.neutral9
-        size: 28
+        checked: pageMenu.opened
         onClicked: {
-            root.openMenuAt(pageMenu, this);
+            pageMenu.openBelow(this, 0);
         }
     }
 
@@ -126,91 +117,40 @@ SettingsPage {
         }
     }
 
-    Popup {
+    DialogPopup {
         id: detailsPopup
         objectName: "addressDetailsPopup"
-        readonly property color modalOverlayColor: Qt.rgba(0, 0, 0, 0.4)
-        property real verticalOffset: 0
         parent: Overlay.overlay
-        x: parent ? Math.round((parent.width - width) / 2) : 0
-        y: parent ? Math.round((parent.height - height) / 2) + verticalOffset : verticalOffset
-        width: Math.min(640, root.width - 40)
-        modal: true
-        focus: true
-        leftPadding: 40
-        rightPadding: 40
-        topPadding: 30
-        bottomPadding: 30
-        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+        title: qsTr("Address details")
+        implicitWidth: 640
+        contentItem: ScrollView {
+            id: detailsScroll
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
-        enter: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 0
-                to: 1
-                duration: 300
-                easing.type: Easing.OutCubic
-            }
-            NumberAnimation {
-                property: "verticalOffset"
-                from: -30
-                to: 0
-                duration: 300
-                easing.type: Easing.OutCubic
-            }
-        }
-
-        exit: Transition {
-            NumberAnimation {
-                property: "opacity"
-                from: 1
-                to: 0
-                duration: 250
-                easing.type: Easing.InCubic
-            }
-            NumberAnimation {
-                property: "verticalOffset"
-                from: 0
-                to: -30
-                duration: 250
-                easing.type: Easing.InCubic
-            }
-        }
-
-        Overlay.modal: Rectangle {
-            color: detailsPopup.modalOverlayColor
-            opacity: detailsPopup.opacity
-        }
-        background: Rectangle {
-            color: Theme.color.neutral1
-            border.color: Theme.color.neutral3
-            radius: 10
-            SurfaceGradientBorder {
-                anchors.fill: parent
-                surfaceColor: parent.color
-                cornerRadius: parent.radius
-            }
-        }
-        contentItem: AddressDetails {
-            id: addressDetails
-            address: root.selectedAddress
-            label: root.selectedLabel
-            amount: root.selectedAmount
-            hasAmount: root.selectedHasAmount
-            category: root.selectedCategory
-            scriptType: root.selectedScriptType
-            used: root.selectedUsed
-            hasPaymentRequest: root.selectedHasPaymentRequest
-            onCloseRequested: detailsPopup.close()
-            onCreatePaymentRequestRequested: {
-                root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
-            }
-            onEditLabelRequested: (address, label) => {
-                if (root.updateAddressLabel(address, label)) {
-                    root.selectedLabel = label;
-                    noteErrorText = "";
-                } else {
-                    noteErrorText = qsTr("This address is no longer available.");
+            AddressDetails {
+                id: addressDetails
+                width: detailsScroll.availableWidth
+                address: root.selectedAddress
+                label: root.selectedLabel
+                amount: root.selectedAmount
+                hasAmount: root.selectedHasAmount
+                category: root.selectedCategory
+                scriptType: root.selectedScriptType
+                used: root.selectedUsed
+                hasPaymentRequest: root.selectedHasPaymentRequest
+                onCloseRequested: detailsPopup.close()
+                onCreatePaymentRequestRequested: {
+                    root.createPaymentRequestFromSelected(function() { detailsPopup.close(); });
+                }
+                onEditLabelRequested: (address, label) => {
+                    if (root.updateAddressLabel(address, label)) {
+                        root.selectedLabel = label;
+                        noteErrorText = "";
+                    } else {
+                        noteErrorText = qsTr("This address is no longer available.");
+                    }
                 }
             }
         }
@@ -226,10 +166,10 @@ SettingsPage {
     }
 
     SegmentedPicker {
+        Accessible.name: qsTr("Addresses")
         Layout.fillWidth: true
         Layout.maximumWidth: 360
         Layout.alignment: Qt.AlignHCenter
-        implicitHeight: 36
         model: addressModel.categoryOptions
         currentIndex: Math.max(0, addressModel.categoryOptions.findIndex(option => option.value === addressModel.category))
         onSelected: (index, option) => {
@@ -242,8 +182,8 @@ SettingsPage {
         Layout.fillWidth: true
         visible: root.errorText.length > 0
         text: root.errorText
-        color: Theme.color.red
-        font: Theme.text.description.font
+        color: Theme.color.dangerText
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
 
@@ -257,7 +197,7 @@ SettingsPage {
             return addressModel.showUsed ? qsTr("No receive addresses.") : qsTr("No unused receive addresses.");
         }
         color: Theme.color.neutral6
-        font: Theme.text.description.font
+        textStyle: Theme.text.description
         horizontalAlignment: Text.AlignLeft
     }
 

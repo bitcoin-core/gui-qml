@@ -8,6 +8,7 @@ import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 
 import "../../controls"
+import "../../components"
 
 SettingsPage {
     id: root
@@ -112,12 +113,13 @@ SettingsPage {
         titleAlignment: Text.AlignHCenter
     }
 
-    OutlineButton {
+    NeutralButton {
         objectName: "walletSettingsEmptyAction"
+        buttonSize: NeutralButton.Large
         visible: !root.walletLoaded
         Layout.preferredWidth: 220
         Layout.alignment: Qt.AlignHCenter
-        text: root.noWalletsAvailable ? qsTr("Add wallet") : qsTr("Select wallet")
+        text: root.noWalletsAvailable ? qsTr("Add wallet…") : qsTr("Select wallet…")
         onClicked: root.selectWalletRequested()
     }
 
@@ -144,10 +146,14 @@ SettingsPage {
             Layout.fillWidth: true
             title: qsTr("Private keys")
             value: root.wallet ? root.wallet.privateKeysStatus : ""
+            showDivider: walletExternalSignerRow.visible
         }
 
         ValueRow {
+            id: walletExternalSignerRow
+            objectName: "walletExternalSignerRow"
             Layout.fillWidth: true
+            visible: BuildInfo.externalSignerSupported
             title: qsTr("External signer")
             value: root.wallet ? root.wallet.externalSignerStatus : ""
             showDivider: false

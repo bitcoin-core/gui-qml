@@ -7,6 +7,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
+import "../../components"
 
 Item {
     id: root
@@ -66,6 +67,13 @@ Item {
         walletController.importWallet(walletController.normalizeWalletPath(path))
     }
 
+    function showExternalSignerForm() {
+        walletController.clearWalletLoadStatus()
+        root.push(externalWallet, {
+            "defaultWalletName": walletController.suggestedExternalSignerWalletName
+        })
+    }
+
     function showImportResult() {
         if (root.busy || root.pendingImportResult.length === 0) return
         const result = root.pendingImportResult
@@ -77,7 +85,6 @@ Item {
 
     Component.onCompleted: {
         if (!walletController.initialized) nodeModel.startNodeInitializionThread()
-        walletController.refreshExternalSignerStatus()
     }
 
     AppFileDialog {
@@ -130,9 +137,8 @@ Item {
         id: navigationBar
         objectName: "walletCreationNavigationBar"
         width: parent.width
-        isOnSurface: root.modalView
-        buttonSidePadding: width >= 640 ? 24 : 16
-        closeButtonSize: CloseButton.Large
+        surfaceLevel: root.modalView ? 1 : 0
+        buttonSidePadding: SizeClass.isCompact(width) ? 16 : 24
         visible: root.currentItem && root.currentItem.usesSharedNavigation === true
         height: visible ? implicitHeight : 0
         title: visible ? root.currentItem.title : ""
@@ -182,8 +188,10 @@ Item {
 
             childView: Item {
                 implicitHeight: root.walletDiscoveryReady ? 0 : 48
-                BusyIndicator {
+                SpinningIndicator {
                     objectName: "createWalletDiscoveryBusyIndicator"
+                    size: 32
+                    color: Theme.color.neutral7
                     anchors.centerIn: parent
                     visible: !root.walletDiscoveryReady
                     running: visible
@@ -204,11 +212,11 @@ Item {
             onWatchOnlySelected: root.push(formPage, { "watchOnly": true,
                                                          "modalView": root.modalView })
             onExternalSignerSelected: {
-                walletController.clearWalletLoadStatus()
                 walletController.refreshExternalSignerStatus()
-                root.push(externalWallet, {
-                    "defaultWalletName": walletController.suggestedExternalSignerWalletName
-                })
+                // A responding command goes straight to device detection and
+                // naming; a missing or broken one is set up or corrected first.
+                if (walletController.externalSignerResponding) root.showExternalSignerForm()
+                else root.push(externalSetup, { "modalView": root.modalView })
             }
             onImportSelected: root.chooseImportFile()
         }
@@ -247,6 +255,13 @@ Item {
         id: importSuccess
         WalletImportCompletePage {
             onDone: root.finished(true)
+        }
+    }
+    Component {
+        id: externalSetup
+        ExternalSignerSetupPage {
+            onCancel: root.finished(false)
+            onReady: root.showExternalSignerForm()
         }
     }
     Component {

@@ -19,13 +19,13 @@ Page {
     property bool pendingNextAddress: false
     property string pendingAddressType: ""
     property string addressErrorText: ""
-    readonly property real pageSidePadding: width < 640 ? 16 : 40
+    readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real headerContentWidth: Math.max(0, Math.min(660, width - pageSidePadding * 2))
     readonly property alias requestModal: requestModal
     readonly property alias draftCard: card
     signal addressHistoryRequested()
     signal paymentRequestCreated()
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
     padding: 0
 
     function ensureReceivingAddress(next, type) {
@@ -86,9 +86,7 @@ Page {
                 CoreText {
                     Layout.fillWidth: true
                     text: qsTr("Receive bitcoin")
-                    font: Theme.text.headline.font
-                    lineHeight: Theme.text.headline.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.headline
                     horizontalAlignment: Text.AlignLeft
                 }
                 OverflowMenuButton {
@@ -109,7 +107,7 @@ Page {
                         dim: false
                         ContextMenuPicker {
                             objectName: "receiveAddressTypePicker"
-                            title: qsTr("Address Type")
+                            title: qsTr("Address type")
                             textRole: "label"
                             valueRole: "id"
                             subtitleRole: "description"
@@ -193,6 +191,7 @@ Page {
     }
     PaymentRequestModal {
         id: requestModal
+        parent: Overlay.overlay
         wallet: root.wallet
         onClosed: {
             if (root.presentedRequest && root.request === root.presentedRequest) root.request.clear()
@@ -212,7 +211,6 @@ Page {
     WalletPassphrasePopup {
         id: passphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, parent ? parent.width - 32 : 420)
         //: Title of the password dialog shown when Receive needs to unlock the wallet to generate an address.
         titleText: qsTr("Enter wallet password")
         //: Explains why the wallet password is needed to prepare a payment request.

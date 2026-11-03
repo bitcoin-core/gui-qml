@@ -88,11 +88,12 @@ bool HasMultipleRuntimeDialogButtons(unsigned int buttons)
     return (buttons & (buttons - 1)) != 0;
 }
 
-QVariant InformationRow(const QString& label, const QString& value)
+QVariant InformationRow(const QString& label, const QString& value, bool mono = false)
 {
     QVariantMap row;
     row.insert(QStringLiteral("label"), label);
     row.insert(QStringLiteral("value"), value);
+    row.insert(QStringLiteral("mono"), mono);
     return QVariant::fromValue(row);
 }
 } // namespace
@@ -741,10 +742,10 @@ QVariantList NodeModel::nodeInformationRows()
     const QString warning_text{m_warning_list.empty() ? tr("None") : m_warning_list.join(QStringLiteral("\n"))};
 
     QVariantList rows;
-    rows.push_back(InformationRow(tr("Client version"), fullClientVersion()));
-    rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion)));
-    rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet()))));
-    rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath()))));
+    rows.push_back(InformationRow(tr("Client version"), fullClientVersion(), /*mono=*/true));
+    rows.push_back(InformationRow(tr("User agent"), QString::fromStdString(strSubVersion), /*mono=*/true));
+    rows.push_back(InformationRow(tr("Datadir"), QString::fromStdString(fs::PathToString(gArgs.GetDataDirNet())), /*mono=*/true));
+    rows.push_back(InformationRow(tr("Blocks dir"), QString::fromStdString(fs::PathToString(gArgs.GetBlocksDirPath())), /*mono=*/true));
     rows.push_back(InformationRow(tr("Startup time"), QDateTime::currentDateTime().addSecs(-TicksSeconds(GetUptime())).toString()));
     rows.push_back(InformationRow(tr("Network"), QString::fromStdString(Params().GetChainTypeString())));
     rows.push_back(InformationRow(tr("Block height"), QString::number(block_height)));

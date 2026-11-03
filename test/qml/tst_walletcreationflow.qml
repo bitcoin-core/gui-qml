@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtTest 1.2
+import org.bitcoincore.qt 1.0
 import "../../qml/controls"
 import "../../qml/components"
 import "../../qml/pages/wallet"
@@ -30,8 +31,21 @@ TestCase {
     }
 
     function init() {
+        BuildInfo.externalSignerSupported = true
+        optionsModel.externalSignerPath = ""
         walletController.reset()
         walletController.initialized = true
+    }
+
+    // The controller state after checking a working signer command.
+    function setSignerResponding(signerName) {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        walletController.externalSignerPathConfigured = true
+        walletController.externalSignerResponding = true
+        walletController.canCreateExternalSignerWallet = signerName.length > 0
+        walletController.externalSignerName = signerName
+        walletController.suggestedExternalSignerWalletName = signerName.length > 0 ? signerName : "external_signer"
+        walletController.refreshExternalSignerStatus()
     }
 
     function createFlow() {
@@ -59,7 +73,7 @@ TestCase {
         verify(modal !== null)
         modal.open()
         tryCompare(modal, "opened", true)
-        compare(modal.width, 768)
+        compare(modal.width, 760)
         compare(modal.height, 625)
         mouseClick(findChild(modal, "walletTypeRegular"))
         tryCompare(modal.flow.currentItem, "objectName", "createWalletFormPage")
@@ -98,7 +112,7 @@ TestCase {
         verify(findChild(form, "onboardingScrollView") !== null)
         compare(form.showBackButton, true)
         compare(form.title, "")
-        compare(form.heading, "View-only wallet")
+        compare(form.heading, "Watch-only wallet")
         compare(findChild(form, "watchOnlyXpubPasteButton"), null)
         const name = findChild(form, "createWalletNameInput")
         const xpub = findChild(form, "watchOnlyXpubInput")
@@ -128,8 +142,7 @@ TestCase {
     }
 
     function test_external_signer_uses_onboarding_form_and_ready_page() {
-        walletController.canCreateExternalSignerWallet = true
-        walletController.externalSignerName = "trezor_t"
+        setSignerResponding("trezor_t")
         walletController.suggestedExternalSignerWalletName = "trezor_t2"
         const flow = createFlow()
         findChild(flow, "walletTypeExternalSigner").clicked()
@@ -142,6 +155,7 @@ TestCase {
         compare(findChild(form, "externalWalletNameInput").text, "trezor_t2")
         compare(form.primaryButton, findChild(form, "createExternalWalletButton"))
         compare(form.primaryButton.enabled, true)
+        compare(form.secondaryButtonText, "")
         form.primaryButton.clicked()
 
         tryVerify(function() { return findChild(flow, "externalWalletCreatedPage") !== null })
@@ -154,6 +168,197 @@ TestCase {
         flow.finished.connect(function(openActivity) { finished = openActivity })
         findChild(ready, "externalWalletCreatedDoneButton").clicked()
         compare(finished, true)
+    }
+
+    // With nothing set up, External signer is still offered and starts with
+    // HWI setup, which continues into naming once a device is found.
+    function test_external_signer_without_path_starts_with_hwi_setup() {
+        const flow = createFlow()
+        const typeRow = findChild(flow, "walletTypeExternalSigner")
+        compare(typeRow.visible, true)
+        compare(typeRow.title, "External signer")
+        typeRow.clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
+
+        const setup = findChild(flow, "externalSignerSetupPage")
+        compare(setup.heading, "Set up HWI")
+        compare(setup.showBackButton, true)
+        // The links are inside their sentences and reachable from the keyboard.
+        const releasesLink = findChild(setup, "externalSignerSetupReleasesLink")
+        const guideLink = findChild(setup, "externalSignerSetupGuideLink")
+        // A link at the end takes the sentence's period, so its icon comes last.
+        compare(releasesLink.sentence, "Download HWI for your operating system from its %1")
+        compare(releasesLink.linkText, "releases page.")
+        compare(releasesLink.link.toString(), "https://github.com/bitcoin-core/HWI/releases")
+        compare(guideLink.sentence, "Need help? Follow the %1")
+        compare(guideLink.linkText, "HWI setup guide.")
+        compare(guideLink.link.toString(), "https://github.com/bitcoin-core/HWI#readme")
+        compare(findChild(setup, "externalSignerSetupStepsTitle").text, "Install HWI")
+        compare(releasesLink.activeFocusOnTab, true)
+        compare(releasesLink.Accessible.role, Accessible.Link)
+        compare(releasesLink.Accessible.name, "releases page")
+        compare(setup.subheading, "HWI (Hardware Wallet Interface) lets Bitcoin Core communicate with your hardware wallet.")
+        const warning = findChild(setup, "externalSignerSetupDownloadWarning")
+        compare(warning.text,
+                "Only use HWI from its official releases page. A modified executable can steal your coins.")
+        // The RPC console's banner for the same risk, closed the same way.
+        compare(warning.tone, ToastBanner.Error)
+        compare(warning.showsCloseButton, true)
+        compare(warning.shown, true)
+        findChild(setup, "externalSignerSetupDownloadWarningCloseButton").clicked()
+        tryCompare(warning, "visible", false)
+        verify(findChild(setup, "externalSignerSetupBrowseButton") !== null)
+        const pathSection = findChild(setup, "externalSignerSetupPathSection")
+        compare(pathSection.title, "HWI executable")
+        compare(findChild(setup, "externalSignerSetupPathDialog").title, "Select HWI executable")
+        // The placeholder is an example path, not an instruction.
+        verify(findChild(setup, "externalSignerSetupPathInput").placeholderText.indexOf("hwi") >= 0)
+        // The card sits one level up on the dialog's surface.
+        compare(pathSection.surfaceLevel, setup.surfaceLevel)
+        compare(findChild(setup, "externalSignerSetupCheckDeviceButton"), null)
+        compare(findChild(setup, "externalSignerSetupCommandRow").value, "Not set")
+        compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
+        compare(setup.primaryButton, findChild(setup, "externalSignerSetupContinueButton"))
+        compare(setup.primaryButton.enabled, false)
+
+        const pathField = findChild(setup, "externalSignerSetupPathInput")
+        const commandRow = findChild(setup, "externalSignerSetupCommandRow")
+        const checks = walletController.externalSignerChecks
+        pathField.text = "/opt/hwi/hwi"
+        compare(commandRow.value, "Not checked")
+        // Leaving the field saves and checks nothing; that takes the button.
+        pathField.editingFinished()
+        compare(optionsModel.externalSignerPath, "")
+        compare(walletController.externalSignerChecks, checks)
+        compare(setup.primaryButton.text, "Check HWI")
+        compare(setup.primaryButton.enabled, true)
+        setup.primaryButton.clicked()
+        compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+        // The check shows that it runs before its result is in.
+        compare(pathSection.checking, true)
+        compare(commandRow.value, "Checking…")
+        compare(setup.primaryButton.text, "Checking…")
+        compare(setup.primaryButton.enabled, false)
+        tryCompare(pathSection, "checking", false)
+        compare(walletController.externalSignerChecks, checks + 1)
+        compare(findChild(flow, "externalSignerWalletFormPage"), null)
+
+        // HWI works but no device is connected yet.
+        walletController.externalSignerPathConfigured = true
+        walletController.externalSignerResponding = true
+        compare(commandRow.value, "Responding")
+        compare(findChild(setup, "externalSignerSetupDeviceRow").value, "None found")
+        compare(setup.primaryButton.text, "Check again")
+
+        // The device turns up while the next check runs. That click only
+        // checks; continuing takes another one.
+        setup.primaryButton.clicked()
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "trezor_t"
+        walletController.suggestedExternalSignerWalletName = "trezor_t"
+        compare(setup.primaryButton.text, "Checking…")
+        compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
+        tryCompare(pathSection, "checking", false)
+        compare(findChild(flow, "externalSignerWalletFormPage"), null)
+        compare(findChild(setup, "externalSignerSetupDeviceRow").value, "trezor_t")
+        compare(setup.primaryButton.text, "Use this device")
+        setup.primaryButton.clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
+        const form = findChild(flow, "externalSignerWalletFormPage")
+        compare(findChild(form, "externalWalletNameInput").text, "trezor_t")
+        compare(form.primaryButton.enabled, true)
+    }
+
+    // The HWI links confirm before opening the browser, like every external link.
+    function test_hwi_setup_links_confirm_before_opening() {
+        const flow = createFlow()
+        findChild(flow, "walletTypeExternalSigner").clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
+        const setup = findChild(flow, "externalSignerSetupPage")
+        const popup = findChild(setup, "externalSignerSetupLinkPopup")
+        verify(popup !== null)
+
+        findChild(setup, "externalSignerSetupReleasesLink").linkActivated("https://github.com/bitcoin-core/HWI/releases")
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://github.com/bitcoin-core/HWI/releases")
+        popup.close()
+        tryCompare(popup, "opened", false)
+
+        // The keyboard opens the same link from the focused sentence.
+        const guideLink = findChild(setup, "externalSignerSetupGuideLink")
+        guideLink.forceActiveFocus()
+        keyClick(Qt.Key_Return)
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://github.com/bitcoin-core/HWI#readme")
+        popup.close()
+        tryCompare(popup, "opened", false)
+    }
+
+    // A saved path whose command does not respond is corrected in the flow.
+    function test_external_signer_broken_path_opens_setup_with_its_error() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        walletController.externalSignerPathConfigured = true
+        walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
+        const flow = createFlow()
+        findChild(flow, "walletTypeExternalSigner").clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerSetupPage") !== null })
+
+        const setup = findChild(flow, "externalSignerSetupPage")
+        compare(findChild(setup, "externalSignerSetupPathInput").text, "/usr/local/bin/hwi")
+        const commandRow = findChild(setup, "externalSignerSetupCommandRow")
+        compare(commandRow.value, "Not responding")
+        compare(commandRow.errorText, walletController.externalSignerError)
+        compare(findChild(setup, "externalSignerSetupDeviceRow").visible, false)
+        compare(setup.primaryButton.text, "Check HWI")
+    }
+
+    // A working command skips setup. Without a device the form can check
+    // again, and a device found that way names the wallet.
+    function test_external_signer_responding_without_device_checks_again_on_form() {
+        setSignerResponding("")
+        // Opening Add wallet checks nothing; choosing the type checks once,
+        // and the form it opens doesn't check again.
+        const checks = walletController.externalSignerChecks
+        const flow = createFlow()
+        compare(walletController.externalSignerChecks, checks)
+        findChild(flow, "walletTypeExternalSigner").clicked()
+        tryVerify(function() { return findChild(flow, "externalSignerWalletFormPage") !== null })
+        compare(walletController.externalSignerChecks, checks + 1)
+        compare(findChild(flow, "externalSignerSetupPage"), null)
+
+        const form = findChild(flow, "externalSignerWalletFormPage")
+        compare(form.subheading, "Connect and unlock your device, then check again.")
+        compare(form.primaryButton.enabled, false)
+        compare(form.secondaryButton, findChild(form, "externalWalletCheckAgainButton"))
+        compare(form.secondaryButton.text, "Check again")
+
+        form.secondaryButton.clicked()
+        compare(form.secondaryButton.text, "Checking…")
+        compare(form.secondaryButton.enabled, false)
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "Coldcard Mk4"
+        walletController.suggestedExternalSignerWalletName = "Coldcard_Mk4"
+        compare(form.primaryButton.enabled, false)
+        tryCompare(form, "checking", false)
+        compare(walletController.externalSignerChecks, checks + 2)
+        compare(form.subheading, "Connected signer: Coldcard Mk4")
+        compare(findChild(form, "externalWalletNameInput").text, "Coldcard_Mk4")
+        compare(form.primaryButton.enabled, true)
+        // With a usable device there is nothing left to check.
+        compare(form.secondaryButtonText, "")
+    }
+
+    // Without build support no signer can be used, whatever the signer
+    // status says, so the other wallet types are all that is offered.
+    function test_external_signer_hidden_without_build_support() {
+        BuildInfo.externalSignerSupported = false
+        walletController.canCreateExternalSignerWallet = true
+        walletController.externalSignerName = "trezor_t"
+        const flow = createFlow()
+        compare(findChild(flow, "walletTypeExternalSigner").visible, false)
+        compare(findChild(flow, "walletTypeRegular").visible, true)
+        compare(findChild(flow, "walletTypeViewOnly").visible, true)
+        compare(findChild(flow, "walletTypeImport").visible, true)
     }
 
     function test_regular_requires_acknowledgement_and_warns_for_unencrypted_creation() {
@@ -177,30 +382,30 @@ TestCase {
         compare(findChild(form, "createWalletNameEntry").supportingText,
             "You cannot change this later.")
         compare(encrypt.text, "Encrypt this wallet with a strong password.")
-        compare(acknowledgement.loadedTrailingItem.checked, false)
+        compare(acknowledgement.checked, false)
         findChild(form, "createWalletNameInput").text = "Regular wallet"
         password.text = "correct horse battery staple"
         confirm.text = "different"
         compare(form.canCreate, false)
         confirm.text = password.text
         compare(form.canCreate, false)
-        acknowledgement.clicked()
-        compare(acknowledgement.loadedTrailingItem.checked, true)
+        acknowledgement.toggle()
+        compare(acknowledgement.checked, true)
         compare(form.canCreate, true)
         encrypt.checked = false
-        compare(acknowledgement.loadedTrailingItem.checked, false)
+        compare(acknowledgement.checked, false)
         compare(unencryptedAcknowledgement.visible, true)
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(unencryptedAcknowledgement.checked, false)
         compare(form.canCreate, false)
         compare(create.enabled, false)
-        unencryptedAcknowledgement.clicked()
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, true)
+        unencryptedAcknowledgement.toggle()
+        compare(unencryptedAcknowledgement.checked, true)
         compare(form.canCreate, true)
         encrypt.checked = true
         encrypt.checked = false
-        compare(unencryptedAcknowledgement.loadedTrailingItem.checked, false)
+        compare(unencryptedAcknowledgement.checked, false)
         compare(form.canCreate, false)
-        unencryptedAcknowledgement.clicked()
+        unencryptedAcknowledgement.toggle()
         create.clicked()
         verify(warning.message.indexOf("won't be able to set a password later") !== -1)
         compare(warning.visibleActions[1].role, 0)
@@ -222,7 +427,7 @@ TestCase {
         findChild(form, "createWalletPasswordInput").text = "correct horse battery staple"
         findChild(form, "createWalletPasswordRepeatInput").text = "correct horse battery staple"
         compare(form.canCreate, false)
-        findChild(form, "createWalletPasswordConfirmToggle").clicked()
+        findChild(form, "createWalletPasswordConfirmToggle").toggle()
         compare(form.canCreate, true)
         let warningOpened = false
         const warning = findChild(form, "createWalletUnencryptedWarning")
@@ -259,8 +464,7 @@ TestCase {
         verify(findChild(complete, "importWalletSuccessBadge") !== null)
         const infoSection = findChild(complete, "importWalletInfoSection")
         compare(infoSection.showBackground, true)
-        compare(infoSection.isOnSurface, true)
-        compare(infoSection.showGradientBorder, false)
+        compare(infoSection.surfaceLevel, 1)
         compare(findChild(complete, "importWalletSuccessWalletName").text, "Imported wallet")
         compare(findChild(complete, "importWalletSuccessKeyScheme").text, "Single-key")
         compare(complete.primaryButton.visible, false)

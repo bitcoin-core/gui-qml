@@ -217,7 +217,7 @@ PageStack {
         id: sendPage
         objectName: "walletSendPage"
         background: null
-        readonly property real pageSidePadding: width < 640 ? 16 : 40
+        readonly property real pageSidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
 
         function handlePsbtImportResult(result) {
             sendOptionsPopup.close()
@@ -265,26 +265,49 @@ PageStack {
             enter: Transition {
                 NumberAnimation {
                     property: "verticalOffset"
-                    from: transactionReviewPopup.height
+                    from: Theme.motion.reduced ? 0 : transactionReviewPopup.height
                     to: 0
-                    duration: 350
-                    easing.type: Easing.OutCubic
+                    duration: Theme.motion.travel(Theme.motion.slow)
+                    easing.type: Theme.motion.easing.enter
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    from: Theme.motion.reduced ? 0 : 1
+                    to: 1
+                    duration: Theme.motion.fade(Theme.motion.slow)
+                    easing.type: Theme.motion.easing.enter
                 }
             }
             exit: Transition {
                 NumberAnimation {
                     property: "verticalOffset"
-                    from: 0
-                    to: transactionReviewPopup.height
-                    duration: 280
-                    easing.type: Easing.InCubic
+                    to: Theme.motion.reduced ? 0 : transactionReviewPopup.height
+                    duration: Theme.motion.travel(Theme.motion.exit)
+                    easing.type: Theme.motion.easing.exit
+                }
+                NumberAnimation {
+                    property: "opacity"
+                    to: Theme.motion.reduced ? 0 : 1
+                    duration: Theme.motion.fade(Theme.motion.exit)
+                    easing.type: Theme.motion.easing.exit
                 }
             }
 
             property WalletQmlModel reviewWallet: null
             property bool importedReview: false
+            // Qt 6.5 and older do not give focus back when a popup closes.
+            property Item returnFocusItem: null
 
+            onAboutToShow: {
+                const window = contentItem ? contentItem.Window.window : null
+                returnFocusItem = window ? window.activeFocusItem : null
+            }
             onClosed: {
+                const focusTarget = returnFocusItem
+                returnFocusItem = null
+                if (focusTarget && focusTarget.visible && focusTarget.enabled) {
+                    focusTarget.forceActiveFocus(Qt.OtherFocusReason)
+                }
                 const wallet = reviewWallet
                 const wasImported = importedReview
                 reviewStack.pop(null, StackView.Immediate)
@@ -306,12 +329,12 @@ PageStack {
                 initialItem: reviewPage
                 transform: Translate { y: transactionReviewPopup.verticalOffset }
                 pushEnter: Transition {
-                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.motion.fade(Theme.motion.moderate); easing.type: Theme.motion.easing.enter }
                 }
                 pushExit: Transition {
                     // Keep Review visible under the fading Complete page until
                     // the Complete background is fully opaque.
-                    NumberAnimation { property: "opacity"; from: 1; to: 1; duration: 180 }
+                    NumberAnimation { property: "opacity"; from: 1; to: 1; duration: Theme.motion.fade(Theme.motion.moderate) }
                 }
 
                 Component {
@@ -365,6 +388,7 @@ PageStack {
         AlertPopup {
             id: unsupportedPsbtPopup
             objectName: "unsupportedPsbtPopup"
+            parent: Overlay.overlay
             title: qsTr("Not supported")
             messageObjectName: "unsupportedPsbtPopupMessage"
 
@@ -379,8 +403,9 @@ PageStack {
         AlertPopup {
             id: knownPsbtTxPopup
             objectName: "knownPsbtTxPopup"
+            parent: Overlay.overlay
             title: qsTr("Cannot import transaction")
-            message: qsTr("This transaction is already in your wallet spent history. View it in Activity")
+            message: qsTr("This transaction is already in your wallet spent history. View it in Activity.")
             messageObjectName: "knownPsbtTxPopupMessage"
 
             property string txid: ""
@@ -388,15 +413,15 @@ PageStack {
             onClosed: root.wallet.importedPsbt.clear()
 
             AlertAction {
-                text: qsTr("View transaction")
-                buttonObjectName: "knownPsbtTxViewButton"
-                onTriggered: root.viewTransactionInActivity(knownPsbtTxPopup.txid)
-            }
-
-            AlertAction {
                 text: qsTr("Close")
                 role: AlertAction.Cancel
                 buttonObjectName: "knownPsbtTxCloseButton"
+            }
+
+            AlertAction {
+                text: qsTr("View transaction")
+                buttonObjectName: "knownPsbtTxViewButton"
+                onTriggered: root.viewTransactionInActivity(knownPsbtTxPopup.txid)
             }
         }
 
@@ -671,76 +696,34 @@ PageStack {
         }
 
         // Manual URI entry popup
-        Popup {
+        AlertPopup {
             id: sendUriImportPopup
             objectName: "sendUriImportPopup"
-            anchors.centerIn: Overlay.overlay
-            width: Math.min(sendPage.width - 40, 420)
-            modal: true
-            dim: true
-            padding: 20
+            parent: Overlay.overlay
+            title: qsTr("Open payment request")
+            initialFocusItem: uriImportInput.field
+            implicitWidth: Math.max(420, horizontalActionsWidth + 40)
 
-            Overlay.modal: Rectangle {
-                color: Qt.rgba(0, 0, 0, 0.5)
+            content: LabeledTextField {
+                id: uriImportInput
+                Layout.fillWidth: true
+                label: qsTr("Payment request")
+                fieldObjectName: "sendUriImportInput"
+                placeholderText: qsTr("bitcoin:address?amount=…")
+                fieldBackgroundColor: Theme.color.surface2
             }
 
-            background: Rectangle {
-                color: Theme.color.neutral1
-                border.color: Theme.color.neutral2
-                radius: 5
-                border.width: 1
-                SurfaceGradientBorder {
-                    anchors.fill: parent
-                    surfaceColor: parent.color
-                    cornerRadius: parent.radius
-                }
+            AlertAction {
+                text: qsTr("Cancel")
+                role: AlertAction.Cancel
             }
 
-            contentItem: ColumnLayout {
-                spacing: 12
-
-                CoreText {
-                    text: qsTr("Open payment request")
-                    font: Theme.text.subheading.font
-                    color: Theme.color.neutral9
-                    Layout.fillWidth: true
-                }
-
-                CoreTextField {
-                    id: uriImportInput
-                    objectName: "sendUriImportInput"
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("bitcoin:address?amount=…")
-                    background: Rectangle {
-                        color: Theme.color.neutral2
-                        radius: 5
-                        border.width: 0
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    OutlineButton {
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 0
-                        text: qsTr("Cancel")
-                        onClicked: sendUriImportPopup.close()
-                    }
-
-                    ContinueButton {
-                        objectName: "sendUriImportApplyButton"
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 0
-                        text: qsTr("Apply")
-                        enabled: uriImportInput.text.trim().length > 0
-                        onClicked: {
-                            sendUriImportPopup.close()
-                            sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
-                        }
-                    }
-                }
+            AlertAction {
+                id: uriImportApply
+                text: qsTr("Apply")
+                buttonObjectName: "sendUriImportApplyButton"
+                enabled: uriImportInput.text.trim().length > 0
+                onTriggered: sendPage.applyPaymentRequestFromText(uriImportInput.text, qsTr("manual entry"))
             }
         }
 
@@ -798,7 +781,7 @@ PageStack {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 6
                             //: Main heading of the transaction creation form.
-                            CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); font: Theme.text.headline.font; horizontalAlignment: Text.AlignLeft }
+                            CoreText { objectName: "walletSendTitle"; Layout.fillWidth: true; text: qsTr("Send bitcoin"); textStyle: Theme.text.headline; horizontalAlignment: Text.AlignLeft }
                             RowLayout {
                                 id: availableBalanceRow
                                 Layout.fillWidth: true
@@ -808,7 +791,7 @@ PageStack {
                                     id: availableBalanceCaption
                                     objectName: "sendAvailableCaption"
                                     text: qsTr("Available")
-                                    font: Theme.text.description.font
+                                    textStyle: Theme.text.description
                                     color: Theme.color.neutral7
                                     horizontalAlignment: Text.AlignLeft
                                     Layout.alignment: Qt.AlignBaseline
@@ -817,7 +800,7 @@ PageStack {
                                     objectName: "sendAvailableAmount"
                                     amount: availableAmount.localizedDisplay
                                     unit: availableAmount.unitLabel
-                                    font: Theme.text.description.font
+                                    textStyle: Theme.text.amountDescription
                                     color: Theme.color.neutral7
                                     horizontalAlignment: Text.AlignLeft
                                     Layout.alignment: Qt.AlignBaseline
@@ -846,11 +829,11 @@ PageStack {
                         }
                     }
                     //: Reminder for wallets that sign on a separate hardware device.
-                    CoreText { visible: root.externalSignerWallet; Layout.fillWidth: true; text: qsTr("Have your external signer ready to approve this transaction."); horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.neutral7 }
+                    CoreText { visible: root.externalSignerWallet; Layout.fillWidth: true; text: qsTr("Have your external signer ready to approve this transaction."); horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.neutral7 }
                     GridLayout {
                         id: sendSections
                         Layout.fillWidth: true
-                        columns: width >= 900 ? 2 : 1
+                        columns: width >= SizeClass.wideWidthMin ? 2 : 1
                         columnSpacing: 24
                         rowSpacing: 24
 
@@ -886,8 +869,8 @@ PageStack {
                                         padding: 12
                                         implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
                                         background: Rectangle {
-                                            color: Theme.color.neutral1
-                                            radius: 10
+                                            color: Theme.color.surface1
+                                            radius: Theme.radius.card
                                         }
                                         contentItem: ColumnLayout {
                                             spacing: 12
@@ -895,10 +878,21 @@ PageStack {
                                                 visible: root.wallet.recipients.count > 1
                                                 Layout.fillWidth: true; spacing: 10
                                                 AbstractButton {
+                                                    id: recipientToggle
                                                     objectName: "sendEditRecipient_" + recipientCard.index
                                                     Layout.fillWidth: true; implicitHeight: 36
+                                                    focusPolicy: Qt.StrongFocus
                                                     //: Accessible action to expand or collapse one recipient in the stack.
                                                     Accessible.name: qsTr("Edit recipient %1").arg(recipientCard.index + 1)
+                                                    //: Accessible state of one recipient in the stack.
+                                                    Accessible.description: recipientCard.expanded ? qsTr("Expanded") : qsTr("Collapsed")
+                                                    background: Item {
+                                                        FocusBorder {
+                                                            objectName: recipientToggle.objectName + "FocusBorder"
+                                                            visible: recipientToggle.visualFocus
+                                                            targetRadius: 6
+                                                        }
+                                                    }
                                                     onClicked: {
                                                         const wasExpanded = recipientCard.expanded
                                                         root.wallet.recipients.setCurrentIndex(recipientCard.index)
@@ -907,9 +901,9 @@ PageStack {
                                                     contentItem: RowLayout {
                                                         spacing: 10
                                                         Rectangle {
-                                                            implicitWidth: 28; implicitHeight: 28; radius: 14
-                                                            color: recipientCard.expanded ? Theme.color.orange : Theme.color.neutral3
-                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; font: Theme.text.subheading.font; color: recipientCard.expanded ? "#000000" : Theme.color.neutral9 }
+                                                            implicitWidth: 28; implicitHeight: 28; radius: height / 2
+                                                            color: recipientCard.expanded ? Theme.color.accent : Theme.color.surface3
+                                                            CoreText { anchors.centerIn: parent; text: recipientCard.index + 1; textStyle: Theme.text.subheading; color: recipientCard.expanded ? Theme.color.accentForeground : Theme.color.neutral9 }
                                                         }
                                                         CoreText {
                                                             Layout.fillWidth: true
@@ -917,16 +911,13 @@ PageStack {
                                                             horizontalAlignment: Text.AlignLeft
                                                             wrap: false
                                                             elide: Text.ElideRight
-                                                            font: Theme.text.subheading.font
+                                                            textStyle: Theme.text.subheading
                                                             text: recipientCard.recipientObject.label || recipientCard.recipientObject.paymentRequestLabel || qsTr("Recipient %1").arg(recipientCard.index + 1)
                                                         }
-                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; font: Theme.text.monoDescription.font }
-                                                        Icon {
-                                                            source: "image://images/caret-right"
-                                                            rotation: recipientCard.expanded ? 90 : 0
-                                                            size: 9
+                                                        BitcoinAmountDisplayLabel { visible: !recipientCard.expanded; amount: recipientCard.recipientObject.amount.localizedDisplay; unit: recipientCard.recipientObject.amount.unitLabel; textStyle: Theme.text.amountDescription }
+                                                        CaretRightIcon {
+                                                            expanded: recipientCard.expanded
                                                             color: Theme.color.neutral6
-                                                            Behavior on rotation { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                                                         }
                                                     }
                                                 }
@@ -959,7 +950,7 @@ PageStack {
                                 objectName: "sendPaymentRequestStatusText"
                                 visible: sendPage.paymentRequestIsError && sendPage.paymentRequestStatus.length > 0
                                 Layout.leftMargin: 16; Layout.rightMargin: 16
-                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.red; font: Theme.text.description.font
+                                Layout.fillWidth: true; text: sendPage.paymentRequestStatus; horizontalAlignment: Text.AlignLeft; color: Theme.color.dangerText; textStyle: Theme.text.description
                             }
 
                             NeutralButton {
@@ -999,7 +990,7 @@ PageStack {
                                     showDivider: root.manualCoinSelection || root.selectedInputsActive
                                     trailingItem: SegmentedPicker {
                                         objectName: "sendCoinControlPicker"
-                                        implicitWidth: 190; implicitHeight: 36
+                                        implicitWidth: 190
                                         model: [qsTr("Automatic"), qsTr("Manual")]
                                         currentIndex: root.manualCoinSelection || root.selectedInputsActive ? 1 : 0
                                         onSelected: function(index, option) {
@@ -1037,8 +1028,9 @@ PageStack {
                                     text: root.selectedInputsActive ? (root.wallet.coinsListModel.selectedCoinsCount === 1 ? qsTr("1 input selected") : qsTr("%1 inputs selected").arg(root.wallet.coinsListModel.selectedCoinsCount))
                                         : qsTr("%1 inputs selected automatically").arg(root.wallet.estimatedInputCount)
                                 }
-                                OutlineButton {
+                                NeutralButton {
                                     objectName: "sendUseAutomaticInputsButton"
+                                    buttonSize: NeutralButton.Large
                                     visible: false
                                     text: qsTr("Use automatic selection")
                                     onClicked: { root.wallet.clearSelectedCoins(); root.wallet.coinsListModel.update(); root.scheduleFeeEstimates() }
@@ -1050,15 +1042,15 @@ PageStack {
                                 title: qsTr("Summary")
                                 BitcoinAmount { id: summaryFee; satoshi: Math.max(0, root.wallet.estimatedFeeSatoshi); unit: optionsModel.displayUnit }
                                 BitcoinAmount { id: summaryTotal; satoshi: root.wallet.sendTotalSatoshi; unit: optionsModel.displayUnit }
-                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel; valueTextStyle: Theme.text.monoDescription }
-                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.monoBody }
+                                ValueRow { objectName: "sendTotalFeesValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total fees"); value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryFee.localizedDisplay : "—"; valueUnit: summaryFee.unitLabel }
+                                ValueRow { objectName: "sendTotalAmountValue"; Layout.fillWidth: true; amountValue: true; animateUnitChanges: false; title: qsTr("Total to send"); showDivider: false; value: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.localizedDisplay : recipientsTotalAmount.localizedDisplay; valueUnit: !root.wallet.feeEstimatePending && root.wallet.estimatedFeeSatoshi >= 0 ? summaryTotal.unitLabel : recipientsTotalAmount.unitLabel; valueTextStyle: Theme.text.amountBody }
                             }
 
-                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; font: Theme.text.description.font; color: Theme.color.red }
-                            ContinueButton {
+                            CoreText { objectName: "sendPrepareTransactionErrorText"; Layout.fillWidth: true; visible: root.formErrorText.length > 0; text: root.formErrorText; horizontalAlignment: Text.AlignLeft; textStyle: Theme.text.description; color: Theme.color.dangerText }
+                            PrimaryButton {
                                 objectName: "sendReviewButton"
                                 Layout.fillWidth: true
-                                text: qsTr("Review Transaction")
+                                text: qsTr("Review transaction")
                                 enabled: root.wallet && root.wallet.recipients.allValid && !root.wallet.feeEstimatePending
                                     && !root.wallet.sendAmountExhaustsBalance && (!root.wallet.customFeeEnabled || root.wallet.customFeeRateValid)
                                 onClicked: root.confirmTransactionReview()
@@ -1080,7 +1072,7 @@ PageStack {
                 Item {
                     anchors.fill: parent
 
-                    CoreTextField {
+                    TextField {
                         id: fileImportPathInput
                         objectName: "sendImportPaymentRequestFilePathInput"
                         visible: false
@@ -1092,7 +1084,7 @@ PageStack {
                         onClicked: sendPage.applyPaymentRequestFromFile(fileImportPathInput.text)
                     }
 
-                    CoreTextField {
+                    TextField {
                         id: dropUriInput
                         objectName: "sendDropUriInput"
                         visible: false
@@ -1107,7 +1099,7 @@ PageStack {
                     // Exercises the DropArea hasUrls + file:// branch.
                     // Passes the raw URL to applyPaymentRequestFromFile so C++
                     // handles the platform-correct toLocalFile() conversion.
-                    CoreTextField {
+                    TextField {
                         id: dropFileUrlInput
                         objectName: "sendDropFileUrlInput"
                         visible: false
@@ -1152,12 +1144,11 @@ PageStack {
         }
     }
 
-    SendCoinSelection { id: coinSelectionPopup; wallet: root.wallet }
+    SendCoinSelection { id: coinSelectionPopup; parent: Overlay.overlay; wallet: root.wallet }
 
     WalletPassphrasePopup {
         id: reviewPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(480, root.width - 40)
         popupObjectName: "reviewPassphrasePopup"
         passphraseFieldObjectName: "reviewPassphraseField"
         errorTextObjectName: "reviewPassphraseErrorText"
@@ -1166,7 +1157,7 @@ PageStack {
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to prepare this transaction for review.")
         confirmText: qsTr("Unlock and continue")
-        busyConfirmText: qsTr("Unlocking...")
+        busyConfirmText: qsTr("Unlocking…")
         onSubmitted: (passphrase) => {
             reviewPassphrasePopup.busy = true
             if (root.wallet.prepareTransactionWithPassphrase(passphrase)) {

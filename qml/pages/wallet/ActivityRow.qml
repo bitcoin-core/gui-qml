@@ -7,7 +7,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import org.bitcoincore.qt 1.0
 import "../../controls"
-import "../../components"
 
 Item {
     id: root
@@ -57,7 +56,7 @@ Item {
     readonly property real amountWidth: compact ? 0 : Math.min(210, width * 0.32)
     readonly property color amountColor: isInactive ? Theme.color.neutral6
         : isPendingRequest ? Theme.color.neutral7
-        : netAmountSat > 0 ? Theme.color.green : Theme.color.neutral9
+        : netAmountSat > 0 ? Theme.color.txIncoming : Theme.color.neutral9
     readonly property string metadata: {
         const parts = [dateTimeLabel]
         if (isPendingRequest) {
@@ -91,26 +90,18 @@ Item {
     implicitHeight: parentContent.height + childrenColumn.height + (showChildren ? 12 : 0)
     height: implicitHeight
 
-    Rectangle {
+    GroupedRowBackground {
         id: rowSurface
         objectName: "activityRowBackground"
         anchors.fill: parent
-        color: rowHover.hovered || parentButton.down ? Theme.color.neutral2 : Theme.color.neutral1
-        radius: 16
-        Rectangle {
-            anchors.top: parent.top
-            width: parent.width
-            height: 16
-            color: parent.color
-            visible: !root.firstInSection
-        }
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 16
-            color: parent.color
-            visible: !root.lastInSection
-        }
+        firstInGroup: root.firstInSection
+        lastInGroup: root.lastInSection
+        hovered: rowHover.hovered
+        pressed: parentButton.down
+        showFocus: parentButton.visualFocus
+        dividerLeftInset: root.rowPadding
+        dividerRightInset: root.rowPadding
+        focusBorderObjectName: "activityRowFocusBorder"
     }
 
     AbstractButton {
@@ -125,7 +116,7 @@ Item {
         focusPolicy: Qt.StrongFocus
         Accessible.role: Accessible.ListItem
         Accessible.name: root.hasLabel ? root.displayLabel : root.address || qsTr("Transaction")
-        Accessible.description: [root.hasAmount ? root.amount : "", root.address, root.metadata,
+        Accessible.description: [!root.hasAmount ? "" : optionsModel.hideAmounts ? qsTr("Hidden amount") : root.amount, root.address, root.metadata,
             root.hasChildren ? qsTr("%1 actions").arg(root.actions.length) : ""].filter(function(value) { return value.length > 0 }).join(". ")
         onClicked: root.activated(root.txid, root.requestId, root.isPendingRequest)
         HoverHandler {
@@ -133,16 +124,7 @@ Item {
             enabled: AppMode.isDesktop
             cursorShape: Qt.PointingHandCursor
         }
-        background: Item {
-            FocusBorder {
-                visible: parentButton.visualFocus
-                borderRadius: 16
-                topMargin: 2
-                bottomMargin: 2
-                leftMargin: 2
-                rightMargin: 2
-            }
-        }
+        background: null
     }
 
     Item {
@@ -186,9 +168,7 @@ Item {
                         objectName: "activityRowLabel"
                         width: Math.min(implicitWidth, Math.max(0, parent.width - (requestBadge.visible ? 26 : 0)))
                         text: root.displayLabel
-                        font: Theme.text.subheading.font
-                        lineHeight: Theme.text.description.lineHeight
-                        lineHeightMode: Text.FixedHeight
+                        textStyle: Theme.text.subheading
                         color: root.isInactive ? Theme.color.neutral6 : Theme.color.neutral9
                         horizontalAlignment: Text.AlignLeft
                         wrap: false
@@ -224,9 +204,7 @@ Item {
                     objectName: "activityRowMetadata"
                     Layout.fillWidth: true
                     text: root.metadata
-                    font: Theme.text.caption.font
-                    lineHeight: Theme.text.caption.lineHeight
-                    lineHeightMode: Text.FixedHeight
+                    textStyle: Theme.text.caption
                     color: Theme.color.neutral7
                     horizontalAlignment: Text.AlignLeft
                 }
@@ -274,7 +252,7 @@ Item {
                 readonly property string actionLabel: modelData.label.trim().length > 0 ? modelData.label : ""
                 Accessible.role: Accessible.ListItem
                 Accessible.name: actionLabel || modelData.address || qsTr("Wallet contribution")
-                Accessible.description: modelData.address + ". " + modelData.amount
+                Accessible.description: modelData.address + ". " + (optionsModel.hideAmounts ? qsTr("Hidden amount") : modelData.amount)
                 RowLayout {
                     id: childLayout
                     anchors.left: parent.left
@@ -291,8 +269,8 @@ Item {
                             readonly property bool internal: childRow.modelData.direction === TransactionActivityModel.InternalAction
                             readonly property bool incoming: childRow.modelData.direction === TransactionActivityModel.ReceiveAction
                             source: incoming || internal ? "qrc:/icons/activity-receive.svg" : "qrc:/icons/activity-send.svg"
-                            color: root.isInactive ? Theme.color.neutral6 : internal ? Theme.color.purple
-                                : incoming ? Theme.color.green : Theme.color.orange
+                            color: root.isInactive ? Theme.color.neutral6 : internal ? Theme.color.txInternal
+                                : incoming ? Theme.color.txIncoming : Theme.color.txOutgoing
                             rotation: internal ? -90 : 0
                             size: 24
                             // Offset the asset's transparent padding to align the glyph with the child inset.
@@ -314,11 +292,7 @@ Item {
                                 objectName: "activityActionLabel"
                                 width: Math.min(implicitWidth, Math.max(0, parent.width - (childBadge.visible ? 26 : 0)))
                                 text: childRow.actionLabel
-                                font.family: Theme.text.caption.family
-                                font.styleName: Theme.text.caption.styleName
-                                font.pixelSize: 14
-                                lineHeight: 20
-                                lineHeightMode: Text.FixedHeight
+                                textStyle: Theme.text.caption
                                 color: root.isInactive ? Theme.color.neutral6 : Theme.color.neutral9
                                 horizontalAlignment: Text.AlignLeft
                                 wrap: false
@@ -355,11 +329,7 @@ Item {
                             Layout.fillWidth: true
                             text: childRow.modelData.direction === TransactionActivityModel.ReceiveAction ? qsTr("Received")
                                 : childRow.modelData.direction === TransactionActivityModel.InternalAction ? qsTr("Internal") : qsTr("Sent")
-                            font.family: Theme.text.caption.family
-                            font.styleName: Theme.text.caption.styleName
-                            font.pixelSize: 12
-                            lineHeight: 17
-                            lineHeightMode: Text.FixedHeight
+                            textStyle: Theme.text.caption
                             color: Theme.color.neutral6
                             horizontalAlignment: Text.AlignLeft
                         }
@@ -369,8 +339,7 @@ Item {
                             text: childRow.modelData.amount
                             color: Theme.color.neutral7
                             horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 14
-                            lineHeight: 20
+                            textStyle: Theme.text.amountCaption
                         }
                     }
                     AmountText {
@@ -379,8 +348,7 @@ Item {
                         Layout.preferredWidth: root.amountWidth
                         text: childRow.modelData.amount
                         color: Theme.color.neutral7
-                        font.pixelSize: 14
-                        lineHeight: 20
+                        textStyle: Theme.text.amountCaption
                     }
                     // Keep amounts aligned with the parent despite the tighter child spacing.
                     Item {
@@ -391,14 +359,6 @@ Item {
             }
         }
     }
-    Separator {
-        objectName: "activityTransactionDivider"
-        visible: !root.lastInSection
-        anchors.bottom: parent.bottom
-        width: parent.width
-        color: Theme.color.neutral2
-    }
-
     component ActivityAddress: AddressLabel {
         property bool compact: false
         interactive: false
@@ -414,11 +374,8 @@ Item {
     }
 
     component AmountText: BitcoinAmountDisplayLabel {
-        font.family: optionsModel.moneyFont.family
-        font.weight: optionsModel.moneyFont.weight
-        font.pixelSize: Theme.text.description.pixelSize
-        lineHeight: Theme.text.description.lineHeight
-        lineHeightMode: Text.FixedHeight
+        hidesAmount: true
+        textStyle: Theme.text.amountDescription
         horizontalAlignment: Text.AlignRight
         wrap: false
         elide: Text.ElideRight

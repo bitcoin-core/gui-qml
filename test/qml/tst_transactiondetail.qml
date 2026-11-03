@@ -47,7 +47,7 @@ TestCase {
         }, overrides || {})
     }
     function init() {
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
         walletController.reset()
         walletController.initialized = true
         walletController.setSelectedWalletObject(testWalletModel)
@@ -65,6 +65,7 @@ TestCase {
         tryCompare(overlay, "opened", true)
         const updateButton = findChild(overlay, "updateTransactionButton")
         tryCompare(updateButton, "enabled", true)
+        verify(waitForRendering(overlay.contentItem))
         mouseClick(updateButton)
         const popup = findChild(overlay, "speedUpPassphrasePopup")
         tryCompare(popup, "opened", true)
@@ -119,9 +120,9 @@ TestCase {
 
     function test_confirmation_states_data() {
         return [{tag: "zero", depth: 0, color: Theme.color.neutral7, text: "Unconfirmed"},
-            {tag: "one", depth: 1, color: Theme.color.amber, text: "1 confirmation"},
-            {tag: "five", depth: 5, color: Theme.color.amber, text: "5 confirmations"},
-            {tag: "six", depth: 6, color: Theme.color.green, text: "6 confirmations"}]
+            {tag: "one", depth: 1, color: Theme.color.warning, text: "1 confirmation"},
+            {tag: "five", depth: 5, color: Theme.color.warning, text: "5 confirmations"},
+            {tag: "six", depth: 6, color: Theme.color.success, text: "6 confirmations"}]
     }
     function test_confirmation_states(data) {
         const page = createDetail(transaction({depth: data.depth}))
@@ -188,7 +189,7 @@ TestCase {
         compare(page.actionLabel, data.label)
         if (data.type === TransactionActivityModel.InternalTransfer) {
             compare(findChild(page, "transactionDetailIcon").iconSource.toString(), "qrc:/icons/activity-internal.svg")
-            compare(findChild(page, "transactionDetailIcon").accent, Theme.color.purple)
+            compare(findChild(page, "transactionDetailIcon").accent, Theme.color.txInternal)
         }
         compare(findChild(page, "transactionDetailNote"), null)
         compare(findChild(page, "transactionDetailFlow").inputEntries.length, data.inputs)
@@ -226,9 +227,9 @@ TestCase {
         tryCompare(overlay, "opened", true)
         verify(overlay.readyToConfirm)
         compare(overlay.verticalOffset, 0)
-        compare(overlay.background.color, Theme.color.neutral1)
-        compare(overlay.background.border.color, Theme.color.neutral3)
-        compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.neutral2)
+        compare(overlay.background.color, Theme.color.surface1)
+        compare(overlay.background.border.color, Theme.color.surface2)
+        compare(findChild(overlay.contentItem, "speedUpFeeSection").backgroundColor, Theme.color.surface2)
         compare(findChild(overlay.contentItem, "speedUpOriginalFeeRow").value, testBumpModel.oldFee)
         compare(findChild(overlay.contentItem, "speedUpNewFeeRow").value, testBumpModel.newFee)
         mouseClick(findChild(overlay.contentItem, "speedUpCloseButton"))
@@ -239,6 +240,7 @@ TestCase {
         findChild(page, "speedUpBanner").primaryClicked()
         const overlay = findChild(page, "speedUpOverlay")
         tryCompare(overlay, "opened", true)
+        verify(waitForRendering(overlay.contentItem))
         mouseClick(findChild(overlay.contentItem, "updateTransactionButton"))
 
         const complete = findChild(page, "speedUpCompletePopup")
@@ -281,6 +283,22 @@ TestCase {
         compare(findChild(page, "transactionOverviewGrid").columns, 2)
         compare(findChild(page, "transactionDetailsGrid").columns, 2)
     }
+    function test_explorer_link_asks_before_opening() {
+        optionsModel.thirdPartyTransactionUrls = "https://example.com/tx/%s"
+        const page = createDetail()
+        mouseClick(findChild(page, "transactionDetailMoreButton"))
+        const menu = findChild(page, "transactionDetailMoreMenu")
+        tryCompare(menu, "opened", true)
+        const link = findChild(menu.contentItem, "transactionExplorerLink_0")
+        verify(link !== null)
+        link.clicked()
+        const popup = findChild(page, "transactionExplorerLinkPopup")
+        tryCompare(popup, "opened", true)
+        compare(popup.link, "https://example.com/tx/" + page.txid)
+        verify(findChild(popup.contentItem, "externalLinkMessage").text.indexOf(popup.link) >= 0)
+        findChild(popup.contentItem, "externalLinkCancelButton").clicked()
+        tryCompare(popup, "opened", false)
+    }
     function test_details_toggle_reveals_raw_transaction() {
         const raw = "02000000" + "abcdef0123456789".repeat(1000)
         const page = createDetail(transaction({rawTransaction: raw}))
@@ -312,6 +330,34 @@ TestCase {
         page.transactionData = transaction({rawTransaction: ""})
         toggle.clicked()
         verify(!copy.enabled)
+    }
+
+    function test_hidden_fee_uses_accessible_amount_presentation() {
+        optionsModel.hideAmounts = true
+        try {
+            const page = createDetail()
+            page.detailsExpanded = true
+            verify(waitForRendering(page))
+            const fee = findChild(page, "transactionFeeRowValue")
+            compare(fee.shownText, fee.maskText)
+            compare(fee.Accessible.name, "Hidden amount")
+            const revealing = {FeeRate: Number(800 / 141).toLocaleString(Qt.locale(), 'f', 2) + " sat/vB",
+                VirtualSize: "141 vB", Size: "222 bytes", Weight: "561 WU"}
+            for (const key in revealing) {
+                const value = findChild(page, "transaction" + key + "RowValue")
+                compare(value.shownText, value.maskText, key)
+                compare(value.Accessible.name, "Hidden amount", key)
+            }
+            optionsModel.hideAmounts = false
+            compare(fee.shownText, "800 sats")
+            for (const key in revealing) {
+                const value = findChild(page, "transaction" + key + "RowValue")
+                compare(value.shownText, revealing[key], key)
+                compare(value.Accessible.name, revealing[key], key)
+            }
+        } finally {
+            optionsModel.hideAmounts = false
+        }
     }
 
     function test_overview_and_details_show_transaction_metadata() {

@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-from qml_test_harness import QmlTestHarness, qsettings_sandbox_args
+from qml_test_harness import TEST_MOTION_ARGS, QmlTestHarness, qsettings_sandbox_args
 from qml_process_checks import check_gui_exit, report_gui_failure
 from qml_wallet_test_lib import WalletFlowHarness, find_bitcoind, rpc_call, wait_for_rpc
 
@@ -118,7 +118,7 @@ def start_gui_without_driver(harness):
         harness.gui_binary,
         f"-datadir={harness.gui_datadir}",
         f"-test-automation={harness.socket_path}",
-    ] + settings_args + [
+    ] + TEST_MOTION_ARGS + settings_args + [
         "-qml_onboarded=1",
         "-logtimemicros",
         "-debug",

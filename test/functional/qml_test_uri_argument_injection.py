@@ -27,6 +27,7 @@ import tempfile
 import time
 
 from qml_test_harness import (
+    TEST_MOTION_ARGS,
     QmlTestHarness,
     find_gui_binary,
     qml_qpa_platform,
@@ -62,6 +63,7 @@ def launch(injected_args):
         find_gui_binary(),
         f"-datadir={datadir}",
         f"-test-automation={socket_path}",
+        *TEST_MOTION_ARGS,
         *settings_args,
         "-qml_onboarded=1",
         "-nolisten",

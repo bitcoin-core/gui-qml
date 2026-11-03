@@ -32,21 +32,23 @@ Row {
             radius: width / 2
             color: Theme.color.neutral9
             opacity: (index === 0 && root.numOutboundPeers > 0) || (index + 1 <= root.size * root.numOutboundPeers / root.maxNumOutboundPeers) ? 0.95 : 0.45
-            Behavior on opacity { OpacityAnimator { duration: 150 } }
+            Behavior on opacity { enabled: Theme.motion.animated; OpacityAnimator { duration: Theme.motion.normal } }
             SequentialAnimation on opacity {
                 loops: Animation.Infinite
                 running: root.presentationActive && numOutboundPeers === 0 && index === 0 && !root.paused
+                    && Theme.motion.decorativeLoops
                 SmoothedAnimation { to: 0; velocity: 2.2 }
                 SmoothedAnimation { to: 1; velocity: 2.2 }
             }
             PropertyAnimation on opacity {
                 running: root.paused
                 to: .45;
-                duration: 150
+                duration: Theme.motion.normal
             }
 
             Behavior on color {
-                ColorAnimation { duration: 150 }
+                enabled: Theme.motion.animated
+                ColorAnimation { duration: Theme.motion.normal }
             }
         }
     }

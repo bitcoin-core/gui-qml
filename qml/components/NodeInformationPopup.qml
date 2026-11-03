@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 
 import "../controls"
 
-Popup {
+DialogPopup {
     id: root
     objectName: "nodeInformationPopup"
 
@@ -17,114 +17,62 @@ Popup {
     readonly property string firstInformationValue: rows.length > 0 ? rows[0].value : ""
     readonly property int lastInformationValueLineCount: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueLineCount : 0
     readonly property int lastInformationValueWrapMode: informationRepeater.count > 0 ? informationRepeater.itemAt(informationRepeater.count - 1).valueWrapMode : Text.NoWrap
-    readonly property int contentMargin: 28
 
     onAboutToShow: rows = nodeModel.nodeInformationRows()
 
-    modal: true
-    padding: 0
-    anchors.centerIn: parent
-    width: parent ? Math.min(parent.width - (2 * contentMargin), 760) : 760
-    height: Math.min(implicitHeight, parent ? parent.height - 80 : 560)
-    implicitHeight: Math.min(columnLayout.implicitHeight, 560)
+    title: qsTr("Node information")
+    implicitWidth: 760
 
-    background: Rectangle {
-        color: Theme.color.background
-        radius: 8
-        border.color: Theme.color.neutral4
-        border.width: 1
-        SurfaceGradientBorder {
-            anchors.fill: parent
-            surfaceColor: parent.color
-            referenceColor: Theme.color.neutral1
-            cornerRadius: parent.radius
-        }
-    }
+    contentItem: ColumnLayout {
+        spacing: Theme.space.xl
 
-    ColumnLayout {
-        id: columnLayout
-        anchors.fill: parent
-        spacing: 0
-
-        CoreText {
+        DialogHeader {
             Layout.fillWidth: true
-            Layout.preferredHeight: 56
-            text: qsTr("Node information")
-            bold: true
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            title: root.title
+            closeButtonObjectName: "nodeInformationCloseButton"
+            onCloseRequested: root.close()
         }
-
-        Separator { Layout.fillWidth: true }
 
         ScrollView {
             id: informationScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
-            Layout.margins: root.contentMargin
             contentWidth: availableWidth
             clip: true
 
-            // A Column positioner, never a Quick Layout: a Repeater inside one
-            // crashes on Qt 6.4.0 to 6.5.0 (QTBUG-111792). See AlertPopup.qml.
-            Column {
-                id: informationColumn
+            // The popup is surface1, so the rows sit on a surface2 card.
+            FormSection {
+                objectName: "nodeInformationSection"
                 width: informationScroll.availableWidth
-                spacing: 0
+                surfaceLevel: 1
 
-                Repeater {
-                    id: informationRepeater
-                    model: root.rows
-                    delegate: ColumnLayout {
-                        readonly property int valueLineCount: informationValue.lineCount
-                        readonly property int valueWrapMode: informationValue.wrapMode
+                // A Column positioner, never a Quick Layout: a Repeater inside one
+                // crashes on Qt 6.4.0 to 6.5.0 (QTBUG-111792). See AlertPopup.qml.
+                Column {
+                    id: informationColumn
+                    Layout.fillWidth: true
+                    spacing: 0
 
-                        width: informationColumn.width
-                        spacing: 0
+                    Repeater {
+                        id: informationRepeater
+                        model: root.rows
+                        delegate: ValueRow {
+                            required property var modelData
+                            required property int index
 
-                        KeyValueRow {
-                            Layout.fillWidth: true
-                            keyWidth: 150
-                            key: CoreText {
-                                text: modelData.label
-                                color: Theme.color.neutral7
-                                font.pixelSize: 13
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                                wrap: false
-                            }
-                            value: CoreText {
-                                id: informationValue
-                                objectName: "nodeInformationValue_" + index
-                                text: modelData.value
-                                color: Theme.color.neutral9
-                                font.pixelSize: 13
-                                wrapMode: Text.WordWrap
-                                horizontalAlignment: Text.AlignLeft
-                                verticalAlignment: Text.AlignTop
-                            }
-                        }
-
-                        Separator {
-                            Layout.fillWidth: true
-                            Layout.topMargin: 10
-                            Layout.bottomMargin: 10
-                            visible: index < root.rows.length - 1
+                            width: informationColumn.width
+                            title: modelData.label
+                            titleColor: Theme.color.neutral7
+                            valueObjectName: "nodeInformationValue_" + index
+                            value: modelData.value
+                            valueTextStyle: modelData.mono ? Theme.text.monoDescription : Theme.text.description
+                            valueMaximumWidth: Math.round(informationColumn.width * 0.65)
+                            valueWrap: true
+                            showDivider: index < root.rows.length - 1
                         }
                     }
                 }
             }
-        }
-
-        ContinueButton {
-            objectName: "nodeInformationCloseButton"
-            Layout.fillWidth: true
-            Layout.leftMargin: root.contentMargin
-            Layout.rightMargin: root.contentMargin
-            Layout.bottomMargin: root.contentMargin
-            text: qsTr("OK")
-            onClicked: root.close()
         }
     }
 }

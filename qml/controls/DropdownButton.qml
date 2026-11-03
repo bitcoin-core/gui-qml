@@ -9,11 +9,20 @@ import org.bitcoincore.qt 1.0
 
 NeutralButton {
     id: root
+    property bool keyboardActivation: false
+    Keys.onPressed: function(event) {
+        keyboardActivation = event.key === Qt.Key_Space || event.key === Qt.Key_Down
+        if (event.key === Qt.Key_Down) {
+            if (root.opened === undefined || !root.opened) root.clicked()
+            event.accepted = true
+        }
+    }
+    TapHandler { onPressedChanged: if (pressed) root.keyboardActivation = false }
 
     property string subtitle: ""
     property bool opened: false
     property bool active: false
-    isOnSurface: false
+    surfaceLevel: 0
     property int caretSize: 20
     property url caretSource: "image://images/caret-down-medium-filled"
     property int textAlignment: Text.AlignLeft
@@ -21,23 +30,23 @@ NeutralButton {
     property var subtitleTextStyle: labelTextStyle
     property color subtitleColor: Theme.color.neutral7
     property color caretColor: Theme.color.neutral9
-    property color hoverBgColor: isOnSurface ? Theme.color.neutral3 : Theme.color.neutral2
-    property color defaultBgColor: isOnSurface ? Theme.color.neutral2 : Theme.color.neutral1
+    property color hoverBgColor: Theme.color.surface(surfaceLevel + 2)
+    property color defaultBgColor: Theme.color.surface(surfaceLevel + 1)
 
     textColor: Theme.color.neutral9
-    backgroundColor: active ? Theme.color.orange : defaultBgColor
-    hoverBackgroundColor: active ? Theme.color.orange : hoverBgColor
+    backgroundColor: active ? Theme.color.activeFill : defaultBgColor
+    hoverBackgroundColor: active ? Theme.color.activeFill : hoverBgColor
     forceHoverBackground: opened || visualFocus
-    showBorder: isOnSurface
+    showBorder: surfaceLevel > 0
     backgroundRadius: 6
     focusBorderObjectName: "dropdownButtonFocusBorder"
     scale: 1
 
     implicitHeight: Math.max(30, caretSize + topPadding + bottomPadding)
     leftPadding: 10
-    rightPadding: 4
-    topPadding: 2
-    bottomPadding: 2
+    rightPadding: Theme.space.xs
+    topPadding: Theme.space.xxs
+    bottomPadding: Theme.space.xxs
     hoverEnabled: AppMode.isDesktop
     focusPolicy: Qt.StrongFocus
 
@@ -61,13 +70,11 @@ NeutralButton {
                 Layout.fillWidth: true
                 Layout.alignment: Qt.AlignVCenter
                 text: root.text
-                color: root.enabled ? root.active ? Theme.color.white : root.textColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.textColor : Theme.color.disabledContent
                 horizontalAlignment: root.textAlignment
                 elide: Text.ElideRight
                 wrap: false
-                font: root.labelTextStyle.font
-                lineHeight: root.labelTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.labelTextStyle
             }
 
             CoreText {
@@ -76,11 +83,9 @@ NeutralButton {
                 visible: root.subtitle !== ""
                 Layout.alignment: Qt.AlignVCenter
                 text: root.subtitle
-                color: root.enabled ? root.subtitleColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.subtitleColor : Theme.color.disabledContent
                 wrap: false
-                font: root.subtitleTextStyle.font
-                lineHeight: root.subtitleTextStyle.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: root.subtitleTextStyle
             }
 
             Icon {
@@ -91,11 +96,12 @@ NeutralButton {
                 Layout.preferredHeight: root.caretSize
                 source: root.caretSource
                 size: root.caretSize
-                color: root.enabled ? root.active ? Theme.color.white : root.caretColor : Theme.color.neutral4
+                color: root.enabled ? root.active ? Theme.color.activeForeground : root.caretColor : Theme.color.disabledContent
                 rotation: root.opened ? 180 : 0
 
                 Behavior on rotation {
-                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+                    enabled: Theme.motion.animated
+                    NumberAnimation { duration: Theme.motion.normal; easing.type: Theme.motion.easing.enter }
                 }
             }
         }

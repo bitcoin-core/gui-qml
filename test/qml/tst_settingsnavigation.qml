@@ -78,6 +78,16 @@ TestCase {
     }
 
     Component {
+        id: compactSettingsViewComponent
+
+        SettingsView {
+            width: 390
+            height: 700
+            selectedSectionId: "display"
+        }
+    }
+
+    Component {
         id: firstPage
 
         Item {
@@ -116,8 +126,9 @@ TestCase {
         secondDestroyed = 0
         AppMode.walletEnabled = true
         AppMode.isDesktop = true
+        BuildInfo.externalSignerSupported = true
         nodeModel.mempoolInformationAvailable = true
-        Theme.dark = true
+        Theme.paletteId = "core-dark"
         Theme.blockclocksize = 5 / 12
         optionsModel.displayUnit = 0
         optionsModel.moneyFontChoice = "embedded"
@@ -155,7 +166,7 @@ TestCase {
         compare(walletGroup.text, "Wallet")
         compare(generalGroup.text, "General")
         compare(networkGroup.text, "Network")
-        compare(walletGroup.font.styleName, "Semi Bold")
+        compare(walletGroup.font.weight, Font.DemiBold)
 
         let activatedSection = ""
         sidebar.sectionActivated.connect(function(sectionId) {
@@ -187,6 +198,227 @@ TestCase {
         compare(view.sectionIsVisible("display"), true)
         compare(view.selectedSectionId, "display")
         verify(findChild(view, "settingsSidebar_display") !== null)
+    }
+
+    // A build without signer support can't run a signer command, so a path
+    // saved by another build must not bring back any signer settings.
+    // Whether the signer command works and whether a device was found are
+    // reported separately, each with text and an icon, not color alone.
+    function test_externalSignerSettingsSeparateCommandFromDevice() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        walletController.externalSignerPathConfigured = true
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const commandRow = findChild(view, "externalSignerCommandRow")
+            const deviceRow = findChild(view, "externalSignerDeviceRow")
+            const pathInput = findChild(view, "externalSignerPathInput")
+            verify(commandRow !== null)
+            verify(deviceRow !== null)
+            verify(pathInput !== null)
+
+            walletController.externalSignerError = "The signer command did not return valid output. Check that the path is correct."
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Not responding")
+            compare(commandRow.valueIconSource, "image://images/cross-circle-filled")
+            compare(commandRow.errorText, walletController.externalSignerError)
+            compare(deviceRow.visible, false)
+
+            walletController.externalSignerError = ""
+            walletController.externalSignerResponding = true
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Responding")
+            compare(commandRow.valueIconSource, "image://images/check")
+            compare(commandRow.errorText, "")
+            compare(deviceRow.visible, true)
+            // Device states are fixed at the device: guidance and a warning,
+            // never error styling.
+            compare(deviceRow.value, "None found")
+            compare(deviceRow.valueIconSource, "image://images/alert-filled")
+            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+            compare(deviceRow.supportingText, "Connect and unlock your device, then check again.")
+            compare(deviceRow.errorText, "")
+
+            walletController.externalSignerError = "Your device isn't ready: Device is locked"
+            walletController.refreshExternalSignerStatus()
+            compare(commandRow.value, "Responding")
+            compare(deviceRow.value, "Not ready")
+            compare(deviceRow.valueIconSource, "image://images/alert-filled")
+            compare(deviceRow.valueIconColor, Theme.color.warningIcon)
+            compare(deviceRow.supportingText, "Your device isn't ready: Device is locked")
+            compare(deviceRow.errorText, "")
+
+            // Two connected devices are not "not ready"; the value says what is wrong.
+            walletController.externalSignerCount = 2
+            walletController.externalSignerError = "More than one external signer was found. Connect only one device."
+            walletController.refreshExternalSignerStatus()
+            compare(deviceRow.value, "More than one")
+            compare(deviceRow.valueIconSource, "image://images/alert-filled")
+            compare(deviceRow.supportingText, walletController.externalSignerError)
+            walletController.externalSignerCount = 0
+
+            walletController.externalSignerError = ""
+            walletController.externalSignerName = "trezor_t"
+            walletController.canCreateExternalSignerWallet = true
+            walletController.refreshExternalSignerStatus()
+            compare(deviceRow.value, "trezor_t")
+            compare(deviceRow.valueIconSource, "image://images/check")
+            compare(deviceRow.errorText, "")
+            compare(deviceRow.supportingText, "")
+
+            // An edited path has not been checked, so nothing is claimed about it.
+            pathInput.text = "/opt/hwi/hwi"
+            compare(commandRow.value, "Not checked")
+            compare(commandRow.valueIconSource, "")
+            compare(deviceRow.visible, false)
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
+    // Browse and leaving the field only fill in a path; checking it, and
+    // opening the page, take the Check device button or Return.
+    function test_externalSignerChecksOnlyWhenAsked() {
+        optionsModel.externalSignerPath = ""
+        try {
+            const checks = walletController.externalSignerChecks
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            compare(walletController.externalSignerChecks, checks)
+            const browseButton = findChild(view, "externalSignerBrowseButton")
+            const dialog = findChild(view, "externalSignerPathDialog")
+            const pathField = findChild(view, "externalSignerPathInput")
+            const commandRow = findChild(view, "externalSignerCommandRow")
+            const checkButton = findChild(view, "externalSignerCheckDeviceButton")
+            const section = findChild(view, "externalSignerPathSection")
+            verify(browseButton !== null)
+            verify(dialog !== null)
+            compare(browseButton.text, "Browse…")
+            compare(dialog.title, "Select signer executable")
+            compare(dialog.fileMode, 0)
+
+            browseButton.clicked()
+            compare(dialog.openCalls, 1)
+            // Starts next to the current signer, or at home, never the launch folder.
+            compare(dialog.currentFolder.toString(), "file:///signer/folder")
+            dialog.selectAndAccept("/opt/hwi/hwi")
+            compare(pathField.text, "/opt/hwi/hwi")
+            // A path that isn't being edited is shown from its start.
+            compare(pathField.cursorPosition, 0)
+            compare(optionsModel.externalSignerPath, "")
+            compare(commandRow.value, "Not checked")
+            pathField.editingFinished()
+            compare(optionsModel.externalSignerPath, "")
+            compare(walletController.externalSignerChecks, checks)
+
+            checkButton.clicked()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(commandRow.value, "Checking…")
+            compare(checkButton.text, "Checking…")
+            compare(checkButton.enabled, false)
+            tryCompare(section, "checking", false)
+            compare(checkButton.text, "Check device")
+            compare(walletController.externalSignerChecks, checks + 1)
+
+            // Return in the field checks too.
+            pathField.text = "/opt/hwi/hwi2"
+            pathField.accepted()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
+            tryCompare(section, "checking", false)
+            compare(walletController.externalSignerChecks, checks + 2)
+
+            dialog.rejected()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi2")
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
+    // Closing the section while a check is still waiting runs the check, so
+    // the result on file belongs to the path that was saved.
+    function test_externalSignerCheckRunsWhenClosedEarly() {
+        optionsModel.externalSignerPath = ""
+        const motionMode = Theme.motion.mode
+        Theme.motion.mode = "full"
+        try {
+            const checks = walletController.externalSignerChecks
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            view.selectSection("external-signer", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const section = findChild(view, "externalSignerPathSection")
+            findChild(view, "externalSignerPathInput").text = "/opt/hwi/hwi"
+            findChild(view, "externalSignerCheckDeviceButton").clicked()
+            compare(optionsModel.externalSignerPath, "/opt/hwi/hwi")
+            compare(section.checking, true)
+            compare(walletController.externalSignerChecks, checks)
+
+            view.destroy()
+            tryCompare(walletController, "externalSignerChecks", checks + 1)
+            // And only once.
+            wait(400)
+            compare(walletController.externalSignerChecks, checks + 1)
+        } finally {
+            Theme.motion.mode = motionMode
+            optionsModel.externalSignerPath = ""
+        }
+    }
+
+    Component {
+        id: compactSignerSectionComponent
+        ExternalSignerPathSection { width: 900; title: "Signer executable" }
+    }
+
+    // Browse sits beside the field at the field's height at any width,
+    // including after an existing page is narrowed.
+    function test_externalSignerBrowseSitsBesideTheField() {
+        const section = createTemporaryObject(compactSignerSectionComponent, settingsWindow.contentItem)
+        verify(section !== null)
+        const field = findChild(section, "externalSignerPathInput")
+        const browse = findChild(section, "externalSignerBrowseButton")
+        const besideField = function() {
+            const fieldTop = field.mapToItem(section, 0, 0)
+            const browseTop = browse.mapToItem(section, 0, 0)
+            return browseTop.y === fieldTop.y && browse.height === field.height
+                && browseTop.x >= fieldTop.x + field.width
+                && browseTop.x + browse.width <= section.width
+        }
+        tryVerify(besideField)
+
+        section.width = 300
+        tryVerify(function() { return field.width > 0 && besideField() })
+    }
+
+    function test_settingsViewHidesExternalSignerWithoutBuildSupport() {
+        optionsModel.externalSignerPath = "/usr/local/bin/hwi"
+        try {
+            const supported = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(supported !== null)
+            compare(supported.sectionIsVisible("external-signer"), true)
+            supported.selectSection("wallet", true)
+            tryCompare(supported.pageContainer, "depth", 1)
+            compare(findChild(supported, "walletExternalSignerRow").visible, true)
+            supported.destroy()
+
+            BuildInfo.externalSignerSupported = false
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(view !== null)
+            compare(view.sectionIsVisible("wallet"), true)
+            compare(view.sectionIsVisible("external-signer"), false)
+            verify(findChild(view, "settingsSidebar_wallet") !== null)
+            verify(findChild(view, "settingsSidebar_external-signer") === null)
+            view.selectSection("wallet", true)
+            tryCompare(view.pageContainer, "depth", 1)
+            const signerRow = findChild(view, "walletExternalSignerRow")
+            verify(signerRow !== null)
+            compare(signerRow.visible, false)
+        } finally {
+            optionsModel.externalSignerPath = ""
+        }
     }
 
     function test_containerLazilyCachesAndRestoresEachSectionStack() {
@@ -280,8 +512,8 @@ TestCase {
         verify(networkTrafficSentGraph !== null)
         compare(networkTrafficHeading.descriptionTextStyle.font.pixelSize,
             Theme.text.description.font.pixelSize)
-        compare(networkTrafficDescription.horizontalAlignment, Text.AlignHCenter)
-        compare(networkTrafficSection.backgroundColor, Theme.color.neutral1)
+        compare(networkTrafficDescription.horizontalAlignment, Text.AlignLeft)
+        compare(networkTrafficSection.backgroundColor, Theme.color.surface1)
         compare(networkTrafficSentRow.bottomPadding, 16)
         compare(networkTrafficRangePicker.model.length, 4)
         networkTrafficRangePicker.selected(1, networkTrafficRangePicker.model[1])
@@ -420,13 +652,13 @@ TestCase {
         compare(heading.title, "")
         compare(title.visible, false)
         compare(heading.description, "Add a wallet to manage its settings.")
-        compare(action.text, "Add wallet")
+        compare(action.text, "Add wallet…")
 
         walletController.noWalletsFound = false
         compare(heading.title, "No wallet selected")
         compare(title.visible, true)
         compare(heading.description, "Select a wallet to manage wallet-specific settings.")
-        compare(action.text, "Select wallet")
+        compare(action.text, "Select wallet…")
     }
 
     function test_settingsViewPinsSidebarAndLetsPageContainerGrow() {
@@ -442,16 +674,76 @@ TestCase {
 
         tryCompare(sidebarSurface, "x", 0)
         tryCompare(sidebarSurface, "width", view.sidebarWidth)
-        compare(sidebarSurface.color, Theme.color.neutral1)
+        compare(sidebarSurface.color, Theme.color.surface1)
         compare(sidebarHeading.text, "Settings")
         compare(sidebarHeading.font.pixelSize, Theme.text.display.font.pixelSize)
         compare(sidebarHeading.horizontalAlignment, Text.AlignLeft)
-        tryCompare(view.pageContainer, "x", view.sidebarWidth)
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        verify(pageColumn !== null)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
         tryCompare(view.pageContainer, "width", view.width - view.sidebarWidth)
+        compare(findChild(view, "navigationSplitSeparator").visible, false)
 
-        verify(displayPage.contentHorizontalPadding >= 24)
+        verify(displayPage.contentHorizontalPadding >= Theme.space.pageCompact)
         verify(displayPage.contentLayout.width <= displayPage.maximumContentWidth)
         verify(displayPage.contentLayout.width < view.pageContainer.width)
+    }
+
+    function test_compactSettingsShowOneColumnWithBackToTheSidebar() {
+        const view = createTemporaryObject(compactSettingsViewComponent, settingsWindow.contentItem)
+        verify(view !== null)
+        const split = findChild(view, "settingsSplitView")
+        const sidebarColumn = findChild(view, "navigationSplitPrimary")
+        const pageColumn = findChild(view, "navigationSplitDetail")
+        const sidebarSurface = findChild(view, "settingsSidebarSurface")
+        verify(split !== null)
+        verify(sidebarSurface !== null)
+
+        compare(view.compact, true)
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        compare(sidebarColumn.x, 0)
+        compare(sidebarSurface.width, 390)
+        compare(pageColumn.x, 390)
+        compare(pageColumn.visible, false)
+        compare(view.sidebar.currentSectionId, "")
+
+        view.sidebar.sectionActivated("connection")
+        tryCompare(pageColumn, "x", 0)
+        compare(pageColumn.visible, true)
+        compare(view.pageContainer.width, 390)
+        compare(sidebarColumn.x, -390)
+        compare(sidebarColumn.visible, false)
+        const connectionPage = findChild(view, "connectionSettingsPage")
+        verify(connectionPage !== null)
+        compare(connectionPage.showBackButton, true)
+
+        const back = findChild(connectionPage, "settingsSectionBackButton")
+        verify(back !== null)
+        back.clicked()
+        compare(split.compactColumn, NavigationSplitView.Primary)
+        tryCompare(pageColumn, "x", 390)
+        compare(sidebarColumn.x, 0)
+        compare(view.selectedSectionId, "connection")
+
+        view.openWalletSettings()
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(view.selectedSectionId, "wallet")
+
+        view.width = 900
+        compare(view.compact, false)
+        tryCompare(pageColumn, "x", view.sidebarWidth)
+        compare(sidebarSurface.width, view.sidebarWidth)
+        compare(connectionPage.showBackButton, false)
+        compare(view.sidebar.currentSectionId, "wallet")
+
+        // Narrowing shows the open section's page, even when the list was
+        // the last compact column.
+        split.showPrimary()
+        view.selectSection("display")
+        view.width = 390
+        compare(split.compactColumn, NavigationSplitView.Detail)
+        compare(pageColumn.x, 0)
+        compare(view.pageContainer.currentSectionId, "display")
     }
 
     function test_dataHeavyPagesUseAvailableWidthWithResponsivePadding() {
@@ -462,7 +754,7 @@ TestCase {
         view.selectSection("network-traffic")
         const networkTrafficPage = findChild(view, "networkTrafficSettingsPage")
         verify(networkTrafficPage !== null)
-        verify(networkTrafficPage.contentHorizontalPadding >= 24)
+        verify(networkTrafficPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(networkTrafficPage.contentLayout, "width",
             networkTrafficPage.scrollView.availableWidth
                 - networkTrafficPage.contentHorizontalPadding * 2)
@@ -473,7 +765,7 @@ TestCase {
         const debugLogContent = findChild(view, "debugLogContentLayout")
         verify(debugLogPage !== null)
         verify(debugLogContent !== null)
-        verify(debugLogPage.contentHorizontalPadding >= 24)
+        verify(debugLogPage.contentHorizontalPadding >= Theme.space.pageCompact)
         tryCompare(debugLogContent, "width",
             debugLogPage.width - debugLogPage.contentHorizontalPadding * 2)
         verify(debugLogContent.width > 840)
@@ -562,7 +854,7 @@ TestCase {
         compare(header.title, "RPC console")
         compare(header.showBackButton, false)
         compare(page.maximumContentWidth, page.width)
-        verify(page.contentHorizontalPadding >= 24)
+        verify(page.contentHorizontalPadding >= Theme.space.pageCompact)
         compare(heading.description, "Execute RPC commands and inspect their responses.")
         compare(warning.text,
                 "Beware of scammers who may ask you to enter commands here to steal your funds. Only enter commands you fully understand.")
@@ -573,8 +865,8 @@ TestCase {
         compare(searchBar.height, 48)
         compare(search.height, 40)
         compare(searchBar.background.visible, true)
-        compare(searchBar.background.color, Theme.color.neutral1)
-        compare(search.background.color, Theme.color.neutral2)
+        compare(searchBar.background.color, Theme.color.surface1)
+        compare(search.background.color, Theme.color.surface2)
         compare(searchIcon.source.toString(), "image://images/search")
         compare(searchClearButton.visible, true)
         compare(previousSearchIcon.width, 14)
@@ -583,8 +875,8 @@ TestCase {
         compare(nextSearchIcon.height, 14)
         compare(previousSearchIcon.strokeWidth, 2)
         compare(nextSearchIcon.strokeWidth, 2)
-        compare(previousSearchIcon.strokeColor, Theme.color.neutral4)
-        compare(nextSearchIcon.strokeColor, Theme.color.neutral4)
+        compare(previousSearchIcon.strokeColor, Theme.color.disabledContent)
+        compare(nextSearchIcon.strokeColor, Theme.color.disabledContent)
         compare(previousSearchIcon.rotation, -90)
         compare(nextSearchIcon.rotation, 90)
         compare(previousSearchButton.enabled, false)
@@ -604,10 +896,10 @@ TestCase {
         compare(helpFooter.text,
                 "Use ↑↓ arrows to navigate history. Type help for an overview of available commands. Type help-console for console syntax help.")
         compare(commandInput.placeholderText, "Enter command…")
-        compare(commandInputRow.color, Theme.color.neutral1)
-        compare(commandInput.background.color, Theme.color.neutral2)
+        compare(commandInputRow.color, Theme.color.surface1)
+        compare(commandInput.background.color, Theme.color.surface2)
         compare(commandInputDivider.height, 1)
-        compare(commandInputDivider.color, Theme.color.neutral2)
+        compare(commandInputDivider.color, Theme.color.surfaceDivider)
         compare(rpcConsole.showHeader, false)
         compare(rpcConsole.tabActive, true)
         compare(rpcConsole.outputFontPixelSize, 13)
@@ -625,22 +917,22 @@ TestCase {
         tryCompare(previousSearchButton, "activeFocus", true)
         // FocusBorder animates visibility, so wait for both showing and hiding.
         tryCompare(previousSearchFocusBorder, "visible", true)
-        compare(previousSearchFocusBorder.border.color, Theme.color.purple)
+        compare(previousSearchFocusBorder.border.color, Theme.color.focus)
         tryCompare(nextSearchFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(nextSearchButton, "activeFocus", true)
         tryCompare(nextSearchFocusBorder, "visible", true)
-        compare(nextSearchFocusBorder.border.color, Theme.color.purple)
+        compare(nextSearchFocusBorder.border.color, Theme.color.focus)
         tryCompare(previousSearchFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(decreaseButton, "activeFocus", true)
         tryCompare(decreaseFocusBorder, "visible", true)
-        compare(decreaseFocusBorder.border.color, Theme.color.purple)
+        compare(decreaseFocusBorder.border.color, Theme.color.focus)
         tryCompare(increaseFocusBorder, "visible", false)
         keyClick(Qt.Key_Tab)
         tryCompare(increaseButton, "activeFocus", true)
         tryCompare(increaseFocusBorder, "visible", true)
-        compare(increaseFocusBorder.border.color, Theme.color.purple)
+        compare(increaseFocusBorder.border.color, Theme.color.focus)
         tryCompare(decreaseFocusBorder, "visible", false)
 
         mouseClick(increaseButton)
@@ -661,6 +953,25 @@ TestCase {
 
         view.selectSection("about")
         tryCompare(rpcConsole, "tabActive", false)
+    }
+
+    function test_settings_scroll_to_keyboard_focus() {
+        const originalHeight = settingsWindow.height
+        settingsWindow.height = 420
+        try {
+            const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+            verify(waitForRendering(view))
+            const row = findChild(view, "displayTransactionUrlsRow")
+            const page = view.pageContainer.currentItem
+            const viewport = page.scrollView.contentItem
+            row.forceActiveFocus(Qt.TabFocusReason)
+            tryVerify(function() {
+                const y = row.mapToItem(viewport, 0, 0).y
+                return y >= 0 && y + row.height <= viewport.height + 1
+            })
+        } finally {
+            settingsWindow.height = originalHeight
+        }
     }
 
     function test_displayPageUsesInlineGenericPickers() {
@@ -729,7 +1040,7 @@ TestCase {
         const embeddedMoneyFontWidth = moneyFontPicker.width
         moneyFontPicker.activated("best_system")
         compare(optionsModel.moneyFontChoice, "best_system")
-        compare(moneyFontPicker.currentText, "System Monospace")
+        compare(moneyFontPicker.currentText, "System monospace")
         tryVerify(function() { return moneyFontPicker.width > embeddedMoneyFontWidth })
         moneyFontPicker.activated("embedded")
         compare(optionsModel.moneyFontChoice, "embedded")
@@ -748,6 +1059,53 @@ TestCase {
             compare(optionsModel.displayUnit, unit.value)
             compare(displayUnitPicker.currentValue, unit.value)
             compare(displayUnitPicker.currentText, unit.text)
+        }
+
+        const sizeSlider = findChild(view, "displayTextSizeSlider")
+        compare(sizeSlider.minimumValue, 0)
+        compare(sizeSlider.maximumValue, Theme.textScales.length - 1)
+        compare(sizeSlider.Accessible.description, findChild(view, "displayTextSizePercentage").text)
+
+        const reduceMotionRow = findChild(view, "displayReduceMotionRow")
+        verify(reduceMotionRow !== null)
+        compare(reduceMotionRow.checked, Theme.reduceMotion)
+        const reduceMotion = Theme.reduceMotion
+        reduceMotionRow.switchItem.toggle()
+        reduceMotionRow.switchItem.toggled()
+        compare(Theme.reduceMotion, !reduceMotion)
+        Theme.reduceMotion = reduceMotion
+
+        // The View menu and its shortcut change the setting too, so the row follows it.
+        const hideAmountsRow = findChild(view, "displayHideAmountsRow")
+        verify(hideAmountsRow !== null)
+        try {
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            hideAmountsRow.switchItem.toggle()
+            hideAmountsRow.switchItem.toggled()
+            compare(optionsModel.hideAmounts, true)
+            optionsModel.hideAmounts = false
+            compare(hideAmountsRow.checked, false)
+            optionsModel.hideAmounts = true
+            compare(hideAmountsRow.checked, true)
+        } finally {
+            optionsModel.hideAmounts = false
+        }
+
+        const textSizeSlider = findChild(view, "displayTextSizeSlider")
+        verify(textSizeSlider !== null)
+        const textScale = Theme.textScale
+        try {
+            Theme.textScale = 1
+            compare(textSizeSlider.value, 3)
+            compare(textSizeSlider.stepCount, 6)
+            textSizeSlider.value = 5
+            textSizeSlider.moved()
+            compare(Theme.textScale, Theme.textScales[5])
+            Theme.textScale = Theme.textScales[0]
+            compare(textSizeSlider.value, 0)
+        } finally {
+            Theme.textScale = textScale
         }
 
         designSystemRow.clicked()
@@ -927,40 +1285,42 @@ TestCase {
                 const introduction = findChild(view, "externalSignerIntroduction")
                 const signerSection = findChild(view, "externalSignerPathSection")
                 const signerPathRow = findChild(view, "externalSignerPathRow")
-                const signerFooter = findChild(view, "externalSignerPathSectionFooter")
                 const signerPathInput = findChild(view, "externalSignerPathInput")
-                const signerPathFocusBorder = findChild(view, "externalSignerPathFocusBorder")
-                const signerStatusIndicator = findChild(view, "externalSignerStatusIndicator")
-                const signerStatusText = findChild(view, "externalSignerStatusText")
+                const signerPathFocusBorder = findChild(view, "externalSignerPathInputFocusRing")
+                const signerCommandRow = findChild(view, "externalSignerCommandRow")
+                const signerDeviceRow = findChild(view, "externalSignerDeviceRow")
                 const checkDeviceButton = findChild(view, "externalSignerCheckDeviceButton")
                 verify(signerPage !== null)
                 verify(introduction !== null)
                 verify(signerSection !== null)
                 verify(signerPathRow !== null)
-                verify(signerFooter !== null)
                 verify(signerPathInput !== null)
                 verify(signerPathFocusBorder !== null)
-                verify(signerStatusIndicator !== null)
-                verify(signerStatusText !== null)
+                verify(signerCommandRow !== null)
+                verify(signerDeviceRow !== null)
                 verify(checkDeviceButton !== null)
                 compare(introduction.title, "")
-                compare(introduction.description, "Connect a hardware wallet or another external signing tool.")
+                compare(introduction.description,
+                    "Connect a hardware wallet or another external signing tool. Creating an external signer wallet needs exactly one connected device.")
                 compare(signerPage.maximumContentWidth, 840)
-                compare(signerSection.title, "Signer path")
-                compare(signerPathRow.topPadding, 16)
-                compare(signerPathRow.bottomPadding, 16)
-                compare(signerFooter.text,
-                    "The add wallet flow can offer external wallets when exactly one supported signer is connected.")
-                compare(signerStatusIndicator.color, Theme.color.red)
+                compare(signerSection.title, "Signer executable")
+                compare(signerCommandRow.title, "Signer command")
+                compare(signerCommandRow.value, "Not set")
+                compare(signerDeviceRow.visible, false)
                 compare(checkDeviceButton.text, "Check device")
-                compare(signerPathInput.implicitHeight, 37)
-                compare(signerPathInput.leftPadding, 15)
-                compare(signerPathInput.rightPadding, 10)
-                compare(signerPathInput.background.color, Theme.color.neutral2)
-                compare(signerPathInput.background.radius, 5)
-                compare(signerPathFocusBorder.border.color, Theme.color.orange)
-                compare(signerStatusIndicator.width, 10)
-                compare(signerStatusIndicator.height, 10)
+                // Outside the card, under it and on its right edge.
+                const sectionBottom = signerSection.mapToItem(signerPage, 0, signerSection.height).y
+                const sectionRight = signerSection.mapToItem(signerPage, signerSection.width, 0).x
+                tryVerify(function() {
+                    const buttonTop = checkDeviceButton.mapToItem(signerPage, 0, 0)
+                    return buttonTop.y >= sectionBottom
+                        && Math.abs(buttonTop.x + checkDeviceButton.width - sectionRight) < 1
+                })
+                compare(signerPathInput.height, Theme.size.control)
+                compare(signerPathInput.Accessible.name, "Signer executable")
+                compare(signerPathInput.background.color, Theme.color.surface2)
+                compare(signerPathInput.background.radius, Theme.radius.field)
+                compare(signerPathFocusBorder.parent.ringColor, Theme.color.neutral6)
             }
             if (destination.id === "about") {
                 const versionRow = findChild(view, "aboutVersionRow")

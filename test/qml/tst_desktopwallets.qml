@@ -261,11 +261,10 @@ TestCase {
 
         const detailsPopup = findChild(page, "addressDetailsPopup")
         verify(detailsPopup !== null)
-        compare(detailsPopup.background.color, Theme.color.neutral1)
-        compare(detailsPopup.background.border.color, Theme.color.neutral3)
-        compare(detailsPopup.modalOverlayColor, Qt.rgba(0, 0, 0, 0.4))
-        verify(detailsPopup.enter !== null)
-        verify(detailsPopup.exit !== null)
+        compare(detailsPopup.background.color, Theme.color.surface1)
+        compare(detailsPopup.background.border.color, Theme.color.surface2)
+        verify(detailsPopup.enterTransition !== null)
+        verify(detailsPopup.exitTransition !== null)
 
         detailsPopup.open()
         tryCompare(detailsPopup, "opened", true)

@@ -15,12 +15,12 @@ Control {
     property var model: []
     property var groupTitles: ({})
     property string currentSectionId: ""
-    property int rowHeight: 36
-    property int groupSpacing: 16
+    property int rowHeight: Theme.size.control
+    property int groupSpacing: Theme.space.l
     property int groupTitleHeight: 25
-    property int cornerRadius: 8
-    property color selectedBackgroundColor: Qt.rgba(Theme.color.orange.r, Theme.color.orange.g, Theme.color.orange.b, 0.15)
-    property color hoverBackgroundColor: Theme.color.neutral2
+    property int cornerRadius: Theme.radius.sidebarRow
+    property color selectedBackgroundColor: Theme.color.surfaceSelected
+    property color hoverBackgroundColor: Theme.color.surfaceHover
     readonly property var visibleSections: root.filteredSections()
     readonly property alias listView: sectionList
 
@@ -94,21 +94,17 @@ Control {
                     leftMargin: 10
                     rightMargin: 10
                 }
-                height: Theme.text.caption.lineHeight
+                height: Theme.text.captionStrong.lineHeight
                 text: delegate.groupTitle
                 color: Theme.color.neutral6
-                font.family: Theme.text.caption.family
-                font.pixelSize: Theme.text.caption.pixelSize
-                fontStyleName: "Semi Bold"
-                lineHeight: Theme.text.caption.lineHeight
-                lineHeightMode: Text.FixedHeight
+                textStyle: Theme.text.captionStrong
                 horizontalAlignment: Text.AlignLeft
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 Accessible.ignored: true
             }
 
-            AbstractButton {
+            ItemDelegate {
                 id: button
                 objectName: delegate.modelData.objectName || "settingsSidebar_" + delegate.modelData.id
                 anchors.left: parent.left
@@ -124,9 +120,9 @@ Control {
 
                 onClicked: root.sectionActivated(delegate.modelData.id)
 
-                background: Rectangle {
+                background: StateBackground {
                     radius: root.cornerRadius
-                    color: delegate.modelData.id === root.currentSectionId
+                    stateColor: delegate.modelData.id === root.currentSectionId
                         ? root.selectedBackgroundColor
                         : button.hovered
                             ? root.hoverBackgroundColor
@@ -135,26 +131,20 @@ Control {
                     FocusBorder {
                         visible: button.visualFocus
                         borderRadius: root.cornerRadius + 2
-                        topMargin: -2
-                        bottomMargin: -2
-                        leftMargin: -2
-                        rightMargin: -2
+                        topMargin: -Theme.focusRing.offsetDense
+                        bottomMargin: -Theme.focusRing.offsetDense
+                        leftMargin: -Theme.focusRing.offsetDense
+                        rightMargin: -Theme.focusRing.offsetDense
                     }
                 }
 
                 contentItem: CoreText {
                     text: delegate.modelData.label
-                    color: delegate.modelData.id === root.currentSectionId
-                        ? Theme.color.orange
-                        : Theme.color.neutral9
-                    font: Theme.text.description.font
+                    color: Theme.color.neutral9
+                    textStyle: Theme.text.description
                     horizontalAlignment: Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
-
-                    Behavior on color {
-                        ColorAnimation { duration: 150 }
-                    }
                 }
 
                 HoverHandler {

@@ -5,6 +5,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import org.bitcoincore.qt 1.0
 import "../../controls"
 import "../../components"
 
@@ -51,7 +52,7 @@ OnboardingView {
             objectName: "walletTypeViewOnly"
             Layout.fillWidth: true
             enabled: !root.importingWallet
-            title: qsTr("View-only")
+            title: qsTr("Watch-only")
             description: qsTr("Keep an eye on another wallet you have.")
             iconSource: "image://images/visible-filled"
             onClicked: root.watchOnlySelected()
@@ -60,10 +61,11 @@ OnboardingView {
             objectName: "walletTypeExternalSigner"
             Layout.fillWidth: true
             enabled: !root.importingWallet
-            visible: walletController.canCreateExternalSignerWallet
-            title: walletController.externalSignerName.length > 0
-                ? qsTr("External signer") : qsTr("Hardware wallet")
-            description: qsTr("Sign with a connected device")
+            // Offered before HWI is set up; choosing it starts with setup.
+            visible: BuildInfo.externalSignerSupported
+            //: Wallet type in Add wallet: a wallet whose keys stay on a hardware wallet used through HWI.
+            title: qsTr("External signer")
+            description: qsTr("Sign with a connected device.")
             iconSource: "image://images/devices-filled"
             onClicked: root.externalSignerSelected()
         }
@@ -84,7 +86,9 @@ OnboardingView {
             onClicked: root.importSelected()
         }
 
-        BusyIndicator {
+        SpinningIndicator {
+            size: 32
+            color: Theme.color.neutral7
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 16
             visible: root.importingWallet

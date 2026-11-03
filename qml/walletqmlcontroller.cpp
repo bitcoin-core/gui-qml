@@ -2,8 +2,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <bitcoin-build-config.h> // IWYU pragma: keep
+
 #include <qml/walletqmlcontroller.h>
 #include <qml/backendexecutor.h>
+#include <qml/core_settings.h>
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/util.h>
@@ -35,6 +38,7 @@
 #include <QMetaObject>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QTextDocument>
 #include <QStringList>
 #include <QTimer>
 #include <QUrl>
@@ -80,9 +84,10 @@ bool ErrorContains(const QString& error, const QString& needle)
 }
 } // namespace
 
-WalletQmlController::WalletQmlController(interfaces::Node& node, QObject *parent)
+WalletQmlController::WalletQmlController(interfaces::Node& node, ArgsManager& args, QObject *parent)
     : QObject(parent)
     , m_node(node)
+    , m_args(args)
     , m_empty_wallet(new WalletQmlModel(&node, this))
     , m_selected_wallet(m_empty_wallet)
     , m_wallet_command_executor(std::make_shared<BackendExecutor>())
@@ -564,6 +569,11 @@ bool WalletQmlController::createExternalSignerWallet(const QString& name)
 {
     clearWalletLoadStatus();
     clearWalletMigrationStatus();
+#ifndef ENABLE_EXTERNAL_SIGNER
+    //: Shown when creating an external signer wallet in a build compiled without external signer support.
+    setWalletLoadError(tr("This build does not support external signers."));
+    return false;
+#endif
     if (!m_initialized) {
         setWalletLoadError(tr("Wallets are still loading. Try again in a moment."));
         return false;
@@ -733,31 +743,79 @@ void WalletQmlController::requestOpenWalletSettings()
 
 void WalletQmlController::refreshExternalSignerStatus()
 {
-    const QString signer_path = QString::fromStdString(
-        SettingToString(m_node.getPersistentSetting("signer"), "")).trimmed();
+    // A signer given on the command line is used as given; settings show it
+    // as set there and don't let it be changed. Otherwise the saved path is
+    // the one to use, and it is applied to the node.
+    const bool command_line{QmlCoreSettings::IsCommandLineOverridden(m_args, QStringLiteral("signer"))};
+    const common::SettingsValue signer_setting{command_line
+        ? QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("signer"))
+        : m_node.getPersistentSetting("signer")};
+    // -nosigner is false, which would otherwise read as the path "0".
+    const QString signer_path = signer_setting.isFalse() ? QString{}
+        : QString::fromStdString(SettingToString(signer_setting, "")).trimmed();
     const bool path_configured = !signer_path.isEmpty();
-    if (path_configured) {
-        m_node.forceSetting("signer", signer_path.toStdString());
-    } else {
-        m_node.forceSetting("signer", common::SettingsValue{});
+    if (!command_line) {
+        if (path_configured) {
+            m_node.forceSetting("signer", signer_path.toStdString());
+        } else {
+            m_node.forceSetting("signer", common::SettingsValue{});
+        }
     }
+    bool responding = false;
     int signer_count = 0;
     QString signer_name;
     QString error;
 
     try {
         auto signers = m_node.listExternalSigners();
+        // Without a path Core returns no signers without running anything.
+        responding = path_configured;
         signer_count = static_cast<int>(signers.size());
         if (signer_count == 1) {
             signer_name = QString::fromStdString(signers.front()->getName());
         } else if (signer_count > 1) {
             error = tr("More than one external signer was found. Connect only one device.");
         }
-    } catch (const std::runtime_error&) {
-        error = tr("The signer command did not return valid output. Check that the path is correct.");
+    } catch (const std::runtime_error& e) {
+        // A device that answers with an error, for example because it is
+        // locked, is reported the same way as a command that cannot run.
+        // Only the first means the signer command itself works.
+        error = externalSignerDeviceError(e.what(), signer_path.toStdString());
+        responding = !error.isEmpty();
+        if (!responding) {
+            error = tr("The signer command did not return valid output. Check that the path is correct.");
+        }
     }
 
-    setExternalSignerStatus(path_configured, signer_count, signer_name, error);
+    setExternalSignerStatus(path_configured, responding, signer_count, signer_name, error);
+}
+
+QString WalletQmlController::externalSignerDeviceError(const std::string& error, const std::string& command)
+{
+    // ExternalSigner::Enumerate() names the command in errors about an entry
+    // of the signer list it printed. Other errors mean no list was printed.
+    const std::string prefix{"'" + command + "' "};
+    if (!error.starts_with(prefix)) return {};
+    const std::string detail{error.substr(prefix.size())};
+    if (detail.starts_with("error: ")) {
+        // The reason is the signer tool's own text, and the QML text that
+        // shows it reads anything tag-like as markup, so such a reason is
+        // left out rather than rendered.
+        const QString reason{QString::fromStdString(detail.substr(7))};
+        if (!Qt::mightBeRichText(reason)) {
+            //: %1 is the reason given by the external signer tool, for example "Device is locked".
+            return tr("Your device isn't ready: %1").arg(reason);
+        }
+    }
+    if (detail == "error" || detail.starts_with("error: ")) {
+        //: The external signer tool reported an error for the connected hardware wallet without saying why.
+        return tr("Your device isn't ready. Unlock it, then check again.");
+    }
+    if (detail == "received invalid response, missing signer fingerprint") {
+        //: The connected hardware wallet did not report its fingerprint, usually because it is locked.
+        return tr("Your device didn't share its fingerprint. Unlock it, then check again.");
+    }
+    return {};
 }
 
 void WalletQmlController::requestOpenReceive()
@@ -1359,10 +1417,11 @@ QString WalletQmlController::makeSuggestedExternalSignerWalletName(const QString
     return suggested.left(20);
 }
 
-void WalletQmlController::setExternalSignerStatus(bool path_configured, int signer_count, const QString& signer_name, const QString& error)
+void WalletQmlController::setExternalSignerStatus(bool path_configured, bool responding, int signer_count, const QString& signer_name, const QString& error)
 {
     const QString suggested_name = makeSuggestedExternalSignerWalletName(signer_name);
     if (m_external_signer_path_configured == path_configured &&
+        m_external_signer_responding == responding &&
         m_external_signer_count == signer_count &&
         m_external_signer_name == signer_name &&
         m_external_signer_error == error &&
@@ -1371,6 +1430,7 @@ void WalletQmlController::setExternalSignerStatus(bool path_configured, int sign
     }
 
     m_external_signer_path_configured = path_configured;
+    m_external_signer_responding = responding;
     m_external_signer_count = signer_count;
     m_external_signer_name = signer_name;
     m_external_signer_error = error;

@@ -18,18 +18,14 @@ Page {
     property int selectedNodeId: -1
     property PeerDetailsModel selectedDetails
 
-    background: Rectangle { color: Theme.color.neutral0 }
+    background: Rectangle { color: Theme.color.background }
 
     header: NavigationBar2 {
         visible: root.showHeader
-        leftItem: NavButton {
-            objectName: "peersBackButton"
-            visible: root.showBackButton
-            iconSource: "image://images/caret-left"
-            text: qsTr("Back")
-            onClicked: root.back()
-        }
-        centerItem: Header { headerBold: true; headerSize: 18; header: qsTr("Peers") }
+        showBackButton: root.showBackButton
+        backButtonObjectName: "peersBackButton"
+        onBackClicked: root.back()
+        title: qsTr("Peers")
     }
 
     function selectPeer(peerDetails) {
@@ -67,7 +63,7 @@ Page {
         primaryMaximumWidth: 498
         primaryWidthRatio: 0.38
         detailMinimumWidth: 280
-        separatorColor: Theme.color.neutral2
+        separatorColor: Theme.color.surfaceDivider
 
         onIsCompactChanged: {
             if (!isCompact) Qt.callLater(root.reconcileSelection)
@@ -110,7 +106,7 @@ Page {
                         : peerListModelProxy.count === 0
                             ? qsTr("No peers match your search or filters")
                             : qsTr("Select a peer to view its details")
-                    font: Theme.text.description.font
+                    textStyle: Theme.text.description
                     color: Theme.color.neutral6
                 }
             }

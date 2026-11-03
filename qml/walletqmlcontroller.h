@@ -9,6 +9,7 @@
 #include <qml/models/walletqmlmodel.h>
 #include <qml/backendexecutor.h>
 
+#include <common/args.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
@@ -16,6 +17,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 
 #include <QMutex>
 #include <QObject>
@@ -43,6 +45,9 @@ class WalletQmlController : public QObject
     Q_PROPERTY(QString lastImportedWalletName READ lastImportedWalletName NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(QString lastImportedWalletKeyScheme READ lastImportedWalletKeyScheme NOTIFY lastImportedWalletInfoChanged)
     Q_PROPERTY(bool canCreateExternalSignerWallet READ canCreateExternalSignerWallet NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(bool externalSignerPathConfigured READ externalSignerPathConfigured NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(bool externalSignerResponding READ externalSignerResponding NOTIFY externalSignerStatusChanged)
+    Q_PROPERTY(int externalSignerCount READ externalSignerCount NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerName READ externalSignerName NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString externalSignerError READ externalSignerError NOTIFY externalSignerStatusChanged)
     Q_PROPERTY(QString suggestedExternalSignerWalletName READ suggestedExternalSignerWalletName NOTIFY externalSignerStatusChanged)
@@ -51,7 +56,7 @@ class WalletQmlController : public QObject
 public:
     using OpenLocalPathFn = std::function<bool(const QString&)>;
 
-    explicit WalletQmlController(interfaces::Node& node, QObject *parent = nullptr);
+    explicit WalletQmlController(interfaces::Node& node, ArgsManager& args = gArgs, QObject *parent = nullptr);
     ~WalletQmlController();
 
     Q_INVOKABLE void setSelectedWallet(QString path, QString wallet_format = QString());
@@ -99,6 +104,9 @@ public:
     QString lastImportedWalletName() const { return m_last_imported_wallet_name; }
     QString lastImportedWalletKeyScheme() const { return m_last_imported_wallet_key_scheme; }
     bool canCreateExternalSignerWallet() const { return m_external_signer_path_configured && m_external_signer_count == 1; }
+    bool externalSignerPathConfigured() const { return m_external_signer_path_configured; }
+    bool externalSignerResponding() const { return m_external_signer_responding; }
+    int externalSignerCount() const { return m_external_signer_count; }
     QString externalSignerName() const { return m_external_signer_name; }
     QString externalSignerError() const { return m_external_signer_error; }
     QString suggestedExternalSignerWalletName() const { return m_suggested_external_signer_wallet_name; }
@@ -182,7 +190,8 @@ private:
     void setLastImportedWalletInfo(const QString& wallet_name, const QString& key_scheme);
     void clearLastImportedWalletInfo();
     QString makeSuggestedExternalSignerWalletName(const QString& signer_name) const;
-    void setExternalSignerStatus(bool path_configured, int signer_count, const QString& signer_name, const QString& error);
+    void setExternalSignerStatus(bool path_configured, bool responding, int signer_count, const QString& signer_name, const QString& error);
+    static QString externalSignerDeviceError(const std::string& error, const std::string& command);
     void publishWalletInfo(WalletQmlModel* wallet_model);
     void subscribeWalletInfo(WalletQmlModel* wallet_model);
     void setWalletLocationOpenError(const QString& error);
@@ -195,6 +204,7 @@ private:
     QSet<WalletQmlModel*> m_retiring_wallets;
     QSet<QString> m_retiring_wallet_names;
     interfaces::Node& m_node;
+    ArgsManager& m_args;
     WalletQmlModel* m_empty_wallet;
     WalletQmlModel* m_selected_wallet;
     std::shared_ptr<BackendExecutor> m_wallet_command_executor;
@@ -215,6 +225,7 @@ private:
     QString m_last_imported_wallet_name;
     QString m_last_imported_wallet_key_scheme;
     bool m_external_signer_path_configured{false};
+    bool m_external_signer_responding{false};
     int m_external_signer_count{0};
     QString m_external_signer_name;
     QString m_external_signer_error;

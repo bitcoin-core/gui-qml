@@ -9,6 +9,7 @@ import "../../qml/controls"
 TestCase {
     name: "NavButton"
     when: windowShown
+    visible: true
     width: 300
     height: 200
 
@@ -29,5 +30,22 @@ TestCase {
         compare(button.contentItem.y, button.topPadding)
         compare(button.contentItem.width, button.width - button.leftPadding - button.rightPadding)
         compare(button.contentItem.height, button.height - button.topPadding - button.bottomPadding)
+    }
+
+    function test_releaseOutsideDoesNotClick() {
+        const button = createTemporaryObject(iconTextButtonComponent, this)
+        verify(button !== null)
+        let clicks = 0
+        button.clicked.connect(function() { ++clicks })
+
+        mousePress(button)
+        verify(button.down)
+        mouseMove(button, button.width + 40, button.height / 2)
+        mouseRelease(button, button.width + 40, button.height / 2)
+        compare(clicks, 0)
+        verify(!button.down)
+
+        mouseClick(button)
+        compare(clicks, 1)
     }
 }

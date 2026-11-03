@@ -6,7 +6,6 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import "../controls"
-import "../components"
 
 import org.bitcoincore.qt 1.0
 
@@ -21,7 +20,7 @@ Item {
     property alias maxValue: trafficGraph.maxValue
     property alias valueList: trafficGraph.valueList
     property double maxRateBps
-    property color unitLabelColor: Theme.color.neutral9
+    property color unitLabelColor: Theme.color.neutral7
 
     height: 250
 
@@ -29,50 +28,56 @@ Item {
         id: trafficGraph
         height: root.height
         width: root.width
-        backgroundColor: root.backgroundColor
-        borderColor: root.borderColor
-        gradientColor: root.fillColor
-        lineColor: root.lineColor
-        markerLineColor: root.markerLineColor
+        backgroundColor: Theme.color.surface1
+        borderColor: Theme.color.surfaceDivider
+        gradientColor: Theme.color.trafficReceived
+        lineColor: Theme.color.trafficReceived
+        markerLineColor: Theme.color.surfaceDivider
         maxSamples: root.maxSamples
         maxValue: root.maxValue
         valueList: root.valueList
 
         Behavior on backgroundColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on borderColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on gradientColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on lineColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
 
         Behavior on markerLineColor {
-            ColorAnimation { duration: 150 }
+            enabled: Theme.motion.animated
+            ColorAnimation { duration: Theme.motion.normal }
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps)) + "/s"
+            //: Network traffic rate axis label. %1 is a size such as "10 KB".
+            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps)))
             color: root.unitLabelColor
-            font.pixelSize: 13
+            textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
             Layout.leftMargin: 5
-            Layout.bottomMargin: 6
+            Layout.bottomMargin: Theme.space.s
         }
         CoreText {
-            text: formatBytes(formatMagnitude(root.maxRateBps / 10)) + "/s"
+            text: qsTr("%1/s").arg(formatBytes(formatMagnitude(root.maxRateBps / 10)))
             color: root.unitLabelColor
-            font.pixelSize: 13
+            textStyle: Theme.text.monoCaption
             Layout.alignment: Qt.AlignLeft | Qt.AlignBottom
             Layout.leftMargin: 5
             Layout.bottomMargin: 5
@@ -85,12 +90,12 @@ Item {
     }
 
     function formatBytes(bytes) {
-        var suffixes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
+        var units = [qsTr("%1 Bytes"), qsTr("%1 KB"), qsTr("%1 MB"), qsTr("%1 GB"), qsTr("%1 TB"), qsTr("%1 PB")];
         var index = 0;
-        while (bytes >= 1000 && index < suffixes.length - 1) {
+        while (bytes >= 1000 && index < units.length - 1) {
             bytes /= 1000;
             index++;
         }
-        return bytes.toFixed(0) + " " + suffixes[index];
+        return units[index].arg(Number(bytes).toLocaleString(Qt.locale(), "f", 0));
     }
 }

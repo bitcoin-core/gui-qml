@@ -14,7 +14,7 @@ Page {
     id: root
     objectName: "sendTransactionReviewPage"
     background: Rectangle { color: Theme.color.background }
-    title: qsTr("Review Transaction")
+    title: qsTr("Review transaction")
 
     property WalletQmlModel wallet: null
     readonly property WalletQmlModelTransaction transaction: wallet ? wallet.currentTransaction : null
@@ -26,7 +26,7 @@ Page {
     readonly property string reviewMessage: wallet ? wallet.currentTransactionReviewMessage : ""
     readonly property bool showWarning: reviewMessage.length > 0
         || (wallet && wallet.keySchemeKind === WalletQmlModel.WatchOnly && !canBroadcast)
-    readonly property real sidePadding: width < 640 ? 16 : 40
+    readonly property real sidePadding: SizeClass.isCompact(width) ? Theme.space.pageCompact : Theme.space.pageRegular
     readonly property real reviewContentWidth: Math.max(0, Math.min(1100, width - sidePadding * 2))
     property bool sending: false
     property string saveStatus: ""
@@ -45,8 +45,14 @@ Page {
     signal back()
     signal transactionSent(string txid)
 
+    // The review is a full-window sheet: Escape goes back like its close button.
+    Keys.onEscapePressed: function(event) {
+        if (!root.sending) root.back()
+        event.accepted = true
+    }
+
     function focusInitialControl() {
-        reviewCloseButton.forceActiveFocus(Qt.TabFocusReason)
+        reviewHeader.closeButton.forceActiveFocus(Qt.TabFocusReason)
     }
 
     Component {
@@ -54,7 +60,7 @@ Page {
         StatusPill {
             objectName: "sendTransactionReviewReadyPill"
             text: root.showBroadcast ? qsTr("Ready to broadcast") : qsTr("Ready to send")
-            accentColor: Theme.color.orange
+            accentColor: Theme.color.accent
         }
     }
 
@@ -112,24 +118,18 @@ Page {
     }
 
     header: NavigationBar2 {
+        id: reviewHeader
         implicitWidth: 0
         leftPadding: (root.width - root.reviewContentWidth) / 2
         rightPadding: leftPadding
         topPadding: 16
         bottomPadding: 12
-        centerItem: CoreText {
-            objectName: "sendTransactionReviewTitle"
-            text: root.title
-            font: Theme.text.heading.font
-            wrap: false
-        }
-        rightItem: CloseButton {
-            id: reviewCloseButton
-            objectName: "sendTransactionReviewCloseButton"
-            size: 45
-            iconSize: 15
-            onClicked: root.back()
-        }
+        title: root.title
+        titleObjectName: "sendTransactionReviewTitle"
+        showCloseButton: true
+        closeButtonObjectName: "sendTransactionReviewCloseButton"
+        closeButtonSize: CloseButton.Large
+        onCloseClicked: root.back()
     }
 
     AppFileDialog {
@@ -184,11 +184,6 @@ Page {
                 objectName: "sendTransactionReviewWarning"
                 visible: root.showWarning
                 Layout.fillWidth: true
-                backgroundColor: Theme.color.neutral1
-                radius: 16
-                contentMargin: 20
-                messageFontPixelSize: Theme.text.description.font.pixelSize
-                messageLineHeight: Theme.text.description.lineHeight
                 message: root.reviewMessage.length ? root.reviewMessage
                     : qsTr("This wallet does not have the keys to sign this transaction.")
             }
@@ -220,13 +215,14 @@ Page {
                             leadingItem: ActivityRequestBadge {
                                 objectName: "sendTransactionReviewRecipient" + index + "RequestBadge"
                                 inactive: true
-                                surfaceColor: Theme.color.neutral1
+                                surfaceColor: Theme.color.surface1
                                 statusText: qsTr("Payment request recipient")
                             }
                             trailingItem: BitcoinAmountDisplayLabel {
                                 objectName: "sendTransactionReviewRecipient" + index + "Amount"
                                 text: modelData.amount
-                                font: Theme.text.monoDescription.font
+                                animateUnitChanges: false
+                                textStyle: Theme.text.amountDescription
                                 color: Theme.color.neutral9
                             }
                         }
@@ -252,6 +248,7 @@ Page {
                     title: qsTr("Fee rate")
                     value: root.transaction && root.transaction.reviewFeeRate.length > 0
                         ? qsTr("%1 sat/vB").arg(root.transaction.reviewFeeRate) : "—"
+                    valueTextStyle: Theme.text.monoDescription
                     showDivider: false
                 }
             }
@@ -262,14 +259,16 @@ Page {
                 ValueRow {
                     objectName: "sendTransactionReviewFee"
                     amountValue: true
+                    animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("Total fees")
                     value: root.transaction ? root.transaction.fee : ""
-                    dividerColor: Theme.color.neutral2
+                    dividerColor: Theme.color.surfaceDivider
                 }
                 ValueRow {
                     objectName: "sendTransactionReviewTotal"
                     amountValue: true
+                    animateUnitChanges: false
                     Layout.fillWidth: true
                     title: qsTr("Total amount")
                     value: root.transaction ? root.transaction.total : ""
@@ -307,17 +306,17 @@ Page {
                     objectName: "sendTransactionReviewSaveButton"
                     buttonSize: NeutralButton.Large
                     enabled: !!root.transaction && !root.sending
-                    width: parent.width < 540 || !root.showSend && !root.showBroadcast || externalSignerActions.visible
+                    width: parent.width < SizeClass.stackColumnsMax || !root.showSend && !root.showBroadcast || externalSignerActions.visible
                         ? parent.width : (parent.width - 12) / 2
                     height: 46
                     text: qsTr("Save transaction")
                     onClicked: root.startSavePsbt()
                 }
-                ContinueButton {
+                PrimaryButton {
                     objectName: "sendTransactionReviewSendButton"
                     visible: (root.showSend && !externalSignerActions.visible) || root.showBroadcast
                     enabled: !root.sending
-                    width: parent.width < 540 ? parent.width : (parent.width - 12) / 2
+                    width: parent.width < SizeClass.stackColumnsMax ? parent.width : (parent.width - 12) / 2
                     height: 46
                     text: root.showBroadcast ? qsTr("Broadcast transaction") : qsTr("Send transaction")
                     onClicked: root.showBroadcast ? root.commitBroadcast() : root.requestSend()
@@ -325,22 +324,20 @@ Page {
             }
 
             ToastBanner {
-                visible: root.saveStatus.length > 0
+                shown: root.saveStatus.length > 0
                 Layout.fillWidth: true
-                tintColor: root.saveError ? Theme.color.red : Theme.color.green
-                iconSource: root.saveError ? "image://images/info-filled" : "image://images/check"
+                tone: root.saveError ? ToastBanner.Error : ToastBanner.Success
                 text: root.saveStatus
                 dismissAfter: 3
                 onDismissed: root.saveStatus = ""
             }
 
-            CoreText {
-                visible: text.length > 0
+            ToastBanner {
+                objectName: "sendTransactionErrorBanner"
+                shown: text.length > 0
                 Layout.fillWidth: true
+                tone: ToastBanner.Error
                 text: root.wallet ? root.wallet.transactionError : ""
-                color: Theme.color.red
-                font: Theme.text.description.font
-                wrap: true
             }
 
             Item { Layout.preferredHeight: 24 }
@@ -373,11 +370,10 @@ Page {
     WalletPassphrasePopup {
         id: sendPassphrasePopup
         parent: Overlay.overlay
-        width: Math.min(420, root.width - 40)
         titleText: qsTr("Enter wallet password")
         descriptionText: qsTr("Enter your wallet password to send this transaction.")
         confirmText: qsTr("Unlock and send")
-        busyConfirmText: qsTr("Unlocking...")
+        busyConfirmText: qsTr("Unlocking…")
         onSubmitted: (passphrase) => {
             busy = true
             if (root.wallet.sendTransactionWithPassphrase(passphrase)) {

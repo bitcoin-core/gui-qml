@@ -21,7 +21,7 @@ SettingsPage {
     function formatMegabytes(valueMb) {
         const rounded = Math.round(valueMb)
         const decimals = Math.abs(valueMb - rounded) < 0.005 ? 0 : 2
-        return Number(valueMb).toLocaleString(Qt.locale(), "f", decimals) + " MB"
+        return qsTr("%1 MB").arg(Number(valueMb).toLocaleString(Qt.locale(), "f", decimals))
     }
 
     function validateMempoolSize(valueMb) {
@@ -35,10 +35,11 @@ SettingsPage {
         return ""
     }
 
-    SettingsRestartNotice {
+    ToastBanner {
         objectName: "mempoolRestartNotice"
-        visible: optionsModel.mempoolSettingsDirty
+        shown: optionsModel.mempoolSettingsDirty
         Layout.fillWidth: true
+        text: qsTr("Restart the application for these changes to take effect.")
     }
 
     FormSection {
