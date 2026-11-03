@@ -9,6 +9,7 @@
 #include <qml/models/walletqmlmodel.h>
 #include <qml/backendexecutor.h>
 
+#include <common/args.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
@@ -55,7 +56,7 @@ class WalletQmlController : public QObject
 public:
     using OpenLocalPathFn = std::function<bool(const QString&)>;
 
-    explicit WalletQmlController(interfaces::Node& node, QObject *parent = nullptr);
+    explicit WalletQmlController(interfaces::Node& node, ArgsManager& args = gArgs, QObject *parent = nullptr);
     ~WalletQmlController();
 
     Q_INVOKABLE void setSelectedWallet(QString path, QString wallet_format = QString());
@@ -203,6 +204,7 @@ private:
     QSet<WalletQmlModel*> m_retiring_wallets;
     QSet<QString> m_retiring_wallet_names;
     interfaces::Node& m_node;
+    ArgsManager& m_args;
     WalletQmlModel* m_empty_wallet;
     WalletQmlModel* m_selected_wallet;
     std::shared_ptr<BackendExecutor> m_wallet_command_executor;

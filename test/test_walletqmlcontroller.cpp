@@ -37,7 +37,7 @@ namespace {
 class DrainingWalletController : public WalletQmlController
 {
 public:
-    explicit DrainingWalletController(interfaces::Node& node) : WalletQmlController(node)
+    explicit DrainingWalletController(interfaces::Node& node, ArgsManager& args = gArgs) : WalletQmlController(node, args)
     {
         connect(this, &WalletQmlController::walletsDrained, this, [this] { m_drained = true; });
     }
@@ -331,6 +331,8 @@ private Q_SLOTS:
     void externalSignerSuggestionUsesSignerName();
     void externalSignerCreationNeedsBuildSupport();
     void externalSignerWithoutPathIsNotResponding();
+    void externalSignerFromCommandLineIsUsedAsGiven();
+    void externalSignerTurnedOffOnCommandLine();
     void externalSignerStatusSeparatesCommandFromDevice_data();
     void externalSignerStatusSeparatesCommandFromDevice();
     void initializedControllerSignalsMigrationForLegacyWallet();
@@ -781,6 +783,57 @@ void WalletQmlControllerTests::externalSignerWithoutPathIsNotResponding()
     QVERIFY(!controller.externalSignerPathConfigured());
     QVERIFY(!controller.externalSignerResponding());
     QVERIFY(controller.externalSignerError().isEmpty());
+}
+
+// A signer given with -signer is the one checked, even with another path
+// saved in settings, and the saved path isn't forced over it.
+void WalletQmlControllerTests::externalSignerFromCommandLineIsUsedAsGiven()
+{
+    ArgsManager args;
+    args.LockSettings([](common::Settings& settings) {
+        settings.command_line_options["signer"].push_back(common::SettingsValue{std::string{"/opt/cli/hwi"}});
+    });
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string& name) {
+        return name == "signer" ? common::SettingsValue{std::string{"/usr/bin/hwi"}} : common::SettingsValue{};
+    };
+    // Core runs the command-line signer, so a device error names that command.
+    node.list_external_signers_fn = []() -> std::vector<std::unique_ptr<interfaces::ExternalSigner>> {
+        throw std::runtime_error("'/opt/cli/hwi' error: Device is locked");
+    };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node, args);
+    controller.refreshExternalSignerStatus();
+
+    QVERIFY(controller.externalSignerPathConfigured());
+    QVERIFY(controller.externalSignerResponding());
+    QCOMPARE(controller.externalSignerError(), QString{"Your device isn't ready: Device is locked"});
+    QVERIFY(node.force_setting_arguments.empty());
+}
+
+void WalletQmlControllerTests::externalSignerTurnedOffOnCommandLine()
+{
+    ArgsManager args;
+    args.LockSettings([](common::Settings& settings) {
+        settings.command_line_options["signer"].push_back(common::SettingsValue{false});
+    });
+    MockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    node.get_persistent_setting_fn = [](const std::string& name) {
+        return name == "signer" ? common::SettingsValue{std::string{"/usr/bin/hwi"}} : common::SettingsValue{};
+    };
+    node.list_external_signers_fn = [] { return std::vector<std::unique_ptr<interfaces::ExternalSigner>>{}; };
+    node.ExpectExactly(node.calls.listExternalSigners, 1);
+
+    DrainingWalletController controller(node, args);
+    controller.refreshExternalSignerStatus();
+
+    // -nosigner is not a path, and the saved one doesn't replace it.
+    QVERIFY(!controller.externalSignerPathConfigured());
+    QVERIFY(!controller.externalSignerResponding());
+    QVERIFY(node.force_setting_arguments.empty());
 }
 
 void WalletQmlControllerTests::externalSignerStatusSeparatesCommandFromDevice_data()

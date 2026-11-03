@@ -6,6 +6,7 @@
 
 #include <qml/walletqmlcontroller.h>
 #include <qml/backendexecutor.h>
+#include <qml/core_settings.h>
 
 #include <qml/models/walletqmlmodel.h>
 #include <qml/util.h>
@@ -83,9 +84,10 @@ bool ErrorContains(const QString& error, const QString& needle)
 }
 } // namespace
 
-WalletQmlController::WalletQmlController(interfaces::Node& node, QObject *parent)
+WalletQmlController::WalletQmlController(interfaces::Node& node, ArgsManager& args, QObject *parent)
     : QObject(parent)
     , m_node(node)
+    , m_args(args)
     , m_empty_wallet(new WalletQmlModel(&node, this))
     , m_selected_wallet(m_empty_wallet)
     , m_wallet_command_executor(std::make_shared<BackendExecutor>())
@@ -741,13 +743,23 @@ void WalletQmlController::requestOpenWalletSettings()
 
 void WalletQmlController::refreshExternalSignerStatus()
 {
-    const QString signer_path = QString::fromStdString(
-        SettingToString(m_node.getPersistentSetting("signer"), "")).trimmed();
+    // A signer given on the command line is used as given; settings show it
+    // as set there and don't let it be changed. Otherwise the saved path is
+    // the one to use, and it is applied to the node.
+    const bool command_line{QmlCoreSettings::IsCommandLineOverridden(m_args, QStringLiteral("signer"))};
+    const common::SettingsValue signer_setting{command_line
+        ? QmlCoreSettings::DisplaySettingValue(m_node, m_args, QStringLiteral("signer"))
+        : m_node.getPersistentSetting("signer")};
+    // -nosigner is false, which would otherwise read as the path "0".
+    const QString signer_path = signer_setting.isFalse() ? QString{}
+        : QString::fromStdString(SettingToString(signer_setting, "")).trimmed();
     const bool path_configured = !signer_path.isEmpty();
-    if (path_configured) {
-        m_node.forceSetting("signer", signer_path.toStdString());
-    } else {
-        m_node.forceSetting("signer", common::SettingsValue{});
+    if (!command_line) {
+        if (path_configured) {
+            m_node.forceSetting("signer", signer_path.toStdString());
+        } else {
+            m_node.forceSetting("signer", common::SettingsValue{});
+        }
     }
     bool responding = false;
     int signer_count = 0;
