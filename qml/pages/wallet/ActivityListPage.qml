@@ -12,7 +12,7 @@ import "../../components"
 Page {
     id: root
     objectName: "activityPage"
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
     property bool exportSucceeded: true
     property bool ready: false
     readonly property bool activitySourceEmpty: !wallet || wallet.transactionActivityModel.count === 0

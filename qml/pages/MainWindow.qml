@@ -356,8 +356,8 @@ ApplicationWindow {
 
     WalletCreationModal {
         id: walletCreationModal
-        onFinished: function(openActivity) {
-            if (openActivity) appWindow.routeToShell("openActivity")
+        onFinished: function(openActivity, wallet) {
+            if (openActivity) appWindow.routeToShell("openWallet", wallet)
         }
     }
 
@@ -446,6 +446,9 @@ ApplicationWindow {
             Component {
                 id: settingsPage
                 SettingsView {
+                    wallet: typeof walletController !== "undefined" && walletController.isWalletLoaded
+                        ? walletController.selectedWallet : null
+                    activeWalletName: wallet ? wallet.name : ""
                     onDoneClicked: nodeStack.pop()
                 }
             }

@@ -18,7 +18,7 @@ SettingsPage {
     maximumContentWidth: 840
     contentSpacing: 16
 
-    property WalletQmlModel wallet: walletController.selectedWallet
+    property WalletQmlModel wallet: null
     property AddressListModel addressModel: wallet.addressListModel
     property string selectedAddress: ""
     property string selectedLabel: ""

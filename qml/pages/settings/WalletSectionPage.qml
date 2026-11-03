@@ -15,9 +15,9 @@ SettingsPage {
     title: qsTr("Wallet settings")
     showBackButton: false
 
-    property var wallet: walletController.selectedWallet
+    property var wallet: null
     property string errorText: ""
-    readonly property bool walletLoaded: walletController.isWalletLoaded
+    readonly property bool walletLoaded: root.wallet !== null
     readonly property bool noWalletsAvailable: walletController.noWalletsFound
     readonly property bool canManagePassphrase: root.wallet !== null && root.wallet.canManagePassphrase
 
@@ -61,22 +61,28 @@ SettingsPage {
             if (!root.wallet.backupWallet(automatedPath)) root.errorText = root.wallet.settingsError
             return
         }
+        backupDialog.targetWallet = root.wallet
         backupDialog.open()
     }
 
     AppFileDialog {
         id: backupDialog
+        objectName: "walletSettingsBackupDialog"
         fileMode: AppFileDialog.SaveFile
         currentFolder: "file://" + walletController.homePath()
         currentFile: root.backupDefaultFileUrl()
         defaultSuffix: "bak"
         nameFilters: [qsTr("Wallet backup files (*.bak *.dat)"), qsTr("All files (*)")]
+        property var targetWallet: null
         onAccepted: {
-            if (backupDialog.selectedFile.toString().length === 0) return
+            const wallet = targetWallet
+            targetWallet = null
+            if (!wallet || wallet !== root.wallet || backupDialog.selectedFile.toString().length === 0) return
             const normalized = root.resolvedBackupPath(backupDialog.selectedFile.toString())
-            if (!root.wallet.backupWallet(normalized)) root.errorText = root.wallet.settingsError
+            if (!wallet.backupWallet(normalized)) root.errorText = wallet.settingsError
             else root.errorText = ""
         }
+        onRejected: targetWallet = null
     }
 
     TextField {
@@ -93,13 +99,7 @@ SettingsPage {
         }
     }
 
-    Connections {
-        target: walletController
-
-        function onSelectedWalletChanged() {
-            root.errorText = ""
-        }
-    }
+    onWalletChanged: root.errorText = ""
 
     PageHeading {
         objectName: "walletSettingsEmptyHeading"

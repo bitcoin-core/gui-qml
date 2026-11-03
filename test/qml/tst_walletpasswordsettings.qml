@@ -37,6 +37,7 @@ TestCase {
 
         WalletPasswordSettings {
             updating: false
+            wallet: testWalletModel
             width: 460
             height: 680
         }
@@ -47,6 +48,7 @@ TestCase {
 
         WalletPasswordSettings {
             updating: true
+            wallet: testWalletModel
             width: 460
             height: 680
         }

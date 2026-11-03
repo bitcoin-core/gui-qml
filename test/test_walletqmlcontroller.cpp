@@ -356,10 +356,10 @@ private Q_SLOTS:
     void walletNameAvailabilityErrorRejectsEmptyAndWhitespace();
     void walletNameAvailabilityErrorRejectsExistingNameWithSurroundingWhitespace();
     void walletNameAvailabilityErrorReturnsEmptyForAvailableName();
-    void openSelectedWalletLocationOpensWalletDirectory();
-    void openSelectedWalletLocationReportsOpenFailure();
-    void openSelectedWalletLocationReportsMissingWalletPath();
-    void openSelectedWalletLocationReportsMissingSelectedWallet();
+    void openWalletLocationOpensWalletDirectory();
+    void openWalletLocationReportsOpenFailure();
+    void openWalletLocationReportsMissingWalletPath();
+    void openWalletLocationReportsMissingWallet();
 };
 
 void WalletQmlControllerTests::initTestCase()
@@ -928,6 +928,10 @@ void WalletQmlControllerTests::initializedControllerEmitsWalletCreateSucceeded()
     QVERIFY(controller.isWalletLoaded());
     QVERIFY(!controller.walletLoadInProgress());
     QCOMPARE(controller.walletCreateError(), QString{});
+    auto* created_model = create_spy.at(0).at(0).value<WalletQmlModel*>();
+    QVERIFY(created_model);
+    QCOMPARE(created_model->name(), QString{"created_wallet"});
+    QVERIFY(controller.openWallets().contains(created_model));
 }
 
 void WalletQmlControllerTests::initializedControllerDoesNotCompleteCreateForUnrelatedLoadNotification()
@@ -1232,6 +1236,9 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QVERIFY(controller.isWalletLoaded());
     QVERIFY(controller.isWalletOpen("alpha_wallet"));
     QVERIFY(controller.isWalletOpen("beta_wallet"));
+    QCOMPARE(controller.openWallets().size(), 2);
+    WalletQmlModel* beta_model = qobject_cast<WalletQmlModel*>(controller.openWallets().at(1));
+    QVERIFY(beta_model);
 
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
@@ -1242,6 +1249,12 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QObject::connect(&controller, &WalletQmlController::walletLoadStateChanged, [&]() {
         signal_order.append("walletLoadStateChanged");
     });
+    // Views are keyed by the open wallets, so the next wallet must be
+    // selected before the closed one leaves the list.
+    QObject::connect(&controller, &WalletQmlController::openWalletsChanged, [&]() {
+        signal_order.append("openWalletsChanged");
+        QCOMPARE(controller.selectedWallet(), beta_model);
+    });
 
     controller.closeWallet("alpha_wallet");
 
@@ -1251,8 +1264,9 @@ void WalletQmlControllerTests::initializedControllerClosesSelectedWalletAndSelec
     QCOMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
     QCOMPARE(load_state_spy.at(0).at(1).toBool(), false);
-    QCOMPARE(signal_order, QStringList({"selectedWalletChanged", "walletLoadStateChanged"}));
+    QCOMPARE(signal_order, QStringList({"selectedWalletChanged", "openWalletsChanged", "walletLoadStateChanged"}));
     QCOMPARE(controller.selectedWallet()->name(), QString{"beta_wallet"});
+    QCOMPARE(controller.openWallets(), QList<QObject*>({beta_model}));
     QVERIFY(controller.isWalletLoaded());
     QVERIFY(!controller.isWalletOpen("alpha_wallet"));
     QVERIFY(controller.isWalletOpen("beta_wallet"));
@@ -1398,8 +1412,19 @@ void WalletQmlControllerTests::initializedControllerHandlesExternalWalletUnload(
     QTRY_VERIFY(alpha_state.hasUnload());
     QSignalSpy selected_spy(&controller, &WalletQmlController::selectedWalletChanged);
     QSignalSpy load_state_spy(&controller, &WalletQmlController::walletLoadStateChanged);
+    WalletQmlModel* alpha_model = controller.selectedWallet();
+    QVERIFY(alpha_model->available());
+    QSignalSpy available_spy(alpha_model, &WalletQmlModel::availableChanged);
 
     alpha_state.notifyUnload();
+
+    // Actions are refused from the moment the backend reports the unload,
+    // before the GUI thread hears about it or drops the wallet.
+    QVERIFY(!alpha_model->available());
+    QVERIFY(controller.isWalletOpen("alpha_wallet"));
+    QVERIFY(!alpha_model->backupWallet(QStringLiteral("/nonexistent/alpha.bak")));
+    QCOMPARE(alpha_model->settingsError(), QString{"This wallet is closing."});
+    QTRY_COMPARE(available_spy.count(), 1);
 
     QTRY_COMPARE(load_state_spy.count(), 1);
     QCOMPARE(load_state_spy.at(0).at(0).toString(), QString{"alpha_wallet"});
@@ -1576,7 +1601,7 @@ void WalletQmlControllerTests::walletNameAvailabilityErrorReturnsEmptyForAvailab
     QCOMPARE(controller.walletNameAvailabilityError("brand_new_wallet"), QString{});
 }
 
-void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
+void WalletQmlControllerTests::openWalletLocationOpensWalletDirectory()
 {
     FakeWallet::State wallet_state;
     StrictMockNode node;
@@ -1602,12 +1627,12 @@ void WalletQmlControllerTests::openSelectedWalletLocationOpensWalletDirectory()
         return true;
     });
 
-    QVERIFY(controller.openSelectedWalletLocation());
+    QVERIFY(controller.openWalletLocation(controller.selectedWallet()));
     QCOMPARE(opened_path, QFileInfo{wallet_dir.filePath("created_wallet")}.absoluteFilePath());
     QVERIFY(controller.walletLocationOpenError().isEmpty());
 }
 
-void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
+void WalletQmlControllerTests::openWalletLocationReportsOpenFailure()
 {
     FakeWallet::State wallet_state;
     StrictMockNode node;
@@ -1633,12 +1658,12 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsOpenFailure()
         return false;
     });
 
-    QVERIFY(!controller.openSelectedWalletLocation());
+    QVERIFY(!controller.openWalletLocation(controller.selectedWallet()));
     QCOMPARE(opened_path, QFileInfo{wallet_dir.filePath("created_wallet")}.absoluteFilePath());
     QCOMPARE(controller.walletLocationOpenError(), QString{"Could not open wallet file location."});
 }
 
-void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingWalletPath()
+void WalletQmlControllerTests::openWalletLocationReportsMissingWalletPath()
 {
     FakeWallet::State wallet_state;
     StrictMockNode node;
@@ -1663,18 +1688,18 @@ void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingWalletPat
         return true;
     });
 
-    QVERIFY(!controller.openSelectedWalletLocation());
+    QVERIFY(!controller.openWalletLocation(controller.selectedWallet()));
     QVERIFY(!opened);
     QCOMPARE(controller.walletLocationOpenError(), QString{"Wallet file not found: %1"}.arg(QFileInfo{wallet_dir.filePath("missing_wallet")}.absoluteFilePath()));
 }
 
-void WalletQmlControllerTests::openSelectedWalletLocationReportsMissingSelectedWallet()
+void WalletQmlControllerTests::openWalletLocationReportsMissingWallet()
 {
     StrictMockNode node;
     [[maybe_unused]] auto verify_node = node.VerifyOnExit();
     DrainingWalletController controller(node);
 
-    QVERIFY(!controller.openSelectedWalletLocation());
+    QVERIFY(!controller.openWalletLocation(nullptr));
     QCOMPARE(controller.walletLocationOpenError(), QString{"No wallet file is available to view."});
 }
 

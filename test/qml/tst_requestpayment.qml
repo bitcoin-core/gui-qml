@@ -21,7 +21,7 @@ TestCase {
     Component {
         id: requestPaymentComponent
 
-        ReceivePage {}
+        ReceivePage { wallet: testWalletModel }
     }
 
     Component {
@@ -470,6 +470,35 @@ TestCase {
         card.request.paymentReceived = true
         tryCompare(requestMenu, "visible", false)
         verify(!findChild(card, "requestPaymentQRContextArea").enabled)
+    }
+
+    // A QR save dialog exports only the request it was opened for.
+    function test_qr_save_dialog_belongs_to_the_request_it_was_opened_for() {
+        const page = createPage()
+        const card = createRequest(page)
+        const dialog = findChild(card, "requestPaymentSaveQRDialog")
+        const address = card.request.address
+        try {
+            card.openSaveQRDialog()
+            compare(dialog.visible, true)
+            card.request.address = "bcrt1qreplacedaddress"
+            compare(dialog.visible, false)
+
+            card.openSaveQRDialog()
+            compare(dialog.visible, true)
+            card.request.paymentReceived = true
+            compare(dialog.visible, false)
+            card.request.paymentReceived = false
+
+            // A late accept for a request that changed reports it instead of
+            // silently saving nothing.
+            card.openSaveQRDialog()
+            dialog.target = "a request that is no longer shown"
+            dialog.selectAndAccept("file:///tmp/request-qr.png")
+            compare(card.actionErrorText, "The payment request changed before the QR code was saved.")
+        } finally {
+            card.request.address = address
+        }
     }
 
     function test_primary_action_returns_to_copy_after_update() {

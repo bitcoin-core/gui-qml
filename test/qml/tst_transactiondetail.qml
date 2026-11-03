@@ -19,8 +19,8 @@ TestCase {
     FontLoader { source: "qrc:/fonts/bitcoincoresans/regular" }
     FontLoader { source: "qrc:/fonts/bitcoincoresans/semibold" }
     FontLoader { source: "qrc:/fonts/robotomono/regular" }
-    Component { id: detailComponent; TransactionDetail { width: 1180; height: 1100 } }
-    Component { id: activityComponent; ActivityList { width: 1180; height: 1100 } }
+    Component { id: detailComponent; TransactionDetail { width: 1180; height: 1100; wallet: testWalletModel } }
+    Component { id: activityComponent; ActivityList { width: 1180; height: 1100; wallet: testWalletModel } }
     SignalSpy { id: transactionSpy; signalName: "showTransaction" }
 
     function entry(id, amount, ownership, overrides) {

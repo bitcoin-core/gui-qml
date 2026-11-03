@@ -10,7 +10,7 @@ import "../../components"
 Page {
     id: root
     objectName: "walletCoinsPage"
-    property WalletQmlModel wallet: walletController.selectedWallet
+    property WalletQmlModel wallet: null
     readonly property real contentHorizontalPadding: width >= 900 ? 56 : width >= 640 ? 40 : 24
     readonly property real maximumContentWidth: 840
     signal back()

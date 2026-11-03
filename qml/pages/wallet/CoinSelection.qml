@@ -15,7 +15,7 @@ Page {
     id: root
     objectName: "coinSelectionPage"
 
-    property WalletQmlModel wallet: walletController.selectedWallet
+    property WalletQmlModel wallet: null
 
     signal done()
 
