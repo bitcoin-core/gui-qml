@@ -18,6 +18,9 @@ OnboardingView {
     property string nameError: ""
     property bool nameEdited: false
     property bool submitted: false
+    // Whether the form offers to go back to the setup step, which it does
+    // when that step was skipped on the way here.
+    property bool canChangeSigner: false
     // True from Check again until its result is in.
     property bool checking: false
     readonly property bool creatingWallet: submitted || walletController.walletLoadInProgress
@@ -28,6 +31,7 @@ OnboardingView {
 
     signal cancel()
     signal created(var wallet)
+    signal changeSignerRequested()
 
     function submit() {
         if (!canCreate) return
@@ -113,6 +117,19 @@ OnboardingView {
             textStyle: Theme.text.body
             wrap: true
             horizontalAlignment: Text.AlignLeft
+        }
+
+        // A working signer skips the setup step on the way here; this goes
+        // back to it to pick another executable. Coming from setup, Back
+        // does that already.
+        LinkButton {
+            objectName: "externalWalletChangeSignerButton"
+            Layout.alignment: Qt.AlignLeft
+            visible: root.canChangeSigner
+            //: Opens the external signer setup step from wallet naming, to choose another signer executable.
+            text: qsTr("Change signer executable")
+            enabled: !root.creatingWallet && !root.checking
+            onClicked: root.changeSignerRequested()
         }
 
         LabeledTextField {

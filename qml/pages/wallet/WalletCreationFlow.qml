@@ -88,10 +88,13 @@ Item {
         walletController.importWallet(walletController.normalizeWalletPath(path))
     }
 
-    function showExternalSignerForm() {
+    // setupSkipped: the form opens straight from the wallet types, so it is
+    // the only way back to setup. After setup, Back already goes there.
+    function showExternalSignerForm(setupSkipped) {
         walletController.clearWalletLoadStatus()
         root.push(externalWallet, {
-            "defaultWalletName": walletController.suggestedExternalSignerWalletName
+            "defaultWalletName": walletController.suggestedExternalSignerWalletName,
+            "canChangeSigner": setupSkipped
         })
     }
 
@@ -249,7 +252,7 @@ Item {
                 walletController.refreshExternalSignerStatus()
                 // A responding command goes straight to device detection and
                 // naming; a missing or broken one is set up or corrected first.
-                if (walletController.externalSignerResponding) root.showExternalSignerForm()
+                if (walletController.externalSignerResponding) root.showExternalSignerForm(true)
                 else root.push(externalSetup, { "modalView": root.modalView })
             }
             onImportSelected: root.chooseImportFile()
@@ -294,8 +297,14 @@ Item {
     Component {
         id: externalSetup
         ExternalSignerSetupPage {
+            // Opened from the naming form to change the executable, the step
+            // returns to that form rather than opening a second one.
+            property bool returnsToForm: false
             onCancel: root.finished(false, null)
-            onReady: root.showExternalSignerForm()
+            onReady: {
+                if (returnsToForm) root.pop()
+                else root.showExternalSignerForm(false)
+            }
         }
     }
     Component {
@@ -307,6 +316,8 @@ Item {
                 root.completedWallet = wallet
                 root.push(externalConfirm, {}, StackView.Immediate)
             }
+            onChangeSignerRequested: root.push(externalSetup, { "modalView": root.modalView,
+                                                                "returnsToForm": true })
         }
     }
     Component {
