@@ -8,6 +8,9 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME bitcoinqml_process_checks
   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/test_qml_process_checks.py
 )
+add_test(NAME bitcoinqml_cache_policy_checks
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/functional/test_qml_cache_policy.py
+)
 
 add_executable(bitcoinqml_bootstrap_tests
   test_bootstrap.cpp
@@ -15,7 +18,7 @@ add_executable(bitcoinqml_bootstrap_tests
   ../qml/quithandler.h
 )
 target_include_directories(bitcoinqml_bootstrap_tests PRIVATE ..)
-target_link_libraries(bitcoinqml_bootstrap_tests PRIVATE Qt6::Widgets Qt6::Quick Qt6::Test)
+target_link_libraries(bitcoinqml_bootstrap_tests PRIVATE sanitize_interface Qt6::Widgets Qt6::Quick Qt6::Test)
 add_test(NAME bitcoinqml_bootstrap_tests COMMAND bitcoinqml_bootstrap_tests -platform minimal)
 set_tests_properties(bitcoinqml_bootstrap_tests PROPERTIES TIMEOUT 30)
 
@@ -62,6 +65,7 @@ add_executable(bitcoinqml_unit_tests
   test_transactionactivitymodel.cpp
   test_activityfilterproxymodel.cpp
   test_qtinfolog.cpp
+  test_qmlcachepolicy.cpp
   test_qtmessagefilter.cpp
   test_rpccommandexecutor.cpp
   test_rpcconsolemodel.cpp
@@ -134,11 +138,15 @@ add_executable(bitcoinqml_qmltests
   qml/qml_tests_main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/backendexecutor.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinamount.cpp
+  ${CMAKE_CURRENT_SOURCE_DIR}/../qml/qmlcachepolicy.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/bitcoinunits.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/components/blockclockdial.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../qml/controls/linegraph.cpp
   ${QMLTESTS_QRC_CPP}
 )
+
+# Also scan test resources so static builds retain their QtTest QML plugin.
+bitcoin_qml_add_application_sources(bitcoinqml_qmltests SCAN_IMPORTS)
 
 target_compile_definitions(bitcoinqml_qmltests
   PRIVATE
@@ -149,6 +157,7 @@ target_compile_definitions(bitcoinqml_qmltests
 
 target_link_libraries(bitcoinqml_qmltests
   PRIVATE
+    sanitize_interface
     Qt6::Core
     Qt6::Qml
     Qt6::Quick
@@ -166,7 +175,7 @@ add_test(NAME bitcoinqml_qmltests COMMAND bitcoinqml_qmltests -platform minimal)
 
 set(gui_test_environment "QT_QPA_PLATFORM=minimal;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1")
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_fatal_exception_tests
-  bitcoinqml_process_checks PROPERTIES LABELS unit)
+  bitcoinqml_process_checks bitcoinqml_cache_policy_checks PROPERTIES LABELS unit)
 set_tests_properties(bitcoinqml_qmltests PROPERTIES LABELS qml)
 set_tests_properties(bitcoinqml_unit_tests bitcoinqml_bootstrap_tests bitcoinqml_qmltests PROPERTIES
   ENVIRONMENT "${gui_test_environment}")

@@ -6,6 +6,7 @@
 
 #include <qml/bitcoin.h>
 #include <qml/bitcoinqmlapplication.h>
+#include <qml/qmlcachepolicy.h>
 
 #include <common/args.h>
 #include <common/init.h>
@@ -119,6 +120,7 @@
 #include <QThread>
 #include <QUrl>
 #include <QVariant>
+#include <QtGlobal>
 
 QT_BEGIN_NAMESPACE
 class QMessageLogContext;
@@ -458,9 +460,10 @@ int BitcoinQmlApplication::runFromCommandLine(int argc, char* argv[])
 
 int BitcoinQmlApplication::run(int argc, char* argv[])
 {
+    ConfigureQmlCachePolicy();
+
     noui_connect();
     Q_INIT_RESOURCE(bitcoin_qml);
-    Q_INIT_RESOURCE(bitcoin_compat);
     qRegisterMetaType<interfaces::BlockAndHeaderTipInfo>("interfaces::BlockAndHeaderTipInfo");
 
     QGuiApplication::styleHints()->setTabFocusBehavior(Qt::TabFocusAllControls);
