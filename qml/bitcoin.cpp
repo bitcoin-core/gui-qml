@@ -729,6 +729,9 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
     const bool wallet_enabled = WalletEnabledFromArgs();
     app_mode.setWalletEnabled(wallet_enabled);
 
+    // The config file may select the network, and NodeModel reads per-network settings.
+    setupChainQSettings(&app, QString::fromStdString(gArgs.GetChainTypeString()).toUpper());
+
     constexpr bool backend_ready{false};
     NodeModel node_model{*node, backend_ready};
     node_model.addStartupWarnings(startup_warnings);
@@ -798,7 +801,6 @@ int BitcoinQmlApplication::run(int argc, char* argv[])
 
     ChainModel chain_model{QString::fromStdString(gArgs.GetChainTypeString())};
     BlockClockModel block_clock_model{block_clock_history};
-    setupChainQSettings(&app, chain_model.networkName());
 
 
 
