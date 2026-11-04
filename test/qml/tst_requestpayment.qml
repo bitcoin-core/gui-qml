@@ -63,6 +63,7 @@ TestCase {
         testWalletModel.lastTemplateRequestId = ""
         testWalletModel.lastRemovedRequestId = ""
         testWalletModel.removeReceiveRequestResult = true
+        testWalletModel.updatePaymentRequestResult = true
         testWalletModel.ensureReceivingAddressResult = true
         testWalletModel.receiveRequestReconciliationPending = false
         walletController.closePaymentRequestDetailRequests = 0
@@ -523,6 +524,109 @@ TestCase {
         update.clicked()
         verify(!copy.visible)
         verify(!update.visible)
+    }
+
+    // Every way of sharing the QR code or the request it encodes follows the
+    // same rule. The address itself stays copyable.
+    function verifySharing(card, expected) {
+        compare(card.sharing, expected)
+        const qr = findChild(card, "requestPaymentQRImage")
+        compare(qr.visible, expected)
+        compare(qr.code, expected ? card.request.qrPayload : "")
+        compare(findChild(card, "requestPaymentQRContextArea").enabled, expected)
+        compare(findChild(card, "requestPaymentQRContextCopy").enabled, expected)
+        compare(findChild(card, "requestPaymentQRContextSave").enabled, expected)
+        compare(findChild(card, "requestPaymentCopyQRMenuButton").enabled, expected)
+        compare(findChild(card, "requestPaymentSaveQRMenuButton").enabled, expected)
+        verify(findChild(card, "requestPaymentAddressText").interactive)
+        const dialog = findChild(card, "requestPaymentSaveQRDialog")
+        card.openSaveQRDialog()
+        compare(dialog.visible, expected)
+        dialog.close()
+        const clipboard = { text: "", setText: function(text) { this.text = text } }
+        card.clipboard = clipboard
+        card.copyRequest()
+        compare(clipboard.text, expected ? card.request.qrPayload : "")
+        if (!expected) verify(!card.copyQR())
+    }
+
+    function test_qr_sharing_waits_for_unapplied_public_edits_data() {
+        return [
+            {tag: "add amount", field: "requestPaymentAmountInput", saved: "", edited: "0.02", property: "amount", value: 2000000},
+            {tag: "change amount", field: "requestPaymentAmountInput", saved: "0.01", edited: "0.02", property: "amount", value: 2000000},
+            {tag: "clear amount", field: "requestPaymentAmountInput", saved: "0.01", edited: "", property: "amount", value: 0},
+            {tag: "add pay to", field: "requestPaymentYourNameInput", saved: "", edited: "Shop A", property: "label", value: "Shop A"},
+            {tag: "change pay to", field: "requestPaymentYourNameInput", saved: "Shop A", edited: "Shop B", property: "label", value: "Shop B"},
+            {tag: "clear pay to", field: "requestPaymentYourNameInput", saved: "Shop A", edited: "", property: "label", value: ""},
+            {tag: "add message", field: "requestPaymentMessageInput", saved: "", edited: "Invoice 15", property: "message", value: "Invoice 15"},
+            {tag: "change message", field: "requestPaymentMessageInput", saved: "initial-15", edited: "edited-15", property: "message", value: "edited-15"},
+            {tag: "clear message", field: "requestPaymentMessageInput", saved: "Invoice 15", edited: "", property: "message", value: ""},
+        ]
+    }
+    function test_qr_sharing_waits_for_unapplied_public_edits(data) {
+        const page = createPage()
+        // A private note keeps the helper from adding a recipient name.
+        editField(page.draftCard, "requestPaymentNoteSelfInput", "Private").editingFinished()
+        if (data.saved) editField(page.draftCard, data.field, data.saved).editingFinished()
+        const card = createRequest(page)
+        const savedValue = function() {
+            return data.property === "amount" ? card.request.amount.satoshi : card.request[data.property]
+        }
+        const original = savedValue()
+        const dialog = findChild(card, "requestPaymentSaveQRDialog")
+        verifySharing(card, true)
+
+        // An open save dialog cannot export the request once it differs from the form.
+        card.openSaveQRDialog()
+        compare(dialog.visible, true)
+        editField(card, data.field, data.edited)
+        compare(dialog.visible, false)
+        verify(card.publicDetailsEdited)
+        compare(savedValue(), original)
+        verifySharing(card, false)
+
+        // Typing the saved value back makes the form match the QR code again.
+        editField(card, data.field, data.saved)
+        verify(!card.publicDetailsEdited)
+        verifySharing(card, true)
+
+        editField(card, data.field, data.edited)
+        verifySharing(card, false)
+        findChild(card, "requestPaymentUpdateButton").clicked()
+        compare(savedValue(), data.value)
+        verify(!card.publicDetailsEdited)
+        verifySharing(card, true)
+    }
+
+    function test_failed_update_keeps_qr_sharing_unavailable() {
+        const card = createRequest(createPage())
+        const update = findChild(card, "requestPaymentUpdateButton")
+        editField(card, "requestPaymentMessageInput", "Invoice 15")
+        testWalletModel.updatePaymentRequestResult = false
+        update.clicked()
+        compare(card.actionErrorText, "The changes could not be saved. Please try again.")
+        compare(card.request.message, "")
+        verifySharing(card, false)
+        testWalletModel.updatePaymentRequestResult = true
+        update.clicked()
+        compare(card.actionErrorText, "")
+        compare(card.request.message, "Invoice 15")
+        verifySharing(card, true)
+
+        // An invalid amount is rejected before reaching the wallet.
+        editField(card, "requestPaymentAmountInput", ".")
+        update.clicked()
+        verify(card.amountErrorText !== "")
+        compare(card.request.amount.satoshi, 0)
+        verifySharing(card, false)
+    }
+
+    function test_private_note_edit_keeps_qr_sharing() {
+        const card = createRequest(createPage())
+        editField(card, "requestPaymentNoteSelfInput", "Lunch with Hal")
+        verify(card.modified)
+        verify(!card.publicDetailsEdited)
+        verifySharing(card, true)
     }
 
     function test_request_amount_survives_note_only_update_data() {
