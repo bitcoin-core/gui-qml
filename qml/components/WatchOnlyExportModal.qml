@@ -109,7 +109,11 @@ Popup {
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     background: null
 
-    onWalletChanged: if (opened) close()
+    // opened stays false during the enter transition.
+    onWalletChanged: {
+        if (saveDialog.visible) saveDialog.close()
+        if (visible) close()
+    }
     onClosed: {
         exports = []
         addressType = ""
