@@ -364,6 +364,9 @@ private Q_SLOTS:
     void openWalletLocationReportsOpenFailure();
     void openWalletLocationReportsMissingWalletPath();
     void openWalletLocationReportsMissingWallet();
+    void localFileUrlEncodesThePath_data();
+    void localFileUrlEncodesThePath();
+    void homeUrlsPointIntoTheHomeDirectory();
 };
 
 void WalletQmlControllerTests::initTestCase()
@@ -1705,6 +1708,44 @@ void WalletQmlControllerTests::openWalletLocationReportsMissingWallet()
 
     QVERIFY(!controller.openWalletLocation(nullptr));
     QCOMPARE(controller.walletLocationOpenError(), QString{"No wallet file is available to view."});
+}
+
+void WalletQmlControllerTests::localFileUrlEncodesThePath_data()
+{
+    QTest::addColumn<QString>("folder");
+    QTest::addColumn<QString>("file_name");
+    QTest::addColumn<QString>("expected");
+
+    QTest::newRow("unix") << "/home/alice" << "activity.csv" << "file:///home/alice/activity.csv";
+    QTest::newRow("drive letter") << "C:/Users/alice" << "activity.csv" << "file:///C:/Users/alice/activity.csv";
+    QTest::newRow("drive letter folder") << "C:/Users/alice" << "" << "file:///C:/Users/alice";
+    QTest::newRow("hash") << "/home/a#b" << "activity.csv" << "file:///home/a%23b/activity.csv";
+    QTest::newRow("percent") << "/home/100%" << "activity.csv" << "file:///home/100%25/activity.csv";
+    QTest::newRow("question mark") << "/home/a?b" << "" << "file:///home/a%3Fb";
+}
+
+void WalletQmlControllerTests::localFileUrlEncodesThePath()
+{
+    QFETCH(QString, folder);
+    QFETCH(QString, file_name);
+    QFETCH(QString, expected);
+
+    const QUrl url{WalletQmlController::localFileUrl(folder, file_name)};
+    QCOMPARE(url.toString(QUrl::FullyEncoded), expected);
+    QVERIFY(url.isLocalFile());
+    QVERIFY(url.host().isEmpty());
+    QVERIFY(!url.hasFragment());
+    QVERIFY(!url.hasQuery());
+}
+
+void WalletQmlControllerTests::homeUrlsPointIntoTheHomeDirectory()
+{
+    StrictMockNode node;
+    [[maybe_unused]] auto verify_node = node.VerifyOnExit();
+    DrainingWalletController controller(node);
+
+    QCOMPARE(controller.homeFolderUrl().toLocalFile(), QDir::homePath());
+    QCOMPARE(controller.homeFileUrl("activity.csv").toLocalFile(), QDir(QDir::homePath()).filePath("activity.csv"));
 }
 
 #ifdef BITCOINQML_NO_TEST_MAIN

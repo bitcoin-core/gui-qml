@@ -808,6 +808,19 @@ TestCase {
         }
     }
 
+    function test_export_dialog_suggests_a_file_in_the_home_folder() {
+        walletController.homeDirectory = "/tmp/a#b%c"
+        const page = createPage()
+        const dialog = findChild(page, "activityExportDialog")
+        openMore(page)
+        mouseClick(findChild(findChild(page, "activityMoreMenu").contentItem, "activityExportButton"))
+        compare(dialog.openCalls, 1)
+
+        compare(dialog.currentFolder.toString(), "file:///tmp/a%23b%25c")
+        verify(/^file:\/\/\/tmp\/a%23b%25c\/activity-\d{4}-\d{2}-\d{2}-\d{4}\.csv$/
+            .test(dialog.currentFile.toString()), dialog.currentFile.toString())
+    }
+
     function test_filter_menus_export_and_wallet_switch() {
         const page = createPage()
         const proxy = findChild(page, "activityFilterProxyModel")

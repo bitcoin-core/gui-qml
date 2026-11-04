@@ -97,7 +97,7 @@ Page {
 
     function defaultExportFileUrl() {
         const stamp = Qt.formatDateTime(new Date(), "yyyy-MM-dd-HHmm")
-        return "file://" + walletController.homePath() + "/activity-" + stamp + ".csv"
+        return walletController.homeFileUrl("activity-" + stamp + ".csv")
     }
 
     function exportActivity(path) {
@@ -178,7 +178,7 @@ Page {
         title: qsTr("Export activity to CSV")
         defaultSuffix: "csv"
         fileMode: AppFileDialog.SaveFile
-        currentFolder: "file://" + walletController.homePath()
+        currentFolder: walletController.homeFolderUrl()
         currentFile: root.defaultExportFileUrl()
         nameFilters: [qsTr("Comma separated file (*.csv)")]
         onAccepted: root.exportActivity(exportDialog.selectedFile.toString())

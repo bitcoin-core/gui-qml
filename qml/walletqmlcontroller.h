@@ -21,6 +21,7 @@
 #include <QObject>
 #include <QThread>
 #include <QSet>
+#include <QUrl>
 
 struct WalletLoadNotifications;
 
@@ -72,6 +73,8 @@ public:
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const;
     Q_INVOKABLE bool walletPathExists(const QString& path) const;
     Q_INVOKABLE QString homePath() const;
+    Q_INVOKABLE QUrl homeFolderUrl() const;
+    Q_INVOKABLE QUrl homeFileUrl(const QString& file_name) const;
     Q_INVOKABLE QString walletNameAvailabilityError(const QString& name) const;
     Q_INVOKABLE bool openWalletLocation(WalletQmlModel* wallet);
     Q_INVOKABLE void clearWalletLocationOpenError();
@@ -79,6 +82,8 @@ public:
     Q_INVOKABLE void refreshExternalSignerStatus();
     Q_INVOKABLE void requestOpenReceive(WalletQmlModel* wallet);
     Q_INVOKABLE void requestClosePaymentRequestDetail(WalletQmlModel* wallet);
+
+    static QUrl localFileUrl(const QString& folder, const QString& file_name = {});
 
     WalletQmlModel* selectedWallet() const;
     QList<QObject*> openWallets() const;

@@ -192,6 +192,21 @@ QString WalletQmlController::homePath() const
     return QDir::homePath();
 }
 
+QUrl WalletQmlController::homeFolderUrl() const
+{
+    return localFileUrl(QDir::homePath());
+}
+
+QUrl WalletQmlController::homeFileUrl(const QString& file_name) const
+{
+    return localFileUrl(QDir::homePath(), file_name);
+}
+
+QUrl WalletQmlController::localFileUrl(const QString& folder, const QString& file_name)
+{
+    return QUrl::fromLocalFile(file_name.isEmpty() ? folder : QDir(folder).filePath(file_name));
+}
+
 QString WalletQmlController::walletLocationPath(const WalletQmlModel* wallet) const
 {
     if (!wallet || wallet == m_empty_wallet) {
