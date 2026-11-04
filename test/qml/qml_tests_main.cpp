@@ -1210,6 +1210,7 @@ class MockWalletQmlModel : public QObject
     Q_PROPERTY(QString lastTemplateRequestId MEMBER m_last_template_request_id NOTIFY lastTemplateRequestIdChanged)
     Q_PROPERTY(QString lastRemovedRequestId MEMBER m_last_removed_request_id NOTIFY lastRemovedRequestIdChanged)
     Q_PROPERTY(bool removeReceiveRequestResult MEMBER m_remove_receive_request_result NOTIFY removeReceiveRequestResultChanged)
+    Q_PROPERTY(bool updatePaymentRequestResult MEMBER m_update_payment_request_result NOTIFY updatePaymentRequestResultChanged)
 
 public:
     enum class KeyScheme {
@@ -1241,6 +1242,7 @@ public:
     QString m_last_template_request_id;
     QString m_last_removed_request_id;
     bool m_remove_receive_request_result{true};
+    bool m_update_payment_request_result{true};
     bool m_receive_request_reconciliation_pending{false};
     QString m_saved_payment_request_label;
     QString m_saved_payment_request_message;
@@ -1587,7 +1589,7 @@ public:
     Q_INVOKABLE bool updatePaymentRequest(const QString& id, qint64 amount, const QString& label, const QString& message, const QString& note)
     {
         auto* request = &m_detail_payment_request;
-        if (request->m_id != id) return false;
+        if (!m_update_payment_request_result || request->m_id != id) return false;
         if (request->m_payment_received && (amount != request->m_amount.satoshi() || label != request->m_label || message != request->m_message)) return false;
         request->m_amount.setSatoshi(amount);
         request->setProperty("label", label);
@@ -1702,6 +1704,7 @@ Q_SIGNALS:
     void lastTemplateRequestIdChanged();
     void lastRemovedRequestIdChanged();
     void removeReceiveRequestResultChanged();
+    void updatePaymentRequestResultChanged();
     void receiveRequestReconciliationPendingChanged();
 
 private:

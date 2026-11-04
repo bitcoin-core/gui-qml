@@ -29,8 +29,16 @@ Pane {
     }
     readonly property bool saved: !!request && request.id !== ""
     readonly property bool paymentReceived: !!request && request.paymentReceived
-    readonly property bool sharing: visible && saved && !paymentReceived && !!wallet
+    readonly property bool addressShareable: visible && saved && !paymentReceived && !!wallet
         && !wallet.receiveRequestReconciliationPending
+    // The QR code and copied request encode the saved request, so they are
+    // offered only while the public fields in the form still match it,
+    // including after a failed update. The private note is never shared.
+    readonly property bool publicDetailsEdited: saved
+        && (amountInput.modified && amountInSatoshis(amountInput.text) !== request.amount.satoshi
+            || labelInput.modified && labelInput.text !== request.label
+            || messageInput.modified && messageInput.text !== request.message)
+    readonly property bool sharing: addressShareable && !publicDetailsEdited
     readonly property bool hasFields: amountInput.text.trim() !== "" || labelInput.text.trim() !== ""
         || messageInput.text.trim() !== "" || noteInput.text.trim() !== ""
     readonly property bool modified: amountInput.modified || labelInput.modified || messageInput.modified || noteInput.modified
@@ -470,7 +478,7 @@ Pane {
                 Layout.topMargin: 8
                 address: root.request ? root.request.address : ""
                 textStyle: Theme.text.monoDescription
-                interactive: !root.saved || root.sharing
+                interactive: !root.saved || root.addressShareable
                 clipboard: root.clipboard
                 embedded: true
             }
