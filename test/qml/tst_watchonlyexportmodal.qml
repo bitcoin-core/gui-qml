@@ -167,6 +167,18 @@ TestCase {
         compare(modal.payload, segwit.descriptor)
     }
 
+    function test_address_type_focus_outline_stays_inside_the_row() {
+        const modal = openModal([taproot], "bech32m")
+        const row = findChild(modal, "watchOnlyExportAddressType")
+        const border = findChild(modal, "watchOnlyExportAddressTypeFocusBorder")
+        verify(border !== null)
+        row.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(border, "visible", true)
+        const origin = border.mapToItem(row, 0, 0)
+        verify(origin.x >= 0 && origin.y >= 0)
+        verify(origin.x + border.width <= row.width && origin.y + border.height <= row.height)
+    }
+
     function test_taproot_extended_key_recommends_descriptor() {
         const modal = openModal([taproot, segwit], "bech32m")
         findChild(modal, "watchOnlyExportFormatPicker").selected(1, "Extended key")
