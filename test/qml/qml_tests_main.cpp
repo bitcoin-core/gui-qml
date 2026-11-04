@@ -1868,6 +1868,10 @@ public:
     QString walletImportErrorDescription() const { return m_wallet_load_error; }
     QString walletImportErrorHelpText() const { return QString{}; }
     Q_INVOKABLE QString homePath() const { return QStringLiteral("/tmp"); }
+    Q_INVOKABLE QUrl homeFileUrl(const QString& file_name = {}) const
+    {
+        return QUrl::fromLocalFile(file_name.isEmpty() ? homePath() : homePath() + QLatin1Char('/') + file_name);
+    }
     Q_INVOKABLE QString normalizeWalletPath(const QString& path) const { return path; }
     Q_INVOKABLE bool walletPathExists(const QString&) const { return false; }
     Q_INVOKABLE QString walletNameAvailabilityError(const QString&) const { return QString{}; }
