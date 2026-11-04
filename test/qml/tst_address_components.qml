@@ -580,6 +580,40 @@ TestCase {
         page.addressModel.setAddressLabelSucceeds = false
     }
 
+    function test_addressList_detailsFollowPaymentToOpenAddress() {
+        const page = createTemporaryObject(addressListComponent, host)
+        verify(page !== null)
+        page.addressModel.resetForTest()
+
+        const list = findObject(page, "addressListView")
+        tryVerify(function() { return list.itemAtIndex(0) !== null })
+        const address = page.addressModel.addressAt(0)
+        const detailsButton = findObject(list.itemAtIndex(0), "addressRowDetailsButton")
+        mouseClick(detailsButton, detailsButton.width / 2, detailsButton.height / 2)
+        const popup = findChild(page, "addressDetailsPopup")
+        tryCompare(popup, "opened", true)
+        const details = popup.contentItem
+        const requestButton = findObject(details, "addressDetailsCreatePaymentRequestButton")
+        compare(details.address, address)
+        compare(details.used, false)
+        compare(details.amount, "₿ 0")
+        verify(requestButton.visible)
+
+        // The payment hides the row behind the popup; the popup must follow
+        // the address rather than keep offering it for a new request.
+        page.addressModel.receivePaymentForTest(address, "₿ 0.002")
+        verify(page.addressModel.addressAt(0) !== address)
+        compare(details.address, address)
+        compare(details.used, true)
+        compare(details.hasAmount, true)
+        compare(details.amount, "₿ 0.002")
+        verify(!requestButton.visible)
+
+        popup.close()
+        tryCompare(popup, "visible", false)
+        page.addressModel.resetForTest()
+    }
+
     function test_addressList_doesNotReuseFocusedEditableRows() {
         const page = createTemporaryObject(addressListComponent, host)
         verify(page !== null)

@@ -10,6 +10,7 @@
 #include <QAbstractListModel>
 #include <QString>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <vector>
 
@@ -62,6 +63,9 @@ public:
     Q_INVOKABLE void refresh();
     Q_INVOKABLE bool setAddressLabel(const QString& address, const QString& label);
     Q_INVOKABLE QString addressAt(int row) const;
+    //! Current used status and amount of one address in the selected category,
+    //! including a used address hidden from the list. Empty when not found.
+    Q_INVOKABLE QVariantMap entryForAddress(const QString& address) const;
 
 Q_SIGNALS:
     void categoryChanged();
@@ -85,6 +89,8 @@ private:
 
     WalletQmlModel* m_wallet_model{nullptr};
     std::vector<AddressEntry> m_entries;
+    //! Used receive addresses left out of m_entries while used ones are hidden.
+    std::vector<AddressEntry> m_hidden_entries;
     Category m_category{SingleUse};
     bool m_show_used{false};
     int m_display_unit{0};
