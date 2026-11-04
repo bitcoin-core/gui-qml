@@ -27,6 +27,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -484,10 +485,35 @@ public:
     {
         return row >= 0 && row < rowCount() ? m_rows.at(row).label : QString{};
     }
+    Q_INVOKABLE QVariantMap entryForAddress(const QString& address) const
+    {
+        const auto paid = m_paid_display_amounts.find(address);
+        if (paid != m_paid_display_amounts.end()) {
+            return {{QStringLiteral("address"), address}, {QStringLiteral("isUsed"), true},
+                    {QStringLiteral("displayAmount"), paid->second}, {QStringLiteral("hasAmount"), true}};
+        }
+        for (const Entry& entry : m_rows) {
+            if (entry.address != address) continue;
+            return {{QStringLiteral("address"), address}, {QStringLiteral("isUsed"), false},
+                    {QStringLiteral("displayAmount"), QStringLiteral("₿ 0")}, {QStringLiteral("hasAmount"), false}};
+        }
+        return {};
+    }
+    // Like a payment arriving: the address becomes used, so the rebuilt
+    // list hides it while used addresses are not shown.
+    Q_INVOKABLE void receivePaymentForTest(const QString& address, const QString& display_amount)
+    {
+        beginResetModel();
+        std::erase_if(m_rows, [&](const Entry& entry) { return entry.address == address; });
+        m_paid_display_amounts[address] = display_amount;
+        endResetModel();
+        Q_EMIT countChanged();
+    }
     Q_INVOKABLE void resetForTest()
     {
         beginResetModel();
         m_rows.clear();
+        m_paid_display_amounts.clear();
         populateRows();
         endResetModel();
         Q_EMIT countChanged();
@@ -515,6 +541,7 @@ private:
     }
 
     std::vector<Entry> m_rows;
+    std::map<QString, QString> m_paid_display_amounts;
     Category m_category{SingleUse};
     bool m_show_used{false};
     bool m_set_address_label_succeeds{false};
