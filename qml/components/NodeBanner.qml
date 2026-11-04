@@ -18,6 +18,7 @@ Rectangle {
         ? status.bannerKind + "\n" + status.bannerText : ""
     property string dismissedMessage: ""
     readonly property bool shown: message.length > 0 && message !== dismissedMessage
+    onMessageChanged: if (message !== dismissedMessage) dismissedMessage = ""
 
     function dismiss() {
         if (root.status.bannerKind === "warning") {

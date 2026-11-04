@@ -201,6 +201,20 @@ TestCase {
         verify(text.text.indexOf("Clock skew warning") < 0)
     }
 
+    function test_closed_offline_banner_returns_after_reconnecting() {
+        const banner = createTemporaryObject(bannerComponent, testWindow.contentItem)
+        networkStatusModel.setNetworkOfflineForTest(true)
+        tryCompare(banner, "shown", true)
+        findChild(banner, "nodeBannerCloseButton").clicked()
+        compare(banner.shown, false)
+
+        networkStatusModel.setNetworkOfflineForTest(false)
+        compare(banner.shown, false)
+        networkStatusModel.setNetworkOfflineForTest(true)
+        tryCompare(banner, "shown", true)
+        verify(findChild(banner, "nodeBannerText").text.indexOf("<b>Offline.</b>") === 0)
+    }
+
     function test_banner_shows_errors_before_warnings() {
         nodeModel.setWarningsForTest(["Clock skew warning"])
         nodeModel.setStartupErrorForTest("Disk space is too low.")
