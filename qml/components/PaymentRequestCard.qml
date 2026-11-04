@@ -404,7 +404,23 @@ Pane {
                 Layout.preferredHeight: 184
                 Layout.alignment: Qt.AlignHCenter
                 radius: 10
-                color: "white"
+                color: root.publicDetailsEdited ? "transparent" : "white"
+                InfoBanner {
+                    objectName: "requestPaymentQRUnappliedEdits"
+                    visible: root.publicDetailsEdited
+                    anchors.fill: parent
+                    bannerLayout: InfoBanner.Layout.Vertical
+                    contentMargin: 16
+                    contentSpacing: 10
+                    iconSource: "image://images/qr-code"
+                    iconSize: 32
+                    //: Shown in place of the payment request QR code while an edited amount, Pay to or message is not yet saved.
+                    message: qsTr("Update the payment request to show its QR code.")
+                    messageObjectName: "requestPaymentQRUnappliedEditsText"
+                    backgroundColor: Qt.rgba(Theme.color.blue.r, Theme.color.blue.g, Theme.color.blue.b, 0.25)
+                    iconColor: Theme.color.blue
+                    messageColor: Theme.color.blue
+                }
                 QRImage {
                     id: qrImage
                     objectName: "requestPaymentQRImage"
@@ -449,7 +465,7 @@ Pane {
                 objectName: "paymentRequestCreatedDate"
                 visible: root.saved && !!root.request.createdIso
                 Layout.fillWidth: true
-                Layout.topMargin: root.sharing ? 4 : 0
+                Layout.topMargin: root.sharing || root.publicDetailsEdited ? 4 : 0
                 text: visible ? qsTr("Created %1").arg(Qt.formatDateTime(new Date(root.request.createdIso), "MMM d, h:mm AP")) : ""
                 font: Theme.text.caption.font
                 color: Theme.color.neutral7
