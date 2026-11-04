@@ -75,9 +75,9 @@ void BlockClockModel::updateCurrentTime(const QDateTime& current_time)
     const bool period_changed{m_timeline.period_start != period_start};
     if (period_changed) {
         m_timeline.period_start = period_start;
-        // Keep the previous period for ordinary backwards clock/DST changes,
-        // and retain future timestamps so rollover needs no backend reads.
-        m_history->setRetentionStart(period_start - PERIOD_SECONDS);
+        // Keep one window before the previous origin so a backwards clock step
+        // of up to twelve hours, and rollover, need no backend reads.
+        m_history->setRetentionStart(period_start - 2 * PERIOD_SECONDS);
         if (auto snapshot = m_history->takeSnapshot()) m_cached_block_timestamps = std::move(*snapshot);
     }
 

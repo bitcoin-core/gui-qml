@@ -88,6 +88,7 @@ private Q_SLOTS:
     void minuteTimerAdvancesWithoutBlockNotifications();
     void stoppedModelDoesNotConsumeHistoryOrRestartTimers();
     void windowSlidesWithoutBlockNotifications();
+    void backwardClockStepKeepsTheWindowFilled();
     void lastBlockAgeFollowsNewestBlockAndClock();
 };
 
@@ -419,7 +420,7 @@ void BlockClockModelTests::oldIbdNotificationsDoNotRepublishHistory()
     QSignalSpy history_spy{&model, &BlockClockModel::blockTimeFractionsChanged};
 
     for (uint8_t id{2}; id <= 200; ++id) {
-        ConnectBlock(*history, id, UtcTime(0).toSecsSinceEpoch() - id);
+        ConnectBlock(*history, id, UtcTime(0).toSecsSinceEpoch() - BlockClockModel::PERIOD_SECONDS - id);
         QCoreApplication::processEvents();
     }
 
@@ -600,6 +601,25 @@ void BlockClockModelTests::windowSlidesWithoutBlockNotifications()
     model.updateCurrentTime(current_time);
     QCOMPARE(model.blockTimeFractions(), QList<qreal>{-1.0 / 12.0});
     QCOMPARE(history_spy.count(), 2);
+}
+
+void BlockClockModelTests::backwardClockStepKeepsTheWindowFilled()
+{
+    auto history{std::make_shared<BlockClockHistory>()};
+    QDateTime current_time{UtcTime(12, 5)};
+    BlockClockModel model{history, false, [&] { return current_time; }};
+    const qint64 previous_evening{UtcTime(0).toSecsSinceEpoch() - 2 * 60};
+    history->initialize({
+        {uint256{1}, previous_evening},
+        {uint256{2}, UtcTime(6).toSecsSinceEpoch()},
+    });
+    QCoreApplication::processEvents();
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{-0.5}));
+
+    current_time = UtcTime(11, 55);
+    model.updateCurrentTime(current_time);
+    QCOMPARE(model.periodStart(), UtcTime(0).toSecsSinceEpoch());
+    QCOMPARE(model.blockTimeFractions(), (QList<qreal>{-2.0 / 720.0, 0.5}));
 }
 
 void BlockClockModelTests::lastBlockAgeFollowsNewestBlockAndClock()
