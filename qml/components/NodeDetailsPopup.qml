@@ -348,19 +348,28 @@ DialogPopup {
             elide: Text.ElideMiddle
             horizontalAlignment: Text.AlignRight
             color: detailRow.isLink ? Theme.color.accentText : Theme.color.neutral9
-            opacity: linkArea.pressed ? 0.7 : linkArea.containsMouse ? 0.85 : 1
+            opacity: linkButton.down ? 0.7 : linkButton.hovered ? 0.85 : 1
 
-            MouseArea {
-                id: linkArea
+            AbstractButton {
+                id: linkButton
                 objectName: detailRow.valueObjectName.length > 0 ? detailRow.valueObjectName + "_link" : ""
                 anchors.fill: parent
                 enabled: detailRow.isLink
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
+                hoverEnabled: AppMode.isDesktop
+                focusPolicy: Qt.StrongFocus
                 Accessible.role: Accessible.Link
                 Accessible.name: detailRow.row.key + ": " + detailRow.row.value
                 Accessible.description: qsTr("Opens the folder in your file manager")
+                Keys.onReturnPressed: clicked()
+                Keys.onEnterPressed: clicked()
                 onClicked: Qt.openUrlExternally(detailRow.row.url)
+
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+
+                background: FocusBorder {
+                    visible: linkButton.visualFocus
+                    borderRadius: 6
+                }
             }
         }
     }

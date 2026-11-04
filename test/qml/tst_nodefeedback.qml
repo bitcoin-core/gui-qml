@@ -339,10 +339,10 @@ TestCase {
 
         const link = findChild(popup.contentItem, "nodeDetailsAboutValue_1_link")
         mouseMove(link, link.width / 2, link.height / 2)
-        tryCompare(link, "containsMouse", true)
+        tryCompare(link, "hovered", true)
         compare(dataDir.opacity, 0.85)
         mouseMove(findChild(popup.contentItem, "nodeDetailsAboutValue_0"), 2, 2)
-        tryCompare(link, "containsMouse", false)
+        tryCompare(link, "hovered", false)
         compare(dataDir.opacity, 1)
 
         nodeModel.setWarningsForTest([longWarningText()])
@@ -352,6 +352,29 @@ TestCase {
         popup.close()
         tryCompare(popup, "visible", false)
         compare(popup.aboutRows.length, 0)
+    }
+
+    function test_node_details_directory_link_opens_from_keyboard() {
+        testFileUrlOpener.reset()
+        testWindow.requestActivate()
+        tryCompare(testWindow, "active", true)
+        const popup = createTemporaryObject(detailsPopupComponent, testWindow.contentItem)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        popup.moreExpanded = true
+        tryVerify(function() { return findChild(popup.contentItem, "nodeDetailsAboutValue_1_link") !== null })
+        const link = findChild(popup.contentItem, "nodeDetailsAboutValue_1_link")
+        compare(link.focusPolicy, Qt.StrongFocus)
+
+        link.forceActiveFocus(Qt.TabFocusReason)
+        verify(link.visualFocus)
+        tryCompare(link.background, "visible", true)
+        keyClick(Qt.Key_Return)
+        compare(testFileUrlOpener.lastUrl().toString(), "file:///home/test/.bitcoin/regtest")
+        testFileUrlOpener.reset()
+        keyClick(Qt.Key_Space)
+        compare(testFileUrlOpener.lastUrl().toString(), "file:///home/test/.bitcoin/regtest")
+        popup.close()
     }
 
     function test_warnings_popup_lists_each_warning_in_amber() {
