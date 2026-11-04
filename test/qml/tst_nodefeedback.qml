@@ -377,6 +377,26 @@ TestCase {
         popup.close()
     }
 
+    function test_node_details_wraps_long_values() {
+        const popup = createTemporaryObject(detailsPopupComponent, testWindow.contentItem)
+        popup.open()
+        tryCompare(popup, "opened", true)
+        popup.moreExpanded = true
+        const path = "/home/test/" + "a-very-long-directory-name/".repeat(6) + "regtest"
+        popup.aboutRows = [{ key: "Data directory", value: path }, { key: "Version", value: "Bitcoin Core test" }]
+        tryVerify(function() { return findChild(popup.contentItem, "nodeDetailsAboutValue_1") !== null })
+        const value = findChild(popup.contentItem, "nodeDetailsAboutValue_0")
+        tryVerify(function() { return value.lineCount > 1 })
+        compare(value.text, path)
+        compare(value.truncated, false)
+        verify(value.parent.height >= value.height + 24)
+
+        const version = findChild(popup.contentItem, "nodeDetailsAboutValue_1")
+        compare(version.lineCount, 1)
+        compare(version.parent.height, Theme.size.row)
+        popup.close()
+    }
+
     function test_warnings_popup_lists_each_warning_in_amber() {
         nodeModel.setWarningsForTest(["This is a pre-release test build", longWarningText()])
         const popup = createTemporaryObject(warningsPopupComponent, testWindow.contentItem)

@@ -319,7 +319,7 @@ DialogPopup {
         property string valueObjectName: ""
         property bool showTopLine: true
         readonly property bool isLink: row.url !== undefined && row.url.toString().length > 0
-        implicitHeight: 44
+        implicitHeight: Math.max(Theme.size.row, valueText.height + 2 * Theme.space.ml)
 
         Rectangle {
             visible: detailRow.showTopLine
@@ -330,7 +330,7 @@ DialogPopup {
         CoreText {
             id: keyText
             anchors.left: parent.left
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.top: valueText.top
             text: detailRow.row.key
             textStyle: Theme.text.caption
             wrap: false
@@ -341,11 +341,11 @@ DialogPopup {
             objectName: detailRow.valueObjectName
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, detailRow.width - keyText.implicitWidth - 16)
+            width: Math.min(implicitWidth, detailRow.width - keyText.implicitWidth - Theme.space.l)
             text: detailRow.row.value
             textStyle: detailRow.row.mono === true ? Theme.text.monoCaption : Theme.text.captionStrong
-            wrap: false
-            elide: Text.ElideMiddle
+            // Wrap rather than elide so long paths and address lists stay readable.
+            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
             horizontalAlignment: Text.AlignRight
             color: detailRow.isLink ? Theme.color.accentText : Theme.color.neutral9
             opacity: linkButton.down ? 0.7 : linkButton.hovered ? 0.85 : 1
