@@ -357,8 +357,11 @@ Pane {
                     ContextMenuDivider { visible: !root.paymentReceived }
                     ContextMenuButton {
                         objectName: "requestPaymentAgainMenuButton"
+                        // A new request starts from the saved one, so it would
+                        // silently drop edits that are not saved yet.
+                        enabled: !root.modified
                         text: qsTr("Request again")
-                        onTriggered: root.requestAgain(root.request.id)
+                        onTriggered: if (!root.modified) root.requestAgain(root.request.id)
                     }
                     ContextMenuDivider {}
                     ContextMenuButton {
