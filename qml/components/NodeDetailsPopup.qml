@@ -82,7 +82,7 @@ DialogPopup {
 
     function withSpeedRow(rows) {
         if (root.status.key !== "blocks") return rows
-        const progress = rows.findIndex(function(row) { return row.key === qsTr("Progress") })
+        const progress = rows.findIndex(function(row) { return row.id === "progress" })
         if (progress < 0) return rows
         let speed = root.syncSpeedText
         if (root.trafficRef !== null) speed += " · ↓ " + root.rateText(root.trafficRef.receivedRateList)

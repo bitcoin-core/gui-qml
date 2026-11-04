@@ -200,7 +200,7 @@ QtObject {
                 const percent = Math.floor(nodeModelRef.headerSyncProgress * 100) + "%"
                 headers = nodeModelRef.headerPresync ? qsTr("Pre-syncing headers · %1").arg(percent) : qsTr("Headers · %1").arg(percent)
             }
-            rows.push({ key: qsTr("Progress"), value: headers })
+            rows.push({ id: "progress", key: qsTr("Progress"), value: headers })
         } else {
             // Verification is weighted by transactions, so it trails the block count.
             let progress = tipHeight > 0 && headerHeight > tipHeight
@@ -209,7 +209,7 @@ QtObject {
             if (nodeModelRef !== null && nodeModelRef.verificationProgress > 0) {
                 progress += " · " + qsTr("%1 of transactions").arg(formatProgress(nodeModelRef.verificationProgress))
             }
-            rows.push({ key: qsTr("Progress"), value: progress })
+            rows.push({ id: "progress", key: qsTr("Progress"), value: progress })
         }
         rows.push({ key: qsTr("Peers"), value: peersSummary })
         return rows

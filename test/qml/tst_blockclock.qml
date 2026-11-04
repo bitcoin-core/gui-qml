@@ -1143,6 +1143,7 @@ TestCase {
             "Speed=Measuring… · ↓ 2.3 MB/s",
             "Peers=10 out · 0 in · Regtest"
         ])
+        compare(popup.rows[0].id, "progress")
 
         popup.syncSamples = [{ time: 0, height: 245000 }, { time: 60000, height: 245140 }]
         compare(popup.rows[1].value, "~140 blocks/min · ↓ 2.3 MB/s")
