@@ -604,6 +604,17 @@ WatchOnlyDescriptor MakeWatchOnlyDescriptor(const SingleKeyDescriptor& receive, 
     return {.text = text, .parts = parts};
 }
 
+constexpr std::array WATCH_ONLY_EXPORT_TYPES{OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY};
+
+std::optional<OutputType> SingleKeyOutputType(const QString& script)
+{
+    if (script == QLatin1String("tr(")) return OutputType::BECH32M;
+    if (script == QLatin1String("wpkh(")) return OutputType::BECH32;
+    if (script == QLatin1String("sh(wpkh(")) return OutputType::P2SH_SEGWIT;
+    if (script == QLatin1String("pkh(")) return OutputType::LEGACY;
+    return std::nullopt;
+}
+
 QString DescriptorScriptName(OutputType type)
 {
     switch (type) {
@@ -1306,7 +1317,7 @@ QVariantList WalletQmlModel::watchOnlyExports() const
 
     QVariantList exports;
     LOCK(raw_wallet->cs_wallet);
-    for (const OutputType type : {OutputType::BECH32M, OutputType::BECH32, OutputType::P2SH_SEGWIT, OutputType::LEGACY}) {
+    for (const OutputType type : WATCH_ONLY_EXPORT_TYPES) {
         const auto receive = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/false));
         if (!receive) continue;
         const auto change = ParseSingleKeyDescriptor(raw_wallet->GetScriptPubKeyMan(type, /*internal=*/true));
@@ -1328,6 +1339,61 @@ QVariantList WalletQmlModel::watchOnlyExports() const
         item.insert(QStringLiteral("fingerprint"), receive->fingerprint);
         item.insert(QStringLiteral("derivationPath"), receive->derivation_path);
         exports.append(item);
+    }
+    return exports;
+}
+
+QVariantList WalletQmlModel::inactiveWatchOnlyExports() const
+{
+    const wallet::CWallet* raw_wallet = m_wallet ? m_wallet->wallet() : nullptr;
+    if (!raw_wallet) return {};
+
+    struct Inactive {
+        SingleKeyDescriptor descriptor;
+        OutputType type;
+        bool used;
+    };
+    std::vector<Inactive> found;
+    LOCK(raw_wallet->cs_wallet);
+    for (const wallet::ScriptPubKeyMan* spk_man : raw_wallet->GetAllScriptPubKeyMans()) {
+        if (raw_wallet->IsActiveScriptPubKeyMan(*spk_man)) continue;
+        const auto descriptor = ParseSingleKeyDescriptor(spk_man);
+        const auto type = descriptor ? SingleKeyOutputType(descriptor->script) : std::nullopt;
+        if (!type) continue;
+        const auto& desc_man = static_cast<const wallet::DescriptorScriptPubKeyMan&>(*spk_man);
+        LOCK(desc_man.cs_desc_man);
+        found.push_back({*descriptor, *type, desc_man.GetWalletDescriptor().GetNext() > 0});
+    }
+    std::ranges::sort(found, {}, [](const Inactive& item) {
+        return std::tuple{std::ranges::find(WATCH_ONLY_EXPORT_TYPES, item.type) - WATCH_ONLY_EXPORT_TYPES.begin(),
+                          item.descriptor.origin, item.descriptor.xpub, item.descriptor.branch};
+    });
+
+    QVariantList exports;
+    const auto append = [&](const Inactive& receive, const std::optional<SingleKeyDescriptor>& change) {
+        QVariantMap item;
+        item.insert(QStringLiteral("id"), OutputTypeId(receive.type));
+        item.insert(QStringLiteral("label"), OutputTypeLabel(receive.type));
+        item.insert(QStringLiteral("scriptName"), DescriptorScriptName(receive.type));
+        item.insert(QStringLiteral("descriptor"), MakeWatchOnlyDescriptor(receive.descriptor, change).text);
+        item.insert(QStringLiteral("xpub"), receive.descriptor.xpub);
+        item.insert(QStringLiteral("fingerprint"), receive.descriptor.fingerprint);
+        exports.append(item);
+    };
+    for (auto it = found.begin(); it != found.end();) {
+        const auto end = std::find_if(it, found.end(), [&](const Inactive& item) {
+            return item.type != it->type || item.descriptor.origin != it->descriptor.origin ||
+                   item.descriptor.xpub != it->descriptor.xpub;
+        });
+        // next_index only moves once an address is handed out or seen in a transaction.
+        if (std::any_of(it, end, [](const Inactive& item) { return item.used; })) {
+            if (end - it == 2) {
+                append(*it, std::next(it)->descriptor);
+            } else {
+                std::for_each(it, end, [&](const Inactive& item) { append(item, std::nullopt); });
+            }
+        }
+        it = end;
     }
     return exports;
 }
