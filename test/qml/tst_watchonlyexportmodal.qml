@@ -70,17 +70,26 @@ TestCase {
         receiveChain: "0",
         changeChain: "1"
     })
+    readonly property var previousSegwit: ({
+        id: "bech32",
+        label: "Bech32 (SegWit)",
+        scriptName: "wpkh",
+        xpub: "tpubDCPreviousSegwit00000000000000000000",
+        descriptor: "wpkh([0badf00d/84h/1h/0h]tpubDCPreviousSegwit00000000000000000000/<0;1>/*)#cccccccc",
+        fingerprint: "0badf00d"
+    })
 
     Component {
         id: modalComponent
         WatchOnlyExportModal {}
     }
 
-    function makeWallet(exports, preferred, saveError) {
+    function makeWallet(exports, preferred, saveError, inactive) {
         return {
             name: "watch/wallet",
             saved: [],
             watchOnlyExports: () => exports,
+            inactiveWatchOnlyExports: () => inactive || [],
             defaultReceiveAddressType: () => preferred,
             saveWatchOnlyExport: function(path, contents) {
                 this.saved.push({path: path, contents: contents})
@@ -206,6 +215,43 @@ TestCase {
         findChild(modal, "watchOnlyExportFormatPicker").selected(1, "Extended key")
         verify(!modal.extendedKeyFormat)
         compare(modal.payload, legacy.descriptor)
+    }
+
+    function test_complete_export_includes_inactive_descriptors() {
+        let copied = ""
+        const modal = openModal([taproot, segwit], "bech32", {
+            wallet: makeWallet([taproot, segwit], "bech32", "", [previousSegwit]),
+            clipboard: { setText: value => copied = value }
+        })
+        compare(modal.addressType, "")
+        compare(modal.payload, [taproot.descriptor, segwit.descriptor, previousSegwit.descriptor].join("\n"))
+        compare(findChild(modal, "watchOnlyExportTypeList").footerText,
+                "Each descriptor covers receive and change addresses.")
+
+        const row = findItem(modal.contentItem, "watchOnlyExportType_inactive0")
+        verify(row !== null)
+        compare(row.title, previousSegwit.label)
+        compare(row.description, "Previous key wpkh(tpubDCPr...00000000)")
+        verify(!row.showsDisclosureIndicator)
+        verify(findItem(modal.contentItem, "watchOnlyExportType_bech32").showDivider)
+        verify(!row.showDivider)
+        row.clicked()
+        compare(modal.addressType, "")
+        findItem(modal.contentItem, "watchOnlyExportTypeCopy_inactive0").copyRequested()
+        compare(copied, previousSegwit.descriptor)
+
+        findChild(modal, "watchOnlyExportAddressTypePicker").activated("bech32")
+        compare(modal.payload, segwit.descriptor)
+        verify(findChild(modal, "watchOnlyExportNote").text.indexOf("previous keys") >= 0)
+        findChild(modal, "watchOnlyExportAddressTypePicker").activated("bech32m")
+        verify(findChild(modal, "watchOnlyExportNote").text.indexOf("previous keys") < 0)
+    }
+
+    function test_inactive_descriptors_offer_complete_export_for_one_type() {
+        const modal = openModal([segwit], "bech32", {wallet: makeWallet([segwit], "bech32", "", [previousSegwit])})
+        compare(modal.addressType, "")
+        compare(optionIds(modal), ["", "bech32"])
+        compare(modal.payload, segwit.descriptor + "\n" + previousSegwit.descriptor)
     }
 
     function test_address_type_focus_outline_stays_inside_the_row() {

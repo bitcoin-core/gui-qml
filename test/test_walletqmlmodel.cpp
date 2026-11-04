@@ -670,17 +670,25 @@ CExtKey DeriveHardened(const CExtKey& key, std::initializer_list<uint32_t> path)
     return derived;
 }
 
-void LoadActiveDescriptor(wallet::CWallet& wallet, const std::string& descriptor, OutputType type,
-                          bool internal = false, const wallet::KeyMap& keys = {})
+uint256 LoadDescriptor(wallet::CWallet& wallet, const std::string& descriptor, const wallet::KeyMap& keys = {},
+                       int32_t next_index = 0)
 {
     FlatSigningProvider provider;
     std::string error;
     auto parsed = Parse(descriptor, provider, error, /*require_checksum=*/false);
-    QVERIFY2(parsed.size() == 1, error.c_str());
-    wallet::WalletDescriptor wallet_descriptor{std::move(parsed.front()), 0, 0, 0, 0};
+    Assert(parsed.size() == 1);
+    wallet::WalletDescriptor wallet_descriptor{std::move(parsed.front()), 0, 0, 0, next_index};
     LOCK(wallet.cs_wallet);
     wallet.LoadDescriptorScriptPubKeyMan(wallet_descriptor.id, wallet_descriptor, keys, {});
-    wallet.LoadActiveScriptPubKeyMan(wallet_descriptor.id, type, internal);
+    return wallet_descriptor.id;
+}
+
+void LoadActiveDescriptor(wallet::CWallet& wallet, const std::string& descriptor, OutputType type,
+                          bool internal = false, const wallet::KeyMap& keys = {})
+{
+    const uint256 id{LoadDescriptor(wallet, descriptor, keys)};
+    LOCK(wallet.cs_wallet);
+    wallet.LoadActiveScriptPubKeyMan(id, type, internal);
 }
 
 QVariantMap ExportFor(const QVariantList& exports, const QString& id)
@@ -843,6 +851,7 @@ private Q_SLOTS:
     void watchOnlyExportsJoinReceiveAndChange();
     void watchOnlyExportsUseMainnetSlip132Prefixes();
     void watchOnlyExportsSkipMultiKeyDescriptors();
+    void watchOnlyExportsIncludeUsedInactiveDescriptors();
     void canExportWatchOnlyFollowsActiveDescriptors();
     void saveWatchOnlyExportWritesFile();
     void encryptWalletUpdatesSecurityState();
@@ -1034,6 +1043,51 @@ void WalletQmlModelTests::watchOnlyExportsSkipMultiKeyDescriptors()
 
     auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
     QVERIFY(model->watchOnlyExports().isEmpty());
+}
+
+void WalletQmlModelTests::watchOnlyExportsIncludeUsedInactiveDescriptors()
+{
+    ChainSelectionGuard chain_guard{ChainType::REGTEST};
+    node::NodeContext node_context;
+    auto chain = interfaces::MakeChain(node_context);
+    wallet::CWallet raw_wallet{chain.get(), "watch-only-inactive-test", nullptr};
+    QVERIFY(raw_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+
+    // Encrypting a wallet replaces its active descriptors with ones from a new seed.
+    CExtKey old_master;
+    old_master.SetSeed(std::array<std::byte, 32>{});
+    CExtKey new_master;
+    std::array<std::byte, 32> new_seed;
+    new_seed.fill(std::byte{1});
+    new_master.SetSeed(new_seed);
+    const std::string old_segwit{"wpkh(" + OriginDescriptor(old_master, 84)};
+    LoadDescriptor(raw_wallet, old_segwit + "/0/*)", {}, /*next_index=*/2);
+    LoadDescriptor(raw_wallet, old_segwit + "/1/*)");
+    LoadDescriptor(raw_wallet, "tr(" + OriginDescriptor(old_master, 86) + "/0/*)");
+    LoadDescriptor(raw_wallet, "tr(" + OriginDescriptor(old_master, 86) + "/1/*)");
+    const std::string old_legacy{"pkh(" + OriginDescriptor(old_master, 44) + "/0/*)"};
+    LoadDescriptor(raw_wallet, old_legacy, {}, /*next_index=*/1);
+    LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(new_master, 84) + "/0/*)", OutputType::BECH32);
+    LoadActiveDescriptor(raw_wallet, "wpkh(" + OriginDescriptor(new_master, 84) + "/1/*)", OutputType::BECH32, true);
+
+    auto [wallet, model] = MakeWalletModel(nullptr, &raw_wallet);
+    QCOMPARE(model->watchOnlyExports().size(), 1);
+    const QVariantList inactive = model->inactiveWatchOnlyExports();
+    QCOMPARE(inactive.size(), 2);
+
+    const std::string joined{old_segwit + "/<0;1>/*)"};
+    const QVariantMap segwit{inactive.at(0).toMap()};
+    QCOMPARE(segwit.value("id").toString(), QString("bech32"));
+    QCOMPARE(segwit.value("descriptor").toString(), QString::fromStdString(joined + "#" + GetDescriptorChecksum(joined)));
+    QCOMPARE(segwit.value("scriptName").toString(), QString("wpkh"));
+    QCOMPARE(segwit.value("xpub").toString(),
+             QString::fromStdString(EncodeExtPubKey(DeriveHardened(old_master, {84, 1, 0}).Neuter())));
+    const CKeyID old_id{old_master.key.GetPubKey().GetID()};
+    QCOMPARE(segwit.value("fingerprint").toString(), QString::fromStdString(HexStr(std::span{old_id.begin(), 4})));
+
+    const QVariantMap legacy{inactive.at(1).toMap()};
+    QCOMPARE(legacy.value("id").toString(), QString("legacy"));
+    QVERIFY(legacy.value("descriptor").toString().startsWith(QString::fromStdString(old_legacy) + "#"));
 }
 
 void WalletQmlModelTests::canExportWatchOnlyFollowsActiveDescriptors()

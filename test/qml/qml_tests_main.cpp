@@ -1326,6 +1326,7 @@ public:
     }
     Q_INVOKABLE QString defaultReceiveAddressType() const { return m_default_receive_address_type; }
     Q_INVOKABLE QVariantList watchOnlyExports() const { return {}; }
+    Q_INVOKABLE QVariantList inactiveWatchOnlyExports() const { return {}; }
     bool canExportWatchOnly() const { return false; }
     qint64 estimatedFeeSatoshi() const { return m_custom_fee_enabled ? 600 : m_target_blocks == 2 ? 750 : m_target_blocks == 6 ? 500 : 250; }
     QString estimatedFeeRate() const { return m_custom_fee_enabled ? m_custom_fee_rate : QStringLiteral("2.5"); }
