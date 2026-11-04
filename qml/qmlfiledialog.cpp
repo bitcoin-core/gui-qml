@@ -122,7 +122,10 @@ void QmlFileDialog::open()
     if (m_current_folder.isValid() && !m_current_folder.isEmpty()) {
         dlg->setDirectoryUrl(m_current_folder);
     }
-    if (m_current_file.isValid() && !m_current_file.isEmpty()) {
+    // selectUrl() skips the initial selection a native dialog reads when it opens.
+    if (m_current_file.isLocalFile()) {
+        dlg->selectFile(m_current_file.toLocalFile());
+    } else if (m_current_file.isValid() && !m_current_file.isEmpty()) {
         dlg->selectUrl(m_current_file);
     }
 

@@ -198,6 +198,7 @@ TestCase {
         const dialog = findChild(modal, "watchOnlyExportSaveDialog")
         findChild(modal, "watchOnlyExportSaveMenuButton").triggered()
         compare(dialog.openCalls, 1)
+        compare(dialog.currentFolder.toString(), "file:///tmp")
         compare(dialog.currentFile.toString(), "file:///tmp/watch_wallet-watch-only.txt")
 
         dialog.selectAndAccept("file:///tmp/export.txt")

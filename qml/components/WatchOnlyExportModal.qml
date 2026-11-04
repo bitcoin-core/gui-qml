@@ -92,7 +92,8 @@ Popup {
 
     function openSaveDialog() {
         const name = wallet && wallet.name.length > 0 ? wallet.name.replace(/[\\/]/g, "_") : "wallet"
-        saveDialog.currentFile = "file://" + walletController.homePath() + "/" + name + "-watch-only.txt"
+        saveDialog.currentFolder = walletController.homeFileUrl()
+        saveDialog.currentFile = walletController.homeFileUrl(name + "-watch-only.txt")
         saveDialog.open()
     }
 
