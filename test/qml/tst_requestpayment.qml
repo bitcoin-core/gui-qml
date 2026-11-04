@@ -533,6 +533,7 @@ TestCase {
         const qr = findChild(card, "requestPaymentQRImage")
         compare(qr.visible, expected)
         compare(qr.code, expected ? card.request.qrPayload : "")
+        compare(findChild(card, "requestPaymentQRUnappliedEdits").visible, !expected)
         compare(findChild(card, "requestPaymentQRContextArea").enabled, expected)
         compare(findChild(card, "requestPaymentQRContextCopy").enabled, expected)
         compare(findChild(card, "requestPaymentQRContextSave").enabled, expected)
