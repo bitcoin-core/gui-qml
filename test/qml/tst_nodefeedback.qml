@@ -11,6 +11,7 @@ import "../../qml/controls"
 import "../../qml/pages/node"
 
 TestCase {
+    id: testCase
     name: "NodeFeedback"
     when: windowShown
     width: 640
@@ -21,6 +22,11 @@ TestCase {
         width: 640
         height: 520
         visible: true
+    }
+
+    Component {
+        id: signalSpyComponent
+        SignalSpy {}
     }
 
     Component {
@@ -103,6 +109,7 @@ TestCase {
         nodeModel.setWarningsForTest([])
         nodeModel.restoreDismissedWarnings()
         nodeModel.setStartupErrorForTest("")
+        networkStatusModel.setNetworkOfflineForTest(false)
         shutdownSpy.clear()
         nodeModel.answerRuntimeDialog(DialogButtonBox.Cancel)
         destructiveAlertTriggered = false
@@ -238,6 +245,28 @@ TestCase {
         const primaryCenterY = primary.mapToItem(runner, 0, primary.height / 2).y
         const settingsCenterY = settingsButton.mapToItem(runner, 0, settingsButton.height / 2).y
         verify(Math.abs(primaryCenterY - settingsCenterY) <= 0.5)
+    }
+
+    function test_node_runner_recovery_actions_open_their_settings_section() {
+        const runner = createTemporaryObject(nodeRunnerComponent, testWindow.contentItem)
+        const spy = createTemporaryObject(signalSpyComponent, testCase, { target: runner, signalName: "settingsSectionRequested" })
+        const settingsSpy = createTemporaryObject(signalSpyComponent, testCase, { target: runner, signalName: "settingsClicked" })
+        const primary = findChild(runner, "nodeStatusPrimaryAction")
+        const secondary = findChild(runner, "nodeStatusSecondaryAction")
+
+        networkStatusModel.setNetworkOfflineForTest(true)
+        tryCompare(primary, "text", "Network settings")
+        primary.clicked()
+        compare(spy.count, 1)
+        compare(spy.signalArguments[0][0], "connection")
+
+        nodeModel.setStartupErrorForTest("Disk failure")
+        tryCompare(secondary, "visible", true)
+        compare(secondary.text, "View debug log")
+        secondary.clicked()
+        compare(spy.count, 2)
+        compare(spy.signalArguments[1][0], "debug-log")
+        compare(settingsSpy.count, 0)
     }
 
     function test_node_runner_clock_follows_stack_visibility() {

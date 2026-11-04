@@ -451,6 +451,7 @@ ApplicationWindow {
                     onSettingsClicked: {
                         nodeStack.push(settingsPage)
                     }
+                    onSettingsSectionRequested: function(section) { nodeStack.openSettings(section) }
                     onPeersClicked: {
                         peerTableModel.startAutoRefresh()
                         nodeStack.push(peersPage)

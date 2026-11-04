@@ -11,6 +11,7 @@ import "../../components"
 
 Page {
     signal settingsClicked
+    signal settingsSectionRequested(string section)
     signal peersClicked
     id: root
     objectName: "nodeRunner"
@@ -32,7 +33,9 @@ Page {
                 NodeStatusBar {
                     id: nodeStatusBar
                     Layout.alignment: Qt.AlignVCenter
-                    onRouteRequested: root.settingsClicked()
+                    onRouteRequested: function(action) {
+                        root.settingsSectionRequested(action === "debugLog" ? "debug-log" : "connection")
+                    }
                     onWarningsRequested: nodeWarnings.open()
                 }
                 IconButton {
