@@ -731,6 +731,7 @@ private Q_SLOTS:
     void openingRequestRemainsResponsiveDuringLargeHistoryScan();
     void requestDetailEditsPreserveReceiveDraft();
     void setCurrentPaymentRequestAddressEditsExistingRequest();
+    void setCurrentPaymentRequestAddressRejectsUsedAddress();
     void usePaymentRequestAsTemplatePreservesAddressType();
     void commitPaymentRequestOnLockedWalletSignalsNeedsUnlock();
     void commitPaymentRequestWithPassphraseUnlocksRetriesAndRelocks();
@@ -2300,6 +2301,25 @@ void WalletQmlModelTests::setCurrentPaymentRequestAddressEditsExistingRequest()
     const auto entry = model->receiveRequests()->entryById(request_id);
     QVERIFY(entry.has_value());
     QCOMPARE(QString::fromStdString(entry->recipient.label), QStringLiteral("renamed"));
+}
+
+void WalletQmlModelTests::setCurrentPaymentRequestAddressRejectsUsedAddress()
+{
+    auto [wallet, model] = MakePasswordWalletModel();
+    const CTxDestination destination{DecodeDestination(VALID_MAINNET_ADDRESS.toStdString())};
+    wallet->wallet_addresses.emplace_back(destination, true, wallet::AddressPurpose::RECEIVE, "paid while open");
+    wallet->get_address_result = true;
+    CMutableTransaction tx;
+    tx.vout.emplace_back(200'000, GetScriptForDestination(destination));
+    const interfaces::WalletTx payment{MakeIncomingPayment(tx, {true})};
+    wallet->setWalletTxsFn([payment] { return std::set<interfaces::WalletTx>{payment}; });
+    const QString receiving_address{model->receivingAddress()->address()};
+
+    // A request for an address that already received a payment would be
+    // moved to a fresh address by the Receive page, so it is refused.
+    QVERIFY(!model->setCurrentPaymentRequestAddress(VALID_MAINNET_ADDRESS));
+    QVERIFY(model->currentPaymentRequest()->address().isEmpty());
+    QCOMPARE(model->receivingAddress()->address(), receiving_address);
 }
 
 void WalletQmlModelTests::setCurrentPaymentRequestAddressUsesAddressListLabel()
