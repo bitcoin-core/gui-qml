@@ -178,7 +178,8 @@ TestCase {
     }
 
     function test_pendingOptionsOnlyDisableSettingsEditors(data) {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+            { "wallet": testWalletModel })
         verify(view !== null)
         optionsModel.settingsReady = data.ready
         optionsModel.settingsPending = data.pending
@@ -192,21 +193,25 @@ TestCase {
             compare(view.pageContainer.currentItem.enabled, true, section)
             if (section === "mempool") compare(findChild(view, "mempoolSizeLimitInput").enabled, false)
         }
-        view.openWalletPassword(false)
-        tryCompare(view.pageContainer, "depth", 2)
-        compare(view.pageContainer.currentItem.enabled, true)
+        view.selectSection("wallet")
+        const walletStack = findChild(view, "walletSettingsStack")
+        verify(walletStack !== null)
+        walletStack.openPassword(false)
+        tryCompare(walletStack, "depth", 2)
+        compare(walletStack.currentItem.enabled, true)
         view.selectSection("display")
         compare(view.pageContainer.currentItem.enabled, false)
         optionsModel.settingsReady = true
         optionsModel.settingsPending = false
         tryCompare(view.pageContainer.currentItem, "enabled", true)
         view.selectSection("wallet")
-        compare(view.pageContainer.depth, 2)
-        compare(view.pageContainer.currentItem.enabled, true)
+        compare(walletStack.depth, 2)
+        compare(walletStack.currentItem.enabled, true)
     }
 
     function test_pendingSavePreservesPushedProxyDraft() {
-        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem)
+        const view = createTemporaryObject(settingsViewComponent, settingsWindow.contentItem,
+            { "wallet": testWalletModel })
         view.selectSection("connection")
         findChild(view, "proxySettingsRow").clicked()
         tryCompare(view.pageContainer, "depth", 2)
@@ -239,9 +244,11 @@ TestCase {
         compare(proxyPage.draftProxyAddress, "10.0.0.1:9050")
         verify(proxyPage.proxyDraftDirty)
         view.selectSection("wallet")
-        findChild(view, "walletPasswordRow").clicked()
-        tryCompare(view.pageContainer, "depth", 2)
-        compare(view.pageContainer.currentItem.enabled, true)
+        const walletStack = findChild(view, "walletSettingsStack")
+        verify(walletStack !== null)
+        findChild(walletStack, "walletPasswordRow").clicked()
+        tryCompare(walletStack, "depth", 2)
+        compare(walletStack.currentItem.enabled, true)
         view.selectSection("connection")
         optionsModel.settingsPending = false
         tryCompare(save, "enabled", true)
