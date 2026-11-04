@@ -21,6 +21,7 @@ Popup {
     property string errorText: ""
     property var clipboard: Clipboard
     readonly property bool allTypes: !extendedKeyFormat && addressType === ""
+    readonly property bool extendedKeyAvailable: exports.some(item => item.extendedKey !== "")
     readonly property var currentExport: {
         for (const item of exports) {
             if (item.id === addressType) return item
@@ -34,7 +35,7 @@ Popup {
         return fingerprints.size === 1 ? exports[0].fingerprint : ""
     }
     readonly property var typeOptions: {
-        const options = exports.map(item => ({
+        const options = exports.filter(item => !extendedKeyFormat || item.extendedKey !== "").map(item => ({
             id: item.id,
             label: item.label,
             description: item.description,
@@ -51,7 +52,8 @@ Popup {
 
     function preferredAddressType() {
         const preferred = wallet ? wallet.defaultReceiveAddressType() : ""
-        return exports.some(item => item.id === preferred) ? preferred : exports[0].id
+        const candidates = extendedKeyFormat ? exports.filter(item => item.extendedKey !== "") : exports
+        return candidates.some(item => item.id === preferred) ? preferred : candidates[0].id
     }
 
     function openForWallet() {
@@ -65,8 +67,9 @@ Popup {
     }
 
     function setExtendedKeyFormat(enabled) {
+        if (enabled && !extendedKeyAvailable) return
         extendedKeyFormat = enabled
-        if (enabled && addressType === "") addressType = preferredAddressType()
+        if (enabled && (!currentExport || currentExport.extendedKey === "")) addressType = preferredAddressType()
     }
 
     function shortKey(key) {
@@ -217,7 +220,7 @@ Popup {
                     Layout.fillWidth: true
                     implicitHeight: 36
                     //: Export formats: an output descriptor, or a bare xpub/ypub/zpub key for wallets that only accept those.
-                    model: [qsTr("Descriptor"), qsTr("Extended key")]
+                    model: [qsTr("Descriptor"), {text: qsTr("Extended key"), enabled: root.extendedKeyAvailable}]
                     currentIndex: root.extendedKeyFormat ? 1 : 0
                     onSelected: index => root.setExtendedKeyFormat(index === 1)
                 }

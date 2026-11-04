@@ -976,6 +976,17 @@ void WalletQmlModelTests::watchOnlyExportsJoinReceiveAndChange()
     QVERIFY(ExportFor(exports, "legacy").value("descriptorParts").toMap().isEmpty());
     QVERIFY(legacy_lines.at(0).startsWith(QString::fromStdString(legacy_receive) + "#"));
     QVERIFY(legacy_lines.at(1).startsWith(QString::fromStdString(legacy_change) + "#"));
+    QVERIFY(ExportFor(exports, "legacy").value("extendedKey").toString().isEmpty());
+
+    wallet::CWallet branch_wallet{chain.get(), "watch-only-branch-test", nullptr};
+    QVERIFY(branch_wallet.LoadWalletFlags(wallet::WALLET_FLAG_DESCRIPTORS | wallet::WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+    const std::string swapped{"wpkh(" + OriginDescriptor(master, 84)};
+    LoadActiveDescriptor(branch_wallet, swapped + "/1/*)", OutputType::BECH32);
+    LoadActiveDescriptor(branch_wallet, swapped + "/0/*)", OutputType::BECH32, true);
+    auto [branch_view, branch_model] = MakeWalletModel(nullptr, &branch_wallet);
+    const QVariantMap swapped_export{ExportFor(branch_model->watchOnlyExports(), "bech32")};
+    QCOMPARE(swapped_export.value("descriptorParts").toMap().value("path").toString(), QString("/<1;0>/*"));
+    QVERIFY(swapped_export.value("extendedKey").toString().isEmpty());
 }
 
 void WalletQmlModelTests::watchOnlyExportsUseMainnetSlip132Prefixes()
